@@ -7,7 +7,7 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "preLaunchTask": "Start ZX Spectrum emulator server"
+      "preLaunchTask": "zxspectrum.start-server"
     }
   ]
 }

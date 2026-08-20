@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start ZX Spectrum emulator server",
+      "label": "zxspectrum.start-server",
       "type": "shell",
       "command": "wsl.exe",
       "args": [
