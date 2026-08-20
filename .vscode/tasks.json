@@ -21,13 +21,11 @@
       "problemMatcher": {
         "owner": "zxspectrum",
         "pattern": {
-          "regexp": "^(?!)(x)$",
-          "file": 1,
-          "location": 1,
-          "message": 1
+          "regexp": "^.*$"
         },
         "background": {
           "activeOnStart": true,
+          "beginsPattern": "Started server process",
           "endsPattern": "Uvicorn running on"
         }
       }
