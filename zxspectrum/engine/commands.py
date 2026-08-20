@@ -14,7 +14,11 @@ from zxspectrum.core.z80 import Registers
 
 @dataclass
 class Step:
-    pass
+    # Exactly one of these is honored: if ticks is set, step that many
+    # T-states (sub-instruction granularity); otherwise step `instructions`
+    # whole instructions (the default: one).
+    instructions: int = 1
+    ticks: int | None = None
 
 
 @dataclass

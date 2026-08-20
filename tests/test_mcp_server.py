@@ -59,6 +59,49 @@ def test_load_rom_set_registers_and_step():
     _run(scenario())
 
 
+def test_step_with_instruction_count():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            server = create_server(engine)
+            engine.machine.write_memory(0x8000, bytes([0x3E, 0x42, 0x47, 0x76]))  # LD A,42; LD B,A; HALT
+            await server.call_tool("set_registers", {"pc": 0x8000})
+
+            r = await server.call_tool("step", {"instructions": 2})
+            regs = _json(r)
+            assert regs["registers"]["af"] >> 8 == 0x42
+            assert regs["registers"]["bc"] >> 8 == 0x42  # LD B,A also completed
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_step_with_tick_count():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            server = create_server(engine)
+            engine.machine.write_memory(0x8000, bytes([0x3E, 0x42]))  # LD A,0x42 (7 T-states)
+            await server.call_tool("set_registers", {"pc": 0x8000})
+
+            # Stepping fewer T-states than the instruction needs should
+            # land mid-instruction, not yet showing the completed result.
+            r = await server.call_tool("step", {"ticks": 3})
+            regs_partial = _json(r)
+            assert regs_partial["registers"]["af"] >> 8 != 0x42
+
+            r = await server.call_tool("step", {"ticks": 10})
+            regs_full = _json(r)
+            assert regs_full["registers"]["af"] >> 8 == 0x42
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
 def test_memory_round_trip():
     async def scenario():
         engine = Engine()

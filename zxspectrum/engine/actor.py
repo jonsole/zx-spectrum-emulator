@@ -75,8 +75,8 @@ class Engine:
 
     # -- convenience wrappers (what front-ends actually call) ----------------
 
-    async def step(self) -> None:
-        return await self.submit(cmd.Step())
+    async def step(self, instructions: int = 1, ticks: int | None = None) -> None:
+        return await self.submit(cmd.Step(instructions=instructions, ticks=ticks))
 
     async def run(self) -> None:
         return await self.submit(cmd.Run())
@@ -146,7 +146,12 @@ class Engine:
         m = self.machine
 
         if isinstance(command, cmd.Step):
-            m.step_instruction()
+            if command.ticks is not None:
+                for _ in range(command.ticks):
+                    m.tick()
+            else:
+                for _ in range(command.instructions):
+                    m.step_instruction()
             await self._publish(cmd.Stopped(reason="step", pc=m.registers.pc))
             return None
 

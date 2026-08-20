@@ -55,9 +55,12 @@ def create_server(engine: Engine) -> MCPServer:
         return {"pc": regs.pc}
 
     @server.tool()
-    async def step() -> dict:
-        """Execute exactly one Z80 instruction."""
-        await engine.step()
+    async def step(instructions: int = 1, ticks: int | None = None) -> dict:
+        """Step the CPU. By default, executes one instruction; pass
+        `instructions` to step several whole instructions, or `ticks` to
+        step that many T-states instead (sub-instruction granularity --
+        PC may land mid-instruction)."""
+        await engine.step(instructions=instructions, ticks=ticks)
         regs = await engine.get_registers()
         return {"pc": regs.pc, "registers": _regs_to_dict(regs)}
 
