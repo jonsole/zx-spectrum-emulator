@@ -5,7 +5,12 @@
       "label": "zxspectrum.start-server",
       "type": "shell",
       "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
-      "args": ["-m", "zxspectrum.server.main", "--dap-port", "4711", "--mcp-port", "8000"],
+      "args": [
+        "-m", "zxspectrum.server.main",
+        "--dap-port", "4711",
+        "--mcp-port", "8000",
+        "--screen-port", "8500"
+      ],
       "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
       "presentation": {

@@ -1,0 +1,52 @@
+{
+  "name": "zxspectrum-debug",
+  "displayName": "ZX Spectrum Debug",
+  "description": "Registers the 'zxspectrum' debugger type so launch.json's debugServer field can connect directly to zx-spectrum-emulator's DAP server, and provides a live screen viewer fed by the emulator's screen-stream port. No adapter code -- debugServer overrides how VS Code connects to the debugger itself.",
+  "version": "0.0.2",
+  "publisher": "jonsole",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Debuggers"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:zxspectrum.showScreen",
+    "onDebug:zxspectrum"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "zxspectrum.showScreen",
+        "title": "ZX Spectrum: Show Screen"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "zxspectrum",
+        "label": "ZX Spectrum",
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "rom": {
+                "type": "string",
+                "description": "Path to a 16K ROM image to load."
+              },
+              "snapshot": {
+                "type": "string",
+                "description": "Path to a .sna snapshot to load. Falls back to reset() if omitted."
+              },
+              "sld": {
+                "type": "string",
+                "description": "Path to an sjasmplus SLD file, for source-level debugging of the loaded program. Requires asm."
+              },
+              "asm": {
+                "type": "string",
+                "description": "Path to the source the sld file was assembled from. Requires sld."
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

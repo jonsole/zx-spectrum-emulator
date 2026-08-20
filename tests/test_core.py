@@ -4,7 +4,7 @@ import pytest
 from zxspectrum.core.keyboard import Keyboard
 from zxspectrum.core.machine import Spectrum48K
 from zxspectrum.core.memory import Memory
-from zxspectrum.core.snapshot import HEADER_SIZE, SNA_48K_SIZE, parse_sna
+from zxspectrum.core.snapshot import HEADER_SIZE, SNA_48K_SIZE, parse_sna, write_sna
 from zxspectrum.core.ula import ULA, attr_addr, pixel_addr
 from zxspectrum.core.z80 import Registers
 
@@ -107,6 +107,43 @@ def test_parse_sna_pops_pc_from_stack():
 def test_parse_sna_rejects_wrong_size():
     with pytest.raises(ValueError):
         parse_sna(b"\x00" * 10)
+
+
+def test_write_sna_round_trips_with_parse_sna():
+    regs = Registers(
+        pc=0x8400, sp=0xFF00, af=0x1234, bc=0x5678, de=0x9ABC, hl=0xDEF0,
+        ix=0x1111, iy=0x2222, ir=0x3344, af2=0x5566, bc2=0x7788, de2=0x99AA, hl2=0xBBCC,
+        im=1, iff1=True, iff2=True,
+    )
+    ram = bytearray(0xC000)
+    ram[0] = 0xCD  # a marker byte, just to confirm RAM survives the round trip
+    data = write_sna(regs, bytes(ram), border=4)
+    assert len(data) == SNA_48K_SIZE
+
+    image = parse_sna(data)
+    assert image.regs.pc == regs.pc
+    assert image.regs.sp == regs.sp
+    assert image.regs.af == regs.af
+    assert image.regs.bc == regs.bc
+    assert image.regs.de == regs.de
+    assert image.regs.hl == regs.hl
+    assert image.regs.ix == regs.ix
+    assert image.regs.iy == regs.iy
+    assert image.regs.ir == regs.ir
+    assert image.regs.af2 == regs.af2
+    assert image.regs.bc2 == regs.bc2
+    assert image.regs.de2 == regs.de2
+    assert image.regs.hl2 == regs.hl2
+    assert image.regs.im == regs.im
+    assert image.regs.iff1 is True
+    assert image.regs.iff2 is True
+    assert image.border == 4
+    assert image.ram[0] == 0xCD
+
+
+def test_write_sna_rejects_wrong_size_ram():
+    with pytest.raises(ValueError):
+        write_sna(Registers(pc=0, sp=0xFF00), b"\x00" * 10)
 
 
 # -- machine (integration) ------------------------------------------------

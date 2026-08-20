@@ -43,12 +43,14 @@ cycle-exact ULA timing, beeper audio output, and tape loading. See
 
 ## Why this architecture
 
-- **One process, one live emulator, two front-ends.** `engine/actor.py` owns
-  the single `Spectrum48K` instance and is the *only* thing allowed to touch
-  it. The MCP server and the DAP server never call the core directly — they
-  submit a `Command` to the engine's `asyncio.Queue` and await a per-request
-  future for the reply. Because everything runs on one event loop, this needs
-  no locks, but it does guarantee both sides always see consistent state.
+- **One process, one live emulator, three front-ends.** `engine/actor.py`
+  owns the single `Spectrum48K` instance and is the *only* thing allowed to
+  touch it. The MCP server and the DAP server never call the core directly —
+  they submit a `Command` to the engine's `asyncio.Queue` and await a
+  per-request future for the reply; the [screen stream](#live-screen-viewer)
+  reads it the same way, just repeatedly. Because everything runs on one
+  event loop, this needs no locks, but it does guarantee every front-end
+  always sees consistent state.
 - **Events, not polling.** The engine also fans out state-change events
   (`Stopped`, `Continued`) to every subscriber. If you tell it to `run` or
   `step` over MCP, your VS Code session gets an unsolicited `stopped` DAP
@@ -100,7 +102,7 @@ full Visual Studio IDE rather than just Build Tools).
 This also compiles the native Z80 core extension as part of the install (via
 the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
 Verified in a clean checkout: the install command above, then `pytest`,
-passes all 72 tests with nothing else run in between.
+passes all 78 tests with nothing else run in between.
 
 ### WSL / Linux / macOS
 
@@ -130,12 +132,14 @@ every genuine Spectrum ROM).
 ```bash
 python -m zxspectrum.server.main \
   --mcp-host 127.0.0.1 --mcp-port 8000 \
-  --dap-host 127.0.0.1 --dap-port 4711
+  --dap-host 127.0.0.1 --dap-port 4711 \
+  --screen-host 127.0.0.1 --screen-port 8500
 ```
 
 (`.venv-win\Scripts\python.exe` natively, or the activated WSL venv's
-`python` — see [Setup](#setup).) This starts both servers on one asyncio
-event loop, sharing one `Engine`.
+`python` — see [Setup](#setup).) This starts all three servers — MCP, DAP,
+and the [screen stream](#live-screen-viewer) — on one asyncio event loop,
+sharing one `Engine`.
 
 ### Connecting an MCP client
 
@@ -183,50 +187,24 @@ steps are required first, on top of [Setup](#setup):
 
 1. **A real 48K ROM** — see [ROM](#rom) above. `launch.json` expects it at
    `roms/48.rom`.
-2. **Register the `zxspectrum` debugger type.** VS Code requires
+2. **Install the `vscode-extension/` extension.** VS Code requires
    `launch.json`'s `type` to match a registered `contributes.debuggers`
    entry before it will even attempt a `debugServer` connection — this is
-   true even though no actual adapter code is needed, since `debugServer`
-   overrides which process VS Code talks to (see the [extension
+   true even though no actual adapter code is needed for that part, since
+   `debugServer` overrides which process VS Code talks to (see the [extension
    guide](https://code.visualstudio.com/api/extension-guides/debugger-extension)).
-   Create a minimal declarative extension — no code required — at
-   `<VS Code extensions folder>/<publisher>.zxspectrum-debug-0.0.1/package.json`:
+   The repo's `vscode-extension/` directory is a small real extension (it
+   also provides the live screen viewer — see below) — copy or symlink it
+   into your VS Code extensions folder:
 
-   ```json
-   {
-     "name": "zxspectrum-debug",
-     "publisher": "<your-name>",
-     "version": "0.0.1",
-     "engines": { "vscode": "^1.85.0" },
-     "categories": ["Debuggers"],
-     "contributes": {
-       "debuggers": [
-         {
-           "type": "zxspectrum",
-           "label": "ZX Spectrum",
-           "configurationAttributes": {
-             "launch": {
-               "properties": {
-                 "rom": { "type": "string", "description": "Path to a 16K ROM image to load." },
-                 "snapshot": { "type": "string", "description": "Path to a .sna snapshot to load." },
-                 "sld": { "type": "string", "description": "Path to an sjasmplus SLD file. Requires asm." },
-                 "asm": { "type": "string", "description": "Path to the source the sld was assembled from. Requires sld." }
-               }
-             }
-           }
-         }
-       ]
-     }
-   }
+   ```powershell
+   # PowerShell, from the repo root
+   Copy-Item -Recurse .\vscode-extension "$env:USERPROFILE\.vscode\extensions\jonsole.zxspectrum-debug-0.0.2"
    ```
 
-   The `configurationAttributes` block is only there so VS Code's `launch.json`
-   editor recognizes `rom`/`snapshot`/`sld`/`asm` as valid instead of flagging
-   them as unknown properties — `debugServer` bypasses real adapter code
-   regardless, so this is purely for the editor's schema validation, not
-   functional.
-
-   Then reload VS Code ("Developer: Reload Window") to pick it up.
+   Then reload VS Code ("Developer: Reload Window") to pick it up. See
+   `vscode-extension/README.md` for details and re-install instructions after
+   editing it.
 
 With both in place, open the Run and Debug view and launch **"ZX Spectrum:
 Step through ROM"**. The `preLaunchTask` starts the server automatically
@@ -259,6 +237,28 @@ doesn't reliably auto-populate the Registers panel or auto-focus the
 Disassembly View on every stop — clicking the Call Stack entry once after a
 stop refreshes it. Tracked upstream as
 [microsoft/vscode#131253](https://github.com/microsoft/vscode/issues/131253).
+
+#### Live screen viewer
+
+Run **"ZX Spectrum: Show Screen"** from the Command Palette (or just launch a
+debug session — it opens automatically) for a live view of the display
+alongside your code, fed by a third server port (`--screen-port`, default
+`8500`) that streams the screen as a continuous sequence of PNG frames (10fps)
+to any connected client. The extension bridges that stream into a webview
+panel; watch it update in real time as you step, run, or drive the machine
+over MCP.
+
+This port is a plain, independent front-end onto the shared `Engine` — the
+same standalone-server design as DAP and MCP, not something that only works
+through VS Code. Any client can connect directly and read the same frames
+(4-byte big-endian length prefix + that many PNG bytes, repeated for as long
+as the connection stays open) — see `zxspectrum/server/screen_stream.py`.
+
+Frames are read via `engine.machine.render_screen()` directly rather than
+through the engine's normal command queue — a `run()` in progress occupies
+the actor loop for its entire duration, so a queued read would sit unserved
+(and the view would visibly freeze) until it stopped. Same queue-bypass
+pattern DAP's own memory reads already use, for the same reason.
 
 #### Call stack
 
@@ -357,6 +357,29 @@ with `load_debug_info`/relaunch for whatever program you loaded next. The
 ROM's own source is unaffected either way; it's always available
 independently once built.
 
+#### Example: Manic Miner
+
+A bigger example than `hello_rom_call` — [SkoolKit's Manic Miner
+disassembly](https://github.com/skoolkid/manicminer), source-level debuggable
+end to end. `scripts/build_manicminer.py` fetches it, assembles it with
+`sjasmplus`, and wraps the result into a `.sna` (`core/snapshot.py`'s
+`write_sna()`, the write-side counterpart of the `.sna` loader):
+
+```sh
+.venv-win\Scripts\python.exe scripts\build_manicminer.py   # native Windows
+.venv/bin/python scripts/build_manicminer.py                 # WSL/Linux/macOS
+```
+
+Unlike `hello_rom_call` (original, trivial, safe to commit), the output here
+**must never be committed** — a full game disassembly necessarily reproduces
+the actual copyrighted game code and data in full, same treatment as the ROM
+itself: `game_disassembly/` and `.manicminer-disassembly-src/` are gitignored,
+built locally, and there's no reference binary to verify against (unlike the
+ROM), so a clean `sjasmplus` assembly with zero errors is the correctness
+signal instead. Launch **"ZX Spectrum: Manic Miner"** once built, or load
+`game_disassembly/manicminer/mm.sna` + `mm.sld` over MCP the same way as any
+other program.
+
 ### Shared state, live
 
 Because both front-ends drive the same `Engine`, you can set a breakpoint in
@@ -371,7 +394,7 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-72 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+78 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
 16384 bytes with zero decode errors), the ROM SLD parser (`rom_source.py`),
 the engine actor's concurrency guarantees, and both front-ends driven over
@@ -400,7 +423,7 @@ zx-spectrum-emulator/
       memory.py                # 48K map (16K ROM + 48K RAM)
       ula.py                    # screen decode, border, frame interrupt
       keyboard.py                # 8x5 matrix, port 0xFE
-      snapshot.py                 # .sna loader
+      snapshot.py                 # .sna loader + writer
       disassembler.py               # full documented Z80 disassembler
       rom_source.py                   # ROM SLD parser (source-level debug)
       machine.py                        # Spectrum48K: wires it all together
@@ -410,11 +433,17 @@ zx-spectrum-emulator/
     server/
       mcp_server.py            # MCP tools
       dap.py                     # DAP TCP server
-      main.py                      # entrypoint: starts engine + both servers
+      screen_stream.py             # screen-frame TCP stream
+      main.py                        # entrypoint: starts engine + all three servers
   scripts/
     build_rom_source.py         # builds rom_disassembly/ (see below)
+    build_manicminer.py           # builds game_disassembly/manicminer/ (see below)
+  examples/
+    hello_rom_call/              # tiny original demo, committed
+  vscode-extension/            # debugger type registration + live screen viewer
   roms/                        # gitignored; drop your 48K ROM here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
+  game_disassembly/            # gitignored; scripts/build_manicminer.py output
   tests/
 ```
 
@@ -457,11 +486,18 @@ expose the same lookup over MCP. Verified end-to-end (build → `stackTrace` →
 `setBreakpoints` → hit → correct PC, and separately, own-program address →
 ROM address → correct source switches for both).
 
+A [live screen viewer](#live-screen-viewer) is done too: a third server port
+(`screen_stream.py`) streams the display as a continuous sequence of PNG
+frames to any client, and the `vscode-extension/` extension bridges that into
+a webview panel — the project's first extension with real code (previously
+just a declarative debugger-type stub). Explicitly designed to keep working
+standalone, independent of VS Code: the streaming port has no VS-Code-specific
+code in it, same as DAP/MCP.
+
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
 - Tape loading (`.tap`/`.tzx`/`.pzx`)
 - Beeper audio synthesis (port writes are tracked, not turned into sound)
-- An optional live viewer (today, screenshots are on-demand via `get_screen`)
 
 ## License
 

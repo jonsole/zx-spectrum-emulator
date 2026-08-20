@@ -13,7 +13,21 @@ roms/*
 !roms/.gitkeep
 .pytest_cache/
 
+# Rust build output
+rust-core/target/
+
+# Fetched ZEXALL/ZEXDOC (GPL v2.0, github.com/agn453/ZEXALL) -- a standalone
+# Z80 exerciser used only as a test fixture, not linked into the emulator;
+# fetched rather than committed to avoid vendoring a second project's tree.
+.zexall-src/
+
 # Fetched/generated ROM disassembly (copyrighted -- Amstrad / Logan &
 # O'Hara / Dymond -- same treatment as roms/: never committed, see README)
 .rom-disassembly-src/
 rom_disassembly/
+
+# Fetched/generated game disassemblies (copyrighted game code/data, plus
+# the disassembly's own annotations) -- same treatment, see README and
+# scripts/build_manicminer.py
+.manicminer-disassembly-src/
+game_disassembly/
