@@ -243,6 +243,36 @@ def test_disassemble_forward_from_pc():
     _run(scenario())
 
 
+def test_disassemble_positive_instruction_offset_skips_forward():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            # NOP(1); LD A,0x42(2); JP 0x8000(3) -- skip the first two
+            # instructions (offset=2) and read starting at the JP.
+            engine.machine.write_memory(0x8000, bytes([0x00, 0x3E, 0x42, 0xC3, 0x00, 0x80]))
+            resp = await client.request(
+                "disassemble",
+                {"memoryReference": "0x8000", "instructionOffset": 2, "instructionCount": 1},
+            )
+            instructions = resp["body"]["instructions"]
+            assert instructions[0]["address"] == "0x8003"
+            assert instructions[0]["instruction"] == "JP 0x8000"
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
 def test_disassemble_backward_from_an_aligned_instruction_boundary():
     async def scenario():
         engine = Engine()
@@ -264,6 +294,65 @@ def test_disassemble_backward_from_an_aligned_instruction_boundary():
             )
             instructions = resp["body"]["instructions"]
             assert [i["instruction"] for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_disassemble_backward_beyond_a_small_fixed_search_window():
+    # Regression test: the backward-alignment search's byte budget must
+    # scale with how many instructions are requested, not be a small fixed
+    # constant -- a real DAP session against the 48K ROM found the marker
+    # missing from VS Code's Disassembly View because a realistic request
+    # (50 instructions of "before" context, ~100 bytes for 2-byte
+    # instructions) exceeded a since-fixed max_search=64 and silently fell
+    # back to "no before context", shifting every address by 50 slots.
+    #
+    # Deliberately varied instruction lengths/content here, NOT a single
+    # repeated instruction: a uniformly-repeating byte pattern is a
+    # degenerate case where shifting by one unit can coincidentally
+    # realign and produce an equally "valid-looking" but wrong alignment
+    # (an inherent ambiguity of backward-scanning variable-length opcodes,
+    # not something the search budget can fix) -- real code doesn't
+    # exhibit this, as already confirmed against the actual 48K ROM.
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            unit = bytes([0x3C, 0x06, 0x11, 0x0D, 0x11, 0x22, 0x22, 0xAF])
+            # INC A(1); LD B,0x11(2); DEC C(1); LD DE,0x2222(3); XOR A(1) = 8 bytes, 5 instructions
+            n_units = 12  # 12 * 8 = 96 bytes of lookback, past any small fixed budget
+            n_instructions = 5 * n_units
+            program = unit * n_units + bytes([0x76])  # ...; HALT
+            engine.machine.write_memory(0x8000, program)
+            halt_addr = 0x8000 + len(unit) * n_units
+
+            resp = await client.request(
+                "disassemble",
+                {
+                    "memoryReference": f"0x{halt_addr:04X}",
+                    "instructionOffset": -n_instructions,
+                    "instructionCount": n_instructions + 1,
+                },
+            )
+            instructions = resp["body"]["instructions"]
+            addrs = [i["address"] for i in instructions]
+            assert addrs[0] == "0x8000"
+            assert addrs[n_instructions] == f"0x{halt_addr:04X}"
+            assert instructions[n_instructions]["instruction"] == "HALT"
+            assert instructions[0]["instruction"] == "INC A"
+            assert instructions[1]["instruction"] == "LD B,0x11"
+            assert instructions[3]["instruction"] == "LD DE,0x2222"
         finally:
             await client.close()
             server.close()

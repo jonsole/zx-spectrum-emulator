@@ -265,9 +265,14 @@ class DapConnection:
         instruction_offset = args.get("instructionOffset", 0)
         count = args["instructionCount"]
 
-        if instruction_offset >= 0:
+        if instruction_offset > 0:
+            # Walk forward `instruction_offset` instructions from base_addr
+            # -- unlike the backward case, this is unambiguous (variable-
+            # length decoding only needs a direction, not a search).
             start = base_addr
-        else:
+            for _ in range(instruction_offset):
+                start = (start + disassemble_one(self._read_memory_sync, start).length) & 0xFFFF
+        elif instruction_offset < 0:
             # Z80 opcodes are variable-length, so there's no way to jump
             # straight to "N instructions before base_addr" -- search
             # backward for a start address that, decoded forward, lands
@@ -275,6 +280,8 @@ class DapConnection:
             # instructions. Falls back to base_addr itself (no "before"
             # instructions) if no aligned start is found within range.
             start = self._find_aligned_backward_start(base_addr, -instruction_offset)
+        else:
+            start = base_addr
 
         instructions = disassemble_range(self._read_memory_sync, start, count)
         return {
@@ -284,7 +291,12 @@ class DapConnection:
             ]
         }
 
-    def _find_aligned_backward_start(self, base_addr: int, needed_before: int, max_search: int = 64) -> int:
+    def _find_aligned_backward_start(self, base_addr: int, needed_before: int) -> int:
+        # Z80 instructions are 1-4 bytes; searching back needed_before * 4
+        # bytes comfortably covers every real instruction stream (capped so
+        # a huge request -- e.g. VS Code paging in hundreds of instructions
+        # of context -- can't make this pathologically slow).
+        max_search = min(needed_before * 4 + 16, 2048)
         for back in range(1, max_search + 1):
             candidate = (base_addr - back) & 0xFFFF
             addr = candidate
