@@ -199,3 +199,132 @@ def test_maskable_interrupt_fires_at_frame_boundary():
     # see the docstring on the `registers` property) -- so the two are
     # always exactly one apart, not equal.
     assert pushed_return_addr == (pc_at_interrupt + 1) & 0xFFFF
+    # The real hardware stack got a push here (SP -= 2, asserted above),
+    # but call_stack tracking works at the opcode level (see
+    # _classify_step()) and there's no CALL/RST opcode actually sitting at
+    # pc_at_interrupt (it's a NOP -- the interrupt intercepts BEFORE that
+    # NOP would have been fetched) -- so this must NOT have pushed a
+    # call_stack frame. Deliberately untracked, not a bug: see
+    # _classify_step()'s docstring on why this is symmetric with RETI/RETN
+    # also being untracked.
+    assert m.call_stack == []
+
+
+def _set_sp(m: Spectrum48K, sp: int) -> None:
+    regs = m.registers
+    regs.sp = sp
+    m.set_registers(regs)
+
+
+def test_call_stack_tracks_a_call_and_its_return():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    # 0x8000: CALL 0x9000 (3 bytes, returns to 0x8003) ; 0x9000: RET
+    _load_program(m, 0x8000, bytes([0xCD, 0x00, 0x90]))
+    m.write_memory(0x9000, bytes([0xC9]))  # RET
+
+    m.step_instruction()  # CALL 0x9000
+    assert m.call_stack == [0x8003]
+    assert m.registers.pc == 0x9000
+
+    m.step_instruction()  # RET
+    assert m.call_stack == []
+    assert m.registers.pc == 0x8003
+
+
+def test_call_stack_tracks_nested_calls_in_order():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    # 0x8000: CALL 0x9000 (-> 0x8003)
+    # 0x9000: CALL 0x9100 (-> 0x9003)
+    # 0x9003: RET
+    # 0x9100: RET
+    _load_program(m, 0x8000, bytes([0xCD, 0x00, 0x90]))
+    m.write_memory(0x9000, bytes([0xCD, 0x00, 0x91]))
+    m.write_memory(0x9003, bytes([0xC9]))
+    m.write_memory(0x9100, bytes([0xC9]))
+
+    m.step_instruction()  # CALL 0x9000
+    assert m.call_stack == [0x8003]
+    m.step_instruction()  # CALL 0x9100
+    assert m.call_stack == [0x8003, 0x9003]
+    m.step_instruction()  # RET (inside 0x9100) -> back to 0x9003
+    assert m.call_stack == [0x8003]
+    assert m.registers.pc == 0x9003
+    m.step_instruction()  # RET (at 0x9003) -> back to 0x8003
+    assert m.call_stack == []
+    assert m.registers.pc == 0x8003
+
+
+def test_call_stack_tracks_rst():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    # RST 0x10 (0xD7, 1 byte, returns to 0x8001) ; the ROM's own
+    # PRINT_A_1-equivalent doesn't need to be loaded -- RST just needs to
+    # push+jump, whatever's at 0x0010 (unwritten ROM = 0x00 = NOP here).
+    _load_program(m, 0x8000, bytes([0xD7]))
+
+    m.step_instruction()
+    assert m.call_stack == [0x8001]
+    assert m.registers.pc == 0x0010
+
+
+def test_call_stack_ignores_a_conditional_call_that_is_not_taken():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    # XOR A (sets Z) ; CALL NZ,0x9000 -- NZ is false, so the call must not
+    # be taken: no frame pushed, and SP/PC just fall through normally.
+    _load_program(m, 0x8000, bytes([0xAF, 0xC4, 0x00, 0x90]))
+
+    m.step_instruction()  # XOR A
+    sp_before = m.registers.sp
+    m.step_instruction()  # CALL NZ,0x9000 (not taken)
+    assert m.call_stack == []
+    assert m.registers.pc == 0x8004
+    assert m.registers.sp == sp_before
+
+
+def test_call_stack_ignores_a_conditional_ret_that_is_not_taken():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    # CALL 0x9000 ; at 0x9000: XOR A (sets Z) ; RET NZ (not taken) ; RET
+    _load_program(m, 0x8000, bytes([0xCD, 0x00, 0x90]))
+    m.write_memory(0x9000, bytes([0xAF, 0xC0, 0xC9]))  # XOR A ; RET NZ ; RET
+
+    m.step_instruction()  # CALL 0x9000
+    assert m.call_stack == [0x8003]
+    m.step_instruction()  # XOR A
+    sp_before = m.registers.sp
+    m.step_instruction()  # RET NZ (not taken)
+    assert m.call_stack == [0x8003]  # unchanged -- still inside the call
+    assert m.registers.pc == 0x9002
+    assert m.registers.sp == sp_before
+
+    m.step_instruction()  # RET (taken)
+    assert m.call_stack == []
+    assert m.registers.pc == 0x8003
+
+
+def test_call_stack_is_cleared_by_reset_and_set_registers():
+    m = Spectrum48K()
+    _set_sp(m, 0xFF00)
+    _load_program(m, 0x8000, bytes([0xCD, 0x00, 0x90]))
+    m.write_memory(0x9000, bytes([0x76]))  # HALT -- stay put, don't return
+    m.step_instruction()
+    assert m.call_stack == [0x8003]
+
+    m.reset()
+    assert m.call_stack == []
+
+    _set_sp(m, 0xFF00)
+    _load_program(m, 0x8000, bytes([0xCD, 0x00, 0x90]))
+    m.write_memory(0x9000, bytes([0x76]))
+    m.step_instruction()
+    assert m.call_stack == [0x8003]
+
+    # A debugger redirecting PC directly (not via CALL/RET) also
+    # invalidates whatever call chain was tracked before it.
+    regs = m.registers
+    regs.pc = 0x8000
+    m.set_registers(regs)
+    assert m.call_stack == []

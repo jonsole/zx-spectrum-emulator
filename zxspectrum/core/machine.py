@@ -17,6 +17,43 @@ from zxspectrum.core.z80 import Registers, Z80
 # what's on the data bus during the ack cycle, but z80.h still reads a byte.
 _INT_ACK_BYTE = 0xFF
 
+# Opcodes that push a return address and jump to a callee -- CALL nn, CALL
+# cc,nn, and every RST. Whether a conditional CALL actually pushed anything
+# is confirmed afterward by checking SP, not decided here.
+_CALL_OPCODES = frozenset({0xCD, 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC})
+_RST_OPCODES = frozenset({0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF})
+# RET / RET cc -- pairs with a tracked _CALL_OPCODES/_RST_OPCODES push.
+_RET_OPCODES = frozenset({0xC9, 0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8})
+
+
+def _classify_step(read_byte, addr: int) -> str | None:
+    """Classify the opcode at `addr` for call_stack tracking purposes.
+    Returns "call" (CALL/RST -- may push a return address), "ret" (RET/RET
+    cc -- may pop one), or None (everything else). Skips redundant DD/FD
+    prefixes the same way the real CPU does before classifying the
+    underlying opcode.
+
+    RETI/RETN (0xED 0x4D / 0xED 0x45) fall under the ED-prefixed None case
+    deliberately, not "ret": they return from an interrupt, and this
+    emulator doesn't push a call_stack frame for interrupt entry either
+    (that happens inside z80.h's own microcode during tick(), invisible at
+    the opcode level this classifier works at) -- treating both ends as an
+    untracked no-op keeps call_stack correct for the CALL/RET pairs it DOES
+    see instead of popping a real one that was never the interrupt's.
+    """
+    a = addr & 0xFFFF
+    op = read_byte(a)
+    while op in (0xDD, 0xFD):
+        a = (a + 1) & 0xFFFF
+        op = read_byte(a)
+    if op == 0xED:
+        return None
+    if op in _CALL_OPCODES or op in _RST_OPCODES:
+        return "call"
+    if op in _RET_OPCODES:
+        return "ret"
+    return None
+
 
 class Spectrum48K:
     def __init__(self) -> None:
@@ -27,6 +64,13 @@ class Spectrum48K:
         self.tstates = 0
         self.frame_count = 0
         self.breakpoints: set[int] = set()
+        # Return addresses for CALL/RST frames currently unwound below the
+        # current PC, oldest first -- see _classify_step() for how it's
+        # kept in sync with actual execution. Cleared on reset/snapshot
+        # load/set_registers since any of those can redirect PC outside
+        # normal call/return flow, making a stale call chain actively
+        # misleading rather than just incomplete.
+        self.call_stack: list[int] = []
         self._int_pending = False
         self._prime_fetch()
 
@@ -49,6 +93,7 @@ class Spectrum48K:
         self.cpu.pins = self.cpu.reset()
         self.tstates = 0
         self.frame_count = 0
+        self.call_stack.clear()
         self._int_pending = False
         self._prime_fetch()
 
@@ -85,6 +130,10 @@ class Spectrum48K:
         # the documented way to actually redirect execution.
         self.cpu.set_regs(regs)
         self.cpu.prefetch(regs.pc)
+        # An external PC write can redirect execution outside normal
+        # call/return flow (a debugger jumping PC around, a fresh snapshot
+        # load), so any tracked call chain is no longer meaningful.
+        self.call_stack.clear()
         self._prime_fetch()
 
     def _prime_fetch(self) -> None:
@@ -152,9 +201,21 @@ class Spectrum48K:
 
     def step_instruction(self) -> None:
         """Run T-states until the current instruction completes."""
+        pc_before, sp_before = self.registers.pc, self.registers.sp
+        category = _classify_step(self.memory.read, pc_before)
+
         self.tick()
         while not self.cpu.opdone:
             self.tick()
+
+        if category is None:
+            return
+        sp_after = self.registers.sp
+        if category == "call" and sp_after == (sp_before - 2) & 0xFFFF:
+            return_addr = self.memory.read(sp_after) | (self.memory.read((sp_after + 1) & 0xFFFF) << 8)
+            self.call_stack.append(return_addr)
+        elif category == "ret" and sp_after == (sp_before + 2) & 0xFFFF and self.call_stack:
+            self.call_stack.pop()
 
     def run_frame(self) -> None:
         """Run exactly one video frame's worth of T-states (~69888)."""

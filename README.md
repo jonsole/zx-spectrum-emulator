@@ -100,7 +100,7 @@ full Visual Studio IDE rather than just Build Tools).
 This also compiles the native Z80 core extension as part of the install (via
 the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
 Verified in a clean checkout: the install command above, then `pytest`,
-passes all 65 tests with nothing else run in between.
+passes all 72 tests with nothing else run in between.
 
 ### WSL / Linux / macOS
 
@@ -200,10 +200,31 @@ steps are required first, on top of [Setup](#setup):
      "engines": { "vscode": "^1.85.0" },
      "categories": ["Debuggers"],
      "contributes": {
-       "debuggers": [{ "type": "zxspectrum", "label": "ZX Spectrum" }]
+       "debuggers": [
+         {
+           "type": "zxspectrum",
+           "label": "ZX Spectrum",
+           "configurationAttributes": {
+             "launch": {
+               "properties": {
+                 "rom": { "type": "string", "description": "Path to a 16K ROM image to load." },
+                 "snapshot": { "type": "string", "description": "Path to a .sna snapshot to load." },
+                 "sld": { "type": "string", "description": "Path to an sjasmplus SLD file. Requires asm." },
+                 "asm": { "type": "string", "description": "Path to the source the sld was assembled from. Requires sld." }
+               }
+             }
+           }
+         }
+       ]
      }
    }
    ```
+
+   The `configurationAttributes` block is only there so VS Code's `launch.json`
+   editor recognizes `rom`/`snapshot`/`sld`/`asm` as valid instead of flagging
+   them as unknown properties — `debugServer` bypasses real adapter code
+   regardless, so this is purely for the editor's schema validation, not
+   functional.
 
    Then reload VS Code ("Developer: Reload Window") to pick it up.
 
@@ -214,9 +235,9 @@ ready before connecting.
 
 Without the ROM disassembly built (see below), this drives VS Code's
 **Disassembly View** rather than a source view: breakpoints are instruction
-breakpoints set from there, and the single stack frame is labeled with just
-the disassembled instruction at PC. Stepping is `next` (one Z80 instruction)
-regardless. Supported requests: `initialize`, `launch`/`attach`,
+breakpoints set from there, and each stack frame is labeled with just the
+disassembled instruction at its address (no symbol name). Stepping is `next`
+(one Z80 instruction) regardless. Supported requests: `initialize`, `launch`/`attach`,
 `configurationDone`, `setInstructionBreakpoints`, `setBreakpoints`,
 `continue`/`next`/`stepIn`/`stepOut`/`pause`, `threads`, `stackTrace`,
 `disassemble`, `scopes`/`variables` (a **Registers** scope — including the
@@ -238,6 +259,26 @@ doesn't reliably auto-populate the Registers panel or auto-focus the
 Disassembly View on every stop — clicking the Call Stack entry once after a
 stop refreshes it. Tracked upstream as
 [microsoft/vscode#131253](https://github.com/microsoft/vscode/issues/131253).
+
+#### Call stack
+
+`stackTrace` shows a real, multiple-frame call stack, not just the current
+PC: `Spectrum48K` tracks `CALL`/`RST` and their matching `RET` as they
+execute (`machine.py`'s `call_stack`), so stepping into a routine adds a
+frame for it, each labeled and sourced exactly like the top frame (using
+whichever debug info covers that address — the loaded program's own, or the
+ROM's). It's a live opcode-level watch, not stack-memory guesswork — the Z80
+has no frame-pointer convention, so there's no reliable way to tell a return
+address from ordinary pushed data by inspection alone.
+
+Two things it deliberately doesn't track, both rare in practice: interrupt
+handler entry/exit (`RETI`/`RETN`) is invisible to it on purpose, so it
+can't desync the frames it *does* track; and code that unwinds the stack by
+resetting SP directly instead of matching `RET`s one-for-one (an idiom the
+ROM itself uses for error handling) can leave stale frames until the next
+real `CALL`/`RET` resyncs things. Cleared automatically on reset, a new
+snapshot, or any direct PC/register write, since a stale call chain would
+be actively misleading rather than just incomplete.
 
 #### Source-level debugging of the ROM
 
@@ -330,7 +371,7 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-65 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+72 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
 16384 bytes with zero decode errors), the ROM SLD parser (`rom_source.py`),
 the engine actor's concurrency guarantees, and both front-ends driven over

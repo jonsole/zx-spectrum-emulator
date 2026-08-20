@@ -327,14 +327,27 @@ class DapConnection:
         return {"threads": [{"id": _THREAD_ID, "name": "Z80"}]}
 
     async def _cmd_stackTrace(self, args: dict) -> dict:
+        # Frame 0 is the current PC; frame 1+ are call_stack's tracked
+        # return addresses, innermost (most recently called) first --
+        # call_stack itself is oldest-first (a plain append/pop stack), so
+        # reversed() here is what puts them in that display order. See
+        # machine.py's _classify_step()/step_instruction() for how it's
+        # kept in sync with actual CALL/RST/RET execution, and its known
+        # limitation (untracked interrupt frames, desyncable by direct SP
+        # manipulation -- e.g. the ROM's own error-handler unwind idiom).
         regs = await self.engine.get_registers()
-        inst = disassemble_one(self._read_memory_sync, regs.pc)
-        name = f"0x{regs.pc:04X}: {inst.text}"
+        addrs = [regs.pc, *reversed(self.engine.machine.call_stack)]
+        frames = [self._build_frame(i + 1, addr) for i, addr in enumerate(addrs)]
+        return {"stackFrames": frames, "totalFrames": len(frames)}
+
+    def _build_frame(self, frame_id: int, addr: int) -> dict:
+        inst = disassemble_one(self._read_memory_sync, addr)
+        name = f"0x{addr:04X}: {inst.text}"
 
         frame = {
-            "id": 1,
+            "id": frame_id,
             "name": name,
-            "instructionPointerReference": f"0x{regs.pc:04X}",
+            "instructionPointerReference": f"0x{addr:04X}",
             "line": 0,
             "column": 0,
         }
@@ -344,10 +357,10 @@ class DapConnection:
         # (e.g. it only has entries far below PC), which would mislabel
         # the frame rather than just showing no source for it.
         for source in self._active_sources():
-            line = source.addr_to_line.get(regs.pc)
+            line = source.addr_to_line.get(addr)
             if line is None:
                 continue
-            symbol = source.symbol_at(regs.pc)
+            symbol = source.symbol_at(addr)
             if symbol is not None:
                 sym_name, offset = symbol
                 label = f"{sym_name}+{offset}" if offset else sym_name
@@ -356,7 +369,7 @@ class DapConnection:
             frame["line"] = line
             frame["column"] = 1
             break
-        return {"stackFrames": [frame], "totalFrames": 1}
+        return frame
 
     def _read_memory_sync(self, addr: int) -> int:
         # Disassembly is read-only and doesn't mutate machine state, so it

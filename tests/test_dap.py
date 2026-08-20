@@ -482,6 +482,58 @@ def test_stack_trace_labels_frame_with_disassembled_instruction():
             server.close()
             await engine.stop()
 
+
+def test_stack_trace_shows_a_call_frame_for_a_call_in_progress():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            # Write the program BEFORE the final set_registers(pc=...) --
+            # its priming tick fetches whatever byte is at the new PC
+            # immediately (see machine.py's _prime_fetch()), so writing
+            # memory afterward would be one step too late and the CPU
+            # would execute a stale already-fetched byte instead.
+            base = 0x8000
+            callee = (base + 0x100) & 0xFFFF
+            engine.machine.write_memory(base, bytes([0xCD, callee & 0xFF, callee >> 8]))  # CALL callee
+            engine.machine.write_memory(callee, bytes([0x00]))  # NOP
+
+            regs = await engine.get_registers()
+            regs.pc = base
+            await engine.set_registers(regs)
+            await client.event("stopped")
+
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                trace = await client.request("stackTrace", {"threadId": 1})
+            assert trace["body"]["totalFrames"] == 1  # not inside the call yet
+
+            resp = await client.request("next", {"threadId": 1})
+            assert resp["success"]
+            await client.event("stopped")
+
+            regs = await engine.get_registers()
+            assert regs.pc == callee
+            assert engine.machine.call_stack == [(base + 3) & 0xFFFF]
+
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                trace = await client.request("stackTrace", {"threadId": 1})
+            frames = trace["body"]["stackFrames"]
+            assert trace["body"]["totalFrames"] == 2
+            assert frames[0]["instructionPointerReference"] == f"0x{callee:04X}"
+            assert frames[1]["instructionPointerReference"] == f"0x{(base + 3) & 0xFFFF:04X}"
+            assert frames[0]["id"] != frames[1]["id"]
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
     _run(scenario())
 
 
