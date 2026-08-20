@@ -87,7 +87,7 @@ uv pip install -e ".[dev]"
 This also compiles the native Z80 core extension as part of the install
 (via the `cffi_modules` build hook in `setup.py`) — no separate build step
 needed. Verified in a clean checkout: `pip install -e ".[dev]"` then
-`pytest` passes all 40 tests with nothing else run in between.
+`pytest` passes all 42 tests with nothing else run in between.
 
 ## ROM
 
@@ -136,37 +136,41 @@ claude mcp add zx-spectrum --transport sse --url http://127.0.0.1:8000/sse
 
 ### Connecting VS Code (DAP)
 
-`server/dap.py` implements the DAP wire protocol (Content-Length-framed
-JSON over a plain TCP socket) and has been verified against a real
-`asyncio` TCP client speaking that protocol — see `tests/test_dap.py` and
-the live shared-state check described in [Status & roadmap](#status--roadmap).
-**It has not yet been verified against an actual VS Code window.** VS
-Code's `launch.json` `debugServer` field (pointing at a port instead of
-spawning the extension's own adapter process) is
-[documented as an extension-author feature](https://code.visualstudio.com/api/extension-guides/debugger-extension) —
-in practice this likely means VS Code still needs a minimal extension
-`package.json` contributing a `debuggers` entry for a `type` (even though
-that extension doesn't need to implement anything, since `debugServer`
-overrides which process VS Code actually talks to). That thin extension
-shell doesn't exist yet; building and confirming it end-to-end in a real
-VS Code window is the next real step for this side of the project.
+The repo's `.vscode/` folder is a ready-to-use workspace: `tasks.json` starts
+the emulator server inside WSL, and `launch.json`'s **"ZX Spectrum: Step
+through ROM"** configuration points at it. Two one-time setup steps are
+required first, on top of [Setup](#setup):
 
-Once that shell exists, a `launch.json` entry would look like:
+1. **A real 48K ROM** — see [ROM](#rom) above. `launch.json` expects it at
+   `roms/48.rom`.
+2. **Register the `zxspectrum` debugger type.** VS Code requires
+   `launch.json`'s `type` to match a registered `contributes.debuggers`
+   entry before it will even attempt a `debugServer` connection — this is
+   true even though no actual adapter code is needed, since `debugServer`
+   overrides which process VS Code talks to (see the [extension
+   guide](https://code.visualstudio.com/api/extension-guides/debugger-extension)).
+   Create a minimal declarative extension — no code required — at
+   `<VS Code extensions folder>/<publisher>.zxspectrum-debug-0.0.1/package.json`:
 
-```jsonc
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "ZX Spectrum",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "/absolute/path/to/roms/48.rom"
-    }
-  ]
-}
-```
+   ```json
+   {
+     "name": "zxspectrum-debug",
+     "publisher": "<your-name>",
+     "version": "0.0.1",
+     "engines": { "vscode": "^1.85.0" },
+     "categories": ["Debuggers"],
+     "contributes": {
+       "debuggers": [{ "type": "zxspectrum", "label": "ZX Spectrum" }]
+     }
+   }
+   ```
+
+   Then reload VS Code ("Developer: Reload Window") to pick it up.
+
+With both in place, open the Run and Debug view and launch **"ZX Spectrum:
+Step through ROM"**. The `preLaunchTask` starts the server automatically
+(watch its output in the dedicated terminal panel) and waits for it to be
+ready before connecting.
 
 There's no source file in v1 (no assembler listing/map), so this drives VS
 Code's **Disassembly View** rather than a source view: breakpoints are
@@ -179,6 +183,15 @@ the disassembled instruction at PC. Supported requests: `initialize`,
 shadow set `AF'`/`BC'`/`DE'`/`HL'` — and a **Flags** scope breaking `F` out
 into `S`/`Z`/`H`/`P·V`/`N`/`C` booleans), `readMemory`/`writeMemory`, and
 `disconnect`.
+
+**What's actually been verified:** the complete
+launch→disassemble→setInstructionBreakpoints→continue→stopped-at-breakpoint→inspect-registers
+flow, run from a **native Windows** process against the DAP server running
+inside WSL (confirming WSL2's localhost port-forwarding works for this
+without extra configuration), using the exact Windows-style ROM path
+`${workspaceFolder}` resolves to. That exercises everything VS Code itself
+would do except VS Code's own UI rendering — the one remaining unconfirmed
+step is actually pressing F5 in a live VS Code window.
 
 ### Shared state, live
 
@@ -194,7 +207,7 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-40 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+42 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
 16384 bytes with zero decode errors), the engine actor's concurrency
 guarantees, and both front-ends driven over real sockets (an actual
@@ -244,12 +257,20 @@ server → DAP server), including a live concurrent-session check: a real DAP
 client and a real MCP client connected simultaneously, each observing the
 other's changes as unsolicited events.
 
-Not yet built:
-- A minimal VS Code extension shell to actually register the debugger
-  `type` so `launch.json`'s `debugServer` field can connect to `dap.py` —
-  the protocol itself is implemented and tested, but real VS Code
-  integration hasn't been confirmed end-to-end yet (see
-  [Connecting VS Code](#connecting-vs-code-dap)).
+A [VS Code workspace](#connecting-vs-code-dap) (`.vscode/tasks.json` +
+`launch.json`) is included and the full debug flow has been verified against
+the DAP server from a real native-Windows process — the one remaining
+unconfirmed step is pressing F5 in an actual VS Code window, since that
+requires the one-time per-machine debugger-type registration described
+there (deliberately not part of this repo — it's local setup, not project
+code).
+
+**Known limitation, not yet fixed:** if a client starts `run()` and
+disconnects without ever `pause()`-ing (e.g. a crashed or killed client
+mid-session), the engine's single actor loop stays stuck running that
+program forever, blocking every other client too — there's currently no
+auto-pause on disconnect or run-time cap. Fine for controlled testing;
+worth fixing before this is used for anything more exposed.
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
