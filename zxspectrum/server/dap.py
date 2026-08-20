@@ -18,6 +18,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import re
 from typing import Any
 
@@ -66,19 +67,22 @@ def _as_addr(value: Any, offset: int = 0) -> int:
 _WINDOWS_DRIVE_PATH = re.compile(r"^([A-Za-z]):[\\/](.*)$")
 
 
-def _to_wsl_path(path: str) -> str:
-    """Translate a Windows-style absolute path to its WSL /mnt/<drive> form.
+def _normalize_incoming_path(path: str) -> str:
+    """Adjust a client-supplied path to whatever this server process can
+    actually open.
 
-    This server always runs inside WSL (no supported native-Windows build --
-    see the README), but a client running as a native Windows process (VS
-    Code, launched via `debugServer` rather than through this project's own
-    WSL-aware tooling) resolves `${workspaceFolder}`-style paths to Windows
-    paths before sending them. Passing anything else through unchanged is
-    safe: WSL paths, relative paths, and already-POSIX paths don't match
-    this pattern.
+    This server can run either natively on Windows or inside WSL (see the
+    README). A native-Windows VS Code process resolves
+    `${workspaceFolder}`-style paths to Windows form (`C:\\...`) before
+    sending them in launch requests -- when *this* process is also native
+    Windows, that path is already directly usable and is returned
+    unchanged. When this process is running inside WSL instead, that same
+    Windows-style path needs translating to its /mnt/<drive> equivalent
+    first. Anything that isn't a bare Windows drive path (WSL paths,
+    relative paths, already-POSIX paths) is always passed through as-is.
     """
     m = _WINDOWS_DRIVE_PATH.match(path)
-    if not m:
+    if not m or os.name == "nt":
         return path
     drive, rest = m.groups()
     return f"/mnt/{drive.lower()}/{rest.replace('\\', '/')}"
@@ -188,11 +192,11 @@ class DapConnection:
     async def _cmd_launch(self, args: dict) -> dict:
         rom_path = args.get("rom")
         if rom_path:
-            with open(_to_wsl_path(rom_path), "rb") as f:
+            with open(_normalize_incoming_path(rom_path), "rb") as f:
                 await self.engine.load_rom(f.read())
         snapshot_path = args.get("snapshot")
         if snapshot_path:
-            with open(_to_wsl_path(snapshot_path), "rb") as f:
+            with open(_normalize_incoming_path(snapshot_path), "rb") as f:
                 await self.engine.load_snapshot(f.read())
         else:
             await self.engine.reset()

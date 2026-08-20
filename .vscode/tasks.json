@@ -4,14 +4,9 @@
     {
       "label": "zxspectrum.start-server",
       "type": "shell",
-      "command": "wsl.exe",
-      "args": [
-        "--cd", "${workspaceFolder}",
-        "-d", "Ubuntu-24.04",
-        "--",
-        "bash", "-lc",
-        "source .venv/bin/activate && python -m zxspectrum.server.main --dap-port 4711 --mcp-port 8000"
-      ],
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["-m", "zxspectrum.server.main", "--dap-port", "4711", "--mcp-port", "8000"],
+      "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
       "presentation": {
         "reveal": "always",

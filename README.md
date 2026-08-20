@@ -63,19 +63,46 @@ cycle-exact ULA timing, beeper audio output, and tape loading. See
 
 ## Requirements
 
-- **WSL** (Windows Subsystem for Linux) with a distro that has a C toolchain,
-  or any Linux/macOS machine. There's no supported native-Windows build path:
-  compiling the `cffi` extension needs a C compiler, and this project doesn't
-  assume MSVC Build Tools are installed. Everything below is written for
-  running inside WSL from a Windows checkout — if you're natively on
-  Linux/macOS, skip the `wsl.exe -d ...` prefix.
-- Python 3.10+ (a [`uv`](https://github.com/astral-sh/uv)-managed interpreter
-  works well and sidesteps missing `pyconfig.h`/header issues some
-  system Pythons have).
+- A C compiler, to build the `cffi` extension. Either:
+  - **Native Windows**: [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+    (the "Desktop development with C++" workload). This is the primary,
+    recommended path on Windows — no WSL needed, and it's noticeably faster
+    (the full test suite runs in ~2s natively vs ~7s under WSL, since every
+    filesystem access avoids the WSL/DrvFs boundary).
+  - **WSL** (Windows Subsystem for Linux) or any Linux/macOS machine, if you'd
+    rather not install MSVC. Still fully supported — see
+    [WSL / Linux / macOS](#wsl--linux--macos) below.
+- Python 3.10+.
 - A real 48K ZX Spectrum ROM image, 16384 bytes (16K) exactly. Not included —
   see [ROM](#rom).
 
 ## Setup
+
+**Native Windows** (with MSVC Build Tools installed):
+
+```powershell
+python -m venv .venv-win
+.\.venv-win\Scripts\pip.exe install -e ".[dev]"
+```
+
+The `pip install` needs to run inside the MSVC developer environment so
+`cl.exe` is on `PATH` for the `cffi` build step — either run it from a
+"Developer PowerShell for VS" / "x64 Native Tools Command Prompt", or from a
+plain shell via:
+
+```powershell
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && .venv-win\Scripts\pip.exe install -e ".[dev]"'
+```
+
+(adjust the path if Build Tools installed somewhere else, or if using the
+full Visual Studio IDE rather than just Build Tools).
+
+This also compiles the native Z80 core extension as part of the install (via
+the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
+Verified in a clean checkout: the install command above, then `pytest`,
+passes all 49 tests with nothing else run in between.
+
+### WSL / Linux / macOS
 
 ```bash
 # from inside WSL, at the project root
@@ -84,10 +111,10 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
-This also compiles the native Z80 core extension as part of the install
-(via the `cffi_modules` build hook in `setup.py`) — no separate build step
-needed. Verified in a clean checkout: `pip install -e ".[dev]"` then
-`pytest` passes all 42 tests with nothing else run in between.
+Same `cffi_modules` build-on-install behavior as above. On WSL specifically,
+system Python can be missing `pyconfig.h`/dev headers; a
+[`uv`](https://github.com/astral-sh/uv)-managed interpreter (`uv venv
+--python 3.12`, as above) sidesteps that.
 
 ## ROM
 
@@ -106,7 +133,9 @@ python -m zxspectrum.server.main \
   --dap-host 127.0.0.1 --dap-port 4711
 ```
 
-This starts both servers on one asyncio event loop, sharing one `Engine`.
+(`.venv-win\Scripts\python.exe` natively, or the activated WSL venv's
+`python` — see [Setup](#setup).) This starts both servers on one asyncio
+event loop, sharing one `Engine`.
 
 ### Connecting an MCP client
 
@@ -132,7 +161,7 @@ look, it doesn't start it.
 | `load_rom(rom_base64)` | Load a 16K ROM image (base64) |
 | `load_snapshot(sna_base64)` | Load a `.sna` snapshot (base64) |
 | `reset()` | Reset the machine |
-| `step()` | Execute exactly one Z80 instruction |
+| `step(instructions=1, ticks=None)` | Step N instructions (default 1), or N T-states if `ticks` is given |
 | `run()` | Run until a breakpoint or `pause()` |
 | `pause()` | Interrupt an in-flight `run()` |
 | `set_breakpoint(addr)` / `clear_breakpoint(addr)` | PC breakpoints |
@@ -145,9 +174,9 @@ look, it doesn't start it.
 ### Connecting VS Code (DAP)
 
 The repo's `.vscode/` folder is a ready-to-use workspace: `tasks.json` starts
-the emulator server inside WSL, and `launch.json`'s **"ZX Spectrum: Step
-through ROM"** configuration points at it. Two one-time setup steps are
-required first, on top of [Setup](#setup):
+the emulator server (natively, via `.venv-win`), and `launch.json`'s **"ZX
+Spectrum: Step through ROM"** configuration points at it. Two one-time setup
+steps are required first, on top of [Setup](#setup):
 
 1. **A real 48K ROM** — see [ROM](#rom) above. `launch.json` expects it at
    `roms/48.rom`.
@@ -192,14 +221,20 @@ shadow set `AF'`/`BC'`/`DE'`/`HL'` — and a **Flags** scope breaking `F` out
 into `S`/`Z`/`H`/`P·V`/`N`/`C` booleans), `readMemory`/`writeMemory`, and
 `disconnect`.
 
-**What's actually been verified:** the complete
-launch→disassemble→setInstructionBreakpoints→continue→stopped-at-breakpoint→inspect-registers
-flow, run from a **native Windows** process against the DAP server running
-inside WSL (confirming WSL2's localhost port-forwarding works for this
-without extra configuration), using the exact Windows-style ROM path
-`${workspaceFolder}` resolves to. That exercises everything VS Code itself
-would do except VS Code's own UI rendering — the one remaining unconfirmed
-step is actually pressing F5 in a live VS Code window.
+**Verified working in an actual live VS Code session**, not just
+protocol-level: launch, breakpoints, continue-to-breakpoint, disassembly-view
+navigation (forward and backward from an arbitrary PC, including across the
+0xFFFF/0x0000 address wrap), and register inspection all confirmed by hand
+against the real ROM. A couple of real bugs turned up exactly this way and
+are already fixed — see [Status & roadmap](#status--roadmap) and the git
+history for details.
+
+One current UI rough edge, not fixable from the adapter side: VS Code
+doesn't reliably auto-populate the Registers panel or auto-focus the
+Disassembly View on every stop for a source**less** frame (there's no
+listing/map file in v1) — clicking the Call Stack entry once after a stop
+refreshes it. Tracked upstream as
+[microsoft/vscode#131253](https://github.com/microsoft/vscode/issues/131253).
 
 ### Shared state, live
 
@@ -215,7 +250,7 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-42 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+49 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
 16384 bytes with zero decode errors), the engine actor's concurrency
 guarantees, and both front-ends driven over real sockets (an actual
@@ -266,12 +301,14 @@ client and a real MCP client connected simultaneously, each observing the
 other's changes as unsolicited events.
 
 A [VS Code workspace](#connecting-vs-code-dap) (`.vscode/tasks.json` +
-`launch.json`) is included and the full debug flow has been verified against
-the DAP server from a real native-Windows process — the one remaining
-unconfirmed step is pressing F5 in an actual VS Code window, since that
-requires the one-time per-machine debugger-type registration described
-there (deliberately not part of this repo — it's local setup, not project
-code).
+`launch.json`) is included and confirmed working end to end in a real,
+interactive VS Code session (see the note there about one VS Code UI rough
+edge that isn't fixable from the adapter side).
+
+Native Windows builds are fully supported (`.venv-win`, MSVC Build Tools) —
+this is now the primary path on Windows; WSL/Linux/macOS remain supported
+alternatives. `DapConnection`'s incoming-path handling adapts automatically
+to whichever platform the server process is actually running on.
 
 **Known limitation, not yet fixed:** if a client starts `run()` and
 disconnects without ever `pause()`-ing (e.g. a crashed or killed client
@@ -279,6 +316,14 @@ mid-session), the engine's single actor loop stays stuck running that
 program forever, blocking every other client too — there's currently no
 auto-pause on disconnect or run-time cap. Fine for controlled testing;
 worth fixing before this is used for anything more exposed.
+
+**In progress:** source-level debugging against a real, commented
+disassembly (not just raw instructions) — validated the pipeline
+(`skoolkid/rom`'s SkoolKit source → `skool2asm.py` → `sjasmplus` assembly,
+reproducing the ROM **byte-for-byte**, with `--sld` giving a proper
+address↔source-line map) but haven't wired it into `dap.py`/the MCP surface
+yet. The copyrighted disassembly source is fetched locally, never committed
+(same treatment as the ROM itself).
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
