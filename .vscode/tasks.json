@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start ZX Spectrum emulator server",
+      "type": "shell",
+      "command": "wsl.exe",
+      "args": [
+        "--cd", "${workspaceFolder}",
+        "-d", "Ubuntu-24.04",
+        "--",
+        "bash", "-lc",
+        "source .venv/bin/activate && python -m zxspectrum.server.main --dap-port 4711 --mcp-port 8000"
+      ],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "zxspectrum",
+        "pattern": {
+          "regexp": "^(?!)(x)$",
+          "file": 1,
+          "location": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "endsPattern": "Uvicorn running on"
+        }
+      }
+    }
+  ]
+}

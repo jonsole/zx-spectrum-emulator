@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ZX Spectrum: Step through ROM",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "preLaunchTask": "Start ZX Spectrum emulator server"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 from typing import Any
 
 from zxspectrum.core.disassembler import disassemble_one, disassemble_range
@@ -60,6 +61,27 @@ def _write_message(writer: asyncio.StreamWriter, message: dict[str, Any]) -> Non
 def _as_addr(value: Any, offset: int = 0) -> int:
     addr = int(value, 16) if isinstance(value, str) else int(value)
     return (addr + offset) & 0xFFFF
+
+
+_WINDOWS_DRIVE_PATH = re.compile(r"^([A-Za-z]):[\\/](.*)$")
+
+
+def _to_wsl_path(path: str) -> str:
+    """Translate a Windows-style absolute path to its WSL /mnt/<drive> form.
+
+    This server always runs inside WSL (no supported native-Windows build --
+    see the README), but a client running as a native Windows process (VS
+    Code, launched via `debugServer` rather than through this project's own
+    WSL-aware tooling) resolves `${workspaceFolder}`-style paths to Windows
+    paths before sending them. Passing anything else through unchanged is
+    safe: WSL paths, relative paths, and already-POSIX paths don't match
+    this pattern.
+    """
+    m = _WINDOWS_DRIVE_PATH.match(path)
+    if not m:
+        return path
+    drive, rest = m.groups()
+    return f"/mnt/{drive.lower()}/{rest.replace('\\', '/')}"
 
 
 class DapConnection:
@@ -166,11 +188,11 @@ class DapConnection:
     async def _cmd_launch(self, args: dict) -> dict:
         rom_path = args.get("rom")
         if rom_path:
-            with open(rom_path, "rb") as f:
+            with open(_to_wsl_path(rom_path), "rb") as f:
                 await self.engine.load_rom(f.read())
         snapshot_path = args.get("snapshot")
         if snapshot_path:
-            with open(snapshot_path, "rb") as f:
+            with open(_to_wsl_path(snapshot_path), "rb") as f:
                 await self.engine.load_snapshot(f.read())
         else:
             await self.engine.reset()

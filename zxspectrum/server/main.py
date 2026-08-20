@@ -17,6 +17,7 @@ async def amain(mcp_host: str, mcp_port: int, dap_host: str, dap_port: int) -> N
     engine.start()
     mcp_server = create_server(engine)
     dap_server = await create_dap_server(engine, host=dap_host, port=dap_port)
+    print(f"DAP server listening on {dap_host}:{dap_port}", flush=True)
     try:
         async with dap_server:
             await asyncio.gather(

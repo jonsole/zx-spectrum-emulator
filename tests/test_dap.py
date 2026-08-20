@@ -2,11 +2,26 @@
 import asyncio
 
 from zxspectrum.engine.actor import Engine
-from zxspectrum.server.dap import _read_message, _write_message, create_dap_server
+from zxspectrum.server.dap import _read_message, _to_wsl_path, _write_message, create_dap_server
 
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def test_to_wsl_path_translates_windows_drive_paths():
+    # This server always runs inside WSL, but a native-Windows VS Code
+    # process resolves ${workspaceFolder} to a Windows path before sending
+    # it -- see _to_wsl_path's docstring.
+    assert _to_wsl_path(r"C:\Users\jonso\zx-spectrum-emulator\roms\48.rom") == \
+        "/mnt/c/Users/jonso/zx-spectrum-emulator/roms/48.rom"
+    assert _to_wsl_path("C:/Users/jonso/roms/48.rom") == "/mnt/c/Users/jonso/roms/48.rom"
+    assert _to_wsl_path(r"d:\roms\48.rom") == "/mnt/d/roms/48.rom"
+
+
+def test_to_wsl_path_leaves_non_windows_paths_unchanged():
+    assert _to_wsl_path("/mnt/c/Users/jonso/roms/48.rom") == "/mnt/c/Users/jonso/roms/48.rom"
+    assert _to_wsl_path("roms/48.rom") == "roms/48.rom"
 
 
 class _Client:
