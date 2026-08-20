@@ -192,4 +192,10 @@ def test_maskable_interrupt_fires_at_frame_boundary():
     assert regs.iff1 is False
     assert regs.sp == sp_before - 2
     pushed_return_addr = m.read_memory(regs.sp, 1)[0] | (m.read_memory(regs.sp + 1, 1)[0] << 8)
-    assert pushed_return_addr == pc_at_interrupt
+    # The hardware push uses the CPU's raw internal PC (matching real Z80
+    # behavior: the pre-fetched-but-unused byte is discarded and refetched
+    # after the handler returns), whereas Spectrum48K.registers.pc is the
+    # externally-corrected "address of the pending instruction" (raw - 1,
+    # see the docstring on the `registers` property) -- so the two are
+    # always exactly one apart, not equal.
+    assert pushed_return_addr == (pc_at_interrupt + 1) & 0xFFFF

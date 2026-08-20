@@ -54,7 +54,29 @@ class Spectrum48K:
 
     @property
     def registers(self) -> Registers:
-        return self.cpu.get_regs()
+        # z80_opdone() fires exactly when the overlapped fetch has already
+        # consumed the first byte of the NEXT instruction, so the raw PC
+        # register always reads one byte past the address that instruction
+        # actually starts at -- for sequential code this is invisible
+        # (address+1 IS the next instruction anyway), but it's a real,
+        # user-visible bug for anything reached via a jump/call/RST: e.g.
+        # after `JP 0x11CB` the raw register reads 0x11CC, so a breakpoint
+        # at 0x11CB (or a disassembly/stack-trace label at PC) would silently
+        # never match. Every external caller (breakpoints, DAP stackTrace/
+        # variables, MCP get_registers) wants "the address of the
+        # instruction about to execute", so that's what's reported here;
+        # verified empirically to hold across sequential, jump, and HALT
+        # cases (get_addr(cpu.pins) == raw_pc - 1 in all three).
+        #
+        # Known narrow limitation: if set_registers()/load_snapshot() points
+        # PC at a prefix byte (CB/ED/DD/FD) and registers is read before any
+        # step_instruction() call, the single priming tick hasn't reached an
+        # opdone-equivalent boundary yet (prefix decode suppresses it), so
+        # the "-1" correction doesn't apply cleanly. Rare in practice --
+        # normal use always steps before inspecting state.
+        regs = self.cpu.get_regs()
+        regs.pc = (regs.pc - 1) & 0xFFFF
+        return regs
 
     def set_registers(self, regs: Registers) -> None:
         # z80.h's z80_set_regs() only overwrites the register struct -- it
@@ -143,6 +165,6 @@ class Spectrum48K:
         """Run until a breakpoint is hit; returns 'breakpoint' or 'limit'."""
         for _ in range(max_instructions):
             self.step_instruction()
-            if self.cpu.get_regs().pc in self.breakpoints:
+            if self.registers.pc in self.breakpoints:
                 return "breakpoint"
         return "limit"
