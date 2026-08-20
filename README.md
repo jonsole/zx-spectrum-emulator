@@ -110,12 +110,20 @@ This starts both servers on one asyncio event loop, sharing one `Engine`.
 
 ### Connecting an MCP client
 
-Point any MCP client at `http://127.0.0.1:8000/sse` (SSE transport). For
-Claude Code:
+Point any MCP client at `http://127.0.0.1:8000/sse` (SSE transport).
+
+The repo includes `.mcp.json`, so opening this workspace in Claude Code
+picks up the server automatically (you'll be prompted to approve it once).
+To add it manually instead (e.g. a different client, or without opening
+the workspace), for Claude Code:
 
 ```bash
 claude mcp add zx-spectrum --transport sse --url http://127.0.0.1:8000/sse
 ```
+
+Either way, the server itself needs to actually be running first (see
+[Running](#running) above) — `.mcp.json` only tells the client where to
+look, it doesn't start it.
 
 **Available tools:**
 
