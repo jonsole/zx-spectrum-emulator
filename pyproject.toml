@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "cffi>=1.15"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zx-spectrum-emulator"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "cffi>=1.15",
+    "mcp>=1.0",
+    "pillow>=10.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+packages = ["zxspectrum", "zxspectrum.core", "zxspectrum.engine", "zxspectrum.server"]
+
+[tool.setuptools.package-data]
+zxspectrum = ["_native/shim.h"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+zxspectrum/_native/*.so
+zxspectrum/_native/*.pyd
+zxspectrum/_native/*.o
+zxspectrum/_native/_z80.c
+roms/*
+!roms/.gitkeep
+.pytest_cache/
