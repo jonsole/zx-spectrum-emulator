@@ -11,17 +11,26 @@ from __future__ import annotations
 import base64
 import dataclasses
 import io
+from pathlib import Path
 
 from PIL import Image as PILImage
 
 from mcp.server.mcpserver import Image, MCPServer
 
-from zxspectrum.core.rom_source import get_rom_source
+from zxspectrum.core.rom_source import RomSource, get_rom_source
 from zxspectrum.engine.actor import Engine
 
 
 def _regs_to_dict(regs) -> dict:
     return dataclasses.asdict(regs)
+
+
+def _debug_sources(engine: Engine) -> list[RomSource]:
+    # Whatever program is currently loaded takes priority over the ROM's
+    # own (always-available) debug info -- e.g. a symbol name defined in
+    # both would resolve to the loaded program's, and a call from that
+    # program into the ROM still resolves once neither has a hit here.
+    return [s for s in (engine.debug_info, get_rom_source()) if s is not None]
 
 
 def create_server(engine: Engine) -> MCPServer:
@@ -47,6 +56,20 @@ def create_server(engine: Engine) -> MCPServer:
         await engine.load_snapshot(base64.b64decode(sna_base64))
         regs = await engine.get_registers()
         return {"pc": regs.pc, "registers": _regs_to_dict(regs)}
+
+    @server.tool()
+    async def load_debug_info(sld_path: str, asm_path: str) -> dict:
+        """Attach source-level debug info for whatever program is
+        currently loaded (e.g. your own assembled .sna): an sjasmplus SLD
+        file plus the source it was generated from, both as local paths.
+        Enables resolve_symbol/resolve_address and DAP source-level
+        debugging (stack frames, gutter breakpoints) for this program's
+        addresses, alongside the ROM's own (always available separately,
+        so calls into the ROM still resolve). Cleared automatically the
+        next time load_snapshot() loads a different program."""
+        await engine.load_debug_info(Path(sld_path), Path(asm_path))
+        debug_info = engine.debug_info
+        return {"symbols": len(debug_info.symbols), "instructions": len(debug_info.line_to_addr)}
 
     @server.tool()
     async def reset() -> dict:
@@ -154,31 +177,35 @@ def create_server(engine: Engine) -> MCPServer:
 
     @server.tool()
     async def resolve_symbol(name: str) -> dict:
-        """Look up a ROM routine/label's address by name (e.g. "KEY_INT"),
-        using the commented ROM disassembly built by
-        scripts/build_rom_source.py. Returns found=False if that hasn't
-        been built, or the name doesn't exist."""
-        rom_source = get_rom_source()
-        if rom_source is None:
-            return {"found": False, "reason": "rom_disassembly/ not built -- see scripts/build_rom_source.py"}
-        addr = rom_source.symbols.get(name)
-        if addr is None:
-            return {"found": False, "reason": f"no ROM symbol named {name!r}"}
-        return {"found": True, "address": addr}
+        """Look up a routine/label's address by name (e.g. "KEY_INT"),
+        checking the currently-loaded program's debug info (see
+        load_debug_info) first, then the ROM's own (built by
+        scripts/build_rom_source.py). Returns found=False if neither is
+        available, or the name doesn't exist in either."""
+        sources = _debug_sources(engine)
+        for source in sources:
+            addr = source.symbols.get(name)
+            if addr is not None:
+                return {"found": True, "address": addr}
+        if not sources:
+            return {"found": False, "reason": "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"}
+        return {"found": False, "reason": f"no symbol named {name!r}"}
 
     @server.tool()
     async def resolve_address(addr: int) -> dict:
-        """Find the nearest named ROM routine at or before a 16-bit
-        address, with its offset -- e.g. 0x0005 -> {"symbol": "START",
-        "offset": 5}. Uses the same ROM disassembly as resolve_symbol."""
-        rom_source = get_rom_source()
-        if rom_source is None:
-            return {"found": False, "reason": "rom_disassembly/ not built -- see scripts/build_rom_source.py"}
-        result = rom_source.symbol_at(addr)
-        if result is None:
-            return {"found": False, "reason": "address precedes every known ROM symbol"}
-        symbol, offset = result
-        return {"found": True, "symbol": symbol, "offset": offset}
+        """Find the nearest named routine at or before a 16-bit address,
+        with its offset -- e.g. 0x0005 -> {"symbol": "START", "offset":
+        5}. Checks the currently-loaded program's debug info first, then
+        the ROM's own -- same sources as resolve_symbol."""
+        sources = _debug_sources(engine)
+        for source in sources:
+            result = source.symbol_at(addr)
+            if result is not None:
+                symbol, offset = result
+                return {"found": True, "symbol": symbol, "offset": offset}
+        if not sources:
+            return {"found": False, "reason": "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"}
+        return {"found": False, "reason": "address precedes every known symbol"}
 
     @server.tool()
     async def get_state() -> dict:
@@ -190,6 +217,7 @@ def create_server(engine: Engine) -> MCPServer:
             "breakpoints": sorted(state.breakpoints),
             "running": state.running,
             "border": state.border,
+            "debug_info_loaded": state.debug_info_loaded,
         }
 
     return server

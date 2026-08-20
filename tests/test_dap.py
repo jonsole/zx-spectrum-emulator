@@ -597,6 +597,93 @@ def test_set_breakpoints_line_with_no_instruction_is_unverified():
     _run(scenario())
 
 
+def test_launch_with_sld_and_asm_args_loads_program_debug_info(tmp_path):
+    async def scenario():
+        sld_path = tmp_path / "prog.sld"
+        asm_path = tmp_path / "prog.asm"
+        sld_path.write_text("prog.asm|7||0|0|32768|F|MYROUTINE\n", encoding="utf-8")
+        asm_path.write_text("; fake\n", encoding="utf-8")
+
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {"sld": str(sld_path), "asm": str(asm_path)})
+            await client.event("stopped")
+
+            assert engine.debug_info is not None
+            assert engine.debug_info.symbols == {"MYROUTINE": 0x8000}
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_stack_trace_prefers_loaded_program_source_and_falls_back_to_rom():
+    # This is the concrete scenario the user asked for: debugging your own
+    # assembled program (its own .sna/.sld) while it calls into ROM
+    # routines should show YOUR source for your own code, and still show
+    # the ROM's source once execution is inside a ROM routine -- neither
+    # source should have to be sacrificed for the other.
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.debug_info = RomSource(
+                asm_path=Path("prog.asm"),
+                line_to_addr={7: 0x8000},
+                addr_to_line={0x8000: 7},
+                symbols={"MYROUTINE": 0x8000},
+            )
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"), line_to_addr={90: 0}, addr_to_line={0: 90}, symbols={"START": 0}
+            )
+
+            # PC inside the loaded program -> program's own source.
+            regs = await engine.get_registers()
+            regs.pc = 0x8000
+            await engine.set_registers(regs)
+            await client.event("stopped")
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                trace = await client.request("stackTrace", {"threadId": 1})
+            frame = trace["body"]["stackFrames"][0]
+            assert frame["source"]["path"] == "prog.asm"
+            assert frame["line"] == 7
+            assert frame["name"].startswith("MYROUTINE  ")
+
+            # PC inside the ROM (no mapping in the program's own debug
+            # info) -> falls back to the ROM's source instead of showing
+            # nothing.
+            regs = await engine.get_registers()
+            regs.pc = 0x0000
+            await engine.set_registers(regs)
+            await client.event("stopped")
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                trace = await client.request("stackTrace", {"threadId": 1})
+            frame = trace["body"]["stackFrames"][0]
+            assert frame["source"]["path"] == "rom.asm"
+            assert frame["line"] == 90
+            assert frame["name"].startswith("START  ")
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
 def test_source_and_instruction_breakpoints_do_not_clobber_each_other():
     # Regression test: setInstructionBreakpoints previously cleared every
     # breakpoint on the engine (not just the instruction-category ones it

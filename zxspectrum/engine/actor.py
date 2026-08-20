@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from zxspectrum.core.machine import Spectrum48K
+from zxspectrum.core.rom_source import RomSource, load_source
 from zxspectrum.core.z80 import Registers
 from zxspectrum.engine import commands as cmd
 
@@ -34,6 +36,14 @@ class _Envelope:
 class Engine:
     def __init__(self) -> None:
         self.machine = Spectrum48K()
+        # Debug info for whichever program is currently loaded into RAM
+        # (distinct from the ROM's own, always-available copy -- see
+        # rom_source.get_rom_source() -- so code that calls from a loaded
+        # program into the ROM can still be source-level debugged in both
+        # directions). Not machine state and doesn't affect the tick loop
+        # at all, so it's a plain attribute rather than routed through the
+        # command queue.
+        self.debug_info: RomSource | None = None
         self._queue: asyncio.Queue[_Envelope] = asyncio.Queue()
         self._subscribers: list[asyncio.Queue[Any]] = []
         self._running = False
@@ -127,7 +137,25 @@ class Engine:
         return await self.submit(cmd.LoadRom(data))
 
     async def load_snapshot(self, data: bytes) -> None:
+        # A new snapshot is presumptively a different program -- any debug
+        # info already attached almost certainly no longer matches its
+        # addresses, so it would silently mislabel the new program's code
+        # rather than just showing no source. Cleared here rather than
+        # left for the caller to remember; call load_debug_info() again
+        # afterward for the new program if needed.
+        self.debug_info = None
         return await self.submit(cmd.LoadSnapshot(data))
+
+    async def load_debug_info(self, sld_path: Path, asm_path: Path) -> None:
+        """Attach source-level debug info for whatever program is
+        currently loaded (an sjasmplus SLD file + the source it was
+        assembled from) -- e.g. your own .sna plus its .sld. Raises if
+        either file doesn't exist; this is an explicit action, not an
+        automatic optional check."""
+        self.debug_info = load_source(sld_path, asm_path)
+
+    async def clear_debug_info(self) -> None:
+        self.debug_info = None
 
     # -- the actor loop ----------------------------------------------------
 
@@ -221,6 +249,7 @@ class Engine:
                 breakpoints=frozenset(m.breakpoints),
                 running=self._running,
                 border=m.ula.border,
+                debug_info_loaded=self.debug_info is not None,
             )
 
         if isinstance(command, cmd.LoadRom):

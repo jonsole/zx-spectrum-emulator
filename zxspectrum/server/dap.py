@@ -8,12 +8,16 @@ events, so state changes made over MCP show up in VS Code's UI without
 VS Code having requested them, and vice versa.
 
 Stack traces are always a single synthetic frame at PC, labeled with the
-disassembled instruction there. When the ROM disassembly has been built
-(scripts/build_rom_source.py -- see rom_source.py), that frame also gets
-a `source`/`line` pointing into the commented rom.asm, and source-line
+disassembled instruction there. When debug info is available for the
+address -- either the currently-loaded program's own (attached via `launch`
+args or MCP's `load_debug_info`) or the ROM's own (built by
+scripts/build_rom_source.py, always available once built -- see
+rom_source.py) -- that frame also gets a `source`/`line`, and source-line
 breakpoints (set by clicking the gutter in that file) are resolved to
-addresses via the same SLD data; without it, only instruction breakpoints
-(set from the Disassembly View) are available.
+addresses via the same SLD data. The loaded program's own debug info takes
+priority; the ROM's is checked as a fallback so calling from a loaded
+program into a ROM routine still resolves. Without either, only instruction
+breakpoints (set from the Disassembly View) are available.
 """
 from __future__ import annotations
 
@@ -23,10 +27,11 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from zxspectrum.core.disassembler import disassemble_one, disassemble_range
-from zxspectrum.core.rom_source import get_rom_source as _get_rom_source
+from zxspectrum.core.rom_source import RomSource, get_rom_source as _get_rom_source
 from zxspectrum.engine import commands as cmd
 from zxspectrum.engine.actor import Engine
 
@@ -212,6 +217,11 @@ class DapConnection:
                 await self.engine.load_snapshot(f.read())
         else:
             await self.engine.reset()
+        sld_path, asm_path = args.get("sld"), args.get("asm")
+        if sld_path and asm_path:
+            await self.engine.load_debug_info(
+                Path(_normalize_incoming_path(sld_path)), Path(_normalize_incoming_path(asm_path))
+            )
         return {}
 
     async def _cmd_attach(self, args: dict) -> dict:
@@ -235,15 +245,35 @@ class DapConnection:
         await self._sync_breakpoints()
         return {"breakpoints": breakpoints}
 
-    async def _cmd_setBreakpoints(self, args: dict) -> dict:
-        # Source-line breakpoints, set by clicking the gutter in rom.asm
-        # once the ROM disassembly has been built. Resolved to addresses
-        # via the SLD's line<->address mapping; a line with no mapped
-        # instruction (e.g. a comment or label-only line) comes back
-        # unverified rather than silently dropped, so VS Code shows it as
-        # such instead of pretending it's active.
-        source_path = (args.get("source") or {}).get("path", "")
+    def _active_sources(self) -> list[RomSource]:
+        # Whatever program is currently loaded takes priority over the
+        # ROM's own (always-available) debug info -- so a call from that
+        # program into a ROM routine still resolves once the program's own
+        # source has no mapping for the address.
+        sources = []
+        if self.engine.debug_info is not None:
+            sources.append(self.engine.debug_info)
         rom_source = _get_rom_source()
+        if rom_source is not None:
+            sources.append(rom_source)
+        return sources
+
+    def _source_for_path(self, path: str) -> RomSource | None:
+        for source in self._active_sources():
+            if str(source.asm_path) == path or source.asm_path.name == Path(path).name:
+                return source
+        return None
+
+    async def _cmd_setBreakpoints(self, args: dict) -> dict:
+        # Source-line breakpoints, set by clicking the gutter in whichever
+        # file is currently open (the loaded program's own source, or
+        # rom.asm once the ROM disassembly has been built). Resolved to
+        # addresses via the matching source's SLD line<->address mapping;
+        # a line with no mapped instruction (e.g. a comment or label-only
+        # line) comes back unverified rather than silently dropped, so VS
+        # Code shows it as such instead of pretending it's active.
+        source_path = (args.get("source") or {}).get("path", "")
+        rom_source = self._source_for_path(source_path)
 
         addrs: set[int] = set()
         results = []
@@ -299,14 +329,7 @@ class DapConnection:
     async def _cmd_stackTrace(self, args: dict) -> dict:
         regs = await self.engine.get_registers()
         inst = disassemble_one(self._read_memory_sync, regs.pc)
-        rom_source = _get_rom_source()
-
         name = f"0x{regs.pc:04X}: {inst.text}"
-        symbol = rom_source.symbol_at(regs.pc) if rom_source else None
-        if symbol is not None:
-            sym_name, offset = symbol
-            label = f"{sym_name}+{offset}" if offset else sym_name
-            name = f"{label}  {name}"
 
         frame = {
             "id": 1,
@@ -315,11 +338,24 @@ class DapConnection:
             "line": 0,
             "column": 0,
         }
-        line = rom_source.addr_to_line.get(regs.pc) if rom_source else None
-        if line is not None:
-            frame["source"] = {"name": rom_source.asm_path.name, "path": str(rom_source.asm_path)}
+        # First source (loaded program, then ROM) with an exact address
+        # match wins -- symbol_at() alone would find SOME nearest label
+        # from a source that doesn't actually cover this address at all
+        # (e.g. it only has entries far below PC), which would mislabel
+        # the frame rather than just showing no source for it.
+        for source in self._active_sources():
+            line = source.addr_to_line.get(regs.pc)
+            if line is None:
+                continue
+            symbol = source.symbol_at(regs.pc)
+            if symbol is not None:
+                sym_name, offset = symbol
+                label = f"{sym_name}+{offset}" if offset else sym_name
+                frame["name"] = f"{label}  {name}"
+            frame["source"] = {"name": source.asm_path.name, "path": str(source.asm_path)}
             frame["line"] = line
             frame["column"] = 1
+            break
         return {"stackFrames": [frame], "totalFrames": 1}
 
     def _read_memory_sync(self, addr: int) -> int:

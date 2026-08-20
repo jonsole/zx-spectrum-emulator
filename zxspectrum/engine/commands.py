@@ -119,3 +119,4 @@ class State:
     breakpoints: frozenset[int]
     running: bool
     border: int
+    debug_info_loaded: bool

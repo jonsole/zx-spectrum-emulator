@@ -1,11 +1,13 @@
-"""Parses sjasmplus SLD debug data for the commented ROM disassembly.
+"""Parses sjasmplus SLD debug data -- both for the commented ROM
+disassembly (built by scripts/build_rom_source.py, see `get_rom_source()`)
+and for an arbitrary user-assembled program's own SLD (see `load_source()`,
+attached at runtime via `Engine.load_debug_info()`).
 
-Built by scripts/build_rom_source.py (skool2asm.py -> sjasmplus --sld),
-gitignored like the ROM itself since the disassembly is copyrighted.
-Loading is optional: `load_rom_source()` returns None if the build output
-doesn't exist, matching the existing optional-ROM pattern elsewhere in
-core/ -- callers (dap.py) fall back to the addressless behavior they
-already have.
+The ROM's own copy is gitignored since the disassembly is copyrighted, and
+loading it is optional: `load_rom_source()`/`get_rom_source()` return None
+if the build output doesn't exist, matching the existing optional-ROM
+pattern elsewhere in core/ -- callers (dap.py) fall back to the addressless
+behavior they already have.
 
 SLD is sjasmplus's pipe-delimited format: one record per line,
     file|line|definition_file|definition_line|page|address|type|data
@@ -78,14 +80,23 @@ def _parse_sld(sld_text: str) -> tuple[dict[int, int], dict[int, int], dict[str,
     return line_to_addr, addr_to_line, symbols
 
 
+def load_source(sld_path: Path, asm_path: Path) -> RomSource:
+    """Parse an explicit sld/asm pair for an arbitrary assembled program.
+    Unlike `load_rom_source()`, this is an explicit user action (via
+    `load_debug_info`), not an automatic optional check -- a missing file
+    raises rather than silently returning None, so the caller gets a clear
+    error instead of debugging quietly not working."""
+    line_to_addr, addr_to_line, symbols = _parse_sld(sld_path.read_text(encoding="utf-8"))
+    return RomSource(asm_path=asm_path, line_to_addr=line_to_addr, addr_to_line=addr_to_line, symbols=symbols)
+
+
 def load_rom_source(directory: Path | None = None) -> RomSource | None:
     directory = directory or DEFAULT_DIR
     asm_path = directory / "rom.asm"
     sld_path = directory / "rom.sld"
     if not asm_path.exists() or not sld_path.exists():
         return None
-    line_to_addr, addr_to_line, symbols = _parse_sld(sld_path.read_text(encoding="utf-8"))
-    return RomSource(asm_path=asm_path, line_to_addr=line_to_addr, addr_to_line=addr_to_line, symbols=symbols)
+    return load_source(sld_path, asm_path)
 
 
 _cache: RomSource | None = None

@@ -1,0 +1,9 @@
+|SLD.data.version|1
+test.asm|1||0|-1|-1|Z|pages.size:16384,pages.count:4,slots.count:4,slots.adr:0,16384,32768,49152
+test.asm|3||0|2|32768|F|Start
+test.asm|3||0|2|32768|L|,Start,
+test.asm|4||0|2|32768|T|
+test.asm|5||0|2|32770|F|PrintIt
+test.asm|5||0|2|32770|L|,PrintIt,
+test.asm|6||0|2|32770|T|
+test.asm|7||0|2|32773|T|

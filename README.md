@@ -100,7 +100,7 @@ full Visual Studio IDE rather than just Build Tools).
 This also compiles the native Z80 core extension as part of the install (via
 the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
 Verified in a clean checkout: the install command above, then `pytest`,
-passes all 60 tests with nothing else run in between.
+passes all 65 tests with nothing else run in between.
 
 ### WSL / Linux / macOS
 
@@ -160,6 +160,7 @@ look, it doesn't start it.
 |---|---|
 | `load_rom(rom_base64)` | Load a 16K ROM image (base64) |
 | `load_snapshot(sna_base64)` | Load a `.sna` snapshot (base64) |
+| `load_debug_info(sld_path, asm_path)` | Attach source-level debug info for the loaded program (see [source-level debugging](#source-level-debugging-of-your-own-program)) |
 | `reset()` | Reset the machine |
 | `step(instructions=1, ticks=None)` | Step N instructions (default 1), or N T-states if `ticks` is given |
 | `run()` | Run until a breakpoint or `pause()` |
@@ -170,8 +171,8 @@ look, it doesn't start it.
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border |
-| `resolve_symbol(name)` | ROM symbol name → address (needs `rom_disassembly/` built, see [source-level debugging](#source-level-debugging-of-the-rom)) |
-| `resolve_address(addr)` | Address → nearest ROM symbol + offset |
+| `resolve_symbol(name)` | Symbol name → address (loaded program's own debug info first, then the ROM's) |
+| `resolve_address(addr)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |
 
 ### Connecting VS Code (DAP)
 
@@ -276,6 +277,45 @@ set by clicking the gutter in that file directly, resolved to addresses via
 the SLD map. Instruction breakpoints (from the Disassembly View) still work
 and can be mixed freely with source breakpoints in the same session.
 
+#### Source-level debugging of your own program
+
+Assembled your own program with `sjasmplus --sld`? Attach its `.sld` plus
+the source it was built from, and get everything above for your own code
+too — real `source`/`line` in stack frames, gutter breakpoints, and
+`resolve_symbol`/`resolve_address`. It's layered on top of the ROM's own
+source (not a replacement for it): your program's debug info is checked
+first, and a `CALL` into a ROM routine still resolves to `rom.asm` once
+execution is inside it, so you don't lose one to get the other.
+
+Over MCP:
+
+```
+load_snapshot(sna_base64=...)
+load_debug_info(sld_path="C:/path/to/yourprogram.sld", asm_path="C:/path/to/yourprogram.asm")
+```
+
+Over DAP, add `sld`/`asm` to the launch config alongside `snapshot`:
+
+```json
+{
+  "name": "My program",
+  "type": "zxspectrum",
+  "request": "launch",
+  "debugServer": 4711,
+  "rom": "${workspaceFolder}/roms/48.rom",
+  "snapshot": "${workspaceFolder}/yourprogram.sna",
+  "sld": "${workspaceFolder}/yourprogram.sld",
+  "asm": "${workspaceFolder}/yourprogram.asm",
+  "preLaunchTask": "zxspectrum.start-server"
+}
+```
+
+Loading a *new* snapshot always clears the previously-attached debug info
+(it almost certainly doesn't match the new program's addresses) — reattach
+with `load_debug_info`/relaunch for whatever program you loaded next. The
+ROM's own source is unaffected either way; it's always available
+independently once built.
+
 ### Shared state, live
 
 Because both front-ends drive the same `Engine`, you can set a breakpoint in
@@ -290,7 +330,7 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-60 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+65 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
 16384 bytes with zero decode errors), the ROM SLD parser (`rom_source.py`),
 the engine actor's concurrency guarantees, and both front-ends driven over
@@ -362,20 +402,25 @@ program forever, blocking every other client too — there's currently no
 auto-pause on disconnect or run-time cap. Fine for controlled testing;
 worth fixing before this is used for anything more exposed.
 
-[Source-level debugging of the ROM](#source-level-debugging-of-the-rom)
-against a real, commented disassembly (not just raw instructions) is done:
+Source-level debugging against a real, commented disassembly (not just raw
+instructions) is done, for both
+[the ROM](#source-level-debugging-of-the-rom) and
+[your own assembled programs](#source-level-debugging-of-your-own-program):
 `scripts/build_rom_source.py` reproduces the ROM **byte-for-byte** via
-`skool2asm.py` + `sjasmplus --sld`, and `dap.py` uses the resulting map for
-`source`-annotated stack frames and source-line breakpoints, verified
-end-to-end (build → `stackTrace` → `setBreakpoints` → hit → correct PC).
+`skool2asm.py` + `sjasmplus --sld`; `load_debug_info` attaches the same kind
+of map for any `sjasmplus`-assembled program, layered on top of (not
+replacing) the ROM's own, so a call from your program into a ROM routine
+still resolves. `dap.py` uses whichever map applies for `source`-annotated
+stack frames and source-line breakpoints; `resolve_symbol`/`resolve_address`
+expose the same lookup over MCP. Verified end-to-end (build → `stackTrace` →
+`setBreakpoints` → hit → correct PC, and separately, own-program address →
+ROM address → correct source switches for both).
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
 - Tape loading (`.tap`/`.tzx`/`.pzx`)
 - Beeper audio synthesis (port writes are tracked, not turned into sound)
 - An optional live viewer (today, screenshots are on-demand via `get_screen`)
-- General SLD loading for arbitrary user-assembled programs (today, source
-  debugging is ROM-specific); `resolve_symbol`/`resolve_address` MCP tools
 
 ## License
 

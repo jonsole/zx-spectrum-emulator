@@ -5,6 +5,27 @@ from zxspectrum.engine import commands as cmd
 from zxspectrum.engine.actor import Engine
 
 
+def _write_sld(tmp_path, name, addr, line=1):
+    sld_path = tmp_path / f"{name}.sld"
+    asm_path = tmp_path / f"{name}.asm"
+    sld_path.write_text(f"{name}.asm|{line}||0|0|{addr}|F|{name.upper()}\n", encoding="utf-8")
+    asm_path.write_text("; fake\n", encoding="utf-8")
+    return sld_path, asm_path
+
+
+def _build_sna(pc: int, sp: int = 0x8000) -> bytes:
+    from zxspectrum.core.snapshot import HEADER_SIZE
+
+    header = bytearray(HEADER_SIZE)
+    header[23] = sp & 0xFF
+    header[24] = (sp >> 8) & 0xFF
+    ram = bytearray(0xC000)
+    stack_off = sp - 0x4000
+    ram[stack_off] = pc & 0xFF
+    ram[stack_off + 1] = (pc >> 8) & 0xFF
+    return bytes(header) + bytes(ram)
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -83,6 +104,32 @@ def test_pause_interrupts_a_run_in_progress_from_another_task():
 
             state = await engine.get_state()
             assert state.running is False
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_load_debug_info_is_visible_via_get_state_and_cleared_by_a_new_snapshot(tmp_path):
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            state = await engine.get_state()
+            assert state.debug_info_loaded is False
+
+            sld_path, asm_path = _write_sld(tmp_path, "prog", addr=0x8000)
+            await engine.load_debug_info(sld_path, asm_path)
+            assert engine.debug_info is not None
+            assert engine.debug_info.symbols == {"PROG": 0x8000}
+            state = await engine.get_state()
+            assert state.debug_info_loaded is True
+
+            # A new snapshot is presumptively a different program -- its
+            # addresses almost certainly don't match the old debug info,
+            # so it must not silently carry over.
+            await engine.load_snapshot(_build_sna(pc=0x9000))
+            assert engine.debug_info is None
         finally:
             await engine.stop()
 

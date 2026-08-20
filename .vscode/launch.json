@@ -8,6 +8,17 @@
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "preLaunchTask": "zxspectrum.start-server"
+    },
+    {
+      "name": "ZX Spectrum: hello_rom_call example",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/hello_rom_call/test.sna",
+      "sld": "${workspaceFolder}/examples/hello_rom_call/test.sld",
+      "asm": "${workspaceFolder}/examples/hello_rom_call/test.asm",
+      "preLaunchTask": "zxspectrum.start-server"
     }
   ]
 }

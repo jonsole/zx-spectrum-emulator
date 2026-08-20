@@ -203,3 +203,56 @@ def test_resolve_symbol_without_rom_source_built_returns_not_found():
             await engine.stop()
 
     _run(scenario())
+
+
+def test_load_debug_info_attaches_program_source(tmp_path):
+    async def scenario():
+        sld_path = tmp_path / "prog.sld"
+        asm_path = tmp_path / "prog.asm"
+        sld_path.write_text(
+            "prog.asm|7||0|0|32768|F|MYROUTINE\nprog.asm|7||0|0|32768|T|\n", encoding="utf-8"
+        )
+        asm_path.write_text("; fake\n", encoding="utf-8")
+
+        engine = Engine()
+        engine.start()
+        try:
+            server = create_server(engine)
+            result = _json(
+                await server.call_tool("load_debug_info", {"sld_path": str(sld_path), "asm_path": str(asm_path)})
+            )
+            assert result == {"symbols": 1, "instructions": 1}
+            assert engine.debug_info is not None
+            assert engine.debug_info.symbols == {"MYROUTINE": 0x8000}
+
+            state = _json(await server.call_tool("get_state", {}))
+            assert state["debug_info_loaded"] is True
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_resolve_symbol_prefers_loaded_program_over_rom():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            engine.debug_info = RomSource(
+                asm_path=Path("prog.asm"),
+                line_to_addr={7: 0x9000},
+                addr_to_line={0x9000: 7},
+                symbols={"START": 0x9000},  # deliberately shadows the ROM's own START
+            )
+            server = create_server(engine)
+            with patch("zxspectrum.server.mcp_server.get_rom_source", return_value=_ROM_SOURCE):
+                found = _json(await server.call_tool("resolve_symbol", {"name": "START"}))
+                assert found == {"found": True, "address": 0x9000}
+
+                # A ROM-only symbol still resolves via the fallback.
+                nearby = _json(await server.call_tool("resolve_address", {"addr": 5}))
+                assert nearby == {"found": True, "symbol": "START", "offset": 5}
+        finally:
+            await engine.stop()
+
+    _run(scenario())
