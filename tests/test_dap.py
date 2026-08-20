@@ -1,7 +1,9 @@
 """server/dap.py: exercised over a real asyncio TCP connection, DAP-framed."""
 import asyncio
+from pathlib import Path
 from unittest.mock import patch
 
+from zxspectrum.core.rom_source import RomSource
 from zxspectrum.engine.actor import Engine
 from zxspectrum.server.dap import _normalize_incoming_path, _read_message, _write_message, create_dap_server
 
@@ -467,9 +469,190 @@ def test_stack_trace_labels_frame_with_disassembled_instruction():
             pc = (await engine.get_registers()).pc
             engine.machine.write_memory(pc, bytes([0x3E, 0x42]))
 
-            resp = await client.request("stackTrace", {"threadId": 1})
+            # Pinned to "no ROM source" regardless of whether
+            # rom_disassembly/ happens to be built in this environment --
+            # that case is covered separately by
+            # test_stack_trace_includes_source_when_rom_source_available.
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request("stackTrace", {"threadId": 1})
             name = resp["body"]["stackFrames"][0]["name"]
             assert name == f"0x{pc:04X}: LD A,0x42"
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_stack_trace_includes_source_when_rom_source_available():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            regs = await engine.get_registers()
+            regs.pc = 0x8000
+            await engine.set_registers(regs)
+            await client.event("stopped")
+            pc = (await engine.get_registers()).pc
+            engine.machine.write_memory(pc, bytes([0x00]))  # NOP
+
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"),
+                line_to_addr={42: pc},
+                addr_to_line={pc: 42},
+                symbols={"ENTRY": pc},
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                resp = await client.request("stackTrace", {"threadId": 1})
+
+            frame = resp["body"]["stackFrames"][0]
+            assert frame["name"] == f"ENTRY  0x{pc:04X}: NOP"
+            assert frame["line"] == 42
+            assert frame["source"] == {"name": "rom.asm", "path": "rom.asm"}
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_set_breakpoints_resolves_source_line_and_stops_there():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.machine.write_memory(0x8000, bytes([0x00, 0x00, 0x76]))  # NOP NOP HALT
+
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"), line_to_addr={10: 0x8002}, addr_to_line={0x8002: 10}, symbols={}
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                resp = await client.request(
+                    "setBreakpoints", {"source": {"path": "rom.asm"}, "breakpoints": [{"line": 10}]}
+                )
+            bp = resp["body"]["breakpoints"][0]
+            assert bp["verified"] is True
+            assert bp["instructionReference"] == "0x8002"
+
+            regs = await engine.get_registers()
+            regs.pc = 0x8000
+            await engine.set_registers(regs)
+            await client.event("stopped")
+
+            resp = await client.request("continue", {"threadId": 1})
+            assert resp["success"]
+            await client.event("continued")
+            stopped = await client.event("stopped")
+            assert stopped["body"]["reason"] == "breakpoint"
+            assert (await engine.get_registers()).pc == 0x8002
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_set_breakpoints_line_with_no_instruction_is_unverified():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            # Pinned to "no ROM source" regardless of whether
+            # rom_disassembly/ happens to be built in this environment --
+            # must degrade to "unverified", not raise.
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request(
+                    "setBreakpoints", {"source": {"path": "rom.asm"}, "breakpoints": [{"line": 100}]}
+                )
+            assert resp["body"]["breakpoints"][0]["verified"] is False
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_source_and_instruction_breakpoints_do_not_clobber_each_other():
+    # Regression test: setInstructionBreakpoints previously cleared every
+    # breakpoint on the engine (not just the instruction-category ones it
+    # owns) before re-adding its own set -- so setting one kind wiped out
+    # the other kind on the same connection. Both categories must coexist,
+    # and dropping one (an empty setBreakpoints call) must leave the other
+    # untouched.
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.machine.write_memory(0x8000, bytes([0x00, 0x00, 0x00, 0x76]))  # NOP NOP NOP HALT
+
+            resp = await client.request(
+                "setInstructionBreakpoints", {"breakpoints": [{"instructionReference": "0x8003"}]}
+            )
+            assert resp["body"]["breakpoints"][0]["verified"] is True
+
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"), line_to_addr={5: 0x8001}, addr_to_line={0x8001: 5}, symbols={}
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                await client.request(
+                    "setBreakpoints", {"source": {"path": "rom.asm"}, "breakpoints": [{"line": 5}]}
+                )
+                state = await engine.get_state()
+                assert {0x8001, 0x8003} <= state.breakpoints
+
+                # Drop the source breakpoint -- the instruction breakpoint
+                # set earlier must survive this.
+                await client.request(
+                    "setBreakpoints", {"source": {"path": "rom.asm"}, "breakpoints": []}
+                )
+
+            state = await engine.get_state()
+            assert 0x8003 in state.breakpoints
+            assert 0x8001 not in state.breakpoints
+
+            regs = await engine.get_registers()
+            regs.pc = 0x8000
+            await engine.set_registers(regs)
+            await client.event("stopped")
+
+            resp = await client.request("continue", {"threadId": 1})
+            assert resp["success"]
+            await client.event("continued")
+            stopped = await client.event("stopped")
+            assert stopped["body"]["reason"] == "breakpoint"
+            assert (await engine.get_registers()).pc == 0x8003
         finally:
             await client.close()
             server.close()

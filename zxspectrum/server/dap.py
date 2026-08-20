@@ -7,10 +7,13 @@ Continued) are forwarded here as unsolicited DAP `stopped`/`continued`
 events, so state changes made over MCP show up in VS Code's UI without
 VS Code having requested them, and vice versa.
 
-No source file exists in v1 (there's no assembler listing/map), so
-breakpoints are instruction breakpoints (set from the Disassembly View),
-not source-line breakpoints, and stack traces are a single synthetic
-frame at PC, labeled with the disassembled instruction at PC.
+Stack traces are always a single synthetic frame at PC, labeled with the
+disassembled instruction there. When the ROM disassembly has been built
+(scripts/build_rom_source.py -- see rom_source.py), that frame also gets
+a `source`/`line` pointing into the commented rom.asm, and source-line
+breakpoints (set by clicking the gutter in that file) are resolved to
+addresses via the same SLD data; without it, only instruction breakpoints
+(set from the Disassembly View) are available.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ import re
 from typing import Any
 
 from zxspectrum.core.disassembler import disassemble_one, disassemble_range
+from zxspectrum.core.rom_source import get_rom_source as _get_rom_source
 from zxspectrum.engine import commands as cmd
 from zxspectrum.engine.actor import Engine
 
@@ -96,6 +100,14 @@ class DapConnection:
         self._seq = 0
         self._sub: asyncio.Queue | None = None
         self._forward_task: asyncio.Task | None = None
+        # setBreakpoints (source-line) and setInstructionBreakpoints each
+        # replace only their own category per the DAP spec, but the engine
+        # itself just has one flat address set -- tracked per-category here
+        # and reconciled by _sync_breakpoints() so setting one kind doesn't
+        # wipe out the other within this connection.
+        self._source_breakpoints: dict[str, set[int]] = {}
+        self._instruction_breakpoints: set[int] = set()
+        self._known_breakpoints: set[int] = set()
 
     def _next_seq(self) -> int:
         self._seq += 1
@@ -209,16 +221,54 @@ class DapConnection:
         return {}
 
     async def _cmd_setInstructionBreakpoints(self, args: dict) -> dict:
-        # DAP semantics: each call replaces the full breakpoint set.
-        state = await self.engine.get_state()
-        for addr in list(state.breakpoints):
-            await self.engine.clear_breakpoint(addr)
+        # DAP semantics: each call replaces this connection's full
+        # instruction-breakpoint set -- but must not disturb any
+        # source-line breakpoints also active on this connection, so the
+        # actual engine writes go through _sync_breakpoints().
+        addrs: set[int] = set()
         breakpoints = []
         for bp in args.get("breakpoints", []):
             addr = _as_addr(bp["instructionReference"], bp.get("offset", 0))
-            await self.engine.set_breakpoint(addr)
+            addrs.add(addr)
             breakpoints.append({"verified": True, "instructionReference": f"0x{addr:04X}"})
+        self._instruction_breakpoints = addrs
+        await self._sync_breakpoints()
         return {"breakpoints": breakpoints}
+
+    async def _cmd_setBreakpoints(self, args: dict) -> dict:
+        # Source-line breakpoints, set by clicking the gutter in rom.asm
+        # once the ROM disassembly has been built. Resolved to addresses
+        # via the SLD's line<->address mapping; a line with no mapped
+        # instruction (e.g. a comment or label-only line) comes back
+        # unverified rather than silently dropped, so VS Code shows it as
+        # such instead of pretending it's active.
+        source_path = (args.get("source") or {}).get("path", "")
+        rom_source = _get_rom_source()
+
+        addrs: set[int] = set()
+        results = []
+        for bp in args.get("breakpoints", []):
+            line = bp["line"]
+            addr = rom_source.line_to_addr.get(line) if rom_source else None
+            if addr is None:
+                results.append({"verified": False, "line": line, "message": "no instruction at this line"})
+            else:
+                addrs.add(addr)
+                results.append({"verified": True, "line": line, "instructionReference": f"0x{addr:04X}"})
+
+        self._source_breakpoints[source_path] = addrs
+        await self._sync_breakpoints()
+        return {"breakpoints": results}
+
+    async def _sync_breakpoints(self) -> None:
+        desired = set(self._instruction_breakpoints)
+        for addrs in self._source_breakpoints.values():
+            desired |= addrs
+        for addr in desired - self._known_breakpoints:
+            await self.engine.set_breakpoint(addr)
+        for addr in self._known_breakpoints - desired:
+            await self.engine.clear_breakpoint(addr)
+        self._known_breakpoints = desired
 
     async def _cmd_continue(self, args: dict) -> dict:
         # Must not block the response on run() completing -- it may run
@@ -249,13 +299,27 @@ class DapConnection:
     async def _cmd_stackTrace(self, args: dict) -> dict:
         regs = await self.engine.get_registers()
         inst = disassemble_one(self._read_memory_sync, regs.pc)
+        rom_source = _get_rom_source()
+
+        name = f"0x{regs.pc:04X}: {inst.text}"
+        symbol = rom_source.symbol_at(regs.pc) if rom_source else None
+        if symbol is not None:
+            sym_name, offset = symbol
+            label = f"{sym_name}+{offset}" if offset else sym_name
+            name = f"{label}  {name}"
+
         frame = {
             "id": 1,
-            "name": f"0x{regs.pc:04X}: {inst.text}",
+            "name": name,
             "instructionPointerReference": f"0x{regs.pc:04X}",
             "line": 0,
             "column": 0,
         }
+        line = rom_source.addr_to_line.get(regs.pc) if rom_source else None
+        if line is not None:
+            frame["source"] = {"name": rom_source.asm_path.name, "path": str(rom_source.asm_path)}
+            frame["line"] = line
+            frame["column"] = 1
         return {"stackFrames": [frame], "totalFrames": 1}
 
     def _read_memory_sync(self, addr: int) -> int:

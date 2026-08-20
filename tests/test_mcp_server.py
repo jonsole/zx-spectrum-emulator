@@ -2,7 +2,10 @@
 import asyncio
 import base64
 import json
+from pathlib import Path
+from unittest.mock import patch
 
+from zxspectrum.core.rom_source import RomSource
 from zxspectrum.engine.actor import Engine
 from zxspectrum.server.mcp_server import create_server
 
@@ -151,6 +154,51 @@ def test_get_screen_returns_an_image():
             assert len(r.content) == 1
             assert r.content[0].type == "image"
             assert r.content[0].mime_type == "image/png"
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
+_ROM_SOURCE = RomSource(
+    asm_path=Path("rom.asm"),
+    line_to_addr={90: 0, 93: 5},
+    addr_to_line={0: 90, 5: 93},
+    symbols={"START": 0},
+)
+
+
+def test_resolve_symbol_and_resolve_address_use_rom_source():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            server = create_server(engine)
+            with patch("zxspectrum.server.mcp_server.get_rom_source", return_value=_ROM_SOURCE):
+                found = _json(await server.call_tool("resolve_symbol", {"name": "START"}))
+                assert found == {"found": True, "address": 0}
+
+                missing = _json(await server.call_tool("resolve_symbol", {"name": "NOPE"}))
+                assert missing["found"] is False
+
+                nearby = _json(await server.call_tool("resolve_address", {"addr": 5}))
+                assert nearby == {"found": True, "symbol": "START", "offset": 5}
+        finally:
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_resolve_symbol_without_rom_source_built_returns_not_found():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        try:
+            server = create_server(engine)
+            with patch("zxspectrum.server.mcp_server.get_rom_source", return_value=None):
+                result = _json(await server.call_tool("resolve_symbol", {"name": "START"}))
+                assert result["found"] is False
+                assert "build_rom_source" in result["reason"]
         finally:
             await engine.stop()
 

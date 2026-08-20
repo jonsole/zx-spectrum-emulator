@@ -100,7 +100,7 @@ full Visual Studio IDE rather than just Build Tools).
 This also compiles the native Z80 core extension as part of the install (via
 the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
 Verified in a clean checkout: the install command above, then `pytest`,
-passes all 49 tests with nothing else run in between.
+passes all 60 tests with nothing else run in between.
 
 ### WSL / Linux / macOS
 
@@ -170,6 +170,8 @@ look, it doesn't start it.
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border |
+| `resolve_symbol(name)` | ROM symbol name → address (needs `rom_disassembly/` built, see [source-level debugging](#source-level-debugging-of-the-rom)) |
+| `resolve_address(addr)` | Address → nearest ROM symbol + offset |
 
 ### Connecting VS Code (DAP)
 
@@ -209,12 +211,12 @@ Step through ROM"**. The `preLaunchTask` starts the server automatically
 (watch its output in the dedicated terminal panel) and waits for it to be
 ready before connecting.
 
-There's no source file in v1 (no assembler listing/map), so this drives VS
-Code's **Disassembly View** rather than a source view: breakpoints are
-instruction breakpoints set from there, stepping is `next`
-(one Z80 instruction), and the single synthetic stack frame is labeled with
-the disassembled instruction at PC. Supported requests: `initialize`,
-`launch`/`attach`, `configurationDone`, `setInstructionBreakpoints`,
+Without the ROM disassembly built (see below), this drives VS Code's
+**Disassembly View** rather than a source view: breakpoints are instruction
+breakpoints set from there, and the single stack frame is labeled with just
+the disassembled instruction at PC. Stepping is `next` (one Z80 instruction)
+regardless. Supported requests: `initialize`, `launch`/`attach`,
+`configurationDone`, `setInstructionBreakpoints`, `setBreakpoints`,
 `continue`/`next`/`stepIn`/`stepOut`/`pause`, `threads`, `stackTrace`,
 `disassemble`, `scopes`/`variables` (a **Registers** scope — including the
 shadow set `AF'`/`BC'`/`DE'`/`HL'` — and a **Flags** scope breaking `F` out
@@ -229,12 +231,50 @@ against the real ROM. A couple of real bugs turned up exactly this way and
 are already fixed — see [Status & roadmap](#status--roadmap) and the git
 history for details.
 
-One current UI rough edge, not fixable from the adapter side: VS Code
+One current UI rough edge, not fixable from the adapter side: for a
+source**less** frame (i.e. without the ROM disassembly built), VS Code
 doesn't reliably auto-populate the Registers panel or auto-focus the
-Disassembly View on every stop for a source**less** frame (there's no
-listing/map file in v1) — clicking the Call Stack entry once after a stop
-refreshes it. Tracked upstream as
+Disassembly View on every stop — clicking the Call Stack entry once after a
+stop refreshes it. Tracked upstream as
 [microsoft/vscode#131253](https://github.com/microsoft/vscode/issues/131253).
+
+#### Source-level debugging of the ROM
+
+The 48K ROM's disassembly has been reverse-engineered and fully commented by
+others — [SkoolKit's `skoolkid/rom`](https://github.com/skoolkid/rom)
+reproduces *The Complete Spectrum ROM Disassembly* (Logan & O'Hara) as a
+`.skool` file. `scripts/build_rom_source.py` turns that into a real source
+view for the DAP session:
+
+```
+skoolkid/rom (.skool)  →  skool2asm.py  →  sjasmplus --sld  →  rom_disassembly/
+                                                                  rom.asm  (readable, labeled source)
+                                                                  rom.sld  (address <-> source-line map)
+```
+
+Run it once (needs `pip install skoolkit`, plus `sjasmplus` on PATH — see the
+script's `--help` for where to get a build per platform):
+
+```sh
+.venv-win\Scripts\python.exe scripts\build_rom_source.py   # native Windows
+.venv/bin/python scripts/build_rom_source.py                 # WSL/Linux/macOS
+```
+
+It clones `skoolkid/rom` into `.rom-disassembly-src/` and writes
+`rom_disassembly/rom.asm` + `rom.sld` — both gitignored, since the
+disassembly (like the ROM binary itself) is copyrighted material fetched
+locally, never committed. The script **refuses to write output** unless the
+freshly assembled binary is byte-for-byte identical to `roms/48.rom` — a
+mismatch would mean the address↔source-line map can't be trusted for
+debugging, which is worse than not having one.
+
+Once built, the DAP server picks it up automatically (no config needed) the
+next time it starts: stack frames get a real `source`/`line` into
+`rom.asm` (VS Code opens it and highlights the current line on every stop,
+labeled with its nearest routine — e.g. `KEY_INT+3`), and breakpoints can be
+set by clicking the gutter in that file directly, resolved to addresses via
+the SLD map. Instruction breakpoints (from the Disassembly View) still work
+and can be mixed freely with source breakpoints in the same session.
 
 ### Shared state, live
 
@@ -250,11 +290,12 @@ the actual point of the project; see `tests/test_dap.py` and
 python -m pytest tests/ -v
 ```
 
-49 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
+60 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
 machine layer, the disassembler (including a full pass over a real ROM's
-16384 bytes with zero decode errors), the engine actor's concurrency
-guarantees, and both front-ends driven over real sockets (an actual
-`asyncio` TCP connection for DAP, a real `mcp` SSE client for MCP).
+16384 bytes with zero decode errors), the ROM SLD parser (`rom_source.py`),
+the engine actor's concurrency guarantees, and both front-ends driven over
+real sockets (an actual `asyncio` TCP connection for DAP, a real `mcp` SSE
+client for MCP).
 
 ## Performance
 
@@ -280,7 +321,8 @@ zx-spectrum-emulator/
       keyboard.py                # 8x5 matrix, port 0xFE
       snapshot.py                 # .sna loader
       disassembler.py               # full documented Z80 disassembler
-      machine.py                     # Spectrum48K: wires it all together
+      rom_source.py                   # ROM SLD parser (source-level debug)
+      machine.py                        # Spectrum48K: wires it all together
     engine/
       actor.py                # the shared live instance (asyncio actor)
       commands.py               # Command/Event dataclasses
@@ -288,7 +330,10 @@ zx-spectrum-emulator/
       mcp_server.py            # MCP tools
       dap.py                     # DAP TCP server
       main.py                      # entrypoint: starts engine + both servers
+  scripts/
+    build_rom_source.py         # builds rom_disassembly/ (see below)
   roms/                        # gitignored; drop your 48K ROM here
+  rom_disassembly/             # gitignored; scripts/build_rom_source.py output
   tests/
 ```
 
@@ -317,19 +362,20 @@ program forever, blocking every other client too — there's currently no
 auto-pause on disconnect or run-time cap. Fine for controlled testing;
 worth fixing before this is used for anything more exposed.
 
-**In progress:** source-level debugging against a real, commented
-disassembly (not just raw instructions) — validated the pipeline
-(`skoolkid/rom`'s SkoolKit source → `skool2asm.py` → `sjasmplus` assembly,
-reproducing the ROM **byte-for-byte**, with `--sld` giving a proper
-address↔source-line map) but haven't wired it into `dap.py`/the MCP surface
-yet. The copyrighted disassembly source is fetched locally, never committed
-(same treatment as the ROM itself).
+[Source-level debugging of the ROM](#source-level-debugging-of-the-rom)
+against a real, commented disassembly (not just raw instructions) is done:
+`scripts/build_rom_source.py` reproduces the ROM **byte-for-byte** via
+`skool2asm.py` + `sjasmplus --sld`, and `dap.py` uses the resulting map for
+`source`-annotated stack frames and source-line breakpoints, verified
+end-to-end (build → `stackTrace` → `setBreakpoints` → hit → correct PC).
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
 - Tape loading (`.tap`/`.tzx`/`.pzx`)
 - Beeper audio synthesis (port writes are tracked, not turned into sound)
 - An optional live viewer (today, screenshots are on-demand via `get_screen`)
+- General SLD loading for arbitrary user-assembled programs (today, source
+  debugging is ROM-specific); `resolve_symbol`/`resolve_address` MCP tools
 
 ## License
 

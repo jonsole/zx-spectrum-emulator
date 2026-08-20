@@ -16,6 +16,7 @@ from PIL import Image as PILImage
 
 from mcp.server.mcpserver import Image, MCPServer
 
+from zxspectrum.core.rom_source import get_rom_source
 from zxspectrum.engine.actor import Engine
 
 
@@ -150,6 +151,34 @@ def create_server(engine: Engine) -> MCPServer:
         buf = io.BytesIO()
         PILImage.fromarray(rgb, mode="RGB").save(buf, format="PNG")
         return Image(data=buf.getvalue(), format="png")
+
+    @server.tool()
+    async def resolve_symbol(name: str) -> dict:
+        """Look up a ROM routine/label's address by name (e.g. "KEY_INT"),
+        using the commented ROM disassembly built by
+        scripts/build_rom_source.py. Returns found=False if that hasn't
+        been built, or the name doesn't exist."""
+        rom_source = get_rom_source()
+        if rom_source is None:
+            return {"found": False, "reason": "rom_disassembly/ not built -- see scripts/build_rom_source.py"}
+        addr = rom_source.symbols.get(name)
+        if addr is None:
+            return {"found": False, "reason": f"no ROM symbol named {name!r}"}
+        return {"found": True, "address": addr}
+
+    @server.tool()
+    async def resolve_address(addr: int) -> dict:
+        """Find the nearest named ROM routine at or before a 16-bit
+        address, with its offset -- e.g. 0x0005 -> {"symbol": "START",
+        "offset": 5}. Uses the same ROM disassembly as resolve_symbol."""
+        rom_source = get_rom_source()
+        if rom_source is None:
+            return {"found": False, "reason": "rom_disassembly/ not built -- see scripts/build_rom_source.py"}
+        result = rom_source.symbol_at(addr)
+        if result is None:
+            return {"found": False, "reason": "address precedes every known ROM symbol"}
+        symbol, offset = result
+        return {"found": True, "symbol": symbol, "offset": offset}
 
     @server.tool()
     async def get_state() -> dict:
