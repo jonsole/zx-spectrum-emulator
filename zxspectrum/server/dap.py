@@ -261,7 +261,20 @@ class DapConnection:
         return self.engine.machine.memory.read(addr)
 
     async def _cmd_disassemble(self, args: dict) -> dict:
-        base_addr = _as_addr(args["memoryReference"], args.get("offset", 0))
+        try:
+            base_addr = _as_addr(args["memoryReference"], args.get("offset", 0))
+        except (ValueError, TypeError):
+            # VS Code's Disassembly View can internally generate a
+            # "disassemblyNotAvailable" placeholder request with an empty
+            # memoryReference (e.g. while a scroll event races session
+            # setup) -- a known VS Code bug (microsoft/vscode#270361) means
+            # a *failed* response to that specific request can permanently
+            # wedge the view's internal loading lock, silently breaking all
+            # future auto-scroll-to-PC behavior for the rest of that view's
+            # lifetime. Returning a harmless empty result instead of an
+            # error avoids ever triggering that, regardless of whether the
+            # user's VS Code build already has the upstream fix.
+            return {"instructions": []}
         instruction_offset = args.get("instructionOffset", 0)
         count = args["instructionCount"]
 

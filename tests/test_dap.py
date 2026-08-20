@@ -213,6 +213,37 @@ def test_read_write_memory():
     _run(scenario())
 
 
+def test_disassemble_with_empty_memory_reference_does_not_error():
+    # VS Code's Disassembly View can internally send a request with an
+    # empty memoryReference (a "disassemblyNotAvailable" placeholder --
+    # see microsoft/vscode#270361). A *failed* response to that specific
+    # request is known to permanently wedge the view's internal loading
+    # lock in some VS Code versions, silently breaking future auto-scroll-
+    # to-PC behavior -- so this must always succeed, never error.
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            resp = await client.request(
+                "disassemble", {"memoryReference": "", "instructionCount": 10}
+            )
+            assert resp["success"] is True
+            assert resp["body"]["instructions"] == []
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
 def test_disassemble_forward_from_pc():
     async def scenario():
         engine = Engine()
