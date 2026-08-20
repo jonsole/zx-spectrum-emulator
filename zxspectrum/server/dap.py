@@ -296,18 +296,23 @@ class DapConnection:
         # bytes comfortably covers every real instruction stream (capped so
         # a huge request -- e.g. VS Code paging in hundreds of instructions
         # of context -- can't make this pathologically slow).
+        #
+        # The 64KB address space wraps (0xFFFF is immediately followed by
+        # 0x0000), which a plain `addr < base_addr` comparison can't
+        # express -- for base_addr near 0x0000 that condition is never
+        # true for any candidate near the top of memory, so the search
+        # always silently "found nothing" and fell back to no before-
+        # context. Decoding a fixed `needed_before` instructions forward
+        # with addresses masked to 16 bits throughout, then checking where
+        # that lands, handles the wraparound correctly instead.
         max_search = min(needed_before * 4 + 16, 2048)
         for back in range(1, max_search + 1):
             candidate = (base_addr - back) & 0xFFFF
             addr = candidate
-            count = 0
-            while addr < base_addr:
+            for _ in range(needed_before):
                 inst = disassemble_one(self._read_memory_sync, addr)
-                addr += inst.length
-                count += 1
-                if addr > base_addr:
-                    break
-            if addr == base_addr and count == needed_before:
+                addr = (addr + inst.length) & 0xFFFF
+            if addr == base_addr:
                 return candidate
         return base_addr
 

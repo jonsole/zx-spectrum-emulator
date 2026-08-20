@@ -361,6 +361,46 @@ def test_disassemble_backward_beyond_a_small_fixed_search_window():
     _run(scenario())
 
 
+def test_disassemble_backward_context_wraps_around_address_zero():
+    # Regression test: a real VS Code session opening the Disassembly View
+    # right at the reset entry point (PC=0x0000) asks for
+    # instructionOffset=-50 -- there's no memory "before" 0x0000 in a
+    # linear sense, but the Z80's 16-bit address space wraps (0xFFFF is
+    # immediately followed by 0x0000), so this is answerable. The original
+    # implementation compared addresses with a plain `<`, which can never
+    # be satisfied wrapping from high memory back down to 0x0000, so it
+    # silently returned 0 bytes of "before" context -- shifting every
+    # returned address by 50 slots relative to what VS Code expected and
+    # making its current-position marker land on the wrong instruction
+    # every time (a different wrong one depending on the request shape).
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            resp = await client.request(
+                "disassemble",
+                {"memoryReference": "0x0000", "instructionOffset": -50, "instructionCount": 100},
+            )
+            instructions = resp["body"]["instructions"]
+            assert instructions[50]["address"] == "0x0000"
+            # everything before the wrap point is unwritten RAM (0x00 = NOP)
+            assert instructions[49]["address"] == "0xFFFF"
+            assert instructions[49]["instruction"] == "NOP"
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
 def test_stack_trace_labels_frame_with_disassembled_instruction():
     async def scenario():
         engine = Engine()
