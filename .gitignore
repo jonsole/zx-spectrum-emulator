@@ -11,3 +11,8 @@ zxspectrum/_native/_z80.c
 roms/*
 !roms/.gitkeep
 .pytest_cache/
+
+# Fetched/generated ROM disassembly (copyrighted -- Amstrad / Logan &
+# O'Hara / Dymond -- same treatment as roms/: never committed, see README)
+.rom-disassembly-src/
+rom_disassembly/
