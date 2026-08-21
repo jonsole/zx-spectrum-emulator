@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let engine = Engine::new();
     if args.contention_overlay {
-        engine.set_contention_overlay(true).await;
+        engine.set_contention_overlay(true);
     }
     let sources = Sources::new(DebugInfo::default(), args.rom_disassembly_dir);
 

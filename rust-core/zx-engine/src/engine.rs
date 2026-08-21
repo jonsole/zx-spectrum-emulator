@@ -27,6 +27,17 @@ pub struct Engine {
     /// `actor.py`'s own comment, quoted here verbatim) lets it take effect
     /// on `Run`'s next yield regardless of queue backlog.
     pause_requested: Arc<AtomicBool>,
+    /// Same reasoning and same bypass as `pause_requested`: `Run`'s handler
+    /// monopolizes the actor loop until it yields or stops, so a toggle
+    /// routed through the command queue would sit stuck behind an in-flight
+    /// `Run` for as long as the game keeps playing -- exactly when a caller
+    /// most wants to see the overlay appear. Synced into
+    /// `machine.ula.contention_overlay_enabled` at the same points the
+    /// screen gets re-rendered (after every command, and at `Run`'s own
+    /// yield cadence), so it never needs the machine to be idle to take
+    /// effect. (Confirmed live: an earlier queued-command version of this
+    /// silently never applied while a real game was running.)
+    contention_overlay_requested: Arc<AtomicBool>,
     /// The latest rendered screen, refreshed by the actor task after every
     /// command AND periodically during a long `Run` (same cadence as its
     /// own pause-check yield). Deliberately NOT routed through the command
@@ -50,9 +61,11 @@ impl Engine {
         let (tx, rx) = mpsc::channel(64);
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let pause_requested = Arc::new(AtomicBool::new(false));
+        let contention_overlay_requested = Arc::new(AtomicBool::new(false));
         let (screen_tx, screen) = watch::channel(Vec::new());
         let (memory_tx, memory) = watch::channel(Vec::new());
-        let engine = Engine { tx, events, pause_requested, screen, memory };
+        let engine =
+            Engine { tx, events, pause_requested, contention_overlay_requested, screen, memory };
         engine.spawn_actor(rx, screen_tx, memory_tx);
         engine
     }
@@ -78,7 +91,15 @@ impl Engine {
     ) {
         let events = self.events.clone();
         let pause_requested = self.pause_requested.clone();
-        tokio::spawn(actor_loop(rx, events, pause_requested, screen_tx, memory_tx));
+        let contention_overlay_requested = self.contention_overlay_requested.clone();
+        tokio::spawn(actor_loop(
+            rx,
+            events,
+            pause_requested,
+            contention_overlay_requested,
+            screen_tx,
+            memory_tx,
+        ));
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -91,10 +112,11 @@ impl Engine {
         self.pause_requested.store(true, Ordering::Relaxed);
     }
 
-    pub async fn set_contention_overlay(&self, enabled: bool) {
-        let (reply, rx) = oneshot::channel();
-        self.tx.send(Command::SetContentionOverlay { enabled, reply }).await.ok();
-        rx.await.ok();
+    /// See the `contention_overlay_requested` field doc comment -- bypasses
+    /// the queue entirely, same as `pause()`, so it can take effect even
+    /// while a `Run` is in flight.
+    pub fn set_contention_overlay(&self, enabled: bool) {
+        self.contention_overlay_requested.store(enabled, Ordering::Relaxed);
     }
 
     /// `ticks`, when set, steps that many of the CPU's own T-states rather
@@ -209,6 +231,7 @@ async fn actor_loop(
     mut rx: mpsc::Receiver<Command>,
     events: broadcast::Sender<Event>,
     pause_requested: Arc<AtomicBool>,
+    contention_overlay_requested: Arc<AtomicBool>,
     screen_tx: watch::Sender<Vec<u8>>,
     memory_tx: watch::Sender<Vec<u8>>,
 ) {
@@ -216,6 +239,7 @@ async fn actor_loop(
     // Always false wherever a caller can observe it -- see the comment in
     // the `Run` handler below.
     let running = false;
+    machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
     screen_tx.send_replace(machine.render_screen());
     memory_tx.send_replace(machine.read_memory(0, 0x10000));
 
@@ -282,6 +306,8 @@ async fn actor_loop(
                         break;
                     }
                     if count % RUN_YIELD_EVERY == 0 {
+                        machine.ula.contention_overlay_enabled =
+                            contention_overlay_requested.load(Ordering::Relaxed);
                         screen_tx.send_replace(machine.render_screen());
                         memory_tx.send_replace(machine.read_memory(0, 0x10000));
                         tokio::task::yield_now().await;
@@ -347,14 +373,11 @@ async fn actor_loop(
                 }
                 reply.send(result).ok();
             }
-            Command::SetContentionOverlay { enabled, reply } => {
-                machine.ula.contention_overlay_enabled = enabled;
-                reply.send(()).ok();
-            }
         }
         // Cheap enough to do after every individual command (unlike inside
         // Run's tight per-instruction loop, where it's throttled to the
         // same cadence as the existing yield check above).
+        machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
         screen_tx.send_replace(machine.render_screen());
         memory_tx.send_replace(machine.read_memory(0, 0x10000));
     }

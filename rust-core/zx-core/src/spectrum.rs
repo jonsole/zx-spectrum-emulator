@@ -248,27 +248,28 @@ impl Spectrum48K {
 
     /// Applies real ULA memory contention (see `advance_tstate()`'s doc
     /// comment for the mechanism) if `addr` is in the contended page.
+    /// Marks each halted T-state's pixels for the overlay as it goes (see
+    /// `Ula::mark_contention_tstate`) -- one mark per real T-state actually
+    /// spent halted, not one mark per contention event.
     fn apply_memory_contention(&mut self, addr: u16) {
         if !contention::is_contended_memory(addr) {
             return;
         }
-        let start = self.tstates;
-        let delay = contention::memory_contention_delay(start);
+        let delay = contention::memory_contention_delay(self.tstates);
         for _ in 0..delay {
+            self.ula.mark_contention_tstate(self.tstates, false);
             self.advance_tstate();
         }
-        self.ula.record_contention(start, false, delay);
     }
 
     /// Same, for I/O port contention -- see `contention::io_contention_delay`
     /// for the 4-case table this implements.
     fn apply_io_contention(&mut self, addr: u16) {
-        let start = self.tstates;
-        let delay = contention::io_contention_delay(addr, start);
+        let delay = contention::io_contention_delay(addr, self.tstates);
         for _ in 0..delay {
+            self.ula.mark_contention_tstate(self.tstates, true);
             self.advance_tstate();
         }
-        self.ula.record_contention(start, true, delay);
     }
 
     /// Runs T-states until the current instruction completes.

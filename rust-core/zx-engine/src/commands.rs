@@ -87,10 +87,6 @@ pub enum Command {
         data: Vec<u8>,
         reply: oneshot::Sender<Result<Registers, String>>,
     },
-    SetContentionOverlay {
-        enabled: bool,
-        reply: oneshot::Sender<()>,
-    },
 }
 
 /// Fanned out to every `Engine::subscribe()`r, mirrors `commands.py`'s

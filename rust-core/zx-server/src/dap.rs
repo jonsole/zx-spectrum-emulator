@@ -479,6 +479,17 @@ async fn handle_request(
                 Some(base_addr) => (true, disassemble(sources, engine, arguments, base_addr).await),
             }
         }
+        // Not a standard DAP request -- a custom one, sent via VS Code's
+        // `DebugSession.customRequest()` (see `vscode-extension/
+        // extension.js`'s "ZX Spectrum: Toggle Contention Overlay"
+        // command). No Python-server equivalent: `zxspectrum/core/ula.py`
+        // doesn't model contention at all, so there's nothing to toggle
+        // there.
+        "setContentionOverlay" => {
+            let enabled = arguments.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+            engine.set_contention_overlay(enabled);
+            (true, json!({ "enabled": enabled }))
+        }
         other => (false, json!({ "message": format!("unsupported request: {other}") })),
     };
 

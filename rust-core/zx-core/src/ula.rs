@@ -14,14 +14,17 @@
 //! the in-progress one), since `screen_stream`/MCP's `get_screen` poll far
 //! slower than the ~50Hz frame rate and want one stable, whole picture.
 //!
-//! Contention tracking (which scanlines' contended windows a real
-//! CPU access actually landed in, and how much delay it cost) is recorded
-//! here too and can be rendered as a tint overlay -- see
-//! `contention_overlay_enabled` and [`crate::contention`], which has the
-//! actual timing tables and their sources. This module owns none of the
-//! delay *application* (that's `Spectrum48K::tick()`'s job, since only it
-//! can halt the CPU's own clock); it only tracks what happened, for
-//! rendering.
+//! Contention tracking is recorded here too, at PIXEL granularity: every
+//! real T-state the CPU's clock was actually halted for (see
+//! `Spectrum48K::apply_memory_contention`/`apply_io_contention`) marks the
+//! exact pixel(s) the ULA's raster beam was at during that T-state, in a
+//! per-pixel bitmap -- not a per-scanline aggregate. `screen()` renders
+//! this as a 50%-alpha red (memory) / blue (IO) marker directly on those
+//! pixels, over a screen whose overall brightness is halved first so a
+//! marker stays visible even over a same-colored game pixel. See
+//! [`crate::contention`] for the actual timing tables and their sources;
+//! this module owns none of the delay *application*, only what to draw as
+//! a result of it.
 
 use crate::contention::{self, CONTENDED_TSTATES_PER_LINE};
 use crate::memory::{Memory, Spectrum48KMemory};
@@ -31,17 +34,10 @@ pub const SCREEN_HEIGHT: usize = 192;
 const BITMAP_BASE: u16 = 0x4000;
 const ATTR_BASE: u16 = 0x5800;
 const FRAME_BYTES: usize = SCREEN_HEIGHT * SCREEN_WIDTH * 3;
+const PIXEL_COUNT: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 /// 48K Spectrum: one interrupt per frame at ~50Hz.
 pub const FRAME_TSTATES: u32 = 69888;
-
-/// Per-line contention total (mem or IO) at which the overlay tint
-/// saturates -- the pattern's own worst case if EVERY one of a line's 16
-/// contended 8-T-state groups incurred the maximum delay (6): `16 * 6`.
-/// Real programs essentially never hit this consistently for a whole
-/// line, so it's a reasonable "fully lit" reference rather than an
-/// empirically-tuned magic number.
-const MAX_LINE_CONTENTION: u16 = 16 * 6;
 
 fn color(index: u8, bright: bool) -> (u8, u8, u8) {
     let level: u8 = if bright { 0xFF } else { 0xCD };
@@ -81,10 +77,15 @@ pub struct Ula {
     /// `on_tstate`'s own doc comment for the fetch order this mirrors.
     fetch: [u8; 4],
 
-    mem_contention: [u16; SCREEN_HEIGHT],
-    io_contention: [u16; SCREEN_HEIGHT],
-    mem_contention_last: [u16; SCREEN_HEIGHT],
-    io_contention_last: [u16; SCREEN_HEIGHT],
+    /// One flag per pixel: was the CPU's clock halted (memory contention)
+    /// while the raster beam was at this exact pixel, at any point this
+    /// frame? Row-major, same indexing as the framebuffer's pixels
+    /// (`y * SCREEN_WIDTH + x`).
+    mem_halted: Vec<bool>,
+    /// Same, for IO contention.
+    io_halted: Vec<bool>,
+    mem_halted_last: Vec<bool>,
+    io_halted_last: Vec<bool>,
 }
 
 impl Default for Ula {
@@ -96,10 +97,10 @@ impl Default for Ula {
             framebuffer: vec![0u8; FRAME_BYTES],
             last_frame: vec![0u8; FRAME_BYTES],
             fetch: [0; 4],
-            mem_contention: [0; SCREEN_HEIGHT],
-            io_contention: [0; SCREEN_HEIGHT],
-            mem_contention_last: [0; SCREEN_HEIGHT],
-            io_contention_last: [0; SCREEN_HEIGHT],
+            mem_halted: vec![false; PIXEL_COUNT],
+            io_halted: vec![false; PIXEL_COUNT],
+            mem_halted_last: vec![false; PIXEL_COUNT],
+            io_halted_last: vec![false; PIXEL_COUNT],
         }
     }
 }
@@ -109,16 +110,16 @@ impl Ula {
     /// load. Deliberately leaves `border`/`flash_state` untouched (neither
     /// was touched by `Spectrum48K::reset()` before this feature existed)
     /// and `contention_overlay_enabled` untouched -- a debug preference
-    /// set independently via MCP, not part of the emulated machine's own
-    /// state, so resetting the machine shouldn't silently turn it off.
+    /// set independently, not part of the emulated machine's own state,
+    /// so resetting the machine shouldn't silently turn it off.
     pub fn clear_frame_state(&mut self) {
         self.framebuffer.fill(0);
         self.last_frame.fill(0);
         self.fetch = [0; 4];
-        self.mem_contention = [0; SCREEN_HEIGHT];
-        self.io_contention = [0; SCREEN_HEIGHT];
-        self.mem_contention_last = [0; SCREEN_HEIGHT];
-        self.io_contention_last = [0; SCREEN_HEIGHT];
+        self.mem_halted.fill(false);
+        self.io_halted.fill(false);
+        self.mem_halted_last.fill(false);
+        self.io_halted_last.fill(false);
     }
 
     /// Called once per real T-state (never for a contention "phantom"
@@ -178,73 +179,98 @@ impl Ula {
         }
     }
 
-    /// Swaps the in-progress framebuffer into `last_frame` (zero-alloc --
-    /// reuses the two existing buffers) and starts a fresh contention
-    /// tally. Called from `Spectrum48K::advance_tstate()`'s existing
-    /// frame-wraparound branch.
+    /// Swaps the in-progress framebuffer (and contention bitmaps) into the
+    /// "last complete frame" slot (zero-alloc -- reuses the existing
+    /// buffers) and starts fresh ones for the next frame. Called from
+    /// `Spectrum48K::advance_tstate()`'s existing frame-wraparound branch.
     pub fn on_frame_boundary(&mut self) {
         std::mem::swap(&mut self.framebuffer, &mut self.last_frame);
         self.framebuffer.fill(0);
-        self.mem_contention_last = self.mem_contention;
-        self.io_contention_last = self.io_contention;
-        self.mem_contention = [0; SCREEN_HEIGHT];
-        self.io_contention = [0; SCREEN_HEIGHT];
+        std::mem::swap(&mut self.mem_halted, &mut self.mem_halted_last);
+        std::mem::swap(&mut self.io_halted, &mut self.io_halted_last);
+        self.mem_halted.fill(false);
+        self.io_halted.fill(false);
     }
 
-    /// Records that a real CPU memory (`is_io=false`) or I/O (`is_io=true`)
-    /// access incurred `delay` T-states of contention at `tstate` --
-    /// called by `Spectrum48K::tick()` right after it applies that delay.
-    /// A no-op for `delay == 0` or a `tstate` outside the visible window
-    /// (I/O contention can, in principle, land there too, but has nothing
-    /// to attribute to a scanline).
-    pub fn record_contention(&mut self, tstate: u32, is_io: bool, delay: u32) {
-        if delay == 0 {
-            return;
-        }
-        let Some((line, _)) = contention::scanline_and_offset(tstate) else {
+    /// Marks the pixel(s) the raster beam was at during `tstate` as having
+    /// halted the CPU's clock due to memory (`is_io=false`) or IO
+    /// (`is_io=true`) contention -- called once per T-state actually spent
+    /// halted (i.e. once per `advance_tstate()` call inside
+    /// `Spectrum48K::apply_memory_contention`/`apply_io_contention`'s
+    /// phantom-tick loops), not once per contention *event*. Each T-state
+    /// of the 128-T-state contended window corresponds to 2 of the line's
+    /// 256 pixels (128 T-states -> 256 pixels), matching `on_tstate`'s own
+    /// fetch schedule -- the same T-state that's contended is the one
+    /// whose pixels the raster beam is at. A no-op outside the visible
+    /// window. For IO contention specifically, note the contention model
+    /// already applies a whole I/O access's cumulative delay as one
+    /// front-loaded block of phantom T-states (see
+    /// `contention::io_contention_delay`'s doc comment) rather than
+    /// interleaved with the access's own real T-states -- the pixels
+    /// marked here are consistent with that same simplification, not
+    /// claiming sub-access cycle-exact positioning.
+    pub fn mark_contention_tstate(&mut self, tstate: u32, is_io: bool) {
+        let Some((line, offset)) = contention::scanline_and_offset(tstate) else {
             return;
         };
-        let delay = delay.min(u16::MAX as u32) as u16;
-        let bucket = if is_io { &mut self.io_contention } else { &mut self.mem_contention };
-        bucket[line] = bucket[line].saturating_add(delay);
+        if offset >= CONTENDED_TSTATES_PER_LINE {
+            return;
+        }
+        let x0 = (offset * 2) as usize;
+        let bitmap = if is_io { &mut self.io_halted } else { &mut self.mem_halted };
+        for dx in 0..2usize {
+            let idx = line * SCREEN_WIDTH + x0 + dx;
+            if idx < bitmap.len() {
+                bitmap[idx] = true;
+            }
+        }
     }
 
-    /// Sum of memory + IO contention delay T-states over the last fully
+    /// Sum of memory + IO contention T-states over the last fully
     /// completed frame -- a numeric readout even without the visual
-    /// overlay (`screen()`).
+    /// overlay (`screen()`). Each contended T-state marks 2 pixels, so
+    /// this divides the pixel counts back down.
     pub fn contended_tstates_last_frame(&self) -> u32 {
-        let mem: u32 = self.mem_contention_last.iter().map(|&v| v as u32).sum();
-        let io: u32 = self.io_contention_last.iter().map(|&v| v as u32).sum();
+        let mem = self.mem_halted_last.iter().filter(|&&b| b).count() as u32 / 2;
+        let io = self.io_halted_last.iter().filter(|&&b| b).count() as u32 / 2;
         mem + io
     }
 
     /// The last fully completed frame as a flat RGB buffer
     /// (`SCREEN_HEIGHT * SCREEN_WIDTH * 3` bytes, row-major). When
-    /// `contention_overlay_enabled`, additively tints each scanline
-    /// toward red by how much memory contention it cost and toward
-    /// blue by I/O contention, both scaled against [`MAX_LINE_CONTENTION`].
+    /// `contention_overlay_enabled`: halves the whole picture's brightness
+    /// first (so a marker stays visible even over a same-colored game
+    /// pixel, e.g. a red marker over Manic Miner's red title screen),
+    /// then blends a 50%-alpha red marker onto every pixel where the CPU's
+    /// clock was halted by memory contention this frame, and a 50%-alpha
+    /// blue marker for IO contention.
     pub fn screen(&self) -> Vec<u8> {
         if !self.contention_overlay_enabled {
             return self.last_frame.clone();
         }
         let mut out = self.last_frame.clone();
-        for y in 0..SCREEN_HEIGHT {
-            let mem_boost = tint_boost(self.mem_contention_last[y]);
-            let io_boost = tint_boost(self.io_contention_last[y]);
-            if mem_boost == 0 && io_boost == 0 {
-                continue;
+        for i in 0..PIXEL_COUNT {
+            let idx = i * 3;
+            out[idx] /= 2;
+            out[idx + 1] /= 2;
+            out[idx + 2] /= 2;
+            if self.mem_halted_last[i] {
+                out[idx] = blend_toward(out[idx], 255);
+                out[idx + 1] = blend_toward(out[idx + 1], 0);
+                out[idx + 2] = blend_toward(out[idx + 2], 0);
             }
-            for x in 0..SCREEN_WIDTH {
-                let idx = (y * SCREEN_WIDTH + x) * 3;
-                out[idx] = out[idx].saturating_add(mem_boost);
-                out[idx + 2] = out[idx + 2].saturating_add(io_boost);
+            if self.io_halted_last[i] {
+                out[idx] = blend_toward(out[idx], 0);
+                out[idx + 1] = blend_toward(out[idx + 1], 0);
+                out[idx + 2] = blend_toward(out[idx + 2], 255);
             }
         }
         out
     }
 }
 
-fn tint_boost(line_contention: u16) -> u8 {
-    let scaled = (line_contention as u32 * 200) / MAX_LINE_CONTENTION as u32;
-    scaled.min(200) as u8
+/// 50/50 blend of `base` toward `target` -- the "50%-alpha marker over the
+/// (already halved) base pixel" compositing math.
+fn blend_toward(base: u8, target: u8) -> u8 {
+    ((base as u16 + target as u16) / 2) as u8
 }

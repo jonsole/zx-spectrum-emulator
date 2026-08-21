@@ -195,7 +195,7 @@ impl ZxSpectrumServer {
         &self,
         Parameters(req): Parameters<SetContentionOverlayRequest>,
     ) -> Result<CallToolResult, McpError> {
-        self.engine.set_contention_overlay(req.enabled).await;
+        self.engine.set_contention_overlay(req.enabled);
         Ok(text_result(if req.enabled { "contention overlay enabled" } else { "contention overlay disabled" }))
     }
 

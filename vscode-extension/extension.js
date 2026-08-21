@@ -20,9 +20,14 @@ let socket;
 let reconnectTimer;
 let recvBuffer = Buffer.alloc(0);
 
+let contentionOverlayEnabled = false;
+
 function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('zxspectrum.showScreen', () => showScreenPanel(context))
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('zxspectrum.toggleContentionOverlay', toggleContentionOverlay)
   );
 
   // Auto-open on launching a zxspectrum debug session -- no matching
@@ -33,9 +38,32 @@ function activate(context) {
     vscode.debug.onDidStartDebugSession((session) => {
       if (session.type === 'zxspectrum') {
         showScreenPanel(context);
+        // A fresh session starts with the overlay off unless the server
+        // was launched with --contention-overlay -- this extension has no
+        // way to know that, so it assumes off and lets the command's own
+        // toggle (or another customRequest) correct it from there.
+        contentionOverlayEnabled = false;
       }
     })
   );
+}
+
+async function toggleContentionOverlay() {
+  const session = vscode.debug.activeDebugSession;
+  if (!session || session.type !== 'zxspectrum') {
+    vscode.window.showWarningMessage('ZX Spectrum: start a debug session first to toggle the contention overlay.');
+    return;
+  }
+  const next = !contentionOverlayEnabled;
+  try {
+    await session.customRequest('setContentionOverlay', { enabled: next });
+    contentionOverlayEnabled = next;
+    vscode.window.setStatusBarMessage(`ZX Spectrum: contention overlay ${next ? 'ON' : 'OFF'}`, 3000);
+  } catch (err) {
+    // Most likely cause: the Python server (which doesn't model contention
+    // at all) is what's actually running, not the Rust one.
+    vscode.window.showErrorMessage(`ZX Spectrum: couldn't toggle the contention overlay (${err.message || err}).`);
+  }
 }
 
 function showScreenPanel(context) {
