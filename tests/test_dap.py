@@ -5,11 +5,22 @@ from unittest.mock import patch
 
 from zxspectrum.core.rom_source import RomSource
 from zxspectrum.engine.actor import Engine
-from zxspectrum.server.dap import _normalize_incoming_path, _read_message, _write_message, create_dap_server
+from zxspectrum.server.dap import DapConnection, _normalize_incoming_path, _read_message, _write_message, create_dap_server
 
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def _no_label(text: str) -> str:
+    # Every disassembled line gets the same fixed-width label column
+    # folded in, whether or not that line actually has a label -- see
+    # DapConnection._LABEL_COLUMN_WIDTH.
+    return " " * DapConnection._LABEL_COLUMN_WIDTH + text
+
+
+def _labeled(label: str, text: str) -> str:
+    return f"{label}:".ljust(DapConnection._LABEL_COLUMN_WIDTH) + text
 
 
 def test_normalize_incoming_path_translates_windows_drive_paths_under_wsl():
@@ -280,7 +291,11 @@ def test_disassemble_forward_from_pc():
                     {"memoryReference": "0x8000", "instructionCount": 3},
                 )
             instructions = resp["body"]["instructions"]
-            assert [i["instruction"] for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
+            assert [i["instruction"] for i in instructions] == [
+                _no_label("NOP"),
+                _no_label("LD A,0x42"),
+                _no_label("JP 0x8000"),
+            ]
             assert instructions[0]["address"] == "0x8000"
             assert instructions[2]["address"] == "0x8003"
         finally:
@@ -313,7 +328,7 @@ def test_disassemble_positive_instruction_offset_skips_forward():
                 )
             instructions = resp["body"]["instructions"]
             assert instructions[0]["address"] == "0x8003"
-            assert instructions[0]["instruction"] == "JP 0x8000"
+            assert instructions[0]["instruction"] == _no_label("JP 0x8000")
         finally:
             await client.close()
             server.close()
@@ -351,8 +366,8 @@ def test_disassemble_annotates_operands_with_resolved_symbols():
                     {"memoryReference": "0x8000", "instructionCount": 2},
                 )
             instructions = resp["body"]["instructions"]
-            assert instructions[0]["instruction"] == "CALL 0x9000 (MY_ROUTINE)"
-            assert instructions[1]["instruction"] == "LD HL,0x9104 (MY_TABLE+4)"
+            assert instructions[0]["instruction"] == _no_label("CALL 0x9000 (MY_ROUTINE)")
+            assert instructions[1]["instruction"] == _no_label("LD HL,0x9104 (MY_TABLE+4)")
         finally:
             await client.close()
             server.close()
@@ -384,9 +399,9 @@ def test_disassemble_includes_symbol_field_for_labeled_addresses():
                 )
             instructions = resp["body"]["instructions"]
             assert instructions[0]["symbol"] == "MY_FUNC"
-            assert instructions[0]["instruction"] == "MY_FUNC:  NOP"
+            assert instructions[0]["instruction"] == _labeled("MY_FUNC", "NOP")
             assert "symbol" not in instructions[1]  # 0x8001 isn't itself a labeled address
-            assert instructions[1]["instruction"] == "HALT"
+            assert instructions[1]["instruction"] == _no_label("HALT")
         finally:
             await client.close()
             server.close()
@@ -416,7 +431,7 @@ def test_disassemble_leaves_operands_unannotated_once_max_offset_is_exceeded():
                     "disassemble",
                     {"memoryReference": "0x8000", "instructionCount": 1},
                 )
-            assert resp["body"]["instructions"][0]["instruction"] == "JP 0x8000"
+            assert resp["body"]["instructions"][0]["instruction"] == _no_label("JP 0x8000")
         finally:
             await client.close()
             server.close()
@@ -446,7 +461,11 @@ def test_disassemble_backward_from_an_aligned_instruction_boundary():
                     {"memoryReference": "0x8003", "instructionOffset": -2, "instructionCount": 3},
                 )
             instructions = resp["body"]["instructions"]
-            assert [i["instruction"] for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
+            assert [i["instruction"] for i in instructions] == [
+                _no_label("NOP"),
+                _no_label("LD A,0x42"),
+                _no_label("JP 0x8000"),
+            ]
         finally:
             await client.close()
             server.close()
@@ -503,10 +522,10 @@ def test_disassemble_backward_beyond_a_small_fixed_search_window():
             addrs = [i["address"] for i in instructions]
             assert addrs[0] == "0x8000"
             assert addrs[n_instructions] == f"0x{halt_addr:04X}"
-            assert instructions[n_instructions]["instruction"] == "HALT"
-            assert instructions[0]["instruction"] == "INC A"
-            assert instructions[1]["instruction"] == "LD B,0x11"
-            assert instructions[3]["instruction"] == "LD DE,0x2222"
+            assert instructions[n_instructions]["instruction"] == _no_label("HALT")
+            assert instructions[0]["instruction"] == _no_label("INC A")
+            assert instructions[1]["instruction"] == _no_label("LD B,0x11")
+            assert instructions[3]["instruction"] == _no_label("LD DE,0x2222")
         finally:
             await client.close()
             server.close()
@@ -546,7 +565,7 @@ def test_disassemble_backward_context_wraps_around_address_zero():
             assert instructions[50]["address"] == "0x0000"
             # everything before the wrap point is unwritten RAM (0x00 = NOP)
             assert instructions[49]["address"] == "0xFFFF"
-            assert instructions[49]["instruction"] == "NOP"
+            assert instructions[49]["instruction"] == _no_label("NOP")
         finally:
             await client.close()
             server.close()

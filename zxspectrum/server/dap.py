@@ -265,6 +265,14 @@ class DapConnection:
     # meaningless offset (see rom_source.symbol_at()'s docstring).
     _SYMBOL_MAX_OFFSET = 0xFF
 
+    # Reserved width (label name + ":" + a 2-space gap) for the label
+    # column folded into each disassembled line -- fixed regardless of
+    # whether that particular line has a label, so mnemonics all start in
+    # the same column instead of only the labeled lines being indented.
+    # 12 chars comfortably fits real ROM/game routine names (e.g.
+    # "START_NEW", "LD_EDGE_1"); a longer one just doesn't pad further.
+    _LABEL_COLUMN_WIDTH = 12 + len(":  ")
+
     def _resolve_symbol(self, addr: int) -> tuple[str, int] | None:
         # Same priority as _active_sources()/_build_frame(): the loaded
         # program's own debug info first, ROM as fallback. Unlike
@@ -451,15 +459,17 @@ class DapConnection:
         for i in instructions:
             text = annotate_symbols(i.text, self._resolve_symbol)
             label = self._label_at(i.addr)
-            if label is not None:
-                # DAP has a dedicated "symbol" field for this, which the
-                # spec says a client MAY render as a heading above the
-                # line -- VS Code's Disassembly View does not, in
-                # practice, do that (confirmed live: the field arrives
-                # but nothing shows), so the label is also folded directly
-                # into the instruction text, which every client renders
-                # by definition.
-                text = f"{label}:  {text}"
+            # DAP has a dedicated "symbol" field for this, which the spec
+            # says a client MAY render as a heading above the line -- VS
+            # Code's Disassembly View does not, in practice, do that
+            # (confirmed live: the field arrives but nothing shows), so
+            # the label is also folded directly into the instruction
+            # text, which every client renders by definition. Every line
+            # gets the same fixed-width label column -- labeled or not --
+            # so the actual mnemonics all start in the same column instead
+            # of staggering only where a label happens to land.
+            label_prefix = f"{label}:" if label else ""
+            text = f"{label_prefix:<{self._LABEL_COLUMN_WIDTH}}{text}"
             entry = {
                 "address": f"0x{i.addr:04X}",
                 "instructionBytes": i.raw.hex(),
