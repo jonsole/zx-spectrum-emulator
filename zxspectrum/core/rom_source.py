@@ -41,15 +41,22 @@ class RomSource:
         self._sorted_addrs = [addr for _, addr in pairs]
         self._sorted_names = [name for name, _ in pairs]
 
-    def symbol_at(self, addr: int) -> tuple[str, int] | None:
+    def symbol_at(self, addr: int, max_offset: int | None = None) -> tuple[str, int] | None:
         """The nearest label at or before `addr`, with its offset -- e.g.
         (addr - 3) inside routine FOO returns ("FOO", 3). None if `addr`
-        precedes every known label."""
+        precedes every known label. `max_offset`, if given, also returns
+        None once the offset is too large to plausibly still be "inside"
+        that label -- without it, an address far past the highest known
+        label (e.g. deep into RAM when only a 16K ROM source is loaded)
+        still matches the last label with a huge, meaningless offset."""
         i = bisect.bisect_right(self._sorted_addrs, addr) - 1
         if i < 0:
             return None
         base = self._sorted_addrs[i]
-        return self._sorted_names[i], addr - base
+        offset = addr - base
+        if max_offset is not None and offset > max_offset:
+            return None
+        return self._sorted_names[i], offset
 
 
 def _parse_sld(sld_text: str) -> tuple[dict[int, int], dict[int, int], dict[str, int]]:

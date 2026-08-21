@@ -55,6 +55,12 @@ def test_symbol_at_finds_nearest_label_at_or_before_address(tmp_path):
     assert rom_source.symbol_at(11) == ("ERROR_1", 3)
 
 
+def test_symbol_at_max_offset_bounds_how_far_past_a_label_still_counts(tmp_path):
+    rom_source = load_rom_source(_write_build(tmp_path))
+    assert rom_source.symbol_at(11, max_offset=3) == ("ERROR_1", 3)
+    assert rom_source.symbol_at(12, max_offset=3) is None
+
+
 def test_symbol_at_returns_none_before_the_first_known_label(tmp_path):
     sld = "rom.asm|89||0|0|100|F|FOO\n"
     (tmp_path / "rom.asm").write_text("; fake\n", encoding="utf-8")

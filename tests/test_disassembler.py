@@ -1,4 +1,4 @@
-from zxspectrum.core.disassembler import disassemble_one, disassemble_range
+from zxspectrum.core.disassembler import annotate_symbols, disassemble_one, disassemble_range
 
 
 def _mem(data: bytes, base: int = 0):
@@ -129,6 +129,34 @@ def test_disassemble_range_walks_variable_length_instructions():
     instructions = disassemble_range(_mem(program), 0, 3)
     assert [i.text for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
     assert [i.addr for i in instructions] == [0, 1, 3]
+
+
+def test_annotate_symbols_appends_exact_match_with_no_offset():
+    resolve = {0x8000: ("MY_ROUTINE", 0)}.get
+    assert annotate_symbols("CALL 0x8000", resolve) == "CALL 0x8000 (MY_ROUTINE)"
+
+
+def test_annotate_symbols_appends_offset_when_not_exactly_on_the_symbol():
+    resolve = {0x4567: ("MY_TABLE", 4)}.get
+    assert annotate_symbols("LD HL,0x4567", resolve) == "LD HL,0x4567 (MY_TABLE+4)"
+
+
+def test_annotate_symbols_leaves_text_unchanged_when_unresolved():
+    assert annotate_symbols("CALL 0x8000", lambda addr: None) == "CALL 0x8000"
+
+
+def test_annotate_symbols_ignores_2_digit_operands():
+    # 8-bit immediates/ports/RST vectors are never wide enough to look
+    # like a 4-hex-digit address, so a resolver that would match anything
+    # must never be consulted for them.
+    resolve = lambda addr: ("SHOULD_NOT_MATCH", 0)  # noqa: E731
+    assert annotate_symbols("OUT (0xFE),A", resolve) == "OUT (0xFE),A"
+    assert annotate_symbols("RST 0x30", resolve) == "RST 0x30"
+
+
+def test_annotate_symbols_handles_multiple_addresses_in_one_instruction():
+    resolve = {0x8000: ("SRC", 0), 0x9000: ("DST", 0)}.get
+    assert annotate_symbols("LD (0x9000),0x8000", resolve) == "LD (0x9000 (DST)),0x8000 (SRC)"
 
 
 def test_real_rom_reset_vector_matches_known_disassembly():

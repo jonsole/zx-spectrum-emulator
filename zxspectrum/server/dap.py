@@ -30,7 +30,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from zxspectrum.core.disassembler import disassemble_one, disassemble_range
+from zxspectrum.core.disassembler import annotate_symbols, disassemble_one, disassemble_range
 from zxspectrum.core.rom_source import RomSource, get_rom_source as _get_rom_source
 from zxspectrum.engine import commands as cmd
 from zxspectrum.engine.actor import Engine
@@ -258,6 +258,38 @@ class DapConnection:
             sources.append(rom_source)
         return sources
 
+    # Bounds symbol_at()'s "nearest label at or before" match to a plausible
+    # table/routine size -- without it, any address past the highest label
+    # in a source (e.g. RAM addresses once only the 16K ROM source is
+    # loaded) would still match that source's very last label with a huge,
+    # meaningless offset (see rom_source.symbol_at()'s docstring).
+    _SYMBOL_MAX_OFFSET = 0xFF
+
+    def _resolve_symbol(self, addr: int) -> tuple[str, int] | None:
+        # Same priority as _active_sources()/_build_frame(): the loaded
+        # program's own debug info first, ROM as fallback. Unlike
+        # _build_frame()'s addr_to_line lookup, this doesn't require an
+        # exact-address match -- a disassembled operand pointing partway
+        # into a routine or data table should still annotate with
+        # SYMBOL+offset, not just addresses landing exactly on a label.
+        for source in self._active_sources():
+            result = source.symbol_at(addr, max_offset=self._SYMBOL_MAX_OFFSET)
+            if result is not None:
+                return result
+        return None
+
+    def _label_at(self, addr: int) -> str | None:
+        # Exact-address match only (max_offset=0) -- this is for VS Code's
+        # Disassembly View "symbol" field, which headers a line with a
+        # label when an instruction IS the start of a named routine, not
+        # merely near one (that's what _resolve_symbol()'s operand
+        # annotation is for).
+        for source in self._active_sources():
+            result = source.symbol_at(addr, max_offset=0)
+            if result is not None:
+                return result[0]
+        return None
+
     def _source_for_path(self, path: str) -> RomSource | None:
         for source in self._active_sources():
             if str(source.asm_path) == path or source.asm_path.name == Path(path).name:
@@ -342,7 +374,8 @@ class DapConnection:
 
     def _build_frame(self, frame_id: int, addr: int) -> dict:
         inst = disassemble_one(self._read_memory_sync, addr)
-        name = f"0x{addr:04X}: {inst.text}"
+        text = annotate_symbols(inst.text, self._resolve_symbol)
+        name = f"0x{addr:04X}: {text}"
 
         frame = {
             "id": frame_id,
@@ -414,12 +447,21 @@ class DapConnection:
             start = base_addr
 
         instructions = disassemble_range(self._read_memory_sync, start, count)
-        return {
-            "instructions": [
-                {"address": f"0x{i.addr:04X}", "instructionBytes": i.raw.hex(), "instruction": i.text}
-                for i in instructions
-            ]
-        }
+        result = []
+        for i in instructions:
+            entry = {
+                "address": f"0x{i.addr:04X}",
+                "instructionBytes": i.raw.hex(),
+                "instruction": annotate_symbols(i.text, self._resolve_symbol),
+            }
+            label = self._label_at(i.addr)
+            if label is not None:
+                # DAP's own field for this -- VS Code's Disassembly View
+                # renders it as a "LABEL:" heading above the instruction
+                # line, exactly like a real assembly listing.
+                entry["symbol"] = label
+            result.append(entry)
+        return {"instructions": result}
 
     def _find_aligned_backward_start(self, base_addr: int, needed_before: int) -> int:
         # Z80 instructions are 1-4 bytes; searching back needed_before * 4

@@ -270,10 +270,15 @@ def test_disassemble_forward_from_pc():
             await client.event("stopped")
 
             engine.machine.write_memory(0x8000, bytes([0x00, 0x3E, 0x42, 0xC3, 0x00, 0x80]))
-            resp = await client.request(
-                "disassemble",
-                {"memoryReference": "0x8000", "instructionCount": 3},
-            )
+            # Pinned to "no ROM source" regardless of whether rom_disassembly/
+            # happens to be built in this environment -- otherwise a real ROM
+            # symbol landing within _SYMBOL_MAX_OFFSET of one of these plain
+            # addresses would flakily annotate it and break this assertion.
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8000", "instructionCount": 3},
+                )
             instructions = resp["body"]["instructions"]
             assert [i["instruction"] for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
             assert instructions[0]["address"] == "0x8000"
@@ -301,13 +306,115 @@ def test_disassemble_positive_instruction_offset_skips_forward():
             # NOP(1); LD A,0x42(2); JP 0x8000(3) -- skip the first two
             # instructions (offset=2) and read starting at the JP.
             engine.machine.write_memory(0x8000, bytes([0x00, 0x3E, 0x42, 0xC3, 0x00, 0x80]))
-            resp = await client.request(
-                "disassemble",
-                {"memoryReference": "0x8000", "instructionOffset": 2, "instructionCount": 1},
-            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8000", "instructionOffset": 2, "instructionCount": 1},
+                )
             instructions = resp["body"]["instructions"]
             assert instructions[0]["address"] == "0x8003"
             assert instructions[0]["instruction"] == "JP 0x8000"
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_disassemble_annotates_operands_with_resolved_symbols():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.machine.write_memory(
+                0x8000,
+                bytes([0xCD, 0x00, 0x90])  # CALL 0x9000
+                + bytes([0x21, 0x04, 0x91]),  # LD HL,0x9104
+            )
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"),
+                line_to_addr={},
+                addr_to_line={},
+                symbols={"MY_ROUTINE": 0x9000, "MY_TABLE": 0x9100},
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8000", "instructionCount": 2},
+                )
+            instructions = resp["body"]["instructions"]
+            assert instructions[0]["instruction"] == "CALL 0x9000 (MY_ROUTINE)"
+            assert instructions[1]["instruction"] == "LD HL,0x9104 (MY_TABLE+4)"
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_disassemble_includes_symbol_field_for_labeled_addresses():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.machine.write_memory(0x8000, bytes([0x00, 0x76]))  # NOP; HALT
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"), line_to_addr={}, addr_to_line={}, symbols={"MY_FUNC": 0x8000}
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8000", "instructionCount": 2},
+                )
+            instructions = resp["body"]["instructions"]
+            assert instructions[0]["symbol"] == "MY_FUNC"
+            assert "symbol" not in instructions[1]  # 0x8001 isn't itself a labeled address
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_disassemble_leaves_operands_unannotated_once_max_offset_is_exceeded():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            engine.machine.write_memory(0x8000, bytes([0xC3, 0x00, 0x80]))  # JP 0x8000
+            rom_source = RomSource(
+                asm_path=Path("rom.asm"), line_to_addr={}, addr_to_line={}, symbols={"START": 0x0000}
+            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8000", "instructionCount": 1},
+                )
+            assert resp["body"]["instructions"][0]["instruction"] == "JP 0x8000"
         finally:
             await client.close()
             server.close()
@@ -331,10 +438,11 @@ def test_disassemble_backward_from_an_aligned_instruction_boundary():
             # NOP(1); LD A,0x42(2); JP 0x8000(3) -- ask for 2 instructions
             # before the JP at 0x8003 plus the JP itself.
             engine.machine.write_memory(0x8000, bytes([0x00, 0x3E, 0x42, 0xC3, 0x00, 0x80]))
-            resp = await client.request(
-                "disassemble",
-                {"memoryReference": "0x8003", "instructionOffset": -2, "instructionCount": 3},
-            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request(
+                    "disassemble",
+                    {"memoryReference": "0x8003", "instructionOffset": -2, "instructionCount": 3},
+                )
             instructions = resp["body"]["instructions"]
             assert [i["instruction"] for i in instructions] == ["NOP", "LD A,0x42", "JP 0x8000"]
         finally:
@@ -380,14 +488,15 @@ def test_disassemble_backward_beyond_a_small_fixed_search_window():
             engine.machine.write_memory(0x8000, program)
             halt_addr = 0x8000 + len(unit) * n_units
 
-            resp = await client.request(
-                "disassemble",
-                {
-                    "memoryReference": f"0x{halt_addr:04X}",
-                    "instructionOffset": -n_instructions,
-                    "instructionCount": n_instructions + 1,
-                },
-            )
+            with patch("zxspectrum.server.dap._get_rom_source", return_value=None):
+                resp = await client.request(
+                    "disassemble",
+                    {
+                        "memoryReference": f"0x{halt_addr:04X}",
+                        "instructionOffset": -n_instructions,
+                        "instructionCount": n_instructions + 1,
+                    },
+                )
             instructions = resp["body"]["instructions"]
             addrs = [i["address"] for i in instructions]
             assert addrs[0] == "0x8000"
