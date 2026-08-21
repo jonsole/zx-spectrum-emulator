@@ -319,16 +319,20 @@ def _decode_ed(c: _Cursor) -> str:
 # exactly 4 uppercase hex digits (0x{:04X}) -- jump/call targets, (nn)
 # memory operands, and 16-bit LD immediates. 8-bit immediates, I/O ports,
 # and RST vectors use 2 digits and never match, which is what keeps this
-# from misfiring on those.
-_ADDR_RE = re.compile(r"0x([0-9A-F]{4})\b")
+# from misfiring on those. A trailing ")" is captured separately so a
+# memory-indirect operand like "(0x5C0E)" gets annotated as
+# "(0x5C0E) (TVDATA)" -- the label after the closing paren, not nested
+# inside it.
+_ADDR_RE = re.compile(r"0x([0-9A-F]{4})\b(\))?")
 
 
 def annotate_symbols(text: str, resolve: Resolver) -> str:
     """Append a resolved symbol name after every 4-hex-digit address in
     `text`, e.g. "CALL 0x8000" -> "CALL 0x8000 (START)", "LD HL,0x4567" ->
-    "LD HL,0x4567 (MY_TABLE+4)". `resolve` is typically RomSource.symbol_at
-    bound to a caller's active debug sources, passed as a callback so this
-    module stays free of any dependency on rom_source.py."""
+    "LD HL,0x4567 (MY_TABLE+4)", "LD HL,(0x5C0E)" -> "LD HL,(0x5C0E)
+    (TVDATA)". `resolve` is typically RomSource.symbol_at bound to a
+    caller's active debug sources, passed as a callback so this module
+    stays free of any dependency on rom_source.py."""
 
     def _sub(m: re.Match) -> str:
         result = resolve(int(m.group(1), 16))
@@ -336,7 +340,8 @@ def annotate_symbols(text: str, resolve: Resolver) -> str:
             return m.group(0)
         name, offset = result
         label = f"{name}+{offset}" if offset else name
-        return f"{m.group(0)} ({label})"
+        closing_paren = m.group(2) or ""
+        return f"0x{m.group(1)}{closing_paren} ({label})"
 
     return _ADDR_RE.sub(_sub, text)
 

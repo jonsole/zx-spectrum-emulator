@@ -156,7 +156,14 @@ def test_annotate_symbols_ignores_2_digit_operands():
 
 def test_annotate_symbols_handles_multiple_addresses_in_one_instruction():
     resolve = {0x8000: ("SRC", 0), 0x9000: ("DST", 0)}.get
-    assert annotate_symbols("LD (0x9000),0x8000", resolve) == "LD (0x9000 (DST)),0x8000 (SRC)"
+    assert annotate_symbols("LD (0x9000),0x8000", resolve) == "LD (0x9000) (DST),0x8000 (SRC)"
+
+
+def test_annotate_symbols_labels_memory_indirect_operand_after_the_closing_paren():
+    # "(0x5C0E)" -- a memory-indirect operand -- should annotate as
+    # "(0x5C0E) (TVDATA)", not the more confusing "(0x5C0E (TVDATA))".
+    resolve = {0x5C0E: ("TVDATA", 0)}.get
+    assert annotate_symbols("LD HL,(0x5C0E)", resolve) == "LD HL,(0x5C0E) (TVDATA)"
 
 
 def test_real_rom_reset_vector_matches_known_disassembly():

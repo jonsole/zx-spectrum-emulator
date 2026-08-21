@@ -369,7 +369,7 @@ def test_disassemble_annotates_operands_with_resolved_symbols():
             instructions = resp["body"]["instructions"]
             assert instructions[0]["instruction"] == _no_label("CALL 0x9000 (MY_ROUTINE)")
             assert instructions[1]["instruction"] == _no_label("LD HL,0x9104 (MY_TABLE+4)")
-            assert instructions[2]["instruction"] == _no_label("LD HL,(0x9000 (MY_ROUTINE))")
+            assert instructions[2]["instruction"] == _no_label("LD HL,(0x9000) (MY_ROUTINE)")
         finally:
             await client.close()
             server.close()
