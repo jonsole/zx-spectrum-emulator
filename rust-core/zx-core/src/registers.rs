@@ -2,7 +2,7 @@
 /// the two index registers. Flags are kept as a raw byte (`f`) rather than
 /// individual bools, matching how the real hardware and the Python core's
 /// `regs.af` view both treat it -- bit layout is defined in `flags.rs`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Registers {
     pub a: u8,
     pub f: u8,

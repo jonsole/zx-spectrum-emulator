@@ -1,0 +1,9 @@
+[package]
+name = "zx-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zx-core = { path = "../zx-core" }
+tokio = { version = "1", features = ["rt", "sync", "macros", "time"] }
+serde = { version = "1", features = ["derive"] }

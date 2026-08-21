@@ -6,6 +6,7 @@
 //! Python tests give it).
 
 use std::path::Path;
+use zx_core::flags::FLAG_C;
 use zx_core::spectrum::Spectrum48K;
 use zx_core::ula::FRAME_TSTATES;
 
@@ -66,6 +67,49 @@ fn keyboard_in_reads_through_the_real_bus() {
     }
     let bits = machine.registers().a & 0x1F;
     assert_eq!(bits, 0x1F & !0b00000001); // SPACE pressed -> bit 0 clear
+}
+
+#[test]
+fn in_r_c_reads_through_the_real_bus_and_preserves_carry() {
+    // ED-prefixed `IN r,(C)` (opcode 0x58 = IN E,(C)) -- was completely
+    // unimplemented until this pass, panicked the whole server the moment
+    // Manic Miner's own code executed it. Same bus decode as `IN A,(n)`
+    // (any port with A0=0 hits the ULA/keyboard regardless of the upper
+    // byte), but a distinct CPU dispatch path, so this exercises that path
+    // specifically -- plus the flags side effect (`_z80_in`-style: S/Z/5/3/P
+    // from the value read, H=0, N=0, C left untouched).
+    let mut machine = Spectrum48K::new();
+    machine.keyboard.key_down("SPACE"); // row 7, bit 0
+    // LD BC,$7FFE ; SCF ; IN E,(C) ; HALT
+    machine.write_memory(0x8000, &[0x01, 0xFE, 0x7F, 0x37, 0xED, 0x58, 0x76]);
+    let mut regs = machine.registers();
+    regs.pc = 0x8000;
+    machine.set_registers(regs);
+    for _ in 0..3 {
+        machine.step_instruction();
+    }
+    let regs = machine.registers();
+    let bits = regs.e & 0x1F;
+    assert_eq!(bits, 0x1F & !0b00000001, "SPACE pressed -> bit 0 clear");
+    assert_ne!(regs.f & FLAG_C, 0, "IN r,(C) must not touch the carry flag");
+}
+
+#[test]
+fn in_r_c_on_an_unmapped_port_reads_floating_bus_high() {
+    // A0=1 (odd port) is unconnected on a real 48K -- this core's bus decode
+    // returns 0xFF for it (see spectrum.rs's tick()), same value both
+    // IN A,(n) and IN r,(C) should observe since the decode is address-based,
+    // not opcode-based.
+    let mut machine = Spectrum48K::new();
+    // LD BC,$0001 ; IN B,(C) ; HALT
+    machine.write_memory(0x8000, &[0x01, 0x01, 0x00, 0xED, 0x40, 0x76]);
+    let mut regs = machine.registers();
+    regs.pc = 0x8000;
+    machine.set_registers(regs);
+    for _ in 0..2 {
+        machine.step_instruction();
+    }
+    assert_eq!(machine.registers().b, 0xFF);
 }
 
 #[test]

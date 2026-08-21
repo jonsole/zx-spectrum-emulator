@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["zx-core", "zx-core-conformance"]
+members = ["zx-core", "zx-core-conformance", "zx-engine", "zx-server"]

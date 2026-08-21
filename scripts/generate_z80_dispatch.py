@@ -41,15 +41,18 @@ IO_TCYCLES = 4
 
 # Names of YAML entries this generator does not attempt: HALT is
 # hand-written in cpu.rs (its PC-rewind trick doesn't fit the generic
-# pattern), `OUT (n),A`/`IN A,(n)` (the two forms real ZX Spectrum port
-# 0xFE access actually uses) ARE handled -- see the ioread/iowrite T-state
-# kinds below -- but every other I/O form (`IN r,(C)`/`OUT (C),r`/block
-# I/O) stays deferred, no device model exists for ports beyond 0xFE yet.
-# Everything else here is a `special` payload (CB/DD/FD/interrupt
-# handling, out of scope for this pass).
+# pattern). `OUT (n),A`/`IN A,(n)`/`IN $RY,(C)`/`IN (C)`/`OUT (C),$RY`/
+# `OUT (C),0` ARE handled -- see the ioread/iowrite T-state kinds below --
+# since `Spectrum48K::tick()`'s bus decode is already address-based (any
+# port with A0=0 hits the ULA keyboard/border regardless of which opcode
+# issued the IORQ, matching real hardware), so these need no new device
+# model, just the CPU-side dispatch. The block I/O forms (INI/IND/OUTI/
+# OUTD and their repeating counterparts) stay deferred -- real ports
+# beyond the ULA (e.g. a 128K AY chip) still have no model, and nothing
+# has needed them yet. Everything else here is a `special` payload
+# (CB/DD/FD/interrupt handling, out of scope for this pass).
 SKIP_NAMES = {
     "HALT",
-    "IN $RY,(C)", "IN (C)", "OUT (C),$RY", "OUT (C),0",
     "INI", "IND", "INIR", "INDR", "OUTI", "OUTD", "OTIR", "OTDR",
     "ddfdcb", "int_im0", "int_im1", "int_im2", "nmi",
     # The BYTE-DISPATCH entries for the CB/DD/FD prefixes themselves (not
@@ -310,6 +313,24 @@ ACTIONS: dict[str, "callable"] = {
         1: lambda y, z, p, q, i: "self.regs.set_wzl(self.regs.wzl().wrapping_add(1));",
     },
     "IN A,(n)": {0: lambda y, z, p, q, i: "self.regs.set_wzh(self.regs.a);"},
+    # ED-prefixed port I/O ($BC as the full 16-bit port address). WZ=BC+1
+    # on the ioread/iowrite mcycle (mirrors "$WZ=$BC+1" in the YAML,
+    # same real-hardware upper-address-bus side effect as OUT (n),A/
+    # IN A,(n) above). The overlapped mcycle's `_z80_in(cpu,$DLATCH)`
+    # sets S/Z/5/3/P from the byte read, H=0, N=0, C preserved -- exactly
+    # `alu::szp`-shaped, ported as `alu::in_flags` (see alu.rs) rather than
+    # reusing and8/xor8/or8's private szp_flags helper directly, since
+    # those also force flags this doesn't touch.
+    "IN $RY,(C)": {
+        0: lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);",
+        1: lambda y, z, p, q, i: f"{R[y]} = self.dlatch; self.regs.f = alu::in_flags(self.dlatch, self.regs.f);",
+    },
+    "IN (C)": {
+        0: lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);",
+        1: lambda y, z, p, q, i: "self.regs.f = alu::in_flags(self.dlatch, self.regs.f);",
+    },
+    "OUT (C),$RY": {0: lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);"},
+    "OUT (C),0": {0: lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);"},
     "LD A,(BC)": lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);",
     "LD A,(DE)": lambda y, z, p, q, i: "self.regs.wz = self.regs.de().wrapping_add(1);",
     "INC (HL)": lambda y, z, p, q, i: (

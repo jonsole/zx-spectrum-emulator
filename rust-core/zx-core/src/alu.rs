@@ -101,6 +101,12 @@ pub fn cp8(acc: u8, val: u8) -> u8 {
     cp_flags(acc, val, res)
 }
 
+/// `IN r,(C)`/`IN (C)`: S/Z/5/3/P from the byte read off the port, H=0,
+/// N=0, C preserved (mirrors `_z80_in()` in `z80.h`).
+pub fn in_flags(val: u8, f: u8) -> u8 {
+    szp_flags(val) | (f & FLAG_C)
+}
+
 /// INC/DEC preserve the carry flag (it's not one of the flags they touch),
 /// so the caller passes the current `F` register in as `carry_in` and only
 /// its C bit is kept.

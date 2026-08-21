@@ -66,6 +66,18 @@ impl Spectrum48K {
         self.memory.load_rom(data)
     }
 
+    /// Loads a `.sna` snapshot: RAM contents, registers, and border.
+    /// Mirrors `machine.py::load_snapshot()`.
+    pub fn load_snapshot(&mut self, data: &[u8]) -> Result<(), String> {
+        let image = crate::snapshot::parse_sna(data)?;
+        self.memory.ram.copy_from_slice(&image.ram);
+        self.set_registers(image.regs);
+        self.ula.border = image.border;
+        self.tstates = 0;
+        self.int_pending = false;
+        Ok(())
+    }
+
     // ---- reset / registers / memory ---------------------------------------
 
     /// Real Z80 RESET semantics (PC/I/R/IFF/IM cleared, other registers
