@@ -352,7 +352,8 @@ def test_disassemble_annotates_operands_with_resolved_symbols():
             engine.machine.write_memory(
                 0x8000,
                 bytes([0xCD, 0x00, 0x90])  # CALL 0x9000
-                + bytes([0x21, 0x04, 0x91]),  # LD HL,0x9104
+                + bytes([0x21, 0x04, 0x91])  # LD HL,0x9104
+                + bytes([0x2A, 0x00, 0x90]),  # LD HL,(0x9000)  -- memory-indirect
             )
             rom_source = RomSource(
                 asm_path=Path("rom.asm"),
@@ -363,11 +364,12 @@ def test_disassemble_annotates_operands_with_resolved_symbols():
             with patch("zxspectrum.server.dap._get_rom_source", return_value=rom_source):
                 resp = await client.request(
                     "disassemble",
-                    {"memoryReference": "0x8000", "instructionCount": 2},
+                    {"memoryReference": "0x8000", "instructionCount": 3},
                 )
             instructions = resp["body"]["instructions"]
             assert instructions[0]["instruction"] == _no_label("CALL 0x9000 (MY_ROUTINE)")
             assert instructions[1]["instruction"] == _no_label("LD HL,0x9104 (MY_TABLE+4)")
+            assert instructions[2]["instruction"] == _no_label("LD HL,(0x9000 (MY_ROUTINE))")
         finally:
             await client.close()
             server.close()

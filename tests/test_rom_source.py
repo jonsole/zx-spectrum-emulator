@@ -36,15 +36,21 @@ def test_load_rom_source_maps_instruction_lines_to_addresses(tmp_path):
     rom_source = load_rom_source(_write_build(tmp_path))
     assert rom_source is not None
     # Only T records (real instructions) contribute -- the D/L/Z records
-    # for the KSTATE EQU and the device header must not leak in, since
-    # their "address" field isn't a real code address.
+    # for the KSTATE EQU and the device header must not leak in here (D
+    # does contribute to `symbols`, just not line<->address mapping; see
+    # test_load_rom_source_collects_symbols_from_f_and_d_records).
     assert rom_source.line_to_addr == {90: 0, 91: 1, 105: 8, 106: 11}
     assert rom_source.addr_to_line == {0: 90, 1: 91, 8: 105, 11: 106}
 
 
-def test_load_rom_source_collects_symbols_from_f_records(tmp_path):
+def test_load_rom_source_collects_symbols_from_f_and_d_records(tmp_path):
+    # F (a named routine, e.g. START/ERROR_1) and D (an EQU'd constant or
+    # system-variable address, e.g. KSTATE) both become resolvable
+    # symbols -- D is what lets memory-indirect operands like
+    # "LD HL,(0x5C0E)" annotate with a real system-variable name (see
+    # DapConnection._resolve_symbol / annotate_symbols).
     rom_source = load_rom_source(_write_build(tmp_path))
-    assert rom_source.symbols == {"START": 0, "ERROR_1": 8}
+    assert rom_source.symbols == {"KSTATE": 23552, "START": 0, "ERROR_1": 8}
 
 
 def test_symbol_at_finds_nearest_label_at_or_before_address(tmp_path):

@@ -14,9 +14,16 @@ SLD is sjasmplus's pipe-delimited format: one record per line,
 `type` is a single letter: T (an instruction -- address<->line, unnamed),
 F (a global label: `data` is the name), D (an EQU'd constant or system-
 variable address), L (display/scope flags for the preceding D/F record),
-Z (device/page header). Only T and F are used here -- D's address field
-is an EQU value, not necessarily a real code address, and L/Z carry no
-address<->line information of their own.
+Z (device/page header). T, F, and D are used here; L/Z carry no
+address<->line information of their own. D's address field is sometimes
+an arbitrary constant rather than a real address (e.g. a bitmask) -- but
+it's included as a symbol anyway since the common case (a curated
+disassembly's system-variable EQUs, e.g. ROM's TVDATA at 0x5C0E) is
+exactly what's wanted for annotating `LD HL,(nn)`-style memory-indirect
+operands, and a stray constant-valued D can only ever collide with a
+real 16-bit operand that happens to land within symbol_at()'s
+max_offset of it -- the same inherent ambiguity annotate_symbols()
+already accepts for F-labeled code addresses.
 """
 from __future__ import annotations
 
@@ -78,7 +85,7 @@ def _parse_sld(sld_text: str) -> tuple[dict[int, int], dict[int, int], dict[str,
             # first-wins rule is a safer default than silently overwriting.
             line_to_addr.setdefault(line_no, addr)
             addr_to_line.setdefault(addr, line_no)
-        elif rec_type == "F" and data:
+        elif rec_type in ("F", "D") and data:
             try:
                 addr = int(addr_s)
             except ValueError:
