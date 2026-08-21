@@ -17,11 +17,13 @@
 //! swallow one extra instruction after every DDCB/FDCB op -- neither was
 //! ever exercised by the differential tests).
 //!
-//! **The real zexdoc.z80 now passes in full: every test group reports
-//! `OK`, zero `ERROR`s.** DD/FD and DDCB/FDCB (and everything else) are
-//! confirmed correct against known-correct Z80 semantics, not just against
-//! z80.h -- the strongest correctness claim this project can currently
-//! make. Getting here involved one genuine near-miss: what initially
+//! **Both the real zexdoc.z80 AND its stricter sibling zexall.z80 (which
+//! checks the undocumented flag bits fully instead of masking them out) now
+//! pass in full: every test group in both suites reports `OK`, zero
+//! `ERROR`s.** DD/FD and DDCB/FDCB (and everything else) are confirmed
+//! correct against known-correct Z80 semantics, not just against z80.h --
+//! the strongest correctness claim this project can currently make. Getting
+//! here involved one genuine near-miss: what initially
 //! LOOKED like a stuck/infinite loop partway through the `add ix` group
 //! turned out to be a false alarm, traced via a PC-hit histogram
 //! and a counter on how often zexdoc's own `test:` routine (0x1D2A) got
@@ -148,15 +150,13 @@ fn zexdoc_reports_no_errors() {
     );
 }
 
-/// zexall.z80's stricter sibling: checks the undocumented flag bits fully
-/// instead of masking them out the way zexdoc does. Not yet run to
-/// completion (each full run is ~15-20 minutes) -- since zexdoc's own
-/// undocumented-flag-touching groups (`bit n,...`, block instructions,
-/// `<rrd,rld>`, etc.) already pass, this is expected to pass too, but
-/// that's an expectation, not a verified fact until this has actually been
-/// run once.
+/// zexdoc.z80's stricter sibling: checks the undocumented flag bits fully
+/// instead of masking them out. **Confirmed passing in full (2026-08-22):
+/// every group reports `OK`, zero `ERROR`s, in ~1055s.** `#[ignore]`d for
+/// the same reason as `zexdoc_reports_no_errors` above -- runtime, not
+/// doubt.
 #[test]
-#[ignore = "not yet run to completion -- see doc comment above"]
+#[ignore = "passes in full, but takes ~18 minutes -- run explicitly, see doc comment above"]
 fn zexall_reports_no_errors() {
     let output = run_zexall_com(Path::new("../../.zexall-src/zexall.com"));
     print!("{output}");

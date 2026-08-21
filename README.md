@@ -543,11 +543,12 @@ still ahead of it.
   2. The real [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL) Z80
      exerciser (fetched at test time, not vendored — see
      `scripts/fetch_zexall.py`) runs against the core through a minimal
-     CP/M BDOS shim. **zexdoc.z80 passes in full: every test group reports
-     `OK`, zero errors, across the entire suite.** This checks agreement
-     with known-correct Z80 semantics directly, independent of z80.h — the
-     stronger of the two claims, since it would catch a bug the two cores
-     happened to share.
+     CP/M BDOS shim. **Both zexdoc.z80 and its stricter sibling zexall.z80
+     (which checks the undocumented flag bits fully instead of masking them
+     out) pass in full: every test group in both suites reports `OK`, zero
+     errors.** This checks agreement with known-correct Z80 semantics
+     directly, independent of z80.h — the stronger of the two claims, since
+     it would catch a bug the two cores happened to share.
 - Covers the full documented instruction set plus the well-known
   undocumented forms: unprefixed, `ED`, `CB`, `DD`/`FD` (register
   substitution including `IXH`/`IXL`/`IYH`/`IYL`, and `(IX+d)`/`(IY+d)`
@@ -559,8 +560,9 @@ still ahead of it.
 
 ```bash
 cd rust-core
-cargo test                                                # fast suite, seconds
-cargo test --test zexall -- --ignored --nocapture         # full ZEXDOC run, ~18 min
+cargo test                                                            # fast suite, seconds
+cargo test --test zexall zexdoc_reports_no_errors -- --ignored --nocapture  # full ZEXDOC run, ~18 min
+cargo test --test zexall zexall_reports_no_errors -- --ignored --nocapture  # stricter sibling, ~18 min
 ```
 
 ## License
