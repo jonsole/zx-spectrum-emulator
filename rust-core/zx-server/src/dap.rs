@@ -364,7 +364,43 @@ async fn handle_request(
             });
             (true, json!({ "allThreadsContinued": true }))
         }
-        "next" | "stepIn" | "stepOut" => {
+        "next" => {
+            // Step over: a plain single step already steps INTO a CALL/RST
+            // (it just executes the instruction, which pushes the return
+            // address and jumps) -- that's exactly `stepIn`'s semantics, so
+            // this only needs to special-case CALL/RST. For those, run
+            // (rather than single-step) until a breakpoint set at the
+            // instruction immediately after the call/rst is hit, which is
+            // where execution lands once the subroutine returns. Spawned in
+            // the background (mirroring `continue`, below) rather than
+            // awaited inline, so a subroutine that never returns can't wedge
+            // this connection's request loop -- a `pause` request can still
+            // interrupt it, and the eventual `stopped` event reaches the
+            // client via the connection's separate event-forwarding task.
+            let regs = engine.get_registers().await;
+            let mem = engine.watch_memory().borrow().clone();
+            let read = |a: u16| mem[a as usize];
+            let inst = zx_core::disassemble_one(&read, regs.pc);
+            if inst.text.starts_with("CALL") || inst.text.starts_with("RST") {
+                let return_addr = regs.pc.wrapping_add(inst.length as u16);
+                // Don't clear a breakpoint the user actually set there.
+                let already_set = state.known_breakpoints.contains(&return_addr);
+                let engine = engine.clone();
+                tokio::spawn(async move {
+                    if !already_set {
+                        engine.set_breakpoint(return_addr).await;
+                    }
+                    engine.run().await;
+                    if !already_set {
+                        engine.clear_breakpoint(return_addr).await;
+                    }
+                });
+            } else {
+                engine.step(1, None).await;
+            }
+            (true, json!({}))
+        }
+        "stepIn" | "stepOut" => {
             engine.step(1, None).await;
             (true, json!({}))
         }
@@ -624,4 +660,93 @@ fn flag_variables(regs: &zx_core::Registers) -> Vec<Value> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rom_source::DebugInfo;
+    use std::path::PathBuf;
+
+    async fn request(
+        engine: &Engine,
+        sources: &Sources,
+        state: &mut ConnectionState,
+        seq: &Arc<AtomicI64>,
+        command: &str,
+        arguments: Value,
+    ) -> Value {
+        let req = json!({"seq": 1, "type": "request", "command": command, "arguments": arguments});
+        handle_request(&req, engine, sources, state, seq).await
+    }
+
+    /// `next` (step over) must run PAST a CALL instead of single-stepping
+    /// into it (which is `stepIn`'s job) -- regression coverage for the fix
+    /// making it set a temporary breakpoint at the return address and run to
+    /// it, instead of just calling `engine.step(1, ..)` like every other
+    /// step request.
+    #[tokio::test]
+    async fn next_steps_over_a_call() {
+        let engine = Engine::new();
+        let sources = Sources::new(DebugInfo::default(), PathBuf::new());
+        let mut state = ConnectionState::default();
+        let seq = Arc::new(AtomicI64::new(1));
+
+        let base: u16 = 0x8000;
+        let callee: u16 = base.wrapping_add(0x100);
+        engine.write_memory(base, vec![0xCD, (callee & 0xFF) as u8, (callee >> 8) as u8]).await; // CALL callee
+        engine.write_memory(callee, vec![0xC9]).await; // RET
+
+        let mut regs = engine.get_registers().await;
+        regs.pc = base;
+        regs.sp = 0xFFF0;
+        engine.set_registers(regs).await;
+
+        let mut events = engine.subscribe();
+
+        let resp = request(&engine, &sources, &mut state, &seq, "next", json!({"threadId": 1})).await;
+        assert_eq!(resp["success"], true);
+
+        // `next`'s run-to-return happens in a spawned background task (so a
+        // callee that never returns can't wedge the connection) -- wait for
+        // its `stopped` event rather than asserting on registers right away.
+        loop {
+            if let Event::Stopped { reason: "breakpoint", .. } = events.recv().await.unwrap() {
+                break;
+            }
+        }
+
+        let regs = engine.get_registers().await;
+        assert_eq!(regs.pc, base.wrapping_add(3)); // landed after the CALL, not inside it
+
+        // The temporary breakpoint used to land here must not leak.
+        let state_snapshot = engine.get_state().await;
+        assert!(state_snapshot.breakpoints.is_empty());
+    }
+
+    /// A plain `stepIn` request is unaffected by the `next` fix -- it must
+    /// still land INSIDE the call, one instruction in.
+    #[tokio::test]
+    async fn step_in_still_steps_into_a_call() {
+        let engine = Engine::new();
+        let sources = Sources::new(DebugInfo::default(), PathBuf::new());
+        let mut state = ConnectionState::default();
+        let seq = Arc::new(AtomicI64::new(1));
+
+        let base: u16 = 0x8000;
+        let callee: u16 = base.wrapping_add(0x100);
+        engine.write_memory(base, vec![0xCD, (callee & 0xFF) as u8, (callee >> 8) as u8]).await; // CALL callee
+        engine.write_memory(callee, vec![0xC9]).await; // RET
+
+        let mut regs = engine.get_registers().await;
+        regs.pc = base;
+        regs.sp = 0xFFF0;
+        engine.set_registers(regs).await;
+
+        let resp = request(&engine, &sources, &mut state, &seq, "stepIn", json!({"threadId": 1})).await;
+        assert_eq!(resp["success"], true);
+
+        let regs = engine.get_registers().await;
+        assert_eq!(regs.pc, callee);
+    }
 }

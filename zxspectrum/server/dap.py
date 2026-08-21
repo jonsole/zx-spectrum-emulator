@@ -348,7 +348,33 @@ class DapConnection:
         return {"allThreadsContinued": True}
 
     async def _cmd_next(self, args: dict) -> dict:
-        await self.engine.step()
+        # Step over: a plain single step already steps INTO a CALL/RST (it
+        # just executes the instruction, which pushes the return address and
+        # jumps) -- that's exactly stepIn's semantics, so this only needs to
+        # special-case CALL/RST. For those, run (rather than single-step)
+        # until a breakpoint set at the instruction immediately after the
+        # call/rst is hit, which is where execution lands once the
+        # subroutine returns. Not awaited inline (mirroring _cmd_continue,
+        # above) so a subroutine that never returns can't wedge this
+        # connection's request loop -- a pause request can still interrupt
+        # it, and the eventual stopped event reaches the client via the
+        # forwarded-events task.
+        regs = await self.engine.get_registers()
+        inst = disassemble_one(self._read_memory_sync, regs.pc)
+        if inst.text.startswith("CALL") or inst.text.startswith("RST"):
+            return_addr = (regs.pc + inst.length) & 0xFFFF
+            already_set = return_addr in self._known_breakpoints
+
+            async def _run_to_return() -> None:
+                if not already_set:
+                    await self.engine.set_breakpoint(return_addr)
+                await self.engine.run()
+                if not already_set:
+                    await self.engine.clear_breakpoint(return_addr)
+
+            asyncio.create_task(_run_to_return())
+        else:
+            await self.engine.step()
         return {}
 
     async def _cmd_stepIn(self, args: dict) -> dict:

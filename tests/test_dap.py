@@ -646,7 +646,10 @@ def test_stack_trace_shows_a_call_frame_for_a_call_in_progress():
                 trace = await client.request("stackTrace", {"threadId": 1})
             assert trace["body"]["totalFrames"] == 1  # not inside the call yet
 
-            resp = await client.request("next", {"threadId": 1})
+            # stepIn (not next/step-over) is what's expected to land inside
+            # the call -- see test_next_steps_over_a_call for step-over's own
+            # (different, intentional) behavior of running past it instead.
+            resp = await client.request("stepIn", {"threadId": 1})
             assert resp["success"]
             await client.event("stopped")
 
@@ -661,6 +664,52 @@ def test_stack_trace_shows_a_call_frame_for_a_call_in_progress():
             assert frames[0]["instructionPointerReference"] == f"0x{callee:04X}"
             assert frames[1]["instructionPointerReference"] == f"0x{(base + 3) & 0xFFFF:04X}"
             assert frames[0]["id"] != frames[1]["id"]
+        finally:
+            await client.close()
+            server.close()
+            await engine.stop()
+
+    _run(scenario())
+
+
+def test_next_steps_over_a_call():
+    async def scenario():
+        engine = Engine()
+        engine.start()
+        server = await create_dap_server(engine, port=0)
+        client = await _connect(server)
+        try:
+            await client.request("initialize", {})
+            await client.event("initialized")
+            await client.request("launch", {})
+            await client.event("stopped")
+
+            # Same write-before-set_registers ordering as
+            # test_stack_trace_shows_a_call_frame_for_a_call_in_progress --
+            # see its comment.
+            base = 0x8000
+            callee = (base + 0x100) & 0xFFFF
+            engine.machine.write_memory(base, bytes([0xCD, callee & 0xFF, callee >> 8]))  # CALL callee
+            engine.machine.write_memory(callee, bytes([0xC9]))  # RET
+
+            regs = await engine.get_registers()
+            regs.pc = base
+            await engine.set_registers(regs)
+            await client.event("stopped")
+
+            resp = await client.request("next", {"threadId": 1})
+            assert resp["success"]
+            # Unlike stepIn, next runs the whole call in the background --
+            # its own "stopped" (reason "step") isn't the one to wait for.
+            stopped = await client.event("stopped")
+            assert stopped["body"]["reason"] == "breakpoint"
+
+            regs = await engine.get_registers()
+            assert regs.pc == (base + 3) & 0xFFFF  # landed after the CALL, not inside it
+            assert engine.machine.call_stack == []  # and the call already returned
+
+            # The temporary breakpoint used to land here must not leak.
+            assert engine.machine.breakpoints == set()
         finally:
             await client.close()
             server.close()
