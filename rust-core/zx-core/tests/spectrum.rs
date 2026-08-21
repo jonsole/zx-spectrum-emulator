@@ -8,7 +8,6 @@
 use std::path::Path;
 use zx_core::flags::FLAG_C;
 use zx_core::spectrum::Spectrum48K;
-use zx_core::ula::FRAME_TSTATES;
 
 #[test]
 fn rom_is_write_protected() {
@@ -114,14 +113,133 @@ fn in_r_c_on_an_unmapped_port_reads_floating_bus_high() {
 
 #[test]
 fn frame_boundary_sets_int_pending_and_toggles_flash_every_16th() {
+    // `run_frame()`, not a fixed `FRAME_TSTATES` tick() count -- a single
+    // tick() call can now silently consume more than one real T-state
+    // (ULA contention), so looping on frame_count is what's actually
+    // correct (see `Spectrum48K::run_frame()`'s own doc comment).
     let mut machine = Spectrum48K::new();
     for frame in 1..=16u64 {
-        for _ in 0..FRAME_TSTATES {
-            machine.tick();
-        }
+        machine.run_frame();
         assert_eq!(machine.frame_count, frame);
     }
     assert!(machine.ula.flash_state, "flash should have toggled on frame 16");
+}
+
+#[test]
+fn progressive_render_matches_hand_decoded_reference_when_screen_is_static() {
+    // Regression check for the T-state-synced rendering rewrite: with no
+    // mid-frame screen-memory writes, the progressively-built framebuffer
+    // must agree exactly with a plain hand-computed decode -- proving the
+    // rewrite didn't silently change the pixel/attribute decode math
+    // (color table, ink/paper/bright), independent of timing.
+    let mut machine = Spectrum48K::new();
+    machine.write_memory(0x0000, &[0x76]); // HALT -- CPU idles, never touches screen memory
+    let mut regs = machine.registers();
+    regs.pc = 0x0000;
+    machine.set_registers(regs);
+
+    // Every pixel byte "all ink"; every attribute ink=2 (red), paper=0,
+    // not bright -- so every pixel in the whole picture should decode to
+    // the same known color, easy to assert without re-deriving the
+    // color table in the test itself.
+    for row in 0..192u16 {
+        machine.write_memory(zx_core::ula::pixel_addr(0, row), &[0xFF]);
+        for col in 1..32u16 {
+            machine.write_memory(zx_core::ula::pixel_addr(col * 8, row), &[0xFF]);
+        }
+    }
+    for row in 0..24u16 {
+        for col in 0..32u16 {
+            machine.write_memory(zx_core::ula::attr_addr(col * 8, row * 8), &[0x02]);
+        }
+    }
+
+    machine.run_frame();
+
+    let screen = machine.render_screen();
+    let expected_red = (0xCDu8, 0u8, 0u8); // color(ink=2, bright=false)
+    for (i, px) in screen.chunks_exact(3).enumerate() {
+        assert_eq!(
+            (px[0], px[1], px[2]),
+            expected_red,
+            "pixel {i} didn't match the hand-decoded reference color"
+        );
+    }
+}
+
+#[test]
+fn mid_frame_screen_write_produces_real_tearing() {
+    // The capability a snapshot decoder could never have: a screen-memory
+    // write partway through a frame should only affect the part of the
+    // picture the ULA hadn't drawn yet.
+    let mut machine = Spectrum48K::new();
+    machine.write_memory(0x0000, &[0x76]); // HALT -- CPU idles at an uncontended address
+    let mut regs = machine.registers();
+    regs.pc = 0x0000;
+    machine.set_registers(regs);
+
+    // Whole screen: all-ink pixels, red attributes -- one full stable
+    // frame first so `render_screen()` has a real "last complete frame"
+    // to fall back on before the torn frame under test.
+    for row in 0..192u16 {
+        for col in 0..32u16 {
+            machine.write_memory(zx_core::ula::pixel_addr(col * 8, row), &[0xFF]);
+        }
+    }
+    for row in 0..24u16 {
+        for col in 0..32u16 {
+            machine.write_memory(zx_core::ula::attr_addr(col * 8, row * 8), &[0x02]); // red
+        }
+    }
+    machine.run_frame();
+
+    // Tick into the NEXT frame up to the start of scanline 100 -- past
+    // where scanline 50 was already drawn, before scanline 150 is drawn.
+    let target = zx_core::contention::FIRST_CONTENDED_TSTATE + 100 * zx_core::contention::LINE_TSTATES;
+    while machine.tstates < target {
+        machine.tick();
+    }
+    // Recolor scanline 150 to green, ahead of the ULA reaching it.
+    for col in 0..32u16 {
+        machine.write_memory(zx_core::ula::attr_addr(col * 8, 150), &[0x04]);
+    }
+    // Finish the frame.
+    let starting_frame = machine.frame_count;
+    while machine.frame_count == starting_frame {
+        machine.tick();
+    }
+
+    let screen = machine.render_screen();
+    let pixel_at = |x: usize, y: usize| {
+        let idx = (y * zx_core::ula::SCREEN_WIDTH + x) * 3;
+        (screen[idx], screen[idx + 1], screen[idx + 2])
+    };
+    assert_eq!(pixel_at(0, 50), (0xCD, 0, 0), "row 50 was already drawn -- should stay the old red");
+    assert_eq!(pixel_at(0, 150), (0, 0xCD, 0), "row 150 was drawn after the write -- should be the new green");
+}
+
+#[test]
+fn contended_memory_executes_fewer_loop_iterations_per_frame_than_uncontended() {
+    fn count_loop_iterations(load_addr: u16) -> u16 {
+        let mut machine = Spectrum48K::new();
+        // INC BC ; JR -3 (tight, infinite 2-instruction loop). BC (not B
+        // alone) so the count can't wrap within one frame's worth of
+        // iterations.
+        machine.write_memory(load_addr, &[0x03, 0x18, 0xFD]);
+        let mut regs = machine.registers();
+        regs.pc = load_addr;
+        regs.set_bc(0);
+        machine.set_registers(regs);
+        machine.run_frame();
+        machine.registers().bc()
+    }
+
+    let contended = count_loop_iterations(0x4000);
+    let uncontended = count_loop_iterations(0x8000);
+    assert!(
+        contended < uncontended,
+        "contended={contended} uncontended={uncontended} -- contention should cost real throughput"
+    );
 }
 
 #[test]

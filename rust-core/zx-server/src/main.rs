@@ -39,6 +39,11 @@ struct Args {
     /// default lands on the real `rom_disassembly/` at the project root.
     #[arg(long, default_value = "../rom_disassembly")]
     rom_disassembly_dir: std::path::PathBuf,
+
+    /// Start with the ULA contention overlay already enabled (see the
+    /// `set_contention_overlay` MCP tool for toggling it at runtime).
+    #[arg(long, default_value_t = false)]
+    contention_overlay: bool,
 }
 
 #[tokio::main]
@@ -50,6 +55,9 @@ async fn main() -> anyhow::Result<()> {
     println!("Starting ZX Spectrum Rust server...");
     let args = Args::parse();
     let engine = Engine::new();
+    if args.contention_overlay {
+        engine.set_contention_overlay(true).await;
+    }
     let sources = Sources::new(DebugInfo::default(), args.rom_disassembly_dir);
 
     let dap_engine = engine.clone();

@@ -91,6 +91,21 @@ impl Engine {
         self.pause_requested.store(true, Ordering::Relaxed);
     }
 
+    pub async fn set_contention_overlay(&self, enabled: bool) {
+        let (reply, rx) = oneshot::channel();
+        self.tx.send(Command::SetContentionOverlay { enabled, reply }).await.ok();
+        rx.await.ok();
+    }
+
+    /// `ticks`, when set, steps that many of the CPU's own T-states rather
+    /// than whole instructions (sub-instruction debugging). Note this
+    /// means N *CPU-visible* T-states, not necessarily N real T-states of
+    /// wall-clock/frame time: ULA contention can make a single
+    /// `Spectrum48K::tick()` call silently consume more than one real
+    /// T-state (see `Spectrum48K::advance_tstate()`'s doc comment) while
+    /// the CPU's own state machine only ever advances by one per call --
+    /// which is exactly the semantic wanted here, single-stepping through
+    /// the CPU's own dispatch steps regardless of contention.
     pub async fn step(&self, instructions: u32, ticks: Option<u32>) -> Registers {
         let (reply, rx) = oneshot::channel();
         self.tx.send(Command::Step { instructions, ticks, reply }).await.ok();
@@ -332,6 +347,10 @@ async fn actor_loop(
                 }
                 reply.send(result).ok();
             }
+            Command::SetContentionOverlay { enabled, reply } => {
+                machine.ula.contention_overlay_enabled = enabled;
+                reply.send(()).ok();
+            }
         }
         // Cheap enough to do after every individual command (unlike inside
         // Run's tight per-instruction loop, where it's throttled to the
@@ -372,5 +391,6 @@ fn state_snapshot(machine: &Spectrum48K, running: bool) -> State {
         breakpoints: machine.breakpoints.iter().copied().collect(),
         running,
         border: machine.ula.border,
+        contended_tstates_last_frame: machine.ula.contended_tstates_last_frame(),
     }
 }

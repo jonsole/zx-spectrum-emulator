@@ -17,6 +17,10 @@ pub struct State {
     pub breakpoints: Vec<u16>,
     pub running: bool,
     pub border: u8,
+    /// Sum of memory + IO contention delay T-states over the last fully
+    /// completed frame -- a numeric readout of contention even without
+    /// the visual overlay (see `Command::SetContentionOverlay`).
+    pub contended_tstates_last_frame: u32,
 }
 
 pub enum Command {
@@ -82,6 +86,10 @@ pub enum Command {
     LoadSnapshot {
         data: Vec<u8>,
         reply: oneshot::Sender<Result<Registers, String>>,
+    },
+    SetContentionOverlay {
+        enabled: bool,
+        reply: oneshot::Sender<()>,
     },
 }
 

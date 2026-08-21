@@ -29,3 +29,16 @@ detail yet -- just captured here so they don't get lost.
       what a given run actually executed/touched, so a thin run (e.g.
       never past a title screen) will under-classify most of the image
       as unvisited/unknown.
+
+- [ ] **ULA memory/IO contention (T-state-accurate timing).** Neither core
+      implements this yet -- `zxspectrum/core/ula.py` explicitly flags it
+      as out of scope ("a functionally-correct decode of the display file,
+      not a cycle-perfect raster model"), so this is new work, not a port.
+      The classic model: extra wait T-states inserted when the CPU accesses
+      contended memory (0x4000-0x7FFF) or an I/O port with the high bit of
+      the address clear, during the ULA's screen-fetch window -- the
+      well-known 6,5,4,3,2,1,0,0 delay pattern repeating every 8 T-states,
+      active for the contended region of each scanline. Needed for
+      cycle-accurate timing (some games rely on it for effects/sync); no
+      Python reference to verify against, so correctness would need to lean
+      on published reference T-state tables instead.
