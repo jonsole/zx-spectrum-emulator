@@ -141,9 +141,26 @@ async fn handle_connection(stream: TcpStream, engine: Engine, sources: Sources) 
         let Some(request) = read_message(&mut reader).await else {
             break;
         };
+        let command = request["command"].as_str().unwrap_or("").to_string();
         let response = handle_request(&request, &engine, &sources, &mut state, &seq).await;
+        let success = response.get("success").and_then(Value::as_bool).unwrap_or(false);
         if out_tx.send(frame_message(&response)).is_err() {
             break;
+        }
+        if command == "initialize" && success {
+            // Per the DAP spec: the adapter sends `initialized` right after
+            // its `initialize` response, signaling it's ready for
+            // `setBreakpoints`/`setInstructionBreakpoints`/etc. Real DAP
+            // clients (VS Code included) gate sending those requests on
+            // this event -- without it, breakpoints set in the UI are
+            // never actually transmitted to the server at all, so
+            // `continue` runs straight past them. (Missing here until
+            // this fix; a hand-written test client that doesn't wait for
+            // it never noticed.)
+            let msg = envelope_event(&seq, "initialized", json!({}));
+            if out_tx.send(frame_message(&msg)).is_err() {
+                break;
+            }
         }
     }
 
