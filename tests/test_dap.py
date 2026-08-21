@@ -384,7 +384,9 @@ def test_disassemble_includes_symbol_field_for_labeled_addresses():
                 )
             instructions = resp["body"]["instructions"]
             assert instructions[0]["symbol"] == "MY_FUNC"
+            assert instructions[0]["instruction"] == "MY_FUNC:  NOP"
             assert "symbol" not in instructions[1]  # 0x8001 isn't itself a labeled address
+            assert instructions[1]["instruction"] == "HALT"
         finally:
             await client.close()
             server.close()

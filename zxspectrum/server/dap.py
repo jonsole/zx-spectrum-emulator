@@ -449,16 +449,23 @@ class DapConnection:
         instructions = disassemble_range(self._read_memory_sync, start, count)
         result = []
         for i in instructions:
+            text = annotate_symbols(i.text, self._resolve_symbol)
+            label = self._label_at(i.addr)
+            if label is not None:
+                # DAP has a dedicated "symbol" field for this, which the
+                # spec says a client MAY render as a heading above the
+                # line -- VS Code's Disassembly View does not, in
+                # practice, do that (confirmed live: the field arrives
+                # but nothing shows), so the label is also folded directly
+                # into the instruction text, which every client renders
+                # by definition.
+                text = f"{label}:  {text}"
             entry = {
                 "address": f"0x{i.addr:04X}",
                 "instructionBytes": i.raw.hex(),
-                "instruction": annotate_symbols(i.text, self._resolve_symbol),
+                "instruction": text,
             }
-            label = self._label_at(i.addr)
             if label is not None:
-                # DAP's own field for this -- VS Code's Disassembly View
-                # renders it as a "LABEL:" heading above the instruction
-                # line, exactly like a real assembly listing.
                 entry["symbol"] = label
             result.append(entry)
         return {"instructions": result}
