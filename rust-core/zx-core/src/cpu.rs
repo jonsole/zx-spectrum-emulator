@@ -860,8 +860,12 @@ impl Cpu {
     /// True exactly when the CPU has just returned to a fresh opcode
     /// fetch's T1 (M1|RD both asserted) and isn't mid-prefix. Mirrors
     /// `z80_opdone()` -- checked against the PINS returned by the most
-    /// recent `tick()` call, not against any internal step number.
-    fn is_instruction_boundary(&self, pins: u64) -> bool {
+    /// recent `tick()` call, not against any internal step number. Public
+    /// so a machine-level caller driving `tick()` directly (to intercept
+    /// IORQ as well as MREQ, which `step()`'s own internal loop doesn't)
+    /// can detect instruction completion the same way `step()` does,
+    /// without duplicating this check.
+    pub fn is_instruction_boundary(&self, pins: u64) -> bool {
         (pins & (M1 | RD)) == (M1 | RD) && !self.prefix_active
     }
 

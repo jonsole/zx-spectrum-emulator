@@ -37,15 +37,19 @@ ED_STEP_BASE = 256
 EXTRA_STEP_BASE = 512
 
 MEM_TCYCLES = 3
+IO_TCYCLES = 4
 
 # Names of YAML entries this generator does not attempt: HALT is
 # hand-written in cpu.rs (its PC-rewind trick doesn't fit the generic
-# pattern), everything else here uses ioread/iowrite (deferred -- no I/O
-# device model yet) or is a `special` payload (CB/DD/FD/interrupt
+# pattern), `OUT (n),A`/`IN A,(n)` (the two forms real ZX Spectrum port
+# 0xFE access actually uses) ARE handled -- see the ioread/iowrite T-state
+# kinds below -- but every other I/O form (`IN r,(C)`/`OUT (C),r`/block
+# I/O) stays deferred, no device model exists for ports beyond 0xFE yet.
+# Everything else here is a `special` payload (CB/DD/FD/interrupt
 # handling, out of scope for this pass).
 SKIP_NAMES = {
     "HALT",
-    "OUT (n),A", "IN A,(n)", "IN $RY,(C)", "IN (C)", "OUT (C),$RY", "OUT (C),0",
+    "IN $RY,(C)", "IN (C)", "OUT (C),$RY", "OUT (C),0",
     "INI", "IND", "INIR", "INDR", "OUTI", "OUTD", "OTIR", "OTDR",
     "ddfdcb", "int_im0", "int_im1", "int_im2", "nmi",
     # The BYTE-DISPATCH entries for the CB/DD/FD prefixes themselves (not
@@ -186,8 +190,6 @@ def parse_opdescs() -> list[Op]:
         mcycles = d.get("mcycles")
         if mcycles is None:
             raise ValueError(f"op '{name}' has no mcycles")
-        if any(mc["type"] in ("ioread", "iowrite") for mc in mcycles):
-            continue  # deferred, see SKIP_NAMES doc comment
         ops.append(Op(name, d.get("cond", "True"), d.get("prefix", ""), d.get("flags", {}), mcycles))
     return ops
 
@@ -297,6 +299,17 @@ ACTIONS: dict[str, "callable"] = {
         "self.regs.set_wzl(self.regs.e.wrapping_add(1)); self.regs.set_wzh(self.regs.a);"
     ),
     "LD (nn),A": {2: lambda y, z, p, q, i: "self.regs.set_wzh(self.regs.a);"},
+    # WZ high byte = A on the mread of the immediate port byte (matching
+    # "$WZH=$A" in the YAML), so the port number ends up on the low half of
+    # WZ and A duplicated onto the high half -- exactly what real hardware
+    # puts on the upper address bus lines (A8-A15) during the actual io
+    # cycle. OUT's iowrite mcycle also increments WZL afterward ("$WZL++"),
+    # a real, if obscure, undocumented side effect.
+    "OUT (n),A": {
+        0: lambda y, z, p, q, i: "self.regs.set_wzh(self.regs.a);",
+        1: lambda y, z, p, q, i: "self.regs.set_wzl(self.regs.wzl().wrapping_add(1));",
+    },
+    "IN A,(n)": {0: lambda y, z, p, q, i: "self.regs.set_wzh(self.regs.a);"},
     "LD A,(BC)": lambda y, z, p, q, i: "self.regs.wz = self.regs.bc().wrapping_add(1);",
     "LD A,(DE)": lambda y, z, p, q, i: "self.regs.wz = self.regs.de().wrapping_add(1);",
     "INC (HL)": lambda y, z, p, q, i: (
@@ -689,6 +702,28 @@ def build_tstates(op: Op) -> list[TState]:
             tstates.append(TState("mwrite_go", ab=mc["ab"], db=mc["db"], mci=mci))
             tstates.append(TState("plain"))
             tstates += [TState("plain") for _ in range(3, tcycles)]
+        elif t == "ioread":
+            # Mirrors z80_gen.py's own ioread template exactly (ported
+            # from `.chips-codegen-src/z80_gen.py`, not guessed): two
+            # leading idle T-states, THEN wait-check+issue, THEN
+            # consume+action -- unlike mread, which issues on T2 not T3.
+            tcycles = mc.get("tcycles", IO_TCYCLES)
+            tstates.append(TState("plain"))
+            tstates.append(TState("plain"))
+            tstates.append(TState("ioread_wait", ab=mc["ab"]))
+            tstates.append(TState("ioread_latch", dst=mc["dst"], mci=mci))
+            tstates += [TState("plain") for _ in range(4, tcycles)]
+        elif t == "iowrite":
+            # Mirrors z80_gen.py's own iowrite template: issue on T2 with
+            # NO wait check (data must be valid on the bus first), THEN a
+            # separate wait-check+action T3 -- unlike mwrite, which combines
+            # wait-check+issue+action into one T-state.
+            tcycles = mc.get("tcycles", IO_TCYCLES)
+            tstates.append(TState("plain"))
+            tstates.append(TState("iowrite_go", ab=mc["ab"], db=mc["db"], mci=mci))
+            tstates.append(TState("iowrite_wait", mci=mci))
+            tstates.append(TState("plain"))
+            tstates += [TState("plain") for _ in range(4, tcycles)]
         elif t == "generic":
             tstates.append(TState("generic", mci=mci))
             tstates += [TState("plain") for _ in range(1, mc["tcycles"])]
@@ -762,6 +797,41 @@ class Generator:
                 "                if pins & WAIT != 0 { return Some(pins); }\n"
                 f"                let pins = set_addr_data_ctrl(pins, {addr}, {data}, MREQ | WR);\n"
             )
+            if action:
+                body += f"                {action}\n"
+            body += f"                self.step = {nxt};\n                pins"
+            return body
+        if ts.kind == "ioread_wait":
+            addr = addr_expr(ts.kw["ab"], y, z, p, q)
+            return (
+                "                if pins & WAIT != 0 { return Some(pins); }\n"
+                f"                let pins = set_addr_ctrl(pins, {addr}, IORQ | RD);\n"
+                f"                self.step = {nxt};\n"
+                "                pins"
+            )
+        if ts.kind == "ioread_latch":
+            dest_stmt = emit_dest_assign(ts.kw["dst"], y, z, p, q)
+            action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
+            body = f"                {dest_stmt}\n"
+            if action:
+                body += f"                {action}\n"
+            body += f"                self.step = {nxt};\n                pins"
+            return body
+        if ts.kind == "iowrite_go":
+            # NOTE, unlike mwrite_go: no wait check here -- z80_gen.py's own
+            # iowrite template issues the write first and defers the wait
+            # check (and the action) to the NEXT T-state (`iowrite_wait`).
+            addr = addr_expr(ts.kw["ab"], y, z, p, q)
+            db_tok = ts.kw["db"]
+            data = "0" if db_tok in ("0", 0) else data_read_expr(db_tok, y, z, p, q)
+            body = (
+                f"                let pins = set_addr_data_ctrl(pins, {addr}, {data}, IORQ | WR);\n"
+                f"                self.step = {nxt};\n                pins"
+            )
+            return body
+        if ts.kind == "iowrite_wait":
+            action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
+            body = "                if pins & WAIT != 0 { return Some(pins); }\n"
             if action:
                 body += f"                {action}\n"
             body += f"                self.step = {nxt};\n                pins"
