@@ -16,6 +16,12 @@ roms/*
 # Rust build output
 rust-core/target/
 
+# Fetched reference copy of z80_gen.py (github.com/floooh/chips) -- a
+# reading aid for scripts/generate_z80_dispatch.py, which ports its
+# algorithm to Rust; not committed since it's someone else's source tree,
+# not this project's, and generate_z80_dispatch.py is the actual artifact.
+.chips-codegen-src/
+
 # Fetched ZEXALL/ZEXDOC (GPL v2.0, github.com/agn453/ZEXALL) -- a standalone
 # Z80 exerciser used only as a test fixture, not linked into the emulator;
 # fetched rather than committed to avoid vendoring a second project's tree.

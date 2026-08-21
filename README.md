@@ -445,6 +445,7 @@ zx-spectrum-emulator/
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
   game_disassembly/            # gitignored; scripts/build_manicminer.py output
   tests/
+  rust-core/                  # separate Rust Z80 core -- see below, own section
 ```
 
 ## Status & roadmap
@@ -499,9 +500,72 @@ Stretch goals, not blocking normal use:
 - Tape loading (`.tap`/`.tzx`/`.pzx`)
 - Beeper audio synthesis (port writes are tracked, not turned into sound)
 
+## Rust core (`rust-core/`)
+
+A from-scratch, hand-written Z80 interpreter in Rust — not an FFI wrapper
+around `z80.h` — being built alongside the Python project above, for two
+reasons: a genuine path to WebAssembly (a browser-playable target has no
+good story via the Python/`cffi` stack), and a deliberate Rust-learning
+exercise. The eventual goal is for `rust-core/` to grow into a full
+replacement for the Python DAP/MCP/screen-stream server above, reusing one
+core for both a native server and a wasm browser player; today it's
+CPU-only, with the memory/ULA/keyboard/snapshot layer and both front-ends
+still ahead of it.
+
+**Status: the CPU core is complete and independently verified two ways.**
+- **Tick/pin-level, not instruction-level** (mirroring the Python project's
+  own `z80.h` wrapper, and for the same reason): `Cpu::tick()` advances
+  exactly one T-state with real address/data/control pins, including the
+  real overlapped-fetch pipeline — needed later for cycle-accurate ULA
+  memory contention, which depends on genuine per-T-state bus visibility,
+  not "this instruction took N T-states" as a lump sum.
+- **Every opcode is generated, not hand-transcribed.**
+  `scripts/generate_z80_dispatch.py` ports
+  [floooh/chips](https://github.com/floooh/chips)' own `z80_gen.py` codegen
+  algorithm (Python, already) to emit Rust instead of C, reading the same
+  `vendor/chips/z80_desc.yml` instruction-cycle description that generates
+  the real `z80.h` — literal fidelity to the authoritative source, and a
+  generator that asserts no two opcode descriptors ever claim the same byte
+  catches transposition bugs a human eyeballing an opcode table can miss.
+  The `(IX+d)`/`(IY+d)` displacement-addressing sequence and the `DD CB
+  d`/`FD CB d` double-prefix machine cycle are hand-written in `cpu.rs`
+  instead (small, fixed sequences that mix bus-pin-issuing steps with plain
+  idle ones, a shape the generator's per-machine-cycle templates don't
+  cleanly express) — everything else is generated output, regenerated via
+  `python scripts/generate_z80_dispatch.py` whenever the mapping changes.
+- **Verified two independent ways:**
+  1. A differential test harness (the `zx-core-conformance` crate, dev-only)
+     links the real `vendor/chips/z80.h` via FFI and runs both cores in
+     lockstep — fuzzed random instruction streams plus hand-written
+     programs for anything unsafe to fuzz (control flow, the stack) —
+     checked register-for-register after every instruction, and separately,
+     pin-for-pin on every single T-state.
+  2. The real [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL) Z80
+     exerciser (fetched at test time, not vendored — see
+     `scripts/fetch_zexall.py`) runs against the core through a minimal
+     CP/M BDOS shim. **zexdoc.z80 passes in full: every test group reports
+     `OK`, zero errors, across the entire suite.** This checks agreement
+     with known-correct Z80 semantics directly, independent of z80.h — the
+     stronger of the two claims, since it would catch a bug the two cores
+     happened to share.
+- Covers the full documented instruction set plus the well-known
+  undocumented forms: unprefixed, `ED`, `CB`, `DD`/`FD` (register
+  substitution including `IXH`/`IXL`/`IYH`/`IYL`, and `(IX+d)`/`(IY+d)`
+  addressing), and `DD CB d`/`FD CB d` (including the undocumented "also
+  store to register" behavior). I/O opcodes and interrupt handling are
+  deferred, same as the Python core's own priorities — see
+  `rust-core/zx-core-conformance/tests/zexall.rs`'s doc comment for the
+  full detail on what's verified and how.
+
+```bash
+cd rust-core
+cargo test                                                # fast suite, seconds
+cargo test --test zexall -- --ignored --nocapture         # full ZEXDOC run, ~18 min
+```
+
 ## License
 
 This project's own code has no license file yet. The vendored
-`vendor/chips/z80.h` is [floooh/chips](https://github.com/floooh/chips),
-zlib-licensed. No ROM image is included or distributed — you must supply
-your own.
+`vendor/chips/z80.h` and `vendor/chips/z80_desc.yml` are
+[floooh/chips](https://github.com/floooh/chips), zlib-licensed. No ROM image
+is included or distributed — you must supply your own.

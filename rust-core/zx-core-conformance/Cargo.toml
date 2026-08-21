@@ -1,0 +1,11 @@
+[package]
+name = "zx-core-conformance"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+zx-core = { path = "../zx-core" }
+
+[build-dependencies]
+cc = "1"
