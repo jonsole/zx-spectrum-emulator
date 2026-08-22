@@ -49,6 +49,24 @@
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
       "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): Aquaplane",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): Border rainbow test",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/border_rainbow/test.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
     }
   ]
 }
