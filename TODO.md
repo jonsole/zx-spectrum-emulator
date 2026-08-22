@@ -42,3 +42,21 @@ detail yet -- just captured here so they don't get lost.
       cycle-accurate timing (some games rely on it for effects/sync); no
       Python reference to verify against, so correctness would need to lean
       on published reference T-state tables instead.
+      **Update:** implemented in the Rust core (`zx-core/src/contention.rs`
+      + `Ula`'s per-pixel overlay), Python core still doesn't have it.
+
+- [ ] **Execution trace (instructions + memory/IO reads and writes), so a
+      breakpoint can show the flow that led up to it.** Not just "what's
+      the call stack right now" (already tracked, see `call_stack`) but a
+      rolling history of what actually executed and what it touched --
+      each step's PC/opcode plus any memory or port read/write it made
+      (address, direction, value) -- so stopping at a breakpoint lets you
+      scroll back through recent execution instead of only seeing the
+      current instant. Needs a real design pass: an unbounded trace would
+      grow forever, so this wants a bounded ring buffer (how many
+      instructions? configurable?), a way to expose it (new DAP custom
+      request and/or MCP tool, maybe a dedicated VS Code view given how
+      much data this could be), and a decision on whether tracing is
+      always-on (cost every single tick, even when nobody's looking) or a
+      toggle like the contention overlay. No Python reference for this
+      one either.

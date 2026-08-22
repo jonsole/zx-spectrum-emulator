@@ -58,7 +58,18 @@ async fn main() -> anyhow::Result<()> {
     if args.contention_overlay {
         engine.set_contention_overlay(true);
     }
-    let sources = Sources::new(DebugInfo::default(), args.rom_disassembly_dir);
+    // Canonicalize -- the default ("../rom_disassembly") is a relative,
+    // forward-slash literal; PathBuf::join() only uses the native
+    // separator for segments it appends itself, so displaying the result
+    // as-is produces a mixed "../rom_disassembly\rom.asm" on Windows,
+    // which VS Code's own path handling refused to load as a stackTrace/
+    // Disassembly View source ("Could not load source"). Falls back to
+    // the raw path if canonicalization fails (e.g. the directory doesn't
+    // exist yet because the ROM disassembly hasn't been built) --
+    // `Sources`/`get_rom_source()` already tolerate a missing directory.
+    let rom_disassembly_dir =
+        std::fs::canonicalize(&args.rom_disassembly_dir).unwrap_or(args.rom_disassembly_dir);
+    let sources = Sources::new(DebugInfo::default(), rom_disassembly_dir);
 
     let dap_engine = engine.clone();
     let dap_sources = sources.clone();

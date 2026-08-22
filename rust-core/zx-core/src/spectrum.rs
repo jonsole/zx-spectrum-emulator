@@ -26,6 +26,54 @@ use std::collections::HashSet;
 /// byte during that cycle. Matches `machine.py`'s `_INT_ACK_BYTE`.
 const INT_ACK_BYTE: u8 = 0xFF;
 
+// Opcodes that push a return address and jump to a callee -- CALL nn, CALL
+// cc,nn, and every RST. Whether a conditional CALL actually pushed anything
+// is confirmed afterward by checking SP, not decided here. Matches
+// `machine.py`'s `_CALL_OPCODES`/`_RST_OPCODES`.
+const CALL_OPCODES: [u8; 9] = [0xCD, 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC];
+const RST_OPCODES: [u8; 8] = [0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF];
+/// RET / RET cc -- pairs with a tracked `CALL_OPCODES`/`RST_OPCODES` push.
+const RET_OPCODES: [u8; 9] = [0xC9, 0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StepCategory {
+    Call,
+    Ret,
+}
+
+/// Classifies the opcode at `addr` for `call_stack` tracking purposes.
+/// Returns `Call` (CALL/RST -- may push a return address), `Ret` (RET/RET
+/// cc -- may pop one), or `None` (everything else). Skips redundant DD/FD
+/// prefixes the same way the real CPU does before classifying the
+/// underlying opcode. Ported directly from `machine.py`'s
+/// `_classify_step`, including its own documented deliberate choice:
+/// RETI/RETN (0xED 0x4D / 0xED 0x45) fall under the ED-prefixed `None`
+/// case, not `Ret` -- they return from an interrupt, and this emulator
+/// doesn't push a `call_stack` frame for interrupt entry either (that
+/// would happen inside `Cpu::tick()`'s own dispatch during the interrupt
+/// acknowledge cycle, invisible at the opcode level this classifier works
+/// at) -- treating both ends as an untracked no-op keeps `call_stack`
+/// correct for the CALL/RET pairs it DOES see instead of popping a real
+/// one that was never the interrupt's.
+fn classify_step(mem: &mut Spectrum48KMemory, addr: u16) -> Option<StepCategory> {
+    let mut a = addr;
+    let mut op = mem.read(a);
+    while op == 0xDD || op == 0xFD {
+        a = a.wrapping_add(1);
+        op = mem.read(a);
+    }
+    if op == 0xED {
+        return None;
+    }
+    if CALL_OPCODES.contains(&op) || RST_OPCODES.contains(&op) {
+        return Some(StepCategory::Call);
+    }
+    if RET_OPCODES.contains(&op) {
+        return Some(StepCategory::Ret);
+    }
+    None
+}
+
 pub struct Spectrum48K {
     pub cpu: Cpu,
     pub memory: Spectrum48KMemory,
@@ -34,6 +82,13 @@ pub struct Spectrum48K {
     pub tstates: u32,
     pub frame_count: u64,
     pub breakpoints: HashSet<u16>,
+    /// Return addresses for CALL/RST frames currently unwound below the
+    /// current PC, oldest first -- see `classify_step()` for how it's kept
+    /// in sync with actual execution. Cleared on reset/snapshot load/
+    /// `set_registers()` since any of those can redirect PC outside normal
+    /// call/return flow, making a stale call chain actively misleading
+    /// rather than just incomplete. Matches `machine.py`'s `call_stack`.
+    pub call_stack: Vec<u16>,
     pins: u64,
     int_pending: bool,
 }
@@ -48,6 +103,7 @@ impl Default for Spectrum48K {
             tstates: 0,
             frame_count: 0,
             breakpoints: HashSet::new(),
+            call_stack: Vec::new(),
             pins: 0,
             int_pending: false,
         };
@@ -72,7 +128,7 @@ impl Spectrum48K {
     pub fn load_snapshot(&mut self, data: &[u8]) -> Result<(), String> {
         let image = crate::snapshot::parse_sna(data)?;
         self.memory.ram.copy_from_slice(&image.ram);
-        self.set_registers(image.regs);
+        self.set_registers(image.regs); // also clears call_stack
         self.ula.border = image.border;
         self.ula.clear_frame_state();
         self.tstates = 0;
@@ -89,7 +145,7 @@ impl Spectrum48K {
     /// approximation for now, revisit if/when `Cpu` grows real RESET pin
     /// handling.
     pub fn reset(&mut self) {
-        self.set_registers(Registers::default());
+        self.set_registers(Registers::default()); // also clears call_stack
         self.ula.clear_frame_state();
         self.tstates = 0;
         self.frame_count = 0;
@@ -100,9 +156,16 @@ impl Spectrum48K {
         self.cpu.registers()
     }
 
+    /// An external register write (a debugger jumping PC around, a fresh
+    /// snapshot/reset) can redirect execution outside normal call/return
+    /// flow, so any tracked `call_stack` is no longer meaningful --
+    /// cleared unconditionally here, matching `machine.py`'s own
+    /// `set_registers()`, rather than trying to detect whether PC
+    /// specifically changed.
     pub fn set_registers(&mut self, regs: Registers) {
         self.cpu.set_registers(regs, &mut self.memory);
         self.pins = self.cpu.pins();
+        self.call_stack.clear();
     }
 
     fn prime_fetch(&mut self) {
@@ -272,11 +335,36 @@ impl Spectrum48K {
         }
     }
 
-    /// Runs T-states until the current instruction completes.
+    /// Runs T-states until the current instruction completes. Tracks
+    /// `call_stack`: classifies the opcode at the pre-step PC (before
+    /// anything executes, since by the time the instruction completes the
+    /// bytes at the OLD PC may no longer be what ran, e.g. self-modifying
+    /// code), then afterward confirms via the SP delta that a push/pop
+    /// actually happened -- so a conditional CALL/RET that wasn't taken
+    /// (SP unchanged) doesn't touch `call_stack`. Matches `machine.py`'s
+    /// `step_instruction()`.
     pub fn step_instruction(&mut self) {
+        let pc_before = self.registers().pc;
+        let sp_before = self.registers().sp;
+        let category = classify_step(&mut self.memory, pc_before);
+
         self.tick();
         while !self.cpu.is_instruction_boundary(self.pins) {
             self.tick();
+        }
+
+        let Some(category) = category else { return };
+        let sp_after = self.registers().sp;
+        match category {
+            StepCategory::Call if sp_after == sp_before.wrapping_sub(2) => {
+                let lo = self.memory.read(sp_after);
+                let hi = self.memory.read(sp_after.wrapping_add(1));
+                self.call_stack.push((lo as u16) | ((hi as u16) << 8));
+            }
+            StepCategory::Ret if sp_after == sp_before.wrapping_add(2) && !self.call_stack.is_empty() => {
+                self.call_stack.pop();
+            }
+            _ => {}
         }
     }
 

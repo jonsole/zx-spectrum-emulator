@@ -53,6 +53,36 @@ const STEP_DDFDCB_13: u16 = 0xFFDB;
 const STEP_DDFDCB_14: u16 = 0xFFDA;
 const STEP_DDFDCB_15: u16 = 0xFFD9;
 
+// Maskable-interrupt acceptance (IM 0/1/2), hand-written the same way as
+// the shared fetch/refresh machine cycle above -- not generated, since
+// `scripts/generate_z80_dispatch.py` only processes `z80_desc.yml`'s
+// unprefixed/ED opcode tables (see its own doc comment), and interrupt
+// acceptance is a separate, non-opcode-indexed entry point there
+// (`int_im0`/`int_im1`/`int_im2`). Ported directly from those three
+// blocks, T-state for T-state -- see `begin_fetch()`'s doc comment for
+// where this gets entered, and the individual STEP_INT_* arms below for
+// the per-mcycle citations.
+const STEP_INT_1: u16 = 0xFFC0;
+const STEP_INT_2: u16 = 0xFFC1;
+const STEP_INT_3: u16 = 0xFFC2;
+const STEP_INT_4: u16 = 0xFFC3;
+const STEP_INT_5: u16 = 0xFFC4;
+const STEP_INT_6: u16 = 0xFFC5;
+const STEP_INT_PUSH_HI_1: u16 = 0xFFC6;
+const STEP_INT_PUSH_HI_2: u16 = 0xFFC7;
+const STEP_INT_PUSH_HI_3: u16 = 0xFFC8;
+const STEP_INT_PUSH_LO_1: u16 = 0xFFC9;
+const STEP_INT_PUSH_LO_2: u16 = 0xFFCA;
+const STEP_INT_PUSH_LO_3: u16 = 0xFFCB;
+const STEP_INT_DONE_IM1: u16 = 0xFFCC;
+const STEP_INT_DONE_IM2: u16 = 0xFFCD;
+const STEP_INT_VEC_LO_2: u16 = 0xFFCF;
+const STEP_INT_VEC_LO_3: u16 = 0xFFD0;
+const STEP_INT_VEC_HI_1: u16 = 0xFFD1;
+const STEP_INT_VEC_HI_2: u16 = 0xFFD2;
+const STEP_INT_VEC_HI_3: u16 = 0xFFD3;
+const STEP_INT_VEC_HI_4: u16 = 0xFFD4;
+
 const ED_STEP_BASE: u16 = 256;
 
 /// 256-entry table marking which unprefixed opcodes touch `(HL)` and
@@ -500,6 +530,156 @@ impl Cpu {
                 pins
             }
             STEP_DDFDCB_15 => self.begin_fetch(pins),
+            // `int_im0`/`int_im1`/`int_im2`'s shared first 3 mcycles
+            // (`z80_desc.yml`): disable interrupts, assert M1|IORQ, then
+            // wait-check and latch whatever byte the ULA puts on the data
+            // bus during that cycle (`Spectrum48K::tick()`'s int-ack
+            // branch, unconditionally 0xFF -- the ZX Spectrum's floating
+            // bus during an unrecognized IORQ). Only IM2 actually uses
+            // that byte (as the vector's low byte); IM0's own spec says
+            // it should be executed as an opcode, but since it's always
+            // 0xFF here -- which VLA decodes as `RST 38h` -- IM0
+            // and IM1 are bit-for-bit identical on this specific
+            // hardware, so both are handled by the IM1 path below.
+            STEP_INT_1 => {
+                self.regs.iff1 = false;
+                self.regs.iff2 = false;
+                self.halted = false;
+                self.step = STEP_INT_2;
+                pins
+            }
+            STEP_INT_2 => {
+                let pins = pins | M1 | IORQ;
+                self.step = STEP_INT_3;
+                pins
+            }
+            STEP_INT_3 => {
+                if pins & WAIT != 0 {
+                    return pins;
+                }
+                self.dlatch = get_data(pins);
+                self.step = STEP_INT_4;
+                pins
+            }
+            // A regular refresh cycle (R increments the same as any other
+            // M1) plus one extra idle T-state -- `z80_desc.yml`'s `generic
+            // tcycles: 3` on this mcycle.
+            STEP_INT_4 => {
+                let pins = self.refresh(pins);
+                self.step = STEP_INT_5;
+                pins
+            }
+            STEP_INT_5 => {
+                self.step = STEP_INT_6;
+                pins
+            }
+            STEP_INT_6 => {
+                self.step = STEP_INT_PUSH_HI_1;
+                pins
+            }
+            // Two regular write machine cycles, pushing PC -- identical
+            // shape to CALL nn's own PC push (same helper, same pin
+            // sequence), just reached from here instead of a CALL operand
+            // read.
+            STEP_INT_PUSH_HI_1 => {
+                self.step = STEP_INT_PUSH_HI_2;
+                pins
+            }
+            STEP_INT_PUSH_HI_2 => {
+                if pins & WAIT != 0 {
+                    return pins;
+                }
+                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                self.step = STEP_INT_PUSH_HI_3;
+                pins
+            }
+            STEP_INT_PUSH_HI_3 => {
+                self.step = STEP_INT_PUSH_LO_1;
+                pins
+            }
+            STEP_INT_PUSH_LO_1 => {
+                self.step = STEP_INT_PUSH_LO_2;
+                pins
+            }
+            STEP_INT_PUSH_LO_2 => {
+                if pins & WAIT != 0 {
+                    return pins;
+                }
+                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                if self.regs.im == 2 {
+                    // Vector address = (I<<8)|ack_byte -- `dlatch` still
+                    // holds the ack byte latched back in STEP_INT_3.
+                    self.regs.set_wzl(self.dlatch);
+                    self.regs.set_wzh(self.regs.i);
+                } else {
+                    // IM 0/1: RST 38h, unconditionally -- see this match
+                    // arm's own leading comment for why IM0 collapses into
+                    // this same path on this hardware.
+                    self.regs.wz = 0x0038;
+                    self.regs.pc = 0x0038;
+                }
+                self.step = STEP_INT_PUSH_LO_3;
+                pins
+            }
+            // Real hardware (and `vendor/chips/z80.h`'s own generated
+            // `int_im1`/`int_im2` case lists -- cross-checked directly
+            // against those exact case numbers, not re-derived) has one
+            // more idle T-state here before the IM1 path's fetch, or
+            // before IM2's own vector-address read begins. Missing this
+            // exact T-state doesn't break correctness (PC still ends up
+            // right), but does shift every subsequent T-state -- and
+            // hence every interrupt-timed effect a game calibrates
+            // against real hardware, e.g. Aquaplane's per-frame border
+            // write -- by however many T-states this whole sequence runs
+            // short, one real T-state at a time.
+            STEP_INT_PUSH_LO_3 => {
+                self.step = if self.regs.im == 2 { STEP_INT_DONE_IM2 } else { STEP_INT_DONE_IM1 };
+                pins
+            }
+            STEP_INT_DONE_IM1 => self.begin_fetch(pins),
+            // Two regular read machine cycles, fetching the ISR address
+            // the vector points at -- mirrors `IN A,(n)`'s own `$WZ++`
+            // read exactly (same `wz_post_inc()` helper). This one plain
+            // T-state is the first mread's own T1 (`STEP_INT_PUSH_LO_3`
+            // was the interrupt sequence's own shared extra T-state, not
+            // this one -- see z80.h's case 1667 vs 1666).
+            STEP_INT_DONE_IM2 => {
+                self.step = STEP_INT_VEC_LO_2;
+                pins
+            }
+            STEP_INT_VEC_LO_2 => {
+                if pins & WAIT != 0 {
+                    return pins;
+                }
+                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                self.step = STEP_INT_VEC_LO_3;
+                pins
+            }
+            STEP_INT_VEC_LO_3 => {
+                self.dlatch = get_data(pins);
+                self.step = STEP_INT_VEC_HI_1;
+                pins
+            }
+            STEP_INT_VEC_HI_1 => {
+                self.step = STEP_INT_VEC_HI_2;
+                pins
+            }
+            STEP_INT_VEC_HI_2 => {
+                if pins & WAIT != 0 {
+                    return pins;
+                }
+                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                self.step = STEP_INT_VEC_HI_3;
+                pins
+            }
+            STEP_INT_VEC_HI_3 => {
+                self.regs.set_wzh(get_data(pins));
+                self.regs.set_wzl(self.dlatch);
+                self.regs.pc = self.regs.wz;
+                self.step = STEP_INT_VEC_HI_4;
+                pins
+            }
+            STEP_INT_VEC_HI_4 => self.begin_fetch(pins),
             0 => self.begin_fetch(pins), // NOP dispatch == bootstrap convention, see struct doc
             0x76 => self.op_halt(pins),
             0xCB => self.begin_fetch_cb(pins),
@@ -514,9 +694,6 @@ impl Cpu {
     /// address=PC (post-incremented), M1|MREQ|RD asserted. Mirrors
     /// `_z80_fetch()`.
     pub(crate) fn begin_fetch(&mut self, pins: u64) -> u64 {
-        let addr = self.regs.pc;
-        self.regs.pc = self.regs.pc.wrapping_add(1);
-        self.step = STEP_M1_T2;
         self.hlx_idx = 0;
         // Mirrors `_z80_fetch()`'s own unconditional `prefix_active =
         // false` -- redundant with every OTHER path here (their own M1_T4
@@ -527,6 +704,23 @@ impl Cpu {
         // `step()` silently runs one extra instruction before stopping.
         // Found via a real fuzzer failure, not anticipated in advance.
         self.prefix_active = false;
+        // Every complete-instruction boundary funnels through here
+        // (including HALT's own repeated re-fetch of itself, which is
+        // exactly how HALT "wakes up" below) -- the one place real
+        // hardware samples the INT line. `iff1` gates it (DI/EI's own
+        // generated code already handles the "not immediately after EI"
+        // one-instruction delay for free: EI's `action`/`post_action`
+        // pair briefly clears `iff1` around its OWN `begin_fetch()` call,
+        // so this check simply can't see it as enabled on that boundary --
+        // see `z80_desc.yml`'s EI entry). NMI isn't modeled: this project
+        // doesn't emulate any hardware that raises it.
+        if pins & INT != 0 && self.regs.iff1 {
+            self.step = STEP_INT_1;
+            return pins;
+        }
+        let addr = self.regs.pc;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+        self.step = STEP_M1_T2;
         set_addr_ctrl(pins, addr, M1 | MREQ | RD)
     }
 

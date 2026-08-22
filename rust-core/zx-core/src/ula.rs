@@ -25,8 +25,24 @@
 //! [`crate::contention`] for the actual timing tables and their sources;
 //! this module owns none of the delay *application*, only what to draw as
 //! a result of it.
+//!
+//! The rendered output also includes the border, tracked at the SAME
+//! per-8-pixel-group granularity real hardware actually updates it at: the
+//! border output register can be written by software at any T-state, but
+//! the ULA only latches a new value at 8-pixel (4-T-state) boundaries --
+//! the group of 8 pixels already being drawn finishes in whatever color
+//! was latched at ITS OWN start, and a write mid-group doesn't take visual
+//! effect until the next one. So this is tracked per PIXEL, not per line
+//! or per T-state, in a full-canvas bitmap alongside the paper framebuffer
+//! (see `border_pixels`/`on_tstate`'s latch-and-mark logic). Geometry is
+//! sourced from the classic World of Spectrum 48K technical reference
+//! (<https://worldofspectrum.org/faq/reference/48kreference.htm>): a frame
+//! is 312 scanlines (64 top border, 192 paper, 56 bottom border); each
+//! 224-T-state line is 24 T-states left border, 128 paper (256px @ 2
+//! px/T-state), 24 T-states right border, 48 T-states horizontal retrace
+//! (not rendered) -- so the visible border is 48px on every side.
 
-use crate::contention::{self, CONTENDED_TSTATES_PER_LINE};
+use crate::contention::{self, CONTENDED_TSTATES_PER_LINE, LINE_TSTATES};
 use crate::memory::{Memory, Spectrum48KMemory};
 
 pub const SCREEN_WIDTH: usize = 256;
@@ -38,6 +54,60 @@ const PIXEL_COUNT: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 /// 48K Spectrum: one interrupt per frame at ~50Hz.
 pub const FRAME_TSTATES: u32 = 69888;
+
+/// Visible border width/height, each side -- see the module doc comment
+/// for the source. `BORDER_LEFT_PX`/`BORDER_RIGHT_PX` are in pixels (24
+/// T-states * 2px/T-state each); `BORDER_TOP_LINES`/`BORDER_BOTTOM_LINES`
+/// are whole scanlines.
+pub const BORDER_LEFT_PX: usize = 48;
+pub const BORDER_RIGHT_PX: usize = 48;
+pub const BORDER_TOP_LINES: usize = 64;
+pub const BORDER_BOTTOM_LINES: usize = 56;
+/// Total scanlines/frame (48K): 64 + 192 + 56.
+pub const TOTAL_LINES: usize = BORDER_TOP_LINES + SCREEN_HEIGHT + BORDER_BOTTOM_LINES;
+/// `screen()`'s actual output width/height, border included.
+pub const FULL_SCREEN_WIDTH: usize = BORDER_LEFT_PX + SCREEN_WIDTH + BORDER_RIGHT_PX;
+pub const FULL_SCREEN_HEIGHT: usize = TOTAL_LINES;
+const FULL_PIXEL_COUNT: usize = FULL_SCREEN_WIDTH * FULL_SCREEN_HEIGHT;
+const FULL_FRAME_BYTES: usize = FULL_PIXEL_COUNT * 3;
+
+const LEFT_BORDER_TSTATES: u32 = (BORDER_LEFT_PX / 2) as u32;
+const RIGHT_BORDER_TSTATES: u32 = (BORDER_RIGHT_PX / 2) as u32;
+/// T-states/line actually rendered (left border + paper/border-content +
+/// right border) -- the remaining T-states of each 224-T-state line are
+/// horizontal retrace, never rendered.
+const VISIBLE_LINE_TSTATES: u32 = LEFT_BORDER_TSTATES + (SCREEN_WIDTH as u32) / 2 + RIGHT_BORDER_TSTATES;
+/// How many T-states the ULA latches a border-output write for before a
+/// newer one can take visual effect -- 8 pixels @ 2px/T-state.
+const BORDER_LATCH_TSTATES: u32 = 4;
+
+/// The T-state (mod `FRAME_TSTATES`) of the top-left corner pixel of the
+/// FULL rendered canvas (start of the first top-border line's own left
+/// border) -- `contention::FIRST_CONTENDED_TSTATE` is the first PAPER
+/// pixel specifically; this is that same reference shifted back by one
+/// left-border-width and `BORDER_TOP_LINES` whole lines, wrapped mod
+/// `FRAME_TSTATES` since that lands before T-state 0 (the interrupt point
+/// isn't defined to coincide with a raster line boundary -- it doesn't
+/// need to, they're both just measured against the same master clock).
+/// Adding `FRAME_TSTATES` before subtracting keeps every intermediate
+/// value non-negative for unsigned arithmetic.
+///
+/// Note this lands late within a given `Spectrum48K::tstates` sweep (close
+/// to `FRAME_TSTATES`, not close to 0) -- the interrupt (`tstates == 0`)
+/// fires partway through vertical blanking, not at the top-left of the
+/// picture, so raster position and interrupt-relative T-state count are
+/// two different phase references over the same clock. Concretely: as
+/// `tstates` counts 0..=FRAME_TSTATES-1 once, the raster (canvas-relative,
+/// "shifted") position it corresponds to starts partway through row 0,
+/// climbs to the bottom-right corner, and only wraps back to the actual
+/// top-left corner (shifted == 0) in the last ~25 T-states of that same
+/// sweep. Code reasoning about "when in the picture" something happens
+/// (e.g. tests) should convert through this constant rather than assuming
+/// `tstates` itself counts up from the top-left.
+pub const FRAME_TOP_LEFT_TSTATE: u32 = (contention::FIRST_CONTENDED_TSTATE + FRAME_TSTATES
+    - LEFT_BORDER_TSTATES
+    - (BORDER_TOP_LINES as u32) * LINE_TSTATES)
+    % FRAME_TSTATES;
 
 fn color(index: u8, bright: bool) -> (u8, u8, u8) {
     let level: u8 = if bright { 0xFF } else { 0xCD };
@@ -86,6 +156,21 @@ pub struct Ula {
     io_halted: Vec<bool>,
     mem_halted_last: Vec<bool>,
     io_halted_last: Vec<bool>,
+
+    /// Border color latched in for each pixel of the FULL canvas (border
+    /// region only meaningfully; paper-region entries are written too but
+    /// always overwritten by the paper paste in `screen()`) -- see
+    /// `on_tstate`'s doc comment for the latch-every-8-pixels behavior
+    /// this mirrors. Row-major over the FULL canvas
+    /// (`y * FULL_SCREEN_WIDTH + x`), unlike `mem_halted`/`io_halted`
+    /// which are paper-relative.
+    border_pixels: Vec<u8>,
+    border_pixels_last: Vec<u8>,
+    /// The border value latched at the start of the 8-pixel group
+    /// currently being drawn -- refreshed every `BORDER_LATCH_TSTATES`
+    /// T-states, held steady in between regardless of how many times
+    /// software writes `border` mid-group.
+    border_latch: u8,
 }
 
 impl Default for Ula {
@@ -101,6 +186,9 @@ impl Default for Ula {
             io_halted: vec![false; PIXEL_COUNT],
             mem_halted_last: vec![false; PIXEL_COUNT],
             io_halted_last: vec![false; PIXEL_COUNT],
+            border_pixels: vec![0; FULL_PIXEL_COUNT],
+            border_pixels_last: vec![0; FULL_PIXEL_COUNT],
+            border_latch: 0,
         }
     }
 }
@@ -120,6 +208,9 @@ impl Ula {
         self.io_halted.fill(false);
         self.mem_halted_last.fill(false);
         self.io_halted_last.fill(false);
+        self.border_pixels.fill(0);
+        self.border_pixels_last.fill(0);
+        self.border_latch = 0;
     }
 
     /// Called once per real T-state (never for a contention "phantom"
@@ -134,6 +225,8 @@ impl Ula {
     /// its attribute byte -- and immediately draws both cells' 16 pixels
     /// using the four just-fetched bytes. Offsets 4-7 are idle.
     pub fn on_tstate(&mut self, tstate: u32, mem: &mut Spectrum48KMemory) {
+        self.mark_border_tstate(tstate);
+
         let Some((line, offset)) = contention::scanline_and_offset(tstate) else {
             return;
         };
@@ -155,6 +248,34 @@ impl Ula {
                 self.draw_cell(line, cell0 + 1, p1, a1);
             }
             _ => {}
+        }
+    }
+
+    /// Latches `border` into `border_latch` at the start of every 8-pixel
+    /// (`BORDER_LATCH_TSTATES`-T-state) group, then records that latched
+    /// value for whichever pixel(s) of the FULL canvas the raster beam is
+    /// at during `tstate` -- covering every rendered T-state of every one
+    /// of the frame's 312 lines (top/bottom border-only lines included,
+    /// not just the 192 paper ones), using `FRAME_TOP_LEFT_TSTATE` as the
+    /// shared reference point so this lines up exactly with where
+    /// `on_tstate`'s own paper-fetch logic (below) puts the paper
+    /// rectangle. A no-op during horizontal retrace (not rendered).
+    fn mark_border_tstate(&mut self, tstate: u32) {
+        let shifted = (tstate + FRAME_TSTATES - FRAME_TOP_LEFT_TSTATE) % FRAME_TSTATES;
+        let shifted_line = (shifted / LINE_TSTATES) as usize;
+        let shifted_offset = shifted % LINE_TSTATES;
+
+        if shifted_offset % BORDER_LATCH_TSTATES == 0 {
+            self.border_latch = self.border;
+        }
+        if shifted_offset >= VISIBLE_LINE_TSTATES {
+            return; // horizontal retrace -- not rendered
+        }
+        let x0 = (shifted_offset * 2) as usize;
+        for dx in 0..2usize {
+            if let Some(slot) = self.border_pixels.get_mut(shifted_line * FULL_SCREEN_WIDTH + x0 + dx) {
+                *slot = self.border_latch;
+            }
         }
     }
 
@@ -190,6 +311,7 @@ impl Ula {
         std::mem::swap(&mut self.io_halted, &mut self.io_halted_last);
         self.mem_halted.fill(false);
         self.io_halted.fill(false);
+        std::mem::swap(&mut self.border_pixels, &mut self.border_pixels_last);
     }
 
     /// Marks the pixel(s) the raster beam was at during `tstate` as having
@@ -236,15 +358,43 @@ impl Ula {
         mem + io
     }
 
-    /// The last fully completed frame as a flat RGB buffer
-    /// (`SCREEN_HEIGHT * SCREEN_WIDTH * 3` bytes, row-major). When
+    /// The last fully completed frame, WITH the border, as a flat RGB
+    /// buffer (`FULL_SCREEN_HEIGHT * FULL_SCREEN_WIDTH * 3` bytes,
+    /// row-major) -- the border filled per-pixel from `border_pixels_last`
+    /// (see `mark_border_tstate`), with the paper (`paper_screen()`)
+    /// pasted on top in the middle (overwriting whatever `border_pixels`
+    /// happened to record for that same rectangle, which doesn't matter --
+    /// the paper fetch always owns those pixels).
+    pub fn screen(&self) -> Vec<u8> {
+        let paper = self.paper_screen();
+        let mut out = vec![0u8; FULL_FRAME_BYTES];
+        for i in 0..FULL_PIXEL_COUNT {
+            let (r, g, b) = color(self.border_pixels_last[i] & 0x07, false);
+            let idx = i * 3;
+            out[idx] = r;
+            out[idx + 1] = g;
+            out[idx + 2] = b;
+        }
+        for y in 0..SCREEN_HEIGHT {
+            let full_y = BORDER_TOP_LINES + y;
+            let src_row = y * SCREEN_WIDTH * 3;
+            let dst_row = (full_y * FULL_SCREEN_WIDTH + BORDER_LEFT_PX) * 3;
+            out[dst_row..dst_row + SCREEN_WIDTH * 3]
+                .copy_from_slice(&paper[src_row..src_row + SCREEN_WIDTH * 3]);
+        }
+        out
+    }
+
+    /// The last fully completed frame's PAPER area only (no border) as a
+    /// flat RGB buffer (`SCREEN_HEIGHT * SCREEN_WIDTH * 3` bytes,
+    /// row-major) -- `screen()`'s own building block. When
     /// `contention_overlay_enabled`: halves the whole picture's brightness
     /// first (so a marker stays visible even over a same-colored game
     /// pixel, e.g. a red marker over Manic Miner's red title screen),
     /// then blends a 50%-alpha red marker onto every pixel where the CPU's
     /// clock was halted by memory contention this frame, and a 50%-alpha
     /// blue marker for IO contention.
-    pub fn screen(&self) -> Vec<u8> {
+    fn paper_screen(&self) -> Vec<u8> {
         if !self.contention_overlay_enabled {
             return self.last_frame.clone();
         }

@@ -290,13 +290,13 @@ impl ZxSpectrumServer {
 
     #[tool(description = "Press a key")]
     async fn key_down(&self, Parameters(req): Parameters<KeyRequest>) -> Result<CallToolResult, McpError> {
-        self.engine.key_down(req.key).await;
+        self.engine.key_down(&req.key);
         Ok(text_result("key down"))
     }
 
     #[tool(description = "Release a key")]
     async fn key_up(&self, Parameters(req): Parameters<KeyRequest>) -> Result<CallToolResult, McpError> {
-        self.engine.key_up(req.key).await;
+        self.engine.key_up(&req.key);
         Ok(text_result("key up"))
     }
 

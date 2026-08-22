@@ -4,8 +4,9 @@
 use crate::commands::{Command, Event, State};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
+use zx_core::keyboard::Keyboard;
 use zx_core::{Registers, Spectrum48K};
 
 /// How many instructions a `Run` executes between checks for an incoming
@@ -38,6 +39,15 @@ pub struct Engine {
     /// effect. (Confirmed live: an earlier queued-command version of this
     /// silently never applied while a real game was running.)
     contention_overlay_requested: Arc<AtomicBool>,
+    /// Same reasoning and bypass as `contention_overlay_requested`:
+    /// keypresses need to take effect while a game is actually running, not
+    /// after it stops (which, for a live game, may be "never" -- confirmed
+    /// live against Aquaplane's attract-mode loop, which a queued
+    /// `KeyDown`/`KeyUp` command sat behind indefinitely since nothing
+    /// caused `Run` to yield the queue). Holds the live key state directly;
+    /// synced into `machine.keyboard` at the same points
+    /// `contention_overlay_requested` is.
+    key_state: Arc<Mutex<Keyboard>>,
     /// The latest rendered screen, refreshed by the actor task after every
     /// command AND periodically during a long `Run` (same cadence as its
     /// own pause-check yield). Deliberately NOT routed through the command
@@ -62,17 +72,25 @@ impl Engine {
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let pause_requested = Arc::new(AtomicBool::new(false));
         let contention_overlay_requested = Arc::new(AtomicBool::new(false));
+        let key_state = Arc::new(Mutex::new(Keyboard::new()));
         let (screen_tx, screen) = watch::channel(Vec::new());
         let (memory_tx, memory) = watch::channel(Vec::new());
-        let engine =
-            Engine { tx, events, pause_requested, contention_overlay_requested, screen, memory };
+        let engine = Engine {
+            tx,
+            events,
+            pause_requested,
+            contention_overlay_requested,
+            key_state,
+            screen,
+            memory,
+        };
         engine.spawn_actor(rx, screen_tx, memory_tx);
         engine
     }
 
-    /// The latest rendered screen (raw RGB, `SCREEN_HEIGHT*SCREEN_WIDTH*3`
-    /// bytes) without going through the command queue -- see the `screen`
-    /// field doc comment.
+    /// The latest rendered screen (raw RGB, border included --
+    /// `FULL_SCREEN_HEIGHT*FULL_SCREEN_WIDTH*3` bytes) without going
+    /// through the command queue -- see the `screen` field doc comment.
     pub fn watch_screen(&self) -> watch::Receiver<Vec<u8>> {
         self.screen.clone()
     }
@@ -92,11 +110,13 @@ impl Engine {
         let events = self.events.clone();
         let pause_requested = self.pause_requested.clone();
         let contention_overlay_requested = self.contention_overlay_requested.clone();
+        let key_state = self.key_state.clone();
         tokio::spawn(actor_loop(
             rx,
             events,
             pause_requested,
             contention_overlay_requested,
+            key_state,
             screen_tx,
             memory_tx,
         ));
@@ -182,20 +202,20 @@ impl Engine {
         rx.await.expect("actor task dropped the reply channel")
     }
 
-    pub async fn key_down(&self, key: String) {
-        let (reply, rx) = oneshot::channel();
-        self.tx.send(Command::KeyDown { key, reply }).await.ok();
-        rx.await.ok();
+    /// See the `key_state` field doc comment -- bypasses the queue
+    /// entirely, same as `pause()`/`set_contention_overlay()`, so a
+    /// keypress takes effect even while a `Run` is in flight.
+    pub fn key_down(&self, key: &str) {
+        self.key_state.lock().unwrap().key_down(key);
     }
 
-    pub async fn key_up(&self, key: String) {
-        let (reply, rx) = oneshot::channel();
-        self.tx.send(Command::KeyUp { key, reply }).await.ok();
-        rx.await.ok();
+    pub fn key_up(&self, key: &str) {
+        self.key_state.lock().unwrap().key_up(key);
     }
 
-    /// Raw RGB bytes (`SCREEN_HEIGHT * SCREEN_WIDTH * 3`) -- PNG-encoding
-    /// happens in the server layer, not here.
+    /// Raw RGB bytes, border included (`FULL_SCREEN_HEIGHT *
+    /// FULL_SCREEN_WIDTH * 3`) -- PNG-encoding happens in the server
+    /// layer, not here.
     pub async fn get_screen(&self) -> Vec<u8> {
         let (reply, rx) = oneshot::channel();
         self.tx.send(Command::GetScreen { reply }).await.ok();
@@ -232,6 +252,7 @@ async fn actor_loop(
     events: broadcast::Sender<Event>,
     pause_requested: Arc<AtomicBool>,
     contention_overlay_requested: Arc<AtomicBool>,
+    key_state: Arc<Mutex<Keyboard>>,
     screen_tx: watch::Sender<Vec<u8>>,
     memory_tx: watch::Sender<Vec<u8>>,
 ) {
@@ -240,6 +261,7 @@ async fn actor_loop(
     // the `Run` handler below.
     let running = false;
     machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
+    machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
     screen_tx.send_replace(machine.render_screen());
     memory_tx.send_replace(machine.read_memory(0, 0x10000));
 
@@ -308,6 +330,7 @@ async fn actor_loop(
                     if count % RUN_YIELD_EVERY == 0 {
                         machine.ula.contention_overlay_enabled =
                             contention_overlay_requested.load(Ordering::Relaxed);
+                        machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
                         screen_tx.send_replace(machine.render_screen());
                         memory_tx.send_replace(machine.read_memory(0, 0x10000));
                         tokio::task::yield_now().await;
@@ -348,14 +371,6 @@ async fn actor_loop(
                 let _ = events.send(Event::Stopped { reason: "step", pc });
                 reply.send(machine.registers()).ok();
             }
-            Command::KeyDown { key, reply } => {
-                machine.keyboard.key_down(&key);
-                reply.send(()).ok();
-            }
-            Command::KeyUp { key, reply } => {
-                machine.keyboard.key_up(&key);
-                reply.send(()).ok();
-            }
             Command::GetScreen { reply } => {
                 reply.send(machine.render_screen()).ok();
             }
@@ -378,6 +393,7 @@ async fn actor_loop(
         // Run's tight per-instruction loop, where it's throttled to the
         // same cadence as the existing yield check above).
         machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
+        machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
         screen_tx.send_replace(machine.render_screen());
         memory_tx.send_replace(machine.read_memory(0, 0x10000));
     }
@@ -415,5 +431,6 @@ fn state_snapshot(machine: &Spectrum48K, running: bool) -> State {
         running,
         border: machine.ula.border,
         contended_tstates_last_frame: machine.ula.contended_tstates_last_frame(),
+        call_stack: machine.call_stack.clone(),
     }
 }

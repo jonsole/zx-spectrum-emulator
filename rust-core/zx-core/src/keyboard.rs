@@ -62,6 +62,17 @@ impl Keyboard {
         self.row_state = [0x1F; 8];
     }
 
+    /// Raw row-state snapshot (bit set = released) -- lets a caller mirror
+    /// one `Keyboard`'s state into another without re-deriving it through
+    /// `key_down`/`key_up`'s name lookup.
+    pub fn row_state(&self) -> [u8; 8] {
+        self.row_state
+    }
+
+    pub fn set_row_state(&mut self, state: [u8; 8]) {
+        self.row_state = state;
+    }
+
     pub fn read_port(&self, high_byte: u8) -> u8 {
         let mut bits: u8 = 0x1F;
         for (row, (addr_bit, _)) in ROWS.iter().enumerate() {

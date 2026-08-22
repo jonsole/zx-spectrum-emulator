@@ -21,6 +21,9 @@ pub struct State {
     /// completed frame -- a numeric readout of contention even without
     /// the visual overlay (see `Command::SetContentionOverlay`).
     pub contended_tstates_last_frame: u32,
+    /// Return addresses for CALL/RST frames currently unwound below `pc`,
+    /// oldest first -- see `Spectrum48K::call_stack`.
+    pub call_stack: Vec<u16>,
 }
 
 pub enum Command {
@@ -64,14 +67,6 @@ pub enum Command {
     SetRegisters {
         regs: Registers,
         reply: oneshot::Sender<Registers>,
-    },
-    KeyDown {
-        key: String,
-        reply: oneshot::Sender<()>,
-    },
-    KeyUp {
-        key: String,
-        reply: oneshot::Sender<()>,
     },
     GetScreen {
         reply: oneshot::Sender<Vec<u8>>,

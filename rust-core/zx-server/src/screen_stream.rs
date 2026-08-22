@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::interval;
-use zx_core::ula::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use zx_core::ula::{FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH};
 use zx_engine::Engine;
 
 const FRAME_INTERVAL: Duration = Duration::from_millis(20); // 10fps
@@ -35,7 +35,7 @@ async fn handle_connection(mut stream: TcpStream, engine: Engine) -> io::Result<
     loop {
         ticker.tick().await;
         let rgb = screen_rx.borrow_and_update().clone();
-        if rgb.len() != SCREEN_WIDTH * SCREEN_HEIGHT * 3 {
+        if rgb.len() != FULL_SCREEN_WIDTH * FULL_SCREEN_HEIGHT * 3 {
             continue; // not primed yet
         }
         let png = encode_png(&rgb);
@@ -52,11 +52,16 @@ async fn handle_connection(mut stream: TcpStream, engine: Engine) -> io::Result<
 
 pub(crate) fn encode_png(rgb: &[u8]) -> Vec<u8> {
     let image: ImageBuffer<Rgb<u8>, _> =
-        ImageBuffer::from_raw(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, rgb.to_vec())
+        ImageBuffer::from_raw(FULL_SCREEN_WIDTH as u32, FULL_SCREEN_HEIGHT as u32, rgb.to_vec())
             .expect("screen buffer is the right size");
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new(&mut out)
-        .write_image(&image, SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, image::ExtendedColorType::Rgb8)
+        .write_image(
+            &image,
+            FULL_SCREEN_WIDTH as u32,
+            FULL_SCREEN_HEIGHT as u32,
+            image::ExtendedColorType::Rgb8,
+        )
         .expect("PNG encoding cannot fail for a valid RGB buffer");
     out
 }

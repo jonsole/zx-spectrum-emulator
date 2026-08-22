@@ -86,7 +86,27 @@ function showScreenPanel(context) {
     null,
     context.subscriptions
   );
+  panel.webview.onDidReceiveMessage(handleWebviewMessage, null, context.subscriptions);
   connectStream();
+}
+
+// Forwards a keydown/keyup captured by the webview (see getHtml()'s script)
+// to the emulator via a DAP custom request (server-side: dap.rs's
+// "keyDown"/"keyUp" handlers, same customRequest mechanism as the
+// contention-overlay toggle). Silently drops the keypress if there's no
+// active zxspectrum session -- nothing sensible to do with it otherwise,
+// and this fires on every keystroke so a warning popup per keypress would
+// be far too noisy.
+async function handleWebviewMessage(message) {
+  if (message.type !== 'keyDown' && message.type !== 'keyUp') return;
+  const session = vscode.debug.activeDebugSession;
+  if (!session || session.type !== 'zxspectrum') return;
+  try {
+    await session.customRequest(message.type, { key: message.key });
+  } catch (err) {
+    // Most likely cause: the Python server (no keyDown/keyUp custom
+    // request) is what's actually running, not the Rust one.
+  }
 }
 
 function connectStream() {
@@ -160,17 +180,69 @@ function getHtml() {
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; img-src data:; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
   <style>
-    body { margin:0; padding:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; }
-    img { image-rendering: pixelated; width:512px; height:384px; }
+    body { margin:0; padding:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; outline:none; }
+    /* 352x312 (border included) at 2x scale */
+    img { image-rendering: pixelated; width:704px; height:624px; }
   </style>
 </head>
-<body>
+<body tabindex="0">
   <img id="screen" alt="ZX Spectrum screen" />
   <script nonce="${nonce}">
+    const vscodeApi = acquireVsCodeApi();
     const img = document.getElementById('screen');
     window.addEventListener('message', (event) => {
       img.src = 'data:image/png;base64,' + event.data.image;
     });
+
+    // Maps a browser KeyboardEvent to a 48K Spectrum key name (see
+    // zx-core/src/keyboard.rs's ROWS table) -- null for anything with no
+    // Spectrum equivalent. Left/right Shift both map to CAPS SHIFT since
+    // physical Spectrum keyboards only have the one; Ctrl (either side)
+    // maps to SYM SHIFT, matching a common software-emulator convention
+    // (real hardware has no direct PC-keyboard equivalent for it).
+    function toSpectrumKey(event) {
+      const key = event.key;
+      if (key.length === 1 && /[a-zA-Z]/.test(key)) return key.toUpperCase();
+      if (key.length === 1 && /[0-9]/.test(key)) return key;
+      switch (key) {
+        case ' ': return 'SPACE';
+        case 'Enter': return 'ENTER';
+        case 'Shift': return 'CAPS SHIFT';
+        case 'Control': return 'SYM SHIFT';
+        default: return null;
+      }
+    }
+
+    // Tracks which mapped keys are currently down so a lost blur/focus
+    // event (switching windows mid-keypress) can't leave a key stuck
+    // pressed forever from the emulator's point of view.
+    const held = new Set();
+
+    document.body.addEventListener('keydown', (event) => {
+      const key = toSpectrumKey(event);
+      if (!key) return;
+      event.preventDefault();
+      if (event.repeat || held.has(key)) return;
+      held.add(key);
+      vscodeApi.postMessage({ type: 'keyDown', key });
+    });
+
+    document.body.addEventListener('keyup', (event) => {
+      const key = toSpectrumKey(event);
+      if (!key) return;
+      event.preventDefault();
+      held.delete(key);
+      vscodeApi.postMessage({ type: 'keyUp', key });
+    });
+
+    window.addEventListener('blur', () => {
+      for (const key of held) {
+        vscodeApi.postMessage({ type: 'keyUp', key });
+      }
+      held.clear();
+    });
+
+    document.body.focus();
   </script>
 </body>
 </html>`;

@@ -410,10 +410,24 @@ async fn handle_request(
         }
         "threads" => (true, json!({ "threads": [{"id": THREAD_ID, "name": "Z80"}] })),
         "stackTrace" => {
-            let regs = engine.get_registers().await;
+            // Frame 0 is the current PC; frame 1+ are call_stack's tracked
+            // return addresses, innermost (most recently called) first --
+            // call_stack itself is oldest-first (a plain push/pop stack),
+            // so reversing here is what puts them in that display order.
+            // See `Spectrum48K::call_stack`'s doc comment for how it's kept
+            // in sync with actual CALL/RST/RET execution, and its known
+            // limitation (untracked interrupt frames, desyncable by direct
+            // SP manipulation -- e.g. the ROM's own error-handler unwind
+            // idiom).
+            let state = engine.get_state().await;
             let mem = engine.watch_memory().borrow().clone();
-            let frame = build_frame(sources, &mem, 0, regs.pc);
-            (true, json!({ "stackFrames": [frame], "totalFrames": 1 }))
+            let addrs = std::iter::once(state.pc).chain(state.call_stack.into_iter().rev());
+            let frames: Vec<Value> = addrs
+                .enumerate()
+                .map(|(i, addr)| build_frame(sources, &mem, i as i64, addr))
+                .collect();
+            let total = frames.len();
+            (true, json!({ "stackFrames": frames, "totalFrames": total }))
         }
         "scopes" => (
             true,
@@ -489,6 +503,25 @@ async fn handle_request(
             let enabled = arguments.get("enabled").and_then(Value::as_bool).unwrap_or(false);
             engine.set_contention_overlay(enabled);
             (true, json!({ "enabled": enabled }))
+        }
+        // Not a standard DAP request either -- sent by the screen-viewer
+        // webview's own keydown/keyup handlers (see extension.js) so the
+        // panel can be played live, not just watched. `Engine::key_down`/
+        // `key_up` bypass the command queue the same way
+        // `setContentionOverlay` does, so a keypress takes effect
+        // immediately even while the game is running under `continue`
+        // (confirmed live: a queued version of this sat behind an
+        // in-flight `Run` indefinitely for any game whose attract-mode
+        // loop never hits a breakpoint).
+        "keyDown" => {
+            let key = arguments.get("key").and_then(Value::as_str).unwrap_or("");
+            engine.key_down(key);
+            (true, json!({ "key": key }))
+        }
+        "keyUp" => {
+            let key = arguments.get("key").and_then(Value::as_str).unwrap_or("");
+            engine.key_up(key);
+            (true, json!({ "key": key }))
         }
         other => (false, json!({ "message": format!("unsupported request: {other}") })),
     };
