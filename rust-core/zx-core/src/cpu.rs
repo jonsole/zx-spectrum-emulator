@@ -715,6 +715,22 @@ impl Cpu {
         // see `z80_desc.yml`'s EI entry). NMI isn't modeled: this project
         // doesn't emulate any hardware that raises it.
         if pins & INT != 0 && self.regs.iff1 {
+            // z80.h's `_z80_fetch()` does this exact `pc++` right here
+            // (guarded on the HALT pin, its equivalent of `self.halted`)
+            // before ever reaching its own interrupt-step dispatch --
+            // `_z80_halt()` decrements `pc` on EVERY HALT re-fetch cycle
+            // (mirrored by `op_halt()` below), so a real hardware interrupt
+            // accepted while halted needs this to undo that decrement,
+            // otherwise the return address pushed moments from now would
+            // be the HALT opcode's own address instead of the instruction
+            // after it -- found via a real, reproducible hang: a `HALT;
+            // <body>; JP` loop's interrupt kept returning to HALT itself
+            // rather than `<body>`, so it just re-halted forever, waiting
+            // for an interrupt that was already spent accepting the one
+            // that got it there.
+            if self.halted {
+                self.regs.pc = self.regs.pc.wrapping_add(1);
+            }
             self.step = STEP_INT_1;
             return pins;
         }

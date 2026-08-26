@@ -1,5 +1,4 @@
 pub mod alu;
-pub mod contention;
 pub mod cpu;
 pub mod disassembler;
 pub mod flags;

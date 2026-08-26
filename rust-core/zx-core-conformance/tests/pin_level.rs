@@ -86,3 +86,37 @@ fn halt_tick_by_tick_pins_match_the_real_z80h_core() {
     assert!(new_cpu.halted);
     assert_eq!(new_cpu.registers().pc, 1);
 }
+
+/// Same-core check (deliberately NOT a `ReferenceCpu` diff -- this core's
+/// dispatch intentionally diverges from the real z80.h reference here: T1
+/// of a plain mread/mwrite now carries the real target address instead of
+/// stale leftover bits, and MREQ spans T2+T3 instead of T1 only, both
+/// user-directed changes the generic reference core was never trying to
+/// model). Proves the actual property `Ula::tick()`'s contention decision
+/// depends on: the target address is live on the bus BEFORE MREQ turns
+/// on, not just whenever MREQ happens to be asserted.
+#[test]
+fn mread_t1_carries_the_real_target_address_before_mreq_asserts() {
+    let mut mem_bytes = [0u8; 0x10000];
+    mem_bytes[0] = 0x7E; // LD A,(HL)
+    mem_bytes[0x4000] = 0x42;
+
+    let mut regs = Registers::default();
+    regs.set_hl(0x4000); // deliberately in the contended range
+    regs.i = 0x99; // refresh address would be 0x99xx if T1 were stale
+
+    let mut cpu = Cpu::new();
+    let mut mem = FlatMemory(mem_bytes);
+    cpu.set_registers(regs, &mut mem);
+
+    let mut pins = cpu.pins();
+    // Ticks 0-2: the M1 fetch of 0x7E (address/RD/refresh housekeeping).
+    // Tick 3 is T1 of the SEPARATE "mread" mcycle that reads the byte at
+    // HL -- the one this fix targets.
+    for _ in 0..3 {
+        pins = service(&mut mem, cpu.tick(pins));
+    }
+    pins = service(&mut mem, cpu.tick(pins));
+    assert_eq!(get_addr(pins), 0x4000, "T1 should already show the real target address (HL), not a stale/refresh address");
+    assert_eq!(pins & MREQ, 0, "T1 should not have MREQ asserted yet -- that's T2's job");
+}

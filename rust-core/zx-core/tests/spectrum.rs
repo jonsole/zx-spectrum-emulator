@@ -8,6 +8,7 @@
 use std::path::Path;
 use zx_core::flags::FLAG_C;
 use zx_core::spectrum::Spectrum48K;
+use zx_core::ula::FRAME_TSTATES;
 
 fn load_program(m: &mut Spectrum48K, addr: u16, code: &[u8]) {
     m.write_memory(addr, code);
@@ -130,7 +131,7 @@ fn border_change_mid_frame_only_affects_pixels_drawn_after_it() {
     let early_row = 10;
     let late_row = zx_core::ula::FULL_SCREEN_HEIGHT - 10;
     let tstate_of_row_start = |row: usize| {
-        let shifted = (row as u32) * zx_core::contention::LINE_TSTATES;
+        let shifted = (row as u32) * zx_core::ula::LINE_TSTATES;
         (shifted + zx_core::ula::FRAME_TOP_LEFT_TSTATE) % zx_core::ula::FRAME_TSTATES
     };
     assert!(
@@ -223,7 +224,7 @@ fn in_r_c_on_an_unmapped_port_reads_floating_bus_high() {
 }
 
 #[test]
-fn frame_boundary_sets_int_pending_and_toggles_flash_every_16th() {
+fn frame_boundary_starts_the_int_pulse_and_toggles_flash_every_16th() {
     // `run_frame()`, not a fixed `FRAME_TSTATES` tick() count -- a single
     // tick() call can now silently consume more than one real T-state
     // (ULA contention), so looping on frame_count is what's actually
@@ -247,10 +248,15 @@ fn im1_interrupt_pushes_pc_and_jumps_to_0x0038() {
     regs.im = 1;
     machine.set_registers(regs);
 
-    machine.run_frame(); // sets int_pending at the frame boundary
-
-    // The interrupt can only be accepted at the next instruction boundary,
-    // not mid-instruction -- give it a few more NOPs' worth of ticks.
+    // Deliberately NOT `run_frame()` first: the INT pulse is active during
+    // T-states 0-31 of every frame, a freshly constructed machine's own
+    // included -- real hardware doesn't grant a grace period after reset
+    // either (the 48K ROM's own first instruction is `DI` for exactly this
+    // reason), so the interrupt is already pending here and would just get
+    // silently eaten by `run_frame()`'s own NOP-sliding before this loop
+    // ever got to observe it. Ticking directly lets the very first
+    // instruction boundary accept it, same idiom as
+    // `interrupt_during_halt_returns_to_the_instruction_after_halt_not_halt_itself`.
     for _ in 0..50 {
         machine.tick();
         if machine.registers().pc == 0x0038 {
@@ -270,16 +276,28 @@ fn im1_interrupt_pushes_pc_and_jumps_to_0x0038() {
 #[test]
 fn im2_interrupt_jumps_through_the_vector_table() {
     let mut machine = Spectrum48K::new();
-    load_program(&mut machine, 0x8000, &[0x00; 8]); // NOP loop
+    // `JP $` -- jumps to its own address, forever. Not a NOP loop: this
+    // genuinely can't drift anywhere on its own, so landing at the ISR
+    // below can only happen via a real interrupt going through the vector
+    // table, not by coincidentally free-running into it (an actual NOP
+    // loop CAN free-run into an address a few thousand bytes away within
+    // one frame's T-state budget, which is exactly far enough to reach
+    // this test's own ISR address by accident and pass for the wrong
+    // reason -- found via a real false positive while debugging a
+    // different, genuine interrupt-during-HALT bug this same session).
+    load_program(&mut machine, 0x8000, &[0xC3, 0x00, 0x80]);
     set_sp(&mut machine, 0xFF00);
 
     // The ZX Spectrum ULA's floating bus always presents 0xFF during
     // interrupt acknowledge, so with I=0x90 the vector address is always
     // 0x90FF regardless of which device (notionally) raised the
     // interrupt -- point it at an ISR that just halts, so PC settles
-    // somewhere directly observable.
-    machine.write_memory(0x90FF, &[0x00, 0x91]); // vector -> 0x9100
-    machine.write_memory(0x9100, &[0x76]); // HALT
+    // somewhere directly observable. The ISR itself lives well clear of
+    // 0x9100 (the vector table's OWN high-byte address) -- writing ISR
+    // bytes starting exactly there would silently overwrite the vector
+    // table entry itself.
+    machine.write_memory(0x90FF, &[0x00, 0x92]); // vector -> 0x9200
+    machine.write_memory(0x9200, &[0x76]); // HALT
 
     let mut regs = machine.registers();
     regs.iff1 = true;
@@ -288,15 +306,129 @@ fn im2_interrupt_jumps_through_the_vector_table() {
     regs.i = 0x90;
     machine.set_registers(regs);
 
-    machine.run_frame();
+    // Deliberately NOT `run_frame()` first -- see
+    // `im1_interrupt_pushes_pc_and_jumps_to_0x0038`'s own comment: the
+    // interrupt is already pending from construction, and `run_frame()`
+    // would just let the CPU spend it looping on `JP $` before this loop
+    // got a chance to observe anything.
     for _ in 0..50 {
         machine.tick();
-        if machine.registers().pc == 0x9100 {
+        if machine.cpu.halted {
             break;
         }
     }
 
-    assert_eq!(machine.registers().pc, 0x9100, "IM2 should jump through the vector table to the ISR");
+    // Checked via `cpu.halted`, not a raw PC comparison against 0x9200:
+    // `registers().pc` reads as `halt_addr + 1` (0x9201) once genuinely
+    // halted, same quirk
+    // `interrupt_during_halt_returns_to_the_instruction_after_halt_not_halt_itself`
+    // exists to document -- a literal `pc == 0x9200` check would never
+    // observe a match here.
+    assert!(machine.cpu.halted, "IM2 should jump through the vector table to the ISR, which halts");
+    assert_eq!(machine.registers().pc, 0x9201, "PC reads as halt_addr + 1 while genuinely halted");
+}
+
+#[test]
+fn interrupt_during_halt_returns_to_the_instruction_after_halt_not_halt_itself() {
+    // Regression test for a real bug: `op_halt()` decrements PC back to
+    // HALT's own address on every re-fetch cycle (so the SAME HALT byte
+    // gets re-read each time), relying on `begin_fetch()`'s normal fetch
+    // path to increment it back before the next opcode is dispatched --
+    // but when an interrupt is accepted INSTEAD of a normal fetch, that
+    // increment never ran, so the interrupt pushed HALT's own address as
+    // the return address rather than the instruction after it. On real
+    // hardware (and `vendor/chips/z80.h`'s `_z80_fetch()`, which explicitly
+    // does `cpu->pc++` here, guarded on the HALT pin, to undo the same
+    // decrement) the return address is always the instruction after HALT.
+    // Manifested as a real, reproducible hang: a `HALT; <body>; JP` loop
+    // (an ordinary interrupt-driven main loop) kept returning to HALT
+    // itself instead of `<body>`, so it just re-halted forever waiting for
+    // an interrupt that had already been spent accepting the one that got
+    // it there.
+    let mut machine = Spectrum48K::new();
+    // HALT at 0x8000; INC BC (a distinctive, single-byte marker) right
+    // after it at 0x8001.
+    machine.write_memory(0x8000, &[0x76, 0x03]);
+    // The ISR lives well clear of 0x9100 (the vector table's OWN
+    // high-byte address) -- writing ISR bytes starting exactly there
+    // would silently overwrite the vector table entry itself (found via
+    // this exact mistake while writing this test).
+    machine.write_memory(0x90FF, &[0x00, 0x92]); // IM2 vector (I=0x90) -> 0x9200
+    machine.write_memory(0x9200, &[0xFB, 0xC9]); // ISR: EI; RET
+
+    let mut regs = machine.registers();
+    regs.pc = 0x8000;
+    regs.sp = 0xFF00;
+    regs.iff1 = true;
+    regs.iff2 = true;
+    regs.im = 2;
+    regs.i = 0x90;
+    regs.set_bc(0x1234);
+    machine.set_registers(regs);
+
+    // Deliberately NOT `run_frame()` first: that runs a full frame
+    // unconditionally, and this program has nothing after `INC BC` to
+    // loop back to, so it would NOP-slide through arbitrary memory for
+    // the rest of that frame before this loop even started. Instead, let
+    // the frame boundary (and so the interrupt) occur naturally within
+    // this same step loop -- one frame's worth of HALT re-fetches is
+    // easily within budget.
+    for _ in 0..20_000 {
+        machine.step_instruction();
+        if !machine.cpu.halted && machine.registers().pc == 0x8001 {
+            break;
+        }
+    }
+
+    assert!(!machine.cpu.halted, "should have genuinely returned from the ISR, not still be waiting");
+    assert_eq!(machine.registers().pc, 0x8001, "should return to the instruction after HALT, not HALT itself");
+    // One more step should execute INC BC, not HALT again.
+    machine.step_instruction();
+    assert_eq!(machine.registers().bc(), 0x1235, "should have executed INC BC, not re-entered HALT");
+}
+
+#[test]
+fn interrupt_missed_while_disabled_is_lost_not_queued_for_later() {
+    // Real 48K ULA hardware pulls INT low for exactly 32 T-states once per
+    // frame and then releases it, whether or not the CPU ever accepted
+    // it -- it does NOT stay asserted (or get remembered/re-delivered)
+    // until interrupts happen to be re-enabled. User-confirmed hardware
+    // behavior, and the reason an ISR (or any interrupts-disabled
+    // stretch) that runs past that 32-T-state window loses that frame's
+    // interrupt outright rather than receiving it late.
+    let mut machine = Spectrum48K::new();
+    load_program(&mut machine, 0x8000, &[0x00; 8]); // NOP loop
+    set_sp(&mut machine, 0xFF00);
+    let mut regs = machine.registers();
+    regs.iff1 = false; // interrupts disabled throughout
+    regs.im = 1;
+    machine.set_registers(regs);
+
+    machine.run_frame(); // starts the 32-T-state INT pulse at the frame boundary
+
+    // Comfortably past the 32-T-state pulse, still with interrupts
+    // disabled -- nothing should have been pushed.
+    for _ in 0..200 {
+        machine.tick();
+    }
+    assert_eq!(machine.registers().sp, 0xFF00, "no interrupt should have been accepted while disabled");
+
+    // Re-enable interrupts well after the pulse has already expired, then
+    // run right up to (but not past) the NEXT frame boundary. If the
+    // missed interrupt were incorrectly "queued" rather than lost, it
+    // would fire the instant IFF1 goes true; the correct behavior is
+    // nothing happens until the NEXT frame's own fresh pulse.
+    let mut regs = machine.registers();
+    regs.iff1 = true;
+    regs.iff2 = true;
+    machine.set_registers(regs);
+    for _ in 0..(FRAME_TSTATES - 300) {
+        machine.tick();
+    }
+    assert_eq!(
+        machine.registers().sp, 0xFF00,
+        "the missed interrupt must not be delivered late -- it was lost, not queued"
+    );
 }
 
 #[test]
@@ -372,7 +504,7 @@ fn mid_frame_screen_write_produces_real_tearing() {
 
     // Tick into the NEXT frame up to the start of scanline 100 -- past
     // where scanline 50 was already drawn, before scanline 150 is drawn.
-    let target = zx_core::contention::FIRST_CONTENDED_TSTATE + 100 * zx_core::contention::LINE_TSTATES;
+    let target = zx_core::ula::FIRST_CONTENDED_TSTATE + 100 * zx_core::ula::LINE_TSTATES;
     while machine.tstates < target {
         machine.tick();
     }
@@ -420,6 +552,52 @@ fn contended_memory_executes_fewer_loop_iterations_per_frame_than_uncontended() 
         contended < uncontended,
         "contended={contended} uncontended={uncontended} -- contention should cost real throughput"
     );
+}
+
+/// A plain (non-LDIR) data read to a contended address, at a T-state with
+/// a known nonzero contention delay -- proves the T1-address fix actually
+/// throttles ordinary reads/writes, not just LDI/LDIR's own internal
+/// bookkeeping T-states (already covered by `ldir_contention.rs`) or
+/// opcode fetches (already covered by
+/// `contended_memory_executes_fewer_loop_iterations_per_frame_than_uncontended`,
+/// which only exercises `begin_fetch()`'s own hand-written MREQ timing,
+/// never the "mread"/"mwrite" template this fix touches). Before the fix,
+/// this delay only applied "by coincidence" (whatever was left on the
+/// address bus from the previous access, not the read's own real target).
+#[test]
+fn plain_read_from_contended_memory_is_delayed_by_the_documented_amount() {
+    use zx_core::ula::{memory_contention_delay, FIRST_CONTENDED_TSTATE};
+
+    let mut machine = Spectrum48K::new();
+    load_program(&mut machine, 0x8000, &[0x7E]); // LD A,(HL) -- uncontended fetch
+    machine.write_memory(0x4000, &[0x42]); // contended source byte
+    let mut regs = machine.registers();
+    regs.set_hl(0x4000);
+    machine.set_registers(regs);
+
+    // Land T1 of the mread mcycle exactly on the first T-state of the
+    // contended window, where the documented delay is unambiguous (6, per
+    // DELAY_PATTERN[0]). step_instruction()'s first 3 real ticks are the
+    // opcode fetch's own T2/T3/T4 (T1 already happened for free as part
+    // of set_registers()'s own priming tick, uncounted in `tstates`) --
+    // the 4th tick is the mread's own T1.
+    let start_tstate = FIRST_CONTENDED_TSTATE - 3;
+    machine.tstates = start_tstate;
+
+    machine.step_instruction();
+
+    let delay = memory_contention_delay(FIRST_CONTENDED_TSTATE);
+    assert_eq!(delay, 6, "sanity check on the test's own setup");
+    // fetch tail (3) + T1 through the held gap (`delay` itself already
+    // spans from T1's own real T-state to the T-state T2 finally executes
+    // at -- DELAY_PATTERN[0]==6 means "checked at phase 0, held until
+    // phase 6", i.e. T1(phase 0)+5 held T-states = 6, landing T2 exactly
+    // at phase 6) + T2/T3's own 2 real T-states + the overlapped tick
+    // that begins the next instruction's own fetch.
+    let expected_cost = 3 + delay + 2 + 1;
+    let actual_cost = machine.tstates - start_tstate;
+    assert_eq!(actual_cost, expected_cost, "LD A,(HL) into contended memory should cost fetch + contention delay + the mread's own T-states");
+    assert_eq!(machine.registers().a, 0x42, "the read itself should still have happened correctly");
 }
 
 #[test]

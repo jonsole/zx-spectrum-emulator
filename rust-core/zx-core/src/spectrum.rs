@@ -11,12 +11,11 @@
 //! persists across calls itself, the same role `self.cpu.pins` plays in
 //! `machine.py::tick()`.
 
-use crate::contention;
 use crate::keyboard::Keyboard;
 use crate::memory::{Memory, Spectrum48KMemory};
 use crate::pins::{get_addr, get_data, set_data, INT, IORQ, M1, MREQ, RD, WR};
 use crate::registers::Registers;
-use crate::ula::{Ula, FRAME_TSTATES};
+use crate::ula::{io_contention_delay, Ula, FRAME_TSTATES};
 use crate::Cpu;
 use std::collections::HashSet;
 
@@ -25,6 +24,18 @@ use std::collections::HashSet;
 /// (and this core, once interrupt acknowledgment exists) still reads a
 /// byte during that cycle. Matches `machine.py`'s `_INT_ACK_BYTE`.
 const INT_ACK_BYTE: u8 = 0xFF;
+
+/// How long the 48K ULA pulls INT low, once per frame -- purely a function
+/// of raster position (`tstates < INT_PULSE_TSTATES`), not CPU behavior:
+/// the ULA doesn't know or care whether the CPU ever accepts it, so the
+/// line isn't extended, re-armed, or suppressed for any reason (including
+/// how recently the machine itself was constructed -- a fresh instance's
+/// `tstates == 0` is just as much "within the pulse window" as any other
+/// frame's, matching real hardware, where interrupt timing isn't synced to
+/// CPU reset at all -- the 48K ROM's own first instruction is `DI`
+/// specifically because an interrupt can arrive before software is ready
+/// for one).
+const INT_PULSE_TSTATES: u32 = 32;
 
 // Opcodes that push a return address and jump to a callee -- CALL nn, CALL
 // cc,nn, and every RST. Whether a conditional CALL actually pushed anything
@@ -90,7 +101,6 @@ pub struct Spectrum48K {
     /// rather than just incomplete. Matches `machine.py`'s `call_stack`.
     pub call_stack: Vec<u16>,
     pins: u64,
-    int_pending: bool,
 }
 
 impl Default for Spectrum48K {
@@ -105,7 +115,6 @@ impl Default for Spectrum48K {
             breakpoints: HashSet::new(),
             call_stack: Vec::new(),
             pins: 0,
-            int_pending: false,
         };
         machine.prime_fetch();
         machine
@@ -132,7 +141,6 @@ impl Spectrum48K {
         self.ula.border = image.border;
         self.ula.clear_frame_state();
         self.tstates = 0;
-        self.int_pending = false;
         Ok(())
     }
 
@@ -149,7 +157,6 @@ impl Spectrum48K {
         self.ula.clear_frame_state();
         self.tstates = 0;
         self.frame_count = 0;
-        self.int_pending = false;
     }
 
     pub fn registers(&self) -> Registers {
@@ -210,96 +217,76 @@ impl Spectrum48K {
 
     // ---- tick loop -----------------------------------------------------------
 
-    /// Advances exactly one T-state, servicing whatever the bus asks for.
-    /// Mirrors `machine.py::tick()`, extended with ULA contention: the
-    /// 48K ULA halts the CPU's own clock (not the Z80's WAIT pin -- there
-    /// is no lookahead available for that here, see `advance_tstate()`'s
-    /// doc comment) for a data-sheet-documented number of extra T-states
-    /// when a real memory/IO access lands in its contended window. A
-    /// SINGLE call to this method can therefore silently advance
-    /// `self.tstates` by more than 1 -- see `run_frame()`'s own doc
-    /// comment for the one place in this codebase that had to change
-    /// because of that.
+    /// Advances exactly one real T-state -- one call, one clock cycle,
+    /// always. `Ula::tick()` is asked FIRST, using whatever's currently on
+    /// the bus (`self.pins`, unchanged since the last call if that was
+    /// itself a stall): if it says the ULA needs this cycle for itself
+    /// (contention), `Cpu::tick()` is never called at all this time --
+    /// only the frame clock/screen-fetch bookkeeping advances, and the CPU
+    /// genuinely does not progress. Only once `Ula::tick()` says the CPU
+    /// may proceed does this call `Cpu::tick()` and service whatever
+    /// MREQ/IORQ/RD/WR it asks for. This means a single `Cpu::tick()`-worth
+    /// of real CPU progress can take MULTIPLE calls to this method (one
+    /// per T-state actually spent, contended or not) -- callers that loop
+    /// until some condition (`step_instruction()`, `run_frame()`) are
+    /// unaffected by this since they already loop on `tick()` regardless;
+    /// callers that count a fixed number of `tick()` calls now get true
+    /// T-state-level granularity rather than "N real CPU steps," which is
+    /// what per-T-state debugging tools actually want.
     pub fn tick(&mut self) {
-        let mut pins = self.pins;
-        if self.int_pending {
-            pins |= INT;
+        let current_tstate = self.tstates;
+
+        if current_tstate < INT_PULSE_TSTATES {
+            self.pins |= INT;
         } else {
-            pins &= !INT;
+            self.pins &= !INT;
         }
 
-        let mut pins = self.cpu.tick(pins);
+        if self.ula.tick(current_tstate, self.pins, &mut self.memory) {
+            self.pins = self.cpu.tick(self.pins);
+        }
 
-        if pins & MREQ != 0 {
-            let addr = get_addr(pins);
-            if pins & RD != 0 {
-                self.apply_memory_contention(addr);
-                pins = set_data(pins, self.memory.read(addr));
-            } else if pins & WR != 0 {
-                self.apply_memory_contention(addr);
-                self.memory.write(addr, get_data(pins));
+        let addr = get_addr(self.pins);
+        if self.pins & MREQ != 0 {
+            if self.pins & RD != 0 {
+                self.pins = set_data(self.pins, self.memory.read(addr));
+            } else if self.pins & WR != 0 {
+                self.memory.write(addr, get_data(self.pins));
             }
-            // A bare MREQ with neither RD nor WR is a refresh cycle --
-            // not contended (the refresh address, derived from I/R, isn't
-            // "an instruction fetch, memory read, or memory write" in the
-            // documented sense, and in practice essentially never lands
-            // in screen memory anyway).
-        } else if pins & IORQ != 0 {
-            let addr = get_addr(pins);
-            if pins & M1 != 0 {
+        } else if self.pins & IORQ != 0 {
+            if self.pins & M1 != 0 {
                 // Interrupt acknowledge cycle -- deliberately NOT
                 // contended (see the rust-core plan's explicit
                 // out-of-scope note: real-hardware behavior here is
-                // murkier, and this core doesn't model IM2 vectored
-                // interrupts yet either).
-                pins = set_data(pins, INT_ACK_BYTE);
-                self.int_pending = false;
+                // murkier.
+                self.pins = set_data(self.pins, INT_ACK_BYTE);
             } else {
-                self.apply_io_contention(addr);
-                if pins & RD != 0 {
+                // Disabled for now -- double-counts with the unconditional
+                // memory-contention check above, which now ALSO fires on
+                // an IO cycle's own T-states (the port address persists on
+                // the bus same as any other) and stacks on top of this
+                // table's own delay for the same access. Confirmed via a
+                // live Aquaplane regression: border-timing code that uses
+                // `OUT (C),r` with a contended port (B in 0x40-0x7F) for
+                // precise timing was getting delayed twice.
+                // self.apply_io_contention(addr);
+                if self.pins & RD != 0 {
                     let value = if addr & 0x01 == 0 {
                         self.keyboard.read_port((addr >> 8) as u8)
                     } else {
                         0xFF // unmapped port; floating-bus behavior not modeled
                     };
-                    pins = set_data(pins, value);
-                } else if pins & WR != 0 && addr & 0x01 == 0 {
-                    self.ula.border = get_data(pins) & 0x07;
+                    self.pins = set_data(self.pins, value);
+                } else if self.pins & WR != 0 && addr & 0x01 == 0 {
+                    self.ula.border = get_data(self.pins) & 0x07;
                     // bits 3/4 (MIC/speaker) tracked nowhere yet -- no audio
                 }
             }
         }
 
-        self.pins = pins;
-        self.advance_tstate();
-    }
-
-    /// The single per-real-T-state hook: advances the frame clock, drives
-    /// the ULA's own T-state-synced screen fetch (`Ula::on_tstate()`), and
-    /// handles the frame-boundary interrupt/flash/framebuffer-swap
-    /// bookkeeping. Called once for the real T-state `tick()` drives via
-    /// `Cpu::tick()`, and reused -- WITHOUT any `Cpu::tick()` call --
-    /// for every contention "phantom" T-state `apply_memory_contention()`/
-    /// `apply_io_contention()` insert: the CPU's own state machine only
-    /// ever sees its own T-states advance by exactly one per real
-    /// `Cpu::tick()` call (matching real hardware, where the CPU is
-    /// unaware its clock was ever stopped), while `self.tstates` -- and
-    /// hence the ULA's own raster position -- advances by the true,
-    /// contended amount. This only works because this core's WAIT-pin
-    /// protocol has no lookahead for contention: by the time `tick()`
-    /// observes a newly-asserted MREQ/IORQ, `Cpu`'s internal step has
-    /// already advanced past the one T-state that would check WAIT, so
-    /// asserting WAIT reactively here would not actually hold anything.
-    /// Real 48K hardware doesn't use WAIT for this either -- the ULA
-    /// halts the clock oscillator directly.
-    fn advance_tstate(&mut self) {
-        let current = self.tstates;
-        self.ula.on_tstate(current, &mut self.memory);
-
         self.tstates += 1;
         if self.tstates >= FRAME_TSTATES {
             self.tstates -= FRAME_TSTATES;
-            self.int_pending = true;
             self.frame_count += 1;
             self.ula.on_frame_boundary();
             if self.frame_count % 16 == 0 {
@@ -308,32 +295,7 @@ impl Spectrum48K {
             }
         }
     }
-
-    /// Applies real ULA memory contention (see `advance_tstate()`'s doc
-    /// comment for the mechanism) if `addr` is in the contended page.
-    /// Marks each halted T-state's pixels for the overlay as it goes (see
-    /// `Ula::mark_contention_tstate`) -- one mark per real T-state actually
-    /// spent halted, not one mark per contention event.
-    fn apply_memory_contention(&mut self, addr: u16) {
-        if !contention::is_contended_memory(addr) {
-            return;
-        }
-        let delay = contention::memory_contention_delay(self.tstates);
-        for _ in 0..delay {
-            self.ula.mark_contention_tstate(self.tstates, false);
-            self.advance_tstate();
-        }
-    }
-
-    /// Same, for I/O port contention -- see `contention::io_contention_delay`
-    /// for the 4-case table this implements.
-    fn apply_io_contention(&mut self, addr: u16) {
-        let delay = contention::io_contention_delay(addr, self.tstates);
-        for _ in 0..delay {
-            self.ula.mark_contention_tstate(self.tstates, true);
-            self.advance_tstate();
-        }
-    }
+    
 
     /// Runs T-states until the current instruction completes. Tracks
     /// `call_stack`: classifies the opcode at the pre-step PC (before
@@ -368,15 +330,50 @@ impl Spectrum48K {
         }
     }
 
-    /// Runs exactly one video frame's worth of T-states (~69888). Loops
-    /// on `frame_count` rather than a fixed T-state count: since
-    /// contention lets a single `tick()` call silently consume more than
-    /// one real T-state (see `advance_tstate()`'s doc comment), a
-    /// `for _ in 0..FRAME_TSTATES { self.tick() }`-style loop would call
-    /// `tick()` too few times to actually cover a full frame whenever any
-    /// contention occurred. `frame_count` is incremented exactly once per
-    /// real frame boundary regardless of how many `tick()` calls it took
-    /// to get there, so looping on it is correct either way.
+    /// Steps over a HALT and everything the resulting interrupt triggers
+    /// (the ISR), stopping only once execution has genuinely reached
+    /// `target_pc` (normally `halt_addr + 1`, the instruction right after
+    /// HALT) with the CPU no longer halted. A plain address check on `pc`
+    /// alone is NOT enough here, and using one is a real bug this replaced:
+    /// while halted, `Cpu::registers().pc` reads as `halt_addr + 1`
+    /// continuously (see its doc comment) -- the SAME value `target_pc`
+    /// normally holds -- so an address-only breakpoint fires the instant
+    /// this exact HALT is (re-)entered and starts waiting, not only once
+    /// a real return has happened. That's not a hypothetical: a loop
+    /// shaped `HALT; <body>; JP` (extremely common -- an interrupt-driven
+    /// main loop) re-enters the very same HALT every pass, so the false
+    /// match was hit on effectively every real program, not just this
+    /// project's own test fixture.
+    ///
+    /// Checking `!halted` alongside the address fixes it, and for free
+    /// handles the other case an address-only check also got wrong: a
+    /// SECOND interrupt firing before the first ISR's own RET completes
+    /// (real hardware can absolutely do this if the ISR runs long) just
+    /// detours through another ISR pass -- `pc` sits elsewhere throughout,
+    /// the condition stays unmet, and this keeps looping through it
+    /// automatically rather than exiting on a return address it never
+    /// actually reached yet.
+    ///
+    /// Bounded by roughly one frame's worth of instructions in the
+    /// ordinary case (an interrupt is guaranteed within `FRAME_TSTATES`),
+    /// but genuinely unbounded if interrupts are disabled or `target_pc`
+    /// is never actually reached -- matching real hardware, where a HALT
+    /// with interrupts disabled hangs forever too.
+    pub fn step_over_halt(&mut self, target_pc: u16) {
+        loop {
+            self.step_instruction();
+            if !self.cpu.halted && self.registers().pc == target_pc {
+                break;
+            }
+        }
+    }
+
+    /// Runs exactly one video frame's worth of T-states (~69888). `tick()`
+    /// itself now advances exactly one real T-state per call (see its own
+    /// doc comment), so a fixed `for _ in 0..FRAME_TSTATES` loop would
+    /// technically also work -- looping on `frame_count` instead is just
+    /// the more robust/obviously-correct expression of "until the frame
+    /// boundary fires," independent of the exact T-state count.
     pub fn run_frame(&mut self) {
         let target = self.frame_count + 1;
         while self.frame_count < target {

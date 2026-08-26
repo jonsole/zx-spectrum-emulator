@@ -60,6 +60,21 @@
           "endsPattern": "DAP server listening"
         }
       }
+    },
+    {
+      "label": "ldir-contention.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\tools\\sjasmplus\\sjasmplus.exe",
+      "args": ["test.asm", "--sld=test.sld", "--fullpath"],
+      "options": { "cwd": "${workspaceFolder}/examples/ldir_contention" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ldir-contention.build-and-start-server",
+      "dependsOrder": "sequence",
+      "dependsOn": ["ldir-contention.build", "zxspectrum-rust.start-server"]
     }
   ]
 }

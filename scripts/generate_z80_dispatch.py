@@ -712,16 +712,27 @@ def build_tstates(op: Op) -> list[TState]:
     for mci, mc in enumerate(mcycles):
         t = mc["type"]
         if t == "mread":
+            # T1 places the real target address on the bus (no control
+            # bits) -- real hardware has the address valid from the start
+            # of T1, and the ULA's contention check needs to see it before
+            # deciding whether to stall, which happens before MREQ|RD
+            # asserts on T2. T2/T3 reuse get_addr(pins) rather than
+            # re-evaluating "ab" a second/third time -- several "ab" tokens
+            # (e.g. $PC++) are side-effecting post-increments, so
+            # re-running the expression would double/triple-fire them.
+            # MREQ|RD asserted on T2 and T3, not T1 -- user-directed.
             tcycles = mc.get("tcycles", MEM_TCYCLES)
-            tstates.append(TState("plain"))
-            tstates.append(TState("mread_wait", ab=mc["ab"]))
+            tstates.append(TState("bus_addr", ab=mc["ab"]))
+            tstates.append(TState("mread_wait"))
             tstates.append(TState("mread_latch", dst=mc["dst"], mci=mci))
             tstates += [TState("plain") for _ in range(3, tcycles)]
         elif t == "mwrite":
+            # Same reasoning as "mread" above for T1's address placement.
+            # MREQ|WR asserted on T2 and T3, not T1.
             tcycles = mc.get("tcycles", MEM_TCYCLES)
-            tstates.append(TState("plain"))
-            tstates.append(TState("mwrite_go", ab=mc["ab"], db=mc["db"], mci=mci))
-            tstates.append(TState("plain"))
+            tstates.append(TState("bus_addr", ab=mc["ab"]))
+            tstates.append(TState("mwrite_go", db=mc["db"], mci=mci))
+            tstates.append(TState("mwrite_hold"))
             tstates += [TState("plain") for _ in range(3, tcycles)]
         elif t == "ioread":
             # Mirrors z80_gen.py's own ioread template exactly (ported
@@ -793,35 +804,74 @@ class Generator:
     def render(self, ts: TState, nxt: int | None, op: Op, y: int, z: int, p: int, q: int) -> str:
         if ts.kind == "plain":
             return f"                self.step = {nxt};\n                pins"
-        if ts.kind == "mread_wait":
+        if ts.kind == "bus_addr":
+            # T1 of a plain mread/mwrite: places the real target address
+            # on the bus (no control bits) -- the ONE place "ab" gets
+            # evaluated, so any side effect (e.g. $PC++) fires exactly
+            # once. Real hardware has the address valid from the start of
+            # T1, before MREQ activates -- this is what lets the ULA's
+            # contention check see the correct address before MREQ turns
+            # on (see `Ula::tick()`'s doc comment).
             addr = addr_expr(ts.kw["ab"], y, z, p, q)
             return (
+                f"                let pins = set_addr(pins, {addr});\n"
+                f"                self.step = {nxt};\n"
+                "                pins"
+            )
+        if ts.kind == "mread_wait":
+            # Reuses the address `bus_addr` (T1) already placed rather
+            # than re-evaluating "ab" -- see `bus_addr`'s own comment.
+            return (
                 "                if pins & WAIT != 0 { return Some(pins); }\n"
-                f"                let pins = set_addr_ctrl(pins, {addr}, MREQ | RD);\n"
+                "                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);\n"
                 f"                self.step = {nxt};\n"
                 "                pins"
             )
         if ts.kind == "mread_latch":
+            # Reuses whatever's ALREADY on the address bus from
+            # `mread_wait` (`get_addr(pins)`) rather than re-evaluating the
+            # "ab" expression a second time -- several of those (`$PC++`,
+            # `cpu->hl++`, etc.) are POST-INCREMENT operations with a real
+            # side effect, so calling them twice per byte fetched would
+            # double-advance PC/HL/etc. Address bits survive the
+            # `CTRL_PIN_MASK` strip between T-states (only control bits are
+            # stripped), so the value is still there to read back.
             dest_stmt = emit_dest_assign(ts.kw["dst"], y, z, p, q)
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
-            body = f"                {dest_stmt}\n"
+            body = "                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);\n"
+            body += f"                {dest_stmt}\n"
             if action:
                 body += f"                {action}\n"
             body += f"                self.step = {nxt};\n                pins"
             return body
         if ts.kind == "mwrite_go":
-            addr = addr_expr(ts.kw["ab"], y, z, p, q)
+            # Reuses the address "bus_addr" (T1) already placed rather
+            # than re-evaluating "ab" -- see "bus_addr"'s own comment.
+            # Data is still evaluated fresh here (its first evaluation,
+            # T1 only places the address) -- confirmed no "db" token used
+            # by any real mwrite entry is side-effecting.
             db_tok = ts.kw["db"]
             data = "0" if db_tok in ("0", 0) else data_read_expr(db_tok, y, z, p, q)
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
             body = (
                 "                if pins & WAIT != 0 { return Some(pins); }\n"
-                f"                let pins = set_addr_data_ctrl(pins, {addr}, {data}, MREQ | WR);\n"
+                f"                let pins = set_addr_data_ctrl(pins, get_addr(pins), {data}, MREQ | WR);\n"
             )
             if action:
                 body += f"                {action}\n"
             body += f"                self.step = {nxt};\n                pins"
             return body
+        if ts.kind == "mwrite_hold":
+            # Re-asserts MREQ|WR for T3, reusing get_addr(pins) rather than
+            # re-evaluating the source expressions -- same reasoning as
+            # mread_latch above, and doubly true for the data bits (also
+            # untouched by CTRL_PIN_MASK): re-deriving them could read a
+            # DIFFERENT value if mwrite_go's own action already mutated the
+            # source register.
+            return (
+                "                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);\n"
+                f"                self.step = {nxt};\n                pins"
+            )
         if ts.kind == "ioread_wait":
             addr = addr_expr(ts.kw["ab"], y, z, p, q)
             return (
@@ -831,9 +881,15 @@ class Generator:
                 "                pins"
             )
         if ts.kind == "ioread_latch":
+            # Reasserts IORQ|RD, same as mread_latch does for MREQ|RD --
+            # every T-state strips control lines unless the step
+            # re-asserts them (see CTRL_PIN_MASK), and this is IORQ's
+            # second and final T-state, so without this it would only
+            # ever be visible on the bus for one T-state instead of two.
             dest_stmt = emit_dest_assign(ts.kw["dst"], y, z, p, q)
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
-            body = f"                {dest_stmt}\n"
+            body = "                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);\n"
+            body += f"                {dest_stmt}\n"
             if action:
                 body += f"                {action}\n"
             body += f"                self.step = {nxt};\n                pins"
@@ -851,8 +907,12 @@ class Generator:
             )
             return body
         if ts.kind == "iowrite_wait":
+            # Reasserts IORQ|WR, same as mwrite_hold does for MREQ|WR --
+            # this is IORQ's second and final T-state (see ioread_latch's
+            # comment above for why it needs to be re-asserted here).
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, nxt)
             body = "                if pins & WAIT != 0 { return Some(pins); }\n"
+            body += "                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);\n"
             if action:
                 body += f"                {action}\n"
             body += f"                self.step = {nxt};\n                pins"

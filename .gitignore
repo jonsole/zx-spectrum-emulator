@@ -37,3 +37,8 @@ rom_disassembly/
 # scripts/build_manicminer.py
 .manicminer-disassembly-src/
 game_disassembly/
+
+# Fetched sjasmplus binary (github.com/z00m128/sjasmplus) -- a build tool,
+# not this project's own code; fetched by the LDIR contention example's
+# build task rather than committed.
+tools/

@@ -26,31 +26,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             1 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 512;
                 pins
             }
             512 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 513;
                 pins
             }
             513 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.c = get_data(pins);
                 self.step = 514;
                 pins
             }
             514 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 515;
                 pins
             }
             515 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 516;
                 pins
             }
             516 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.b = get_data(pins);
                 self.step = 517;
                 pins
@@ -59,17 +63,19 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             2 => {
+                let pins = set_addr(pins, self.regs.bc());
                 self.step = 518;
                 pins
             }
             518 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.bc(), self.regs.a, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.a, MREQ | WR);
                 self.regs.set_wzl(self.regs.c.wrapping_add(1)); self.regs.set_wzh(self.regs.a);
                 self.step = 519;
                 pins
             }
             519 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 520;
                 pins
             }
@@ -97,16 +103,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             6 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 523;
                 pins
             }
             523 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 524;
                 pins
             }
             524 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.b = get_data(pins);
                 self.step = 525;
                 pins
@@ -155,16 +163,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             10 => {
+                let pins = set_addr(pins, self.regs.bc());
                 self.step = 533;
                 pins
             }
             533 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.bc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 534;
                 pins
             }
             534 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 535;
@@ -194,16 +204,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             14 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 538;
                 pins
             }
             538 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 539;
                 pins
             }
             539 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.c = get_data(pins);
                 self.step = 540;
                 pins
@@ -220,16 +232,18 @@ impl crate::cpu::Cpu {
                 pins
             }
             541 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 542;
                 pins
             }
             542 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 543;
                 pins
             }
             543 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.b = self.regs.b.wrapping_sub(1); if self.regs.b == 0 { self.step = 549; return Some(pins); }
                 self.step = 544;
@@ -260,31 +274,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             17 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 550;
                 pins
             }
             550 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 551;
                 pins
             }
             551 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.e = get_data(pins);
                 self.step = 552;
                 pins
             }
             552 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 553;
                 pins
             }
             553 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 554;
                 pins
             }
             554 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.d = get_data(pins);
                 self.step = 555;
                 pins
@@ -293,17 +311,19 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             18 => {
+                let pins = set_addr(pins, self.regs.de());
                 self.step = 556;
                 pins
             }
             556 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.de(), self.regs.a, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.a, MREQ | WR);
                 self.regs.set_wzl(self.regs.e.wrapping_add(1)); self.regs.set_wzh(self.regs.a);
                 self.step = 557;
                 pins
             }
             557 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 558;
                 pins
             }
@@ -331,16 +351,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             22 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 561;
                 pins
             }
             561 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 562;
                 pins
             }
             562 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.d = get_data(pins);
                 self.step = 563;
                 pins
@@ -353,16 +375,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             24 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 564;
                 pins
             }
             564 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 565;
                 pins
             }
             565 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 566;
                 pins
@@ -424,16 +448,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             26 => {
+                let pins = set_addr(pins, self.regs.de());
                 self.step = 579;
                 pins
             }
             579 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.de(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 580;
                 pins
             }
             580 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.regs.wz = self.regs.de().wrapping_add(1);
                 self.step = 581;
@@ -463,16 +489,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             30 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 584;
                 pins
             }
             584 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 585;
                 pins
             }
             585 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.e = get_data(pins);
                 self.step = 586;
                 pins
@@ -485,16 +513,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             32 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 587;
                 pins
             }
             587 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 588;
                 pins
             }
             588 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 if !(self.regs.f & FLAG_Z == 0) { self.step = 594; return Some(pins); }
                 self.step = 589;
@@ -525,31 +555,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             33 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 595;
                 pins
             }
             595 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 596;
                 pins
             }
             596 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_l(get_data(pins));
                 self.step = 597;
                 pins
             }
             597 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 598;
                 pins
             }
             598 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 599;
                 pins
             }
             599 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_h(get_data(pins));
                 self.step = 600;
                 pins
@@ -558,60 +592,68 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             34 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 601;
                 pins
             }
             601 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 602;
                 pins
             }
             602 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 603;
                 pins
             }
             603 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 604;
                 pins
             }
             604 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 605;
                 pins
             }
             605 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 606;
                 pins
             }
             606 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 607;
                 pins
             }
             607 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.hlx_l(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_l(), MREQ | WR);
                 self.step = 608;
                 pins
             }
             608 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 609;
                 pins
             }
             609 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 610;
                 pins
             }
             610 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.wz, self.hlx_h(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_h(), MREQ | WR);
                 self.step = 611;
                 pins
             }
             611 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 612;
                 pins
             }
@@ -639,16 +681,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             38 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 615;
                 pins
             }
             615 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 616;
                 pins
             }
             616 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_h(get_data(pins));
                 self.step = 617;
                 pins
@@ -661,16 +705,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             40 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 618;
                 pins
             }
             618 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 619;
                 pins
             }
             619 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 if !(self.regs.f & FLAG_Z != 0) { self.step = 625; return Some(pins); }
                 self.step = 620;
@@ -733,61 +779,69 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             42 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 633;
                 pins
             }
             633 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 634;
                 pins
             }
             634 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 635;
                 pins
             }
             635 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 636;
                 pins
             }
             636 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 637;
                 pins
             }
             637 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 638;
                 pins
             }
             638 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 639;
                 pins
             }
             639 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 640;
                 pins
             }
             640 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_l(get_data(pins));
                 self.step = 641;
                 pins
             }
             641 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 642;
                 pins
             }
             642 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 643;
                 pins
             }
             643 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_h(get_data(pins));
                 self.step = 644;
                 pins
@@ -816,16 +870,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             46 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 647;
                 pins
             }
             647 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 648;
                 pins
             }
             648 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_l(get_data(pins));
                 self.step = 649;
                 pins
@@ -838,16 +894,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             48 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 650;
                 pins
             }
             650 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 651;
                 pins
             }
             651 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 if !(self.regs.f & FLAG_C == 0) { self.step = 657; return Some(pins); }
                 self.step = 652;
@@ -878,31 +936,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             49 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 658;
                 pins
             }
             658 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 659;
                 pins
             }
             659 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_spl(get_data(pins));
                 self.step = 660;
                 pins
             }
             660 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 661;
                 pins
             }
             661 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 662;
                 pins
             }
             662 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_sph(get_data(pins));
                 self.step = 663;
                 pins
@@ -911,47 +973,53 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             50 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 664;
                 pins
             }
             664 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 665;
                 pins
             }
             665 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 666;
                 pins
             }
             666 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 667;
                 pins
             }
             667 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 668;
                 pins
             }
             668 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 669;
                 pins
             }
             669 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 670;
                 pins
             }
             670 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.regs.a, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.a, MREQ | WR);
                 self.regs.set_wzh(self.regs.a);
                 self.step = 671;
                 pins
             }
             671 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 672;
                 pins
             }
@@ -971,16 +1039,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             52 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 675;
                 pins
             }
             675 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 676;
                 pins
             }
             676 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 let r = alu::inc8(self.dlatch, self.regs.f); self.dlatch = r.value; self.regs.f = r.flags;
                 self.step = 677;
@@ -991,16 +1061,18 @@ impl crate::cpu::Cpu {
                 pins
             }
             678 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 679;
                 pins
             }
             679 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 680;
                 pins
             }
             680 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 681;
                 pins
             }
@@ -1008,16 +1080,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             53 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 682;
                 pins
             }
             682 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 683;
                 pins
             }
             683 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 let r = alu::dec8(self.dlatch, self.regs.f); self.dlatch = r.value; self.regs.f = r.flags;
                 self.step = 684;
@@ -1028,16 +1102,18 @@ impl crate::cpu::Cpu {
                 pins
             }
             685 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 686;
                 pins
             }
             686 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 687;
                 pins
             }
             687 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 688;
                 pins
             }
@@ -1045,31 +1121,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             54 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 689;
                 pins
             }
             689 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 690;
                 pins
             }
             690 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 691;
                 pins
             }
             691 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 692;
                 pins
             }
             692 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 693;
                 pins
             }
             693 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 694;
                 pins
             }
@@ -1081,16 +1161,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             56 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 695;
                 pins
             }
             695 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 696;
                 pins
             }
             696 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 if !(self.regs.f & FLAG_C != 0) { self.step = 702; return Some(pins); }
                 self.step = 697;
@@ -1153,46 +1235,52 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             58 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 710;
                 pins
             }
             710 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 711;
                 pins
             }
             711 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 712;
                 pins
             }
             712 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 713;
                 pins
             }
             713 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 714;
                 pins
             }
             714 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 715;
                 pins
             }
             715 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 716;
                 pins
             }
             716 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 717;
                 pins
             }
             717 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.step = 718;
                 pins
@@ -1221,16 +1309,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             62 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 721;
                 pins
             }
             721 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 722;
                 pins
             }
             722 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.step = 723;
                 pins
@@ -1267,16 +1357,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             70 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 724;
                 pins
             }
             724 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 725;
                 pins
             }
             725 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.b = get_data(pins);
                 self.step = 726;
                 pins
@@ -1313,16 +1405,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             78 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 727;
                 pins
             }
             727 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 728;
                 pins
             }
             728 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.c = get_data(pins);
                 self.step = 729;
                 pins
@@ -1359,16 +1453,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             86 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 730;
                 pins
             }
             730 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 731;
                 pins
             }
             731 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.d = get_data(pins);
                 self.step = 732;
                 pins
@@ -1405,16 +1501,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             94 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 733;
                 pins
             }
             733 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 734;
                 pins
             }
             734 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.e = get_data(pins);
                 self.step = 735;
                 pins
@@ -1451,16 +1549,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             102 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 736;
                 pins
             }
             736 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 737;
                 pins
             }
             737 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.h = get_data(pins);
                 self.step = 738;
                 pins
@@ -1497,16 +1597,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             110 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 739;
                 pins
             }
             739 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 740;
                 pins
             }
             740 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.l = get_data(pins);
                 self.step = 741;
                 pins
@@ -1519,16 +1621,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             112 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 742;
                 pins
             }
             742 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.b, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.b, MREQ | WR);
                 self.step = 743;
                 pins
             }
             743 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 744;
                 pins
             }
@@ -1536,16 +1640,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             113 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 745;
                 pins
             }
             745 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.c, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.c, MREQ | WR);
                 self.step = 746;
                 pins
             }
             746 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 747;
                 pins
             }
@@ -1553,16 +1659,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             114 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 748;
                 pins
             }
             748 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.d, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.d, MREQ | WR);
                 self.step = 749;
                 pins
             }
             749 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 750;
                 pins
             }
@@ -1570,16 +1678,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             115 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 751;
                 pins
             }
             751 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.e, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.e, MREQ | WR);
                 self.step = 752;
                 pins
             }
             752 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 753;
                 pins
             }
@@ -1587,16 +1697,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             116 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 754;
                 pins
             }
             754 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.h, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.h, MREQ | WR);
                 self.step = 755;
                 pins
             }
             755 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 756;
                 pins
             }
@@ -1604,16 +1716,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             117 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 757;
                 pins
             }
             757 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.l, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.l, MREQ | WR);
                 self.step = 758;
                 pins
             }
             758 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 759;
                 pins
             }
@@ -1621,16 +1735,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             119 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 760;
                 pins
             }
             760 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.addr, self.regs.a, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.a, MREQ | WR);
                 self.step = 761;
                 pins
             }
             761 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 762;
                 pins
             }
@@ -1662,16 +1778,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             126 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 763;
                 pins
             }
             763 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 764;
                 pins
             }
             764 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.step = 765;
                 pins
@@ -1708,16 +1826,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             134 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 766;
                 pins
             }
             766 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 767;
                 pins
             }
             767 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(0, self.dlatch);
                 self.step = 768;
@@ -1755,16 +1875,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             142 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 769;
                 pins
             }
             769 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 770;
                 pins
             }
             770 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(1, self.dlatch);
                 self.step = 771;
@@ -1802,16 +1924,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             150 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 772;
                 pins
             }
             772 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 773;
                 pins
             }
             773 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(2, self.dlatch);
                 self.step = 774;
@@ -1849,16 +1973,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             158 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 775;
                 pins
             }
             775 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 776;
                 pins
             }
             776 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(3, self.dlatch);
                 self.step = 777;
@@ -1896,16 +2022,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             166 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 778;
                 pins
             }
             778 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 779;
                 pins
             }
             779 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(4, self.dlatch);
                 self.step = 780;
@@ -1943,16 +2071,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             174 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 781;
                 pins
             }
             781 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 782;
                 pins
             }
             782 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(5, self.dlatch);
                 self.step = 783;
@@ -1990,16 +2120,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             182 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 784;
                 pins
             }
             784 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 785;
                 pins
             }
             785 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(6, self.dlatch);
                 self.step = 786;
@@ -2037,16 +2169,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             190 => {
+                let pins = set_addr(pins, self.addr);
                 self.step = 787;
                 pins
             }
             787 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.addr, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 788;
                 pins
             }
             788 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(7, self.dlatch);
                 self.step = 789;
@@ -2065,31 +2199,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             790 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 791;
                 pins
             }
             791 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 792;
                 pins
             }
             792 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 793;
                 pins
             }
             793 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 794;
                 pins
             }
             794 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 795;
                 pins
             }
             795 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 796;
@@ -2099,31 +2237,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             193 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 797;
                 pins
             }
             797 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 798;
                 pins
             }
             798 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.c = get_data(pins);
                 self.step = 799;
                 pins
             }
             799 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 800;
                 pins
             }
             800 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 801;
                 pins
             }
             801 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.b = get_data(pins);
                 self.step = 802;
                 pins
@@ -2132,31 +2274,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             194 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 803;
                 pins
             }
             803 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 804;
                 pins
             }
             804 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 805;
                 pins
             }
             805 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 806;
                 pins
             }
             806 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 807;
                 pins
             }
             807 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_Z == 0 { self.regs.pc = self.regs.wz; }
                 self.step = 808;
@@ -2166,31 +2312,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             195 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 809;
                 pins
             }
             809 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 810;
                 pins
             }
             810 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 811;
                 pins
             }
             811 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 812;
                 pins
             }
             812 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 813;
                 pins
             }
             813 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 814;
@@ -2200,31 +2350,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             196 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 815;
                 pins
             }
             815 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 816;
                 pins
             }
             816 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 817;
                 pins
             }
             817 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 818;
                 pins
             }
             818 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 819;
                 pins
             }
             819 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_Z == 0) { self.step = 827; return Some(pins); }
                 self.step = 820;
@@ -2235,31 +2389,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             821 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 822;
                 pins
             }
             822 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 823;
                 pins
             }
             823 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 824;
                 pins
             }
             824 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 825;
                 pins
             }
             825 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 826;
                 pins
             }
             826 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 827;
                 pins
             }
@@ -2271,30 +2429,34 @@ impl crate::cpu::Cpu {
                 pins
             }
             828 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 829;
                 pins
             }
             829 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.b, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.b, MREQ | WR);
                 self.step = 830;
                 pins
             }
             830 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 831;
                 pins
             }
             831 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 832;
                 pins
             }
             832 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.c, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.c, MREQ | WR);
                 self.step = 833;
                 pins
             }
             833 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 834;
                 pins
             }
@@ -2302,16 +2464,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             198 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 835;
                 pins
             }
             835 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 836;
                 pins
             }
             836 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(0, self.dlatch);
                 self.step = 837;
@@ -2325,31 +2489,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             838 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 839;
                 pins
             }
             839 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 840;
                 pins
             }
             840 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 841;
                 pins
             }
             841 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 842;
                 pins
             }
             842 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 0; self.regs.pc = self.regs.wz;
                 self.step = 843;
                 pins
             }
             843 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 844;
                 pins
             }
@@ -2362,31 +2530,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             845 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 846;
                 pins
             }
             846 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 847;
                 pins
             }
             847 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 848;
                 pins
             }
             848 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 849;
                 pins
             }
             849 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 850;
                 pins
             }
             850 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 851;
@@ -2396,31 +2568,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             201 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 852;
                 pins
             }
             852 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 853;
                 pins
             }
             853 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 854;
                 pins
             }
             854 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 855;
                 pins
             }
             855 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 856;
                 pins
             }
             856 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 857;
@@ -2430,31 +2606,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             202 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 858;
                 pins
             }
             858 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 859;
                 pins
             }
             859 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 860;
                 pins
             }
             860 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 861;
                 pins
             }
             861 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 862;
                 pins
             }
             862 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_Z != 0 { self.regs.pc = self.regs.wz; }
                 self.step = 863;
@@ -2464,31 +2644,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             204 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 864;
                 pins
             }
             864 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 865;
                 pins
             }
             865 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 866;
                 pins
             }
             866 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 867;
                 pins
             }
             867 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 868;
                 pins
             }
             868 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_Z != 0) { self.step = 876; return Some(pins); }
                 self.step = 869;
@@ -2499,31 +2683,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             870 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 871;
                 pins
             }
             871 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 872;
                 pins
             }
             872 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 873;
                 pins
             }
             873 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 874;
                 pins
             }
             874 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 875;
                 pins
             }
             875 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 876;
                 pins
             }
@@ -2531,31 +2719,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             205 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 877;
                 pins
             }
             877 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 878;
                 pins
             }
             878 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 879;
                 pins
             }
             879 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 880;
                 pins
             }
             880 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 881;
                 pins
             }
             881 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 882;
                 pins
@@ -2565,31 +2757,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             883 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 884;
                 pins
             }
             884 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 885;
                 pins
             }
             885 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 886;
                 pins
             }
             886 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 887;
                 pins
             }
             887 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 888;
                 pins
             }
             888 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 889;
                 pins
             }
@@ -2597,16 +2793,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             206 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 890;
                 pins
             }
             890 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 891;
                 pins
             }
             891 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(1, self.dlatch);
                 self.step = 892;
@@ -2620,31 +2818,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             893 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 894;
                 pins
             }
             894 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 895;
                 pins
             }
             895 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 896;
                 pins
             }
             896 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 897;
                 pins
             }
             897 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 8; self.regs.pc = self.regs.wz;
                 self.step = 898;
                 pins
             }
             898 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 899;
                 pins
             }
@@ -2657,31 +2859,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             900 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 901;
                 pins
             }
             901 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 902;
                 pins
             }
             902 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 903;
                 pins
             }
             903 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 904;
                 pins
             }
             904 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 905;
                 pins
             }
             905 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 906;
@@ -2691,31 +2897,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             209 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 907;
                 pins
             }
             907 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 908;
                 pins
             }
             908 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.e = get_data(pins);
                 self.step = 909;
                 pins
             }
             909 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 910;
                 pins
             }
             910 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 911;
                 pins
             }
             911 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.d = get_data(pins);
                 self.step = 912;
                 pins
@@ -2724,31 +2934,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             210 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 913;
                 pins
             }
             913 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 914;
                 pins
             }
             914 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 915;
                 pins
             }
             915 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 916;
                 pins
             }
             916 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 917;
                 pins
             }
             917 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_C == 0 { self.regs.pc = self.regs.wz; }
                 self.step = 918;
@@ -2758,16 +2972,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             211 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 919;
                 pins
             }
             919 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 920;
                 pins
             }
             920 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.regs.set_wzh(self.regs.a);
                 self.step = 921;
@@ -2784,6 +3000,7 @@ impl crate::cpu::Cpu {
             }
             923 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.set_wzl(self.regs.wzl().wrapping_add(1));
                 self.step = 924;
                 pins
@@ -2796,31 +3013,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             212 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 926;
                 pins
             }
             926 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 927;
                 pins
             }
             927 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 928;
                 pins
             }
             928 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 929;
                 pins
             }
             929 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 930;
                 pins
             }
             930 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_C == 0) { self.step = 938; return Some(pins); }
                 self.step = 931;
@@ -2831,31 +3052,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             932 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 933;
                 pins
             }
             933 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 934;
                 pins
             }
             934 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 935;
                 pins
             }
             935 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 936;
                 pins
             }
             936 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 937;
                 pins
             }
             937 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 938;
                 pins
             }
@@ -2867,30 +3092,34 @@ impl crate::cpu::Cpu {
                 pins
             }
             939 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 940;
                 pins
             }
             940 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.d, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.d, MREQ | WR);
                 self.step = 941;
                 pins
             }
             941 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 942;
                 pins
             }
             942 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 943;
                 pins
             }
             943 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.e, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.e, MREQ | WR);
                 self.step = 944;
                 pins
             }
             944 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 945;
                 pins
             }
@@ -2898,16 +3127,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             214 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 946;
                 pins
             }
             946 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 947;
                 pins
             }
             947 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(2, self.dlatch);
                 self.step = 948;
@@ -2921,31 +3152,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             949 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 950;
                 pins
             }
             950 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 951;
                 pins
             }
             951 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 952;
                 pins
             }
             952 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 953;
                 pins
             }
             953 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 16; self.regs.pc = self.regs.wz;
                 self.step = 954;
                 pins
             }
             954 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 955;
                 pins
             }
@@ -2958,31 +3193,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             956 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 957;
                 pins
             }
             957 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 958;
                 pins
             }
             958 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 959;
                 pins
             }
             959 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 960;
                 pins
             }
             960 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 961;
                 pins
             }
             961 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 962;
@@ -2996,31 +3235,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             218 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 963;
                 pins
             }
             963 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 964;
                 pins
             }
             964 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 965;
                 pins
             }
             965 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 966;
                 pins
             }
             966 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 967;
                 pins
             }
             967 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_C != 0 { self.regs.pc = self.regs.wz; }
                 self.step = 968;
@@ -3030,16 +3273,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             219 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 969;
                 pins
             }
             969 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 970;
                 pins
             }
             970 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.regs.set_wzh(self.regs.a);
                 self.step = 971;
@@ -3060,6 +3305,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             974 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.regs.a = get_data(pins);
                 self.step = 975;
                 pins
@@ -3068,31 +3314,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             220 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 976;
                 pins
             }
             976 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 977;
                 pins
             }
             977 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 978;
                 pins
             }
             978 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 979;
                 pins
             }
             979 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 980;
                 pins
             }
             980 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_C != 0) { self.step = 988; return Some(pins); }
                 self.step = 981;
@@ -3103,31 +3353,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             982 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 983;
                 pins
             }
             983 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 984;
                 pins
             }
             984 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 985;
                 pins
             }
             985 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 986;
                 pins
             }
             986 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 987;
                 pins
             }
             987 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 988;
                 pins
             }
@@ -3135,16 +3389,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             222 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 989;
                 pins
             }
             989 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 990;
                 pins
             }
             990 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(3, self.dlatch);
                 self.step = 991;
@@ -3158,31 +3414,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             992 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 993;
                 pins
             }
             993 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 994;
                 pins
             }
             994 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 995;
                 pins
             }
             995 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 996;
                 pins
             }
             996 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 24; self.regs.pc = self.regs.wz;
                 self.step = 997;
                 pins
             }
             997 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 998;
                 pins
             }
@@ -3195,31 +3455,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             999 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1000;
                 pins
             }
             1000 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1001;
                 pins
             }
             1001 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1002;
                 pins
             }
             1002 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1003;
                 pins
             }
             1003 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1004;
                 pins
             }
             1004 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1005;
@@ -3229,31 +3493,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             225 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1006;
                 pins
             }
             1006 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1007;
                 pins
             }
             1007 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_l(get_data(pins));
                 self.step = 1008;
                 pins
             }
             1008 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1009;
                 pins
             }
             1009 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1010;
                 pins
             }
             1010 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.set_hlx_h(get_data(pins));
                 self.step = 1011;
                 pins
@@ -3262,31 +3530,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             226 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1012;
                 pins
             }
             1012 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1013;
                 pins
             }
             1013 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1014;
                 pins
             }
             1014 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1015;
                 pins
             }
             1015 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1016;
                 pins
             }
             1016 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_PV == 0 { self.regs.pc = self.regs.wz; }
                 self.step = 1017;
@@ -3296,31 +3568,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             227 => {
+                let pins = set_addr(pins, self.regs.sp);
                 self.step = 1018;
                 pins
             }
             1018 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.sp, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1019;
                 pins
             }
             1019 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1020;
                 pins
             }
             1020 => {
+                let pins = set_addr(pins, self.regs.sp.wrapping_add(1));
                 self.step = 1021;
                 pins
             }
             1021 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.sp.wrapping_add(1), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1022;
                 pins
             }
             1022 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1023;
                 pins
@@ -3330,31 +3606,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1024 => {
+                let pins = set_addr(pins, self.regs.sp.wrapping_add(1));
                 self.step = 1025;
                 pins
             }
             1025 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.sp.wrapping_add(1), self.hlx_h(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_h(), MREQ | WR);
                 self.step = 1026;
                 pins
             }
             1026 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1027;
                 pins
             }
             1027 => {
+                let pins = set_addr(pins, self.regs.sp);
                 self.step = 1028;
                 pins
             }
             1028 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.sp, self.hlx_l(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_l(), MREQ | WR);
                 self.set_hlx(self.regs.wz);
                 self.step = 1029;
                 pins
             }
             1029 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1030;
                 pins
             }
@@ -3370,31 +3650,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             228 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1033;
                 pins
             }
             1033 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1034;
                 pins
             }
             1034 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1035;
                 pins
             }
             1035 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1036;
                 pins
             }
             1036 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1037;
                 pins
             }
             1037 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_PV == 0) { self.step = 1045; return Some(pins); }
                 self.step = 1038;
@@ -3405,31 +3689,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1039 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1040;
                 pins
             }
             1040 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1041;
                 pins
             }
             1041 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1042;
                 pins
             }
             1042 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1043;
                 pins
             }
             1043 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 1044;
                 pins
             }
             1044 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1045;
                 pins
             }
@@ -3441,30 +3729,34 @@ impl crate::cpu::Cpu {
                 pins
             }
             1046 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1047;
                 pins
             }
             1047 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.hlx_h(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_h(), MREQ | WR);
                 self.step = 1048;
                 pins
             }
             1048 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1049;
                 pins
             }
             1049 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1050;
                 pins
             }
             1050 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.hlx_l(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.hlx_l(), MREQ | WR);
                 self.step = 1051;
                 pins
             }
             1051 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1052;
                 pins
             }
@@ -3472,16 +3764,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             230 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1053;
                 pins
             }
             1053 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1054;
                 pins
             }
             1054 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(4, self.dlatch);
                 self.step = 1055;
@@ -3495,31 +3789,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1056 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1057;
                 pins
             }
             1057 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1058;
                 pins
             }
             1058 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1059;
                 pins
             }
             1059 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1060;
                 pins
             }
             1060 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 32; self.regs.pc = self.regs.wz;
                 self.step = 1061;
                 pins
             }
             1061 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1062;
                 pins
             }
@@ -3532,31 +3830,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1063 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1064;
                 pins
             }
             1064 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1065;
                 pins
             }
             1065 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1066;
                 pins
             }
             1066 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1067;
                 pins
             }
             1067 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1068;
                 pins
             }
             1068 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1069;
@@ -3570,31 +3872,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             234 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1070;
                 pins
             }
             1070 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1071;
                 pins
             }
             1071 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1072;
                 pins
             }
             1072 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1073;
                 pins
             }
             1073 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1074;
                 pins
             }
             1074 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_PV != 0 { self.regs.pc = self.regs.wz; }
                 self.step = 1075;
@@ -3608,31 +3914,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             236 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1076;
                 pins
             }
             1076 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1077;
                 pins
             }
             1077 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1078;
                 pins
             }
             1078 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1079;
                 pins
             }
             1079 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1080;
                 pins
             }
             1080 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_PV != 0) { self.step = 1088; return Some(pins); }
                 self.step = 1081;
@@ -3643,31 +3953,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1082 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1083;
                 pins
             }
             1083 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1084;
                 pins
             }
             1084 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1085;
                 pins
             }
             1085 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1086;
                 pins
             }
             1086 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 1087;
                 pins
             }
             1087 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1088;
                 pins
             }
@@ -3678,16 +3992,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch_ed(pins)
             }
             238 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1089;
                 pins
             }
             1089 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1090;
                 pins
             }
             1090 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(5, self.dlatch);
                 self.step = 1091;
@@ -3701,31 +4017,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1092 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1093;
                 pins
             }
             1093 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1094;
                 pins
             }
             1094 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1095;
                 pins
             }
             1095 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1096;
                 pins
             }
             1096 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 40; self.regs.pc = self.regs.wz;
                 self.step = 1097;
                 pins
             }
             1097 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1098;
                 pins
             }
@@ -3738,31 +4058,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1099 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1100;
                 pins
             }
             1100 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1101;
                 pins
             }
             1101 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1102;
                 pins
             }
             1102 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1103;
                 pins
             }
             1103 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1104;
                 pins
             }
             1104 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1105;
@@ -3772,31 +4096,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             241 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1106;
                 pins
             }
             1106 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1107;
                 pins
             }
             1107 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.f = get_data(pins);
                 self.step = 1108;
                 pins
             }
             1108 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1109;
                 pins
             }
             1109 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1110;
                 pins
             }
             1110 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.a = get_data(pins);
                 self.step = 1111;
                 pins
@@ -3805,31 +4133,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             242 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1112;
                 pins
             }
             1112 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1113;
                 pins
             }
             1113 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1114;
                 pins
             }
             1114 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1115;
                 pins
             }
             1115 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1116;
                 pins
             }
             1116 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_S == 0 { self.regs.pc = self.regs.wz; }
                 self.step = 1117;
@@ -3843,31 +4175,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             244 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1118;
                 pins
             }
             1118 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1119;
                 pins
             }
             1119 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1120;
                 pins
             }
             1120 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1121;
                 pins
             }
             1121 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1122;
                 pins
             }
             1122 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_S == 0) { self.step = 1130; return Some(pins); }
                 self.step = 1123;
@@ -3878,31 +4214,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1124 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1125;
                 pins
             }
             1125 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1126;
                 pins
             }
             1126 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1127;
                 pins
             }
             1127 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1128;
                 pins
             }
             1128 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 1129;
                 pins
             }
             1129 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1130;
                 pins
             }
@@ -3914,30 +4254,34 @@ impl crate::cpu::Cpu {
                 pins
             }
             1131 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1132;
                 pins
             }
             1132 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.a, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.a, MREQ | WR);
                 self.step = 1133;
                 pins
             }
             1133 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1134;
                 pins
             }
             1134 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1135;
                 pins
             }
             1135 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.f, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.f, MREQ | WR);
                 self.step = 1136;
                 pins
             }
             1136 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1137;
                 pins
             }
@@ -3945,16 +4289,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             246 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1138;
                 pins
             }
             1138 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1139;
                 pins
             }
             1139 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(6, self.dlatch);
                 self.step = 1140;
@@ -3968,31 +4314,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1141 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1142;
                 pins
             }
             1142 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1143;
                 pins
             }
             1143 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1144;
                 pins
             }
             1144 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1145;
                 pins
             }
             1145 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 48; self.regs.pc = self.regs.wz;
                 self.step = 1146;
                 pins
             }
             1146 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1147;
                 pins
             }
@@ -4005,31 +4355,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1148 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1149;
                 pins
             }
             1149 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1150;
                 pins
             }
             1150 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1151;
                 pins
             }
             1151 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1152;
                 pins
             }
             1152 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1153;
                 pins
             }
             1153 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1154;
@@ -4051,31 +4405,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             250 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1157;
                 pins
             }
             1157 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1158;
                 pins
             }
             1158 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1159;
                 pins
             }
             1159 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1160;
                 pins
             }
             1160 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1161;
                 pins
             }
             1161 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if self.regs.f & FLAG_S != 0 { self.regs.pc = self.regs.wz; }
                 self.step = 1162;
@@ -4091,31 +4449,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             252 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1163;
                 pins
             }
             1163 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1164;
                 pins
             }
             1164 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1165;
                 pins
             }
             1165 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1166;
                 pins
             }
             1166 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1167;
                 pins
             }
             1167 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 if !(self.regs.f & FLAG_S != 0) { self.step = 1175; return Some(pins); }
                 self.step = 1168;
@@ -4126,31 +4488,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1169 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1170;
                 pins
             }
             1170 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1171;
                 pins
             }
             1171 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1172;
                 pins
             }
             1172 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1173;
                 pins
             }
             1173 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.pc = self.regs.wz;
                 self.step = 1174;
                 pins
             }
             1174 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1175;
                 pins
             }
@@ -4158,16 +4524,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             254 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1176;
                 pins
             }
             1176 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1177;
                 pins
             }
             1177 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.alu_op(7, self.dlatch);
                 self.step = 1178;
@@ -4181,31 +4549,35 @@ impl crate::cpu::Cpu {
                 pins
             }
             1179 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1180;
                 pins
             }
             1180 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), (self.regs.pc >> 8) as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), (self.regs.pc >> 8) as u8, MREQ | WR);
                 self.step = 1181;
                 pins
             }
             1181 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1182;
                 pins
             }
             1182 => {
+                let pins = set_addr(pins, self.sp_pre_dec());
                 self.step = 1183;
                 pins
             }
             1183 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.sp_pre_dec(), self.regs.pc as u8, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.pc as u8, MREQ | WR);
                 self.regs.wz = 56; self.regs.pc = self.regs.wz;
                 self.step = 1184;
                 pins
             }
             1184 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1185;
                 pins
             }
@@ -4419,6 +4791,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1188 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1189;
@@ -4439,6 +4812,7 @@ impl crate::cpu::Cpu {
             }
             1191 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1192;
                 pins
@@ -4483,60 +4857,68 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             323 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1201;
                 pins
             }
             1201 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1202;
                 pins
             }
             1202 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1203;
                 pins
             }
             1203 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1204;
                 pins
             }
             1204 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1205;
                 pins
             }
             1205 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1206;
                 pins
             }
             1206 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1207;
                 pins
             }
             1207 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.regs.c, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.c, MREQ | WR);
                 self.step = 1208;
                 pins
             }
             1208 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1209;
                 pins
             }
             1209 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1210;
                 pins
             }
             1210 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.wz, self.regs.b, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.b, MREQ | WR);
                 self.step = 1211;
                 pins
             }
             1211 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1212;
                 pins
             }
@@ -4548,31 +4930,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             325 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1213;
                 pins
             }
             1213 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1214;
                 pins
             }
             1214 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1215;
                 pins
             }
             1215 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1216;
                 pins
             }
             1216 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1217;
                 pins
             }
             1217 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1218;
@@ -4610,6 +4996,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1222 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1223;
@@ -4630,6 +5017,7 @@ impl crate::cpu::Cpu {
             }
             1225 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1226;
                 pins
@@ -4674,61 +5062,69 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             331 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1235;
                 pins
             }
             1235 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1236;
                 pins
             }
             1236 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1237;
                 pins
             }
             1237 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1238;
                 pins
             }
             1238 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1239;
                 pins
             }
             1239 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1240;
                 pins
             }
             1240 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1241;
                 pins
             }
             1241 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1242;
                 pins
             }
             1242 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.c = get_data(pins);
                 self.step = 1243;
                 pins
             }
             1243 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1244;
                 pins
             }
             1244 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1245;
                 pins
             }
             1245 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.b = get_data(pins);
                 self.step = 1246;
                 pins
@@ -4741,31 +5137,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             333 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1247;
                 pins
             }
             1247 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1248;
                 pins
             }
             1248 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1249;
                 pins
             }
             1249 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1250;
                 pins
             }
             1250 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1251;
                 pins
             }
             1251 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1252;
@@ -4803,6 +5203,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1256 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1257;
@@ -4823,6 +5224,7 @@ impl crate::cpu::Cpu {
             }
             1259 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1260;
                 pins
@@ -4867,60 +5269,68 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             339 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1269;
                 pins
             }
             1269 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1270;
                 pins
             }
             1270 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1271;
                 pins
             }
             1271 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1272;
                 pins
             }
             1272 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1273;
                 pins
             }
             1273 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1274;
                 pins
             }
             1274 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1275;
                 pins
             }
             1275 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.regs.e, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.e, MREQ | WR);
                 self.step = 1276;
                 pins
             }
             1276 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1277;
                 pins
             }
             1277 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1278;
                 pins
             }
             1278 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.wz, self.regs.d, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.d, MREQ | WR);
                 self.step = 1279;
                 pins
             }
             1279 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1280;
                 pins
             }
@@ -4932,31 +5342,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             341 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1281;
                 pins
             }
             1281 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1282;
                 pins
             }
             1282 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1283;
                 pins
             }
             1283 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1284;
                 pins
             }
             1284 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1285;
                 pins
             }
             1285 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1286;
@@ -4994,6 +5408,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1290 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1291;
@@ -5014,6 +5429,7 @@ impl crate::cpu::Cpu {
             }
             1293 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1294;
                 pins
@@ -5058,61 +5474,69 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             347 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1303;
                 pins
             }
             1303 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1304;
                 pins
             }
             1304 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1305;
                 pins
             }
             1305 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1306;
                 pins
             }
             1306 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1307;
                 pins
             }
             1307 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1308;
                 pins
             }
             1308 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1309;
                 pins
             }
             1309 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1310;
                 pins
             }
             1310 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.e = get_data(pins);
                 self.step = 1311;
                 pins
             }
             1311 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1312;
                 pins
             }
             1312 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1313;
                 pins
             }
             1313 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.d = get_data(pins);
                 self.step = 1314;
                 pins
@@ -5125,31 +5549,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             349 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1315;
                 pins
             }
             1315 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1316;
                 pins
             }
             1316 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1317;
                 pins
             }
             1317 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1318;
                 pins
             }
             1318 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1319;
                 pins
             }
             1319 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1320;
@@ -5187,6 +5615,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1324 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1325;
@@ -5207,6 +5636,7 @@ impl crate::cpu::Cpu {
             }
             1327 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1328;
                 pins
@@ -5251,60 +5681,68 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             355 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1337;
                 pins
             }
             1337 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1338;
                 pins
             }
             1338 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1339;
                 pins
             }
             1339 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1340;
                 pins
             }
             1340 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1341;
                 pins
             }
             1341 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1342;
                 pins
             }
             1342 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1343;
                 pins
             }
             1343 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.regs.l, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.l, MREQ | WR);
                 self.step = 1344;
                 pins
             }
             1344 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1345;
                 pins
             }
             1345 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1346;
                 pins
             }
             1346 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.wz, self.regs.h, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.h, MREQ | WR);
                 self.step = 1347;
                 pins
             }
             1347 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1348;
                 pins
             }
@@ -5316,31 +5754,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             357 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1349;
                 pins
             }
             1349 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1350;
                 pins
             }
             1350 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1351;
                 pins
             }
             1351 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1352;
                 pins
             }
             1352 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1353;
                 pins
             }
             1353 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1354;
@@ -5356,16 +5798,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             359 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1355;
                 pins
             }
             1355 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.hl(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1356;
                 pins
             }
             1356 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1357;
                 pins
@@ -5388,17 +5832,19 @@ impl crate::cpu::Cpu {
                 pins
             }
             1361 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1362;
                 pins
             }
             1362 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.hl(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.regs.wz = self.regs.hl().wrapping_add(1);
                 self.step = 1363;
                 pins
             }
             1363 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1364;
                 pins
             }
@@ -5420,6 +5866,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1367 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1368;
@@ -5440,6 +5887,7 @@ impl crate::cpu::Cpu {
             }
             1370 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1371;
                 pins
@@ -5484,61 +5932,69 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             363 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1380;
                 pins
             }
             1380 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1381;
                 pins
             }
             1381 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1382;
                 pins
             }
             1382 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1383;
                 pins
             }
             1383 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1384;
                 pins
             }
             1384 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1385;
                 pins
             }
             1385 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1386;
                 pins
             }
             1386 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1387;
                 pins
             }
             1387 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.l = get_data(pins);
                 self.step = 1388;
                 pins
             }
             1388 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1389;
                 pins
             }
             1389 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1390;
                 pins
             }
             1390 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.h = get_data(pins);
                 self.step = 1391;
                 pins
@@ -5551,31 +6007,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             365 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1392;
                 pins
             }
             1392 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1393;
                 pins
             }
             1393 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1394;
                 pins
             }
             1394 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1395;
                 pins
             }
             1395 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1396;
                 pins
             }
             1396 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1397;
@@ -5591,16 +6051,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             367 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1398;
                 pins
             }
             1398 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.hl(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1399;
                 pins
             }
             1399 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1400;
                 pins
@@ -5623,17 +6085,19 @@ impl crate::cpu::Cpu {
                 pins
             }
             1404 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1405;
                 pins
             }
             1405 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.hl(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.regs.wz = self.regs.hl().wrapping_add(1);
                 self.step = 1406;
                 pins
             }
             1406 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1407;
                 pins
             }
@@ -5655,6 +6119,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1410 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1411;
@@ -5675,6 +6140,7 @@ impl crate::cpu::Cpu {
             }
             1413 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1414;
                 pins
@@ -5719,60 +6185,68 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             371 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1423;
                 pins
             }
             1423 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1424;
                 pins
             }
             1424 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1425;
                 pins
             }
             1425 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1426;
                 pins
             }
             1426 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1427;
                 pins
             }
             1427 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1428;
                 pins
             }
             1428 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1429;
                 pins
             }
             1429 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.wz_post_inc(), self.regs.spl(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.spl(), MREQ | WR);
                 self.step = 1430;
                 pins
             }
             1430 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1431;
                 pins
             }
             1431 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1432;
                 pins
             }
             1432 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.wz, self.regs.sph(), MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.regs.sph(), MREQ | WR);
                 self.step = 1433;
                 pins
             }
             1433 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1434;
                 pins
             }
@@ -5784,31 +6258,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             373 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1435;
                 pins
             }
             1435 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1436;
                 pins
             }
             1436 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1437;
                 pins
             }
             1437 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1438;
                 pins
             }
             1438 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1439;
                 pins
             }
             1439 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1440;
@@ -5841,6 +6319,7 @@ impl crate::cpu::Cpu {
                 pins
             }
             1443 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
                 self.dlatch = get_data(pins);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1444;
@@ -5861,6 +6340,7 @@ impl crate::cpu::Cpu {
             }
             1446 => {
                 if pins & WAIT != 0 { return Some(pins); }
+                let pins = set_addr_ctrl(pins, get_addr(pins), IORQ | WR);
                 self.regs.wz = self.regs.bc().wrapping_add(1);
                 self.step = 1447;
                 pins
@@ -5905,61 +6385,69 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             379 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1456;
                 pins
             }
             1456 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1457;
                 pins
             }
             1457 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1458;
                 pins
             }
             1458 => {
+                let pins = set_addr(pins, self.pc_post_inc());
                 self.step = 1459;
                 pins
             }
             1459 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.pc_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1460;
                 pins
             }
             1460 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.step = 1461;
                 pins
             }
             1461 => {
+                let pins = set_addr(pins, self.wz_post_inc());
                 self.step = 1462;
                 pins
             }
             1462 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.wz_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1463;
                 pins
             }
             1463 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_spl(get_data(pins));
                 self.step = 1464;
                 pins
             }
             1464 => {
+                let pins = set_addr(pins, self.regs.wz);
                 self.step = 1465;
                 pins
             }
             1465 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.wz, MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1466;
                 pins
             }
             1466 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_sph(get_data(pins));
                 self.step = 1467;
                 pins
@@ -5972,31 +6460,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             381 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1468;
                 pins
             }
             1468 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1469;
                 pins
             }
             1469 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzl(get_data(pins));
                 self.step = 1470;
                 pins
             }
             1470 => {
+                let pins = set_addr(pins, self.sp_post_inc());
                 self.step = 1471;
                 pins
             }
             1471 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.sp_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1472;
                 pins
             }
             1472 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.regs.set_wzh(get_data(pins));
                 self.regs.pc = self.regs.wz;
                 self.step = 1473;
@@ -6111,31 +6603,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             416 => {
+                let pins = set_addr(pins, self.hl_post_inc());
                 self.step = 1474;
                 pins
             }
             1474 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1475;
                 pins
             }
             1475 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1476;
                 pins
             }
             1476 => {
+                let pins = set_addr(pins, self.de_post_inc());
                 self.step = 1477;
                 pins
             }
             1477 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.de_post_inc(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 1478;
                 pins
             }
             1478 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1479;
                 pins
             }
@@ -6152,16 +6648,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             417 => {
+                let pins = set_addr(pins, self.hl_post_inc());
                 self.step = 1482;
                 pins
             }
             1482 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1483;
                 pins
             }
             1483 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1484;
                 pins
@@ -6203,31 +6701,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             424 => {
+                let pins = set_addr(pins, self.hl_post_dec());
                 self.step = 1490;
                 pins
             }
             1490 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_dec(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1491;
                 pins
             }
             1491 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1492;
                 pins
             }
             1492 => {
+                let pins = set_addr(pins, self.de_post_dec());
                 self.step = 1493;
                 pins
             }
             1493 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.de_post_dec(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 1494;
                 pins
             }
             1494 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1495;
                 pins
             }
@@ -6244,16 +6746,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             425 => {
+                let pins = set_addr(pins, self.hl_post_dec());
                 self.step = 1498;
                 pins
             }
             1498 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_dec(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1499;
                 pins
             }
             1499 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1500;
                 pins
@@ -6295,31 +6799,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             432 => {
+                let pins = set_addr(pins, self.hl_post_inc());
                 self.step = 1506;
                 pins
             }
             1506 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1507;
                 pins
             }
             1507 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1508;
                 pins
             }
             1508 => {
+                let pins = set_addr(pins, self.de_post_inc());
                 self.step = 1509;
                 pins
             }
             1509 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.de_post_inc(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 1510;
                 pins
             }
             1510 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1511;
                 pins
             }
@@ -6357,16 +6865,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             433 => {
+                let pins = set_addr(pins, self.hl_post_inc());
                 self.step = 1519;
                 pins
             }
             1519 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_inc(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1520;
                 pins
             }
             1520 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1521;
                 pins
@@ -6429,31 +6939,35 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             440 => {
+                let pins = set_addr(pins, self.hl_post_dec());
                 self.step = 1532;
                 pins
             }
             1532 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_dec(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1533;
                 pins
             }
             1533 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1534;
                 pins
             }
             1534 => {
+                let pins = set_addr(pins, self.de_post_dec());
                 self.step = 1535;
                 pins
             }
             1535 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.de_post_dec(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 1536;
                 pins
             }
             1536 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1537;
                 pins
             }
@@ -6491,16 +7005,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             441 => {
+                let pins = set_addr(pins, self.hl_post_dec());
                 self.step = 1545;
                 pins
             }
             1545 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.hl_post_dec(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1546;
                 pins
             }
             1546 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 self.step = 1547;
                 pins
@@ -6759,16 +7275,18 @@ impl crate::cpu::Cpu {
                 self.begin_fetch(pins)
             }
             1559 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1560;
                 pins
             }
             1560 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_ctrl(pins, self.regs.hl(), MREQ | RD);
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.step = 1561;
                 pins
             }
             1561 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
                 self.dlatch = get_data(pins);
                 if let Some(v) = self.cb_action(self.dlatch, true) { self.dlatch = v; } else { self.step = 1565; return Some(pins); }
                 self.step = 1562;
@@ -6779,16 +7297,18 @@ impl crate::cpu::Cpu {
                 pins
             }
             1563 => {
+                let pins = set_addr(pins, self.regs.hl());
                 self.step = 1564;
                 pins
             }
             1564 => {
                 if pins & WAIT != 0 { return Some(pins); }
-                let pins = set_addr_data_ctrl(pins, self.regs.hl(), self.dlatch, MREQ | WR);
+                let pins = set_addr_data_ctrl(pins, get_addr(pins), self.dlatch, MREQ | WR);
                 self.step = 1565;
                 pins
             }
             1565 => {
+                let pins = set_addr_ctrl(pins, get_addr(pins), MREQ | WR);
                 self.step = 1566;
                 pins
             }
