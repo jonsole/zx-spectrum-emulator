@@ -40,6 +40,14 @@
       "preLaunchTask": "zxspectrum-rust.start-server"
     },
     {
+      "name": "ZX Spectrum (Rust core, release): Step through ROM",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "preLaunchTask": "zxspectrum-rust.start-server-release"
+    },
+    {
       "name": "ZX Spectrum (Rust core): Manic Miner",
       "type": "zxspectrum",
       "request": "launch",
@@ -49,6 +57,17 @@
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
       "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core, release): Manic Miner",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
+      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
+      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
+      "preLaunchTask": "zxspectrum-rust.start-server-release"
     },
     {
       "name": "ZX Spectrum (Rust core): Aquaplane",
@@ -107,6 +126,15 @@
       "preLaunchTask": "zxspectrum-rust.start-server"
     },
     {
+      "name": "ZX Spectrum (Rust core, release): ZEXALL",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server-release"
+    },
+    {
       "name": "ZX Spectrum (Rust core): ZEXDOC",
       "type": "zxspectrum",
       "request": "launch",
@@ -114,6 +142,15 @@
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
       "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core, release): ZEXDOC",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server-release"
     },
     {
       "name": "ZX Spectrum (Rust core): ZEXCCFB (CCF/SCF flag test)",

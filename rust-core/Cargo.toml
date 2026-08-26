@@ -1,3 +1,15 @@
 [workspace]
 resolver = "2"
 members = ["zx-core", "zx-core-conformance", "zx-engine", "zx-server"]
+
+# Plain `cargo run` (unoptimized, opt-level=0) is too slow for interactive
+# use -- the Z80 core dispatches through a 500+-arm match every emulated
+# T-state. opt-level=2 on workspace members keeps incremental rebuilds
+# close to debug-build speed while getting most of the runtime win;
+# dependencies (compiled once, rarely touched) go to opt-level=3 since
+# that cost is effectively free after the first build.
+[profile.dev]
+opt-level = 2
+
+[profile.dev.package."*"]
+opt-level = 3

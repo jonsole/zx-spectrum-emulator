@@ -62,6 +62,38 @@
       }
     },
     {
+      "label": "zxspectrum-rust.start-server-release",
+      "type": "shell",
+      "command": "${env:USERPROFILE}\\.cargo\\bin\\cargo.exe",
+      "args": [
+        "run",
+        "--release",
+        "-p", "zx-server",
+        "--",
+        "--dap-port", "4711",
+        "--mcp-port", "8000",
+        "--screen-port", "8500"
+      ],
+      "options": { "cwd": "${workspaceFolder}/rust-core" },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "zxspectrum-rust",
+        "pattern": {
+          "regexp": "^.*$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting ZX Spectrum Rust server",
+          "endsPattern": "DAP server listening"
+        }
+      }
+    },
+    {
       "label": "ldir-contention.build",
       "type": "shell",
       "command": "${workspaceFolder}\\tools\\sjasmplus\\sjasmplus.exe",
