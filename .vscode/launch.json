@@ -87,6 +87,42 @@
       "sld": "${workspaceFolder}/examples/ldir_contention/test.sld",
       "asm": "${workspaceFolder}/examples/ldir_contention/test.asm",
       "preLaunchTask": "ldir-contention.build-and-start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): Z80 full test suite",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/z80full.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): ZEXALL",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): ZEXDOC",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core): ZEXCCFB (CCF/SCF flag test)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexccfb.sna",
+      "preLaunchTask": "zxspectrum-rust.start-server"
     }
   ]
 }
