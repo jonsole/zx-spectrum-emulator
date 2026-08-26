@@ -14,9 +14,21 @@ use zx_core::Registers;
 pub struct State {
     pub pc: u16,
     pub registers: Registers,
+    /// Whether the CPU is currently sitting in a HALT's repeated re-fetch
+    /// wait for its interrupt. Needed alongside `pc` specifically because
+    /// `Registers::pc` reads identically (`halt_addr+1`) whether the CPU
+    /// is still waiting or has already resumed past it -- see
+    /// `Cpu::registers()`'s doc comment -- so telling those two states
+    /// apart (e.g. computing where "step over" on a HALT should really
+    /// land) needs this extra bit.
+    pub halted: bool,
     pub breakpoints: Vec<u16>,
     pub running: bool,
     pub border: u8,
+    /// Raw T-state counter within the current frame (0..FRAME_TSTATES) --
+    /// useful for lining up a breakpoint hit against exactly where in the
+    /// raster/contention timeline it happened.
+    pub tstates: u32,
     /// Sum of memory + IO contention delay T-states over the last fully
     /// completed frame -- a numeric readout of contention even without
     /// the visual overlay (see `Command::SetContentionOverlay`).
@@ -30,6 +42,13 @@ pub enum Command {
     Step {
         instructions: u32,
         ticks: Option<u32>,
+        reply: oneshot::Sender<Registers>,
+    },
+    /// See `Spectrum48K::step_over_halt()` -- runs past a HALT still
+    /// waiting for its interrupt, and past everything its ISR does, until
+    /// execution genuinely (not-halted) reaches `target_pc`.
+    StepOverHalt {
+        target_pc: u16,
         reply: oneshot::Sender<Registers>,
     },
     Run {

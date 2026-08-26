@@ -44,6 +44,17 @@ struct Args {
     /// `set_contention_overlay` MCP tool for toggling it at runtime).
     #[arg(long, default_value_t = false)]
     contention_overlay: bool,
+
+    /// Exit the whole process once the last open DAP connection closes
+    /// (e.g. VS Code's "Stop" debugging action) -- lets a build task chain
+    /// like `preLaunchTask` freely bind the same port again next launch
+    /// without a stale server left running from the previous session.
+    /// Off by default since a short-lived diagnostic script connecting
+    /// alongside a long-running server (e.g. via the MCP port) shouldn't
+    /// take the whole thing down; only the DAP connection count is
+    /// tracked, and only transitions to zero trigger it.
+    #[arg(long, default_value_t = false)]
+    exit_on_disconnect: bool,
 }
 
 #[tokio::main]
@@ -74,8 +85,11 @@ async fn main() -> anyhow::Result<()> {
     let dap_engine = engine.clone();
     let dap_sources = sources.clone();
     let dap_host = args.dap_host.clone();
+    let exit_on_disconnect = args.exit_on_disconnect;
     let dap_task = tokio::spawn(async move {
-        if let Err(e) = dap::serve(dap_engine, dap_sources, &dap_host, args.dap_port).await {
+        if let Err(e) =
+            dap::serve(dap_engine, dap_sources, &dap_host, args.dap_port, exit_on_disconnect).await
+        {
             eprintln!("DAP server error: {e}");
         }
     });

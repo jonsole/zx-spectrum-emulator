@@ -139,18 +139,31 @@ impl Engine {
         self.contention_overlay_requested.store(enabled, Ordering::Relaxed);
     }
 
-    /// `ticks`, when set, steps that many of the CPU's own T-states rather
-    /// than whole instructions (sub-instruction debugging). Note this
-    /// means N *CPU-visible* T-states, not necessarily N real T-states of
-    /// wall-clock/frame time: ULA contention can make a single
-    /// `Spectrum48K::tick()` call silently consume more than one real
-    /// T-state (see `Spectrum48K::advance_tstate()`'s doc comment) while
-    /// the CPU's own state machine only ever advances by one per call --
-    /// which is exactly the semantic wanted here, single-stepping through
-    /// the CPU's own dispatch steps regardless of contention.
+    /// `ticks`, when set, steps that many real T-states rather than whole
+    /// instructions (sub-instruction debugging) -- each `Spectrum48K::
+    /// tick()` call advances exactly one real T-state, including any the
+    /// ULA holds the CPU's own clock for (contention), so this genuinely
+    /// single-steps wall-clock/frame time, not just the CPU's own visible
+    /// dispatch steps. A contended step may show the CPU's registers
+    /// unchanged from the previous one if that particular T-state was
+    /// spent held rather than actually progressing.
     pub async fn step(&self, instructions: u32, ticks: Option<u32>) -> Registers {
         let (reply, rx) = oneshot::channel();
         self.tx.send(Command::Step { instructions, ticks, reply }).await.ok();
+        rx.await.expect("actor task dropped the reply channel")
+    }
+
+    /// See `Spectrum48K::step_over_halt()`. Only ever terminates once
+    /// execution genuinely (not-halted) reaches `target_pc` -- bounded by
+    /// roughly one frame's worth of instructions in practice, but
+    /// genuinely unbounded if interrupts are disabled or `target_pc` is
+    /// never reached (a real hang, matching hardware), so the actor loop's
+    /// own handler checks `pause_requested` each iteration exactly like
+    /// `Run` does, rather than delegating to `Spectrum48K::step_over_halt()`'s
+    /// simpler unconditional loop.
+    pub async fn step_over_halt(&self, target_pc: u16) -> Registers {
+        let (reply, rx) = oneshot::channel();
+        self.tx.send(Command::StepOverHalt { target_pc, reply }).await.ok();
         rx.await.expect("actor task dropped the reply channel")
     }
 
@@ -286,6 +299,39 @@ async fn actor_loop(
                 }
                 if let Some(msg) = panic_msg {
                     eprintln!("step: CPU panicked mid-instruction, stopping early: {msg}");
+                }
+                let pc = machine.registers().pc;
+                let _ = events.send(Event::Stopped { reason: "step", pc });
+                reply.send(machine.registers()).ok();
+            }
+            Command::StepOverHalt { target_pc, reply } => {
+                pause_requested.store(false, Ordering::Relaxed);
+                let mut panic_msg = None;
+                let mut count: u64 = 0;
+                loop {
+                    if pause_requested.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if let Err(e) = step_instruction_catching_panics(&mut machine) {
+                        panic_msg = Some(e);
+                        break;
+                    }
+                    // NOT just `machine.registers().pc == target_pc` --
+                    // that's also exactly what a HALT still waiting (or a
+                    // FRESH re-entry into the same HALT, e.g. a `HALT; ...;
+                    // JP` loop looping back around) displays continuously,
+                    // long before any real return happens. See
+                    // `Spectrum48K::step_over_halt()`'s doc comment.
+                    if !machine.cpu.halted && machine.registers().pc == target_pc {
+                        break;
+                    }
+                    count += 1;
+                    if count % RUN_YIELD_EVERY == 0 {
+                        tokio::task::yield_now().await;
+                    }
+                }
+                if let Some(msg) = panic_msg {
+                    eprintln!("step_over_halt: CPU panicked mid-instruction, stopping early: {msg}");
                 }
                 let pc = machine.registers().pc;
                 let _ = events.send(Event::Stopped { reason: "step", pc });
@@ -427,9 +473,11 @@ fn state_snapshot(machine: &Spectrum48K, running: bool) -> State {
     State {
         pc: machine.registers().pc,
         registers: machine.registers(),
+        halted: machine.cpu.halted,
         breakpoints: machine.breakpoints.iter().copied().collect(),
         running,
         border: machine.ula.border,
+        tstates: machine.tstates,
         contended_tstates_last_frame: machine.ula.contended_tstates_last_frame(),
         call_stack: machine.call_stack.clone(),
     }

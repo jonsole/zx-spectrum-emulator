@@ -31,7 +31,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
-use zx_engine::{Engine, Event};
+use zx_engine::{Engine, Event, State};
 
 use crate::rom_source::Sources;
 
@@ -45,16 +45,36 @@ const THREAD_ID: i64 = 1;
 // longer one just doesn't pad further.
 const LABEL_COLUMN_WIDTH: usize = 12 + 3; // 12 + len(":  ")
 
-pub async fn serve(engine: Engine, sources: Sources, host: &str, port: u16) -> io::Result<()> {
+pub async fn serve(
+    engine: Engine,
+    sources: Sources,
+    host: &str,
+    port: u16,
+    exit_on_disconnect: bool,
+) -> io::Result<()> {
     let listener = TcpListener::bind((host, port)).await?;
     println!("DAP server listening on {host}:{port}");
+    // Counts currently-open DAP connections, not just "has anyone ever
+    // connected" -- a short-lived diagnostic script (see this module's own
+    // doc comment on per-connection breakpoint state) can legitimately
+    // connect and disconnect while VS Code's own long-lived session is
+    // still open, and that shouldn't kill the server out from under it.
+    // Only the transition to zero live connections counts as "debugging
+    // stopped".
+    let open_connections = Arc::new(AtomicI64::new(0));
     loop {
         let (stream, _) = listener.accept().await?;
         let engine = engine.clone();
         let sources = sources.clone();
+        let open_connections = open_connections.clone();
+        open_connections.fetch_add(1, Ordering::SeqCst);
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, engine, sources).await {
                 eprintln!("DAP connection error: {e}");
+            }
+            if open_connections.fetch_sub(1, Ordering::SeqCst) == 1 && exit_on_disconnect {
+                println!("Last DAP connection closed, exiting (--exit-on-disconnect)");
+                std::process::exit(0);
             }
         });
     }
@@ -308,7 +328,25 @@ async fn handle_request(
             }
             (true, json!({}))
         }
-        "attach" | "configurationDone" | "disconnect" => (true, json!({})),
+        "attach" | "configurationDone" => (true, json!({})),
+        "disconnect" | "terminate" => {
+            // Clicking Stop while a `continue`-triggered Run is in flight
+            // otherwise does nothing: `Run`'s loop only ever breaks early
+            // via `pause_requested` (see `Engine::pause()`'s own doc
+            // comment on why that bypasses the command queue -- a queued
+            // Pause could never be dequeued while Run is still running on
+            // the single actor task), and neither of these requests used
+            // to call it. Since every other queued command (memory reads,
+            // register reads, breakpoints, ...) waits behind Run on that
+            // same actor, an un-paused Run made the WHOLE session look
+            // hung, not just this one request. Mirrors the "pause" request
+            // handler below. `terminate` isn't advertised via
+            // `supportsTerminateRequest` (matching the Python reference,
+            // which also never implemented it), but handling it the same
+            // way here is harmless and covers clients that send it anyway.
+            engine.pause();
+            (true, json!({}))
+        }
         "setInstructionBreakpoints" => {
             let requested: HashSet<u16> = arguments
                 .get("breakpoints")
@@ -368,20 +406,80 @@ async fn handle_request(
             // Step over: a plain single step already steps INTO a CALL/RST
             // (it just executes the instruction, which pushes the return
             // address and jumps) -- that's exactly `stepIn`'s semantics, so
-            // this only needs to special-case CALL/RST. For those, run
-            // (rather than single-step) until a breakpoint set at the
-            // instruction immediately after the call/rst is hit, which is
-            // where execution lands once the subroutine returns. Spawned in
-            // the background (mirroring `continue`, below) rather than
-            // awaited inline, so a subroutine that never returns can't wedge
-            // this connection's request loop -- a `pause` request can still
-            // interrupt it, and the eventual `stopped` event reaches the
-            // client via the connection's separate event-forwarding task.
-            let regs = engine.get_registers().await;
+            // this needs to special-case CALL/RST. The block-repeat
+            // instructions (LDIR/LDDR/CPIR/CPDR/INIR/INDR/OTIR/OTDR) need
+            // the same treatment for a different reason: each one rewinds
+            // PC back to itself and re-enters `begin_fetch` after copying
+            // just one byte (see the generated dispatch's PC-rewind step),
+            // so a single-step-by-instruction only ever completes ONE
+            // repeat, not the whole block -- which is why "step over" on
+            // LDIR appeared to just re-run it one byte at a time instead of
+            // moving past it. For both cases, run (rather than single-step)
+            // until a breakpoint set at the instruction immediately after
+            // is hit -- where execution lands once the subroutine returns,
+            // or once the block instruction's repeat count reaches zero and
+            // it falls through to the next opcode fetch. HALT needs a
+            // third kind of special-casing still -- see the branch below.
+            // All three are spawned in the background (mirroring
+            // `continue`, below) rather than awaited inline, so a
+            // subroutine (or a HALT with interrupts disabled) that never
+            // returns can't wedge this connection's request loop -- a
+            // `pause` request can still interrupt it, and the eventual
+            // `stopped` event reaches the client via the connection's
+            // separate event-forwarding task.
+            let dbg_state = engine.get_state().await;
+            let regs = dbg_state.registers;
             let mem = engine.watch_memory().borrow().clone();
             let read = |a: u16| mem[a as usize];
             let inst = zx_core::disassemble_one(&read, regs.pc);
-            if inst.text.starts_with("CALL") || inst.text.starts_with("RST") {
+            const STEP_OVER_AS_RUN: &[&str] = &[
+                "CALL", "RST", "LDIR", "LDDR", "CPIR", "CPDR", "INIR", "INDR", "OTIR", "OTDR",
+            ];
+            if inst.text.starts_with("HALT") {
+                // A HALT still waiting for its interrupt looks identical,
+                // via a plain single step, to a HALT that's already
+                // finished: PC is displayed as `halt_addr+1` in both cases
+                // (see `Cpu::registers()`'s doc comment), and a single
+                // `step(1, None)` only advances one 4-T-state re-fetch
+                // cycle while still waiting -- so "step over" on a pending
+                // HALT looked like it did nothing at all (PC frozen, only
+                // `R` visibly incrementing). And "step over", same as for
+                // CALL/RST below, means skipping the ISR entirely too --
+                // not just the wait -- landing back at the instruction
+                // after HALT. That address is NOT always just `regs.pc`,
+                // though: `pc` only already reads as `halt_addr+1` while
+                // `halted` is true (mid-wait); a fresh, not-yet-executed
+                // HALT (the ordinary case -- you single-stepped up to it
+                // and it hasn't run yet) shows `pc` as the HALT opcode's
+                // OWN address, same as any other not-yet-executed
+                // instruction, needing the usual `pc + length` -- this
+                // exact distinction is why `dbg_state.halted` had to be
+                // added to `State` (`Registers` alone can't tell the two
+                // apart).
+                //
+                // Getting there is NOT a plain breakpoint+`run()` (unlike
+                // CALL/RST/the block-repeat instructions below), even
+                // though it looks like it should be: a breakpoint only
+                // checks the address, and `pc` reads as this exact return
+                // address the WHOLE TIME the CPU sits waiting in HALT too
+                // (see above) -- so in a `HALT; ...; JP` loop (an
+                // interrupt-driven main loop, extremely common, not a
+                // one-off), the breakpoint fired the instant the loop
+                // looped back around and re-entered the SAME HALT to wait
+                // for the NEXT interrupt, not only once a real return had
+                // happened. `step_over_halt()` checks `!halted` alongside
+                // the address itself, so it can't be fooled by that.
+                // Spawned in the background for the same reason as
+                // CALL/RST/LDIR below -- this hangs for real if interrupts
+                // happen to be disabled, and `pause` needs to be able to
+                // reach it.
+                let return_addr =
+                    if dbg_state.halted { regs.pc } else { regs.pc.wrapping_add(inst.length as u16) };
+                let engine = engine.clone();
+                tokio::spawn(async move {
+                    engine.step_over_halt(return_addr).await;
+                });
+            } else if STEP_OVER_AS_RUN.iter().any(|prefix| inst.text.starts_with(prefix)) {
                 let return_addr = regs.pc.wrapping_add(inst.length as u16);
                 // Don't clear a breakpoint the user actually set there.
                 let already_set = state.known_breakpoints.contains(&return_addr);
@@ -435,15 +533,16 @@ async fn handle_request(
                 "scopes": [
                     {"name": "Registers", "variablesReference": 1000, "expensive": false},
                     {"name": "Flags", "variablesReference": 1001, "expensive": false},
+                    {"name": "Debug", "variablesReference": 1002, "expensive": false},
                 ]
             }),
         ),
         "variables" => {
             let reference = arguments.get("variablesReference").and_then(Value::as_i64).unwrap_or(0);
-            let regs = engine.get_registers().await;
             let variables = match reference {
-                1000 => register_variables(&regs),
-                1001 => flag_variables(&regs),
+                1000 => register_variables(&engine.get_registers().await),
+                1001 => flag_variables(&engine.get_registers().await),
+                1002 => debug_variables(&engine.get_state().await),
                 _ => vec![],
             };
             (true, json!({ "variables": variables }))
@@ -689,6 +788,14 @@ fn register_variables(regs: &zx_core::Registers) -> Vec<Value> {
     variables.push(json!({"name": "IFF1", "value": regs.iff1.to_string(), "variablesReference": 0}));
     variables.push(json!({"name": "IFF2", "value": regs.iff2.to_string(), "variablesReference": 0}));
     variables
+}
+
+fn debug_variables(state: &State) -> Vec<Value> {
+    vec![json!({
+        "name": "T-states",
+        "value": state.tstates.to_string(),
+        "variablesReference": 0,
+    })]
 }
 
 fn flag_variables(regs: &zx_core::Registers) -> Vec<Value> {
