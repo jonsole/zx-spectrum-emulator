@@ -607,10 +607,12 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
 
     } else if (command == "setBreakpoints") {
         // Source-line breakpoints: map each line to an address via the SLD
-        // data for whichever source this path names. A line with no
-        // instruction (a comment, a blank, an EQU) has no T record and so no
-        // address -- reported unverified rather than silently accepted, so
-        // the client greys the breakpoint out instead of showing an armed one
+        // data for whichever source this path names. A clicked line often has
+        // no instruction of its own -- a label, a blank, a comment block --
+        // so the lookup nudges forward to the next line that does and reports
+        // where it landed, which the client moves its marker to. Only when
+        // nothing nearby has code is the breakpoint reported unverified, so
+        // the client greys it out rather than showing an armed breakpoint
         // that can never fire.
         const json& source = arg(arguments, "source");
         const std::string source_path =
@@ -632,17 +634,20 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                            {"message", "no debug info loaded for this source"}});
                     continue;
                 }
-                auto it = rom_source->line_to_addr.find(uint32_t(line));
-                if (it == rom_source->line_to_addr.end()) {
+                uint16_t addr = 0;
+                uint32_t actual_line = 0;
+                if (!rom_source->addr_for_line(uint32_t(line), addr, actual_line)) {
                     results.push_back(json{{"verified", false},
                                            {"line", line},
                                            {"message", "no instruction at this line"}});
                     continue;
                 }
-                const uint16_t addr = it->second;
                 addrs.insert(addr);
+                // `line` here is the line the breakpoint ACTUALLY landed on,
+                // which may be below the one clicked (see addr_for_line).
+                // DAP clients move their marker to it.
                 results.push_back(json{{"verified", true},
-                                       {"line", line},
+                                       {"line", actual_line},
                                        {"instructionReference", hex4(addr)}});
             }
         }

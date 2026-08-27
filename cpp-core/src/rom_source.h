@@ -43,6 +43,20 @@ public:
     std::unordered_map<uint16_t, uint32_t> addr_to_line;
     std::map<std::string, uint16_t> symbols;
 
+    /// How far below a requested line to look for a real instruction. A
+    /// clicked line often has no code of its own -- a label ("START:"), a
+    /// blank, or a routine's header comment block -- and the instruction it
+    /// evidently means is the next one down. Bounded so a click in open space
+    /// near the end of a file cannot teleport a breakpoint somewhere
+    /// unrelated; past this the line is simply reported unverified.
+    static constexpr uint32_t MAX_BREAKPOINT_NUDGE = 50;
+
+    /// Address for a source line, nudging forward past lines with no
+    /// instruction of their own. `actual_line` comes back as the line the
+    /// address really belongs to, which DAP expects a client to move its
+    /// marker to. False if nothing within MAX_BREAKPOINT_NUDGE has code.
+    bool addr_for_line(uint32_t line, uint16_t& addr, uint32_t& actual_line) const;
+
     /// The nearest label at or before `addr`, with its offset -- three bytes
     /// into routine FOO gives ("FOO", 3). False if `addr` precedes every
     /// known label, or if `max_offset` is exceeded (pass NO_MAX for an

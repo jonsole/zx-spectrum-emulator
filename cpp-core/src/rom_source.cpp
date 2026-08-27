@@ -151,6 +151,22 @@ void RomSource::index() {
     }
 }
 
+bool RomSource::addr_for_line(uint32_t line, uint16_t& addr, uint32_t& actual_line) const {
+    // A plain forward probe rather than a sorted index: the search is bounded
+    // to a handful of lines, and only ever runs when a user clicks the gutter.
+    // Forward only -- nudging UP would move the breakpoint above the line the
+    // user actually clicked, which is a surprise rather than a convenience.
+    for (uint32_t offset = 0; offset <= MAX_BREAKPOINT_NUDGE; offset++) {
+        auto it = line_to_addr.find(line + offset);
+        if (it != line_to_addr.end()) {
+            addr = it->second;
+            actual_line = line + offset;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool RomSource::symbol_at(uint16_t addr, int32_t max_offset, std::string& name,
                           uint16_t& offset) const {
     // Index of the last entry <= addr.
