@@ -31,11 +31,27 @@
       }
     },
     {
+      // A previous server still holding zx_server.exe open makes the link
+      // fail with LNK1168, which takes the whole launch down. Stopping it
+      // first is what lets a server outlive its debug session (so MCP clients
+      // keep working between sessions) without breaking the next launch.
+      "label": "zxspectrum-cpp.stop-stale-server",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-Command",
+        "Get-Process -Name zx_server -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0"
+      ],
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
       "label": "zxspectrum-cpp.build",
       "type": "shell",
       "command": "powershell.exe",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "build.ps1", "-Release"],
       "options": { "cwd": "${workspaceFolder}/cpp-core" },
+      "dependsOn": "zxspectrum-cpp.stop-stale-server",
       "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
       "problemMatcher": "$msCompile"
     },
@@ -46,12 +62,11 @@
       "args": [
         "--dap-port", "4711",
         "--mcp-port", "8000",
-        "--screen-port", "8500",
-        // Without this the server outlives the debug session, and the NEXT
-        // launch's build step fails to link zx_server.exe because the old one
-        // still has it open (LNK1168). To keep a server alive for MCP use
-        // outside VS Code, run the exe by hand without this flag.
-        "--exit-on-disconnect"
+        "--screen-port", "8500"
+        // Deliberately NOT --exit-on-disconnect: the MCP server lives in this
+        // same process, so exiting when the debug session stops would drop
+        // every connected agent too. The stale-server kill above is what keeps
+        // the next launch working instead.
       ],
       "options": { "cwd": "${workspaceFolder}" },
       "dependsOn": "zxspectrum-cpp.build",
