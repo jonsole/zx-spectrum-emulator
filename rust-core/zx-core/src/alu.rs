@@ -299,6 +299,40 @@ pub fn cpi_cpd(a: u8, val: u8, bc_after: u16, f: u8) -> (u8, bool) {
     (flags, repeat)
 }
 
+/// Shared flag formula for INI/IND/OUTI/OUTD (and their repeating forms)
+/// -- ported from `_z80_ini_ind`/`_z80_outi_outd`, which are identical
+/// but for which value feeds `t`. `b` is B AFTER the port-read/write
+/// step's own decrement has already applied (not before); `val` is the
+/// byte just transferred; `t_operand` is C+1/C-1 for INI/IND or the
+/// (already-adjusted) L register for OUTI/OUTD -- not a real register
+/// change, just an input this undocumented-flag formula happens to use.
+fn block_io_flags(b: u8, val: u8, t_operand: u8) -> u8 {
+    let mut f = sz_flags(b) | (b & (FLAG_5 | FLAG_3));
+    if val & FLAG_S != 0 {
+        f |= FLAG_N;
+    }
+    let t = t_operand as u32 + val as u32;
+    if t & 0x100 != 0 {
+        f |= FLAG_H | FLAG_C;
+    }
+    f |= szp_flags((t as u8 & 7) ^ b) & FLAG_PV;
+    f
+}
+
+/// INI/IND: `c_for_flags` is C+1 (INI) or C-1 (IND). Ported from
+/// `_z80_ini_ind`; `b != 0` (computed by the caller, which already has
+/// the post-decrement B) is INIR/INDR's own repeat condition.
+pub fn ini_ind_flags(b: u8, val: u8, c_for_flags: u8) -> u8 {
+    block_io_flags(b, val, c_for_flags)
+}
+
+/// OUTI/OUTD: `l` is the L register after HL++/HL-- has already applied.
+/// Ported from `_z80_outi_outd`; `b != 0` (computed by the caller, which
+/// already has the post-decrement B) is OTIR/OTDR's own repeat condition.
+pub fn outi_outd_flags(b: u8, val: u8, l: u8) -> u8 {
+    block_io_flags(b, val, l)
+}
+
 /// RRD/RLD rotate a nibble between A and `(HL)`. Returns
 /// `(new_a, new_mem_value, flags)` -- the memory write itself is a
 /// cpu.rs concern (it needs the `Memory` trait, which this file doesn't

@@ -5,6 +5,7 @@
 use zx_core::{Memory, Registers};
 
 const PIN_MREQ: u64 = 1 << 25;
+const PIN_IORQ: u64 = 1 << 26;
 const PIN_RD: u64 = 1 << 27;
 const PIN_WR: u64 = 1 << 28;
 const PIN_HALT: u64 = 1 << 29;
@@ -199,6 +200,37 @@ impl ReferenceCpu {
             } else if self.pins & PIN_WR != 0 {
                 mem.write(addr, get_data(self.pins));
             }
+        }
+    }
+
+    /// Same as `step()`, but also services IORQ -- every port read returns
+    /// `io_read_value` (a real device's identity doesn't matter for a
+    /// differential test; only that both cores see the SAME byte), and a
+    /// port write is a no-op (nothing here needs to inspect what got
+    /// written, only the resulting register/flag state). For block I/O
+    /// opcodes (INI/IND/INIR/INDR/OUTI/OUTD/OTIR/OTDR), which `step()`
+    /// alone can't exercise meaningfully since it never supplies any port
+    /// data at all.
+    pub fn step_with_io(&mut self, mem: &mut impl Memory, io_read_value: u8) {
+        unsafe {
+            self.pins = zx_tick(self.handle, self.pins);
+            self.service_memory_and_io(mem, io_read_value);
+            while !zx_opdone(self.handle) {
+                self.pins = zx_tick(self.handle, self.pins);
+                self.service_memory_and_io(mem, io_read_value);
+            }
+        }
+    }
+
+    fn service_memory_and_io(&mut self, mem: &mut impl Memory, io_read_value: u8) {
+        if self.pins & PIN_IORQ != 0 {
+            if self.pins & PIN_RD != 0 {
+                self.pins = set_data(self.pins, io_read_value);
+            }
+            // A write's value is discarded -- see `step_with_io`'s doc
+            // comment.
+        } else {
+            self.service_memory(mem);
         }
     }
 }

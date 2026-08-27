@@ -5,9 +5,11 @@ for reference to .chips-codegen-src/z80_gen.py, not vendored/committed)
 to target Rust instead of C.
 
 Scope: unprefixed (0x00-0xFF) and ED-prefixed opcodes only. CB/DD/FD
-prefixes, interrupt acknowledge sequences, and I/O (any mcycle of type
-ioread/iowrite) are all deliberately skipped -- see the rust-core plan
-(project memory) for the reasoning.
+prefixes and interrupt acknowledge sequences are deliberately skipped --
+see the rust-core plan (project memory) for the reasoning. I/O
+(ioread/iowrite mcycles, including the block forms INI/IND/INIR/INDR/
+OUTI/OUTD/OTIR/OTDR) IS handled -- `Spectrum48K::tick()`'s bus decode is
+already address-based, so no per-opcode device model is needed.
 
 Mechanical parts (opcode enumeration via the YAML's `cond` bitfield
 expressions, T-state/step bookkeeping per mcycle type) are fully
@@ -42,18 +44,17 @@ IO_TCYCLES = 4
 # Names of YAML entries this generator does not attempt: HALT is
 # hand-written in cpu.rs (its PC-rewind trick doesn't fit the generic
 # pattern). `OUT (n),A`/`IN A,(n)`/`IN $RY,(C)`/`IN (C)`/`OUT (C),$RY`/
-# `OUT (C),0` ARE handled -- see the ioread/iowrite T-state kinds below --
-# since `Spectrum48K::tick()`'s bus decode is already address-based (any
-# port with A0=0 hits the ULA keyboard/border regardless of which opcode
-# issued the IORQ, matching real hardware), so these need no new device
-# model, just the CPU-side dispatch. The block I/O forms (INI/IND/OUTI/
-# OUTD and their repeating counterparts) stay deferred -- real ports
-# beyond the ULA (e.g. a 128K AY chip) still have no model, and nothing
-# has needed them yet. Everything else here is a `special` payload
-# (CB/DD/FD/interrupt handling, out of scope for this pass).
+# `OUT (C),0`/INI/IND/INIR/INDR/OUTI/OUTD/OTIR/OTDR ARE handled -- see the
+# ioread/iowrite T-state kinds below -- since `Spectrum48K::tick()`'s bus
+# decode is already address-based (any port with A0=0 hits the ULA
+# keyboard/border regardless of which opcode issued the IORQ, matching
+# real hardware), so these need no new device model, just the CPU-side
+# dispatch (a real port beyond the ULA, e.g. a 128K AY chip, would just
+# read/write as unmapped floating-bus/no-op, same as any other opcode's
+# access to one). Everything else here is a `special` payload (CB/DD/FD/
+# interrupt handling, out of scope for this pass).
 SKIP_NAMES = {
     "HALT",
-    "INI", "IND", "INIR", "INDR", "OUTI", "OUTD", "OTIR", "OTDR",
     "ddfdcb", "int_im0", "int_im1", "int_im2", "nmi",
     # The BYTE-DISPATCH entries for the CB/DD/FD prefixes themselves (not
     # to be confused with the lowercase 'cb'/'ddfdcb' *payload* entries
@@ -476,6 +477,95 @@ ACTIONS: dict[str, "callable"] = {
             f"if !repeat {{ self.step = {nextstep + 5}; return Some(pins); }}"
         ),
         2: lambda y, z, p, q, i: (
+            "self.regs.pc = self.regs.pc.wrapping_sub(1); self.regs.wz = self.regs.pc; "
+            "self.regs.pc = self.regs.pc.wrapping_sub(1);"
+        ),
+    },
+    # INI/IND/OUTI/OUTD and their repeating forms -- mcycle shape mirrors
+    # LDI/LDIR (an ioread/mread step that sets WZ and decrements B, then an
+    # mwrite/iowrite step that computes the block_io_flags()-based flags
+    # and, for the repeating forms, either loops via a trailing 5-tcycle
+    # generic mcycle (matching LDIR/CPIR's own "nextstep+5" skip pattern)
+    # or falls straight through when B has reached 0). `self.regs.b` is
+    # already the POST-decrement value by the time the flags get computed,
+    # matching `_z80_ini_ind`/`_z80_outi_outd`'s own "const uint8_t b =
+    # cpu->b" read (which happens after the same decrement in z80.h too).
+    "INI": {
+        1: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_add(1); self.regs.b = self.regs.b.wrapping_sub(1);"
+        ),
+        2: lambda y, z, p, q, i: (
+            "self.regs.f = alu::ini_ind_flags(self.regs.b, self.dlatch, self.regs.c.wrapping_add(1));"
+        ),
+    },
+    "IND": {
+        1: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_sub(1); self.regs.b = self.regs.b.wrapping_sub(1);"
+        ),
+        2: lambda y, z, p, q, i: (
+            "self.regs.f = alu::ini_ind_flags(self.regs.b, self.dlatch, self.regs.c.wrapping_sub(1));"
+        ),
+    },
+    "INIR": {
+        1: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_add(1); self.regs.b = self.regs.b.wrapping_sub(1);"
+        ),
+        2: lambda y, z, p, q, i, nextstep: (
+            "self.regs.f = alu::ini_ind_flags(self.regs.b, self.dlatch, self.regs.c.wrapping_add(1)); "
+            f"if self.regs.b == 0 {{ self.step = {nextstep + 5}; return Some(pins); }}"
+        ),
+        3: lambda y, z, p, q, i: (
+            "self.regs.pc = self.regs.pc.wrapping_sub(1); self.regs.wz = self.regs.pc; "
+            "self.regs.pc = self.regs.pc.wrapping_sub(1);"
+        ),
+    },
+    "INDR": {
+        1: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_sub(1); self.regs.b = self.regs.b.wrapping_sub(1);"
+        ),
+        2: lambda y, z, p, q, i, nextstep: (
+            "self.regs.f = alu::ini_ind_flags(self.regs.b, self.dlatch, self.regs.c.wrapping_sub(1)); "
+            f"if self.regs.b == 0 {{ self.step = {nextstep + 5}; return Some(pins); }}"
+        ),
+        3: lambda y, z, p, q, i: (
+            "self.regs.pc = self.regs.pc.wrapping_sub(1); self.regs.wz = self.regs.pc; "
+            "self.regs.pc = self.regs.pc.wrapping_sub(1);"
+        ),
+    },
+    "OUTI": {
+        1: lambda y, z, p, q, i: "self.regs.b = self.regs.b.wrapping_sub(1);",
+        2: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_add(1); "
+            "self.regs.f = alu::outi_outd_flags(self.regs.b, self.dlatch, self.regs.l);"
+        ),
+    },
+    "OUTD": {
+        1: lambda y, z, p, q, i: "self.regs.b = self.regs.b.wrapping_sub(1);",
+        2: lambda y, z, p, q, i: (
+            "self.regs.wz = self.regs.bc().wrapping_sub(1); "
+            "self.regs.f = alu::outi_outd_flags(self.regs.b, self.dlatch, self.regs.l);"
+        ),
+    },
+    "OTIR": {
+        1: lambda y, z, p, q, i: "self.regs.b = self.regs.b.wrapping_sub(1);",
+        2: lambda y, z, p, q, i, nextstep: (
+            "self.regs.wz = self.regs.bc().wrapping_add(1); "
+            "self.regs.f = alu::outi_outd_flags(self.regs.b, self.dlatch, self.regs.l); "
+            f"if self.regs.b == 0 {{ self.step = {nextstep + 5}; return Some(pins); }}"
+        ),
+        3: lambda y, z, p, q, i: (
+            "self.regs.pc = self.regs.pc.wrapping_sub(1); self.regs.wz = self.regs.pc; "
+            "self.regs.pc = self.regs.pc.wrapping_sub(1);"
+        ),
+    },
+    "OTDR": {
+        1: lambda y, z, p, q, i: "self.regs.b = self.regs.b.wrapping_sub(1);",
+        2: lambda y, z, p, q, i, nextstep: (
+            "self.regs.wz = self.regs.bc().wrapping_sub(1); "
+            "self.regs.f = alu::outi_outd_flags(self.regs.b, self.dlatch, self.regs.l); "
+            f"if self.regs.b == 0 {{ self.step = {nextstep + 5}; return Some(pins); }}"
+        ),
+        3: lambda y, z, p, q, i: (
             "self.regs.pc = self.regs.pc.wrapping_sub(1); self.regs.wz = self.regs.pc; "
             "self.regs.pc = self.regs.pc.wrapping_sub(1);"
         ),

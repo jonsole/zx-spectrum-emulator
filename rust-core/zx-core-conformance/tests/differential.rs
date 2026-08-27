@@ -750,3 +750,133 @@ fn ed_block_transfer_and_search_ops_match_the_real_z80h_core() {
         "LDIR should have copied the buffer's first byte to the destination"
     );
 }
+
+/// Steps `cpu` one whole instruction, servicing MREQ the normal way and
+/// IORQ with a fixed `io_read_value` for every port read (a write's value
+/// is discarded) -- `zx_core::Cpu::step()` doesn't service IORQ at all, so
+/// this is the block-I/O-specific equivalent of it, mirroring
+/// `ReferenceCpu::step_with_io()` exactly so both cores see identical port
+/// behavior.
+fn step_new_cpu_with_io(cpu: &mut Cpu, pins: u64, mem: &mut impl Memory, io_read_value: u8) -> u64 {
+    use zx_core::pins::{get_addr, get_data, set_data, IORQ, MREQ, RD, WR};
+    let mut pins = cpu.tick(pins);
+    loop {
+        if pins & IORQ != 0 {
+            if pins & RD != 0 {
+                pins = set_data(pins, io_read_value);
+            }
+        } else if pins & MREQ != 0 {
+            let addr = get_addr(pins);
+            if pins & RD != 0 {
+                pins = set_data(pins, mem.read(addr));
+            } else if pins & WR != 0 {
+                mem.write(addr, get_data(pins));
+            }
+        }
+        if cpu.is_instruction_boundary(pins) {
+            return pins;
+        }
+        pins = cpu.tick(pins);
+    }
+}
+
+#[test]
+fn ed_block_io_ops_match_the_real_z80h_core() {
+    // OTIR (writes a 3-byte buffer out to a port, B 3->0) then INIR (reads
+    // 3 bytes from a port into a different buffer, B 3->0) -- both
+    // repeating forms, so this exercises the "repeat vs fall through"
+    // PC-rewind logic block_io_flags() shares with LDIR/CPIR, plus the
+    // flag formula itself (untested until now: INI/IND/OUTI/OUTD and
+    // their repeating forms were unimplemented before this).
+    const IO_READ_VALUE: u8 = 0x5A;
+    let mut mem_bytes = [0u8; 0x10000];
+    mem_bytes[0x9000..0x9003].copy_from_slice(&[0xAA, 0xBB, 0xCC]);
+    let program: &[(u16, &[u8])] = &[
+        (0x0000, &[0x21, 0x00, 0x90]), // LD HL,0x9000
+        (0x0003, &[0x01, 0x41, 0x03]), // LD BC,0x0341 (B=3, C=0x41 -- port, arbitrary)
+        (0x0006, &[0xED, 0xB3]),       // OTIR
+        (0x0008, &[0x21, 0x00, 0x91]), // LD HL,0x9100
+        (0x000B, &[0x01, 0x41, 0x03]), // LD BC,0x0341
+        (0x000E, &[0xED, 0xB2]),       // INIR
+        (0x0010, &[0x76]),             // HALT
+    ];
+    for (addr, bytes) in program {
+        let start = *addr as usize;
+        mem_bytes[start..start + bytes.len()].copy_from_slice(bytes);
+    }
+
+    let mut new_cpu = Cpu::new();
+    let mut new_mem = FlatMemory(mem_bytes);
+    new_cpu.set_registers(Registers::default(), &mut new_mem);
+    let mut new_pins = new_cpu.pins();
+
+    let mut reference = ReferenceCpu::new();
+    let mut reference_mem = FlatMemory(mem_bytes);
+    reference.set_registers(&Registers::default(), &mut reference_mem);
+
+    for step in 0..20 {
+        new_pins = step_new_cpu_with_io(&mut new_cpu, new_pins, &mut new_mem, IO_READ_VALUE);
+        reference.step_with_io(&mut reference_mem, IO_READ_VALUE);
+
+        if let Some(detail) = diff(&new_cpu.registers(), &reference.registers()) {
+            panic!("step {step}: registers diverged from the real z80.h core\n{detail}");
+        }
+    }
+    assert!(new_cpu.halted, "program should have reached HALT at 0x0010");
+    assert_eq!(new_cpu.registers().bc(), 0x0041, "OTIR/INIR should both have counted B down to 0, C left untouched");
+    assert_eq!(
+        new_mem.read(0x9100),
+        IO_READ_VALUE,
+        "INIR should have written the port's value into the destination buffer"
+    );
+}
+
+#[test]
+fn ed_single_shot_block_io_ops_match_the_real_z80h_core() {
+    // The non-repeating siblings (INI, IND, OUTI, OUTD) -- a different
+    // (shorter, no repeat-branch) mcycle shape than INIR/OTIR's own, so
+    // this covers a genuinely different generated code path, not just the
+    // same block_io_flags() call again.
+    const IO_READ_VALUE: u8 = 0xC3;
+    let mut mem_bytes = [0u8; 0x10000];
+    let program: &[(u16, &[u8])] = &[
+        (0x0000, &[0x21, 0x00, 0x90]), // LD HL,0x9000 -- INI destination
+        (0x0003, &[0x01, 0x41, 0x05]), // LD BC,0x0541 (B=5, C=0x41 -- port, arbitrary)
+        (0x0006, &[0xED, 0xA2]),       // INI (B->4)
+        (0x0008, &[0x21, 0x10, 0x90]), // LD HL,0x9010 -- IND destination
+        (0x000B, &[0xED, 0xAA]),       // IND (B->3)
+        (0x000D, &[0x21, 0x20, 0x90]), // LD HL,0x9020 -- OUTI source
+        (0x0010, &[0x36, 0x77]),       // LD (HL),0x77
+        (0x0012, &[0xED, 0xA3]),       // OUTI (B->2)
+        (0x0014, &[0x21, 0x30, 0x90]), // LD HL,0x9030 -- OUTD source
+        (0x0017, &[0x36, 0x88]),       // LD (HL),0x88
+        (0x0019, &[0xED, 0xAB]),       // OUTD (B->1)
+        (0x001B, &[0x76]),             // HALT
+    ];
+    for (addr, bytes) in program {
+        let start = *addr as usize;
+        mem_bytes[start..start + bytes.len()].copy_from_slice(bytes);
+    }
+
+    let mut new_cpu = Cpu::new();
+    let mut new_mem = FlatMemory(mem_bytes);
+    new_cpu.set_registers(Registers::default(), &mut new_mem);
+    let mut new_pins = new_cpu.pins();
+
+    let mut reference = ReferenceCpu::new();
+    let mut reference_mem = FlatMemory(mem_bytes);
+    reference.set_registers(&Registers::default(), &mut reference_mem);
+
+    for step in 0..20 {
+        new_pins = step_new_cpu_with_io(&mut new_cpu, new_pins, &mut new_mem, IO_READ_VALUE);
+        reference.step_with_io(&mut reference_mem, IO_READ_VALUE);
+
+        if let Some(detail) = diff(&new_cpu.registers(), &reference.registers()) {
+            panic!("step {step}: registers diverged from the real z80.h core\n{detail}");
+        }
+    }
+    assert!(new_cpu.halted, "program should have reached HALT at 0x001B");
+    assert_eq!(new_cpu.registers().bc(), 0x0141, "INI/IND/OUTI/OUTD should each have decremented B once, C left untouched");
+    assert_eq!(new_mem.read(0x9000), IO_READ_VALUE, "INI should have written the port's value to (HL)");
+    assert_eq!(new_mem.read(0x9010), IO_READ_VALUE, "IND should have written the port's value to (HL)");
+}
