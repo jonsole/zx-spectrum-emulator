@@ -45,7 +45,13 @@
       "command": "${workspaceFolder}\\cpp-core\\build\\RelWithDebInfo\\zx_server.exe",
       "args": [
         "--dap-port", "4711",
-        "--screen-port", "8500"
+        "--mcp-port", "8000",
+        "--screen-port", "8500",
+        // Without this the server outlives the debug session, and the NEXT
+        // launch's build step fails to link zx_server.exe because the old one
+        // still has it open (LNK1168). To keep a server alive for MCP use
+        // outside VS Code, run the exe by hand without this flag.
+        "--exit-on-disconnect"
       ],
       "options": { "cwd": "${workspaceFolder}" },
       "dependsOn": "zxspectrum-cpp.build",

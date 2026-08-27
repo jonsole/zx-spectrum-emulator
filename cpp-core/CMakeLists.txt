@@ -53,7 +53,9 @@ target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
 add_executable(zx_server
   src/base64.cpp
   src/dap.cpp
+  src/http.cpp
   src/main.cpp
+  src/mcp_server.cpp
   src/net.cpp
   src/screen_stream.cpp
 )

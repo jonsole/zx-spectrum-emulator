@@ -4,6 +4,7 @@
 #include "dap.h"
 #include "engine.h"
 #include "file_io.h"
+#include "mcp_server.h"
 #include "screen_stream.h"
 
 #include <cstdio>
@@ -18,6 +19,8 @@ struct Args {
     uint16_t dap_port = 4711;
     std::string screen_host = "127.0.0.1";
     uint16_t screen_port = 8500;
+    std::string mcp_host = "127.0.0.1";
+    uint16_t mcp_port = 8000;
     /// Loaded at startup so the machine is usable the moment a client
     /// connects, rather than only after a `launch` request supplies one.
     std::string rom;
@@ -55,6 +58,11 @@ bool parse_args(int argc, char** argv, Args& args) {
         } else if (flag == "--screen-port") {
             if (!next(value)) return false;
             args.screen_port = uint16_t(std::strtoul(value.c_str(), nullptr, 10));
+        } else if (flag == "--mcp-host") {
+            if (!next(args.mcp_host)) return false;
+        } else if (flag == "--mcp-port") {
+            if (!next(value)) return false;
+            args.mcp_port = uint16_t(std::strtoul(value.c_str(), nullptr, 10));
         } else if (flag == "--rom") {
             if (!next(args.rom)) return false;
         } else if (flag == "--uncapped") {
@@ -106,11 +114,12 @@ int main(int argc, char** argv) {
 
     std::thread screen_thread(
         [&] { zx::serve_screen_stream(engine, args.screen_host, args.screen_port); });
+    std::thread mcp_thread([&] { zx::serve_mcp(engine, args.mcp_host, args.mcp_port); });
 
-    // TODO: MCP server (cpp-mcp, streamable HTTP at /mcp) -- Phase 4's
-    // remaining half.
-
+    // DAP last and on this thread: it is the one that can end the process
+    // (--exit-on-disconnect), and it is what the launch is waiting on.
     zx::serve_dap(engine, args.dap_host, args.dap_port, args.exit_on_disconnect);
+    mcp_thread.join();
     screen_thread.join();
     return 0;
 }
