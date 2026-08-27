@@ -456,6 +456,13 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
                     {"supportsSteppingGranularity", false}};
 
     } else if (command == "launch") {
+        // Lets a launch config opt out of realtime pacing (the exercisers
+        // want to finish as fast as the host can manage), without needing a
+        // separately-configured server process.
+        const json& uncapped = arg(arguments, "uncapped");
+        if (uncapped.is_boolean()) {
+            engine.set_speed(uncapped.get<bool>() ? Speed::Uncapped : Speed::Realtime);
+        }
         const std::string rom_path = arg_str(arguments, "rom");
         if (!rom_path.empty()) {
             std::vector<uint8_t> data;

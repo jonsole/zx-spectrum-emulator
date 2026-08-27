@@ -52,7 +52,11 @@ $buildDir = Join-Path $srcDir "build\$buildType"
 cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
-cmake --build $buildDir
+if ($Target) {
+    cmake --build $buildDir --target $Target
+} else {
+    cmake --build $buildDir
+}
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 if ($Test) {

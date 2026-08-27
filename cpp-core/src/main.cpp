@@ -21,6 +21,10 @@ struct Args {
     /// Loaded at startup so the machine is usable the moment a client
     /// connects, rather than only after a `launch` request supplies one.
     std::string rom;
+    /// Runs as fast as the host allows instead of pacing to a real 48K's
+    /// 50Hz. What the exercisers (ZEXALL/ZEXDOC/z80full) want -- they have no
+    /// visual output to get wrong and wall-clock speed is the whole point.
+    bool uncapped = false;
     /// Exits the whole process once the last open DAP connection closes
     /// (e.g. VS Code's Stop action), so a preLaunchTask can rebind the same
     /// port next launch instead of colliding with a stale server. Off by
@@ -53,6 +57,8 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.screen_port = uint16_t(std::strtoul(value.c_str(), nullptr, 10));
         } else if (flag == "--rom") {
             if (!next(args.rom)) return false;
+        } else if (flag == "--uncapped") {
+            args.uncapped = true;
         } else if (flag == "--exit-on-disconnect") {
             args.exit_on_disconnect = true;
         } else {
@@ -79,6 +85,10 @@ int main(int argc, char** argv) {
     }
 
     zx::Engine engine;
+    if (args.uncapped) {
+        engine.set_speed(zx::Speed::Uncapped);
+        std::printf("Speed: uncapped (--uncapped)\n");
+    }
 
     if (!args.rom.empty()) {
         std::vector<uint8_t> data;

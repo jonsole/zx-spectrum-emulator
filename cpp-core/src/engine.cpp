@@ -1,14 +1,38 @@
 #include "engine.h"
 
 #include "snapshot.h"
+#include "ula.h"
+
+#ifdef _WIN32
+// Pacing sleeps for a few milliseconds at a time. Windows' default timer
+// granularity is ~15.6ms, which would overshoot every one of them and pace the
+// emulator to roughly 30% of real speed; timeBeginPeriod(1) is the documented
+// way to ask for 1ms, and is what every emulator on this platform does.
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <timeapi.h>
+#pragma comment(lib, "winmm.lib")
+#endif
 
 namespace zx {
 namespace {
 
 /// How many instructions `run` executes between checks for a pause request,
 /// keyboard updates and a screen refresh. Small enough that the UI feels
-/// live, large enough that the checks cost nothing.
+/// live, large enough that the checks cost nothing. It is also how often
+/// pacing gets to sleep, which works out at roughly twice per emulated frame
+/// -- fine enough that the picture does not visibly lurch.
 constexpr uint64_t RUN_YIELD_EVERY = 2000;
+
+/// A real 48K issues 7,000,000 half-T-states per second (3.5MHz, 2 halves).
+constexpr double REALTIME_HC_PER_SEC = 7'000'000.0;
+
+/// How far behind real time the emulator may fall before pacing gives up on
+/// catching up and simply restarts its baseline. Without this, any stall (a
+/// breakpoint, the host being busy, a laptop resuming from sleep) would leave
+/// a debt that pacing pays back by running flat out -- the emulator would
+/// visibly sprint to "catch up", which is worse than quietly losing the time.
+constexpr auto MAX_PACING_DEBT = std::chrono::milliseconds(250);
 
 } // namespace
 
@@ -23,6 +47,9 @@ const char* stop_reason_name(StopReason r) {
 }
 
 Engine::Engine() {
+#ifdef _WIN32
+    timeBeginPeriod(1); // see the note on the include above
+#endif
     publish_screen();
     thread_ = std::thread([this] { actor_loop(); });
 }
@@ -37,6 +64,9 @@ Engine::~Engine() {
     if (thread_.joinable()) {
         thread_.join();
     }
+#ifdef _WIN32
+    timeEndPeriod(1);
+#endif
 }
 
 void Engine::on_stopped(StoppedHandler h) { on_stopped_ = std::move(h); }
@@ -91,8 +121,52 @@ R Engine::submit(std::function<R(Spectrum48K&)> fn) {
 }
 
 void Engine::publish_screen() {
+    // machine_.screen() is the last COMPLETED frame, so it only changes at a
+    // frame boundary. A run yields roughly twice per frame, so without this
+    // check about half the 330KB copies re-published a frame the viewer
+    // already had. Measured as a wash on bench_machine -- kept because it is
+    // strictly less work, not because it showed up as a win.
+    const uint64_t frame = machine_.ula.frame_count();
+    if (frame == published_frame_) {
+        return;
+    }
+    published_frame_ = frame;
     std::lock_guard<std::mutex> lock(screen_mutex_);
     screen_snapshot_ = machine_.screen();
+}
+
+void Engine::pace_reset() {
+    pace_origin_ = std::chrono::steady_clock::now();
+    pace_origin_hc_ = machine_.ula.frame_count() * uint64_t(HC_PER_FRAME)
+                      + machine_.ula.frame_hc();
+}
+
+void Engine::pace_wait() {
+    if (speed_.load() == Speed::Uncapped) {
+        return;
+    }
+    const uint64_t hc = machine_.ula.frame_count() * uint64_t(HC_PER_FRAME)
+                        + machine_.ula.frame_hc();
+    const double emulated_seconds = double(hc - pace_origin_hc_) / REALTIME_HC_PER_SEC;
+    const auto target =
+        pace_origin_ + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                           std::chrono::duration<double>(emulated_seconds));
+    const auto now = std::chrono::steady_clock::now();
+
+    if (now >= target) {
+        // Running behind rather than ahead: nothing to wait for. If we have
+        // fallen a long way behind, forget the debt (see MAX_PACING_DEBT).
+        if (now - target > MAX_PACING_DEBT) {
+            pace_reset();
+        }
+        return;
+    }
+    std::this_thread::sleep_for(target - now);
+}
+
+void Engine::publish_progress() {
+    emulated_hc_.store(machine_.ula.frame_count() * uint64_t(HC_PER_FRAME)
+                       + machine_.ula.frame_hc());
 }
 
 void Engine::sync_keys() {
@@ -206,6 +280,7 @@ Registers Engine::step_over_halt(uint16_t target_pc) {
             if (++count % RUN_YIELD_EVERY == 0) {
                 sync_keys();
                 publish_screen();
+                publish_progress();
             }
         }
         return m.registers();
@@ -223,6 +298,7 @@ MachineState Engine::run() {
     }
     StopReason reason = StopReason::Breakpoint;
     MachineState s = submit<MachineState>([this, &reason](Spectrum48K& m) {
+        pace_reset();
         uint64_t count = 0;
         for (;;) {
             if (pause_requested_.load()) {
@@ -237,6 +313,8 @@ MachineState Engine::run() {
             if (++count % RUN_YIELD_EVERY == 0) {
                 sync_keys();
                 publish_screen();
+                publish_progress();
+                pace_wait();
             }
         }
         return snapshot(false);

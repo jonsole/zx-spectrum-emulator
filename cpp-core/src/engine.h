@@ -16,6 +16,7 @@
 #include "spectrum.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -47,6 +48,16 @@ struct MachineState {
 
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
 enum class StopReason { Step, Breakpoint, Pause, Entry, Error };
+
+/// How fast a `run` is allowed to go.
+///
+/// `Realtime` is the default because it is what the hardware does: a 48K
+/// executes 3.5 million T-states a second and no more, and a game's speed IS
+/// its frame rate -- games sync to the 50Hz interrupt, so an unpaced emulator
+/// running at 6x plays them at 6x. `Uncapped` is for the exercisers (ZEXALL,
+/// ZEXDOC, z80full), where wall-clock speed is the whole point and there is
+/// no visual output to get wrong.
+enum class Speed { Realtime, Uncapped };
 
 const char* stop_reason_name(StopReason r);
 
@@ -88,6 +99,14 @@ public:
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
+    /// Total half-T-states emulated since power-on, updated as a run
+    /// progresses. Everything in `state()` is queued and so cannot be read at
+    /// all while a run owns the actor thread -- this is the one progress
+    /// signal an outside observer can sample mid-run.
+    uint64_t emulated_half_clocks() const { return emulated_hc_.load(); }
+    /// Takes effect at the next yield, so it can be changed mid-run.
+    void set_speed(Speed s) { speed_.store(s); }
+    Speed speed() const { return speed_.load(); }
     void key_down(const std::string& key);
     void key_up(const std::string& key);
     /// Latest rendered frame (RGB, border included). Never blocks on the CPU.
@@ -103,6 +122,14 @@ private:
     bool shutting_down_ = false;
 
     std::atomic<bool> pause_requested_{false};
+    std::atomic<uint64_t> emulated_hc_{0};
+    std::atomic<Speed> speed_{Speed::Realtime};
+
+    /// Wall-clock instant, and the emulated half-clock count, that the current
+    /// run's pacing measures from. Held as a baseline rather than sleeping a
+    /// fixed amount per yield so that pacing self-corrects instead of drifting.
+    std::chrono::steady_clock::time_point pace_origin_;
+    uint64_t pace_origin_hc_ = 0;
 
     /// Live key state, owned outside the machine so a keypress reaches a
     /// running game rather than waiting for it to stop.
@@ -111,6 +138,9 @@ private:
 
     std::mutex screen_mutex_;
     std::vector<uint8_t> screen_snapshot_;
+    /// Frame number currently in screen_snapshot_, so a re-publish of the same
+    /// completed frame can be skipped. Touched only by the actor thread.
+    uint64_t published_frame_ = ~uint64_t(0);
 
     StoppedHandler on_stopped_;
     ContinuedHandler on_continued_;
@@ -122,6 +152,12 @@ private:
     void submit_void(std::function<void(Spectrum48K&)> fn);
 
     void publish_screen();
+    void publish_progress();
+    /// Restarts the pacing baseline at the current instant.
+    void pace_reset();
+    /// Sleeps until wall-clock time has caught up with emulated time. No-op
+    /// when uncapped, or when the emulator is already behind.
+    void pace_wait();
     void sync_keys();
     MachineState snapshot(bool running) const;
 };

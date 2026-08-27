@@ -64,6 +64,27 @@
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/z80full.sna",
+      "uncapped": true,
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): ZEXALL",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
+      "uncapped": true,
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): ZEXDOC",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
+      "uncapped": true,
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
