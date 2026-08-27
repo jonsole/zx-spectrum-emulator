@@ -101,9 +101,16 @@ std::string diff_registers(const Registers& ours, const z80_t& ref) {
     return out;
 }
 
-/// Services the reference's memory pins the same way our step_instruction()
-/// does. Z80_SET_DATA is a statement macro that assigns to its first argument,
-/// not an expression -- hence the slightly awkward shape.
+/// Services the reference's memory pins.
+///
+/// NOTE the polarity difference: z80.h represents control lines ACTIVE HIGH
+/// (bit set == asserted), while our core models them active low as the real
+/// chip does. So this function tests `p & Z80_MREQ` while our own
+/// Z80::service_memory tests `asserted(pins, MREQ)`. Both are correct for
+/// their own core; mixing them up would silently service the wrong cycles.
+///
+/// Z80_SET_DATA is a statement macro that assigns to its first argument, not
+/// an expression -- hence the slightly awkward shape.
 uint64_t ref_service(uint64_t /*prev*/, FlatMemory& mem, uint64_t p) {
     if (p & Z80_MREQ) {
         if (p & Z80_RD) {

@@ -1047,16 +1047,16 @@ class Generator:
             addr = addr_expr(ts.kw["ab"], y, z, p, q)
             return f"            pins = set_addr(pins, {addr});\n{goto}"
         if ts.kind == "mread_t1l":
-            return f"            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);\n{goto}"
+            return f"            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);\n{goto}"
         if ts.kind == "mread_t2l_wait":
-            return f"            if (pins & WAIT) {{ return true; }}\n{goto}"
+            return f"            if (asserted(pins, WAIT)) {{ return true; }}\n{goto}"
         if ts.kind == "mread_t3l_latch":
             dest = emit_dest_assign(ts.kw["dst"], y, z, p, q)
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
             body = f"            {dest}\n"
             if action:
                 body += f"            {action}\n"
-            body += "            pins = release_ctrl(pins, MREQ | RD);\n"
+            body += "            pins = release_pins(pins, MREQ | RD);\n"
             return body + goto
 
         # ---- memory write --------------------------------------------------
@@ -1064,7 +1064,7 @@ class Generator:
             addr = addr_expr(ts.kw["ab"], y, z, p, q)
             return f"            pins = set_addr(pins, {addr});\n{goto}"
         if ts.kind == "mwrite_t1l":
-            return f"            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);\n{goto}"
+            return f"            pins = set_addr_assert(pins, get_addr(pins), MREQ);\n{goto}"
         if ts.kind == "mwrite_t2h_data":
             # Data is evaluated here, its first and only evaluation (T1H
             # placed the address only). Confirmed that no "db" token used by
@@ -1076,13 +1076,13 @@ class Generator:
             # WR trails MREQ by a half-cycle, as on the real chip: the data
             # bus has to settle before the write strobe.
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
-            body = "            if (pins & WAIT) { return true; }\n"
-            body += "            pins |= WR;\n"
+            body = "            if (asserted(pins, WAIT)) { return true; }\n"
+            body += "            pins = assert_pins(pins, WR);\n"
             if action:
                 body += f"            {action}\n"
             return body + goto
         if ts.kind == "mwrite_t3l_end":
-            return f"            pins = release_ctrl(pins, MREQ | WR);\n{goto}"
+            return f"            pins = release_pins(pins, MREQ | WR);\n{goto}"
 
         # ---- I/O read ------------------------------------------------------
         if ts.kind == "ioread_t1h":
@@ -1092,16 +1092,16 @@ class Generator:
             # IORQ asserts a half-cycle later than MREQ would -- a real
             # difference between this chip's memory and I/O cycles, not a
             # transcription slip.
-            return f"            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);\n{goto}"
+            return f"            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);\n{goto}"
         if ts.kind == "ioread_tw_l_wait":
-            return f"            if (pins & WAIT) {{ return true; }}\n{goto}"
+            return f"            if (asserted(pins, WAIT)) {{ return true; }}\n{goto}"
         if ts.kind == "ioread_t3l_latch":
             dest = emit_dest_assign(ts.kw["dst"], y, z, p, q)
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
             body = f"            {dest}\n"
             if action:
                 body += f"            {action}\n"
-            body += "            pins = release_ctrl(pins, IORQ | RD);\n"
+            body += "            pins = release_pins(pins, IORQ | RD);\n"
             return body + goto
 
         # ---- I/O write -----------------------------------------------------
@@ -1111,16 +1111,16 @@ class Generator:
         if ts.kind == "iowrite_t2h_assert":
             db_tok = ts.kw["db"]
             data = "0" if db_tok in ("0", 0) else data_read_expr(db_tok, y, z, p, q)
-            return (f"            pins = set_addr_data_ctrl(pins, get_addr(pins), {data}, IORQ | WR);\n"
+            return (f"            pins = set_addr_data_assert(pins, get_addr(pins), {data}, IORQ | WR);\n"
                     f"{goto}")
         if ts.kind == "iowrite_tw_l_wait":
-            return f"            if (pins & WAIT) {{ return true; }}\n{goto}"
+            return f"            if (asserted(pins, WAIT)) {{ return true; }}\n{goto}"
         if ts.kind == "iowrite_t3l_end":
             action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
             body = ""
             if action:
                 body += f"            {action}\n"
-            body += "            pins = release_ctrl(pins, IORQ | WR);\n"
+            body += "            pins = release_pins(pins, IORQ | WR);\n"
             return body + goto
 
         # ---- internal cycle -------------------------------------------------

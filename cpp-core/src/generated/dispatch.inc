@@ -27,7 +27,7 @@
             return true;
         }
         case 512: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 513;
             return true;
         }
@@ -36,7 +36,7 @@
             return true;
         }
         case 514: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 515;
             return true;
         }
@@ -46,7 +46,7 @@
         }
         case 516: {
             regs.c = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 517;
             return true;
         }
@@ -56,7 +56,7 @@
             return true;
         }
         case 518: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 519;
             return true;
         }
@@ -65,7 +65,7 @@
             return true;
         }
         case 520: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 521;
             return true;
         }
@@ -75,7 +75,7 @@
         }
         case 522: {
             regs.b = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 523;
             return true;
         }
@@ -89,7 +89,7 @@
             return true;
         }
         case 524: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 525;
             return true;
         }
@@ -99,8 +99,8 @@
             return true;
         }
         case 526: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.set_wzl(uint8_t(regs.c + 1)); regs.set_wzh(regs.a);
             step_ = 527;
             return true;
@@ -110,7 +110,7 @@
             return true;
         }
         case 528: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 529;
             return true;
         }
@@ -155,7 +155,7 @@
             return true;
         }
         case 534: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 535;
             return true;
         }
@@ -164,7 +164,7 @@
             return true;
         }
         case 536: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 537;
             return true;
         }
@@ -174,7 +174,7 @@
         }
         case 538: {
             regs.b = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 539;
             return true;
         }
@@ -259,7 +259,7 @@
             return true;
         }
         case 554: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 555;
             return true;
         }
@@ -268,7 +268,7 @@
             return true;
         }
         case 556: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 557;
             return true;
         }
@@ -279,7 +279,7 @@
         case 558: {
             regs.a = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 559;
             return true;
         }
@@ -324,7 +324,7 @@
             return true;
         }
         case 564: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 565;
             return true;
         }
@@ -333,7 +333,7 @@
             return true;
         }
         case 566: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 567;
             return true;
         }
@@ -343,7 +343,7 @@
         }
         case 568: {
             regs.c = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 569;
             return true;
         }
@@ -370,7 +370,7 @@
             return true;
         }
         case 572: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 573;
             return true;
         }
@@ -379,7 +379,7 @@
             return true;
         }
         case 574: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 575;
             return true;
         }
@@ -390,7 +390,7 @@
         case 576: {
             dlatch_ = get_data(pins);
             regs.b = uint8_t(regs.b - 1); if (regs.b == 0) { step_ = 587; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 577;
             return true;
         }
@@ -445,7 +445,7 @@
             return true;
         }
         case 588: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 589;
             return true;
         }
@@ -454,7 +454,7 @@
             return true;
         }
         case 590: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 591;
             return true;
         }
@@ -464,7 +464,7 @@
         }
         case 592: {
             regs.e = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 593;
             return true;
         }
@@ -474,7 +474,7 @@
             return true;
         }
         case 594: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 595;
             return true;
         }
@@ -483,7 +483,7 @@
             return true;
         }
         case 596: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 597;
             return true;
         }
@@ -493,7 +493,7 @@
         }
         case 598: {
             regs.d = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 599;
             return true;
         }
@@ -507,7 +507,7 @@
             return true;
         }
         case 600: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 601;
             return true;
         }
@@ -517,8 +517,8 @@
             return true;
         }
         case 602: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.set_wzl(uint8_t(regs.e + 1)); regs.set_wzh(regs.a);
             step_ = 603;
             return true;
@@ -528,7 +528,7 @@
             return true;
         }
         case 604: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 605;
             return true;
         }
@@ -573,7 +573,7 @@
             return true;
         }
         case 610: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 611;
             return true;
         }
@@ -582,7 +582,7 @@
             return true;
         }
         case 612: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 613;
             return true;
         }
@@ -592,7 +592,7 @@
         }
         case 614: {
             regs.d = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 615;
             return true;
         }
@@ -611,7 +611,7 @@
             return true;
         }
         case 616: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 617;
             return true;
         }
@@ -620,7 +620,7 @@
             return true;
         }
         case 618: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 619;
             return true;
         }
@@ -630,7 +630,7 @@
         }
         case 620: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 621;
             return true;
         }
@@ -746,7 +746,7 @@
             return true;
         }
         case 646: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 647;
             return true;
         }
@@ -755,7 +755,7 @@
             return true;
         }
         case 648: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 649;
             return true;
         }
@@ -766,7 +766,7 @@
         case 650: {
             regs.a = get_data(pins);
             regs.wz = uint16_t(regs.de() + 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 651;
             return true;
         }
@@ -811,7 +811,7 @@
             return true;
         }
         case 656: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 657;
             return true;
         }
@@ -820,7 +820,7 @@
             return true;
         }
         case 658: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 659;
             return true;
         }
@@ -830,7 +830,7 @@
         }
         case 660: {
             regs.e = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 661;
             return true;
         }
@@ -849,7 +849,7 @@
             return true;
         }
         case 662: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 663;
             return true;
         }
@@ -858,7 +858,7 @@
             return true;
         }
         case 664: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 665;
             return true;
         }
@@ -869,7 +869,7 @@
         case 666: {
             dlatch_ = get_data(pins);
             if (!((regs.f & FLAG_Z) == 0)) { step_ = 677; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 667;
             return true;
         }
@@ -924,7 +924,7 @@
             return true;
         }
         case 678: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 679;
             return true;
         }
@@ -933,7 +933,7 @@
             return true;
         }
         case 680: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 681;
             return true;
         }
@@ -943,7 +943,7 @@
         }
         case 682: {
             set_hlx_l(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 683;
             return true;
         }
@@ -953,7 +953,7 @@
             return true;
         }
         case 684: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 685;
             return true;
         }
@@ -962,7 +962,7 @@
             return true;
         }
         case 686: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 687;
             return true;
         }
@@ -972,7 +972,7 @@
         }
         case 688: {
             set_hlx_h(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 689;
             return true;
         }
@@ -986,7 +986,7 @@
             return true;
         }
         case 690: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 691;
             return true;
         }
@@ -995,7 +995,7 @@
             return true;
         }
         case 692: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 693;
             return true;
         }
@@ -1005,7 +1005,7 @@
         }
         case 694: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 695;
             return true;
         }
@@ -1015,7 +1015,7 @@
             return true;
         }
         case 696: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 697;
             return true;
         }
@@ -1024,7 +1024,7 @@
             return true;
         }
         case 698: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 699;
             return true;
         }
@@ -1034,7 +1034,7 @@
         }
         case 700: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 701;
             return true;
         }
@@ -1044,7 +1044,7 @@
             return true;
         }
         case 702: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 703;
             return true;
         }
@@ -1054,8 +1054,8 @@
             return true;
         }
         case 704: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 705;
             return true;
         }
@@ -1064,7 +1064,7 @@
             return true;
         }
         case 706: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 707;
             return true;
         }
@@ -1074,7 +1074,7 @@
             return true;
         }
         case 708: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 709;
             return true;
         }
@@ -1084,8 +1084,8 @@
             return true;
         }
         case 710: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 711;
             return true;
         }
@@ -1094,7 +1094,7 @@
             return true;
         }
         case 712: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 713;
             return true;
         }
@@ -1139,7 +1139,7 @@
             return true;
         }
         case 718: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 719;
             return true;
         }
@@ -1148,7 +1148,7 @@
             return true;
         }
         case 720: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 721;
             return true;
         }
@@ -1158,7 +1158,7 @@
         }
         case 722: {
             set_hlx_h(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 723;
             return true;
         }
@@ -1177,7 +1177,7 @@
             return true;
         }
         case 724: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 725;
             return true;
         }
@@ -1186,7 +1186,7 @@
             return true;
         }
         case 726: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 727;
             return true;
         }
@@ -1197,7 +1197,7 @@
         case 728: {
             dlatch_ = get_data(pins);
             if (!((regs.f & FLAG_Z) != 0)) { step_ = 739; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 729;
             return true;
         }
@@ -1313,7 +1313,7 @@
             return true;
         }
         case 754: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 755;
             return true;
         }
@@ -1322,7 +1322,7 @@
             return true;
         }
         case 756: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 757;
             return true;
         }
@@ -1332,7 +1332,7 @@
         }
         case 758: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 759;
             return true;
         }
@@ -1342,7 +1342,7 @@
             return true;
         }
         case 760: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 761;
             return true;
         }
@@ -1351,7 +1351,7 @@
             return true;
         }
         case 762: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 763;
             return true;
         }
@@ -1361,7 +1361,7 @@
         }
         case 764: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 765;
             return true;
         }
@@ -1371,7 +1371,7 @@
             return true;
         }
         case 766: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 767;
             return true;
         }
@@ -1380,7 +1380,7 @@
             return true;
         }
         case 768: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 769;
             return true;
         }
@@ -1390,7 +1390,7 @@
         }
         case 770: {
             set_hlx_l(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 771;
             return true;
         }
@@ -1400,7 +1400,7 @@
             return true;
         }
         case 772: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 773;
             return true;
         }
@@ -1409,7 +1409,7 @@
             return true;
         }
         case 774: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 775;
             return true;
         }
@@ -1419,7 +1419,7 @@
         }
         case 776: {
             set_hlx_h(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 777;
             return true;
         }
@@ -1464,7 +1464,7 @@
             return true;
         }
         case 782: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 783;
             return true;
         }
@@ -1473,7 +1473,7 @@
             return true;
         }
         case 784: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 785;
             return true;
         }
@@ -1483,7 +1483,7 @@
         }
         case 786: {
             set_hlx_l(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 787;
             return true;
         }
@@ -1502,7 +1502,7 @@
             return true;
         }
         case 788: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 789;
             return true;
         }
@@ -1511,7 +1511,7 @@
             return true;
         }
         case 790: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 791;
             return true;
         }
@@ -1522,7 +1522,7 @@
         case 792: {
             dlatch_ = get_data(pins);
             if (!((regs.f & FLAG_C) == 0)) { step_ = 803; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 793;
             return true;
         }
@@ -1577,7 +1577,7 @@
             return true;
         }
         case 804: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 805;
             return true;
         }
@@ -1586,7 +1586,7 @@
             return true;
         }
         case 806: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 807;
             return true;
         }
@@ -1596,7 +1596,7 @@
         }
         case 808: {
             regs.set_spl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 809;
             return true;
         }
@@ -1606,7 +1606,7 @@
             return true;
         }
         case 810: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 811;
             return true;
         }
@@ -1615,7 +1615,7 @@
             return true;
         }
         case 812: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 813;
             return true;
         }
@@ -1625,7 +1625,7 @@
         }
         case 814: {
             regs.set_sph(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 815;
             return true;
         }
@@ -1639,7 +1639,7 @@
             return true;
         }
         case 816: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 817;
             return true;
         }
@@ -1648,7 +1648,7 @@
             return true;
         }
         case 818: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 819;
             return true;
         }
@@ -1658,7 +1658,7 @@
         }
         case 820: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 821;
             return true;
         }
@@ -1668,7 +1668,7 @@
             return true;
         }
         case 822: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 823;
             return true;
         }
@@ -1677,7 +1677,7 @@
             return true;
         }
         case 824: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 825;
             return true;
         }
@@ -1687,7 +1687,7 @@
         }
         case 826: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 827;
             return true;
         }
@@ -1697,7 +1697,7 @@
             return true;
         }
         case 828: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 829;
             return true;
         }
@@ -1707,8 +1707,8 @@
             return true;
         }
         case 830: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.set_wzh(regs.a);
             step_ = 831;
             return true;
@@ -1718,7 +1718,7 @@
             return true;
         }
         case 832: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 833;
             return true;
         }
@@ -1753,7 +1753,7 @@
             return true;
         }
         case 838: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 839;
             return true;
         }
@@ -1762,7 +1762,7 @@
             return true;
         }
         case 840: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 841;
             return true;
         }
@@ -1773,7 +1773,7 @@
         case 842: {
             dlatch_ = get_data(pins);
             auto r = alu::inc8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 843;
             return true;
         }
@@ -1791,7 +1791,7 @@
             return true;
         }
         case 846: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 847;
             return true;
         }
@@ -1801,8 +1801,8 @@
             return true;
         }
         case 848: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 849;
             return true;
         }
@@ -1811,7 +1811,7 @@
             return true;
         }
         case 850: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 851;
             return true;
         }
@@ -1825,7 +1825,7 @@
             return true;
         }
         case 852: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 853;
             return true;
         }
@@ -1834,7 +1834,7 @@
             return true;
         }
         case 854: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 855;
             return true;
         }
@@ -1845,7 +1845,7 @@
         case 856: {
             dlatch_ = get_data(pins);
             auto r = alu::dec8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 857;
             return true;
         }
@@ -1863,7 +1863,7 @@
             return true;
         }
         case 860: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 861;
             return true;
         }
@@ -1873,8 +1873,8 @@
             return true;
         }
         case 862: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 863;
             return true;
         }
@@ -1883,7 +1883,7 @@
             return true;
         }
         case 864: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 865;
             return true;
         }
@@ -1897,7 +1897,7 @@
             return true;
         }
         case 866: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 867;
             return true;
         }
@@ -1906,7 +1906,7 @@
             return true;
         }
         case 868: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 869;
             return true;
         }
@@ -1916,7 +1916,7 @@
         }
         case 870: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 871;
             return true;
         }
@@ -1926,7 +1926,7 @@
             return true;
         }
         case 872: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 873;
             return true;
         }
@@ -1936,8 +1936,8 @@
             return true;
         }
         case 874: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 875;
             return true;
         }
@@ -1946,7 +1946,7 @@
             return true;
         }
         case 876: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 877;
             return true;
         }
@@ -1965,7 +1965,7 @@
             return true;
         }
         case 878: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 879;
             return true;
         }
@@ -1974,7 +1974,7 @@
             return true;
         }
         case 880: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 881;
             return true;
         }
@@ -1985,7 +1985,7 @@
         case 882: {
             dlatch_ = get_data(pins);
             if (!((regs.f & FLAG_C) != 0)) { step_ = 893; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 883;
             return true;
         }
@@ -2101,7 +2101,7 @@
             return true;
         }
         case 908: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 909;
             return true;
         }
@@ -2110,7 +2110,7 @@
             return true;
         }
         case 910: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 911;
             return true;
         }
@@ -2120,7 +2120,7 @@
         }
         case 912: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 913;
             return true;
         }
@@ -2130,7 +2130,7 @@
             return true;
         }
         case 914: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 915;
             return true;
         }
@@ -2139,7 +2139,7 @@
             return true;
         }
         case 916: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 917;
             return true;
         }
@@ -2149,7 +2149,7 @@
         }
         case 918: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 919;
             return true;
         }
@@ -2159,7 +2159,7 @@
             return true;
         }
         case 920: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 921;
             return true;
         }
@@ -2168,7 +2168,7 @@
             return true;
         }
         case 922: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 923;
             return true;
         }
@@ -2178,7 +2178,7 @@
         }
         case 924: {
             regs.a = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 925;
             return true;
         }
@@ -2223,7 +2223,7 @@
             return true;
         }
         case 930: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 931;
             return true;
         }
@@ -2232,7 +2232,7 @@
             return true;
         }
         case 932: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 933;
             return true;
         }
@@ -2242,7 +2242,7 @@
         }
         case 934: {
             regs.a = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 935;
             return true;
         }
@@ -2291,7 +2291,7 @@
             return true;
         }
         case 936: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 937;
             return true;
         }
@@ -2300,7 +2300,7 @@
             return true;
         }
         case 938: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 939;
             return true;
         }
@@ -2310,7 +2310,7 @@
         }
         case 940: {
             regs.b = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 941;
             return true;
         }
@@ -2359,7 +2359,7 @@
             return true;
         }
         case 942: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 943;
             return true;
         }
@@ -2368,7 +2368,7 @@
             return true;
         }
         case 944: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 945;
             return true;
         }
@@ -2378,7 +2378,7 @@
         }
         case 946: {
             regs.c = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 947;
             return true;
         }
@@ -2427,7 +2427,7 @@
             return true;
         }
         case 948: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 949;
             return true;
         }
@@ -2436,7 +2436,7 @@
             return true;
         }
         case 950: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 951;
             return true;
         }
@@ -2446,7 +2446,7 @@
         }
         case 952: {
             regs.d = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 953;
             return true;
         }
@@ -2495,7 +2495,7 @@
             return true;
         }
         case 954: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 955;
             return true;
         }
@@ -2504,7 +2504,7 @@
             return true;
         }
         case 956: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 957;
             return true;
         }
@@ -2514,7 +2514,7 @@
         }
         case 958: {
             regs.e = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 959;
             return true;
         }
@@ -2563,7 +2563,7 @@
             return true;
         }
         case 960: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 961;
             return true;
         }
@@ -2572,7 +2572,7 @@
             return true;
         }
         case 962: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 963;
             return true;
         }
@@ -2582,7 +2582,7 @@
         }
         case 964: {
             regs.h = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 965;
             return true;
         }
@@ -2631,7 +2631,7 @@
             return true;
         }
         case 966: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 967;
             return true;
         }
@@ -2640,7 +2640,7 @@
             return true;
         }
         case 968: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 969;
             return true;
         }
@@ -2650,7 +2650,7 @@
         }
         case 970: {
             regs.l = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 971;
             return true;
         }
@@ -2669,7 +2669,7 @@
             return true;
         }
         case 972: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 973;
             return true;
         }
@@ -2679,8 +2679,8 @@
             return true;
         }
         case 974: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 975;
             return true;
         }
@@ -2689,7 +2689,7 @@
             return true;
         }
         case 976: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 977;
             return true;
         }
@@ -2703,7 +2703,7 @@
             return true;
         }
         case 978: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 979;
             return true;
         }
@@ -2713,8 +2713,8 @@
             return true;
         }
         case 980: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 981;
             return true;
         }
@@ -2723,7 +2723,7 @@
             return true;
         }
         case 982: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 983;
             return true;
         }
@@ -2737,7 +2737,7 @@
             return true;
         }
         case 984: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 985;
             return true;
         }
@@ -2747,8 +2747,8 @@
             return true;
         }
         case 986: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 987;
             return true;
         }
@@ -2757,7 +2757,7 @@
             return true;
         }
         case 988: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 989;
             return true;
         }
@@ -2771,7 +2771,7 @@
             return true;
         }
         case 990: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 991;
             return true;
         }
@@ -2781,8 +2781,8 @@
             return true;
         }
         case 992: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 993;
             return true;
         }
@@ -2791,7 +2791,7 @@
             return true;
         }
         case 994: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 995;
             return true;
         }
@@ -2805,7 +2805,7 @@
             return true;
         }
         case 996: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 997;
             return true;
         }
@@ -2815,8 +2815,8 @@
             return true;
         }
         case 998: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 999;
             return true;
         }
@@ -2825,7 +2825,7 @@
             return true;
         }
         case 1000: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1001;
             return true;
         }
@@ -2839,7 +2839,7 @@
             return true;
         }
         case 1002: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1003;
             return true;
         }
@@ -2849,8 +2849,8 @@
             return true;
         }
         case 1004: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1005;
             return true;
         }
@@ -2859,7 +2859,7 @@
             return true;
         }
         case 1006: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1007;
             return true;
         }
@@ -2873,7 +2873,7 @@
             return true;
         }
         case 1008: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1009;
             return true;
         }
@@ -2883,8 +2883,8 @@
             return true;
         }
         case 1010: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1011;
             return true;
         }
@@ -2893,7 +2893,7 @@
             return true;
         }
         case 1012: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1013;
             return true;
         }
@@ -2937,7 +2937,7 @@
             return true;
         }
         case 1014: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1015;
             return true;
         }
@@ -2946,7 +2946,7 @@
             return true;
         }
         case 1016: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1017;
             return true;
         }
@@ -2956,7 +2956,7 @@
         }
         case 1018: {
             regs.a = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1019;
             return true;
         }
@@ -3005,7 +3005,7 @@
             return true;
         }
         case 1020: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1021;
             return true;
         }
@@ -3014,7 +3014,7 @@
             return true;
         }
         case 1022: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1023;
             return true;
         }
@@ -3025,7 +3025,7 @@
         case 1024: {
             dlatch_ = get_data(pins);
             alu_op(0, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1025;
             return true;
         }
@@ -3074,7 +3074,7 @@
             return true;
         }
         case 1026: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1027;
             return true;
         }
@@ -3083,7 +3083,7 @@
             return true;
         }
         case 1028: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1029;
             return true;
         }
@@ -3094,7 +3094,7 @@
         case 1030: {
             dlatch_ = get_data(pins);
             alu_op(1, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1031;
             return true;
         }
@@ -3143,7 +3143,7 @@
             return true;
         }
         case 1032: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1033;
             return true;
         }
@@ -3152,7 +3152,7 @@
             return true;
         }
         case 1034: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1035;
             return true;
         }
@@ -3163,7 +3163,7 @@
         case 1036: {
             dlatch_ = get_data(pins);
             alu_op(2, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1037;
             return true;
         }
@@ -3212,7 +3212,7 @@
             return true;
         }
         case 1038: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1039;
             return true;
         }
@@ -3221,7 +3221,7 @@
             return true;
         }
         case 1040: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1041;
             return true;
         }
@@ -3232,7 +3232,7 @@
         case 1042: {
             dlatch_ = get_data(pins);
             alu_op(3, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1043;
             return true;
         }
@@ -3281,7 +3281,7 @@
             return true;
         }
         case 1044: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1045;
             return true;
         }
@@ -3290,7 +3290,7 @@
             return true;
         }
         case 1046: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1047;
             return true;
         }
@@ -3301,7 +3301,7 @@
         case 1048: {
             dlatch_ = get_data(pins);
             alu_op(4, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1049;
             return true;
         }
@@ -3350,7 +3350,7 @@
             return true;
         }
         case 1050: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1051;
             return true;
         }
@@ -3359,7 +3359,7 @@
             return true;
         }
         case 1052: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1053;
             return true;
         }
@@ -3370,7 +3370,7 @@
         case 1054: {
             dlatch_ = get_data(pins);
             alu_op(5, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1055;
             return true;
         }
@@ -3419,7 +3419,7 @@
             return true;
         }
         case 1056: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1057;
             return true;
         }
@@ -3428,7 +3428,7 @@
             return true;
         }
         case 1058: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1059;
             return true;
         }
@@ -3439,7 +3439,7 @@
         case 1060: {
             dlatch_ = get_data(pins);
             alu_op(6, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1061;
             return true;
         }
@@ -3488,7 +3488,7 @@
             return true;
         }
         case 1062: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1063;
             return true;
         }
@@ -3497,7 +3497,7 @@
             return true;
         }
         case 1064: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1065;
             return true;
         }
@@ -3508,7 +3508,7 @@
         case 1066: {
             dlatch_ = get_data(pins);
             alu_op(7, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1067;
             return true;
         }
@@ -3536,7 +3536,7 @@
             return true;
         }
         case 1070: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1071;
             return true;
         }
@@ -3545,7 +3545,7 @@
             return true;
         }
         case 1072: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1073;
             return true;
         }
@@ -3555,7 +3555,7 @@
         }
         case 1074: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1075;
             return true;
         }
@@ -3565,7 +3565,7 @@
             return true;
         }
         case 1076: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1077;
             return true;
         }
@@ -3574,7 +3574,7 @@
             return true;
         }
         case 1078: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1079;
             return true;
         }
@@ -3585,7 +3585,7 @@
         case 1080: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1081;
             return true;
         }
@@ -3599,7 +3599,7 @@
             return true;
         }
         case 1082: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1083;
             return true;
         }
@@ -3608,7 +3608,7 @@
             return true;
         }
         case 1084: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1085;
             return true;
         }
@@ -3618,7 +3618,7 @@
         }
         case 1086: {
             regs.c = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1087;
             return true;
         }
@@ -3628,7 +3628,7 @@
             return true;
         }
         case 1088: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1089;
             return true;
         }
@@ -3637,7 +3637,7 @@
             return true;
         }
         case 1090: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1091;
             return true;
         }
@@ -3647,7 +3647,7 @@
         }
         case 1092: {
             regs.b = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1093;
             return true;
         }
@@ -3661,7 +3661,7 @@
             return true;
         }
         case 1094: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1095;
             return true;
         }
@@ -3670,7 +3670,7 @@
             return true;
         }
         case 1096: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1097;
             return true;
         }
@@ -3680,7 +3680,7 @@
         }
         case 1098: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1099;
             return true;
         }
@@ -3690,7 +3690,7 @@
             return true;
         }
         case 1100: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1101;
             return true;
         }
@@ -3699,7 +3699,7 @@
             return true;
         }
         case 1102: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1103;
             return true;
         }
@@ -3710,7 +3710,7 @@
         case 1104: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_Z) == 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1105;
             return true;
         }
@@ -3724,7 +3724,7 @@
             return true;
         }
         case 1106: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1107;
             return true;
         }
@@ -3733,7 +3733,7 @@
             return true;
         }
         case 1108: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1109;
             return true;
         }
@@ -3743,7 +3743,7 @@
         }
         case 1110: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1111;
             return true;
         }
@@ -3753,7 +3753,7 @@
             return true;
         }
         case 1112: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1113;
             return true;
         }
@@ -3762,7 +3762,7 @@
             return true;
         }
         case 1114: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1115;
             return true;
         }
@@ -3773,7 +3773,7 @@
         case 1116: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1117;
             return true;
         }
@@ -3787,7 +3787,7 @@
             return true;
         }
         case 1118: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1119;
             return true;
         }
@@ -3796,7 +3796,7 @@
             return true;
         }
         case 1120: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1121;
             return true;
         }
@@ -3806,7 +3806,7 @@
         }
         case 1122: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1123;
             return true;
         }
@@ -3816,7 +3816,7 @@
             return true;
         }
         case 1124: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1125;
             return true;
         }
@@ -3825,7 +3825,7 @@
             return true;
         }
         case 1126: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1127;
             return true;
         }
@@ -3836,7 +3836,7 @@
         case 1128: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_Z) == 0)) { step_ = 1143; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1129;
             return true;
         }
@@ -3854,7 +3854,7 @@
             return true;
         }
         case 1132: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1133;
             return true;
         }
@@ -3864,8 +3864,8 @@
             return true;
         }
         case 1134: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1135;
             return true;
         }
@@ -3874,7 +3874,7 @@
             return true;
         }
         case 1136: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1137;
             return true;
         }
@@ -3884,7 +3884,7 @@
             return true;
         }
         case 1138: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1139;
             return true;
         }
@@ -3894,8 +3894,8 @@
             return true;
         }
         case 1140: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1141;
             return true;
@@ -3905,7 +3905,7 @@
             return true;
         }
         case 1142: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1143;
             return true;
         }
@@ -3927,7 +3927,7 @@
             return true;
         }
         case 1146: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1147;
             return true;
         }
@@ -3937,8 +3937,8 @@
             return true;
         }
         case 1148: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1149;
             return true;
         }
@@ -3947,7 +3947,7 @@
             return true;
         }
         case 1150: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1151;
             return true;
         }
@@ -3957,7 +3957,7 @@
             return true;
         }
         case 1152: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1153;
             return true;
         }
@@ -3967,8 +3967,8 @@
             return true;
         }
         case 1154: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1155;
             return true;
         }
@@ -3977,7 +3977,7 @@
             return true;
         }
         case 1156: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1157;
             return true;
         }
@@ -3991,7 +3991,7 @@
             return true;
         }
         case 1158: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1159;
             return true;
         }
@@ -4000,7 +4000,7 @@
             return true;
         }
         case 1160: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1161;
             return true;
         }
@@ -4011,7 +4011,7 @@
         case 1162: {
             dlatch_ = get_data(pins);
             alu_op(0, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1163;
             return true;
         }
@@ -4033,7 +4033,7 @@
             return true;
         }
         case 1166: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1167;
             return true;
         }
@@ -4043,8 +4043,8 @@
             return true;
         }
         case 1168: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1169;
             return true;
         }
@@ -4053,7 +4053,7 @@
             return true;
         }
         case 1170: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1171;
             return true;
         }
@@ -4063,7 +4063,7 @@
             return true;
         }
         case 1172: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1173;
             return true;
         }
@@ -4073,8 +4073,8 @@
             return true;
         }
         case 1174: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 0; regs.pc = regs.wz;
             step_ = 1175;
             return true;
@@ -4084,7 +4084,7 @@
             return true;
         }
         case 1176: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1177;
             return true;
         }
@@ -4107,7 +4107,7 @@
             return true;
         }
         case 1180: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1181;
             return true;
         }
@@ -4116,7 +4116,7 @@
             return true;
         }
         case 1182: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1183;
             return true;
         }
@@ -4126,7 +4126,7 @@
         }
         case 1184: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1185;
             return true;
         }
@@ -4136,7 +4136,7 @@
             return true;
         }
         case 1186: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1187;
             return true;
         }
@@ -4145,7 +4145,7 @@
             return true;
         }
         case 1188: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1189;
             return true;
         }
@@ -4156,7 +4156,7 @@
         case 1190: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1191;
             return true;
         }
@@ -4170,7 +4170,7 @@
             return true;
         }
         case 1192: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1193;
             return true;
         }
@@ -4179,7 +4179,7 @@
             return true;
         }
         case 1194: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1195;
             return true;
         }
@@ -4189,7 +4189,7 @@
         }
         case 1196: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1197;
             return true;
         }
@@ -4199,7 +4199,7 @@
             return true;
         }
         case 1198: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1199;
             return true;
         }
@@ -4208,7 +4208,7 @@
             return true;
         }
         case 1200: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1201;
             return true;
         }
@@ -4219,7 +4219,7 @@
         case 1202: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1203;
             return true;
         }
@@ -4233,7 +4233,7 @@
             return true;
         }
         case 1204: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1205;
             return true;
         }
@@ -4242,7 +4242,7 @@
             return true;
         }
         case 1206: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1207;
             return true;
         }
@@ -4252,7 +4252,7 @@
         }
         case 1208: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1209;
             return true;
         }
@@ -4262,7 +4262,7 @@
             return true;
         }
         case 1210: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1211;
             return true;
         }
@@ -4271,7 +4271,7 @@
             return true;
         }
         case 1212: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1213;
             return true;
         }
@@ -4282,7 +4282,7 @@
         case 1214: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_Z) != 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1215;
             return true;
         }
@@ -4296,7 +4296,7 @@
             return true;
         }
         case 1216: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1217;
             return true;
         }
@@ -4305,7 +4305,7 @@
             return true;
         }
         case 1218: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1219;
             return true;
         }
@@ -4315,7 +4315,7 @@
         }
         case 1220: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1221;
             return true;
         }
@@ -4325,7 +4325,7 @@
             return true;
         }
         case 1222: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1223;
             return true;
         }
@@ -4334,7 +4334,7 @@
             return true;
         }
         case 1224: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1225;
             return true;
         }
@@ -4345,7 +4345,7 @@
         case 1226: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_Z) != 0)) { step_ = 1241; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1227;
             return true;
         }
@@ -4363,7 +4363,7 @@
             return true;
         }
         case 1230: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1231;
             return true;
         }
@@ -4373,8 +4373,8 @@
             return true;
         }
         case 1232: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1233;
             return true;
         }
@@ -4383,7 +4383,7 @@
             return true;
         }
         case 1234: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1235;
             return true;
         }
@@ -4393,7 +4393,7 @@
             return true;
         }
         case 1236: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1237;
             return true;
         }
@@ -4403,8 +4403,8 @@
             return true;
         }
         case 1238: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1239;
             return true;
@@ -4414,7 +4414,7 @@
             return true;
         }
         case 1240: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1241;
             return true;
         }
@@ -4428,7 +4428,7 @@
             return true;
         }
         case 1242: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1243;
             return true;
         }
@@ -4437,7 +4437,7 @@
             return true;
         }
         case 1244: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1245;
             return true;
         }
@@ -4447,7 +4447,7 @@
         }
         case 1246: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1247;
             return true;
         }
@@ -4457,7 +4457,7 @@
             return true;
         }
         case 1248: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1249;
             return true;
         }
@@ -4466,7 +4466,7 @@
             return true;
         }
         case 1250: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1251;
             return true;
         }
@@ -4476,7 +4476,7 @@
         }
         case 1252: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1253;
             return true;
         }
@@ -4494,7 +4494,7 @@
             return true;
         }
         case 1256: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1257;
             return true;
         }
@@ -4504,8 +4504,8 @@
             return true;
         }
         case 1258: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1259;
             return true;
         }
@@ -4514,7 +4514,7 @@
             return true;
         }
         case 1260: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1261;
             return true;
         }
@@ -4524,7 +4524,7 @@
             return true;
         }
         case 1262: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1263;
             return true;
         }
@@ -4534,8 +4534,8 @@
             return true;
         }
         case 1264: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1265;
             return true;
@@ -4545,7 +4545,7 @@
             return true;
         }
         case 1266: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1267;
             return true;
         }
@@ -4559,7 +4559,7 @@
             return true;
         }
         case 1268: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1269;
             return true;
         }
@@ -4568,7 +4568,7 @@
             return true;
         }
         case 1270: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1271;
             return true;
         }
@@ -4579,7 +4579,7 @@
         case 1272: {
             dlatch_ = get_data(pins);
             alu_op(1, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1273;
             return true;
         }
@@ -4601,7 +4601,7 @@
             return true;
         }
         case 1276: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1277;
             return true;
         }
@@ -4611,8 +4611,8 @@
             return true;
         }
         case 1278: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1279;
             return true;
         }
@@ -4621,7 +4621,7 @@
             return true;
         }
         case 1280: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1281;
             return true;
         }
@@ -4631,7 +4631,7 @@
             return true;
         }
         case 1282: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1283;
             return true;
         }
@@ -4641,8 +4641,8 @@
             return true;
         }
         case 1284: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 8; regs.pc = regs.wz;
             step_ = 1285;
             return true;
@@ -4652,7 +4652,7 @@
             return true;
         }
         case 1286: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1287;
             return true;
         }
@@ -4675,7 +4675,7 @@
             return true;
         }
         case 1290: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1291;
             return true;
         }
@@ -4684,7 +4684,7 @@
             return true;
         }
         case 1292: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1293;
             return true;
         }
@@ -4694,7 +4694,7 @@
         }
         case 1294: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1295;
             return true;
         }
@@ -4704,7 +4704,7 @@
             return true;
         }
         case 1296: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1297;
             return true;
         }
@@ -4713,7 +4713,7 @@
             return true;
         }
         case 1298: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1299;
             return true;
         }
@@ -4724,7 +4724,7 @@
         case 1300: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1301;
             return true;
         }
@@ -4738,7 +4738,7 @@
             return true;
         }
         case 1302: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1303;
             return true;
         }
@@ -4747,7 +4747,7 @@
             return true;
         }
         case 1304: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1305;
             return true;
         }
@@ -4757,7 +4757,7 @@
         }
         case 1306: {
             regs.e = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1307;
             return true;
         }
@@ -4767,7 +4767,7 @@
             return true;
         }
         case 1308: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1309;
             return true;
         }
@@ -4776,7 +4776,7 @@
             return true;
         }
         case 1310: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1311;
             return true;
         }
@@ -4786,7 +4786,7 @@
         }
         case 1312: {
             regs.d = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1313;
             return true;
         }
@@ -4800,7 +4800,7 @@
             return true;
         }
         case 1314: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1315;
             return true;
         }
@@ -4809,7 +4809,7 @@
             return true;
         }
         case 1316: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1317;
             return true;
         }
@@ -4819,7 +4819,7 @@
         }
         case 1318: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1319;
             return true;
         }
@@ -4829,7 +4829,7 @@
             return true;
         }
         case 1320: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1321;
             return true;
         }
@@ -4838,7 +4838,7 @@
             return true;
         }
         case 1322: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1323;
             return true;
         }
@@ -4849,7 +4849,7 @@
         case 1324: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_C) == 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1325;
             return true;
         }
@@ -4863,7 +4863,7 @@
             return true;
         }
         case 1326: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1327;
             return true;
         }
@@ -4872,7 +4872,7 @@
             return true;
         }
         case 1328: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1329;
             return true;
         }
@@ -4883,7 +4883,7 @@
         case 1330: {
             regs.set_wzl(get_data(pins));
             regs.set_wzh(regs.a);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1331;
             return true;
         }
@@ -4897,7 +4897,7 @@
             return true;
         }
         case 1333: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.a, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.a, IORQ | WR);
             step_ = 1334;
             return true;
         }
@@ -4910,7 +4910,7 @@
             return true;
         }
         case 1336: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1337;
             return true;
         }
@@ -4920,7 +4920,7 @@
         }
         case 1338: {
             regs.set_wzl(uint8_t(regs.wzl() + 1));
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 1339;
             return true;
         }
@@ -4934,7 +4934,7 @@
             return true;
         }
         case 1340: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1341;
             return true;
         }
@@ -4943,7 +4943,7 @@
             return true;
         }
         case 1342: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1343;
             return true;
         }
@@ -4953,7 +4953,7 @@
         }
         case 1344: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1345;
             return true;
         }
@@ -4963,7 +4963,7 @@
             return true;
         }
         case 1346: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1347;
             return true;
         }
@@ -4972,7 +4972,7 @@
             return true;
         }
         case 1348: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1349;
             return true;
         }
@@ -4983,7 +4983,7 @@
         case 1350: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_C) == 0)) { step_ = 1365; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1351;
             return true;
         }
@@ -5001,7 +5001,7 @@
             return true;
         }
         case 1354: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1355;
             return true;
         }
@@ -5011,8 +5011,8 @@
             return true;
         }
         case 1356: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1357;
             return true;
         }
@@ -5021,7 +5021,7 @@
             return true;
         }
         case 1358: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1359;
             return true;
         }
@@ -5031,7 +5031,7 @@
             return true;
         }
         case 1360: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1361;
             return true;
         }
@@ -5041,8 +5041,8 @@
             return true;
         }
         case 1362: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1363;
             return true;
@@ -5052,7 +5052,7 @@
             return true;
         }
         case 1364: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1365;
             return true;
         }
@@ -5074,7 +5074,7 @@
             return true;
         }
         case 1368: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1369;
             return true;
         }
@@ -5084,8 +5084,8 @@
             return true;
         }
         case 1370: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1371;
             return true;
         }
@@ -5094,7 +5094,7 @@
             return true;
         }
         case 1372: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1373;
             return true;
         }
@@ -5104,7 +5104,7 @@
             return true;
         }
         case 1374: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1375;
             return true;
         }
@@ -5114,8 +5114,8 @@
             return true;
         }
         case 1376: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1377;
             return true;
         }
@@ -5124,7 +5124,7 @@
             return true;
         }
         case 1378: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1379;
             return true;
         }
@@ -5138,7 +5138,7 @@
             return true;
         }
         case 1380: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1381;
             return true;
         }
@@ -5147,7 +5147,7 @@
             return true;
         }
         case 1382: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1383;
             return true;
         }
@@ -5158,7 +5158,7 @@
         case 1384: {
             dlatch_ = get_data(pins);
             alu_op(2, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1385;
             return true;
         }
@@ -5180,7 +5180,7 @@
             return true;
         }
         case 1388: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1389;
             return true;
         }
@@ -5190,8 +5190,8 @@
             return true;
         }
         case 1390: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1391;
             return true;
         }
@@ -5200,7 +5200,7 @@
             return true;
         }
         case 1392: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1393;
             return true;
         }
@@ -5210,7 +5210,7 @@
             return true;
         }
         case 1394: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1395;
             return true;
         }
@@ -5220,8 +5220,8 @@
             return true;
         }
         case 1396: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 16; regs.pc = regs.wz;
             step_ = 1397;
             return true;
@@ -5231,7 +5231,7 @@
             return true;
         }
         case 1398: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1399;
             return true;
         }
@@ -5254,7 +5254,7 @@
             return true;
         }
         case 1402: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1403;
             return true;
         }
@@ -5263,7 +5263,7 @@
             return true;
         }
         case 1404: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1405;
             return true;
         }
@@ -5273,7 +5273,7 @@
         }
         case 1406: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1407;
             return true;
         }
@@ -5283,7 +5283,7 @@
             return true;
         }
         case 1408: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1409;
             return true;
         }
@@ -5292,7 +5292,7 @@
             return true;
         }
         case 1410: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1411;
             return true;
         }
@@ -5303,7 +5303,7 @@
         case 1412: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1413;
             return true;
         }
@@ -5322,7 +5322,7 @@
             return true;
         }
         case 1414: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1415;
             return true;
         }
@@ -5331,7 +5331,7 @@
             return true;
         }
         case 1416: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1417;
             return true;
         }
@@ -5341,7 +5341,7 @@
         }
         case 1418: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1419;
             return true;
         }
@@ -5351,7 +5351,7 @@
             return true;
         }
         case 1420: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1421;
             return true;
         }
@@ -5360,7 +5360,7 @@
             return true;
         }
         case 1422: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1423;
             return true;
         }
@@ -5371,7 +5371,7 @@
         case 1424: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_C) != 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1425;
             return true;
         }
@@ -5385,7 +5385,7 @@
             return true;
         }
         case 1426: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1427;
             return true;
         }
@@ -5394,7 +5394,7 @@
             return true;
         }
         case 1428: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1429;
             return true;
         }
@@ -5405,7 +5405,7 @@
         case 1430: {
             regs.set_wzl(get_data(pins));
             regs.set_wzh(regs.a);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1431;
             return true;
         }
@@ -5419,7 +5419,7 @@
             return true;
         }
         case 1433: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 1434;
             return true;
         }
@@ -5432,7 +5432,7 @@
             return true;
         }
         case 1436: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1437;
             return true;
         }
@@ -5442,7 +5442,7 @@
         }
         case 1438: {
             regs.a = get_data(pins);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 1439;
             return true;
         }
@@ -5456,7 +5456,7 @@
             return true;
         }
         case 1440: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1441;
             return true;
         }
@@ -5465,7 +5465,7 @@
             return true;
         }
         case 1442: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1443;
             return true;
         }
@@ -5475,7 +5475,7 @@
         }
         case 1444: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1445;
             return true;
         }
@@ -5485,7 +5485,7 @@
             return true;
         }
         case 1446: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1447;
             return true;
         }
@@ -5494,7 +5494,7 @@
             return true;
         }
         case 1448: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1449;
             return true;
         }
@@ -5505,7 +5505,7 @@
         case 1450: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_C) != 0)) { step_ = 1465; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1451;
             return true;
         }
@@ -5523,7 +5523,7 @@
             return true;
         }
         case 1454: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1455;
             return true;
         }
@@ -5533,8 +5533,8 @@
             return true;
         }
         case 1456: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1457;
             return true;
         }
@@ -5543,7 +5543,7 @@
             return true;
         }
         case 1458: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1459;
             return true;
         }
@@ -5553,7 +5553,7 @@
             return true;
         }
         case 1460: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1461;
             return true;
         }
@@ -5563,8 +5563,8 @@
             return true;
         }
         case 1462: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1463;
             return true;
@@ -5574,7 +5574,7 @@
             return true;
         }
         case 1464: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1465;
             return true;
         }
@@ -5588,7 +5588,7 @@
             return true;
         }
         case 1466: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1467;
             return true;
         }
@@ -5597,7 +5597,7 @@
             return true;
         }
         case 1468: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1469;
             return true;
         }
@@ -5608,7 +5608,7 @@
         case 1470: {
             dlatch_ = get_data(pins);
             alu_op(3, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1471;
             return true;
         }
@@ -5630,7 +5630,7 @@
             return true;
         }
         case 1474: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1475;
             return true;
         }
@@ -5640,8 +5640,8 @@
             return true;
         }
         case 1476: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1477;
             return true;
         }
@@ -5650,7 +5650,7 @@
             return true;
         }
         case 1478: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1479;
             return true;
         }
@@ -5660,7 +5660,7 @@
             return true;
         }
         case 1480: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1481;
             return true;
         }
@@ -5670,8 +5670,8 @@
             return true;
         }
         case 1482: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 24; regs.pc = regs.wz;
             step_ = 1483;
             return true;
@@ -5681,7 +5681,7 @@
             return true;
         }
         case 1484: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1485;
             return true;
         }
@@ -5704,7 +5704,7 @@
             return true;
         }
         case 1488: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1489;
             return true;
         }
@@ -5713,7 +5713,7 @@
             return true;
         }
         case 1490: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1491;
             return true;
         }
@@ -5723,7 +5723,7 @@
         }
         case 1492: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1493;
             return true;
         }
@@ -5733,7 +5733,7 @@
             return true;
         }
         case 1494: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1495;
             return true;
         }
@@ -5742,7 +5742,7 @@
             return true;
         }
         case 1496: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1497;
             return true;
         }
@@ -5753,7 +5753,7 @@
         case 1498: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1499;
             return true;
         }
@@ -5767,7 +5767,7 @@
             return true;
         }
         case 1500: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1501;
             return true;
         }
@@ -5776,7 +5776,7 @@
             return true;
         }
         case 1502: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1503;
             return true;
         }
@@ -5786,7 +5786,7 @@
         }
         case 1504: {
             set_hlx_l(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1505;
             return true;
         }
@@ -5796,7 +5796,7 @@
             return true;
         }
         case 1506: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1507;
             return true;
         }
@@ -5805,7 +5805,7 @@
             return true;
         }
         case 1508: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1509;
             return true;
         }
@@ -5815,7 +5815,7 @@
         }
         case 1510: {
             set_hlx_h(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1511;
             return true;
         }
@@ -5829,7 +5829,7 @@
             return true;
         }
         case 1512: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1513;
             return true;
         }
@@ -5838,7 +5838,7 @@
             return true;
         }
         case 1514: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1515;
             return true;
         }
@@ -5848,7 +5848,7 @@
         }
         case 1516: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1517;
             return true;
         }
@@ -5858,7 +5858,7 @@
             return true;
         }
         case 1518: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1519;
             return true;
         }
@@ -5867,7 +5867,7 @@
             return true;
         }
         case 1520: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1521;
             return true;
         }
@@ -5878,7 +5878,7 @@
         case 1522: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_PV) == 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1523;
             return true;
         }
@@ -5892,7 +5892,7 @@
             return true;
         }
         case 1524: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1525;
             return true;
         }
@@ -5901,7 +5901,7 @@
             return true;
         }
         case 1526: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1527;
             return true;
         }
@@ -5911,7 +5911,7 @@
         }
         case 1528: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1529;
             return true;
         }
@@ -5921,7 +5921,7 @@
             return true;
         }
         case 1530: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1531;
             return true;
         }
@@ -5930,7 +5930,7 @@
             return true;
         }
         case 1532: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1533;
             return true;
         }
@@ -5940,7 +5940,7 @@
         }
         case 1534: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1535;
             return true;
         }
@@ -5958,7 +5958,7 @@
             return true;
         }
         case 1538: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1539;
             return true;
         }
@@ -5968,8 +5968,8 @@
             return true;
         }
         case 1540: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1541;
             return true;
         }
@@ -5978,7 +5978,7 @@
             return true;
         }
         case 1542: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1543;
             return true;
         }
@@ -5988,7 +5988,7 @@
             return true;
         }
         case 1544: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1545;
             return true;
         }
@@ -5998,8 +5998,8 @@
             return true;
         }
         case 1546: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             set_hlx(regs.wz);
             step_ = 1547;
             return true;
@@ -6009,7 +6009,7 @@
             return true;
         }
         case 1548: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1549;
             return true;
         }
@@ -6039,7 +6039,7 @@
             return true;
         }
         case 1554: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1555;
             return true;
         }
@@ -6048,7 +6048,7 @@
             return true;
         }
         case 1556: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1557;
             return true;
         }
@@ -6058,7 +6058,7 @@
         }
         case 1558: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1559;
             return true;
         }
@@ -6068,7 +6068,7 @@
             return true;
         }
         case 1560: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1561;
             return true;
         }
@@ -6077,7 +6077,7 @@
             return true;
         }
         case 1562: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1563;
             return true;
         }
@@ -6088,7 +6088,7 @@
         case 1564: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_PV) == 0)) { step_ = 1579; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1565;
             return true;
         }
@@ -6106,7 +6106,7 @@
             return true;
         }
         case 1568: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1569;
             return true;
         }
@@ -6116,8 +6116,8 @@
             return true;
         }
         case 1570: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1571;
             return true;
         }
@@ -6126,7 +6126,7 @@
             return true;
         }
         case 1572: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1573;
             return true;
         }
@@ -6136,7 +6136,7 @@
             return true;
         }
         case 1574: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1575;
             return true;
         }
@@ -6146,8 +6146,8 @@
             return true;
         }
         case 1576: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1577;
             return true;
@@ -6157,7 +6157,7 @@
             return true;
         }
         case 1578: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1579;
             return true;
         }
@@ -6179,7 +6179,7 @@
             return true;
         }
         case 1582: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1583;
             return true;
         }
@@ -6189,8 +6189,8 @@
             return true;
         }
         case 1584: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1585;
             return true;
         }
@@ -6199,7 +6199,7 @@
             return true;
         }
         case 1586: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1587;
             return true;
         }
@@ -6209,7 +6209,7 @@
             return true;
         }
         case 1588: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1589;
             return true;
         }
@@ -6219,8 +6219,8 @@
             return true;
         }
         case 1590: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1591;
             return true;
         }
@@ -6229,7 +6229,7 @@
             return true;
         }
         case 1592: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1593;
             return true;
         }
@@ -6243,7 +6243,7 @@
             return true;
         }
         case 1594: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1595;
             return true;
         }
@@ -6252,7 +6252,7 @@
             return true;
         }
         case 1596: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1597;
             return true;
         }
@@ -6263,7 +6263,7 @@
         case 1598: {
             dlatch_ = get_data(pins);
             alu_op(4, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1599;
             return true;
         }
@@ -6285,7 +6285,7 @@
             return true;
         }
         case 1602: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1603;
             return true;
         }
@@ -6295,8 +6295,8 @@
             return true;
         }
         case 1604: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1605;
             return true;
         }
@@ -6305,7 +6305,7 @@
             return true;
         }
         case 1606: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1607;
             return true;
         }
@@ -6315,7 +6315,7 @@
             return true;
         }
         case 1608: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1609;
             return true;
         }
@@ -6325,8 +6325,8 @@
             return true;
         }
         case 1610: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 32; regs.pc = regs.wz;
             step_ = 1611;
             return true;
@@ -6336,7 +6336,7 @@
             return true;
         }
         case 1612: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1613;
             return true;
         }
@@ -6359,7 +6359,7 @@
             return true;
         }
         case 1616: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1617;
             return true;
         }
@@ -6368,7 +6368,7 @@
             return true;
         }
         case 1618: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1619;
             return true;
         }
@@ -6378,7 +6378,7 @@
         }
         case 1620: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1621;
             return true;
         }
@@ -6388,7 +6388,7 @@
             return true;
         }
         case 1622: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1623;
             return true;
         }
@@ -6397,7 +6397,7 @@
             return true;
         }
         case 1624: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1625;
             return true;
         }
@@ -6408,7 +6408,7 @@
         case 1626: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1627;
             return true;
         }
@@ -6427,7 +6427,7 @@
             return true;
         }
         case 1628: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1629;
             return true;
         }
@@ -6436,7 +6436,7 @@
             return true;
         }
         case 1630: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1631;
             return true;
         }
@@ -6446,7 +6446,7 @@
         }
         case 1632: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1633;
             return true;
         }
@@ -6456,7 +6456,7 @@
             return true;
         }
         case 1634: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1635;
             return true;
         }
@@ -6465,7 +6465,7 @@
             return true;
         }
         case 1636: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1637;
             return true;
         }
@@ -6476,7 +6476,7 @@
         case 1638: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_PV) != 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1639;
             return true;
         }
@@ -6495,7 +6495,7 @@
             return true;
         }
         case 1640: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1641;
             return true;
         }
@@ -6504,7 +6504,7 @@
             return true;
         }
         case 1642: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1643;
             return true;
         }
@@ -6514,7 +6514,7 @@
         }
         case 1644: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1645;
             return true;
         }
@@ -6524,7 +6524,7 @@
             return true;
         }
         case 1646: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1647;
             return true;
         }
@@ -6533,7 +6533,7 @@
             return true;
         }
         case 1648: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1649;
             return true;
         }
@@ -6544,7 +6544,7 @@
         case 1650: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_PV) != 0)) { step_ = 1665; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1651;
             return true;
         }
@@ -6562,7 +6562,7 @@
             return true;
         }
         case 1654: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1655;
             return true;
         }
@@ -6572,8 +6572,8 @@
             return true;
         }
         case 1656: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1657;
             return true;
         }
@@ -6582,7 +6582,7 @@
             return true;
         }
         case 1658: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1659;
             return true;
         }
@@ -6592,7 +6592,7 @@
             return true;
         }
         case 1660: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1661;
             return true;
         }
@@ -6602,8 +6602,8 @@
             return true;
         }
         case 1662: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1663;
             return true;
@@ -6613,7 +6613,7 @@
             return true;
         }
         case 1664: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1665;
             return true;
         }
@@ -6631,7 +6631,7 @@
             return true;
         }
         case 1666: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1667;
             return true;
         }
@@ -6640,7 +6640,7 @@
             return true;
         }
         case 1668: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1669;
             return true;
         }
@@ -6651,7 +6651,7 @@
         case 1670: {
             dlatch_ = get_data(pins);
             alu_op(5, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1671;
             return true;
         }
@@ -6673,7 +6673,7 @@
             return true;
         }
         case 1674: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1675;
             return true;
         }
@@ -6683,8 +6683,8 @@
             return true;
         }
         case 1676: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1677;
             return true;
         }
@@ -6693,7 +6693,7 @@
             return true;
         }
         case 1678: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1679;
             return true;
         }
@@ -6703,7 +6703,7 @@
             return true;
         }
         case 1680: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1681;
             return true;
         }
@@ -6713,8 +6713,8 @@
             return true;
         }
         case 1682: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 40; regs.pc = regs.wz;
             step_ = 1683;
             return true;
@@ -6724,7 +6724,7 @@
             return true;
         }
         case 1684: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1685;
             return true;
         }
@@ -6747,7 +6747,7 @@
             return true;
         }
         case 1688: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1689;
             return true;
         }
@@ -6756,7 +6756,7 @@
             return true;
         }
         case 1690: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1691;
             return true;
         }
@@ -6766,7 +6766,7 @@
         }
         case 1692: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1693;
             return true;
         }
@@ -6776,7 +6776,7 @@
             return true;
         }
         case 1694: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1695;
             return true;
         }
@@ -6785,7 +6785,7 @@
             return true;
         }
         case 1696: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1697;
             return true;
         }
@@ -6796,7 +6796,7 @@
         case 1698: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1699;
             return true;
         }
@@ -6810,7 +6810,7 @@
             return true;
         }
         case 1700: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1701;
             return true;
         }
@@ -6819,7 +6819,7 @@
             return true;
         }
         case 1702: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1703;
             return true;
         }
@@ -6829,7 +6829,7 @@
         }
         case 1704: {
             regs.f = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1705;
             return true;
         }
@@ -6839,7 +6839,7 @@
             return true;
         }
         case 1706: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1707;
             return true;
         }
@@ -6848,7 +6848,7 @@
             return true;
         }
         case 1708: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1709;
             return true;
         }
@@ -6858,7 +6858,7 @@
         }
         case 1710: {
             regs.a = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1711;
             return true;
         }
@@ -6872,7 +6872,7 @@
             return true;
         }
         case 1712: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1713;
             return true;
         }
@@ -6881,7 +6881,7 @@
             return true;
         }
         case 1714: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1715;
             return true;
         }
@@ -6891,7 +6891,7 @@
         }
         case 1716: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1717;
             return true;
         }
@@ -6901,7 +6901,7 @@
             return true;
         }
         case 1718: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1719;
             return true;
         }
@@ -6910,7 +6910,7 @@
             return true;
         }
         case 1720: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1721;
             return true;
         }
@@ -6921,7 +6921,7 @@
         case 1722: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_S) == 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1723;
             return true;
         }
@@ -6940,7 +6940,7 @@
             return true;
         }
         case 1724: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1725;
             return true;
         }
@@ -6949,7 +6949,7 @@
             return true;
         }
         case 1726: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1727;
             return true;
         }
@@ -6959,7 +6959,7 @@
         }
         case 1728: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1729;
             return true;
         }
@@ -6969,7 +6969,7 @@
             return true;
         }
         case 1730: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1731;
             return true;
         }
@@ -6978,7 +6978,7 @@
             return true;
         }
         case 1732: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1733;
             return true;
         }
@@ -6989,7 +6989,7 @@
         case 1734: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_S) == 0)) { step_ = 1749; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1735;
             return true;
         }
@@ -7007,7 +7007,7 @@
             return true;
         }
         case 1738: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1739;
             return true;
         }
@@ -7017,8 +7017,8 @@
             return true;
         }
         case 1740: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1741;
             return true;
         }
@@ -7027,7 +7027,7 @@
             return true;
         }
         case 1742: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1743;
             return true;
         }
@@ -7037,7 +7037,7 @@
             return true;
         }
         case 1744: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1745;
             return true;
         }
@@ -7047,8 +7047,8 @@
             return true;
         }
         case 1746: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1747;
             return true;
@@ -7058,7 +7058,7 @@
             return true;
         }
         case 1748: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1749;
             return true;
         }
@@ -7080,7 +7080,7 @@
             return true;
         }
         case 1752: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1753;
             return true;
         }
@@ -7090,8 +7090,8 @@
             return true;
         }
         case 1754: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1755;
             return true;
         }
@@ -7100,7 +7100,7 @@
             return true;
         }
         case 1756: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1757;
             return true;
         }
@@ -7110,7 +7110,7 @@
             return true;
         }
         case 1758: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1759;
             return true;
         }
@@ -7120,8 +7120,8 @@
             return true;
         }
         case 1760: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1761;
             return true;
         }
@@ -7130,7 +7130,7 @@
             return true;
         }
         case 1762: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1763;
             return true;
         }
@@ -7144,7 +7144,7 @@
             return true;
         }
         case 1764: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1765;
             return true;
         }
@@ -7153,7 +7153,7 @@
             return true;
         }
         case 1766: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1767;
             return true;
         }
@@ -7164,7 +7164,7 @@
         case 1768: {
             dlatch_ = get_data(pins);
             alu_op(6, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1769;
             return true;
         }
@@ -7186,7 +7186,7 @@
             return true;
         }
         case 1772: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1773;
             return true;
         }
@@ -7196,8 +7196,8 @@
             return true;
         }
         case 1774: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1775;
             return true;
         }
@@ -7206,7 +7206,7 @@
             return true;
         }
         case 1776: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1777;
             return true;
         }
@@ -7216,7 +7216,7 @@
             return true;
         }
         case 1778: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1779;
             return true;
         }
@@ -7226,8 +7226,8 @@
             return true;
         }
         case 1780: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 48; regs.pc = regs.wz;
             step_ = 1781;
             return true;
@@ -7237,7 +7237,7 @@
             return true;
         }
         case 1782: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1783;
             return true;
         }
@@ -7260,7 +7260,7 @@
             return true;
         }
         case 1786: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1787;
             return true;
         }
@@ -7269,7 +7269,7 @@
             return true;
         }
         case 1788: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1789;
             return true;
         }
@@ -7279,7 +7279,7 @@
         }
         case 1790: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1791;
             return true;
         }
@@ -7289,7 +7289,7 @@
             return true;
         }
         case 1792: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1793;
             return true;
         }
@@ -7298,7 +7298,7 @@
             return true;
         }
         case 1794: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1795;
             return true;
         }
@@ -7309,7 +7309,7 @@
         case 1796: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1797;
             return true;
         }
@@ -7344,7 +7344,7 @@
             return true;
         }
         case 1802: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1803;
             return true;
         }
@@ -7353,7 +7353,7 @@
             return true;
         }
         case 1804: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1805;
             return true;
         }
@@ -7363,7 +7363,7 @@
         }
         case 1806: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1807;
             return true;
         }
@@ -7373,7 +7373,7 @@
             return true;
         }
         case 1808: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1809;
             return true;
         }
@@ -7382,7 +7382,7 @@
             return true;
         }
         case 1810: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1811;
             return true;
         }
@@ -7393,7 +7393,7 @@
         case 1812: {
             regs.set_wzh(get_data(pins));
             if ((regs.f & FLAG_S) != 0) { regs.pc = regs.wz; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1813;
             return true;
         }
@@ -7413,7 +7413,7 @@
             return true;
         }
         case 1814: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1815;
             return true;
         }
@@ -7422,7 +7422,7 @@
             return true;
         }
         case 1816: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1817;
             return true;
         }
@@ -7432,7 +7432,7 @@
         }
         case 1818: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1819;
             return true;
         }
@@ -7442,7 +7442,7 @@
             return true;
         }
         case 1820: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1821;
             return true;
         }
@@ -7451,7 +7451,7 @@
             return true;
         }
         case 1822: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1823;
             return true;
         }
@@ -7462,7 +7462,7 @@
         case 1824: {
             regs.set_wzh(get_data(pins));
             if (!((regs.f & FLAG_S) != 0)) { step_ = 1839; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1825;
             return true;
         }
@@ -7480,7 +7480,7 @@
             return true;
         }
         case 1828: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1829;
             return true;
         }
@@ -7490,8 +7490,8 @@
             return true;
         }
         case 1830: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1831;
             return true;
         }
@@ -7500,7 +7500,7 @@
             return true;
         }
         case 1832: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1833;
             return true;
         }
@@ -7510,7 +7510,7 @@
             return true;
         }
         case 1834: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1835;
             return true;
         }
@@ -7520,8 +7520,8 @@
             return true;
         }
         case 1836: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.pc = regs.wz;
             step_ = 1837;
             return true;
@@ -7531,7 +7531,7 @@
             return true;
         }
         case 1838: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1839;
             return true;
         }
@@ -7545,7 +7545,7 @@
             return true;
         }
         case 1840: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1841;
             return true;
         }
@@ -7554,7 +7554,7 @@
             return true;
         }
         case 1842: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1843;
             return true;
         }
@@ -7565,7 +7565,7 @@
         case 1844: {
             dlatch_ = get_data(pins);
             alu_op(7, dlatch_);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1845;
             return true;
         }
@@ -7587,7 +7587,7 @@
             return true;
         }
         case 1848: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1849;
             return true;
         }
@@ -7597,8 +7597,8 @@
             return true;
         }
         case 1850: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1851;
             return true;
         }
@@ -7607,7 +7607,7 @@
             return true;
         }
         case 1852: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1853;
             return true;
         }
@@ -7617,7 +7617,7 @@
             return true;
         }
         case 1854: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1855;
             return true;
         }
@@ -7627,8 +7627,8 @@
             return true;
         }
         case 1856: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = 56; regs.pc = regs.wz;
             step_ = 1857;
             return true;
@@ -7638,7 +7638,7 @@
             return true;
         }
         case 1858: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1859;
             return true;
         }
@@ -7912,7 +7912,7 @@
             return true;
         }
         case 1861: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 1862;
             return true;
         }
@@ -7925,7 +7925,7 @@
             return true;
         }
         case 1864: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1865;
             return true;
         }
@@ -7936,7 +7936,7 @@
         case 1866: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 1867;
             return true;
         }
@@ -7955,7 +7955,7 @@
             return true;
         }
         case 1869: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.b, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.b, IORQ | WR);
             step_ = 1870;
             return true;
         }
@@ -7968,7 +7968,7 @@
             return true;
         }
         case 1872: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1873;
             return true;
         }
@@ -7978,7 +7978,7 @@
         }
         case 1874: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 1875;
             return true;
         }
@@ -8053,7 +8053,7 @@
             return true;
         }
         case 1890: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1891;
             return true;
         }
@@ -8062,7 +8062,7 @@
             return true;
         }
         case 1892: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1893;
             return true;
         }
@@ -8072,7 +8072,7 @@
         }
         case 1894: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1895;
             return true;
         }
@@ -8082,7 +8082,7 @@
             return true;
         }
         case 1896: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1897;
             return true;
         }
@@ -8091,7 +8091,7 @@
             return true;
         }
         case 1898: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1899;
             return true;
         }
@@ -8101,7 +8101,7 @@
         }
         case 1900: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1901;
             return true;
         }
@@ -8111,7 +8111,7 @@
             return true;
         }
         case 1902: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1903;
             return true;
         }
@@ -8121,8 +8121,8 @@
             return true;
         }
         case 1904: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1905;
             return true;
         }
@@ -8131,7 +8131,7 @@
             return true;
         }
         case 1906: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1907;
             return true;
         }
@@ -8141,7 +8141,7 @@
             return true;
         }
         case 1908: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 1909;
             return true;
         }
@@ -8151,8 +8151,8 @@
             return true;
         }
         case 1910: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 1911;
             return true;
         }
@@ -8161,7 +8161,7 @@
             return true;
         }
         case 1912: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 1913;
             return true;
         }
@@ -8180,7 +8180,7 @@
             return true;
         }
         case 1914: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1915;
             return true;
         }
@@ -8189,7 +8189,7 @@
             return true;
         }
         case 1916: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1917;
             return true;
         }
@@ -8199,7 +8199,7 @@
         }
         case 1918: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1919;
             return true;
         }
@@ -8209,7 +8209,7 @@
             return true;
         }
         case 1920: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1921;
             return true;
         }
@@ -8218,7 +8218,7 @@
             return true;
         }
         case 1922: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1923;
             return true;
         }
@@ -8229,7 +8229,7 @@
         case 1924: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1925;
             return true;
         }
@@ -8266,7 +8266,7 @@
             return true;
         }
         case 1929: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 1930;
             return true;
         }
@@ -8279,7 +8279,7 @@
             return true;
         }
         case 1932: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1933;
             return true;
         }
@@ -8290,7 +8290,7 @@
         case 1934: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 1935;
             return true;
         }
@@ -8309,7 +8309,7 @@
             return true;
         }
         case 1937: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.c, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.c, IORQ | WR);
             step_ = 1938;
             return true;
         }
@@ -8322,7 +8322,7 @@
             return true;
         }
         case 1940: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1941;
             return true;
         }
@@ -8332,7 +8332,7 @@
         }
         case 1942: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 1943;
             return true;
         }
@@ -8407,7 +8407,7 @@
             return true;
         }
         case 1958: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1959;
             return true;
         }
@@ -8416,7 +8416,7 @@
             return true;
         }
         case 1960: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1961;
             return true;
         }
@@ -8426,7 +8426,7 @@
         }
         case 1962: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1963;
             return true;
         }
@@ -8436,7 +8436,7 @@
             return true;
         }
         case 1964: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1965;
             return true;
         }
@@ -8445,7 +8445,7 @@
             return true;
         }
         case 1966: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1967;
             return true;
         }
@@ -8455,7 +8455,7 @@
         }
         case 1968: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1969;
             return true;
         }
@@ -8465,7 +8465,7 @@
             return true;
         }
         case 1970: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1971;
             return true;
         }
@@ -8474,7 +8474,7 @@
             return true;
         }
         case 1972: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1973;
             return true;
         }
@@ -8484,7 +8484,7 @@
         }
         case 1974: {
             regs.c = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1975;
             return true;
         }
@@ -8494,7 +8494,7 @@
             return true;
         }
         case 1976: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1977;
             return true;
         }
@@ -8503,7 +8503,7 @@
             return true;
         }
         case 1978: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1979;
             return true;
         }
@@ -8513,7 +8513,7 @@
         }
         case 1980: {
             regs.b = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1981;
             return true;
         }
@@ -8532,7 +8532,7 @@
             return true;
         }
         case 1982: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1983;
             return true;
         }
@@ -8541,7 +8541,7 @@
             return true;
         }
         case 1984: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1985;
             return true;
         }
@@ -8551,7 +8551,7 @@
         }
         case 1986: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1987;
             return true;
         }
@@ -8561,7 +8561,7 @@
             return true;
         }
         case 1988: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 1989;
             return true;
         }
@@ -8570,7 +8570,7 @@
             return true;
         }
         case 1990: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 1991;
             return true;
         }
@@ -8581,7 +8581,7 @@
         case 1992: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 1993;
             return true;
         }
@@ -8618,7 +8618,7 @@
             return true;
         }
         case 1997: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 1998;
             return true;
         }
@@ -8631,7 +8631,7 @@
             return true;
         }
         case 2000: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2001;
             return true;
         }
@@ -8642,7 +8642,7 @@
         case 2002: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2003;
             return true;
         }
@@ -8661,7 +8661,7 @@
             return true;
         }
         case 2005: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.d, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.d, IORQ | WR);
             step_ = 2006;
             return true;
         }
@@ -8674,7 +8674,7 @@
             return true;
         }
         case 2008: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2009;
             return true;
         }
@@ -8684,7 +8684,7 @@
         }
         case 2010: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2011;
             return true;
         }
@@ -8759,7 +8759,7 @@
             return true;
         }
         case 2026: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2027;
             return true;
         }
@@ -8768,7 +8768,7 @@
             return true;
         }
         case 2028: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2029;
             return true;
         }
@@ -8778,7 +8778,7 @@
         }
         case 2030: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2031;
             return true;
         }
@@ -8788,7 +8788,7 @@
             return true;
         }
         case 2032: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2033;
             return true;
         }
@@ -8797,7 +8797,7 @@
             return true;
         }
         case 2034: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2035;
             return true;
         }
@@ -8807,7 +8807,7 @@
         }
         case 2036: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2037;
             return true;
         }
@@ -8817,7 +8817,7 @@
             return true;
         }
         case 2038: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2039;
             return true;
         }
@@ -8827,8 +8827,8 @@
             return true;
         }
         case 2040: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2041;
             return true;
         }
@@ -8837,7 +8837,7 @@
             return true;
         }
         case 2042: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2043;
             return true;
         }
@@ -8847,7 +8847,7 @@
             return true;
         }
         case 2044: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2045;
             return true;
         }
@@ -8857,8 +8857,8 @@
             return true;
         }
         case 2046: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2047;
             return true;
         }
@@ -8867,7 +8867,7 @@
             return true;
         }
         case 2048: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2049;
             return true;
         }
@@ -8886,7 +8886,7 @@
             return true;
         }
         case 2050: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2051;
             return true;
         }
@@ -8895,7 +8895,7 @@
             return true;
         }
         case 2052: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2053;
             return true;
         }
@@ -8905,7 +8905,7 @@
         }
         case 2054: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2055;
             return true;
         }
@@ -8915,7 +8915,7 @@
             return true;
         }
         case 2056: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2057;
             return true;
         }
@@ -8924,7 +8924,7 @@
             return true;
         }
         case 2058: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2059;
             return true;
         }
@@ -8935,7 +8935,7 @@
         case 2060: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2061;
             return true;
         }
@@ -8972,7 +8972,7 @@
             return true;
         }
         case 2065: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2066;
             return true;
         }
@@ -8985,7 +8985,7 @@
             return true;
         }
         case 2068: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2069;
             return true;
         }
@@ -8996,7 +8996,7 @@
         case 2070: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2071;
             return true;
         }
@@ -9015,7 +9015,7 @@
             return true;
         }
         case 2073: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.e, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.e, IORQ | WR);
             step_ = 2074;
             return true;
         }
@@ -9028,7 +9028,7 @@
             return true;
         }
         case 2076: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2077;
             return true;
         }
@@ -9038,7 +9038,7 @@
         }
         case 2078: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2079;
             return true;
         }
@@ -9113,7 +9113,7 @@
             return true;
         }
         case 2094: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2095;
             return true;
         }
@@ -9122,7 +9122,7 @@
             return true;
         }
         case 2096: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2097;
             return true;
         }
@@ -9132,7 +9132,7 @@
         }
         case 2098: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2099;
             return true;
         }
@@ -9142,7 +9142,7 @@
             return true;
         }
         case 2100: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2101;
             return true;
         }
@@ -9151,7 +9151,7 @@
             return true;
         }
         case 2102: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2103;
             return true;
         }
@@ -9161,7 +9161,7 @@
         }
         case 2104: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2105;
             return true;
         }
@@ -9171,7 +9171,7 @@
             return true;
         }
         case 2106: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2107;
             return true;
         }
@@ -9180,7 +9180,7 @@
             return true;
         }
         case 2108: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2109;
             return true;
         }
@@ -9190,7 +9190,7 @@
         }
         case 2110: {
             regs.e = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2111;
             return true;
         }
@@ -9200,7 +9200,7 @@
             return true;
         }
         case 2112: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2113;
             return true;
         }
@@ -9209,7 +9209,7 @@
             return true;
         }
         case 2114: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2115;
             return true;
         }
@@ -9219,7 +9219,7 @@
         }
         case 2116: {
             regs.d = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2117;
             return true;
         }
@@ -9238,7 +9238,7 @@
             return true;
         }
         case 2118: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2119;
             return true;
         }
@@ -9247,7 +9247,7 @@
             return true;
         }
         case 2120: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2121;
             return true;
         }
@@ -9257,7 +9257,7 @@
         }
         case 2122: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2123;
             return true;
         }
@@ -9267,7 +9267,7 @@
             return true;
         }
         case 2124: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2125;
             return true;
         }
@@ -9276,7 +9276,7 @@
             return true;
         }
         case 2126: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2127;
             return true;
         }
@@ -9287,7 +9287,7 @@
         case 2128: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2129;
             return true;
         }
@@ -9324,7 +9324,7 @@
             return true;
         }
         case 2133: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2134;
             return true;
         }
@@ -9337,7 +9337,7 @@
             return true;
         }
         case 2136: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2137;
             return true;
         }
@@ -9348,7 +9348,7 @@
         case 2138: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2139;
             return true;
         }
@@ -9367,7 +9367,7 @@
             return true;
         }
         case 2141: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.h, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.h, IORQ | WR);
             step_ = 2142;
             return true;
         }
@@ -9380,7 +9380,7 @@
             return true;
         }
         case 2144: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2145;
             return true;
         }
@@ -9390,7 +9390,7 @@
         }
         case 2146: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2147;
             return true;
         }
@@ -9465,7 +9465,7 @@
             return true;
         }
         case 2162: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2163;
             return true;
         }
@@ -9474,7 +9474,7 @@
             return true;
         }
         case 2164: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2165;
             return true;
         }
@@ -9484,7 +9484,7 @@
         }
         case 2166: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2167;
             return true;
         }
@@ -9494,7 +9494,7 @@
             return true;
         }
         case 2168: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2169;
             return true;
         }
@@ -9503,7 +9503,7 @@
             return true;
         }
         case 2170: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2171;
             return true;
         }
@@ -9513,7 +9513,7 @@
         }
         case 2172: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2173;
             return true;
         }
@@ -9523,7 +9523,7 @@
             return true;
         }
         case 2174: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2175;
             return true;
         }
@@ -9533,8 +9533,8 @@
             return true;
         }
         case 2176: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2177;
             return true;
         }
@@ -9543,7 +9543,7 @@
             return true;
         }
         case 2178: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2179;
             return true;
         }
@@ -9553,7 +9553,7 @@
             return true;
         }
         case 2180: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2181;
             return true;
         }
@@ -9563,8 +9563,8 @@
             return true;
         }
         case 2182: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2183;
             return true;
         }
@@ -9573,7 +9573,7 @@
             return true;
         }
         case 2184: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2185;
             return true;
         }
@@ -9592,7 +9592,7 @@
             return true;
         }
         case 2186: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2187;
             return true;
         }
@@ -9601,7 +9601,7 @@
             return true;
         }
         case 2188: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2189;
             return true;
         }
@@ -9611,7 +9611,7 @@
         }
         case 2190: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2191;
             return true;
         }
@@ -9621,7 +9621,7 @@
             return true;
         }
         case 2192: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2193;
             return true;
         }
@@ -9630,7 +9630,7 @@
             return true;
         }
         case 2194: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2195;
             return true;
         }
@@ -9641,7 +9641,7 @@
         case 2196: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2197;
             return true;
         }
@@ -9661,7 +9661,7 @@
             return true;
         }
         case 2198: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2199;
             return true;
         }
@@ -9670,7 +9670,7 @@
             return true;
         }
         case 2200: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2201;
             return true;
         }
@@ -9680,7 +9680,7 @@
         }
         case 2202: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2203;
             return true;
         }
@@ -9723,7 +9723,7 @@
             return true;
         }
         case 2212: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2213;
             return true;
         }
@@ -9733,8 +9733,8 @@
             return true;
         }
         case 2214: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = uint16_t(regs.hl() + 1);
             step_ = 2215;
             return true;
@@ -9744,7 +9744,7 @@
             return true;
         }
         case 2216: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2217;
             return true;
         }
@@ -9762,7 +9762,7 @@
             return true;
         }
         case 2219: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2220;
             return true;
         }
@@ -9775,7 +9775,7 @@
             return true;
         }
         case 2222: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2223;
             return true;
         }
@@ -9786,7 +9786,7 @@
         case 2224: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2225;
             return true;
         }
@@ -9805,7 +9805,7 @@
             return true;
         }
         case 2227: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.l, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.l, IORQ | WR);
             step_ = 2228;
             return true;
         }
@@ -9818,7 +9818,7 @@
             return true;
         }
         case 2230: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2231;
             return true;
         }
@@ -9828,7 +9828,7 @@
         }
         case 2232: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2233;
             return true;
         }
@@ -9903,7 +9903,7 @@
             return true;
         }
         case 2248: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2249;
             return true;
         }
@@ -9912,7 +9912,7 @@
             return true;
         }
         case 2250: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2251;
             return true;
         }
@@ -9922,7 +9922,7 @@
         }
         case 2252: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2253;
             return true;
         }
@@ -9932,7 +9932,7 @@
             return true;
         }
         case 2254: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2255;
             return true;
         }
@@ -9941,7 +9941,7 @@
             return true;
         }
         case 2256: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2257;
             return true;
         }
@@ -9951,7 +9951,7 @@
         }
         case 2258: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2259;
             return true;
         }
@@ -9961,7 +9961,7 @@
             return true;
         }
         case 2260: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2261;
             return true;
         }
@@ -9970,7 +9970,7 @@
             return true;
         }
         case 2262: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2263;
             return true;
         }
@@ -9980,7 +9980,7 @@
         }
         case 2264: {
             regs.l = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2265;
             return true;
         }
@@ -9990,7 +9990,7 @@
             return true;
         }
         case 2266: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2267;
             return true;
         }
@@ -9999,7 +9999,7 @@
             return true;
         }
         case 2268: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2269;
             return true;
         }
@@ -10009,7 +10009,7 @@
         }
         case 2270: {
             regs.h = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2271;
             return true;
         }
@@ -10028,7 +10028,7 @@
             return true;
         }
         case 2272: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2273;
             return true;
         }
@@ -10037,7 +10037,7 @@
             return true;
         }
         case 2274: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2275;
             return true;
         }
@@ -10047,7 +10047,7 @@
         }
         case 2276: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2277;
             return true;
         }
@@ -10057,7 +10057,7 @@
             return true;
         }
         case 2278: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2279;
             return true;
         }
@@ -10066,7 +10066,7 @@
             return true;
         }
         case 2280: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2281;
             return true;
         }
@@ -10077,7 +10077,7 @@
         case 2282: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2283;
             return true;
         }
@@ -10097,7 +10097,7 @@
             return true;
         }
         case 2284: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2285;
             return true;
         }
@@ -10106,7 +10106,7 @@
             return true;
         }
         case 2286: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2287;
             return true;
         }
@@ -10116,7 +10116,7 @@
         }
         case 2288: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2289;
             return true;
         }
@@ -10159,7 +10159,7 @@
             return true;
         }
         case 2298: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2299;
             return true;
         }
@@ -10169,8 +10169,8 @@
             return true;
         }
         case 2300: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.wz = uint16_t(regs.hl() + 1);
             step_ = 2301;
             return true;
@@ -10180,7 +10180,7 @@
             return true;
         }
         case 2302: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2303;
             return true;
         }
@@ -10198,7 +10198,7 @@
             return true;
         }
         case 2305: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2306;
             return true;
         }
@@ -10211,7 +10211,7 @@
             return true;
         }
         case 2308: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2309;
             return true;
         }
@@ -10222,7 +10222,7 @@
         case 2310: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2311;
             return true;
         }
@@ -10241,7 +10241,7 @@
             return true;
         }
         case 2313: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), 0, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), 0, IORQ | WR);
             step_ = 2314;
             return true;
         }
@@ -10254,7 +10254,7 @@
             return true;
         }
         case 2316: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2317;
             return true;
         }
@@ -10264,7 +10264,7 @@
         }
         case 2318: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2319;
             return true;
         }
@@ -10339,7 +10339,7 @@
             return true;
         }
         case 2334: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2335;
             return true;
         }
@@ -10348,7 +10348,7 @@
             return true;
         }
         case 2336: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2337;
             return true;
         }
@@ -10358,7 +10358,7 @@
         }
         case 2338: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2339;
             return true;
         }
@@ -10368,7 +10368,7 @@
             return true;
         }
         case 2340: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2341;
             return true;
         }
@@ -10377,7 +10377,7 @@
             return true;
         }
         case 2342: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2343;
             return true;
         }
@@ -10387,7 +10387,7 @@
         }
         case 2344: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2345;
             return true;
         }
@@ -10397,7 +10397,7 @@
             return true;
         }
         case 2346: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2347;
             return true;
         }
@@ -10407,8 +10407,8 @@
             return true;
         }
         case 2348: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2349;
             return true;
         }
@@ -10417,7 +10417,7 @@
             return true;
         }
         case 2350: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2351;
             return true;
         }
@@ -10427,7 +10427,7 @@
             return true;
         }
         case 2352: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2353;
             return true;
         }
@@ -10437,8 +10437,8 @@
             return true;
         }
         case 2354: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2355;
             return true;
         }
@@ -10447,7 +10447,7 @@
             return true;
         }
         case 2356: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2357;
             return true;
         }
@@ -10466,7 +10466,7 @@
             return true;
         }
         case 2358: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2359;
             return true;
         }
@@ -10475,7 +10475,7 @@
             return true;
         }
         case 2360: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2361;
             return true;
         }
@@ -10485,7 +10485,7 @@
         }
         case 2362: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2363;
             return true;
         }
@@ -10495,7 +10495,7 @@
             return true;
         }
         case 2364: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2365;
             return true;
         }
@@ -10504,7 +10504,7 @@
             return true;
         }
         case 2366: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2367;
             return true;
         }
@@ -10515,7 +10515,7 @@
         case 2368: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2369;
             return true;
         }
@@ -10543,7 +10543,7 @@
             return true;
         }
         case 2371: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2372;
             return true;
         }
@@ -10556,7 +10556,7 @@
             return true;
         }
         case 2374: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2375;
             return true;
         }
@@ -10567,7 +10567,7 @@
         case 2376: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2377;
             return true;
         }
@@ -10586,7 +10586,7 @@
             return true;
         }
         case 2379: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), regs.a, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), regs.a, IORQ | WR);
             step_ = 2380;
             return true;
         }
@@ -10599,7 +10599,7 @@
             return true;
         }
         case 2382: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2383;
             return true;
         }
@@ -10609,7 +10609,7 @@
         }
         case 2384: {
             regs.wz = uint16_t(regs.bc() + 1);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2385;
             return true;
         }
@@ -10684,7 +10684,7 @@
             return true;
         }
         case 2400: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2401;
             return true;
         }
@@ -10693,7 +10693,7 @@
             return true;
         }
         case 2402: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2403;
             return true;
         }
@@ -10703,7 +10703,7 @@
         }
         case 2404: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2405;
             return true;
         }
@@ -10713,7 +10713,7 @@
             return true;
         }
         case 2406: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2407;
             return true;
         }
@@ -10722,7 +10722,7 @@
             return true;
         }
         case 2408: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2409;
             return true;
         }
@@ -10732,7 +10732,7 @@
         }
         case 2410: {
             regs.set_wzh(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2411;
             return true;
         }
@@ -10742,7 +10742,7 @@
             return true;
         }
         case 2412: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2413;
             return true;
         }
@@ -10751,7 +10751,7 @@
             return true;
         }
         case 2414: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2415;
             return true;
         }
@@ -10761,7 +10761,7 @@
         }
         case 2416: {
             regs.set_spl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2417;
             return true;
         }
@@ -10771,7 +10771,7 @@
             return true;
         }
         case 2418: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2419;
             return true;
         }
@@ -10780,7 +10780,7 @@
             return true;
         }
         case 2420: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2421;
             return true;
         }
@@ -10790,7 +10790,7 @@
         }
         case 2422: {
             regs.set_sph(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2423;
             return true;
         }
@@ -10809,7 +10809,7 @@
             return true;
         }
         case 2424: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2425;
             return true;
         }
@@ -10818,7 +10818,7 @@
             return true;
         }
         case 2426: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2427;
             return true;
         }
@@ -10828,7 +10828,7 @@
         }
         case 2428: {
             regs.set_wzl(get_data(pins));
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2429;
             return true;
         }
@@ -10838,7 +10838,7 @@
             return true;
         }
         case 2430: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2431;
             return true;
         }
@@ -10847,7 +10847,7 @@
             return true;
         }
         case 2432: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2433;
             return true;
         }
@@ -10858,7 +10858,7 @@
         case 2434: {
             regs.set_wzh(get_data(pins));
             regs.pc = regs.wz;
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2435;
             return true;
         }
@@ -11010,7 +11010,7 @@
             return true;
         }
         case 2436: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2437;
             return true;
         }
@@ -11019,7 +11019,7 @@
             return true;
         }
         case 2438: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2439;
             return true;
         }
@@ -11029,7 +11029,7 @@
         }
         case 2440: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2441;
             return true;
         }
@@ -11039,7 +11039,7 @@
             return true;
         }
         case 2442: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2443;
             return true;
         }
@@ -11049,8 +11049,8 @@
             return true;
         }
         case 2444: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2445;
             return true;
         }
@@ -11059,7 +11059,7 @@
             return true;
         }
         case 2446: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2447;
             return true;
         }
@@ -11090,7 +11090,7 @@
             return true;
         }
         case 2452: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2453;
             return true;
         }
@@ -11099,7 +11099,7 @@
             return true;
         }
         case 2454: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2455;
             return true;
         }
@@ -11109,7 +11109,7 @@
         }
         case 2456: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2457;
             return true;
         }
@@ -11176,7 +11176,7 @@
             return true;
         }
         case 2471: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2472;
             return true;
         }
@@ -11189,7 +11189,7 @@
             return true;
         }
         case 2474: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2475;
             return true;
         }
@@ -11200,7 +11200,7 @@
         case 2476: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1); regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2477;
             return true;
         }
@@ -11210,7 +11210,7 @@
             return true;
         }
         case 2478: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2479;
             return true;
         }
@@ -11220,8 +11220,8 @@
             return true;
         }
         case 2480: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1));
             step_ = 2481;
             return true;
@@ -11231,7 +11231,7 @@
             return true;
         }
         case 2482: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2483;
             return true;
         }
@@ -11253,7 +11253,7 @@
             return true;
         }
         case 2486: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2487;
             return true;
         }
@@ -11262,7 +11262,7 @@
             return true;
         }
         case 2488: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2489;
             return true;
         }
@@ -11273,7 +11273,7 @@
         case 2490: {
             dlatch_ = get_data(pins);
             regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2491;
             return true;
         }
@@ -11287,7 +11287,7 @@
             return true;
         }
         case 2493: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), dlatch_, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), dlatch_, IORQ | WR);
             step_ = 2494;
             return true;
         }
@@ -11300,7 +11300,7 @@
             return true;
         }
         case 2496: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2497;
             return true;
         }
@@ -11310,7 +11310,7 @@
         }
         case 2498: {
             regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2499;
             return true;
         }
@@ -11340,7 +11340,7 @@
             return true;
         }
         case 2500: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2501;
             return true;
         }
@@ -11349,7 +11349,7 @@
             return true;
         }
         case 2502: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2503;
             return true;
         }
@@ -11359,7 +11359,7 @@
         }
         case 2504: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2505;
             return true;
         }
@@ -11369,7 +11369,7 @@
             return true;
         }
         case 2506: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2507;
             return true;
         }
@@ -11379,8 +11379,8 @@
             return true;
         }
         case 2508: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2509;
             return true;
         }
@@ -11389,7 +11389,7 @@
             return true;
         }
         case 2510: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2511;
             return true;
         }
@@ -11420,7 +11420,7 @@
             return true;
         }
         case 2516: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2517;
             return true;
         }
@@ -11429,7 +11429,7 @@
             return true;
         }
         case 2518: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2519;
             return true;
         }
@@ -11439,7 +11439,7 @@
         }
         case 2520: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2521;
             return true;
         }
@@ -11506,7 +11506,7 @@
             return true;
         }
         case 2535: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2536;
             return true;
         }
@@ -11519,7 +11519,7 @@
             return true;
         }
         case 2538: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2539;
             return true;
         }
@@ -11530,7 +11530,7 @@
         case 2540: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() - 1); regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2541;
             return true;
         }
@@ -11540,7 +11540,7 @@
             return true;
         }
         case 2542: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2543;
             return true;
         }
@@ -11550,8 +11550,8 @@
             return true;
         }
         case 2544: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1));
             step_ = 2545;
             return true;
@@ -11561,7 +11561,7 @@
             return true;
         }
         case 2546: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2547;
             return true;
         }
@@ -11583,7 +11583,7 @@
             return true;
         }
         case 2550: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2551;
             return true;
         }
@@ -11592,7 +11592,7 @@
             return true;
         }
         case 2552: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2553;
             return true;
         }
@@ -11603,7 +11603,7 @@
         case 2554: {
             dlatch_ = get_data(pins);
             regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2555;
             return true;
         }
@@ -11617,7 +11617,7 @@
             return true;
         }
         case 2557: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), dlatch_, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), dlatch_, IORQ | WR);
             step_ = 2558;
             return true;
         }
@@ -11630,7 +11630,7 @@
             return true;
         }
         case 2560: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2561;
             return true;
         }
@@ -11640,7 +11640,7 @@
         }
         case 2562: {
             regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2563;
             return true;
         }
@@ -11670,7 +11670,7 @@
             return true;
         }
         case 2564: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2565;
             return true;
         }
@@ -11679,7 +11679,7 @@
             return true;
         }
         case 2566: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2567;
             return true;
         }
@@ -11689,7 +11689,7 @@
         }
         case 2568: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2569;
             return true;
         }
@@ -11699,7 +11699,7 @@
             return true;
         }
         case 2570: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2571;
             return true;
         }
@@ -11709,8 +11709,8 @@
             return true;
         }
         case 2572: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2573;
             return true;
         }
@@ -11719,7 +11719,7 @@
             return true;
         }
         case 2574: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2575;
             return true;
         }
@@ -11791,7 +11791,7 @@
             return true;
         }
         case 2590: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2591;
             return true;
         }
@@ -11800,7 +11800,7 @@
             return true;
         }
         case 2592: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2593;
             return true;
         }
@@ -11810,7 +11810,7 @@
         }
         case 2594: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2595;
             return true;
         }
@@ -11918,7 +11918,7 @@
             return true;
         }
         case 2619: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2620;
             return true;
         }
@@ -11931,7 +11931,7 @@
             return true;
         }
         case 2622: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2623;
             return true;
         }
@@ -11942,7 +11942,7 @@
         case 2624: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() + 1); regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2625;
             return true;
         }
@@ -11952,7 +11952,7 @@
             return true;
         }
         case 2626: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2627;
             return true;
         }
@@ -11962,8 +11962,8 @@
             return true;
         }
         case 2628: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); if (regs.b == 0) { step_ = 2639; return true; }
             step_ = 2629;
             return true;
@@ -11973,7 +11973,7 @@
             return true;
         }
         case 2630: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2631;
             return true;
         }
@@ -12036,7 +12036,7 @@
             return true;
         }
         case 2644: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2645;
             return true;
         }
@@ -12045,7 +12045,7 @@
             return true;
         }
         case 2646: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2647;
             return true;
         }
@@ -12056,7 +12056,7 @@
         case 2648: {
             dlatch_ = get_data(pins);
             regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2649;
             return true;
         }
@@ -12070,7 +12070,7 @@
             return true;
         }
         case 2651: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), dlatch_, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), dlatch_, IORQ | WR);
             step_ = 2652;
             return true;
         }
@@ -12083,7 +12083,7 @@
             return true;
         }
         case 2654: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2655;
             return true;
         }
@@ -12093,7 +12093,7 @@
         }
         case 2656: {
             regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { step_ = 2667; return true; }
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2657;
             return true;
         }
@@ -12164,7 +12164,7 @@
             return true;
         }
         case 2668: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2669;
             return true;
         }
@@ -12173,7 +12173,7 @@
             return true;
         }
         case 2670: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2671;
             return true;
         }
@@ -12183,7 +12183,7 @@
         }
         case 2672: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2673;
             return true;
         }
@@ -12193,7 +12193,7 @@
             return true;
         }
         case 2674: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2675;
             return true;
         }
@@ -12203,8 +12203,8 @@
             return true;
         }
         case 2676: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2677;
             return true;
         }
@@ -12213,7 +12213,7 @@
             return true;
         }
         case 2678: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2679;
             return true;
         }
@@ -12285,7 +12285,7 @@
             return true;
         }
         case 2694: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2695;
             return true;
         }
@@ -12294,7 +12294,7 @@
             return true;
         }
         case 2696: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2697;
             return true;
         }
@@ -12304,7 +12304,7 @@
         }
         case 2698: {
             dlatch_ = get_data(pins);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2699;
             return true;
         }
@@ -12412,7 +12412,7 @@
             return true;
         }
         case 2723: {
-            pins = set_addr_ctrl(pins, get_addr(pins), IORQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), IORQ | RD);
             step_ = 2724;
             return true;
         }
@@ -12425,7 +12425,7 @@
             return true;
         }
         case 2726: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2727;
             return true;
         }
@@ -12436,7 +12436,7 @@
         case 2728: {
             dlatch_ = get_data(pins);
             regs.wz = uint16_t(regs.bc() - 1); regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, IORQ | RD);
+            pins = release_pins(pins, IORQ | RD);
             step_ = 2729;
             return true;
         }
@@ -12446,7 +12446,7 @@
             return true;
         }
         case 2730: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2731;
             return true;
         }
@@ -12456,8 +12456,8 @@
             return true;
         }
         case 2732: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); if (regs.b == 0) { step_ = 2743; return true; }
             step_ = 2733;
             return true;
@@ -12467,7 +12467,7 @@
             return true;
         }
         case 2734: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2735;
             return true;
         }
@@ -12530,7 +12530,7 @@
             return true;
         }
         case 2748: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2749;
             return true;
         }
@@ -12539,7 +12539,7 @@
             return true;
         }
         case 2750: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2751;
             return true;
         }
@@ -12550,7 +12550,7 @@
         case 2752: {
             dlatch_ = get_data(pins);
             regs.b = uint8_t(regs.b - 1);
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2753;
             return true;
         }
@@ -12564,7 +12564,7 @@
             return true;
         }
         case 2755: {
-            pins = set_addr_data_ctrl(pins, get_addr(pins), dlatch_, IORQ | WR);
+            pins = set_addr_data_assert(pins, get_addr(pins), dlatch_, IORQ | WR);
             step_ = 2756;
             return true;
         }
@@ -12577,7 +12577,7 @@
             return true;
         }
         case 2758: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2759;
             return true;
         }
@@ -12587,7 +12587,7 @@
         }
         case 2760: {
             regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { step_ = 2771; return true; }
-            pins = release_ctrl(pins, IORQ | WR);
+            pins = release_pins(pins, IORQ | WR);
             step_ = 2761;
             return true;
         }
@@ -12919,7 +12919,7 @@
             return true;
         }
         case 2774: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ | RD);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = 2775;
             return true;
         }
@@ -12928,7 +12928,7 @@
             return true;
         }
         case 2776: {
-            if (pins & WAIT) { return true; }
+            if (asserted(pins, WAIT)) { return true; }
             step_ = 2777;
             return true;
         }
@@ -12939,7 +12939,7 @@
         case 2778: {
             dlatch_ = get_data(pins);
             uint8_t cb_out; if (cb_action(dlatch_, true, &cb_out)) { dlatch_ = cb_out; } else { step_ = 2785; return true; }
-            pins = release_ctrl(pins, MREQ | RD);
+            pins = release_pins(pins, MREQ | RD);
             step_ = 2779;
             return true;
         }
@@ -12957,7 +12957,7 @@
             return true;
         }
         case 2782: {
-            pins = set_addr_ctrl(pins, get_addr(pins), MREQ);
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = 2783;
             return true;
         }
@@ -12967,8 +12967,8 @@
             return true;
         }
         case 2784: {
-            if (pins & WAIT) { return true; }
-            pins |= WR;
+            if (asserted(pins, WAIT)) { return true; }
+            pins = assert_pins(pins, WR);
             step_ = 2785;
             return true;
         }
@@ -12977,7 +12977,7 @@
             return true;
         }
         case 2786: {
-            pins = release_ctrl(pins, MREQ | WR);
+            pins = release_pins(pins, MREQ | WR);
             step_ = 2787;
             return true;
         }

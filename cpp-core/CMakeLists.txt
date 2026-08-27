@@ -55,4 +55,5 @@ endfunction()
 
 zx_add_test(memory_tests)
 zx_add_test(alu_tests USES_REFERENCE)
+zx_add_test(pin_level)
 zx_add_test(differential USES_REFERENCE)

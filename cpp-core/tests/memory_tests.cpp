@@ -40,24 +40,33 @@ TEST(flat_memory_is_unguarded_across_the_whole_64k) {
     CHECK_EQ(mem.read(0xFFFF), uint8_t(0x22));
 }
 
-// The pin layout is load-bearing: vendor/chips/z80.h's shim uses these exact
-// bit positions, so the differential tests depend on them matching.
+// Bit POSITIONS match vendor/chips/z80.h; POLARITY deliberately does not.
+// Every Z80 control line is active low on the real chip, and that is what
+// these helpers model -- see pins.h.
 TEST(pin_helpers_round_trip_address_and_data) {
-    uint64_t pins = 0;
-    pins = set_addr_data_ctrl(pins, 0x4000, 0x42, MREQ | RD);
+    // The resting bus has every control line released (HIGH) -- signals are
+    // active low here, as on the real chip.
+    uint64_t pins = PINS_IDLE;
+    CHECK(!asserted(pins, MREQ));
+    CHECK(!any_asserted(pins, ALL_SIGNALS));
+
+    pins = set_addr_data_assert(pins, 0x4000, 0x42, MREQ | RD);
     CHECK_EQ(get_addr(pins), uint16_t(0x4000));
     CHECK_EQ(get_data(pins), uint8_t(0x42));
-    CHECK(pins & MREQ);
-    CHECK(pins & RD);
+    CHECK(asserted(pins, MREQ));
+    CHECK(asserted(pins, RD));
+    CHECK(asserted(pins, MREQ | RD)); // "all of these"
+    CHECK(!asserted(pins, MREQ | WR)); // WR is not asserted, so not all are
+    CHECK(any_asserted(pins, MREQ | WR));
 
-    // Control lines persist until explicitly released -- the core convention
-    // change that makes half-T-state timing expressible.
+    // Control lines persist until explicitly released -- the convention that
+    // makes half-T-state timing expressible.
     pins = set_addr(pins, 0x8000);
-    CHECK(pins & MREQ);
-    pins = release_ctrl(pins, MREQ | RD);
-    CHECK(!(pins & MREQ));
-    CHECK(!(pins & RD));
-    CHECK_EQ(get_data(pins), uint8_t(0x42)); // data bus untouched by a ctrl release
+    CHECK(asserted(pins, MREQ));
+    pins = release_pins(pins, MREQ | RD);
+    CHECK(!asserted(pins, MREQ));
+    CHECK(!asserted(pins, RD));
+    CHECK_EQ(get_data(pins), uint8_t(0x42)); // data bus untouched by a release
 }
 
 TEST(register_pair_accessors_split_high_and_low_correctly) {

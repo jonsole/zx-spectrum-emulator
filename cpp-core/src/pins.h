@@ -1,22 +1,30 @@
 #pragma once
 // Z80 bus pin encoding: address bits 0-15, data bits 16-23, control lines from
-// bit 24. Ported from rust-core/zx-core/src/pins.rs, and deliberately kept
-// bit-for-bit identical to it -- vendor/chips/z80.h's own shim uses this exact
-// layout, so the differential tests depend on it.
+// bit 24. Bit POSITIONS match rust-core/zx-core/src/pins.rs and z80.h.
 //
-// All control lines are represented ACTIVE HIGH here (bit set == asserted),
-// the opposite of the real chip's active-low wires but matching the vendored
-// z80.h reference's internal convention.
+// POLARITY DOES NOT. Every Z80 control signal is ACTIVE LOW on the real chip,
+// and that is what this models: a bit that is CLEAR means the line is being
+// driven (asserted); a bit that is SET means it is idle. So the resting state
+// of the bus is PINS_IDLE -- all control bits high -- not zero.
 //
-// IMPORTANT, and the one real divergence from the Rust version: control lines
-// are NOT auto-cleared each clock. rust-core's tick() began with
-// `pins &= !CTRL_PIN_MASK`, forcing every T-state to re-assert whatever it
-// wanted held -- workable at whole-T-state resolution, but wrong at half-T
-// resolution, where a line held across a full T-state would have to be
-// re-asserted on both halves. Here a line stays asserted until something
-// explicitly releases it (see release_ctrl), the same convention real hardware
-// and SpecIde both use. Each machine cycle's final half-state is responsible
-// for releasing what it asserted.
+// rust-core and z80.h both represent control lines active-high (bit set ==
+// asserted). That is easier to write and fine for a core that only ever asks
+// "is this line requesting something". It stops being fine here: the ULA work
+// this core exists for reasons entirely in terms of real signal levels ("the
+// ULA halts the CPU while MREQ is low", "it watches MREQ but not RFSH, which
+// is why refresh cycles cause snow"), and an inverted convention makes every
+// one of those statements need mental translation at each call site. Since we
+// deliberately do not diff pins against z80.h (see differential.cpp), nothing
+// forces us to share its polarity.
+//
+// The accessors below are named for the action, not the bit operation, and
+// are deliberately NOT the same names the active-high version used -- a call
+// site that was missed in the conversion fails to compile rather than
+// silently inverting a signal.
+//
+// Control lines are not auto-cleared each clock either: a line stays asserted
+// until something releases it, as on real hardware. Each machine cycle's
+// final half-state releases what that cycle asserted.
 
 #include <cstdint>
 
@@ -35,7 +43,7 @@ constexpr uint32_t PIN_NMI = 32;
 constexpr uint32_t PIN_WAIT = 33;
 constexpr uint32_t PIN_RFSH = 34;
 
-// Masks.
+// Masks. Every one of these is an active-LOW line.
 constexpr uint64_t M1 = 1ULL << PIN_M1;
 constexpr uint64_t MREQ = 1ULL << PIN_MREQ;
 constexpr uint64_t IORQ = 1ULL << PIN_IORQ;
@@ -48,12 +56,16 @@ constexpr uint64_t NMI = 1ULL << PIN_NMI;
 constexpr uint64_t WAIT = 1ULL << PIN_WAIT;
 constexpr uint64_t RFSH = 1ULL << PIN_RFSH;
 
-/// Every line a machine cycle may assert and must therefore release. Unlike
-/// rust-core's constant of the same name this is never applied automatically;
-/// it exists for release_ctrl() call sites that end a whole machine cycle.
-/// Deliberately excludes WAIT (driven by the bus, not the CPU) and
-/// HALT/INT/NMI/RESET (levels, not per-cycle pulses).
-constexpr uint64_t CTRL_PIN_MASK = M1 | MREQ | IORQ | RD | WR | RFSH;
+/// Every control line, whoever drives it. The CPU drives M1/MREQ/IORQ/RD/WR/
+/// RFSH/HALT; the machine drives INT/NMI/WAIT/RESET.
+constexpr uint64_t ALL_SIGNALS =
+    M1 | MREQ | IORQ | RD | WR | HALT | INT | RESET | NMI | WAIT | RFSH;
+
+/// The resting bus: every control line released (high), address and data
+/// zero. Anything that starts a CPU from scratch must start from this, NOT
+/// from 0 -- zero would mean every signal simultaneously asserted, including
+/// RESET and INT.
+constexpr uint64_t PINS_IDLE = ALL_SIGNALS;
 
 constexpr uint16_t get_addr(uint64_t pins) {
     return static_cast<uint16_t>(pins & 0xFFFF);
@@ -71,20 +83,36 @@ constexpr uint64_t set_data(uint64_t pins, uint8_t data) {
     return (pins & ~0xFF0000ULL) | (static_cast<uint64_t>(data) << 16);
 }
 
-/// Sets the address bus plus extra control lines in one go (z80.h's `_sax`).
-constexpr uint64_t set_addr_ctrl(uint64_t pins, uint16_t addr, uint64_t ctrl) {
-    return set_addr(pins, addr) | ctrl;
+/// True when EVERY line in `mask` is being driven. Active low, so "asserted"
+/// is "bit clear".
+constexpr bool asserted(uint64_t pins, uint64_t mask) {
+    return (pins & mask) == 0;
 }
 
-/// Sets address, data, and extra control lines in one go (z80.h's `_sadx`).
-constexpr uint64_t set_addr_data_ctrl(uint64_t pins, uint16_t addr, uint8_t data, uint64_t ctrl) {
-    return set_data(set_addr(pins, addr), data) | ctrl;
+/// True when ANY line in `mask` is being driven.
+constexpr bool any_asserted(uint64_t pins, uint64_t mask) {
+    return (pins & mask) != mask;
 }
 
-/// Deasserts the given control lines. The counterpart to set_*_ctrl's OR,
-/// and the reason control lines can persist across half-clocks safely.
-constexpr uint64_t release_ctrl(uint64_t pins, uint64_t ctrl) {
-    return pins & ~ctrl;
+/// Drives the given lines low.
+constexpr uint64_t assert_pins(uint64_t pins, uint64_t mask) {
+    return pins & ~mask;
+}
+
+/// Releases the given lines back high.
+constexpr uint64_t release_pins(uint64_t pins, uint64_t mask) {
+    return pins | mask;
+}
+
+/// Puts an address on the bus and asserts the given control lines.
+constexpr uint64_t set_addr_assert(uint64_t pins, uint16_t addr, uint64_t ctrl) {
+    return assert_pins(set_addr(pins, addr), ctrl);
+}
+
+/// Puts an address and a data byte on the bus and asserts the given lines.
+constexpr uint64_t set_addr_data_assert(uint64_t pins, uint16_t addr, uint8_t data,
+                                        uint64_t ctrl) {
+    return assert_pins(set_data(set_addr(pins, addr), data), ctrl);
 }
 
 } // namespace zx

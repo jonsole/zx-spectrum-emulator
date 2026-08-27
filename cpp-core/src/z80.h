@@ -218,7 +218,9 @@ private:
     bool prefix_active_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
-    uint64_t pins_ = 0;
+    /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean
+    /// every line asserted at once -- RESET, INT and WAIT included.
+    uint64_t pins_ = PINS_IDLE;
 
     // ---- fetch entry points ------------------------------------------------
     /// M1 T1H: samples INT, then puts PC on the bus and asserts M1. Called
