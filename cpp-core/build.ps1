@@ -6,10 +6,15 @@
 #
 #   .\build.ps1              configure + build (Debug)
 #   .\build.ps1 -Release     configure + build (RelWithDebInfo)
-#   .\build.ps1 -Test        build, then run the test suite via ctest
+#   .\build.ps1 -Test        build, then run the fast tests via ctest
+#   .\build.ps1 -Slow        build, then run ONLY the "slow" tests
+#                            (ZEXALL/ZEXDOC). Use with -Release; these are
+#                            billions of emulated instructions and a Debug
+#                            build turns minutes into hours.
 param(
     [switch]$Release,
-    [switch]$Test
+    [switch]$Test,
+    [switch]$Slow
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,8 +56,14 @@ cmake --build $buildDir
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 if ($Test) {
-    ctest --test-dir $buildDir --output-on-failure
+    # -LE slow: exclude the long-running exercisers from the routine run.
+    ctest --test-dir $buildDir --output-on-failure -LE slow
     if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+}
+
+if ($Slow) {
+    ctest --test-dir $buildDir --output-on-failure -L slow
+    if ($LASTEXITCODE -ne 0) { throw "Slow tests failed" }
 }
 
 Write-Host "OK: $buildType build in $buildDir"

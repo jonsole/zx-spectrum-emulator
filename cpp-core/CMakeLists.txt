@@ -57,3 +57,21 @@ zx_add_test(memory_tests)
 zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)
 zx_add_test(differential USES_REFERENCE)
+
+# ---- ZEXALL / ZEXDOC --------------------------------------------------------
+# One executable, run twice with different arguments. Labelled "slow" and
+# excluded from the default ctest run (build.ps1 -Test): a full pass is well
+# over a billion emulated instructions and takes many minutes even optimised.
+# Run with build.ps1 -Slow.
+add_executable(zexall_runner tests/zexall.cpp)
+target_link_libraries(zexall_runner PRIVATE zx_core)
+target_compile_options(zexall_runner PRIVATE ${ZX_WARNINGS})
+# The .com images live outside the build tree; baked in rather than found by
+# walking relative paths, which break depending on where ctest is invoked.
+target_compile_definitions(zexall_runner
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+foreach(suite zexdoc zexall)
+  add_test(NAME ${suite} COMMAND zexall_runner ${suite})
+  set_tests_properties(${suite} PROPERTIES LABELS "slow" TIMEOUT 7200)
+endforeach()
