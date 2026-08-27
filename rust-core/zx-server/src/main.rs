@@ -40,11 +40,6 @@ struct Args {
     #[arg(long, default_value = "../rom_disassembly")]
     rom_disassembly_dir: std::path::PathBuf,
 
-    /// Start with the ULA contention overlay already enabled (see the
-    /// `set_contention_overlay` MCP tool for toggling it at runtime).
-    #[arg(long, default_value_t = false)]
-    contention_overlay: bool,
-
     /// Exit the whole process once the last open DAP connection closes
     /// (e.g. VS Code's "Stop" debugging action) -- lets a build task chain
     /// like `preLaunchTask` freely bind the same port again next launch
@@ -66,9 +61,6 @@ async fn main() -> anyhow::Result<()> {
     println!("Starting ZX Spectrum Rust server...");
     let args = Args::parse();
     let engine = Engine::new();
-    if args.contention_overlay {
-        engine.set_contention_overlay(true);
-    }
     // Canonicalize -- the default ("../rom_disassembly") is a relative,
     // forward-slash literal; PathBuf::join() only uses the native
     // separator for segments it appends itself, so displaying the result

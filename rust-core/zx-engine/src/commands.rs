@@ -27,12 +27,8 @@ pub struct State {
     pub border: u8,
     /// Raw T-state counter within the current frame (0..FRAME_TSTATES) --
     /// useful for lining up a breakpoint hit against exactly where in the
-    /// raster/contention timeline it happened.
+    /// raster timeline it happened.
     pub tstates: u32,
-    /// Sum of memory + IO contention delay T-states over the last fully
-    /// completed frame -- a numeric readout of contention even without
-    /// the visual overlay (see `Command::SetContentionOverlay`).
-    pub contended_tstates_last_frame: u32,
     /// Return addresses for CALL/RST frames currently unwound below `pc`,
     /// oldest first -- see `Spectrum48K::call_stack`.
     pub call_stack: Vec<u16>,

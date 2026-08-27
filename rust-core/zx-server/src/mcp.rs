@@ -103,15 +103,6 @@ pub struct KeyRequest {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct SetContentionOverlayRequest {
-    /// Whether the screen returned by get_screen (and the screen-stream
-    /// panel) should be tinted to show ULA memory/IO contention: red for
-    /// memory, blue/cyan for IO, per scanline, scaled by how much
-    /// contention that line cost over the last full frame.
-    pub enabled: bool,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct LoadDebugInfoRequest {
     /// Path to the program's sjasmplus SLD file.
     pub sld_path: String,
@@ -184,19 +175,6 @@ impl ZxSpectrumServer {
     async fn pause(&self) -> Result<CallToolResult, McpError> {
         self.engine.pause();
         Ok(text_result("paused"))
-    }
-
-    #[tool(
-        description = "Toggle a screen overlay showing ULA memory/IO contention (red/blue tint per \
-                        scanline, scaled by contention cost) -- also visible in get_screen and the \
-                        VS Code screen-viewer panel while enabled"
-    )]
-    async fn set_contention_overlay(
-        &self,
-        Parameters(req): Parameters<SetContentionOverlayRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        self.engine.set_contention_overlay(req.enabled);
-        Ok(text_result(if req.enabled { "contention overlay enabled" } else { "contention overlay disabled" }))
     }
 
     #[tool(description = "Set a breakpoint at an address")]

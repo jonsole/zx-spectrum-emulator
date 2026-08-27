@@ -42,8 +42,11 @@ detail yet -- just captured here so they don't get lost.
       cycle-accurate timing (some games rely on it for effects/sync); no
       Python reference to verify against, so correctness would need to lean
       on published reference T-state tables instead.
-      **Update:** implemented in the Rust core (`zx-core/src/contention.rs`
-      + `Ula`'s per-pixel overlay), Python core still doesn't have it.
+      **Update:** was implemented in the Rust core, then deliberately
+      stripped back out -- the T-state-level bus-timing model it needed
+      turned out fragile enough (several real edge-case bugs found and
+      fixed over one session) to warrant a cleaner redesign rather than
+      patching further. Revisit from scratch if/when picked back up.
 
 - [ ] **Execution trace (instructions + memory/IO reads and writes), so a
       breakpoint can show the flow that led up to it.** Not just "what's
@@ -58,5 +61,4 @@ detail yet -- just captured here so they don't get lost.
       request and/or MCP tool, maybe a dedicated VS Code view given how
       much data this could be), and a decision on whether tracing is
       always-on (cost every single tick, even when nobody's looking) or a
-      toggle like the contention overlay. No Python reference for this
-      one either.
+      runtime toggle. No Python reference for this one either.

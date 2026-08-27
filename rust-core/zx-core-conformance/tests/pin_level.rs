@@ -92,9 +92,9 @@ fn halt_tick_by_tick_pins_match_the_real_z80h_core() {
 /// of a plain mread/mwrite now carries the real target address instead of
 /// stale leftover bits, and MREQ spans T2+T3 instead of T1 only, both
 /// user-directed changes the generic reference core was never trying to
-/// model). Proves the actual property `Ula::tick()`'s contention decision
-/// depends on: the target address is live on the bus BEFORE MREQ turns
-/// on, not just whenever MREQ happens to be asserted.
+/// model). Proves the target address is live on the bus BEFORE MREQ turns
+/// on, not just whenever MREQ happens to be asserted -- real hardware
+/// behavior a future ULA contention model would depend on.
 #[test]
 fn mread_t1_carries_the_real_target_address_before_mreq_asserts() {
     let mut mem_bytes = [0u8; 0x10000];

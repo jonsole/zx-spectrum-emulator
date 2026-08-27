@@ -11,7 +11,6 @@
   "main": "./extension.js",
   "activationEvents": [
     "onCommand:zxspectrum.showScreen",
-    "onCommand:zxspectrum.toggleContentionOverlay",
     "onDebug:zxspectrum"
   ],
   "contributes": {
@@ -19,10 +18,6 @@
       {
         "command": "zxspectrum.showScreen",
         "title": "ZX Spectrum: Show Screen"
-      },
-      {
-        "command": "zxspectrum.toggleContentionOverlay",
-        "title": "ZX Spectrum: Toggle Contention Overlay"
       }
     ],
     "debuggers": [

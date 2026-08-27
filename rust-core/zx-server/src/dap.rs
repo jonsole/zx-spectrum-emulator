@@ -592,26 +592,14 @@ async fn handle_request(
                 Some(base_addr) => (true, disassemble(sources, engine, arguments, base_addr).await),
             }
         }
-        // Not a standard DAP request -- a custom one, sent via VS Code's
-        // `DebugSession.customRequest()` (see `vscode-extension/
-        // extension.js`'s "ZX Spectrum: Toggle Contention Overlay"
-        // command). No Python-server equivalent: `zxspectrum/core/ula.py`
-        // doesn't model contention at all, so there's nothing to toggle
-        // there.
-        "setContentionOverlay" => {
-            let enabled = arguments.get("enabled").and_then(Value::as_bool).unwrap_or(false);
-            engine.set_contention_overlay(enabled);
-            (true, json!({ "enabled": enabled }))
-        }
-        // Not a standard DAP request either -- sent by the screen-viewer
-        // webview's own keydown/keyup handlers (see extension.js) so the
-        // panel can be played live, not just watched. `Engine::key_down`/
-        // `key_up` bypass the command queue the same way
-        // `setContentionOverlay` does, so a keypress takes effect
-        // immediately even while the game is running under `continue`
-        // (confirmed live: a queued version of this sat behind an
-        // in-flight `Run` indefinitely for any game whose attract-mode
-        // loop never hits a breakpoint).
+        // Not a standard DAP request -- sent by the screen-viewer webview's
+        // own keydown/keyup handlers (see extension.js) so the panel can be
+        // played live, not just watched. `Engine::key_down`/`key_up`
+        // bypass the command queue so a keypress takes effect immediately
+        // even while the game is running under `continue` (confirmed live:
+        // a queued version of this sat behind an in-flight `Run`
+        // indefinitely for any game whose attract-mode loop never hits a
+        // breakpoint).
         "keyDown" => {
             let key = arguments.get("key").and_then(Value::as_str).unwrap_or("");
             engine.key_down(key);

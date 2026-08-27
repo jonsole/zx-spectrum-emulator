@@ -28,25 +28,14 @@ pub struct Engine {
     /// `actor.py`'s own comment, quoted here verbatim) lets it take effect
     /// on `Run`'s next yield regardless of queue backlog.
     pause_requested: Arc<AtomicBool>,
-    /// Same reasoning and same bypass as `pause_requested`: `Run`'s handler
-    /// monopolizes the actor loop until it yields or stops, so a toggle
-    /// routed through the command queue would sit stuck behind an in-flight
-    /// `Run` for as long as the game keeps playing -- exactly when a caller
-    /// most wants to see the overlay appear. Synced into
-    /// `machine.ula.contention_overlay_enabled` at the same points the
-    /// screen gets re-rendered (after every command, and at `Run`'s own
-    /// yield cadence), so it never needs the machine to be idle to take
-    /// effect. (Confirmed live: an earlier queued-command version of this
-    /// silently never applied while a real game was running.)
-    contention_overlay_requested: Arc<AtomicBool>,
-    /// Same reasoning and bypass as `contention_overlay_requested`:
-    /// keypresses need to take effect while a game is actually running, not
-    /// after it stops (which, for a live game, may be "never" -- confirmed
-    /// live against Aquaplane's attract-mode loop, which a queued
-    /// `KeyDown`/`KeyUp` command sat behind indefinitely since nothing
-    /// caused `Run` to yield the queue). Holds the live key state directly;
-    /// synced into `machine.keyboard` at the same points
-    /// `contention_overlay_requested` is.
+    /// Deliberately NOT routed through the command queue either, same
+    /// reasoning as `pause_requested`: keypresses need to take effect
+    /// while a game is actually running, not after it stops (which, for a
+    /// live game, may be "never" -- confirmed live against Aquaplane's
+    /// attract-mode loop, which a queued `KeyDown`/`KeyUp` command sat
+    /// behind indefinitely since nothing caused `Run` to yield the queue).
+    /// Holds the live key state directly; synced into `machine.keyboard`
+    /// at the same points the screen gets re-rendered.
     key_state: Arc<Mutex<Keyboard>>,
     /// The latest rendered screen, refreshed by the actor task after every
     /// command AND periodically during a long `Run` (same cadence as its
@@ -71,7 +60,6 @@ impl Engine {
         let (tx, rx) = mpsc::channel(64);
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let pause_requested = Arc::new(AtomicBool::new(false));
-        let contention_overlay_requested = Arc::new(AtomicBool::new(false));
         let key_state = Arc::new(Mutex::new(Keyboard::new()));
         let (screen_tx, screen) = watch::channel(Vec::new());
         let (memory_tx, memory) = watch::channel(Vec::new());
@@ -79,7 +67,6 @@ impl Engine {
             tx,
             events,
             pause_requested,
-            contention_overlay_requested,
             key_state,
             screen,
             memory,
@@ -109,13 +96,11 @@ impl Engine {
     ) {
         let events = self.events.clone();
         let pause_requested = self.pause_requested.clone();
-        let contention_overlay_requested = self.contention_overlay_requested.clone();
         let key_state = self.key_state.clone();
         tokio::spawn(actor_loop(
             rx,
             events,
             pause_requested,
-            contention_overlay_requested,
             key_state,
             screen_tx,
             memory_tx,
@@ -132,21 +117,11 @@ impl Engine {
         self.pause_requested.store(true, Ordering::Relaxed);
     }
 
-    /// See the `contention_overlay_requested` field doc comment -- bypasses
-    /// the queue entirely, same as `pause()`, so it can take effect even
-    /// while a `Run` is in flight.
-    pub fn set_contention_overlay(&self, enabled: bool) {
-        self.contention_overlay_requested.store(enabled, Ordering::Relaxed);
-    }
-
     /// `ticks`, when set, steps that many real T-states rather than whole
     /// instructions (sub-instruction debugging) -- each `Spectrum48K::
-    /// tick()` call advances exactly one real T-state, including any the
-    /// ULA holds the CPU's own clock for (contention), so this genuinely
+    /// tick()` call advances exactly one real T-state, so this genuinely
     /// single-steps wall-clock/frame time, not just the CPU's own visible
-    /// dispatch steps. A contended step may show the CPU's registers
-    /// unchanged from the previous one if that particular T-state was
-    /// spent held rather than actually progressing.
+    /// dispatch steps.
     pub async fn step(&self, instructions: u32, ticks: Option<u32>) -> Registers {
         let (reply, rx) = oneshot::channel();
         self.tx.send(Command::Step { instructions, ticks, reply }).await.ok();
@@ -216,8 +191,8 @@ impl Engine {
     }
 
     /// See the `key_state` field doc comment -- bypasses the queue
-    /// entirely, same as `pause()`/`set_contention_overlay()`, so a
-    /// keypress takes effect even while a `Run` is in flight.
+    /// entirely, same as `pause()`, so a keypress takes effect even while
+    /// a `Run` is in flight.
     pub fn key_down(&self, key: &str) {
         self.key_state.lock().unwrap().key_down(key);
     }
@@ -264,7 +239,6 @@ async fn actor_loop(
     mut rx: mpsc::Receiver<Command>,
     events: broadcast::Sender<Event>,
     pause_requested: Arc<AtomicBool>,
-    contention_overlay_requested: Arc<AtomicBool>,
     key_state: Arc<Mutex<Keyboard>>,
     screen_tx: watch::Sender<Vec<u8>>,
     memory_tx: watch::Sender<Vec<u8>>,
@@ -273,7 +247,6 @@ async fn actor_loop(
     // Always false wherever a caller can observe it -- see the comment in
     // the `Run` handler below.
     let running = false;
-    machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
     machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
     screen_tx.send_replace(machine.render_screen());
     memory_tx.send_replace(machine.read_memory(0, 0x10000));
@@ -374,8 +347,6 @@ async fn actor_loop(
                         break;
                     }
                     if count % RUN_YIELD_EVERY == 0 {
-                        machine.ula.contention_overlay_enabled =
-                            contention_overlay_requested.load(Ordering::Relaxed);
                         machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
                         screen_tx.send_replace(machine.render_screen());
                         memory_tx.send_replace(machine.read_memory(0, 0x10000));
@@ -435,10 +406,6 @@ async fn actor_loop(
                 reply.send(result).ok();
             }
         }
-        // Cheap enough to do after every individual command (unlike inside
-        // Run's tight per-instruction loop, where it's throttled to the
-        // same cadence as the existing yield check above).
-        machine.ula.contention_overlay_enabled = contention_overlay_requested.load(Ordering::Relaxed);
         machine.keyboard.set_row_state(key_state.lock().unwrap().row_state());
         screen_tx.send_replace(machine.render_screen());
         memory_tx.send_replace(machine.read_memory(0, 0x10000));
@@ -478,7 +445,6 @@ fn state_snapshot(machine: &Spectrum48K, running: bool) -> State {
         running,
         border: machine.ula.border,
         tstates: machine.tstates,
-        contended_tstates_last_frame: machine.ula.contended_tstates_last_frame(),
         call_stack: machine.call_stack.clone(),
     }
 }

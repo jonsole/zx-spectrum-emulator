@@ -88,26 +88,6 @@
       "preLaunchTask": "zxspectrum-rust.start-server"
     },
     {
-      "name": "ZX Spectrum (Rust core): Contention test",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/contention/contention.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): LDIR contention test",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/ldir_contention/test.sna",
-      "sld": "${workspaceFolder}/examples/ldir_contention/test.sld",
-      "asm": "${workspaceFolder}/examples/ldir_contention/test.asm",
-      "preLaunchTask": "ldir-contention.build-and-start-server"
-    },
-    {
       "name": "ZX Spectrum (Rust core): Z80 full test suite",
       "type": "zxspectrum",
       "request": "launch",

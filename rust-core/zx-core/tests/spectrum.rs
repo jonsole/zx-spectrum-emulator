@@ -225,10 +225,10 @@ fn in_r_c_on_an_unmapped_port_reads_floating_bus_high() {
 
 #[test]
 fn frame_boundary_starts_the_int_pulse_and_toggles_flash_every_16th() {
-    // `run_frame()`, not a fixed `FRAME_TSTATES` tick() count -- a single
-    // tick() call can now silently consume more than one real T-state
-    // (ULA contention), so looping on frame_count is what's actually
-    // correct (see `Spectrum48K::run_frame()`'s own doc comment).
+    // `run_frame()`, not a fixed `FRAME_TSTATES` tick() count -- looping
+    // on frame_count is the more robust/obviously-correct expression of
+    // "until the frame boundary fires" (see `Spectrum48K::run_frame()`'s
+    // own doc comment).
     let mut machine = Spectrum48K::new();
     for frame in 1..=16u64 {
         machine.run_frame();
@@ -504,7 +504,7 @@ fn mid_frame_screen_write_produces_real_tearing() {
 
     // Tick into the NEXT frame up to the start of scanline 100 -- past
     // where scanline 50 was already drawn, before scanline 150 is drawn.
-    let target = zx_core::ula::FIRST_CONTENDED_TSTATE + 100 * zx_core::ula::LINE_TSTATES;
+    let target = zx_core::ula::FIRST_PAPER_TSTATE + 100 * zx_core::ula::LINE_TSTATES;
     while machine.tstates < target {
         machine.tick();
     }
@@ -528,76 +528,6 @@ fn mid_frame_screen_write_produces_real_tearing() {
     };
     assert_eq!(pixel_at(0, 50), (0xCD, 0, 0), "row 50 was already drawn -- should stay the old red");
     assert_eq!(pixel_at(0, 150), (0, 0xCD, 0), "row 150 was drawn after the write -- should be the new green");
-}
-
-#[test]
-fn contended_memory_executes_fewer_loop_iterations_per_frame_than_uncontended() {
-    fn count_loop_iterations(load_addr: u16) -> u16 {
-        let mut machine = Spectrum48K::new();
-        // INC BC ; JR -3 (tight, infinite 2-instruction loop). BC (not B
-        // alone) so the count can't wrap within one frame's worth of
-        // iterations.
-        machine.write_memory(load_addr, &[0x03, 0x18, 0xFD]);
-        let mut regs = machine.registers();
-        regs.pc = load_addr;
-        regs.set_bc(0);
-        machine.set_registers(regs);
-        machine.run_frame();
-        machine.registers().bc()
-    }
-
-    let contended = count_loop_iterations(0x4000);
-    let uncontended = count_loop_iterations(0x8000);
-    assert!(
-        contended < uncontended,
-        "contended={contended} uncontended={uncontended} -- contention should cost real throughput"
-    );
-}
-
-/// A plain (non-LDIR) data read to a contended address, at a T-state with
-/// a known nonzero contention delay -- proves the T1-address fix actually
-/// throttles ordinary reads/writes, not just LDI/LDIR's own internal
-/// bookkeeping T-states (already covered by `ldir_contention.rs`) or
-/// opcode fetches (already covered by
-/// `contended_memory_executes_fewer_loop_iterations_per_frame_than_uncontended`,
-/// which only exercises `begin_fetch()`'s own hand-written MREQ timing,
-/// never the "mread"/"mwrite" template this fix touches). Before the fix,
-/// this delay only applied "by coincidence" (whatever was left on the
-/// address bus from the previous access, not the read's own real target).
-#[test]
-fn plain_read_from_contended_memory_is_delayed_by_the_documented_amount() {
-    use zx_core::ula::{memory_contention_delay, FIRST_CONTENDED_TSTATE};
-
-    let mut machine = Spectrum48K::new();
-    load_program(&mut machine, 0x8000, &[0x7E]); // LD A,(HL) -- uncontended fetch
-    machine.write_memory(0x4000, &[0x42]); // contended source byte
-    let mut regs = machine.registers();
-    regs.set_hl(0x4000);
-    machine.set_registers(regs);
-
-    // Land T1 of the mread mcycle exactly on the first T-state of the
-    // contended window, where the documented delay is unambiguous (6, per
-    // DELAY_PATTERN[0]). step_instruction()'s first 3 real ticks are the
-    // opcode fetch's own T2/T3/T4 (T1 already happened for free as part
-    // of set_registers()'s own priming tick, uncounted in `tstates`) --
-    // the 4th tick is the mread's own T1.
-    let start_tstate = FIRST_CONTENDED_TSTATE - 3;
-    machine.tstates = start_tstate;
-
-    machine.step_instruction();
-
-    let delay = memory_contention_delay(FIRST_CONTENDED_TSTATE);
-    assert_eq!(delay, 6, "sanity check on the test's own setup");
-    // fetch tail (3) + T1 through the held gap (`delay` itself already
-    // spans from T1's own real T-state to the T-state T2 finally executes
-    // at -- DELAY_PATTERN[0]==6 means "checked at phase 0, held until
-    // phase 6", i.e. T1(phase 0)+5 held T-states = 6, landing T2 exactly
-    // at phase 6) + T2/T3's own 2 real T-states + the overlapped tick
-    // that begins the next instruction's own fetch.
-    let expected_cost = 3 + delay + 2 + 1;
-    let actual_cost = machine.tstates - start_tstate;
-    assert_eq!(actual_cost, expected_cost, "LD A,(HL) into contended memory should cost fetch + contention delay + the mread's own T-states");
-    assert_eq!(machine.registers().a, 0x42, "the read itself should still have happened correctly");
 }
 
 #[test]

@@ -13,9 +13,9 @@
 
 use crate::keyboard::Keyboard;
 use crate::memory::{Memory, Spectrum48KMemory};
-use crate::pins::{get_addr, get_data, set_data, INT, IORQ, M1, MREQ, RD, WR};
+use crate::pins::{get_addr, get_data, set_data, IORQ, M1, MREQ, RD, WR};
 use crate::registers::Registers;
-use crate::ula::{io_contention_delay, Ula, FRAME_TSTATES};
+use crate::ula::{Ula, FRAME_TSTATES};
 use crate::Cpu;
 use std::collections::HashSet;
 
@@ -24,18 +24,6 @@ use std::collections::HashSet;
 /// (and this core, once interrupt acknowledgment exists) still reads a
 /// byte during that cycle. Matches `machine.py`'s `_INT_ACK_BYTE`.
 const INT_ACK_BYTE: u8 = 0xFF;
-
-/// How long the 48K ULA pulls INT low, once per frame -- purely a function
-/// of raster position (`tstates < INT_PULSE_TSTATES`), not CPU behavior:
-/// the ULA doesn't know or care whether the CPU ever accepts it, so the
-/// line isn't extended, re-armed, or suppressed for any reason (including
-/// how recently the machine itself was constructed -- a fresh instance's
-/// `tstates == 0` is just as much "within the pulse window" as any other
-/// frame's, matching real hardware, where interrupt timing isn't synced to
-/// CPU reset at all -- the 48K ROM's own first instruction is `DI`
-/// specifically because an interrupt can arrive before software is ready
-/// for one).
-const INT_PULSE_TSTATES: u32 = 32;
 
 // Opcodes that push a return address and jump to a callee -- CALL nn, CALL
 // cc,nn, and every RST. Whether a conditional CALL actually pushed anything
@@ -218,33 +206,16 @@ impl Spectrum48K {
     // ---- tick loop -----------------------------------------------------------
 
     /// Advances exactly one real T-state -- one call, one clock cycle,
-    /// always. `Ula::tick()` is asked FIRST, using whatever's currently on
-    /// the bus (`self.pins`, unchanged since the last call if that was
-    /// itself a stall): if it says the ULA needs this cycle for itself
-    /// (contention), `Cpu::tick()` is never called at all this time --
-    /// only the frame clock/screen-fetch bookkeeping advances, and the CPU
-    /// genuinely does not progress. Only once `Ula::tick()` says the CPU
-    /// may proceed does this call `Cpu::tick()` and service whatever
-    /// MREQ/IORQ/RD/WR it asks for. This means a single `Cpu::tick()`-worth
-    /// of real CPU progress can take MULTIPLE calls to this method (one
-    /// per T-state actually spent, contended or not) -- callers that loop
-    /// until some condition (`step_instruction()`, `run_frame()`) are
-    /// unaffected by this since they already loop on `tick()` regardless;
-    /// callers that count a fixed number of `tick()` calls now get true
-    /// T-state-level granularity rather than "N real CPU steps," which is
-    /// what per-T-state debugging tools actually want.
+    /// always. `Ula::tick()` runs first (screen-fetch/border bookkeeping
+    /// for whatever raster position this T-state is, and setting/clearing
+    /// `pins`' own INT bit -- the ULA is what drives that line), then
+    /// `Cpu::tick()` runs and whatever MREQ/IORQ/RD/WR it asks for gets
+    /// serviced.
     pub fn tick(&mut self) {
         let current_tstate = self.tstates;
 
-        if current_tstate < INT_PULSE_TSTATES {
-            self.pins |= INT;
-        } else {
-            self.pins &= !INT;
-        }
-
-        if self.ula.tick(current_tstate, self.pins, &mut self.memory) {
-            self.pins = self.cpu.tick(self.pins);
-        }
+        self.ula.tick(current_tstate, &mut self.pins, &mut self.memory);
+        self.pins = self.cpu.tick(self.pins);
 
         let addr = get_addr(self.pins);
         if self.pins & MREQ != 0 {
@@ -255,21 +226,9 @@ impl Spectrum48K {
             }
         } else if self.pins & IORQ != 0 {
             if self.pins & M1 != 0 {
-                // Interrupt acknowledge cycle -- deliberately NOT
-                // contended (see the rust-core plan's explicit
-                // out-of-scope note: real-hardware behavior here is
-                // murkier.
+                // Interrupt acknowledge cycle.
                 self.pins = set_data(self.pins, INT_ACK_BYTE);
             } else {
-                // Disabled for now -- double-counts with the unconditional
-                // memory-contention check above, which now ALSO fires on
-                // an IO cycle's own T-states (the port address persists on
-                // the bus same as any other) and stacks on top of this
-                // table's own delay for the same access. Confirmed via a
-                // live Aquaplane regression: border-timing code that uses
-                // `OUT (C),r` with a contended port (B in 0x40-0x7F) for
-                // precise timing was getting delayed twice.
-                // self.apply_io_contention(addr);
                 if self.pins & RD != 0 {
                     let value = if addr & 0x01 == 0 {
                         self.keyboard.read_port((addr >> 8) as u8)
