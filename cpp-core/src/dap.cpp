@@ -9,11 +9,14 @@
 // that.
 //
 // Stack traces come from `Spectrum48K::call_stack` (frame 0 is PC, frames 1+
-// are its tracked return addresses innermost-first), each labeled with the
-// disassembled instruction at that address. Source-level debug info (SLD
-// symbols, ROM sources) is NOT ported yet, so `setBreakpoints` on a source
-// line reports unverified and frames carry no `source`/`line`; instruction
-// breakpoints, stepping, registers, memory and disassembly all work.
+// are its tracked return addresses innermost-first), each labelled with the
+// disassembled instruction at that address. Where SLD debug info covers an
+// address -- the loaded program's own, attached via launch's sld/asm args or
+// the MCP load_debug_info tool, or the ROM disassembly's, always available
+// once built -- that frame also carries a source and line, and source-line
+// breakpoints resolve to addresses through the same data. The loaded
+// program's info takes priority, with the ROM as fallback, so a call from a
+// program into a ROM routine still resolves.
 
 #include "dap.h"
 
@@ -21,6 +24,7 @@
 #include "disassembler.h"
 #include "file_io.h"
 #include "net.h"
+#include "rom_source.h"
 
 #include <nlohmann/json.hpp>
 
@@ -42,6 +46,18 @@ namespace zx {
 namespace {
 
 constexpr int64_t THREAD_ID = 1;
+
+/// Reserved width (label name + ":" + a two-space gap) for the label column
+/// folded into each disassembled line -- fixed regardless of whether that
+/// particular line has a label, so mnemonics all start in the same column. 12
+/// characters comfortably fits real ROM and game routine names ("START_NEW",
+/// "LD_EDGE_1"); a longer one simply is not padded further.
+constexpr size_t LABEL_COLUMN_WIDTH = 12 + 3; // 12 + strlen(":  ")
+
+std::string file_name_of(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
 
 std::string hex4(uint16_t v) {
     char buf[8];
@@ -353,16 +369,45 @@ uint16_t find_aligned_backward_start(const ReadFn& read, uint16_t base_addr,
     return base_addr;
 }
 
-json build_frame(const ReadFn& read, int64_t frame_id, uint16_t addr) {
+json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, uint16_t addr) {
     const Instruction inst = disassemble_one(read, addr);
-    return json{{"id", frame_id},
-                {"name", hex4(addr) + ": " + inst.text},
-                {"instructionPointerReference", hex4(addr)},
-                {"line", 0},
-                {"column", 0}};
+    const std::string name = hex4(addr) + ": " + annotate_symbols(inst.text, sources);
+
+    json frame{{"id", frame_id},
+               {"name", name},
+               {"instructionPointerReference", hex4(addr)},
+               {"line", 0},
+               {"column", 0}};
+
+    // The first source (loaded program, then ROM) with an EXACT address match
+    // wins. A nearest-symbol lookup alone would find some label from a source
+    // that does not actually cover this address at all -- e.g. one whose
+    // entries all sit far below PC -- and mislabel the frame rather than
+    // simply showing no source for it.
+    for (const RomSourcePtr& source : sources.active()) {
+        auto it = source->addr_to_line.find(addr);
+        if (it == source->addr_to_line.end()) {
+            continue;
+        }
+        std::string label;
+        uint16_t offset = 0;
+        if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, label, offset)) {
+            if (offset != 0) {
+                label += "+" + std::to_string(offset);
+            }
+            frame["name"] = label + "  " + name;
+        }
+        frame["source"] = json{{"name", file_name_of(source->asm_path)},
+                               {"path", source->asm_path}};
+        frame["line"] = it->second;
+        frame["column"] = 1;
+        break;
+    }
+    return frame;
 }
 
-json do_disassemble(Engine& engine, const json& arguments, uint16_t base_addr) {
+json do_disassemble(Engine& engine, const Sources& sources, const json& arguments,
+                    uint16_t base_addr) {
     MemorySnapshot snapshot(engine);
     const ReadFn read = snapshot.reader();
 
@@ -389,9 +434,27 @@ json do_disassemble(Engine& engine, const json& arguments, uint16_t base_addr) {
             std::snprintf(buf, sizeof buf, "%02x", b);
             bytes += buf;
         }
-        instructions.push_back(json{{"address", hex4(inst.addr)},
-                                    {"instructionBytes", bytes},
-                                    {"instruction", inst.text}});
+        std::string label;
+        std::string prefix;
+        if (sources.label_at(inst.addr, label)) {
+            prefix = label + ":";
+        }
+        // DAP has a dedicated "symbol" field, which the spec says a client MAY
+        // render as a heading above the line -- VS Code's Disassembly View, in
+        // practice, does not. So the label is also folded into the instruction
+        // text, which every client renders by definition. Every line gets the
+        // same fixed-width column, labelled or not, so the mnemonics line up
+        // instead of staggering only where a label happens to land.
+        if (prefix.size() < LABEL_COLUMN_WIDTH) {
+            prefix.resize(LABEL_COLUMN_WIDTH, ' ');
+        }
+        json entry{{"address", hex4(inst.addr)},
+                   {"instructionBytes", bytes},
+                   {"instruction", prefix + annotate_symbols(inst.text, sources)}};
+        if (!label.empty()) {
+            entry["symbol"] = label;
+        }
+        instructions.push_back(entry);
     }
     return json{{"instructions", instructions}};
 }
@@ -436,7 +499,7 @@ bool is_step_over_as_run(const std::string& text) {
 
 // ---- request dispatch ------------------------------------------------------
 
-json handle_request(const json& req, Engine& engine, Connection& conn) {
+json handle_request(const json& req, Engine& engine, Sources& sources, Connection& conn) {
     const std::string command = req.value("command", std::string());
     const int64_t request_seq = req.value("seq", int64_t(0));
     static const json empty_args = json::object();
@@ -492,6 +555,20 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
             engine.reset();
         }
 
+        // Source-level debug info for the loaded program, acted on only when
+        // BOTH are present. Deliberately not auto-cleared by a later launch
+        // that omits them: a fresh load_debug_info, or another launch that
+        // does pass sld/asm, is what replaces it.
+        const std::string sld_path = arg_str(arguments, "sld");
+        const std::string asm_path = arg_str(arguments, "asm");
+        if (!sld_path.empty() && !asm_path.empty()) {
+            std::string load_error;
+            if (!sources.load_debug_info(sld_path, asm_path, load_error)) {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", load_error}});
+            }
+        }
+
     } else if (command == "attach" || command == "configurationDone" ||
                command == "setExceptionBreakpoints") {
         // Nothing to do; acknowledged so the client's handshake completes.
@@ -529,12 +606,18 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
         body = json{{"breakpoints", results}};
 
     } else if (command == "setBreakpoints") {
-        // Source-line breakpoints need SLD debug info to map a line to an
-        // address, and that layer isn't ported yet -- report them
-        // unverified rather than silently accepting breakpoints that would
-        // never fire.
+        // Source-line breakpoints: map each line to an address via the SLD
+        // data for whichever source this path names. A line with no
+        // instruction (a comment, a blank, an EQU) has no T record and so no
+        // address -- reported unverified rather than silently accepted, so
+        // the client greys the breakpoint out instead of showing an armed one
+        // that can never fire.
         const json& source = arg(arguments, "source");
-        const std::string source_path = source.is_object() ? source.value("path", std::string()) : "";
+        const std::string source_path =
+            source.is_object() ? source.value("path", std::string()) : "";
+        const RomSourcePtr rom_source = sources.source_for_path(source_path);
+
+        std::set<uint16_t> addrs;
         json results = json::array();
         const json& list = arg(arguments, "breakpoints");
         if (list.is_array()) {
@@ -543,12 +626,27 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
                 if (line < 0) {
                     continue;
                 }
-                results.push_back(json{{"verified", false},
+                if (rom_source == nullptr) {
+                    results.push_back(json{{"verified", false},
+                                           {"line", line},
+                                           {"message", "no debug info loaded for this source"}});
+                    continue;
+                }
+                auto it = rom_source->line_to_addr.find(uint32_t(line));
+                if (it == rom_source->line_to_addr.end()) {
+                    results.push_back(json{{"verified", false},
+                                           {"line", line},
+                                           {"message", "no instruction at this line"}});
+                    continue;
+                }
+                const uint16_t addr = it->second;
+                addrs.insert(addr);
+                results.push_back(json{{"verified", true},
                                        {"line", line},
-                                       {"message", "no debug info loaded for this source"}});
+                                       {"instructionReference", hex4(addr)}});
             }
         }
-        conn.source_breakpoints[source_path].clear();
+        conn.source_breakpoints[source_path] = std::move(addrs);
         sync_breakpoints(engine, conn);
         body = json{{"breakpoints", results}};
 
@@ -629,9 +727,10 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
         MemorySnapshot snapshot(engine);
         const ReadFn read = snapshot.reader();
         json frames = json::array();
-        frames.push_back(build_frame(read, 0, state.pc));
+        frames.push_back(build_frame(read, sources, 0, state.pc));
         for (size_t i = state.call_stack.size(); i > 0; i--) {
-            frames.push_back(build_frame(read, int64_t(frames.size()), state.call_stack[i - 1]));
+            frames.push_back(
+                build_frame(read, sources, int64_t(frames.size()), state.call_stack[i - 1]));
         }
         body = json{{"stackFrames", frames}, {"totalFrames", frames.size()}};
 
@@ -684,7 +783,7 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
             // view's lifetime. A harmless empty result never triggers it.
             body = json{{"instructions", json::array()}};
         } else {
-            body = do_disassemble(engine, arguments, base_addr);
+            body = do_disassemble(engine, sources, arguments, base_addr);
         }
 
     } else if (command == "keyDown") {
@@ -709,14 +808,14 @@ json handle_request(const json& req, Engine& engine, Connection& conn) {
     return envelope_response(conn, request_seq, command, success, body);
 }
 
-void handle_connection(std::shared_ptr<Connection> conn, Engine& engine) {
+void handle_connection(std::shared_ptr<Connection> conn, Engine& engine, Sources& sources) {
     for (;;) {
         json request;
         if (!read_message(*conn, request)) {
             break;
         }
         const std::string command = request.value("command", std::string());
-        const json response = handle_request(request, engine, *conn);
+        const json response = handle_request(request, engine, sources, *conn);
         send_message(*conn, response);
         if (command == "initialize" && response.value("success", false)) {
             // Per the DAP spec the adapter sends `initialized` right after
@@ -737,7 +836,8 @@ void handle_connection(std::shared_ptr<Connection> conn, Engine& engine) {
 
 } // namespace
 
-void serve_dap(Engine& engine, const std::string& host, uint16_t port, bool exit_on_disconnect) {
+void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16_t port,
+               bool exit_on_disconnect) {
     net::Listener listener;
     std::string error;
     if (!listener.listen(host, port, error)) {
@@ -769,8 +869,8 @@ void serve_dap(Engine& engine, const std::string& host, uint16_t port, bool exit
             std::lock_guard<std::mutex> lock(g_connections_mutex);
             g_connections.push_back(conn);
         }
-        std::thread([conn, &engine, exit_on_disconnect] {
-            handle_connection(conn, engine);
+        std::thread([conn, &engine, &sources, exit_on_disconnect] {
+            handle_connection(conn, engine, sources);
             size_t remaining = 0;
             {
                 std::lock_guard<std::mutex> lock(g_connections_mutex);

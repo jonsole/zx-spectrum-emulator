@@ -57,6 +57,7 @@ add_executable(zx_server
   src/main.cpp
   src/mcp_server.cpp
   src/net.cpp
+  src/rom_source.cpp
   src/screen_stream.cpp
 )
 target_link_libraries(zx_server PRIVATE zx_core)

@@ -1,10 +1,11 @@
-// Entrypoint: starts the DAP and screen-stream servers together against one
-// shared Engine. (MCP is not wired up yet -- see the TODO below.)
+// Entrypoint: starts the DAP, MCP and screen-stream servers together against
+// one shared Engine and one shared set of debug sources.
 
 #include "dap.h"
 #include "engine.h"
 #include "file_io.h"
 #include "mcp_server.h"
+#include "rom_source.h"
 #include "screen_stream.h"
 
 #include <cstdio>
@@ -21,6 +22,11 @@ struct Args {
     uint16_t screen_port = 8500;
     std::string mcp_host = "127.0.0.1";
     uint16_t mcp_port = 8000;
+    /// Directory holding the built ROM disassembly (rom.asm/rom.sld). Default
+    /// is relative to the project root, matching the "run from the workspace
+    /// folder" convention the VS Code task uses. A missing directory is fine:
+    /// symbol lookups simply find nothing.
+    std::string rom_disassembly_dir = "rom_disassembly";
     /// Loaded at startup so the machine is usable the moment a client
     /// connects, rather than only after a `launch` request supplies one.
     std::string rom;
@@ -63,6 +69,8 @@ bool parse_args(int argc, char** argv, Args& args) {
         } else if (flag == "--mcp-port") {
             if (!next(value)) return false;
             args.mcp_port = uint16_t(std::strtoul(value.c_str(), nullptr, 10));
+        } else if (flag == "--rom-disassembly-dir") {
+            if (!next(args.rom_disassembly_dir)) return false;
         } else if (flag == "--rom") {
             if (!next(args.rom)) return false;
         } else if (flag == "--uncapped") {
@@ -112,13 +120,24 @@ int main(int argc, char** argv) {
         std::printf("Loaded ROM %s\n", args.rom.c_str());
     }
 
+    zx::Sources sources(args.rom_disassembly_dir);
+    if (zx::RomSourcePtr rom = zx::get_rom_source(args.rom_disassembly_dir)) {
+        std::printf("ROM disassembly: %zu symbols, %zu mapped instructions\n",
+                    rom->symbols.size(), rom->line_to_addr.size());
+    } else {
+        std::printf("No ROM disassembly in %s -- symbols unavailable "
+                    "(build it with scripts/build_rom_source.py)\n",
+                    args.rom_disassembly_dir.c_str());
+    }
+
     std::thread screen_thread(
         [&] { zx::serve_screen_stream(engine, args.screen_host, args.screen_port); });
-    std::thread mcp_thread([&] { zx::serve_mcp(engine, args.mcp_host, args.mcp_port); });
+    std::thread mcp_thread(
+        [&] { zx::serve_mcp(engine, sources, args.mcp_host, args.mcp_port); });
 
     // DAP last and on this thread: it is the one that can end the process
     // (--exit-on-disconnect), and it is what the launch is waiting on.
-    zx::serve_dap(engine, args.dap_host, args.dap_port, args.exit_on_disconnect);
+    zx::serve_dap(engine, sources, args.dap_host, args.dap_port, args.exit_on_disconnect);
     mcp_thread.join();
     screen_thread.join();
     return 0;

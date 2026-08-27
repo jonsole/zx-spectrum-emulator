@@ -10,11 +10,8 @@
 // neither is needed since every tool here is request/response, so GET is
 // refused with 405 (which the spec explicitly allows).
 //
-// Three tools from the Rust server are NOT here -- load_debug_info,
-// resolve_symbol and resolve_address -- because they need the SLD/symbol
-// layer, which has not been ported yet. They are omitted from tools/list
-// rather than stubbed, so a client is never told a capability exists that
-// does not.
+// The tool surface matches the Rust server's, plus set_speed for the
+// emulator's realtime pacing.
 
 #include "mcp_server.h"
 
@@ -265,6 +262,22 @@ json tools_list() {
     add("get_state",
         "Get a full state snapshot: pc, registers, breakpoints, running, border, call stack",
         no_params());
+    add("load_debug_info",
+        "Attach source-level debug info (a sjasmplus SLD file + its matching .asm) for the "
+        "currently-loaded program -- enables resolve_symbol/resolve_address and DAP source-level "
+        "debugging for this program's addresses, alongside the ROM's own (always available "
+        "separately, so calls into the ROM still resolve)",
+        schema(json{{"sld_path", string_prop("Path to the program's sjasmplus SLD file.")},
+                    {"asm_path", string_prop("Path to the matching .asm source.")}},
+               {"sld_path", "asm_path"}));
+    add("resolve_symbol",
+        "Look up a routine/label's address by name, checking the currently-loaded program's debug "
+        "info first, then the ROM's own",
+        schema(json{{"name", string_prop("Routine/label name, e.g. \"KEY_INT\".")}}, {"name"}));
+    add("resolve_address",
+        "Find the nearest named routine at or before a 16-bit address, with its offset (e.g. "
+        "0x0005 -> {symbol: START, offset: 5}) -- same sources as resolve_symbol",
+        schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
     add("set_speed",
         "Set emulation speed: \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want)",
@@ -272,7 +285,8 @@ json tools_list() {
     return tools;
 }
 
-json call_tool(Engine& engine, const std::string& name, const json& args) {
+json call_tool(Engine& engine, Sources& sources, const std::string& name,
+               const json& args) {
     std::string error;
 
     if (name == "load_rom") {
@@ -440,6 +454,62 @@ json call_tool(Engine& engine, const std::string& name, const json& args) {
         return error_result("'speed' must be \"realtime\" or \"uncapped\"");
     }
 
+    if (name == "load_debug_info") {
+        std::string sld_path;
+        std::string asm_path;
+        if (!arg_string(args, "sld_path", sld_path, error)
+            || !arg_string(args, "asm_path", asm_path, error)) {
+            return error_result(error);
+        }
+        std::string load_error;
+        if (!sources.load_debug_info(sld_path, asm_path, load_error)) {
+            return error_result(load_error);
+        }
+        const RomSourcePtr loaded = sources.debug_info();
+        return json_result(json{{"symbols", loaded->symbols.size()},
+                                {"instructions", loaded->line_to_addr.size()}});
+    }
+
+    if (name == "resolve_symbol") {
+        std::string symbol;
+        if (!arg_string(args, "name", symbol, error)) {
+            return error_result(error);
+        }
+        const std::vector<RomSourcePtr> active = sources.active();
+        for (const RomSourcePtr& source : active) {
+            auto it = source->symbols.find(symbol);
+            if (it != source->symbols.end()) {
+                return json_result(json{{"found", true}, {"address", it->second}});
+            }
+        }
+        const std::string reason =
+            active.empty()
+                ? "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"
+                : "no symbol named \"" + symbol + "\"";
+        return json_result(json{{"found", false}, {"reason", reason}});
+    }
+
+    if (name == "resolve_address") {
+        uint16_t addr = 0;
+        if (!arg_u16(args, "addr", addr, error)) {
+            return error_result(error);
+        }
+        const std::vector<RomSourcePtr> active = sources.active();
+        std::string symbol;
+        uint16_t offset = 0;
+        for (const RomSourcePtr& source : active) {
+            if (source->symbol_at(addr, RomSource::NO_MAX, symbol, offset)) {
+                return json_result(
+                    json{{"found", true}, {"symbol", symbol}, {"offset", offset}});
+            }
+        }
+        const std::string reason =
+            active.empty()
+                ? "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"
+                : "address precedes every known symbol";
+        return json_result(json{{"found", false}, {"reason", reason}});
+    }
+
     return error_result("unknown tool: " + name);
 }
 
@@ -457,7 +527,7 @@ json rpc_result(const json& id, const json& result) {
 
 /// Handles one JSON-RPC message. `handled` comes back false for a
 /// notification, which by definition gets no reply.
-json handle_rpc(Engine& engine, const json& message, bool& handled) {
+json handle_rpc(Engine& engine, Sources& sources, const json& message, bool& handled) {
     handled = true;
     const json id = message.contains("id") ? message["id"] : json();
     const std::string method = message.value("method", std::string());
@@ -495,7 +565,7 @@ json handle_rpc(Engine& engine, const json& message, bool& handled) {
         const json& arguments =
             params.contains("arguments") && params["arguments"].is_object() ? params["arguments"]
                                                                             : empty;
-        return rpc_result(id, call_tool(engine, name.get<std::string>(), arguments));
+        return rpc_result(id, call_tool(engine, sources, name.get<std::string>(), arguments));
     }
     // resources/* and prompts/* are deliberately unimplemented: this server
     // exposes tools only, and says so in its initialize capabilities.
@@ -504,7 +574,8 @@ json handle_rpc(Engine& engine, const json& message, bool& handled) {
 
 // ---- HTTP plumbing ---------------------------------------------------------
 
-void handle_post(Engine& engine, const http::Request& request, http::Response& response) {
+void handle_post(Engine& engine, Sources& sources, const http::Request& request,
+                 http::Response& response) {
     const json message = json::parse(request.body, nullptr, /*allow_exceptions=*/false);
     if (message.is_discarded()) {
         response.status = 400;
@@ -517,7 +588,7 @@ void handle_post(Engine& engine, const http::Request& request, http::Response& r
         json replies = json::array();
         for (const json& one : message) {
             bool handled = false;
-            const json reply = handle_rpc(engine, one, handled);
+            const json reply = handle_rpc(engine, sources, one, handled);
             if (handled) {
                 replies.push_back(reply);
             }
@@ -531,7 +602,7 @@ void handle_post(Engine& engine, const http::Request& request, http::Response& r
     }
 
     bool handled = false;
-    const json reply = handle_rpc(engine, message, handled);
+    const json reply = handle_rpc(engine, sources, message, handled);
     if (!handled) {
         response.status = 202; // a notification: accepted, nothing to say back
         return;
@@ -539,7 +610,7 @@ void handle_post(Engine& engine, const http::Request& request, http::Response& r
     response.body = reply.dump();
 }
 
-void handle_connection(net::Socket sock, Engine& engine) {
+void handle_connection(net::Socket sock, Engine& engine, Sources& sources) {
     std::string buffer;
     for (;;) {
         http::Request request;
@@ -552,7 +623,7 @@ void handle_connection(net::Socket sock, Engine& engine) {
             response.status = 404;
             response.body = R"({"error":"not found; MCP is served at /mcp"})";
         } else if (request.method == "POST") {
-            handle_post(engine, request, response);
+            handle_post(engine, sources, request, response);
         } else if (request.method == "DELETE") {
             // Session teardown. Nothing is kept per-session (there is one
             // machine, shared), so this is just an acknowledgement.
@@ -572,7 +643,7 @@ void handle_connection(net::Socket sock, Engine& engine) {
 
 } // namespace
 
-void serve_mcp(Engine& engine, const std::string& host, uint16_t port) {
+void serve_mcp(Engine& engine, Sources& sources, const std::string& host, uint16_t port) {
     net::Listener listener;
     std::string error;
     if (!listener.listen(host, port, error)) {
@@ -588,8 +659,8 @@ void serve_mcp(Engine& engine, const std::string& host, uint16_t port) {
         if (!sock.valid()) {
             continue;
         }
-        std::thread([s = std::move(sock), &engine]() mutable {
-            handle_connection(std::move(s), engine);
+        std::thread([s = std::move(sock), &engine, &sources]() mutable {
+            handle_connection(std::move(s), engine, sources);
         }).detach();
     }
 }
