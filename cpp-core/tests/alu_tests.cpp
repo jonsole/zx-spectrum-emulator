@@ -21,7 +21,7 @@
 #include "test_main.h"
 
 #define CHIPS_IMPL
-#include "z80.h"
+#include "chips/z80.h"
 
 #include <cstdio>
 

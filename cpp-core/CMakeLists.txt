@@ -18,6 +18,7 @@ endif()
 add_library(zx_core STATIC
   src/alu.cpp
   src/memory.cpp
+  src/z80.cpp
 )
 target_include_directories(zx_core PUBLIC src)
 target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
@@ -38,7 +39,9 @@ function(zx_add_test name)
   target_link_libraries(${name} PRIVATE zx_core)
   target_include_directories(${name} PRIVATE tests)
   if(ARG_USES_REFERENCE)
-    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../vendor/chips)
+    # vendor/, not vendor/chips/, so the reference is included as
+    # "chips/z80.h" and cannot be confused with our own src/z80.h.
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
     if(MSVC)
       target_compile_options(${name} PRIVATE /W3 /wd4244)
     else()
@@ -52,3 +55,4 @@ endfunction()
 
 zx_add_test(memory_tests)
 zx_add_test(alu_tests USES_REFERENCE)
+zx_add_test(differential USES_REFERENCE)
