@@ -17,7 +17,10 @@ endif()
 # ---- zx_core: the emulator itself (no server/protocol code) -----------------
 add_library(zx_core STATIC
   src/alu.cpp
+  src/keyboard.cpp
   src/memory.cpp
+  src/spectrum.cpp
+  src/ula.cpp
   src/z80.cpp
 )
 target_include_directories(zx_core PUBLIC src)
@@ -57,6 +60,11 @@ zx_add_test(memory_tests)
 zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)
 zx_add_test(differential USES_REFERENCE)
+zx_add_test(spectrum_tests)
+# Needs the real ROM, which is copyrighted and gitignored -- the test skips
+# gracefully if it is absent.
+target_compile_definitions(spectrum_tests
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # ---- throughput benchmark ---------------------------------------------------
 # Not a test (nothing to assert -- it reports numbers). Build and run manually;
@@ -64,6 +72,13 @@ zx_add_test(differential USES_REFERENCE)
 add_executable(bench tests/bench.cpp)
 target_link_libraries(bench PRIVATE zx_core)
 target_compile_options(bench PRIVATE ${ZX_WARNINGS})
+
+# Diagnostic, not a test: dumps the rendered canvas for eyeballing.
+add_executable(screenshot tests/screenshot.cpp)
+target_link_libraries(screenshot PRIVATE zx_core)
+target_compile_options(screenshot PRIVATE ${ZX_WARNINGS})
+target_compile_definitions(screenshot
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # ---- ZEXALL / ZEXDOC --------------------------------------------------------
 # One executable, run twice with different arguments. Labelled "slow" and
