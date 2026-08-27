@@ -42,3 +42,8 @@ game_disassembly/
 # not this project's own code; fetched by the LDIR contention example's
 # build task rather than committed.
 tools/
+
+# Scratch git worktrees created for isolated agent runs -- each is a full
+# checkout of the repo, not project content. The tracked parts of .claude/
+# (agents/, skills/) are committed normally.
+.claude/worktrees/

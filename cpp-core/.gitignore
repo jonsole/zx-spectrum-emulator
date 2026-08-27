@@ -1,0 +1,2 @@
+# CMake/Ninja output -- see build.ps1 for how these get produced.
+build/

@@ -1,0 +1,54 @@
+cmake_minimum_required(VERSION 3.20)
+project(zx_cpp_core CXX C)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Warnings-as-errors on our own code only -- vendored third_party/ targets are
+# added with their own (looser) settings, since we don't control their source.
+if(MSVC)
+  add_compile_options(/utf-8)
+  set(ZX_WARNINGS /W4 /WX)
+else()
+  set(ZX_WARNINGS -Wall -Wextra -Werror)
+endif()
+
+# ---- zx_core: the emulator itself (no server/protocol code) -----------------
+add_library(zx_core STATIC
+  src/alu.cpp
+  src/memory.cpp
+)
+target_include_directories(zx_core PUBLIC src)
+target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
+
+# ---- tests ------------------------------------------------------------------
+# Hand-rolled assertions (see tests/test_main.h) rather than a framework --
+# these are plain executables run by CTest, and the emulator's own test needs
+# (diff two cores, run ZEXALL to completion) don't benefit from one.
+enable_testing()
+
+# USES_REFERENCE marks a test that #includes the vendored vendor/chips/z80.h
+# (with CHIPS_IMPL) to diff against the real reference core. Those get the
+# vendor include path and relaxed warnings, since z80.h's own warnings aren't
+# ours to fix and /WX would fail the build on them.
+function(zx_add_test name)
+  cmake_parse_arguments(ARG "USES_REFERENCE" "" "" ${ARGN})
+  add_executable(${name} tests/${name}.cpp)
+  target_link_libraries(${name} PRIVATE zx_core)
+  target_include_directories(${name} PRIVATE tests)
+  if(ARG_USES_REFERENCE)
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../vendor/chips)
+    if(MSVC)
+      target_compile_options(${name} PRIVATE /W3 /wd4244)
+    else()
+      target_compile_options(${name} PRIVATE -Wall)
+    endif()
+  else()
+    target_compile_options(${name} PRIVATE ${ZX_WARNINGS})
+  endif()
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+zx_add_test(memory_tests)
+zx_add_test(alu_tests USES_REFERENCE)
