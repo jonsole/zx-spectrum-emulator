@@ -7,10 +7,13 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Debuggers"],
+  "categories": [
+    "Debuggers"
+  ],
   "main": "./extension.js",
   "activationEvents": [
     "onCommand:zxspectrum.showScreen",
+    "onCommand:zxspectrum.showTrace",
     "onDebug:zxspectrum"
   ],
   "contributes": {
@@ -18,6 +21,10 @@
       {
         "command": "zxspectrum.showScreen",
         "title": "ZX Spectrum: Show Screen"
+      },
+      {
+        "command": "zxspectrum.showTrace",
+        "title": "ZX Spectrum: Show Trace"
       }
     ],
     "debuggers": [

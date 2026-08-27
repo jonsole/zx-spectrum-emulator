@@ -10,12 +10,17 @@
 
 const vscode = require('vscode');
 const net = require('net');
+const fs = require('fs');
+const path = require('path');
 
 const SCREEN_HOST = '127.0.0.1';
 const SCREEN_PORT = 8500; // must match --screen-port; see README if you changed it
 const RECONNECT_DELAY_MS = 1000;
 
 let panel;
+let tracePanel;
+let traceFile;      // the .zxtrace currently shown
+let traceWatcher;   // reloads the panel when that file is recaptured
 let socket;
 let reconnectTimer;
 let recvBuffer = Buffer.alloc(0);
@@ -23,6 +28,9 @@ let recvBuffer = Buffer.alloc(0);
 function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('zxspectrum.showScreen', () => showScreenPanel(context))
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('zxspectrum.showTrace', () => showTracePanel(context))
   );
 
   // Auto-open on launching a zxspectrum debug session -- no matching
@@ -129,6 +137,143 @@ function disconnectStream() {
   }
 }
 
+
+// ---- trace viewer ----------------------------------------------------------
+//
+// Unlike the screen panel, this one has no live connection to the emulator: a
+// trace is a file the server wrote, so the extension host reads it and posts
+// the text into the webview. The page itself is tools/trace_viewer.html, the
+// same file that opens standalone in a browser -- it is not duplicated here,
+// only wrapped in a CSP the webview will accept.
+
+function traceViewerPath(context) {
+  // Three places, in order of how deliberate they are:
+  //   1. bundled beside extension.js, which is what a packaged .vsix or the
+  //      "copy into ~/.vscode/extensions" install should carry;
+  //   2. ../tools/, which is where it lives when the extension is symlinked
+  //      or loaded straight out of the repo;
+  //   3. any open workspace folder, which covers a copy-installed extension
+  //      being used on the repo it came from.
+  const candidates = [
+    path.join(context.extensionPath, 'trace_viewer.html'),
+    path.join(context.extensionPath, '..', 'tools', 'trace_viewer.html')
+  ];
+  for (const folder of vscode.workspace.workspaceFolders || []) {
+    candidates.push(path.join(folder.uri.fsPath, 'tools', 'trace_viewer.html'));
+  }
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+}
+
+async function pickTraceFile() {
+  const chosen = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    openLabel: 'Open trace',
+    filters: { 'ZX Spectrum trace': ['zxtrace', 'txt', 'log'], 'All files': ['*'] },
+    defaultUri: vscode.workspace.workspaceFolders
+      ? vscode.workspace.workspaceFolders[0].uri
+      : undefined
+  });
+  return chosen && chosen.length > 0 ? chosen[0].fsPath : undefined;
+}
+
+async function showTracePanel(context) {
+  const viewer = traceViewerPath(context);
+  if (!fs.existsSync(viewer)) {
+    vscode.window.showErrorMessage(
+      'Trace viewer not found at ' + viewer + '. It lives at tools/trace_viewer.html in the ' +
+      'zx-spectrum-emulator repo; the extension expects to be loaded from alongside it.'
+    );
+    return;
+  }
+
+  if (!tracePanel) {
+    tracePanel = vscode.window.createWebviewPanel(
+      'zxspectrumTrace',
+      'ZX Spectrum Trace',
+      vscode.ViewColumn.Active,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    tracePanel.webview.html = getTraceHtml(viewer);
+    tracePanel.onDidDispose(
+      () => {
+        tracePanel = undefined;
+        stopWatchingTrace();
+      },
+      null,
+      context.subscriptions
+    );
+    // The page asks for a file when its "Open trace..." button is used, since
+    // a webview has no way to reach the workspace itself.
+    tracePanel.webview.onDidReceiveMessage(
+      async (message) => {
+        if (message && message.type === 'pick') {
+          const file = await pickTraceFile();
+          if (file) loadTrace(file);
+        }
+      },
+      null,
+      context.subscriptions
+    );
+  } else {
+    tracePanel.reveal(vscode.ViewColumn.Active);
+  }
+
+  const file = await pickTraceFile();
+  if (file) loadTrace(file);
+}
+
+function loadTrace(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    vscode.window.showErrorMessage('Could not read ' + file + ': ' + err.message);
+    return;
+  }
+  traceFile = file;
+  if (tracePanel) {
+    tracePanel.title = 'Trace: ' + path.basename(file);
+    tracePanel.webview.postMessage({ type: 'trace', name: path.basename(file), text });
+  }
+  watchTrace(file);
+}
+
+// A trace is usually captured more than once while chasing something down, and
+// each capture rewrites the same file -- so reload rather than making the panel
+// be reopened every time.
+function watchTrace(file) {
+  stopWatchingTrace();
+  traceWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(path.dirname(file), path.basename(file))
+  );
+  const reload = () => {
+    if (tracePanel && traceFile === file) loadTrace(file);
+  };
+  traceWatcher.onDidChange(reload);
+  traceWatcher.onDidCreate(reload);
+}
+
+function stopWatchingTrace() {
+  if (traceWatcher) {
+    traceWatcher.dispose();
+    traceWatcher = undefined;
+  }
+}
+
+// Wraps the standalone viewer in the CSP a webview needs. The file has exactly
+// one <style> and one <script>, both inline, so the nonce goes on the script
+// and styles are allowed inline -- the same shape the screen panel uses.
+function getTraceHtml(viewer) {
+  const nonce = getNonce();
+  const csp = '<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ' +
+              'script-src 'nonce-' + nonce + ''; style-src 'unsafe-inline'; ' +
+              'font-src data:; img-src data:;">';
+  return fs.readFileSync(viewer, 'utf8')
+    .replace('<meta charset="utf-8">', '<meta charset="utf-8">
+' + csp)
+    .replace('<script>', '<script nonce="' + nonce + '">');
+}
+
 function getNonce() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let text = '';
@@ -221,6 +366,7 @@ function getHtml() {
 
 function deactivate() {
   disconnectStream();
+  stopWatchingTrace();
 }
 
 module.exports = { activate, deactivate };

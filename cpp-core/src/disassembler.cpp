@@ -136,14 +136,14 @@ std::string decode(Cursor& c, const ReadFn& read, const char* index) {
             }
             if (y == 2) {
                 int8_t d = int8_t(c.byte(read));
-                return "DJNZ $" + addr_rel(c, d);
+                return "DJNZ " + addr_rel(c, d);
             }
             if (y == 3) {
                 int8_t d = int8_t(c.byte(read));
-                return "JR $" + addr_rel(c, d);
+                return "JR " + addr_rel(c, d);
             }
             int8_t d = int8_t(c.byte(read));
-            return std::string("JR ") + CC[y - 4] + ",$" + addr_rel(c, d);
+            return std::string("JR ") + CC[y - 4] + "," + addr_rel(c, d);
         }
         if (z == 1) {
             if (q == 0) {

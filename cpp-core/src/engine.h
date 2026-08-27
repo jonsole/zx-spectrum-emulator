@@ -22,6 +22,7 @@
 #include <deque>
 #include <functional>
 #include <future>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -46,6 +47,19 @@ struct MachineState {
     uint64_t interrupt_count = 0;
     std::vector<uint16_t> breakpoints;
     std::vector<uint16_t> call_stack;
+};
+
+/// What a trace capture is currently doing. Reported back to whoever asked for
+/// it, since a capture can also stop itself on reaching its row limit.
+struct TraceStatus {
+    bool active = false;
+    std::string path;
+    uint64_t rows = 0;
+    uint64_t limit = 0;
+    /// False when the Watch column is the reference's inert "??".
+    bool watching = false;
+    uint16_t watch = 0;
+    bool extra = false;
 };
 
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
@@ -98,6 +112,17 @@ public:
     Registers registers();
     Registers set_registers(Registers r);
     MachineState state();
+    /// Starts recording every half-clock to `options.path`. Replaces any
+    /// capture already in progress. Returns "" or the error message.
+    std::string start_trace(TraceOptions options);
+    /// Closes the capture and reports what it collected.
+    ///
+    /// Queued like everything else here, which means it waits for an in-flight
+    /// `run` to finish. That is the right trade: a capture stops itself at its
+    /// row limit anyway, and anyone wanting to end one early can `pause`
+    /// (which bypasses the queue) and then stop it.
+    TraceStatus stop_trace();
+    TraceStatus trace_status();
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
@@ -150,6 +175,11 @@ private:
     /// completed frame can be skipped. Touched only by the actor thread.
     uint64_t published_frame_ = ~uint64_t(0);
 
+    /// The live capture, or null if tracing has never been started. Owned here
+    /// rather than by the machine because it holds a file handle that has to
+    /// outlive any individual run or step command.
+    std::unique_ptr<TraceLog> trace_;
+
     StoppedHandler on_stopped_;
     ContinuedHandler on_continued_;
 
@@ -168,6 +198,7 @@ private:
     void pace_wait();
     void sync_keys();
     MachineState snapshot(bool running) const;
+    TraceStatus trace_snapshot() const;
 };
 
 } // namespace zx

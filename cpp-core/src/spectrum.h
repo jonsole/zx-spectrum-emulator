@@ -15,6 +15,7 @@
 
 #include "keyboard.h"
 #include "memory.h"
+#include "tracelog.h"
 #include "ula.h"
 #include "z80.h"
 
@@ -33,6 +34,11 @@ public:
     Keyboard keyboard;
 
     std::set<uint16_t> breakpoints;
+
+    /// Optional cycle-by-cycle bus recorder, null when not tracing. Owned by
+    /// whoever turned tracing on (the Engine), not by the machine -- a trace
+    /// outlives individual run/step commands and has a file handle to close.
+    TraceLog* trace = nullptr;
 
     /// Return addresses of CALL/RST frames currently open below the current
     /// PC, oldest first. Maintained by step_instruction(). Cleared whenever

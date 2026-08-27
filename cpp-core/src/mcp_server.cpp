@@ -177,6 +177,20 @@ bool arg_string(const json& args, const char* name, std::string& out, std::strin
     return true;
 }
 
+/// Trace state, reported identically by start_trace, stop_trace and
+/// trace_status so a caller only has to learn one shape.
+json trace_status_json(const TraceStatus& status) {
+    json out{{"active", status.active},
+             {"path", status.path},
+             {"rows", status.rows},
+             {"limit", status.limit},
+             {"extra", status.extra}};
+    if (status.watching) {
+        out["watch"] = status.watch;
+    }
+    return out;
+}
+
 // ---- the tool surface ------------------------------------------------------
 
 /// A JSON Schema object for a tool with no parameters.
@@ -287,6 +301,37 @@ json tools_list() {
                      json{{"type", "boolean"},
                           {"description", "True to break on each accepted interrupt."}}}},
                {"enabled"}));
+    add("start_trace",
+        "Start a cycle-by-cycle bus trace: one row per half-T-state, written as the box-drawn "
+        "table visualz80remix's Trace Log panel produces (M1/MREQ/IORQ/RFSH/RD/WR, address bus, "
+        "data bus, PC and the instruction in flight). For questions about WHEN within an "
+        "instruction something reaches the bus -- contention, interrupt timing, the exact "
+        "T-state a write lands on. Start it, then run or step, then stop_trace; it also stops "
+        "itself at `limit` rows, so a forgotten capture cannot fill the disk. View the result "
+        "with tools/trace_viewer.html, or the \"ZX Spectrum: Show Trace\" command in VS Code.",
+        schema(json{{"path", string_prop("File to write. Relative paths resolve against the "
+                                         "server's working directory (the workspace folder). "
+                                         "Default \"trace.zxtrace\".")},
+                    {"limit", integer_prop("Half-T-states to record before the capture closes "
+                                           "itself. 139,776 is one frame and 7,000,000 one "
+                                           "emulated second; default 25000, and 0 means "
+                                           "unlimited.")},
+                    {"watch", integer_prop("16-bit address to sample into the Watch column on "
+                                           "every half-clock. Omit for none.")},
+                    {"extra", json{{"type", "boolean"},
+                                   {"description", "Add the 48K-specific columns (HALT, WAIT, "
+                                                   "INT, NMI, frame, T-state). Off by default, "
+                                                   "which keeps the layout identical to "
+                                                   "visualz80remix's for side-by-side "
+                                                   "comparison."}}}},
+               {}));
+    add("stop_trace",
+        "Stop the running trace and report where it was written and how many half-T-states it "
+        "captured. Queued, so it waits for an in-flight run to stop -- call pause first to end a "
+        "capture early",
+        no_params());
+    add("trace_status", "Report whether a trace is running, its file, and its row count",
+        no_params());
     add("set_speed",
         "Set emulation speed: \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want)",
@@ -456,6 +501,44 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         return text_result(enabled.get<bool>()
                                ? "will break on each accepted interrupt"
                                : "no longer breaking on interrupts");
+    }
+
+    if (name == "start_trace") {
+        TraceOptions options;
+        const json& path = arg(args, "path");
+        options.path = path.is_string() ? path.get<std::string>() : std::string("trace.zxtrace");
+        const json& limit = arg(args, "limit");
+        if (limit.is_number_integer()) {
+            const int64_t n = limit.get<int64_t>();
+            if (n < 0) {
+                return error_result("'limit' must not be negative");
+            }
+            options.limit = uint64_t(n);
+        }
+        const json& watch = arg(args, "watch");
+        if (watch.is_number_integer()) {
+            const int64_t n = watch.get<int64_t>();
+            if (n < 0 || n > 0xFFFF) {
+                return error_result("'watch' must be a 16-bit address (0..65535)");
+            }
+            options.watch = uint32_t(n);
+        }
+        const json& extra = arg(args, "extra");
+        options.extra = extra.is_boolean() && extra.get<bool>();
+
+        const std::string message = engine.start_trace(options);
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        return json_result(trace_status_json(engine.trace_status()));
+    }
+
+    if (name == "stop_trace") {
+        return json_result(trace_status_json(engine.stop_trace()));
+    }
+
+    if (name == "trace_status") {
+        return json_result(trace_status_json(engine.trace_status()));
     }
 
     if (name == "set_speed") {

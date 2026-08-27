@@ -40,7 +40,6 @@ add_library(zx_core STATIC
   src/snapshot.cpp
   src/spectrum.cpp
   src/tracelog.cpp
-  src/tracelog.cpp
   src/ula.cpp
   src/z80.cpp
 )
@@ -107,6 +106,11 @@ zx_add_test(pin_level)
 zx_add_test(int_timing)
 zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
+zx_add_test(tracelog_tests)
+# Diffs against tests/data/visualz80_reference.txt, found relative to the
+# project root rather than the build tree.
+target_compile_definitions(tracelog_tests
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 # Needs the real ROM, which is copyrighted and gitignored -- the test skips
 # gracefully if it is absent.
 target_compile_definitions(spectrum_tests

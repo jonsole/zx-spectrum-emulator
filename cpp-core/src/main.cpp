@@ -34,6 +34,18 @@ struct Args {
     /// 50Hz. What the exercisers (ZEXALL/ZEXDOC/z80full) want -- they have no
     /// visual output to get wrong and wall-clock speed is the whole point.
     bool uncapped = false;
+    /// Starts a cycle-by-cycle bus trace at boot, written here. Empty means no
+    /// trace; the MCP start_trace/stop_trace tools can begin one later either
+    /// way. This flag exists for the one window those cannot reach -- the
+    /// machine's first few thousand half-clocks, which are over long before a
+    /// client has finished connecting.
+    std::string trace_log;
+    uint64_t trace_limit = zx::TRACE_DEFAULT_LIMIT;
+    /// Memory address sampled into the trace's Watch column, if any.
+    uint32_t trace_watch = zx::TRACE_NO_WATCH;
+    /// Adds the 48K-specific trace columns (HALT/WAIT/INT/NMI, frame, T-state)
+    /// at the cost of the byte-for-byte match with visualz80remix's layout.
+    bool trace_extra = false;
     /// Exits the whole process once the last open DAP connection closes
     /// (e.g. VS Code's Stop action), so a preLaunchTask can rebind the same
     /// port next launch instead of colliding with a stale server. Off by
@@ -73,6 +85,16 @@ bool parse_args(int argc, char** argv, Args& args) {
             if (!next(args.rom_disassembly_dir)) return false;
         } else if (flag == "--rom") {
             if (!next(args.rom)) return false;
+        } else if (flag == "--trace-log") {
+            if (!next(args.trace_log)) return false;
+        } else if (flag == "--trace-limit") {
+            if (!next(value)) return false;
+            args.trace_limit = std::strtoull(value.c_str(), nullptr, 10);
+        } else if (flag == "--trace-watch") {
+            if (!next(value)) return false;
+            args.trace_watch = uint32_t(std::strtoul(value.c_str(), nullptr, 16)) & 0xFFFF;
+        } else if (flag == "--trace-extra") {
+            args.trace_extra = true;
         } else if (flag == "--uncapped") {
             args.uncapped = true;
         } else if (flag == "--exit-on-disconnect") {
@@ -118,6 +140,23 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::printf("Loaded ROM %s\n", args.rom.c_str());
+    }
+
+    // After the ROM, so the capture opens on a machine that has one -- the Asm
+    // column would otherwise disassemble 16K of zeroes as NOPs.
+    if (!args.trace_log.empty()) {
+        zx::TraceOptions trace;
+        trace.path = args.trace_log;
+        trace.limit = args.trace_limit;
+        trace.watch = args.trace_watch;
+        trace.extra = args.trace_extra;
+        const std::string error = engine.start_trace(trace);
+        if (!error.empty()) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        std::printf("Tracing to %s (limit %llu half-clocks)\n", args.trace_log.c_str(),
+                    (unsigned long long)args.trace_limit);
     }
 
     zx::Sources sources(args.rom_disassembly_dir);

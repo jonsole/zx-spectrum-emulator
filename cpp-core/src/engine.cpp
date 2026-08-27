@@ -380,4 +380,51 @@ MachineState Engine::state() {
     });
 }
 
+TraceStatus Engine::trace_snapshot() const {
+    TraceStatus s;
+    if (!trace_) {
+        return s;
+    }
+    s.active = trace_->active();
+    s.path = trace_->path();
+    s.rows = trace_->rows();
+    s.limit = trace_->options().limit;
+    s.watching = trace_->options().watch != TRACE_NO_WATCH;
+    s.watch = uint16_t(trace_->options().watch);
+    s.extra = trace_->options().extra;
+    return s;
+}
+
+std::string Engine::start_trace(TraceOptions options) {
+    return submit<std::string>([this, options](Spectrum48K& m) {
+        if (!trace_) {
+            trace_.reset(new TraceLog());
+        }
+        // open() closes any capture already running, so starting a second trace
+        // supersedes the first rather than failing -- the alternative (an error
+        // the caller has to clear with an explicit stop) is friction with no
+        // upside when the usual reason to restart is "that window was wrong".
+        const std::string error = trace_->open(options);
+        m.trace = error.empty() ? trace_.get() : nullptr;
+        return error;
+    });
+}
+
+TraceStatus Engine::stop_trace() {
+    return submit<TraceStatus>([this](Spectrum48K& m) {
+        if (trace_) {
+            trace_->close();
+        }
+        m.trace = nullptr;
+        return trace_snapshot();
+    });
+}
+
+TraceStatus Engine::trace_status() {
+    return submit<TraceStatus>([this](Spectrum48K& m) {
+        (void)m;
+        return trace_snapshot();
+    });
+}
+
 } // namespace zx

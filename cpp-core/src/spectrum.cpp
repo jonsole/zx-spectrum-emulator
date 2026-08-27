@@ -106,6 +106,14 @@ void Spectrum48K::clock() {
 
     pins_ = cpu.clock(pins_);
 
+    // Sampled HERE, between the CPU's clock and the bus service, and not
+    // after: our memory answers a read in the same half-clock the request is
+    // made, which is a half-clock earlier than real hardware puts the byte on
+    // D0-7. Recording first keeps the data bus honest. See tracelog.h.
+    if (trace != nullptr) {
+        trace->record(*this, pins_);
+    }
+
     service_bus();
 }
 

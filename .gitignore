@@ -40,11 +40,19 @@ game_disassembly/
 
 # Fetched sjasmplus binary (github.com/z00m128/sjasmplus) -- a build tool,
 # not this project's own code; fetched by the LDIR contention example's
-# build task rather than committed.
-tools/
+# build task rather than committed. Scoped to its own directory rather than
+# all of tools/, which also holds committed things (trace_viewer.html).
+tools/sjasmplus/
 
 # Scratch git worktrees created for isolated agent runs -- each is a full
 # checkout of the repo, not project content. The tracked parts of .claude/
 # (agents/, skills/) are committed normally.
 .claude/worktrees/
 trace_screen.rgb
+
+# Captured bus traces (zx_server --trace-log / the start_trace MCP tool), and
+# the copies the trace-log tests write beside themselves. Outputs, not source
+# -- the one committed trace is tests/data/visualz80_reference.txt, which is
+# the reference the tests diff against.
+*.zxtrace
+zx_test_*.txt

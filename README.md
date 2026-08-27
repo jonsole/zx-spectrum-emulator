@@ -380,6 +380,88 @@ signal instead. Launch **"ZX Spectrum: Manic Miner"** once built, or load
 `game_disassembly/manicminer/mm.sna` + `mm.sld` over MCP the same way as any
 other program.
 
+### Cycle-by-cycle bus tracing
+
+The C++ core runs at half-T-state resolution, so it can record what every
+signal on the bus was doing in each half of each T-state. The trace is written
+as the same box-drawn table
+[visualz80remix](https://floooh.github.io/visualz80remix/) produces, which is
+deliberate: a capture from here and a capture from there can be put side by
+side and diffed, and that comparison is a test in its own right (see below).
+
+```
+┌─────────┬────┬──────┬──────┬──────┬────┬────┬──────┬────┬──────┬───────┬─────
+│ Cycle/h │ M1 │ MREQ │ IORQ │ RFSH │ RD │ WR │ AB   │ DB │ PC   │ Watch │ Asm
+├─────────┼────┼──────┼──────┼──────┼────┼────┼──────┼────┼──────┼───────┼─────
+│     1/1 │ M1 │ MREQ │      │      │ RD │    │ 0000 │ 00 │ 0001 │ ??    │ DI
+│     2/0 │ M1 │ MREQ │      │      │ RD │    │ 0000 │ F3 │ 0001 │ ??    │ DI
+│     3/0 │    │      │      │ RFSH │    │    │ 0000 │ F3 │ 0001 │ ??    │ DI
+```
+
+Start one from the command line, which is the only way to catch the machine's
+first few thousand half-clocks:
+
+```bash
+zx_server --rom roms/48.rom --trace-log boot.zxtrace --trace-limit 25000
+```
+
+| flag | meaning |
+| --- | --- |
+| `--trace-log PATH` | where to write; enables tracing at boot |
+| `--trace-limit N` | half-T-states to record before the capture closes itself (default 25000, `0` = unlimited). One frame is 139,776 |
+| `--trace-watch HEX` | a memory address to sample into the Watch column each half-clock |
+| `--trace-extra` | add the 48K-specific columns: HALT, WAIT, INT, NMI, frame, T-state |
+
+Or drive it live over MCP with `start_trace` / `stop_trace` / `trace_status`,
+which is the usual way — capture a window around a breakpoint rather than from
+power-on. `stop_trace` is queued behind an in-flight `run`, so call `pause`
+first to end a capture early; the row limit means you rarely need to.
+
+Tracing costs nothing when it is off (one predictable branch per half-clock)
+and is slow when it is on, which is why every capture is bounded.
+
+#### Viewing a trace
+
+`tools/trace_viewer.html` is a self-contained page — no build step, no
+dependencies, no network. Open it in a browser and drop a `.zxtrace` on it, or
+run **ZX Spectrum: Show Trace** from the VS Code extension, which loads that
+same file into a webview and reloads it whenever the capture is rewritten.
+
+It has two views over the same data:
+
+* **Trace Log** — the table, banded per instruction and searchable (`$4000`
+  jumps to the next row whose address bus holds it).
+* **Timing Diagram** — CLK plus a waveform per signal, drawn active-low as a
+  datasheet would, with the address/data/PC buses as labelled value segments
+  and each instruction shaded behind them.
+
+Clicking in either view moves the selection in the other, and the arrow keys
+step half-clock by half-clock.
+
+The viewer reads the header row to discover the columns, so it opens captures
+made with or without `--trace-extra`, and visualz80remix's own exports too.
+
+#### What the comparison found
+
+`cpp-core/tests/tracelog_tests.cpp` replays visualz80remix's own demo program
+and diffs the two tables cell by cell. **M1, MREQ, IORQ, RD, WR, the address
+bus and the T-state numbering agree everywhere** — the machine-cycle structure
+is identical. Three sub-T-state differences remain, none of them observable to
+a running program, all recorded in that test's `KNOWN_DIFFERENCES` so a new
+one cannot creep in unnoticed:
+
+* **RFSH** — the real chip holds refresh asserted through T4L; this core
+  releases it half a T-state early, at T4H. The one that is a genuine
+  inaccuracy: it shortens the window a refresh address is live on the bus,
+  which is exactly where 48K "snow" comes from, so it will matter once
+  contention lands.
+* **Data bus on a write** — the die drives the byte at T1L, this core at T2H.
+  Zilog's own timing diagram says the start of T2, so the datasheet agrees
+  with us here and the die with neither.
+* **PC** — incremented on the H phase here, on the L phase in the real chip.
+  Purely internal; PC is not a pin, and the address it produces reaches the
+  bus at the same instant either way, which is why AB matches everywhere.
+
 ### Shared state, live
 
 Because both front-ends drive the same `Engine`, you can set a breakpoint in
@@ -440,6 +522,8 @@ zx-spectrum-emulator/
     build_manicminer.py           # builds game_disassembly/manicminer/ (see below)
   examples/
     hello_rom_call/              # tiny original demo, committed
+  tools/
+    trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + live screen viewer
   roms/                        # gitignored; drop your 48K ROM here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
