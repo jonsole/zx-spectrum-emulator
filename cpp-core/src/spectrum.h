@@ -19,6 +19,7 @@
 #include "z80.h"
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,15 @@ public:
     Spectrum48KMemory memory;
     Ula ula;
     Keyboard keyboard;
+
+    std::set<uint16_t> breakpoints;
+
+    /// Return addresses of CALL/RST frames currently open below the current
+    /// PC, oldest first. Maintained by step_instruction(). Cleared whenever
+    /// registers are set wholesale (reset, snapshot load, a debugger moving
+    /// PC), since any of those can leave normal call/return flow and a stale
+    /// chain is worse than none.
+    std::vector<uint16_t> call_stack;
 
     Spectrum48K();
 

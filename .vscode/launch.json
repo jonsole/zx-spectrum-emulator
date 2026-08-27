@@ -32,6 +32,41 @@
       "preLaunchTask": "zxspectrum.start-server"
     },
     {
+      "name": "ZX Spectrum (C++ core): Step through ROM",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): Manic Miner",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): Aquaplane",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): Z80 full test suite",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/z80full.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
       "name": "ZX Spectrum (Rust core): Step through ROM",
       "type": "zxspectrum",
       "request": "launch",

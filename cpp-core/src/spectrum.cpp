@@ -9,6 +9,52 @@ namespace {
 /// decodes as RST 38h) and why IM2 vectors through 0xNNFF.
 constexpr uint8_t INT_ACK_BYTE = 0xFF;
 
+// Opcodes that push a return address: CALL nn, CALL cc,nn, and every RST.
+constexpr uint8_t CALL_OPCODES[] = {0xCD, 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC};
+constexpr uint8_t RST_OPCODES[] = {0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF};
+constexpr uint8_t RET_OPCODES[] = {0xC9, 0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8};
+
+enum class StepKind { Other, Call, Ret };
+
+bool contains(const uint8_t* set, size_t n, uint8_t v) {
+    for (size_t i = 0; i < n; i++) {
+        if (set[i] == v) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Classifies the opcode at `addr` for call-stack tracking. Whether a
+/// CONDITIONAL call/return actually did anything is confirmed afterwards from
+/// the SP delta, not decided here.
+///
+/// RETI/RETN fall under the ED-prefixed "Other" case deliberately: they
+/// return from an interrupt, and interrupt ENTRY does not push a tracked
+/// frame either (it happens inside the CPU's own dispatch, invisible at the
+/// opcode level this looks at). Treating both ends as untracked keeps the
+/// stack correct for the CALL/RET pairs it does see, rather than popping a
+/// frame that was never pushed.
+StepKind classify_step(Spectrum48KMemory& mem, uint16_t addr) {
+    uint16_t a = addr;
+    uint8_t op = mem.read(a);
+    while (op == 0xDD || op == 0xFD) { // skip redundant index prefixes
+        a = uint16_t(a + 1);
+        op = mem.read(a);
+    }
+    if (op == 0xED) {
+        return StepKind::Other;
+    }
+    if (contains(CALL_OPCODES, sizeof CALL_OPCODES, op)
+        || contains(RST_OPCODES, sizeof RST_OPCODES, op)) {
+        return StepKind::Call;
+    }
+    if (contains(RET_OPCODES, sizeof RET_OPCODES, op)) {
+        return StepKind::Ret;
+    }
+    return StepKind::Other;
+}
+
 } // namespace
 
 Spectrum48K::Spectrum48K() {
@@ -21,11 +67,16 @@ void Spectrum48K::reset() {
     pins_ = cpu.pins();
     ula.reset();
     keyboard.clear();
+    call_stack.clear();
 }
 
 void Spectrum48K::set_registers(const Registers& r) {
     cpu.set_registers(r, memory);
     pins_ = cpu.pins();
+    // Any wholesale register write can leave normal call/return flow, so a
+    // tracked chain is no longer meaningful. Cleared unconditionally rather
+    // than trying to detect whether PC specifically moved.
+    call_stack.clear();
 }
 
 std::string Spectrum48K::load_rom(const uint8_t* data, size_t len) {
@@ -100,9 +151,30 @@ void Spectrum48K::service_bus() {
 }
 
 void Spectrum48K::step_instruction() {
+    // Classify BEFORE executing: by the time the instruction completes the
+    // bytes at the old PC may no longer be what ran (self-modifying code).
+    const uint16_t pc_before = registers().pc;
+    const uint16_t sp_before = registers().sp;
+    const StepKind kind = classify_step(memory, pc_before);
+
     clock();
     while (!cpu.is_instruction_boundary()) {
         clock();
+    }
+
+    if (kind == StepKind::Other) {
+        return;
+    }
+    const uint16_t sp_after = registers().sp;
+    if (kind == StepKind::Call && sp_after == uint16_t(sp_before - 2)) {
+        // Confirmed by the SP delta, so a conditional CALL that was not taken
+        // leaves the stack alone.
+        uint16_t lo = memory.read(sp_after);
+        uint16_t hi = memory.read(uint16_t(sp_after + 1));
+        call_stack.push_back(uint16_t(lo | (hi << 8)));
+    } else if (kind == StepKind::Ret && sp_after == uint16_t(sp_before + 2)
+               && !call_stack.empty()) {
+        call_stack.pop_back();
     }
 }
 

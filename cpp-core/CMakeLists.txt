@@ -17,14 +17,38 @@ endif()
 # ---- zx_core: the emulator itself (no server/protocol code) -----------------
 add_library(zx_core STATIC
   src/alu.cpp
+  src/disassembler.cpp
+  src/engine.cpp
   src/keyboard.cpp
   src/memory.cpp
+  src/snapshot.cpp
   src/spectrum.cpp
   src/ula.cpp
   src/z80.cpp
 )
+find_package(Threads REQUIRED)
+target_link_libraries(zx_core PUBLIC Threads::Threads)
 target_include_directories(zx_core PUBLIC src)
 target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
+
+# ---- zx_server: the protocol layer VS Code talks to --------------------------
+# json.hpp and stb_image_write.h are header-only and vendored, so this is just
+# our own sources plus the platform's socket library.
+add_executable(zx_server
+  src/base64.cpp
+  src/dap.cpp
+  src/main.cpp
+  src/net.cpp
+  src/screen_stream.cpp
+)
+target_link_libraries(zx_server PRIVATE zx_core)
+target_compile_options(zx_server PRIVATE ${ZX_WARNINGS})
+if(WIN32)
+  target_link_libraries(zx_server PRIVATE ws2_32)
+endif()
+# json.hpp and stb_image_write.h trip /W4 warnings that aren't ours to fix, and
+# /WX would fail the build on them -- included as SYSTEM so they're exempt.
+target_include_directories(zx_server SYSTEM PRIVATE third_party)
 
 # ---- tests ------------------------------------------------------------------
 # Hand-rolled assertions (see tests/test_main.h) rather than a framework --

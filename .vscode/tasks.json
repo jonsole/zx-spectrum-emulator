@@ -31,6 +31,43 @@
       }
     },
     {
+      "label": "zxspectrum-cpp.build",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "build.ps1", "-Release"],
+      "options": { "cwd": "${workspaceFolder}/cpp-core" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "zxspectrum-cpp.start-server",
+      "type": "shell",
+      "command": "${workspaceFolder}\\cpp-core\\build\\RelWithDebInfo\\zx_server.exe",
+      "args": [
+        "--dap-port", "4711",
+        "--screen-port", "8500"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "zxspectrum-cpp.build",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "zxspectrum-cpp",
+        "pattern": {
+          "regexp": "^.*$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting ZX Spectrum server",
+          "endsPattern": "DAP server listening"
+        }
+      }
+    },
+    {
       "label": "zxspectrum-rust.start-server",
       "type": "shell",
       "command": "${env:USERPROFILE}\\.cargo\\bin\\cargo.exe",
