@@ -58,6 +58,13 @@ zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)
 zx_add_test(differential USES_REFERENCE)
 
+# ---- throughput benchmark ---------------------------------------------------
+# Not a test (nothing to assert -- it reports numbers). Build and run manually;
+# only meaningful in an optimised build.
+add_executable(bench tests/bench.cpp)
+target_link_libraries(bench PRIVATE zx_core)
+target_compile_options(bench PRIVATE ${ZX_WARNINGS})
+
 # ---- ZEXALL / ZEXDOC --------------------------------------------------------
 # One executable, run twice with different arguments. Labelled "slow" and
 # excluded from the default ctest run (build.ps1 -Test): a full pass is well
