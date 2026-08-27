@@ -42,6 +42,11 @@ const char* stop_reason_name(StopReason r) {
         case StopReason::Breakpoint: return "breakpoint";
         case StopReason::Pause: return "pause";
         case StopReason::Entry: return "entry";
+        // DAP vocabulary, which is what these names are for: an
+        // interrupt stop is surfaced through the exception-breakpoint
+        // filter, and "exception" is the reason that pairs with it.
+        // Nothing here treats an interrupt as an error.
+        case StopReason::Interrupt: return "exception";
         default: return "error";
     }
 }
@@ -198,6 +203,7 @@ MachineState Engine::snapshot(bool running) const {
     s.border = machine_.ula.border;
     s.tstate = machine_.ula.tstate();
     s.frame_count = machine_.ula.frame_count();
+    s.interrupt_count = machine_.cpu.interrupt_count;
     for (uint16_t bp : machine_.breakpoints) {
         s.breakpoints.push_back(bp);
     }
@@ -305,7 +311,15 @@ MachineState Engine::run() {
                 reason = StopReason::Pause;
                 break;
             }
+            const uint64_t interrupts_before = m.cpu.interrupt_count;
             m.step_instruction();
+            if (break_on_interrupt_.load() && m.cpu.interrupt_count != interrupts_before) {
+                // PC is now the handler's first instruction, which is
+                // where someone asking to break on an interrupt wants to
+                // land.
+                reason = StopReason::Interrupt;
+                break;
+            }
             if (m.breakpoints.count(m.registers().pc) != 0) {
                 reason = StopReason::Breakpoint;
                 break;

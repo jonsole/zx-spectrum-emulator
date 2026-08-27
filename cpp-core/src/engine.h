@@ -42,12 +42,14 @@ struct MachineState {
     uint8_t border = 0;
     uint32_t tstate = 0;
     uint64_t frame_count = 0;
+    /// Interrupts accepted since power-on.
+    uint64_t interrupt_count = 0;
     std::vector<uint16_t> breakpoints;
     std::vector<uint16_t> call_stack;
 };
 
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
-enum class StopReason { Step, Breakpoint, Pause, Entry, Error };
+enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt };
 
 /// How fast a `run` is allowed to go.
 ///
@@ -107,6 +109,11 @@ public:
     /// Takes effect at the next yield, so it can be changed mid-run.
     void set_speed(Speed s) { speed_.store(s); }
     Speed speed() const { return speed_.load(); }
+    /// Stops a run as soon as an interrupt is accepted, at the first
+    /// instruction of the handler. Checked per instruction, so it can be
+    /// armed or cleared mid-run.
+    void set_break_on_interrupt(bool on) { break_on_interrupt_.store(on); }
+    bool break_on_interrupt() const { return break_on_interrupt_.load(); }
     void key_down(const std::string& key);
     void key_up(const std::string& key);
     /// Latest rendered frame (RGB, border included). Never blocks on the CPU.
@@ -124,6 +131,7 @@ private:
     std::atomic<bool> pause_requested_{false};
     std::atomic<uint64_t> emulated_hc_{0};
     std::atomic<Speed> speed_{Speed::Realtime};
+    std::atomic<bool> break_on_interrupt_{false};
 
     /// Wall-clock instant, and the emulated half-clock count, that the current
     /// run's pacing measures from. Held as a baseline rather than sleeping a

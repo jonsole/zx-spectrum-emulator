@@ -323,6 +323,9 @@ json debug_variables(const MachineState& state) {
                              {"variablesReference", 0}},
                         json{{"name", "Frame"},
                              {"value", std::to_string(state.frame_count)},
+                             {"variablesReference", 0}},
+                        json{{"name", "Interrupts"},
+                             {"value", std::to_string(state.interrupt_count)},
                              {"variablesReference", 0}}});
 }
 
@@ -512,6 +515,17 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
 
     if (command == "initialize") {
         body = json{{"supportsConfigurationDoneRequest", true},
+                    // Not a real exception -- DAP exception filters are
+                    // simply its mechanism for "break when this happens",
+                    // and this is the only one that gets a checkbox in VS
+                    // Code BREAKPOINTS instead of a custom request.
+                    {"exceptionBreakpointFilters",
+                     json::array({json{{"filter", "interrupt"},
+                                       {"label", "Interrupt accepted"},
+                                       {"description",
+                                        "Break at the first instruction of the interrupt "
+                                        "handler, each time the CPU accepts an interrupt."},
+                                       {"default", false}}})},
                     {"supportsInstructionBreakpoints", true},
                     {"supportsReadMemoryRequest", true},
                     {"supportsWriteMemoryRequest", true},
@@ -569,12 +583,23 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
             }
         }
 
-    } else if (command == "attach" || command == "configurationDone" ||
-               command == "setExceptionBreakpoints") {
-        // Nothing to do; acknowledged so the client's handshake completes.
-        // VS Code sends setExceptionBreakpoints during setup even though no
-        // exception filters are advertised, and a failed response there
-        // surfaces as an error popup.
+    } else if (command == "setExceptionBreakpoints") {
+        // The filter list is absolute, not a delta: anything not named is
+        // off. VS Code sends this during setup and on every change.
+        bool on_interrupt = false;
+        const json& filters = arg(arguments, "filters");
+        if (filters.is_array()) {
+            for (const json& filter : filters) {
+                if (filter.is_string() && filter.get<std::string>() == "interrupt") {
+                    on_interrupt = true;
+                }
+            }
+        }
+        engine.set_break_on_interrupt(on_interrupt);
+        body = json{{"breakpoints", json::array({json{{"verified", true}}})}};
+
+    } else if (command == "attach" || command == "configurationDone") {
+        // Nothing to do; acknowledged so the client handshake completes.
 
     } else if (command == "disconnect" || command == "terminate") {
         // Clicking Stop while a `continue`-triggered run is in flight

@@ -161,6 +161,13 @@ public:
     /// correction, and is cleared when an interrupt is accepted.
     bool halted = false;
 
+    /// Interrupts accepted since power-on. A counter rather than a flag
+    /// so a caller can tell one happened between two points without
+    /// having to catch and clear it -- which is what break-on-interrupt
+    /// needs, since the acceptance sequence is over by the time a
+    /// debugger gets to look.
+    uint64_t interrupt_count = 0;
+
     Z80() = default;
 
     /// Advances exactly one half-T-state. `pins` is the caller's response to

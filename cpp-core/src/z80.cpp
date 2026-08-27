@@ -59,6 +59,7 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
         if (halted) {
             regs.pc = uint16_t(regs.pc + 1);
         }
+        interrupt_count++;
         step_ = STEP_INT_T1H;
         return pins;
     }

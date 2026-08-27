@@ -114,6 +114,7 @@ json state_json(const MachineState& s) {
                 {"border", s.border},
                 {"tstate", s.tstate},
                 {"frame_count", s.frame_count},
+                {"interrupt_count", s.interrupt_count},
                 {"breakpoints", s.breakpoints},
                 {"call_stack", s.call_stack}};
 }
@@ -278,6 +279,14 @@ json tools_list() {
         "Find the nearest named routine at or before a 16-bit address, with its offset (e.g. "
         "0x0005 -> {symbol: START, offset: 5}) -- same sources as resolve_symbol",
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
+    add("set_break_on_interrupt",
+        "Stop a run at the first instruction of the interrupt handler each time the CPU "
+        "accepts an interrupt -- for seeing what a handler does, or what state it was "
+        "entered from",
+        schema(json{{"enabled",
+                     json{{"type", "boolean"},
+                          {"description", "True to break on each accepted interrupt."}}}},
+               {"enabled"}));
     add("set_speed",
         "Set emulation speed: \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want)",
@@ -436,6 +445,17 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "get_state") {
         return json_result(state_json(engine.state()));
+    }
+
+    if (name == "set_break_on_interrupt") {
+        const json& enabled = arg(args, "enabled");
+        if (!enabled.is_boolean()) {
+            return error_result("'enabled' is required and must be a boolean");
+        }
+        engine.set_break_on_interrupt(enabled.get<bool>());
+        return text_result(enabled.get<bool>()
+                               ? "will break on each accepted interrupt"
+                               : "no longer breaking on interrupts");
     }
 
     if (name == "set_speed") {
