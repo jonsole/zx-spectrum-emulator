@@ -389,7 +389,7 @@
         }
         case 576: {
             dlatch_ = get_data(pins);
-            regs.b = uint8_t(regs.b - 1); if (regs.b == 0) { step_ = 587; return true; }
+            regs.b = uint8_t(regs.b - 1); if (regs.b == 0) { pins = release_pins(pins, MREQ | RD); step_ = 587; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 577;
             return true;
@@ -868,7 +868,7 @@
         }
         case 666: {
             dlatch_ = get_data(pins);
-            if (!((regs.f & FLAG_Z) == 0)) { step_ = 677; return true; }
+            if (!((regs.f & FLAG_Z) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 677; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 667;
             return true;
@@ -1196,7 +1196,7 @@
         }
         case 728: {
             dlatch_ = get_data(pins);
-            if (!((regs.f & FLAG_Z) != 0)) { step_ = 739; return true; }
+            if (!((regs.f & FLAG_Z) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 739; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 729;
             return true;
@@ -1521,7 +1521,7 @@
         }
         case 792: {
             dlatch_ = get_data(pins);
-            if (!((regs.f & FLAG_C) == 0)) { step_ = 803; return true; }
+            if (!((regs.f & FLAG_C) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 803; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 793;
             return true;
@@ -1984,7 +1984,7 @@
         }
         case 882: {
             dlatch_ = get_data(pins);
-            if (!((regs.f & FLAG_C) != 0)) { step_ = 893; return true; }
+            if (!((regs.f & FLAG_C) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 893; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 883;
             return true;
@@ -3835,7 +3835,7 @@
         }
         case 1128: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_Z) == 0)) { step_ = 1143; return true; }
+            if (!((regs.f & FLAG_Z) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1143; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1129;
             return true;
@@ -4344,7 +4344,7 @@
         }
         case 1226: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_Z) != 0)) { step_ = 1241; return true; }
+            if (!((regs.f & FLAG_Z) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1241; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1227;
             return true;
@@ -4982,7 +4982,7 @@
         }
         case 1350: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_C) == 0)) { step_ = 1365; return true; }
+            if (!((regs.f & FLAG_C) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1365; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1351;
             return true;
@@ -5504,7 +5504,7 @@
         }
         case 1450: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_C) != 0)) { step_ = 1465; return true; }
+            if (!((regs.f & FLAG_C) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1465; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1451;
             return true;
@@ -6087,7 +6087,7 @@
         }
         case 1564: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_PV) == 0)) { step_ = 1579; return true; }
+            if (!((regs.f & FLAG_PV) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1579; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1565;
             return true;
@@ -6543,7 +6543,7 @@
         }
         case 1650: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_PV) != 0)) { step_ = 1665; return true; }
+            if (!((regs.f & FLAG_PV) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1665; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1651;
             return true;
@@ -6988,7 +6988,7 @@
         }
         case 1734: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_S) == 0)) { step_ = 1749; return true; }
+            if (!((regs.f & FLAG_S) == 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1749; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1735;
             return true;
@@ -7461,7 +7461,7 @@
         }
         case 1824: {
             regs.set_wzh(get_data(pins));
-            if (!((regs.f & FLAG_S) != 0)) { step_ = 1839; return true; }
+            if (!((regs.f & FLAG_S) != 0)) { pins = release_pins(pins, MREQ | RD); step_ = 1839; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 1825;
             return true;
@@ -11964,7 +11964,7 @@
         case 2628: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); if (regs.b == 0) { step_ = 2639; return true; }
+            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2639; return true; }
             step_ = 2629;
             return true;
         }
@@ -12092,7 +12092,7 @@
             return true;
         }
         case 2656: {
-            regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { step_ = 2667; return true; }
+            regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2667; return true; }
             pins = release_pins(pins, IORQ | WR);
             step_ = 2657;
             return true;
@@ -12458,7 +12458,7 @@
         case 2732: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); if (regs.b == 0) { step_ = 2743; return true; }
+            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2743; return true; }
             step_ = 2733;
             return true;
         }
@@ -12586,7 +12586,7 @@
             return true;
         }
         case 2760: {
-            regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { step_ = 2771; return true; }
+            regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2771; return true; }
             pins = release_pins(pins, IORQ | WR);
             step_ = 2761;
             return true;
@@ -12938,7 +12938,7 @@
         }
         case 2778: {
             dlatch_ = get_data(pins);
-            uint8_t cb_out; if (cb_action(dlatch_, true, &cb_out)) { dlatch_ = cb_out; } else { step_ = 2785; return true; }
+            uint8_t cb_out; if (cb_action(dlatch_, true, &cb_out)) { dlatch_ = cb_out; } else { pins = release_pins(pins, MREQ | RD); step_ = 2785; return true; }
             pins = release_pins(pins, MREQ | RD);
             step_ = 2779;
             return true;

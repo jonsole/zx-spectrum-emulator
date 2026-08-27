@@ -47,3 +47,4 @@ tools/
 # checkout of the repo, not project content. The tracked parts of .claude/
 # (agents/, skills/) are committed normally.
 .claude/worktrees/
+trace_screen.rgb

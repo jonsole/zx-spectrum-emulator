@@ -102,6 +102,7 @@ endfunction()
 zx_add_test(memory_tests)
 zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)
+zx_add_test(int_timing)
 zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
 # Needs the real ROM, which is copyrighted and gitignored -- the test skips
@@ -122,6 +123,14 @@ add_executable(bench_machine tests/bench_machine.cpp)
 target_link_libraries(bench_machine PRIVATE zx_core)
 target_compile_options(bench_machine PRIVATE ${ZX_WARNINGS})
 target_compile_definitions(bench_machine
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+# Diagnostic, not a test: runs a snapshot until it derails and dumps the
+# instruction history that led there.
+add_executable(trace tests/trace.cpp)
+target_link_libraries(trace PRIVATE zx_core)
+target_compile_options(trace PRIVATE ${ZX_WARNINGS})
+target_compile_definitions(trace
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # Diagnostic, not a test: dumps the rendered canvas for eyeballing.

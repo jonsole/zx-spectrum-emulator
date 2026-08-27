@@ -317,7 +317,7 @@ ACTIONS: dict[str, "callable"] = {
     "DJNZ d": {
         1: lambda y, z, p, q, i, skip: (
             "regs.b = uint8_t(regs.b - 1); "
-            f"if (regs.b == 0) {{ step_ = {skip(5)}; return true; }}"
+            f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         2: lambda y, z, p, q, i: (
             "regs.pc = uint16_t(regs.pc + int8_t(dlatch_)); regs.wz = regs.pc;"
@@ -330,7 +330,7 @@ ACTIONS: dict[str, "callable"] = {
     },
     "JR $CC-4,d": {
         0: lambda y, z, p, q, i, skip: (
-            f"if (!({CC_EXPR[y - 4]})) {{ step_ = {skip(5)}; return true; }}"
+            f"if (!({CC_EXPR[y - 4]})) {{ {skip(5)} }}"
         ),
         1: lambda y, z, p, q, i: (
             "regs.pc = uint16_t(regs.pc + int8_t(dlatch_)); regs.wz = regs.pc;"
@@ -409,7 +409,7 @@ ACTIONS: dict[str, "callable"] = {
     "CCF": lambda y, z, p, q, i: "regs.f = alu::ccf(regs.a, regs.f);",
     "RET $CC": {
         0: lambda y, z, p, q, i, skip: (
-            f"if (!({CC_EXPR[y]})) {{ step_ = {skip(6)}; return true; }}"
+            f"if (!({CC_EXPR[y]})) {{ {skip(6)} }}"
         ),
         2: lambda y, z, p, q, i: "regs.pc = regs.wz;",
     },
@@ -437,7 +437,7 @@ ACTIONS: dict[str, "callable"] = {
     },
     "CALL $CC,nn": {
         1: lambda y, z, p, q, i, skip: (
-            f"if (!({CC_EXPR[y]})) {{ step_ = {skip(7)}; return true; }}"
+            f"if (!({CC_EXPR[y]})) {{ {skip(7)} }}"
         ),
         4: lambda y, z, p, q, i: "regs.pc = regs.wz;",
     },
@@ -487,14 +487,14 @@ ACTIONS: dict[str, "callable"] = {
     "LDIR": {
         2: lambda y, z, p, q, i, skip: (
             _ldi_ldd_body()
-            + f" if (bc_after == 0) {{ step_ = {skip(5)}; return true; }}"
+            + f" if (bc_after == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
     "LDDR": {
         2: lambda y, z, p, q, i, skip: (
             _ldi_ldd_body()
-            + f" if (bc_after == 0) {{ step_ = {skip(5)}; return true; }}"
+            + f" if (bc_after == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -503,14 +503,14 @@ ACTIONS: dict[str, "callable"] = {
     "CPIR": {
         1: lambda y, z, p, q, i, skip: (
             _cpi_cpd_body("+")
-            + f" if (!r.repeat) {{ step_ = {skip(5)}; return true; }}"
+            + f" if (!r.repeat) {{ {skip(5)} }}"
         ),
         2: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
     "CPDR": {
         1: lambda y, z, p, q, i, skip: (
             _cpi_cpd_body("-")
-            + f" if (!r.repeat) {{ step_ = {skip(5)}; return true; }}"
+            + f" if (!r.repeat) {{ {skip(5)} }}"
         ),
         2: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -544,7 +544,7 @@ ACTIONS: dict[str, "callable"] = {
         ),
         2: lambda y, z, p, q, i, skip: (
             "regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); "
-            f"if (regs.b == 0) {{ step_ = {skip(5)}; return true; }}"
+            f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -554,7 +554,7 @@ ACTIONS: dict[str, "callable"] = {
         ),
         2: lambda y, z, p, q, i, skip: (
             "regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); "
-            f"if (regs.b == 0) {{ step_ = {skip(5)}; return true; }}"
+            f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -577,7 +577,7 @@ ACTIONS: dict[str, "callable"] = {
         2: lambda y, z, p, q, i, skip: (
             "regs.wz = uint16_t(regs.bc() + 1); "
             "regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); "
-            f"if (regs.b == 0) {{ step_ = {skip(5)}; return true; }}"
+            f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -586,7 +586,7 @@ ACTIONS: dict[str, "callable"] = {
         2: lambda y, z, p, q, i, skip: (
             "regs.wz = uint16_t(regs.bc() - 1); "
             "regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); "
-            f"if (regs.b == 0) {{ step_ = {skip(5)}; return true; }}"
+            f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -627,7 +627,7 @@ ACTIONS: dict[str, "callable"] = {
         0: lambda y, z, p, q, i, skip: (
             "uint8_t cb_out; "
             "if (cb_action(dlatch_, true, &cb_out)) { dlatch_ = cb_out; } "
-            f"else {{ step_ = {skip(3)}; return true; }}"
+            f"else {{ {skip(3)} }}"
         ),
     },
 }
@@ -992,11 +992,40 @@ class Generator:
             # per instruction (5 for the block/relative-jump forms, 6 for
             # RET cc, 7 for CALL cc, 3 for the CB (HL) form), and the action
             # is what knows which applies.
-            skip = (lambda idx: lambda k: self.skip_target(tstates, idx, k))(i)
+            #
+            # It emits the WHOLE branch, not just the target, because taking
+            # it means "this machine cycle is over, go to the overlapped
+            # fetch" -- and the half-states that would have released this
+            # cycle's control lines are exactly what the branch jumps over.
+            # Leaving them asserted is not cosmetic: a skipped MREQ|RD
+            # release makes the next cycle's write read instead (an interrupt
+            # arriving right after a not-taken CALL cc pushed a corrupt
+            # return address -- Aquaplane derailed on it after ~240 frames),
+            # and a skipped MREQ|WR release leaves WR asserted into the M1
+            # refresh window, which M1 does not clear, writing garbage at the
+            # refresh address.
+            skip = (lambda idx: lambda k: self.skip_branch(tstates, idx, k))(i)
             body = self.render(ts, nxt, skip, op, y, z, p, q)
             self.arms.append(f"        case {ts.number}: {{\n{body}\n        }}")
 
         return tstates[0].number
+
+    # Control lines each kind of half-state is holding asserted when an action
+    # on it can branch away. A "generic" (internal) cycle drives none.
+    SKIP_RELEASE = {
+        "mread_t3l_latch": "MREQ | RD",
+        "ioread_t3l_latch": "IORQ | RD",
+        "iowrite_t3l_end": "IORQ | WR",
+        "mwrite_t2l_wait": "MREQ | WR",
+    }
+
+    def skip_branch(self, tstates: list[TState], i: int, k: int) -> str:
+        """The complete early-out for an action: release whatever this machine
+        cycle still holds, then jump to the overlapped fetch."""
+        target = self.skip_target(tstates, i, k)
+        release = self.SKIP_RELEASE.get(tstates[i].kind)
+        prefix = f"pins = release_pins(pins, {release}); " if release else ""
+        return f"{prefix}step_ = {target}; return true;"
 
     @staticmethod
     def skip_target(tstates: list[TState], i: int, k: int) -> int:
