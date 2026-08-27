@@ -39,6 +39,8 @@ add_library(zx_core STATIC
   src/memory.cpp
   src/snapshot.cpp
   src/spectrum.cpp
+  src/tracelog.cpp
+  src/tracelog.cpp
   src/ula.cpp
   src/z80.cpp
 )
