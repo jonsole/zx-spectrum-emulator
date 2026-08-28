@@ -575,6 +575,56 @@ MachineState Engine::state() {
     });
 }
 
+void Engine::start_coverage() {
+    submit_void([this](Spectrum48K& m) {
+        if (!coverage_) {
+            coverage_ = std::make_unique<Coverage>();
+        } else {
+            coverage_->clear();
+        }
+        m.set_coverage(coverage_.get());
+        coverage_recording_.store(true);
+    });
+}
+
+void Engine::stop_coverage() {
+    submit_void([this](Spectrum48K& m) {
+        m.set_coverage(nullptr);
+        coverage_recording_.store(false);
+    });
+}
+
+bool Engine::coverage_recording() const { return coverage_recording_.load(); }
+
+CoverageCounts Engine::coverage_counts(uint32_t start, uint32_t end) {
+    // Queued rather than read straight off coverage_, even though counting
+    // does not touch the machine: the emulator thread is writing into that
+    // array on every memory access, and a count taken alongside it would be
+    // reading bytes as they change.
+    return submit<CoverageCounts>([this, start, end](Spectrum48K&) {
+        if (coverage_) {
+            return coverage_->counts(start, end);
+        }
+        // No map yet means coverage was never started, which counts as
+        // "nothing executed" rather than as an error -- the answer a freshly
+        // cleared map would give.
+        CoverageCounts empty;
+        empty.untouched = end > start ? size_t(end - start) : 0;
+        return empty;
+    });
+}
+
+std::string Engine::save_coverage(const std::string& path, uint32_t start, uint32_t end,
+                                  CoverageCounts& out) {
+    return submit<std::string>([this, &path, start, end, &out](Spectrum48K&) {
+        if (!coverage_) {
+            return std::string("no coverage recorded -- call start_coverage first");
+        }
+        out = coverage_->counts(start, end);
+        return coverage_->write(path, start, end);
+    });
+}
+
 TraceStatus Engine::trace_snapshot() const {
     TraceStatus s;
     if (!trace_) {
@@ -770,7 +820,7 @@ void Engine::service_trace() {
         if (pending_trace_) {
             trace_ = std::move(pending_trace_);
         }
-        machine_.trace = trace_ && trace_->active() ? trace_.get() : nullptr;
+        machine_.set_trace(trace_ && trace_->active() ? trace_.get() : nullptr);
         trace_change_pending_.store(false, std::memory_order_release);
         trace_applied_ = trace_requested_;
         lock.unlock();
@@ -781,8 +831,8 @@ void Engine::service_trace() {
     // has keeps the machine's hot loop out of a finished trace for the rest of
     // the session. Nothing to publish: trace_status() reads the capture
     // directly.
-    if (machine_.trace != nullptr && !trace_->active()) {
-        machine_.trace = nullptr;
+    if (machine_.trace() != nullptr && !trace_->active()) {
+        machine_.set_trace(nullptr);
     }
 }
 

@@ -3,7 +3,19 @@
 Running backlog of things we might build next. Not scheduled or scoped in
 detail yet -- just captured here so they don't get lost.
 
-- [ ] **Classify memory as code/data (read / read-write) as execution runs.**
+- [x] **Classify memory as code/data (read / read-write) as execution runs.**
+      *Done* — `cpp-core/src/coverage.h`, exposed over MCP as
+      `start_coverage`/`stop_coverage`/`coverage_status`/`save_coverage`, and
+      documented in README.md under "Code/data coverage, for disassembly".
+      Four flags per address (instruction start, opcode byte, read, written),
+      set straight off the bus, and the file it writes is simultaneously a
+      valid SkoolKit code map for `sna2ctl -m`. What is NOT done yet: a
+      control-file generator of our own that uses the read/write distinction
+      (`b` for a constant table vs `g` for a variable vs `u` for untouched) --
+      `sna2ctl -m` only understands code-vs-not-code, so those two flags are
+      recorded but currently unused. Original description follows.
+
+      **Classify memory as code/data (read / read-write) as execution runs.**
       Track, per address, whether it's ever been fetched as an opcode
       (code) vs read or written as data, live while the CPU runs -- e.g. a
       byte first hit as an M1 opcode fetch is "code"; a byte only ever
@@ -15,7 +27,16 @@ detail yet -- just captured here so they don't get lost.
       images without needing a full static disassembly pass.
 
 - [ ] **Integrate SkoolKit to reverse-engineer an unknown binary from an execution trace.**
-      Depends on the memory classification above. SkoolKit's
+      The memory classification above is now in place, so what is left here is
+      the glue: a script that takes a snapshot and a coverage map off a live
+      machine and runs the sna2ctl -> sna2skool -> skool2asm -> sjasmplus ->
+      round-trip-verify pipeline that `scripts/build_aticatac.py` already
+      implements against SkoolKit's own simulator. Two emulator-side gaps
+      block a clean version of it: the C++ server cannot save a snapshot at
+      all (only load one), so the memory image has to be pulled out through
+      `read_memory` and rebuilt externally; and the tape block list does not
+      surface the load addresses from the headers it parses, so sna2skool's
+      -s/-e still have to be worked out by hand. SkoolKit's
       `sna2skool.py` (already vendored -- see `build_rom_source.py`/
       `build_manicminer.py`) takes a snapshot plus a `.ctl` control file
       marking address ranges as code/byte/word/text/etc; without one it

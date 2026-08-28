@@ -34,6 +34,7 @@ endif()
 add_library(zx_core STATIC
   src/alu.cpp
   src/beeper.cpp
+  src/coverage.cpp
   src/disassembler.cpp
   src/engine.cpp
   src/keyboard.cpp
@@ -114,6 +115,7 @@ zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
 zx_add_test(tape_tests)
 zx_add_test(tracelog_tests)
+zx_add_test(coverage_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
 target_compile_definitions(tracelog_tests

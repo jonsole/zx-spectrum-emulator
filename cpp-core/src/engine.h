@@ -28,6 +28,7 @@
 // the only moment Play is ever wanted. Those five use atomics and a mutexed
 // snapshot instead.
 
+#include "coverage.h"
 #include "spectrum.h"
 
 #include <atomic>
@@ -155,6 +156,27 @@ public:
     Registers registers();
     Registers set_registers(Registers r);
     MachineState state();
+
+    /// Starts recording which addresses are executed, read and written,
+    /// clearing whatever the last run recorded. Queued, so it can be called
+    /// mid-run: the run loop services the queue at its yields.
+    ///
+    /// Clearing as it starts is the point, not a convenience. Loading a
+    /// program is memory traffic of its own -- a pulse-level tape load has
+    /// the ROM's loader write every byte of the game -- so a map that spans
+    /// the load describes the loader as much as the program. Load first,
+    /// then start.
+    void start_coverage();
+    /// Stops recording. The map is kept, so it can still be counted and
+    /// written out afterwards, and a later start_coverage clears it.
+    void stop_coverage();
+    bool coverage_recording() const;
+    /// Coverage counts over [start, end). Queued, so safe mid-run.
+    CoverageCounts coverage_counts(uint32_t start, uint32_t end);
+    /// Writes the map to `path` (see Coverage::write) and reports the counts
+    /// for the same range through `out`. Returns "" on success, else why not.
+    std::string save_coverage(const std::string& path, uint32_t start, uint32_t end,
+                              CoverageCounts& out);
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
@@ -284,6 +306,10 @@ private:
     std::atomic<uint64_t> emulated_hc_{0};
     std::atomic<Speed> speed_{Speed::Realtime};
     std::atomic<bool> break_on_interrupt_{false};
+    /// Whether the machine is currently pointed at coverage_. Held as an
+    /// atomic as well as in the machine so a status query can answer without
+    /// queueing behind a run.
+    std::atomic<bool> coverage_recording_{false};
 
     /// Wall-clock instant, and the emulated half-clock count, that the current
     /// run's pacing measures from. Held as a baseline rather than sleeping a
@@ -315,6 +341,16 @@ private:
     std::vector<std::shared_ptr<AudioRing>> audio_sinks_;
     /// Reused across publishes so the audio path does not allocate per block.
     std::vector<int16_t> audio_scratch_;
+
+    /// The code/data map, or null until coverage is first started. Owned here;
+    /// the machine only points at it while recording, which is what switches
+    /// the per-half-clock cost on and off. Actor thread only, like the
+    /// machine itself.
+    ///
+    /// On the heap, and absent until asked for, because the map is 64K and
+    /// most sessions never record one: as a by-value member every Engine
+    /// carried it, benchmarks and the tape tests included.
+    std::unique_ptr<Coverage> coverage_;
 
     /// The current capture, or null if tracing has never been started. Owned
     /// here rather than by the machine because it holds a file handle that has

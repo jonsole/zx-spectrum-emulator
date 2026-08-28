@@ -169,6 +169,37 @@ bool arg_u16(const json& args, const char* name, uint16_t& out, std::string& err
     return true;
 }
 
+/// Optional [start, end) address range, leaving the defaults alone when the
+/// argument is absent. `end` may be 65536 -- one past the last address is not
+/// a 16-bit value, which is why this does not go through arg_u16.
+bool arg_range(const json& args, uint32_t& start, uint32_t& end, std::string& error) {
+    auto read = [&args, &error](const char* name, uint32_t& out) {
+        const json& v = arg(args, name);
+        if (v.is_null()) {
+            return true; // absent: keep the caller's default
+        }
+        if (!v.is_number_integer()) {
+            error = std::string("'") + name + "' must be an integer";
+            return false;
+        }
+        const int64_t n = v.get<int64_t>();
+        if (n < 0 || n > 0x10000) {
+            error = std::string("'") + name + "' must be between 0 and 65536";
+            return false;
+        }
+        out = uint32_t(n);
+        return true;
+    };
+    if (!read("start", start) || !read("end", end)) {
+        return false;
+    }
+    if (start > end) {
+        error = "'start' must not be greater than 'end'";
+        return false;
+    }
+    return true;
+}
+
 bool arg_string(const json& args, const char* name, std::string& out, std::string& error) {
     const json& v = arg(args, name);
     if (!v.is_string()) {
@@ -197,6 +228,21 @@ AudioRing& capture_ring(Engine& engine) {
 
 /// Trace state, reported identically by start_trace, stop_trace and
 /// trace_status so a caller only has to learn one shape.
+/// The default range for coverage queries: RAM only. The ROM's own coverage is
+/// real and recorded, but a disassembly of a loaded program does not want it --
+/// every program calls the ROM, so including it would mark 16K of somebody
+/// else's code as part of the map.
+constexpr uint32_t COVERAGE_DEFAULT_START = 0x4000;
+constexpr uint32_t COVERAGE_DEFAULT_END = 0x10000;
+
+json coverage_counts_json(const CoverageCounts& c) {
+    return json{{"instructions", c.instructions},
+                {"code", c.code},
+                {"read", c.read},
+                {"written", c.written},
+                {"untouched", c.untouched}};
+}
+
 json trace_status_json(const TraceStatus& status) {
     json out{{"active", status.active},
              {"path", status.path},
@@ -471,6 +517,40 @@ json tools_list() {
                                            "replay one part of a multi-load tape.")},
                     {"fast_load", bool_prop("Also turn fast load on or off.")}},
                {}));
+    add("start_coverage",
+        "Start recording which addresses the program executes, reads and writes -- the code/data "
+        "map a disassembler needs to tell instructions from graphics. Clears whatever the last "
+        "run recorded, so START IT AFTER THE PROGRAM HAS LOADED: a pulse-level tape load has the "
+        "ROM's loader write every byte of the game, and a map that spans the load describes the "
+        "loader as much as the program. Takes effect immediately, mid-run included",
+        no_params());
+    add("stop_coverage",
+        "Stop recording. The map is kept -- coverage_status and save_coverage still work on it "
+        "afterwards, and a later start_coverage is what clears it",
+        no_params());
+    add("coverage_status",
+        "Report whether coverage is recording, and how many addresses in a range were executed, "
+        "read, written or never touched. Safe to poll during a run, so coverage can be watched "
+        "saturating -- when the counts stop climbing, more play is not buying more map",
+        schema(json{{"start", integer_prop("First address of the range (default 16384, i.e. "
+                                           "RAM only -- the ROM's own coverage is recorded but "
+                                           "is rarely what a program's map should include).")},
+                    {"end", integer_prop("One past the last address (default 65536).")}},
+               {}));
+    add("save_coverage",
+        "Write the coverage map to a file, for SkoolKit. The file is 65536 bytes, one flag byte "
+        "per address (bit 0 = an instruction started here, bit 1 = fetched as an opcode, bit 2 = "
+        "read as data, bit 3 = written), and bit 0 is where SkoolKit looks -- so the same file "
+        "is a valid code map for `sna2ctl -m`, whose control file is what makes sna2skool "
+        "disassemble code as code and leave data as data. Addresses outside [start, end) are "
+        "written as zero",
+        schema(json{{"path", string_prop("File to write. Relative paths resolve against the "
+                                         "server's working directory (the workspace folder). "
+                                         "Default \"coverage.map\".")},
+                    {"start", integer_prop("First address to include (default 16384).")},
+                    {"end", integer_prop("One past the last address to include (default "
+                                         "65536).")}},
+               {}));
     return tools;
 }
 
@@ -711,6 +791,44 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "trace_status") {
         return json_result(trace_status_json(engine.trace_status()));
+    }
+
+    if (name == "start_coverage") {
+        engine.start_coverage();
+        return text_result("recording coverage (map cleared)");
+    }
+
+    if (name == "stop_coverage") {
+        engine.stop_coverage();
+        return text_result("coverage recording stopped (map kept)");
+    }
+
+    if (name == "coverage_status" || name == "save_coverage") {
+        uint32_t start = COVERAGE_DEFAULT_START;
+        uint32_t end = COVERAGE_DEFAULT_END;
+        if (!arg_range(args, start, end, error)) {
+            return error_result(error);
+        }
+        if (name == "coverage_status") {
+            json out = coverage_counts_json(engine.coverage_counts(start, end));
+            out["recording"] = engine.coverage_recording();
+            out["start"] = start;
+            out["end"] = end;
+            return json_result(out);
+        }
+        const json& path = arg(args, "path");
+        const std::string file =
+            path.is_string() ? path.get<std::string>() : std::string("coverage.map");
+        CoverageCounts counts;
+        const std::string message = engine.save_coverage(file, start, end, counts);
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        json out = coverage_counts_json(counts);
+        out["path"] = file;
+        out["start"] = start;
+        out["end"] = end;
+        return json_result(out);
     }
 
     if (name == "set_speed") {

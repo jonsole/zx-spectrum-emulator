@@ -202,6 +202,25 @@ public:
         return step_ == STEP_M1_T1L && !prefix_active_;
     }
 
+    /// The same question one half-clock LATER: true immediately after the
+    /// clock that began an instruction's opcode fetch, i.e. when the MREQ|RD
+    /// now on the bus belongs to the FIRST opcode byte of an instruction
+    /// rather than to the second byte of a prefixed one.
+    ///
+    /// A caller looking at the pins the CPU has just driven needs this rather
+    /// than is_instruction_boundary(), because the very clock that asserts
+    /// the fetch also advances the step counter past the boundary. Asking
+    /// afterwards is also what lets such a caller do nothing at all when it
+    /// is not interested -- coverage recording is off far more often than it
+    /// is on, and sampling beforehand would cost every caller a load and a
+    /// branch per half-clock whether or not anything wanted the answer.
+    ///
+    /// STEP_M1_T2H is assigned in exactly one place (the STEP_M1_T1L case),
+    /// so this is as unambiguous as the boundary test it mirrors.
+    bool fetch_began_instruction() const {
+        return step_ == STEP_M1_T2H && !prefix_active_;
+    }
+
     /// Runs whole half-clocks until the current instruction completes,
     /// servicing memory internally. Returns the number of half-clocks taken
     /// (so twice the T-state count). Convenience wrapper for callers that do

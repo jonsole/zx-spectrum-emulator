@@ -456,6 +456,67 @@ and never committed. Load `game_disassembly/aticatac/aticatac.sna` +
 `aticatac.sld` over MCP or DAP for source-level debugging, same as Manic
 Miner.
 
+### Code/data coverage, for disassembly
+
+The Atic Atac build above needs a map of which addresses are code and which
+are data, and gets it by replaying the game in SkoolKit's own simulator. The
+emulator can now produce that map itself, from a real run — including one you
+drove by hand, or an agent drove over MCP while looking at the screen.
+
+Recording is a flag per address, set straight off the bus: an opcode fetch
+(`M1` with `MREQ|RD`) marks code, any other read marks data, a write marks a
+variable. Nothing is inferred, so there are no false positives — a byte marked
+code *was executed*.
+
+```
+start_coverage                       # clears the map and starts recording
+run / step / play the game
+coverage_status                      # instructions, code, read, written, untouched
+save_coverage  path=game.map         # 65536 bytes, one flag byte per address
+```
+
+Then hand the file to SkoolKit, which reads bit 0 of each byte as "an
+instruction started here":
+
+```sh
+sna2ctl.py -m game.map -s 0x6000 -e 0xD600 game.z80 > game.ctl
+sna2skool.py -c game.ctl game.z80 > game.skool
+```
+
+**Start recording after the program has loaded, not before.** A pulse-level
+tape load has the ROM's loader write every byte of the game, so a map that
+spans the load describes the loader as much as the program. `start_coverage`
+clears the map as it starts, which is what makes "load, then start" the
+natural order.
+
+What it buys, on eight bytes of sprite data sitting between two routines:
+
+```
+; without a map                     ; with the emulator's map
+c32774 LD A,0                       b32774 DEFB 62,0,205,91,33,255,0,201
+ 32776 CALL 8539
+ 32779 RST 56
+ 32780 NOP
+ 32781 RET
+```
+
+A static pass has to guess, and graphics data is dense in plausible opcodes,
+so it invents a routine. The map says those bytes were only ever read, never
+fetched, and they come out as `DEFB`s.
+
+The map is necessarily incomplete — it only knows what actually ran, so a
+session that never leaves the title screen classifies most of the image as
+untouched. That is the safe direction to be wrong in: unreached code becomes
+`DEFB`s, which still reassemble correctly, rather than invented instructions.
+Watch `coverage_status` as you play; when the counts stop climbing, more
+playing is not buying more map.
+
+Two flags go beyond what `sna2ctl -m` can express, and are recorded ready for
+a control-file generator that can use them: bit 1 marks the *second* opcode
+byte of a `CB`/`ED`/`DD`/`FD`-prefixed instruction (code, but not a place a
+disassembler may start), and bit 3 marks bytes that were written — the
+difference between a constant table (SkoolKit's `b`) and a variable (`g`).
+
 ### Cycle-by-cycle bus tracing
 
 The C++ core runs at half-T-state resolution, so it can record what every

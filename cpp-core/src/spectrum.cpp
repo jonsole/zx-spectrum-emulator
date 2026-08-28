@@ -112,12 +112,22 @@ void Spectrum48K::clock() {
 
     pins_ = cpu.clock(pins_);
 
-    // Sampled HERE, between the CPU's clock and the bus service, and not
-    // after: our memory answers a read in the same half-clock the request is
-    // made, which is a half-clock earlier than real hardware puts the byte on
-    // D0-7. Recording first keeps the data bus honest. See tracelog.h.
-    if (trace != nullptr) {
-        trace->record(*this, pins_);
+    // Both recorders sample HERE, between the CPU's clock and the bus service,
+    // and not after: our memory answers a read in the same half-clock the
+    // request is made, which is a half-clock earlier than real hardware puts
+    // the byte on D0-7. Recording first keeps the data bus honest. See
+    // tracelog.h. One flag guards both of them -- see recording_ in
+    // spectrum.h for why the common case must not pay per recorder.
+    if (recording_) {
+        if (trace_ != nullptr) {
+            trace_->record(*this, pins_);
+        }
+        if (coverage_ != nullptr) {
+            // fetch_began_instruction(), not is_instruction_boundary(): the
+            // pins being recorded are the ones this clock just drove, and the
+            // boundary test has already moved on by now. See z80.h.
+            coverage_->record(pins_, cpu.fetch_began_instruction());
+        }
     }
 
     service_bus();

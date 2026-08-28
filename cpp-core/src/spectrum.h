@@ -14,6 +14,7 @@
 // is the entire point of the half-T-state model.
 
 #include "beeper.h"
+#include "coverage.h"
 #include "keyboard.h"
 #include "memory.h"
 #include "tape.h"
@@ -39,10 +40,17 @@ public:
 
     std::set<uint16_t> breakpoints;
 
-    /// Optional cycle-by-cycle bus recorder, null when not tracing. Owned by
+    /// Attaches the cycle-by-cycle bus recorder, or null to detach. Owned by
     /// whoever turned tracing on (the Engine), not by the machine -- a trace
     /// outlives individual run/step commands and has a file handle to close.
-    TraceLog* trace = nullptr;
+    void set_trace(TraceLog* t) { trace_ = t; recording_ = attached(); }
+    TraceLog* trace() const { return trace_; }
+
+    /// Attaches the per-address code/data recorder, or null to detach. Owned
+    /// by the Engine like the trace above, and for the same reason: a
+    /// coverage map outlives individual run/step commands.
+    void set_coverage(Coverage* c) { coverage_ = c; recording_ = attached(); }
+    Coverage* coverage() const { return coverage_; }
 
     /// Return addresses of CALL/RST frames currently open below the current
     /// PC, oldest first. Maintained by step_instruction(). Cleared whenever
@@ -88,7 +96,26 @@ public:
     void reset();
 
 private:
+    TraceLog* trace_ = nullptr;
+    Coverage* coverage_ = nullptr;
+
     uint64_t pins_ = PINS_IDLE;
+    /// Whether ANY recorder is attached, maintained by the setters above.
+    ///
+    /// One flag rather than a test per recorder: clock() runs seven million
+    /// times per emulated second and nothing is attached during almost all of
+    /// them, so the cost of asking must not grow with the number of recorders.
+    ///
+    /// That keeps the not-recording path to the single predictable branch it
+    /// was when a trace was the only recorder, but it does not make attaching
+    /// this machinery free: tests/bench_machine measures the whole hook at a
+    /// few percent of the empty machine's throughput, of which roughly half
+    /// reproduces by adding an unused member and changing nothing else. The
+    /// loop is small enough to be that sensitive to its own code layout, so
+    /// treat single-digit swings there as noise rather than as work.
+    bool recording_ = false;
+
+    bool attached() const { return trace_ != nullptr || coverage_ != nullptr; }
 
     /// Decodes MREQ/IORQ and services memory or I/O.
     void service_bus();

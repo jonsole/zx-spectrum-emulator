@@ -230,7 +230,7 @@ TEST(matches_visualz80_reference) {
     options.limit = 0; // bounded by the loop below instead
     TraceLog log;
     CHECK_EQ(log.open(options), std::string());
-    machine.trace = &log;
+    machine.set_trace(&log);
 
     // One half-clock short of 64 whole T-states. Z80::set_registers() performs
     // the very first opcode fetch's T1H on a priming clock of its own, outside
@@ -240,7 +240,7 @@ TEST(matches_visualz80_reference) {
     for (uint32_t i = 0; i < REFERENCE_TSTATES * HC_PER_TSTATE - 1; i++) {
         machine.clock();
     }
-    machine.trace = nullptr;
+    machine.set_trace(nullptr);
     log.close();
 
     const std::vector<std::string> our_lines = read_lines(path);
@@ -299,7 +299,7 @@ TEST(stops_itself_at_the_row_limit) {
     options.limit = 40;
     TraceLog log;
     CHECK_EQ(log.open(options), std::string());
-    machine.trace = &log;
+    machine.set_trace(&log);
 
     for (uint32_t i = 0; i < 500; i++) {
         machine.clock();
@@ -327,7 +327,7 @@ TEST(extra_columns_add_the_48k_signals) {
     options.watch = 0x000D; // the byte INC (HL) works on
     TraceLog log;
     CHECK_EQ(log.open(options), std::string());
-    machine.trace = &log;
+    machine.set_trace(&log);
     for (uint32_t i = 0; i < 60; i++) {
         machine.clock();
     }
@@ -370,11 +370,11 @@ TEST(symbols_name_the_instruction_and_annotate_operands) {
     };
     TraceLog log;
     CHECK_EQ(log.open(options), std::string());
-    machine.trace = &log;
+    machine.set_trace(&log);
     for (uint32_t i = 0; i < REFERENCE_TSTATES * HC_PER_TSTATE - 1; i++) {
         machine.clock();
     }
-    machine.trace = nullptr;
+    machine.set_trace(nullptr);
     log.close();
 
     const std::vector<std::string> lines = read_lines(path);
@@ -414,7 +414,7 @@ TEST(no_resolver_leaves_the_reference_layout_alone) {
     options.limit = 8;
     TraceLog log;
     CHECK_EQ(log.open(options), std::string());
-    machine.trace = &log;
+    machine.set_trace(&log);
     for (uint32_t i = 0; i < 40; i++) {
         machine.clock();
     }
