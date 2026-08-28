@@ -9,10 +9,10 @@ block copy, independent of anything else a real game does.
 
 Built with `sjasmplus` (fetched into `tools/sjasmplus/`, gitignored --
 see `.gitignore`), producing `test.sna` + `test.sld` for source-level
-stepping. Launch **"ZX Spectrum (Rust core): LDIR contention test"** from
-the Run and Debug view -- its `preLaunchTask` (`ldir-contention.build-
-and-start-server`) rebuilds from `test.asm` before starting the server,
-so editing the `.asm` and relaunching picks up changes automatically.
+stepping. Launch **"ZX Spectrum: LDIR contention example"** from the Run and
+Debug view. It loads the committed `test.sna` + `test.sld` as-is -- there is
+no rebuild step, so after editing `test.asm` reassemble it with `sjasmplus`
+yourself before relaunching.
 
 Currently reproduces a real bug: `BC` (the LDIR byte counter, starts at
 0x0100) should count down to 0 as the copy completes, but was observed

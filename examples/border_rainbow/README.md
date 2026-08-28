@@ -23,6 +23,6 @@ spelled out in the script if you need to regenerate it. No `.sld` file, so
 no source-level stepping for this one (matches "Step through ROM"'s scope,
 not `hello_rom_call`'s).
 
-Launch **"ZX Spectrum (Rust core): Border rainbow test"** from the Run and
+Launch **"ZX Spectrum: Border rainbow example"** from the Run and
 Debug view and hit continue -- the border should immediately show 8 rapidly
 cycling colored bands.

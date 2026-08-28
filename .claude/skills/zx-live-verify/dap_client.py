@@ -1,10 +1,13 @@
 """Minimal, reusable DAP (Debug Adapter Protocol) client for driving a
 zx-server instance live, the same protocol VS Code speaks to it.
 
-Built from real usage debugging rust-core/zx-server's `next`-over-HALT and
+Built from real usage debugging zx_server's `next`-over-HALT and
 interrupt-pulse bugs: the two gotchas baked in here (settle-based
 `wait_for_settled_stop`, explicit process/port lifecycle in the skill that
 uses this) were each the direct cause of a wasted debugging detour.
+
+Protocol-level, so it is indifferent to what implements the server -- it
+speaks the same DAP that VS Code does.
 
 Usage:
     import asyncio

@@ -2,35 +2,6 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "zxspectrum.start-server",
-      "type": "shell",
-      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
-      "args": [
-        "-m", "zxspectrum.server.main",
-        "--dap-port", "4711",
-        "--mcp-port", "8000",
-        "--screen-port", "8500"
-      ],
-      "options": { "cwd": "${workspaceFolder}" },
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": {
-        "owner": "zxspectrum",
-        "pattern": {
-          "regexp": "^.*$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "Started server process",
-          "endsPattern": "Uvicorn running on"
-        }
-      }
-    },
-    {
       // A previous server still holding zx_server.exe open makes the link
       // fail with LNK1168, which takes the whole launch down. Stopping it
       // first is what lets a server outlive its debug session (so MCP clients
@@ -134,69 +105,6 @@
       }
     },
     {
-      "label": "zxspectrum-rust.start-server",
-      "type": "shell",
-      "command": "${env:USERPROFILE}\\.cargo\\bin\\cargo.exe",
-      "args": [
-        "run",
-        "-p", "zx-server",
-        "--",
-        "--dap-port", "4711",
-        "--mcp-port", "8000",
-        "--screen-port", "8500"
-      ],
-      "options": { "cwd": "${workspaceFolder}/rust-core" },
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": {
-        "owner": "zxspectrum-rust",
-        "pattern": {
-          "regexp": "^.*$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "Starting ZX Spectrum Rust server",
-          "endsPattern": "DAP server listening"
-        }
-      }
-    },
-    {
-      "label": "zxspectrum-rust.start-server-release",
-      "type": "shell",
-      "command": "${env:USERPROFILE}\\.cargo\\bin\\cargo.exe",
-      "args": [
-        "run",
-        "--release",
-        "-p", "zx-server",
-        "--",
-        "--dap-port", "4711",
-        "--mcp-port", "8000",
-        "--screen-port", "8500"
-      ],
-      "options": { "cwd": "${workspaceFolder}/rust-core" },
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": {
-        "owner": "zxspectrum-rust",
-        "pattern": {
-          "regexp": "^.*$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "Starting ZX Spectrum Rust server",
-          "endsPattern": "DAP server listening"
-        }
-      }
-    },
-    {
       // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
       // fetched and assembled rather than committed -- see
       // scripts/build_fairlight.py and .gitignore. Cheap enough (~0.2s of
@@ -214,12 +122,6 @@
       "label": "fairlight.build-and-start-server",
       "dependsOrder": "sequence",
       "dependsOn": ["fairlight.build", "zxspectrum-cpp.start-server-audio"],
-      "problemMatcher": []
-    },
-    {
-      "label": "fairlight.build-and-start-server-rust",
-      "dependsOrder": "sequence",
-      "dependsOn": ["fairlight.build", "zxspectrum-rust.start-server-release"],
       "problemMatcher": []
     }
   ]

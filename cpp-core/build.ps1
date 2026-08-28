@@ -11,10 +11,20 @@
 #                            (ZEXALL/ZEXDOC). Use with -Release; these are
 #                            billions of emulated instructions and a Debug
 #                            build turns minutes into hours.
+#   .\build.ps1 -Target zx_server        build just one target
+#   .\build.ps1 -BuildDir <path>         build somewhere else entirely
+#
+# -BuildDir exists for one specific job: building a change while the user's
+# own zx_server.exe is still running. Windows will not let the linker
+# overwrite a locked .exe (LNK1168), so an automated check that must not
+# disturb a live debug session builds to a throwaway directory instead of
+# the default build\<config>. See .claude/skills/zx-live-verify.
 param(
     [switch]$Release,
     [switch]$Test,
-    [switch]$Slow
+    [switch]$Slow,
+    [string]$Target,
+    [string]$BuildDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,7 +54,7 @@ $env:PATH = "$cmakeDir;$ninjaDir;$env:PATH"
 
 $buildType = if ($Release) { 'RelWithDebInfo' } else { 'Debug' }
 $srcDir = $PSScriptRoot
-$buildDir = Join-Path $srcDir "build\$buildType"
+$buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $srcDir "build\$buildType" }
 
 # The -D argument is quoted: unquoted, PowerShell can pass it through with
 # $buildType unexpanded, which CMake then takes as a literal config name and

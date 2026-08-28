@@ -16,6 +16,11 @@ Usage:
 
 Requires the `mcp` package -- already present in this repo's
 `.venv-win` (run scripts with that interpreter, not a bare `python`).
+
+Prefer this over hand-rolling an HTTP POST for anything carrying a large
+payload: a base64-encoded .sna through PowerShell's ConvertTo-Json arrives
+mangled, and `load_snapshot` then reports success over a machine that never
+actually loaded.
 """
 
 import json

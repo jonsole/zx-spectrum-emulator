@@ -1,4 +1,14 @@
 {
+  // Every configuration here connects to the same thing: zx_server.exe's DAP
+  // port. `debugServer` tells VS Code to talk to an already-running adapter
+  // rather than launching one, and the `preLaunchTask` is what starts it --
+  //
+  //   zxspectrum-cpp.start-server         build, then serve (silent)
+  //   zxspectrum-cpp.start-server-audio   the same, with sound out of the
+  //                                       host's speakers rather than the panel
+  //
+  // The `type` is still required to match the vscode-extension/ debugger
+  // registration before VS Code will attempt the connection at all.
   "version": "0.2.0",
   "configurations": [
     {
@@ -7,7 +17,7 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "preLaunchTask": "zxspectrum.start-server"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       "name": "ZX Spectrum: hello_rom_call example",
@@ -18,29 +28,37 @@
       "snapshot": "${workspaceFolder}/examples/hello_rom_call/test.sna",
       "sld": "${workspaceFolder}/examples/hello_rom_call/test.sld",
       "asm": "${workspaceFolder}/examples/hello_rom_call/test.asm",
-      "preLaunchTask": "zxspectrum.start-server"
-    },
-    {
-      "name": "ZX Spectrum: Manic Miner",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum.start-server"
-    },
-    {
-      "name": "ZX Spectrum (C++ core): Step through ROM",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
-      "name": "ZX Spectrum (C++ core): Manic Miner",
+      // Committed example, no build step: writes the border register in a
+      // tight loop, so a correct ULA draws stripes and a wrong one doesn't.
+      // Snapshot only -- there is no .sld beside it to step the source with.
+      "name": "ZX Spectrum: Border rainbow example",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/border_rainbow/test.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      // Committed example: IM2 + EI/HALT, then one LDIR copying 256 bytes
+      // from uncontended memory into the screen. Written to isolate write-side
+      // memory contention -- which this core does not emulate yet, so what it
+      // shows today is the uncontended timing, not the real thing.
+      "name": "ZX Spectrum: LDIR contention example",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/ldir_contention/test.sna",
+      "sld": "${workspaceFolder}/examples/ldir_contention/test.sld",
+      "asm": "${workspaceFolder}/examples/ldir_contention/test.asm",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum: Manic Miner",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -54,7 +72,7 @@
       // The speed-patched build from scripts/build_manicminer_fast.py: same
       // game, ~1.65x through its main loop. Run that script first -- it needs
       // mm.asm, so scripts/build_manicminer.py has to have run at least once.
-      "name": "ZX Spectrum (C++ core): Manic Miner (fast)",
+      "name": "ZX Spectrum: Manic Miner (fast)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -67,7 +85,7 @@
     {
       // As above, but locked to the frame interrupt via IM 2 + HALT: a steady
       // cadence instead of a loop time that varies with what is on screen.
-      "name": "ZX Spectrum (C++ core): Manic Miner (frame-locked)",
+      "name": "ZX Spectrum: Manic Miner (frame-locked)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -78,18 +96,18 @@
       "preLaunchTask": "zxspectrum-cpp.start-server-audio"
     },
     {
-      "name": "ZX Spectrum (C++ core): hello_rom_call example",
+      "name": "ZX Spectrum: Fairlight",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/hello_rom_call/test.sna",
-      "sld": "${workspaceFolder}/examples/hello_rom_call/test.sld",
-      "asm": "${workspaceFolder}/examples/hello_rom_call/test.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
+      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
+      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
+      "preLaunchTask": "fairlight.build-and-start-server"
     },
     {
-      "name": "ZX Spectrum (C++ core): Aquaplane",
+      "name": "ZX Spectrum: Aquaplane",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -100,7 +118,7 @@
     {
       // Multichannel beeper music -- it drives port 0xFE far harder than a
       // typical game, so it is the useful stress test for the audio path.
-      "name": "ZX Spectrum (C++ core): Chronos",
+      "name": "ZX Spectrum: Chronos",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -114,7 +132,7 @@
       // autostarting BASIC program (scripts/make_test_tape.py), so a
       // successful load turns the border yellow and prints TAPE LOADED OK --
       // by the time this config finishes launching, it has already happened.
-      "name": "ZX Spectrum (C++ core): Tape (fast load)",
+      "name": "ZX Spectrum: Tape (fast load)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -128,7 +146,7 @@
       // watch it take about ten seconds, with loading stripes in the border
       // and the loading screech through the audio panel. This is the path
       // every turbo and custom loader falls back to.
-      "name": "ZX Spectrum (C++ core): Tape (real pulse load)",
+      "name": "ZX Spectrum: Tape (real pulse load)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -153,7 +171,7 @@
       // tape you choose at the time. For an instant load, insert with
       // auto_start left on (what "ZX Spectrum: Load Tape..." does) and it resets
       // and retypes, so the trap gets its moment.
-      "name": "ZX Spectrum (C++ core): Tape (waiting for LOAD)",
+      "name": "ZX Spectrum: Tape (waiting for LOAD)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -163,7 +181,10 @@
       "preLaunchTask": "zxspectrum-cpp.start-server-audio"
     },
     {
-      "name": "ZX Spectrum (C++ core): Z80 full test suite",
+      // The exercisers below all run `uncapped`: they have no visual output to
+      // get wrong and take minutes even so, and the silent start-server task
+      // keeps them off the sound card for the duration.
+      "name": "ZX Spectrum: Z80 full test suite",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -173,7 +194,7 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
-      "name": "ZX Spectrum (C++ core): ZEXALL",
+      "name": "ZX Spectrum: ZEXALL",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -183,7 +204,7 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
-      "name": "ZX Spectrum (C++ core): ZEXDOC",
+      "name": "ZX Spectrum: ZEXDOC",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
@@ -193,136 +214,16 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
-      "name": "ZX Spectrum (C++ core): Fairlight",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
-      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
-      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
-      "preLaunchTask": "fairlight.build-and-start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core, release): Fairlight",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
-      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
-      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
-      "preLaunchTask": "fairlight.build-and-start-server-rust"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): Step through ROM",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core, release): Step through ROM",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "preLaunchTask": "zxspectrum-rust.start-server-release"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): Manic Miner",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core, release): Manic Miner",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum-rust.start-server-release"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): Aquaplane",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): Border rainbow test",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/border_rainbow/test.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): Z80 full test suite",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/z80full.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): ZEXALL",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core, release): ZEXALL",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server-release"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): ZEXDOC",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
-    },
-    {
-      "name": "ZX Spectrum (Rust core, release): ZEXDOC",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server-release"
-    },
-    {
-      "name": "ZX Spectrum (Rust core): ZEXCCFB (CCF/SCF flag test)",
+      // The narrow one: CCF/SCF set the undocumented flag bits from A and the
+      // PREVIOUS flags, which the two suites above largely mask out.
+      "name": "ZX Spectrum: ZEXCCFB (CCF/SCF flag test)",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/zexccfb.sna",
-      "preLaunchTask": "zxspectrum-rust.start-server"
+      "uncapped": true,
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     }
   ]
 }

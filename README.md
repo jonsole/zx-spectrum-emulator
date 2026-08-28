@@ -12,9 +12,9 @@ LLM agent inspects and drives the *same running emulator* over
 ```
                      ┌─────────────────────────────┐
    VS Code  ───DAP──▶│                              │
-  (breakpoints,      │   Engine (asyncio actor)     │◀──MCP─── Claude / any
-   stepping,         │   owns the ONE live           │           MCP client
-   registers)        │   Spectrum48K instance        │
+  (breakpoints,      │   Engine (command queue +    │◀──MCP─── Claude / any
+   stepping,         │   emulation thread) owns the  │           MCP client
+   registers)        │   ONE live Spectrum48K        │
                      └─────────────────────────────┘
                                    │
                      command queue + event fan-out
@@ -22,11 +22,25 @@ LLM agent inspects and drives the *same running emulator* over
                       change, however it happened)
 ```
 
+> ## The C++ core is the project
+>
+> `cpp-core/` is the only supported implementation. The original Python core
+> (`zxspectrum/`, `cffi` around `z80.h`) and the from-scratch Rust core
+> (`rust-core/`) are both **deprecated**: still in the repo, but no longer
+> developed, no longer verified, and no longer wired into `.vscode/` — every
+> launch configuration now targets the C++ server. Tape loading, beeper audio
+> and cycle-by-cycle bus tracing only ever existed in the C++ core.
+>
+> The `scripts/` helpers are still Python and still current — only the Python
+> *emulator* is deprecated. For a clean install, follow
+> **[INSTALL.md](INSTALL.md)**, which is C++-only throughout.
+
 ## What's actually emulated
 
-- **CPU**: full Z80 core, via a vendored, cycle-stepped, pin-level C core
-  ([floooh/chips](https://github.com/floooh/chips) `z80.h`) wrapped with
-  [`cffi`](https://cffi.readthedocs.io/).
+- **CPU**: full Z80 core, cycle-stepped and pin-level, written in C++
+  (`cpp-core/src/z80.cpp`) and diffed instruction-for-instruction against the
+  vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` reference,
+  plus a full ZEXALL/ZEXDOC pass.
 - **Memory**: the standard 48K map — 16K ROM (write-protected) + 48K RAM.
 - **Display**: the ULA's screen decode (the classic interleaved-thirds bitmap +
   attribute layout), border color, and the ~50Hz frame interrupt.
@@ -49,80 +63,61 @@ Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
 
 ## Why this architecture
 
-- **One process, one live emulator, three front-ends.** `engine/actor.py`
+- **One process, one live emulator, four front-ends.** `cpp-core/src/engine.h`
   owns the single `Spectrum48K` instance and is the *only* thing allowed to
-  touch it. The MCP server and the DAP server never call the core directly —
-  they submit a `Command` to the engine's `asyncio.Queue` and await a
-  per-request future for the reply; the [screen stream](#live-screen-viewer)
-  reads it the same way, just repeatedly. Because everything runs on one
-  event loop, this needs no locks, but it does guarantee every front-end
-  always sees consistent state.
+  touch it. The MCP and DAP servers never call the core directly — they queue
+  a command and wait on a future for the reply; the
+  [screen stream](#live-screen-viewer) and the [audio stream](#audio) read it
+  the same way, just repeatedly. The machine runs on its own thread and the
+  queue serialises access to it, so every front-end always sees consistent
+  state. Five things deliberately *bypass* the queue, because they have to
+  work mid-run rather than at the next yield: pause, key presses, screen
+  reads, trace control and the tape transport — see `engine.h`'s header
+  comment for why each one.
 - **Events, not polling.** The engine also fans out state-change events
   (`Stopped`, `Continued`) to every subscriber. If you tell it to `run` or
   `step` over MCP, your VS Code session gets an unsolicited `stopped` DAP
   event even though VS Code didn't ask for the change — and vice versa when
   you set a breakpoint by clicking the gutter.
 - **The Z80 core is pin-level and cycle-stepped, not instruction-level.**
-  `z80_tick()` is called once per T-state with a 64-bit pin mask encoding the
-  address/data/control lines; every memory and I/O access passes through
-  Python code you control. That's what makes T-state-accurate stepping and
-  memory/IO watchpoints straightforward, at some cost to raw execution speed
-  (see [Performance](#performance) below).
+  The core is clocked once per half-T-state with a pin mask encoding the
+  address/data/control lines, and every memory and I/O access passes through
+  a bus you control. That's what makes T-state-accurate stepping, memory/IO
+  watchpoints and the [cycle-by-cycle bus trace](#cycle-by-cycle-bus-tracing)
+  straightforward — the trace is simply that bus, recorded.
 
 ## Requirements
 
-- A C compiler, to build the `cffi` extension. Either:
-  - **Native Windows**: [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-    (the "Desktop development with C++" workload). This is the primary,
-    recommended path on Windows — no WSL needed, and it's noticeably faster
-    (the full test suite runs in ~2s natively vs ~7s under WSL, since every
-    filesystem access avoids the WSL/DrvFs boundary).
-  - **WSL** (Windows Subsystem for Linux) or any Linux/macOS machine, if you'd
-    rather not install MSVC. Still fully supported — see
-    [WSL / Linux / macOS](#wsl--linux--macos) below.
-- Python 3.10+.
+- **Windows 11** with [Build Tools for Visual Studio 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+  and its "Desktop development with C++" workload. CMake and Ninja come with
+  that workload; `cpp-core/build.ps1` locates them and imports the MSVC
+  environment itself, so no developer prompt is needed.
+- **VS Code 1.85+**, for the debugging front end.
 - A real 48K ZX Spectrum ROM image, 16384 bytes (16K) exactly. Not included —
   see [ROM](#rom).
+- **Python 3.10+ — optional**, and only for the helpers in `scripts/` (ROM and
+  game disassemblies, tape generation). The emulator itself needs no Python.
+
+Other platforms: `cpp-core` is portable C++17 with its platform-specific audio
+and socket code `_WIN32`-guarded, so a Linux/macOS build is plausible — but it
+is unverified, and `build.ps1`, the `.vscode/tasks.json` paths and the WASAPI
+audio backend are all Windows-only.
 
 ## Setup
 
-**Native Windows** (with MSVC Build Tools installed):
-
 ```powershell
-python -m venv .venv-win
-.\.venv-win\Scripts\pip.exe install -e ".[dev]"
+cd cpp-core
+.\build.ps1 -Release -Test     # RelWithDebInfo, then the fast test suite
 ```
 
-The `pip install` needs to run inside the MSVC developer environment so
-`cl.exe` is on `PATH` for the `cffi` build step — either run it from a
-"Developer PowerShell for VS" / "x64 Native Tools Command Prompt", or from a
-plain shell via:
+That produces `cpp-core/build/RelWithDebInfo/zx_server.exe`, which is what the
+VS Code tasks launch. A `Debug` build (plain `.\build.ps1`) lands elsewhere and
+those tasks won't find it. `-Slow` runs the ZEXALL/ZEXDOC exercisers instead of
+the fast suite — billions of emulated instructions, so pair it with `-Release`.
 
-```powershell
-cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && .venv-win\Scripts\pip.exe install -e ".[dev]"'
-```
-
-(adjust the path if Build Tools installed somewhere else, or if using the
-full Visual Studio IDE rather than just Build Tools).
-
-This also compiles the native Z80 core extension as part of the install (via
-the `cffi_modules` build hook in `setup.py`) — no separate build step needed.
-Verified in a clean checkout: the install command above, then `pytest`,
-passes all 78 tests with nothing else run in between.
-
-### WSL / Linux / macOS
-
-```bash
-# from inside WSL, at the project root
-uv venv .venv --python 3.12
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-```
-
-Same `cffi_modules` build-on-install behavior as above. On WSL specifically,
-system Python can be missing `pyconfig.h`/dev headers; a
-[`uv`](https://github.com/astral-sh/uv)-managed interpreter (`uv venv
---python 3.12`, as above) sidesteps that.
+For the whole install end to end — ROM, build, the VS Code extension, first
+launch and MCP — follow **[INSTALL.md](INSTALL.md)**, written as a checkable
+step-by-step procedure.
 
 ## ROM
 
@@ -135,21 +130,22 @@ every genuine Spectrum ROM).
 
 ## Running
 
-```bash
-python -m zxspectrum.server.main \
-  --mcp-host 127.0.0.1 --mcp-port 8000 \
-  --dap-host 127.0.0.1 --dap-port 4711 \
-  --screen-host 127.0.0.1 --screen-port 8500
+```powershell
+.\cpp-core\build\RelWithDebInfo\zx_server.exe `
+  --mcp-host 127.0.0.1 --mcp-port 8000 `
+  --dap-host 127.0.0.1 --dap-port 4711 `
+  --screen-host 127.0.0.1 --screen-port 8500 `
+  --rom roms\48.rom
 ```
 
-(`.venv-win\Scripts\python.exe` natively, or the activated WSL venv's
-`python` — see [Setup](#setup).) This starts all three servers — MCP, DAP,
-and the [screen stream](#live-screen-viewer) — on one asyncio event loop,
-sharing one `Engine`.
+One process, one `Engine`, every server — MCP, DAP, the
+[screen stream](#live-screen-viewer) and the [audio stream](#audio) — sharing
+the one live machine. Normally you don't run this by hand: the VS Code
+`preLaunchTask` starts it (see [Connecting VS Code](#connecting-vs-code-dap)).
 
 ### Connecting an MCP client
 
-Point any MCP client at `http://127.0.0.1:8000/sse` (SSE transport).
+Point any MCP client at `http://127.0.0.1:8000/mcp` (streamable HTTP).
 
 The repo includes `.mcp.json`, so opening this workspace in Claude Code
 picks up the server automatically (you'll be prompted to approve it once).
@@ -157,7 +153,7 @@ To add it manually instead (e.g. a different client, or without opening
 the workspace), for Claude Code:
 
 ```bash
-claude mcp add zx-spectrum --transport sse --url http://127.0.0.1:8000/sse
+claude mcp add zx-spectrum --transport http --url http://127.0.0.1:8000/mcp
 ```
 
 Either way, the server itself needs to actually be running first (see
@@ -187,10 +183,10 @@ look, it doesn't start it.
 
 ### Connecting VS Code (DAP)
 
-The repo's `.vscode/` folder is a ready-to-use workspace: `tasks.json` starts
-the emulator server (natively, via `.venv-win`), and `launch.json`'s **"ZX
-Spectrum: Step through ROM"** configuration points at it. Two one-time setup
-steps are required first, on top of [Setup](#setup):
+The repo's `.vscode/` folder is a ready-to-use workspace: `tasks.json` builds
+`cpp-core` and starts `zx_server.exe`, and `launch.json`'s **"ZX Spectrum:
+Step through ROM"** configuration points at it. Two one-time setup steps are
+required first, on top of [Setup](#setup):
 
 1. **A real 48K ROM** — see [ROM](#rom) above. `launch.json` expects it at
    `roms/48.rom`.
@@ -259,7 +255,7 @@ This port is a plain, independent front-end onto the shared `Engine` — the
 same standalone-server design as DAP and MCP, not something that only works
 through VS Code. Any client can connect directly and read the same frames
 (4-byte big-endian length prefix + that many PNG bytes, repeated for as long
-as the connection stays open) — see `zxspectrum/server/screen_stream.py`.
+as the connection stays open) — see `cpp-core/src/screen_stream.cpp`.
 
 Frames are read via `engine.machine.render_screen()` directly rather than
 through the engine's normal command queue — a `run()` in progress occupies
@@ -271,7 +267,7 @@ pattern DAP's own memory reads already use, for the same reason.
 
 `stackTrace` shows a real, multiple-frame call stack, not just the current
 PC: `Spectrum48K` tracks `CALL`/`RST` and their matching `RET` as they
-execute (`machine.py`'s `call_stack`), so stepping into a routine adds a
+execute (`spectrum.cpp`'s call-stack tracking), so stepping into a routine adds a
 frame for it, each labeled and sourced exactly like the top frame (using
 whichever debug info covers that address — the loaded program's own, or the
 ROM's). It's a live opcode-level watch, not stack-memory guesswork — the Z80
@@ -301,12 +297,13 @@ skoolkid/rom (.skool)  →  skool2asm.py  →  sjasmplus --sld  →  rom_disasse
                                                                   rom.sld  (address <-> source-line map)
 ```
 
-Run it once (needs `pip install skoolkit`, plus `sjasmplus` on PATH — see the
-script's `--help` for where to get a build per platform):
+Run it once. The `scripts/` helpers are Python — the only part of the project
+that still is — and want their own venv: `python -m venv .venv-win` then
+`.\.venv-win\Scripts\pip.exe install skoolkit`, plus `sjasmplus` on PATH (see
+the script's `--help` for where to get a build per platform):
 
 ```sh
-.venv-win\Scripts\python.exe scripts\build_rom_source.py   # native Windows
-.venv/bin/python scripts/build_rom_source.py                 # WSL/Linux/macOS
+.venv-win\Scripts\python.exe scripts\build_rom_source.py
 ```
 
 It clones `skoolkid/rom` into `.rom-disassembly-src/` and writes
@@ -354,7 +351,7 @@ Over DAP, add `sld`/`asm` to the launch config alongside `snapshot`:
   "snapshot": "${workspaceFolder}/yourprogram.sna",
   "sld": "${workspaceFolder}/yourprogram.sld",
   "asm": "${workspaceFolder}/yourprogram.asm",
-  "preLaunchTask": "zxspectrum.start-server"
+  "preLaunchTask": "zxspectrum-cpp.start-server"
 }
 ```
 
@@ -369,12 +366,11 @@ independently once built.
 A bigger example than `hello_rom_call` — [SkoolKit's Manic Miner
 disassembly](https://github.com/skoolkid/manicminer), source-level debuggable
 end to end. `scripts/build_manicminer.py` fetches it, assembles it with
-`sjasmplus`, and wraps the result into a `.sna` (`core/snapshot.py`'s
+`sjasmplus`, and wraps the result into a `.sna` (`snapshot.cpp`'s
 `write_sna()`, the write-side counterpart of the `.sna` loader):
 
 ```sh
-.venv-win\Scripts\python.exe scripts\build_manicminer.py   # native Windows
-.venv/bin/python scripts/build_manicminer.py                 # WSL/Linux/macOS
+.venv-win\Scripts\python.exe scripts\build_manicminer.py
 ```
 
 Unlike `hello_rom_call` (original, trivial, safe to commit), the output here
@@ -396,8 +392,7 @@ textured flood fill. `scripts/build_fairlight.py` fetches it, assembles it
 with `sjasmplus`, and wraps the result into a `.sna`:
 
 ```sh
-.venv-win\Scripts\python.exe scriptsuild_fairlight.py   # native Windows
-.venv/bin/python scripts/build_fairlight.py                 # WSL/Linux/macOS
+.venv-win\Scripts\python.exe scripts\build_fairlight.py
 ```
 
 Two differences from Manic Miner. The upstream repo ships assembler source
@@ -414,7 +409,7 @@ in the script.
 
 Same copyright treatment as Manic Miner: `game_disassembly/` and
 `.fairlight-disassembly-src/` are gitignored and never committed. Launch
-**"ZX Spectrum (C++ core): Fairlight"** — its `preLaunchTask` reassembles
+**"ZX Spectrum: Fairlight"** — its `preLaunchTask` reassembles
 before starting the server, so editing the fetched `.asm` and relaunching
 picks the change up.
 
@@ -426,7 +421,6 @@ game itself.
 
 ```sh
 .venv-win\Scripts\python.exe scripts\build_aticatac.py --tape "Atic Atac.tap"
-.venv/bin/python scripts/build_aticatac.py --tape "Atic Atac.tap"
 ```
 
 Two problems have to be solved that the other two don't have. First, the
@@ -555,8 +549,7 @@ one cannot creep in unnoticed:
 Because both front-ends drive the same `Engine`, you can set a breakpoint in
 VS Code, have an MCP client `run()` past other breakpoints and hit yours, and
 watch VS Code's UI update on its own — no polling, no manual sync. This is
-the actual point of the project; see `tests/test_dap.py` and
-`tests/test_engine.py` for it exercised directly.
+the actual point of the project.
 
 ## Audio
 
@@ -788,71 +781,111 @@ every pulse timestamp is measured against.
 
 ## Testing
 
-```bash
-python -m pytest tests/ -v
+```powershell
+cd cpp-core
+.\build.ps1 -Release -Test     # the fast suite, via CTest
+.\build.ps1 -Release -Slow     # ZEXALL + ZEXDOC only -- many minutes each
 ```
 
-78 tests across native-core smoke tests, the memory/ULA/keyboard/snapshot/
-machine layer, the disassembler (including a full pass over a real ROM's
-16384 bytes with zero decode errors), the ROM SLD parser (`rom_source.py`),
-the engine actor's concurrency guarantees, and both front-ends driven over
-real sockets (an actual `asyncio` TCP connection for DAP, a real `mcp` SSE
-client for MCP).
+109 assertions across nine executables: the ALU and a pin-level check diffed
+against the vendored `z80.h` reference (`alu_tests`, `pin_level`, and
+`differential`, which runs both cores in lockstep), the 48K memory map, the
+beeper's decimator, interrupt timing, the machine layer against a real ROM
+(`spectrum_tests`), `.tap`/`.tzx` parsing and the fast-load trap
+(`tape_tests`, 49 of them), and the bus trace against a captured
+visualz80remix reference (`tracelog_tests`). Tests that need the real ROM skip
+themselves rather than fail when `roms/48.rom` is absent.
+
+Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
+exerciser, labelled `slow` and excluded from the routine run: over a billion
+emulated instructions per pass.
 
 ## Performance
 
-Because every T-state crosses the Python↔native-C boundary (by design — see
-[Why this architecture](#why-this-architecture)), bulk execution runs at
-roughly **0.5× real hardware speed** (~1.7 MHz effective vs. 3.5MHz real).
-This is a deliberate tradeoff: the design target is debugger-driven
+Measured by `tests/bench_machine.cpp` (`bench_machine.exe`, RelWithDebInfo) —
+the machine and Engine layers, i.e. what a connected client actually
+experiences, rather than bare CPU throughput:
+
+```
+  machine (CPU+ULA, direct clock)        50.7 M half-clocks/s     7.25x realtime
+  engine run(), uncapped                 40.5 M half-clocks/s     5.79x realtime
+  engine run(), realtime (default)        7.0 M half-clocks/s     1.00x realtime
+```
+
+So the core runs a 48K at **~7× real hardware speed** with headroom to spare,
+and paces itself down to 1.00× for normal use — games run at the right speed,
+and `--uncapped` hands the rest back to the exercisers. Link-time optimisation
+is worth ~23% of that on its own (41.5 → 51.2 M half-clocks/s when it was
+turned on), because the hot loop crosses a translation-unit boundary on every
+half-clock; see the comment in `cpp-core/CMakeLists.txt`.
+
+<details>
+<summary>Historical: the deprecated Python core's performance</summary>
+
+Because every T-state crossed the Python↔native-C boundary, bulk execution ran
+at roughly **0.5× real hardware speed** (~1.7 MHz effective vs. 3.5MHz real).
+That was a deliberate tradeoff: the design target is debugger-driven
 single-stepping, not real-time gameplay, and a faster bulk-tick path would
-require duplicating the bus-servicing logic outside the single code path
-that per-T-state watchpoints depend on.
+have required duplicating the bus-servicing logic outside the single code path
+that per-T-state watchpoints depend on. The C++ core keeps that same single
+code path and is fast enough anyway, which is what removed the tradeoff.
+
+</details>
 
 ## Project layout
 
 ```
 zx-spectrum-emulator/
-  vendor/chips/z80.h          # vendored floooh/chips Z80 core (zlib license)
-  zxspectrum/
-    _native/                  # cffi shim + build script wrapping z80.h
-    core/
-      z80.py                  # pythonic wrapper over the native core
-      memory.py                # 48K map (16K ROM + 48K RAM)
-      ula.py                    # screen decode, border, frame interrupt
-      keyboard.py                # 8x5 matrix, port 0xFE
-      snapshot.py                 # .sna loader + writer
-      disassembler.py               # full documented Z80 disassembler
-      rom_source.py                   # ROM SLD parser (source-level debug)
-      machine.py                        # Spectrum48K: wires it all together
-    engine/
-      actor.py                # the shared live instance (asyncio actor)
-      commands.py               # Command/Event dataclasses
-    server/
-      mcp_server.py            # MCP tools
-      dap.py                     # DAP TCP server
-      screen_stream.py             # screen-frame TCP stream
-      main.py                        # entrypoint: starts engine + all three servers
-  scripts/
+  vendor/chips/z80.h          # vendored floooh/chips Z80 core -- the tests'
+                              #   reference only, not the emulator (zlib license)
+  cpp-core/                   # THE emulator
+    build.ps1                 # configure + build + test (finds MSVC itself)
+    src/
+      z80.cpp                 # the Z80: cycle-stepped, pin-level
+      alu.cpp                  # flags and arithmetic
+      memory.cpp                # 48K map (16K ROM + 48K RAM)
+      ula.cpp                    # screen decode, border, frame interrupt
+      keyboard.cpp                # 8x5 matrix, port 0xFE
+      beeper.cpp                   # port 0xFE bits 4/3 -> samples
+      tape.cpp                      # .tap/.tzx, pulse level + fast-load trap
+      snapshot.cpp                   # .sna loader + writer
+      disassembler.cpp                # full documented Z80 disassembler
+      tracelog.cpp                     # cycle-by-cycle bus capture
+      rom_source.cpp                    # SLD parser (source-level debug)
+      spectrum.cpp                       # Spectrum48K: wires it all together
+      engine.cpp                # the shared live instance + command queue
+      dap.cpp                    # DAP TCP server
+      mcp_server.cpp              # MCP tools (streamable HTTP)
+      screen_stream.cpp            # screen-frame TCP stream
+      audio_stream.cpp              # audio TCP stream
+      audio_wasapi.cpp               # native playback (Windows)
+      main.cpp                        # entrypoint: engine + every server
+    tests/                    # CTest executables, benchmarks, diagnostics
+  scripts/                    # Python helpers -- still current
     build_rom_source.py         # builds rom_disassembly/ (see below)
     build_manicminer.py           # builds game_disassembly/manicminer/ (see below)
     build_aticatac.py             # builds game_disassembly/aticatac/ from a .tap (see below)
+    make_test_tape.py             # generates tapes/
   examples/
     hello_rom_call/              # tiny original demo, committed
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
-  vscode-extension/            # debugger type registration + live screen viewer
+  vscode-extension/            # debugger type registration + screen/trace/tape panels
   roms/                        # gitignored; drop your 48K ROM here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
   game_disassembly/            # gitignored; scripts/build_manicminer.py output
-  tests/
-  rust-core/                  # separate Rust Z80 core -- see below, own section
+  tapes/                       # scripts/make_test_tape.py output, committed
+  snapshots/                   # the Z80 exercisers, committed; games gitignored
+
+  # deprecated, kept for history -- see the note at the top
+  zxspectrum/ + tests/*.py     # the original Python core and its pytest suite
+  rust-core/                   # the from-scratch Rust Z80 core
 ```
 
 ## Status & roadmap
 
-The full core build order is complete and verified end-to-end (native core →
-memory/ULA/keyboard/snapshot/machine → disassembler → async engine → MCP
+The full core build order is complete and verified end-to-end (Z80 →
+memory/ULA/keyboard/snapshot/machine → disassembler → engine → MCP
 server → DAP server), including a live concurrent-session check: a real DAP
 client and a real MCP client connected simultaneously, each observing the
 other's changes as unsolicited events.
@@ -862,17 +895,17 @@ A [VS Code workspace](#connecting-vs-code-dap) (`.vscode/tasks.json` +
 interactive VS Code session (see the note there about one VS Code UI rough
 edge that isn't fixable from the adapter side).
 
-Native Windows builds are fully supported (`.venv-win`, MSVC Build Tools) —
-this is now the primary path on Windows; WSL/Linux/macOS remain supported
-alternatives. `DapConnection`'s incoming-path handling adapts automatically
-to whichever platform the server process is actually running on.
+Windows is the supported platform: MSVC Build Tools 2022, built through
+`cpp-core/build.ps1`. Linux/macOS is plausible but unverified — see
+[Requirements](#requirements).
 
 **Known limitation, not yet fixed:** if a client starts `run()` and
 disconnects without ever `pause()`-ing (e.g. a crashed or killed client
-mid-session), the engine's single actor loop stays stuck running that
-program forever, blocking every other client too — there's currently no
-auto-pause on disconnect or run-time cap. Fine for controlled testing;
-worth fixing before this is used for anything more exposed.
+mid-session), the machine keeps running that program forever. Commands that
+tolerate it are still serviced at each run-loop yield, and pause, keys, the
+screen, tracing and the tape transport bypass the queue entirely — but
+anything that drives emulation itself still waits for the run to end, and
+there is no auto-pause on disconnect or run-time cap.
 
 Source-level debugging against a real, commented disassembly (not just raw
 instructions) is done, for both
@@ -882,14 +915,14 @@ instructions) is done, for both
 `skool2asm.py` + `sjasmplus --sld`; `load_debug_info` attaches the same kind
 of map for any `sjasmplus`-assembled program, layered on top of (not
 replacing) the ROM's own, so a call from your program into a ROM routine
-still resolves. `dap.py` uses whichever map applies for `source`-annotated
+still resolves. `dap.cpp` uses whichever map applies for `source`-annotated
 stack frames and source-line breakpoints; `resolve_symbol`/`resolve_address`
 expose the same lookup over MCP. Verified end-to-end (build → `stackTrace` →
 `setBreakpoints` → hit → correct PC, and separately, own-program address →
 ROM address → correct source switches for both).
 
 A [live screen viewer](#live-screen-viewer) is done too: a third server port
-(`screen_stream.py`) streams the display as a continuous sequence of PNG
+(`screen_stream.cpp`) streams the display as a continuous sequence of PNG
 frames to any client, and the `vscode-extension/` extension bridges that into
 a webview panel — the project's first extension with real code (previously
 just a declarative debugger-type stub). Explicitly designed to keep working
@@ -898,23 +931,26 @@ code in it, same as DAP/MCP.
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
-- Tape loading — **done** in the C++ core for `.tap`/`.tzx` (see [Tape](#tape));
+- Tape loading — **done** for `.tap`/`.tzx` (see [Tape](#tape));
   `.pzx` and tape *saving* are still open, as are the `.tzx` sampled-data block
   types (`0x15` direct recording, `0x18` CSW, `0x19` generalized)
-- Beeper audio synthesis — **done** in the C++ core (see [Audio](#audio));
-  the Python and Rust cores still only track the port writes
+- Beeper audio synthesis — **done** (see [Audio](#audio)); the AY chip is not
 
-## Rust core (`rust-core/`)
+## Rust core (`rust-core/`) — deprecated
+
+> **Deprecated, kept for the record.** The C++ core took over the role this was
+> being built for, and `rust-core/` is no longer developed. What follows
+> describes where it got to, not what to use. The same goes for the Python core
+> it refers to.
 
 A from-scratch, hand-written Z80 interpreter in Rust — not an FFI wrapper
-around `z80.h` — being built alongside the Python project above, for two
-reasons: a genuine path to WebAssembly (a browser-playable target has no
-good story via the Python/`cffi` stack), and a deliberate Rust-learning
-exercise. The eventual goal is for `rust-core/` to grow into a full
-replacement for the Python DAP/MCP/screen-stream server above, reusing one
-core for both a native server and a wasm browser player; today it's
-CPU-only, with the memory/ULA/keyboard/snapshot layer and both front-ends
-still ahead of it.
+around `z80.h` — built alongside the Python project for two reasons: a genuine
+path to WebAssembly (a browser-playable target had no good story via the
+Python/`cffi` stack), and a deliberate Rust-learning exercise. The goal was for
+`rust-core/` to grow into a full replacement for the Python
+DAP/MCP/screen-stream server, reusing one core for both a native server and a
+wasm browser player. It stopped at CPU-only, with the memory/ULA/keyboard/
+snapshot layer and both front-ends never built.
 
 **Status: the CPU core is complete and independently verified two ways.**
 - **Tick/pin-level, not instruction-level** (mirroring the Python project's
