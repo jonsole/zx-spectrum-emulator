@@ -16,6 +16,8 @@
 #include "mcp_server.h"
 
 #include "base64.h"
+#include "file_io.h"
+#include "beeper.h"
 #include "http.h"
 #include "net.h"
 #include "screen_stream.h"
@@ -177,6 +179,22 @@ bool arg_string(const json& args, const char* name, std::string& out, std::strin
     return true;
 }
 
+/// How much recent audio get_audio can look back over.
+constexpr size_t MCP_CAPTURE_SAMPLES = size_t(AUDIO_SAMPLE_RATE) * 4;
+
+/// The capture window get_audio reads from.
+///
+/// A function-local static because the tool surface is free functions with
+/// nowhere to hang per-server state, and there is exactly one Engine in a
+/// process. serve_mcp touches it at startup rather than leaving it to the
+/// first get_audio call: registering a sink is what switches the beeper on, so
+/// a lazily-created ring would make the first call after a run come back empty
+/// -- the one call most likely to be asking "did that make a sound?".
+AudioRing& capture_ring(Engine& engine) {
+    static std::shared_ptr<AudioRing> ring = engine.add_audio_sink(MCP_CAPTURE_SAMPLES);
+    return *ring;
+}
+
 /// Trace state, reported identically by start_trace, stop_trace and
 /// trace_status so a caller only has to learn one shape.
 json trace_status_json(const TraceStatus& status) {
@@ -187,6 +205,61 @@ json trace_status_json(const TraceStatus& status) {
              {"extra", status.extra}};
     if (status.watching) {
         out["watch"] = status.watch;
+    }
+    return out;
+}
+
+/// What is on the tape, block by block -- the answer to "what does this image
+/// contain", which otherwise means reading the file by hand. Sent with every
+/// tape reply, so `tape_control {}` on its own is a full contents listing.
+json tape_blocks_json(const std::vector<TapeBlockInfo>& blocks) {
+    json out = json::array();
+    for (size_t i = 0; i < blocks.size(); i++) {
+        const TapeBlockInfo& b = blocks[i];
+        json entry{{"index", i},
+                   {"kind", b.kind},
+                   {"data_bytes", b.data_bytes},
+                   {"duration_ms", b.duration_ms}};
+        if (!b.name.empty()) {
+            entry["name"] = b.name;
+        }
+        // Only when they are not the ordinary case, so a plain .tap listing
+        // stays readable instead of repeating "standard_speed: true" per row.
+        if (!b.standard_speed) {
+            entry["standard_speed"] = false;
+            entry["tzx_block"] = b.id;
+        }
+        if (b.stop_tape) {
+            entry["stop_tape"] = true;
+        }
+        if (b.pause_ms != 0) {
+            entry["pause_ms"] = b.pause_ms;
+        }
+        out.push_back(std::move(entry));
+    }
+    return out;
+}
+
+/// Tape state, reported identically by load_tape and tape_control so a caller
+/// only has to learn one shape.
+json tape_status_json(const TapeStatus& status, const std::vector<TapeBlockInfo>& blocks) {
+    json out{{"inserted", status.inserted},
+             {"playing", status.playing},
+             {"at_end", status.at_end},
+             {"fast_load", status.fast_load},
+             {"name", status.name},
+             {"block", status.block},
+             {"blocks", status.blocks},
+             {"position_ms", status.position_ms},
+             {"total_ms", status.total_ms}};
+    if (!status.description.empty()) {
+        out["description"] = status.description;
+    }
+    if (!status.warnings.empty()) {
+        out["warnings"] = status.warnings;
+    }
+    if (!blocks.empty()) {
+        out["block_list"] = tape_blocks_json(blocks);
     }
     return out;
 }
@@ -212,6 +285,10 @@ json integer_prop(const char* description) {
 
 json string_prop(const char* description) {
     return json{{"type", "string"}, {"description", description}};
+}
+
+json bool_prop(const char* description) {
+    return json{{"type", "boolean"}, {"description", description}};
 }
 
 json tools_list() {
@@ -274,6 +351,21 @@ json tools_list() {
                                         "\"SYM SHIFT\", \"SPACE\".")}},
                {"key"}));
     add("get_screen", "Get the current screen as a PNG image", no_params());
+    add("get_audio",
+        "Measure what the beeper has been playing: sample count, RMS and peak level, and the "
+        "pitch in Hz estimated from zero crossings. For checking that a BEEP, a sound effect or "
+        "a tape tone actually came out, and at what frequency, without a human listening. Reads "
+        "a rolling window of the most recent audio and does NOT consume it, so it can be called "
+        "repeatedly and alongside live playback.",
+        schema(json{{"duration_ms",
+                     integer_prop("How far back to look, in milliseconds (default 1000, "
+                                  "maximum 4000).")},
+                    {"include_wav",
+                     json{{"type", "boolean"},
+                          {"description", "Also return the window as a base64 16-bit mono WAV. "
+                                          "Off by default -- a second of audio is 44100 numbers, "
+                                          "and the summary is usually the answer."}}}},
+               {}));
     add("get_state",
         "Get a full state snapshot: pc, registers, breakpoints, running, border, call stack",
         no_params());
@@ -306,7 +398,9 @@ json tools_list() {
         "table visualz80remix's Trace Log panel produces (M1/MREQ/IORQ/RFSH/RD/WR, address bus, "
         "data bus, PC and the instruction in flight). For questions about WHEN within an "
         "instruction something reaches the bus -- contention, interrupt timing, the exact "
-        "T-state a write lands on. Start it, then run or step, then stop_trace; it also stops "
+        "T-state a write lands on. Start it, then run or step, then stop_trace -- both take "
+        "effect immediately, so a capture can be opened and closed around part of a run rather "
+        "than only around the whole of one. It also stops "
         "itself at `limit` rows, so a forgotten capture cannot fill the disk. View the result "
         "with tools/trace_viewer.html, or the \"ZX Spectrum: Show Trace\" command in VS Code.",
         schema(json{{"path", string_prop("File to write. Relative paths resolve against the "
@@ -318,6 +412,13 @@ json tools_list() {
                                            "unlimited.")},
                     {"watch", integer_prop("16-bit address to sample into the Watch column on "
                                            "every half-clock. Omit for none.")},
+                    {"symbols", json{{"type", "boolean"},
+                                     {"description", "Resolve addresses against the loaded SLD "
+                                                     "debug info: adds a Symbol column naming "
+                                                     "where each instruction lives, and annotates "
+                                                     "the Asm column's operands. On by default "
+                                                     "when debug info is loaded; set false to keep "
+                                                     "the layout identical to visualz80remix's."}}},
                     {"extra", json{{"type", "boolean"},
                                    {"description", "Add the 48K-specific columns (HALT, WAIT, "
                                                    "INT, NMI, frame, T-state). Off by default, "
@@ -327,15 +428,49 @@ json tools_list() {
                {}));
     add("stop_trace",
         "Stop the running trace and report where it was written and how many half-T-states it "
-        "captured. Queued, so it waits for an in-flight run to stop -- call pause first to end a "
-        "capture early",
+        "captured. Takes effect immediately, mid-run included -- no need to pause first",
         no_params());
-    add("trace_status", "Report whether a trace is running, its file, and its row count",
+    add("trace_status",
+        "Report whether a trace is running, its file, and its row count. Safe to poll during a "
+        "run, so it can be watched filling up",
         no_params());
     add("set_speed",
         "Set emulation speed: \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want)",
         schema(json{{"speed", string_prop("\"realtime\" or \"uncapped\".")}}, {"speed"}));
+    add("load_tape",
+        "Insert a .tap or .tzx tape image and, by default, start loading it: resets the machine, "
+        "types LOAD \"\" for you, and starts the tape, so all that is left is to `run`. "
+        "Standard-speed blocks are satisfied instantly by trapping the ROM's LD-BYTES routine; "
+        "anything non-standard (turbo loaders, custom .tzx blocks) automatically falls back to "
+        "real pulse-level playback through the EAR line, so every loader works -- just at tape "
+        "speed, which for a whole game is minutes. Use set_speed uncapped to hurry that along",
+        schema(json{{"path", string_prop("Path to the .tap or .tzx, resolved against the "
+                                         "server's working directory. The format is detected "
+                                         "from the file's contents, not its extension.")},
+                    {"auto_start", bool_prop("Reset, type LOAD \"\" and start the tape. "
+                                             "True by default. False leaves the tape inserted "
+                                             "and stopped, for a program that loads its own "
+                                             "next part.")},
+                    {"fast_load", bool_prop("Trap the ROM loader and satisfy standard-speed "
+                                            "blocks instantly. True by default; false to watch "
+                                            "(and hear) the real pulse-level load.")}},
+               {"path"}));
+    add("tape_control",
+        "Play, stop, rewind, seek or eject the inserted tape, or report what is on it and where "
+        "it has got to -- every reply lists the blocks, so calling this with no arguments is how "
+        "to find out what an image contains. Takes effect immediately, mid-run included -- which "
+        "is the only time Play is any use, since a program waiting for the next part of a tape "
+        "is by definition already running",
+        schema(json{{"action", string_prop("\"play\", \"stop\", \"rewind\", \"seek\", "
+                                           "\"eject\" or \"status\" (the default).")},
+                    {"block", integer_prop("Which block to seek to, counting from 0, as "
+                                           "listed in block_list. Only for \"seek\", which "
+                                           "leaves the motor stopped -- follow it with "
+                                           "\"play\" to load from there, which is how to "
+                                           "replay one part of a multi-load tape.")},
+                    {"fast_load", bool_prop("Also turn fast load on or off.")}},
+               {}));
     return tools;
 }
 
@@ -488,6 +623,39 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         return image_result(encode_png(engine.screen()));
     }
 
+    if (name == "get_audio") {
+        const json& window = arg(args, "duration_ms");
+        int64_t duration_ms = window.is_number_integer() ? window.get<int64_t>() : 1000;
+        if (duration_ms < 1) {
+            duration_ms = 1;
+        }
+        const int64_t max_ms =
+            int64_t(MCP_CAPTURE_SAMPLES) * 1000 / int64_t(engine.audio_sample_rate());
+        if (duration_ms > max_ms) {
+            duration_ms = max_ms;
+        }
+        const uint32_t rate = engine.audio_sample_rate();
+        const size_t wanted = size_t(duration_ms * int64_t(rate) / 1000);
+
+        std::vector<int16_t> samples;
+        capture_ring(engine).peek_latest(samples, wanted);
+
+        float rms = 0.0f;
+        float peak = 0.0f;
+        measure_level(samples, rms, peak);
+        json out{{"sample_rate", rate},
+                 {"samples", samples.size()},
+                 {"duration_ms", samples.size() * 1000 / size_t(rate)},
+                 {"rms", rms},
+                 {"peak", peak},
+                 {"silent", peak < 0.001f},
+                 {"frequency_hz", estimate_frequency_hz(samples)}};
+        if (arg(args, "include_wav").is_boolean() && arg(args, "include_wav").get<bool>()) {
+            out["wav_base64"] = base64_encode(encode_wav(samples, rate));
+        }
+        return json_result(out);
+    }
+
     if (name == "get_state") {
         return json_result(state_json(engine.state()));
     }
@@ -525,6 +693,10 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         }
         const json& extra = arg(args, "extra");
         options.extra = extra.is_boolean() && extra.get<bool>();
+        const json& symbols = arg(args, "symbols");
+        if (!symbols.is_boolean() || symbols.get<bool>()) {
+            options.resolve_symbol = symbol_resolver(sources);
+        }
 
         const std::string message = engine.start_trace(options);
         if (!message.empty()) {
@@ -611,6 +783,55 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
                 ? "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"
                 : "address precedes every known symbol";
         return json_result(json{{"found", false}, {"reason", reason}});
+    }
+
+    if (name == "load_tape") {
+        std::string path;
+        if (!arg_string(args, "path", path, error)) {
+            return error_result(error);
+        }
+        std::vector<uint8_t> data;
+        if (!read_file(path, data)) {
+            return error_result("couldn't read tape " + path);
+        }
+        // Both flags default ON, so the bare call does the obvious thing.
+        const json& fast = arg(args, "fast_load");
+        engine.set_tape_fast_load(!fast.is_boolean() || fast.get<bool>());
+        const json& start = arg(args, "auto_start");
+        const std::string message =
+            engine.load_tape(std::move(data), path, !start.is_boolean() || start.get<bool>());
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        return json_result(tape_status_json(engine.tape_status(), engine.tape_blocks()));
+    }
+
+    if (name == "tape_control") {
+        const json& fast = arg(args, "fast_load");
+        if (fast.is_boolean()) {
+            engine.set_tape_fast_load(fast.get<bool>());
+        }
+        const json& action = arg(args, "action");
+        const std::string what = action.is_string() ? action.get<std::string>() : "status";
+        if (what == "play") {
+            engine.tape_play();
+        } else if (what == "stop") {
+            engine.tape_stop();
+        } else if (what == "rewind") {
+            engine.tape_rewind();
+        } else if (what == "eject") {
+            engine.tape_eject();
+        } else if (what == "seek") {
+            const json& block = arg(args, "block");
+            if (!block.is_number_unsigned()) {
+                return error_result("\"seek\" needs a \"block\" index");
+            }
+            engine.tape_seek(block.get<size_t>());
+        } else if (what != "status") {
+            return error_result("'action' must be \"play\", \"stop\", \"rewind\", "
+                                "\"seek\", \"eject\" or \"status\"");
+        }
+        return json_result(tape_status_json(engine.tape_status(), engine.tape_blocks()));
     }
 
     return error_result("unknown tool: " + name);
@@ -747,6 +968,9 @@ void handle_connection(net::Socket sock, Engine& engine, Sources& sources) {
 } // namespace
 
 void serve_mcp(Engine& engine, Sources& sources, const std::string& host, uint16_t port) {
+    // Up front, so audio is already accumulating whenever get_audio is first
+    // asked -- see capture_ring().
+    capture_ring(engine);
     net::Listener listener;
     std::string error;
     if (!listener.listen(host, port, error)) {

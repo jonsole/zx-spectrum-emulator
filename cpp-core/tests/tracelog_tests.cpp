@@ -28,14 +28,17 @@
 // pre-seeded with the values the reference has by the time it reads them, and
 // the whole 64-T-state window reproduces exactly.
 
+#include "engine.h"
 #include "spectrum.h"
 #include "test_main.h"
 #include "tracelog.h"
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace zx;
@@ -345,6 +348,142 @@ TEST(extra_columns_add_the_48k_signals) {
     // capture starts at power-on -- so the very first rows must show it.
     CHECK_EQ(rows[0][9], std::string("INT"));
     CHECK_EQ(rows[0][16], std::string("40"));
+}
+
+TEST(symbols_name_the_instruction_and_annotate_operands) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_symbols.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 0;
+    // Stands in for the SLD layer, which lives in zx_server and is not linked
+    // here. The contract is all TraceLog knows: address in, "LABEL+n" or an
+    // empty string out.
+    options.resolve_symbol = [](uint16_t addr) {
+        if (addr == 0x0008) { return std::string("INC_CELL"); }
+        if (addr == 0x000B) { return std::string("INC_CELL+3"); }
+        if (addr == 0x0030) { return std::string("STACK_TOP"); }
+        return std::string();
+    };
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+    machine.trace = &log;
+    for (uint32_t i = 0; i < REFERENCE_TSTATES * HC_PER_TSTATE - 1; i++) {
+        machine.clock();
+    }
+    machine.trace = nullptr;
+    log.close();
+
+    const std::vector<std::string> lines = read_lines(path);
+    const std::vector<std::string> header = header_of(lines);
+    const std::vector<std::vector<std::string>> rows = data_rows(lines);
+    CHECK_EQ(header.size(), size_t(13)); // the reference 12, plus Symbol
+    CHECK_EQ(header[11], std::string("Symbol"));
+    CHECK_EQ(header[12], std::string("Asm"));
+
+    // `LD SP,0x0030` -- a 4-digit operand, so it annotates.
+    CHECK_EQ(rows[0][12], std::string("LD SP,0x0030 (STACK_TOP)"));
+    // ...and its own address has no symbol, so the Symbol column stays empty
+    // rather than borrowing the nearest one.
+    CHECK_EQ(rows[0][11], std::string());
+
+    // The instruction at 0x0008 is named, and CALL 0x0008 annotates to it.
+    bool saw_call = false;
+    bool saw_named_instruction = false;
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (rows[i][12] == "CALL 0x0008 (INC_CELL)") { saw_call = true; }
+        if (rows[i][11] == "INC_CELL" && rows[i][12].compare(0, 5, "LD HL") == 0) {
+            saw_named_instruction = true;
+        }
+    }
+    CHECK(saw_call);
+    CHECK(saw_named_instruction);
+}
+
+TEST(no_resolver_leaves_the_reference_layout_alone) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_nosymbols.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 8;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+    machine.trace = &log;
+    for (uint32_t i = 0; i < 40; i++) {
+        machine.clock();
+    }
+
+    // No Symbol column, and the Asm column back at the reference's own width --
+    // a capture made without debug info stays byte-comparable with one from
+    // visualz80remix.
+    const std::vector<std::string> header = header_of(read_lines(path));
+    CHECK_EQ(header.size(), size_t(12));
+    CHECK_EQ(header[11], std::string("Asm"));
+}
+
+// The viewer's Record button is a start_trace on a machine that is already
+// running, and its Stop a stop_trace on the same -- neither of which the
+// command queue could serve, since a `run` owns the emulator thread until it
+// stops and the program below never stops. Both requests are made here from
+// another thread mid-run, exactly as a DAP connection makes them; routed
+// through the queue this test would hang rather than fail.
+TEST(a_capture_starts_and_stops_across_a_running_machine) {
+    Engine engine;
+    CHECK_EQ(engine.load_rom(reference_program()), std::string());
+    engine.set_speed(Speed::Uncapped); // nothing to wait for between yields
+
+    // Nothing is being traced yet -- and asking must not block on the run.
+    CHECK(!engine.trace_status().active);
+
+    std::thread runner([&engine] { engine.run(); });
+
+    TraceOptions options;
+    options.path = temp_path("tracelog_live.txt");
+    options.limit = 0; // unlimited: nothing but the stop below can close it
+    // Returns only once the emulator thread has taken the capture up, so the
+    // stop cannot overtake the start and cancel it.
+    CHECK_EQ(engine.start_trace(options), std::string());
+
+    // Read while the run is still going, which is what the viewer's row
+    // counter does on a timer.
+    const TraceStatus live = engine.trace_status();
+    CHECK(live.active);
+    CHECK_EQ(live.path, options.path);
+
+    // Each request lands at a yield, so what ends up in the file is whatever
+    // the run got through in between -- which is the whole point: rows
+    // recorded while a run was in flight, by a capture opened and closed
+    // across it.
+    const TraceStatus stopped = engine.stop_trace();
+    engine.pause();
+    runner.join();
+
+    CHECK(stopped.rows > 0);
+    CHECK(!stopped.active);
+    CHECK_EQ(stopped.path, options.path);
+    // Stopping mid-run closes the table properly, so what the viewer loads
+    // next is a complete capture rather than a truncated one: two borders and
+    // the header above the rows, and the closing border below them. Counted
+    // rather than parsed -- there are thousands of rows here, and splitting
+    // every one into cells costs more than the capture did.
+    const std::vector<std::string> lines = read_lines(options.path);
+    CHECK_EQ(lines.size(), size_t(stopped.rows) + 4);
+    CHECK_EQ(header_of(lines)[0], std::string("Cycle/h"));
+
+    // The stopped capture stays on record: its path and row count are exactly
+    // what the viewer needs to go and load the file it has just finished.
+    CHECK_EQ(engine.trace_status().rows, stopped.rows);
+    CHECK(!engine.trace_status().active);
+
+    // Removed, unlike the small captures above: an unlimited trace of a run
+    // collects a yield's worth of half-clocks at once, which is megabytes.
+    std::remove(options.path.c_str());
 }
 
 RUN_TESTS()

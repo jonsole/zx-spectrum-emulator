@@ -89,6 +89,51 @@
       }
     },
     {
+      // Same server, with sound coming out of the host's speakers.
+      //
+      // --audio-device opens the default output from inside zx_server; the
+      // --no-audio alongside it stops the audio STREAM server binding, which
+      // matters because the screen panel opens automatically on a debug
+      // session and would otherwise play the same samples a second time,
+      // slightly out of phase with the native device. Native or panel, not
+      // both. Drop --no-audio (and --audio-device) to go back to hearing it
+      // through the panel instead.
+      //
+      // A separate task rather than flags on zxspectrum-cpp.start-server:
+      // that one is shared with ZEXALL/ZEXDOC/z80full, which run uncapped
+      // (audio is dropped there anyway) and have no business holding the
+      // sound card open for the minutes they take.
+      "label": "zxspectrum-cpp.start-server-audio",
+      "type": "shell",
+      "command": "${workspaceFolder}\\cpp-core\\build\\RelWithDebInfo\\zx_server.exe",
+      "args": [
+        "--dap-port", "4711",
+        "--mcp-port", "8000",
+        "--screen-port", "8500",
+        "--audio-device",
+        "--no-audio"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "zxspectrum-cpp.build",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": {
+        "owner": "zxspectrum-cpp",
+        "pattern": {
+          "regexp": "^.*$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting ZX Spectrum server",
+          "endsPattern": "DAP server listening"
+        }
+      }
+    },
+    {
       "label": "zxspectrum-rust.start-server",
       "type": "shell",
       "command": "${env:USERPROFILE}\\.cargo\\bin\\cargo.exe",
@@ -150,6 +195,32 @@
           "endsPattern": "DAP server listening"
         }
       }
+    },
+    {
+      // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
+      // fetched and assembled rather than committed -- see
+      // scripts/build_fairlight.py and .gitignore. Cheap enough (~0.2s of
+      // sjasmplus) to rerun on every launch, which also means editing the
+      // fetched .asm and relaunching picks the change up.
+      "label": "fairlight.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["scripts/build_fairlight.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "fairlight.build-and-start-server",
+      "dependsOrder": "sequence",
+      "dependsOn": ["fairlight.build", "zxspectrum-cpp.start-server-audio"],
+      "problemMatcher": []
+    },
+    {
+      "label": "fairlight.build-and-start-server-rust",
+      "dependsOrder": "sequence",
+      "dependsOn": ["fairlight.build", "zxspectrum-rust.start-server-release"],
+      "problemMatcher": []
     }
   ]
 }

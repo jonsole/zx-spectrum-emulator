@@ -13,8 +13,10 @@
 // works and what lets the ULA see a real address on a real clock edge, which
 // is the entire point of the half-T-state model.
 
+#include "beeper.h"
 #include "keyboard.h"
 #include "memory.h"
+#include "tape.h"
 #include "tracelog.h"
 #include "ula.h"
 #include "z80.h"
@@ -31,7 +33,9 @@ public:
     Z80 cpu;
     Spectrum48KMemory memory;
     Ula ula;
+    Beeper beeper;
     Keyboard keyboard;
+    Tape tape;
 
     std::set<uint16_t> breakpoints;
 
@@ -62,6 +66,13 @@ public:
     /// Runs one whole video frame (to the next interrupt).
     void run_frame();
 
+    /// Half-T-states since power-on. The ULA's frame counter and in-frame
+    /// position combined into the one monotonic clock that anything outside
+    /// the machine (pacing, progress reporting, audio timestamps) reasons in.
+    uint64_t global_hc() const {
+        return ula.frame_count() * uint64_t(HC_PER_FRAME) + ula.frame_hc();
+    }
+
     Registers registers() const { return cpu.registers(); }
     void set_registers(const Registers& r);
 
@@ -81,6 +92,17 @@ private:
 
     /// Decodes MREQ/IORQ and services memory or I/O.
     void service_bus();
+
+    /// True when the bytes at LD_BYTES really are the stock ROM's loader.
+    /// Without this check any program that happened to execute at 0x0556 --
+    /// a different ROM, a snapshot that jumped there -- would be silently
+    /// hijacked by the tape trap.
+    bool stock_ld_bytes();
+    /// Satisfies one standard-speed tape block in place of the ROM's LD-BYTES
+    /// and returns as if from its final RET. False means "declined": the tape
+    /// is stopped, finished, or the next block is not something the ROM loader
+    /// could have read, so the real routine must run against real pulses.
+    bool fast_load_block();
 };
 
 } // namespace zx

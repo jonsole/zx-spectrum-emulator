@@ -290,6 +290,17 @@ RomSourcePtr Sources::source_for_path(const std::string& path) const {
     return nullptr;
 }
 
+std::function<std::string(uint16_t)> symbol_resolver(Sources& sources) {
+    return [&sources](uint16_t addr) {
+        std::string name;
+        uint16_t offset = 0;
+        if (!sources.resolve_symbol(addr, name, offset)) {
+            return std::string();
+        }
+        return offset == 0 ? name : name + "+" + std::to_string(offset);
+    };
+}
+
 std::string annotate_symbols(const std::string& text, const Sources& sources) {
     std::string out;
     out.reserve(text.size());

@@ -48,7 +48,34 @@
       "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+    },
+    {
+      // The speed-patched build from scripts/build_manicminer_fast.py: same
+      // game, ~1.65x through its main loop. Run that script first -- it needs
+      // mm.asm, so scripts/build_manicminer.py has to have run at least once.
+      "name": "ZX Spectrum (C++ core): Manic Miner (fast)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sna",
+      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sld",
+      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.asm",
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+    },
+    {
+      // As above, but locked to the frame interrupt via IM 2 + HALT: a steady
+      // cadence instead of a loop time that varies with what is on screen.
+      "name": "ZX Spectrum (C++ core): Manic Miner (frame-locked)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sna",
+      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sld",
+      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.asm",
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
     },
     {
       "name": "ZX Spectrum (C++ core): hello_rom_call example",
@@ -68,7 +95,72 @@
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+    },
+    {
+      // Multichannel beeper music -- it drives port 0xFE far harder than a
+      // typical game, so it is the useful stress test for the audio path.
+      "name": "ZX Spectrum (C++ core): Chronos",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/snapshots/Chronos.sna",
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+    },
+    {
+      // Tape loading, the fast way: the ROM's LD-BYTES is trapped and each
+      // standard-speed block is satisfied instantly. The tape is a generated
+      // autostarting BASIC program (scripts/make_test_tape.py), so a
+      // successful load turns the border yellow and prints TAPE LOADED OK --
+      // by the time this config finishes launching, it has already happened.
+      "name": "ZX Spectrum (C++ core): Tape (fast load)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "tape": "${workspaceFolder}/tapes/loading-test.tap",
       "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      // The same tape, loaded the way a real cassette would be: fast load off,
+      // so the ROM reads actual pulses off the EAR line. Press Continue and
+      // watch it take about ten seconds, with loading stripes in the border
+      // and the loading screech through the audio panel. This is the path
+      // every turbo and custom loader falls back to.
+      "name": "ZX Spectrum (C++ core): Tape (real pulse load)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "tape": "${workspaceFolder}/tapes/loading-test.tzx",
+      "tapeFastLoad": false,
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+    },
+    {
+      // The generic one: boots, types LOAD "" and stops in the ROM loader with
+      // no tape at all -- exactly where a real Spectrum sits once you have typed
+      // the command and not yet pressed Play.
+      //
+      // Press Continue, then feed the loader that is already running:
+      //     load_tape   { "path": "...", "auto_start": false }
+      //     tape_control{ "action": "play" }
+      //
+      // That path always loads at real tape speed, even with fast load on, and
+      // it is not a bug: the trap fires on ARRIVING at LD-BYTES, and by now the
+      // ROM is already sitting inside it. Which is the point of this target --
+      // it is for watching a real load, and for breakpointing the loader with a
+      // tape you choose at the time. For an instant load, insert with
+      // auto_start left on (what "ZX Spectrum: Load Tape..." does) and it resets
+      // and retypes, so the trap gets its moment.
+      "name": "ZX Spectrum (C++ core): Tape (waiting for LOAD)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "waitForTape": true,
+      "tapeFastLoad": false,
+      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
     },
     {
       "name": "ZX Spectrum (C++ core): Z80 full test suite",
@@ -99,6 +191,28 @@
       "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
       "uncapped": true,
       "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      "name": "ZX Spectrum (C++ core): Fairlight",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
+      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
+      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
+      "preLaunchTask": "fairlight.build-and-start-server"
+    },
+    {
+      "name": "ZX Spectrum (Rust core, release): Fairlight",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
+      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
+      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
+      "preLaunchTask": "fairlight.build-and-start-server-rust"
     },
     {
       "name": "ZX Spectrum (Rust core): Step through ROM",

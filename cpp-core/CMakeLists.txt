@@ -33,12 +33,14 @@ endif()
 # ---- zx_core: the emulator itself (no server/protocol code) -----------------
 add_library(zx_core STATIC
   src/alu.cpp
+  src/beeper.cpp
   src/disassembler.cpp
   src/engine.cpp
   src/keyboard.cpp
   src/memory.cpp
   src/snapshot.cpp
   src/spectrum.cpp
+  src/tape.cpp
   src/tracelog.cpp
   src/ula.cpp
   src/z80.cpp
@@ -52,6 +54,9 @@ target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
 # json.hpp and stb_image_write.h are header-only and vendored, so this is just
 # our own sources plus the platform's socket library.
 add_executable(zx_server
+  src/audio_device.cpp
+  src/audio_stream.cpp
+  src/audio_wasapi.cpp
   src/base64.cpp
   src/dap.cpp
   src/http.cpp
@@ -101,11 +106,13 @@ function(zx_add_test name)
 endfunction()
 
 zx_add_test(memory_tests)
+zx_add_test(beeper_tests)
 zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)
 zx_add_test(int_timing)
 zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
+zx_add_test(tape_tests)
 zx_add_test(tracelog_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
@@ -114,6 +121,11 @@ target_compile_definitions(tracelog_tests
 # Needs the real ROM, which is copyrighted and gitignored -- the test skips
 # gracefully if it is absent.
 target_compile_definitions(spectrum_tests
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+# The fast-load trap and the auto-typed LOAD "" only mean anything against the
+# real ROM; those tests skip gracefully without it, the parser ones do not need
+# it at all.
+target_compile_definitions(tape_tests
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # ---- throughput benchmark ---------------------------------------------------
@@ -138,6 +150,21 @@ target_link_libraries(trace PRIVATE zx_core)
 target_compile_options(trace PRIVATE ${ZX_WARNINGS})
 target_compile_definitions(trace
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+# Diagnostic, not a test: drives the audio path end to end and writes a WAV.
+# Needs a few of zx_server's sources (the stream server and its sockets) as
+# well as zx_core, so that `beep serve` can stand the real servers up without
+# main.cpp -- which is the only way to hear this without starting the whole
+# debug server.
+add_executable(beep tests/beep.cpp src/audio_device.cpp src/audio_stream.cpp
+                    src/audio_wasapi.cpp src/net.cpp)
+target_link_libraries(beep PRIVATE zx_core)
+target_compile_options(beep PRIVATE ${ZX_WARNINGS})
+target_compile_definitions(beep
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+if(WIN32)
+  target_link_libraries(beep PRIVATE ws2_32)
+endif()
 
 # Diagnostic, not a test: dumps the rendered canvas for eyeballing.
 add_executable(screenshot tests/screenshot.cpp)

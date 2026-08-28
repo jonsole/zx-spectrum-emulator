@@ -66,7 +66,13 @@ void Spectrum48K::reset() {
     cpu.set_registers(regs, memory);
     pins_ = cpu.pins();
     ula.reset();
+    beeper.reset();
     keyboard.clear();
+    // The cassette stays in the deck and keeps its block position -- resetting
+    // a Spectrum does not eject it. Only the motor stops, and it has to:
+    // Ula::reset() zeroed the frame counter, so global_hc() has just restarted
+    // at 0 and every pulse timestamp the tape holds is now in the future.
+    tape.stop();
     call_stack.clear();
 }
 
@@ -148,17 +154,146 @@ void Spectrum48K::service_bus() {
     // simply does not decode the upper bits -- and it is why programs can use
     // 0xFE, 0x00FE or any other even port interchangeably.
     if (asserted(pins_, RD)) {
-        uint8_t value = (addr & 1) == 0
-                            ? keyboard.read_port(uint8_t(addr >> 8))
-                            : 0xFF; // unmapped: floating bus, not modelled further
+        uint8_t value = 0xFF; // unmapped: floating bus, not modelled further
+        if ((addr & 1) == 0) {
+            value = keyboard.read_port(uint8_t(addr >> 8));
+            // Bit 6 is the EAR input. Resolved here rather than inside
+            // Keyboard because it is the tape's line, not a key's -- the same
+            // division that keeps the beeper's bits 3 and 4 in the write
+            // branch below. Tape::ear_at is a pure read, which it has to be:
+            // this single IN asserts IORQ and RD on five consecutive
+            // half-clocks, so it runs five times with the same global_hc()
+            // and must answer identically each time.
+            const bool ear = tape.ear_at(global_hc());
+            if (!ear) {
+                value = uint8_t(value & ~0x40);
+            }
+            // The loading sound. The ULA mixes the EAR socket into the same
+            // audio output as the speaker, which is the only reason a tape is
+            // audible while it loads -- the ROM's loader never touches the
+            // speaker bit, only the border (see EAR_LEVEL in beeper.h). Fed
+            // from here rather than from the tape itself because this is where
+            // the level is already being resolved, and because a loader polls
+            // this port far more finely than the tone it is listening to.
+            beeper.set_ear(tape.playing() && ear, global_hc());
+        }
         pins_ = set_data(pins_, value);
     } else if (asserted(pins_, WR) && (addr & 1) == 0) {
-        // Bits 0-2 border, 3 MIC, 4 speaker. No audio yet.
-        ula.border = uint8_t(get_data(pins_) & 0x07);
+        const uint8_t value = get_data(pins_);
+        ula.border = uint8_t(value & 0x07);
+        // Bits 3 (MIC) and 4 (speaker) drive the beeper. See
+        // Beeper::write_port_fe for why this is a latch and not an edge.
+        beeper.write_port_fe(value, global_hc());
     }
 }
 
+bool Spectrum48K::stock_ld_bytes() {
+    // INC D / EX AF,AF' / DEC D / DI -- the first four bytes of the 48K ROM's
+    // LD-BYTES.
+    return memory.read(LD_BYTES) == 0x14 && memory.read(LD_BYTES + 1) == 0x08
+           && memory.read(LD_BYTES + 2) == 0x15 && memory.read(LD_BYTES + 3) == 0xF3;
+}
+
+bool Spectrum48K::fast_load_block() {
+    const TapeBlock* b = tape.peek_standard_block();
+    if (b == nullptr) {
+        return false;
+    }
+
+    // At LD-BYTES the entry EX AF,AF' has NOT run yet, so the documented
+    // contract -- A = the expected flag byte, carry set to load and clear to
+    // verify, DE = length, IX = destination -- is in the MAIN AF, not the
+    // shadow.
+    Registers r = registers();
+    const uint8_t want_flag = r.a;
+    const bool loading = (r.f & 0x01) != 0;
+    uint16_t len = r.de();
+    uint16_t dst = r.ix;
+    const std::vector<uint8_t>& d = b->data;
+
+    // The ROM reads the flag byte, folds it into H, stores DE bytes folding
+    // each one in, then reads ONE more byte -- the checksum -- and folds that
+    // in too, leaving H zero on a clean block. So a good load consumes DE + 2
+    // bytes, which is why the parity starts at the flag and ends on d[len+1].
+    bool ok = !d.empty() && d[0] == want_flag;
+    uint8_t parity = 0;
+    if (ok) {
+        parity = d[0];
+        size_t i = 1;
+        for (; i < d.size() && len > 0; i++, len--, dst++) {
+            parity = uint8_t(parity ^ d[i]);
+            if (loading) {
+                memory.write(dst, d[i]);
+            } else if (memory.read(dst) != d[i]) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) {
+            // A verify mismatch: the ROM bails out of its loop the same way.
+        } else if (len != 0 || i >= d.size()) {
+            ok = false; // the block ran out before DE bytes had been read
+        } else {
+            parity = uint8_t(parity ^ d[i]);
+            ok = parity == 0;
+        }
+    }
+
+    r.ix = dst;
+    r.set_de(len);
+    // The ROM leaves the routine through CP $01 with A holding the running
+    // parity, so on success A is 0 and 0 - 1 sets S, H, N and C together.
+    // Nothing in the ROM reads more than the carry, but a truthful return
+    // costs one constant and will not surprise a loader that does.
+    r.a = parity;
+    r.f = ok ? uint8_t(0x93) : uint8_t(r.f & ~0x01);
+
+    // Interrupts are deliberately left exactly as the caller had them. The
+    // real routine does DI on the way in and SA-LD-RET does EI on the way out,
+    // so skipping both is a no-op -- it only looks like an omission.
+    //
+    // The border is left alone for the same kind of reason: the routine would
+    // have flashed it and then restored BORDCR, and repainting a border we
+    // never changed would be more surprising, not less. A fast load simply has
+    // no loading stripes; fast_load(false) is the way to watch them.
+
+    // LD-BYTES' final RET. SA-LD-RET has not been pushed at 0x0556 either, so
+    // the top of the stack is the caller's own return address.
+    r.pc = uint16_t(memory.read(r.sp) | (memory.read(uint16_t(r.sp + 1)) << 8));
+    r.sp = uint16_t(r.sp + 2);
+
+    // NOT set_registers(): that clears the whole call stack, and this is an
+    // ordinary RET -- one frame, not all of them. Z80::set_registers re-primes
+    // the fetch pipeline on an internal half-clock that never reaches
+    // Ula::clock, so global_hc() does not move and a fast load costs exactly
+    // zero emulated time, which is the entire point of it.
+    cpu.set_registers(r, memory);
+    pins_ = cpu.pins();
+    if (!call_stack.empty()) {
+        call_stack.pop_back();
+    }
+
+    // Consumed even when the flag did not match. That is deliberate: LD-LOOK-H
+    // loops on a carry-clear return until a header matches, so consuming is
+    // exactly what lets it walk forward -- the same thing a real tape running
+    // past the block would do.
+    tape.consume_block(global_hc());
+    return true;
+}
+
 void Spectrum48K::step_instruction() {
+    // The tape fast-load trap. Here rather than in clock(), which runs seven
+    // million times a second and must not pay for this; and here rather than
+    // in the Engine's run loop, because a plain step and a step-over should
+    // hit it too -- stepping into the ROM loader and watching it take four
+    // minutes is nobody's idea of debugging. step_tstates() and run_frame()
+    // deliberately do NOT trap: sub-instruction stepping is what you reach for
+    // when you want to watch the real LD-EDGE code work.
+    if (tape.fast_load() && registers().pc == LD_BYTES && stock_ld_bytes()
+        && fast_load_block()) {
+        return;
+    }
+
     // Classify BEFORE executing: by the time the instruction completes the
     // bytes at the old PC may no longer be what ran (self-modifying code).
     const uint16_t pc_before = registers().pc;

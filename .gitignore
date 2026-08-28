@@ -34,9 +34,25 @@ rom_disassembly/
 
 # Fetched/generated game disassemblies (copyrighted game code/data, plus
 # the disassembly's own annotations) -- same treatment, see README and
-# scripts/build_manicminer.py
+# scripts/build_manicminer.py / scripts/build_fairlight.py
 .manicminer-disassembly-src/
+.fairlight-disassembly-src/
 game_disassembly/
+
+# Game snapshots and tape images (copyrighted -- same treatment as roms/ and
+# the disassemblies above). The .sna files that ARE committed here are the Z80
+# exercisers, which are freely distributable, and tapes/ holds only what
+# scripts/make_test_tape.py generates -- so both are listed back in by name
+# rather than the whole directory being left unguarded.
+snapshots/*.sna
+!snapshots/z80full.sna
+!snapshots/zexall.sna
+!snapshots/zexccfb.sna
+!snapshots/zexdoc.sna
+tapes/*.tap
+tapes/*.tzx
+!tapes/loading-test.tap
+!tapes/loading-test.tzx
 
 # Fetched sjasmplus binary (github.com/z00m128/sjasmplus) -- a build tool,
 # not this project's own code; fetched by the LDIR contention example's

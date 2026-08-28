@@ -33,13 +33,19 @@ LLM agent inspects and drives the *same running emulator* over
 - **Keyboard**: the full 8×5 matrix on port `0xFE`.
 - **Snapshots**: `.sna` loading (registers + memory + border, including the
   format's PC-on-the-stack quirk).
+- **Tape**: `.tap` and `.tzx` loading in the C++ core, at pulse level through
+  the EAR line, with an optional fast-load trap on the ROM's LD-BYTES — see
+  [Tape](#tape).
 - **Disassembler**: the full documented Z80 instruction set (unprefixed, `CB`,
   `ED`, `DD`, `FD`, and `DD CB d`/`FD CB d`), including the well-known
   undocumented `IXH`/`IXL`/`IYH`/`IYL` register forms.
 
 **Not emulated (yet):** 128K/+2 banking, the AY sound chip, memory contention /
-cycle-exact ULA timing, beeper audio output, and tape loading. See
+cycle-exact ULA timing, and tape *saving*. See
 [Status & roadmap](#status--roadmap).
+
+Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
+[Audio](#audio).
 
 ## Why this architecture
 
@@ -174,6 +180,7 @@ look, it doesn't start it.
 | `get_registers()` / `set_registers(pc=…, af=…, …)` | CPU register access |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
+| `get_audio(duration_ms, include_wav)` | Measure the beeper: sample count, RMS, peak and pitch in Hz (C++ core only) |
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border |
 | `resolve_symbol(name)` | Symbol name → address (loaded program's own debug info first, then the ROM's) |
 | `resolve_address(addr)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |
@@ -380,6 +387,75 @@ signal instead. Launch **"ZX Spectrum: Manic Miner"** once built, or load
 `game_disassembly/manicminer/mm.sna` + `mm.sld` over MCP the same way as any
 other program.
 
+#### Example: Fairlight
+
+A second, larger game disassembly — [VilleKrumlinde/FairlightZ80](https://github.com/VilleKrumlinde/FairlightZ80),
+a hand-annotated reconstruction of the 1985 isometric adventure, complete
+with a written analysis of its render pipeline, room bytecode format and
+textured flood fill. `scripts/build_fairlight.py` fetches it, assembles it
+with `sjasmplus`, and wraps the result into a `.sna`:
+
+```sh
+.venv-win\Scripts\python.exe scriptsuild_fairlight.py   # native Windows
+.venv/bin/python scripts/build_fairlight.py                 # WSL/Linux/macOS
+```
+
+Two differences from Manic Miner. The upstream repo ships assembler source
+directly (no `skool2asm` step), and because it was reconstructed from a
+snapshot rather than a tape image it assembles to the *entire* 48K RAM
+image — screen, sysvars and runtime buffers included — so the `.sna`'s RAM
+is the assembler's output verbatim. That also means the startup register
+state isn't in the source anywhere and has to be reconstructed — PC
+`0xF065` (the title-screen loop), SP `0x6392` (recovered from the original
+snapshot's header), and IY `0xFF80` (the game-state block, which the code
+assumes is already in IY on entry; leaving it at 0 hangs the first room
+draw and gives a permanently black screen). Each is derived in a comment
+in the script.
+
+Same copyright treatment as Manic Miner: `game_disassembly/` and
+`.fairlight-disassembly-src/` are gitignored and never committed. Launch
+**"ZX Spectrum (C++ core): Fairlight"** — its `preLaunchTask` reassembles
+before starting the server, so editing the fetched `.asm` and relaunching
+picks the change up.
+
+#### Example: Atic Atac
+
+Unlike the other two, this one has no published disassembly to fetch:
+`scripts/build_aticatac.py` produces it from a `.tap` of the 1983 Ultimate
+game itself.
+
+```sh
+.venv-win\Scripts\python.exe scripts\build_aticatac.py --tape "Atic Atac.tap"
+.venv/bin/python scripts/build_aticatac.py --tape "Atic Atac.tap"
+```
+
+Two problems have to be solved that the other two don't have. First, the
+tape is *encrypted*: the BASIC loader's `PRINT USR 23424` enters an 18-byte
+stub in the printer buffer that `RRD`s a nibble through all 31744 bytes of
+the game before jumping to `0x6000`, so the plaintext only ever exists in
+RAM. The script runs the tape's own decryptor via `tap2sna`'s simulated
+load and disassembles the result. (A second piece of the same protection
+pokes `0x255E` into `FRAMES`, which the decrypted entry point checks and
+drops back to BASIC if absent — so the tiny tape blocks matter.)
+
+Second, telling code from data. Atic Atac is mostly graphics, and a static
+pass mis-reads a lot of sprite data as plausible instructions. So the script
+*plays the game* in SkoolKit's simulator — mashing keys through the title
+screen and around the castle, once per character and control method — and
+records every address actually executed. That map drives the code/data
+split, so unreached bytes stay `DEFB`s rather than becoming invented
+instructions. The whole build takes about a minute.
+
+There's no reference binary to diff against, so the check is a round trip:
+the generated `.asm` is fed back through `sjasmplus` and compared against
+the decrypted memory it came from. The build fails unless all 30208 bytes
+match byte-for-byte.
+
+Same copyright treatment as the others — `game_disassembly/` is gitignored
+and never committed. Load `game_disassembly/aticatac/aticatac.sna` +
+`aticatac.sld` over MCP or DAP for source-level debugging, same as Manic
+Miner.
+
 ### Cycle-by-cycle bus tracing
 
 The C++ core runs at half-T-state resolution, so it can record what every
@@ -412,10 +488,13 @@ zx_server --rom roms/48.rom --trace-log boot.zxtrace --trace-limit 25000
 | `--trace-watch HEX` | a memory address to sample into the Watch column each half-clock |
 | `--trace-extra` | add the 48K-specific columns: HALT, WAIT, INT, NMI, frame, T-state |
 
-Or drive it live over MCP with `start_trace` / `stop_trace` / `trace_status`,
-which is the usual way — capture a window around a breakpoint rather than from
-power-on. `stop_trace` is queued behind an in-flight `run`, so call `pause`
-first to end a capture early; the row limit means you rarely need to.
+Or drive it live — with the trace viewer's own **Record** button in VS Code
+(see below), or over MCP with `start_trace` / `stop_trace` / `trace_status`.
+That is the usual way: capture a window around a breakpoint rather than from
+power-on. All three bypass the emulator's command queue, so a capture can be
+opened and closed across a run in flight rather than only around one — you can
+record a game as it plays, and stop when you have seen the thing you were
+after.
 
 Tracing costs nothing when it is off (one predictable branch per half-clock)
 and is slow when it is on, which is why every capture is bounded.
@@ -426,6 +505,15 @@ and is slow when it is on, which is why every capture is bounded.
 dependencies, no network. Open it in a browser and drop a `.zxtrace` on it, or
 run **ZX Spectrum: Show Trace** from the VS Code extension, which loads that
 same file into a webview and reloads it whenever the capture is rewritten.
+
+In the VS Code panel it also takes the capture. **Record** starts a trace on
+whatever the current debug session is running — running or stopped, it makes no
+difference — with the same `limit`, `watch` and 48K-column options the flags
+above have; the header counts the half-T-states as they land. **Stop** ends it,
+and so does the capture reaching its own limit; either way the finished file is
+loaded into the panel straight away. It is written as `live.zxtrace` in the
+workspace folder, so it is an ordinary file afterwards: keep it, diff it,
+reopen it later.
 
 It has two views over the same data:
 
@@ -469,6 +557,234 @@ VS Code, have an MCP client `run()` past other breakpoints and hit yours, and
 watch VS Code's UI update on its own — no polling, no manual sync. This is
 the actual point of the project; see `tests/test_dap.py` and
 `tests/test_engine.py` for it exercised directly.
+
+## Audio
+
+The C++ core emulates the 48K beeper: writes to port `0xFE` latch the speaker
+(bit 4) and MIC (bit 3) levels, and those become mono 16-bit PCM.
+
+**Nothing is sampled per clock cycle.** The level only changes when a program
+writes the port -- a few thousand times a second at most -- so each write is
+recorded against the half-T-state it happened on, and the level is integrated
+forward when somebody asks for the audio. The cost lands per *sample* rather
+than per *half-clock*, which keeps it out of the emulator's hot loop
+entirely: `bench_machine` measures the same throughput with the feature as
+without it.
+
+The write is stored as a *latch*, not an edge. Control lines are not
+auto-cleared, so `service_bus()` sees a single `OUT` assert IORQ/WR on five
+consecutive half-clocks and applies it five times over; assigning a level is
+idempotent under that, whereas counting edges would count five.
+
+### Sound as the master clock
+
+With a native output device, the emulator paces against the **sound card**
+rather than against `steady_clock`. This is what keeps picture and sound
+locked together, and it is worth understanding before changing anything here.
+
+A card consumes samples at its own rate, which is never exactly the rate a
+timer believes a 48K runs at. Pacing against the timer lets the two drift
+apart, and the drift has to go somewhere: either audio piles up ahead of the
+speaker (latency that never drains) or the device runs dry (gaps). Pacing
+against the device instead makes the emulator produce exactly what the
+hardware consumes -- and since frames come off the same emulation loop, the
+picture follows the sound rather than being timed separately from it.
+Measured at 50.09fps against a nominal 50.08.
+
+Two corollaries, both learned the hard way and both commented in the source:
+
+- A partially-filled buffer is **never** padded out and queued. Padding hands
+  the device samples the emulator never produced, and because pacing counts
+  them, the machine gets throttled by audio that was never real -- measured at
+  40.1fps, a game running in visible slow motion with no indication anything
+  was wrong. A gap is the honest failure: it costs a click, timing stays
+  correct, and the fix is a larger `--audio-latency-ms`.
+- The emulator needs production headroom *above* the device queue. With a
+  target equal to the queue itself, any chunk at all puts it over, so it
+  produces one chunk per buffer completion and runs at a fraction of speed
+  (measured 23.5fps).
+
+Without a native device -- panel playback only -- pacing stays on the wall
+clock, since a network client should not be able to stall the emulator.
+
+### Hearing and inspecting it
+
+- **In VS Code.** The screen panel plays it. The extension host connects to
+  the audio stream port and forwards blocks to the webview, which schedules
+  them through the Web Audio API. There is a mute button in the top-right
+  corner. Browsers will not start audio until you have interacted with the
+  panel, so the first keypress or click is what gets it going.
+- **Out of the server process.** `--audio-device` opens the default output
+  directly. Never fatal: no sound card, or a device held exclusively by
+  something else, prints a warning and carries on.
+- **Over MCP.** `get_audio` reports sample count, RMS, peak and an estimated
+  pitch over a rolling window, optionally with the window as a base64 WAV. It
+  is a non-consuming read, so it can be called while something is playing.
+  Handy for asserting that a BEEP came out at the frequency it should have --
+  driving the ROM's own BEEPER routine at 440Hz measures 440.0.
+
+```
+zx_server.exe --rom roms/48.rom --audio-device --audio-latency-ms 80
+```
+
+`--no-audio` stops the stream server binding at all; pair it with
+`--audio-device` for native-only output, which is what the Manic Miner and
+Aquaplane launch configurations do (otherwise the panel plays the same audio
+a second time, slightly out of phase). Audio is dropped entirely while the
+emulator runs uncapped (`--uncapped`) -- samples generated hundreds of times
+faster than real time are not playable.
+
+### Backends and latency
+
+Native playback prefers **WASAPI shared mode via `IAudioClient3`**, falling
+back to waveOut if that is unavailable (pre-Windows-10, or a device that
+refuses the low-latency path). `InitializeSharedAudioStream` asks the audio
+engine for its *smallest* supported period and drives rendering from an event
+rather than a poll; the render thread registers as `Pro Audio` through MMCSS
+so it is not descheduled by the emulator thread. Measured 21ms of device
+buffer, against 80ms for waveOut, whose 20ms blocks are its floor.
+
+Shared mode runs at the engine's mix format and nothing else, so rather than
+resampling onto it, **the beeper is told to generate at the mix rate
+directly** -- its decimator is an integer accumulator that is exact at any
+rate, so this costs nothing and loses nothing. That is why the sample rate is
+not a constant, and why everything downstream learns it from the stream
+preamble or `Engine::audio_sample_rate()` rather than assuming 44100.
+
+`--audio-latency-ms` (default 80) behaves differently per backend, which is
+worth knowing when tuning:
+
+| | waveOut | WASAPI |
+|---|---|---|
+| What the flag sets | device queue depth, in 20ms blocks | how much is held *ahead* of the device |
+| Why | buffers are ours to size | the engine caps the period it will grant |
+
+So on WASAPI, raising the flag cannot deepen the device buffer, but it still
+adds slack in front of it -- which is the lever to reach for if the smallest
+period turns out too tight to stay glitch-free.
+
+**Remote Desktop:** RDP redirects audio as a compressed stream with its own
+buffering, typically adding 100-250ms plus jitter, all of it downstream of
+anything measurable here. If audio seems far more delayed than the configured
+buffer, or glitches under network load, check whether you are on RDP before
+looking anywhere else -- and raise `--audio-latency-ms` hard (200+) to ride
+out the jitter, since the delay itself cannot be recovered from this side.
+
+### Stream format
+
+Served on `--audio-port`, default `8501`, alongside the screen stream on
+8500. A 12-byte preamble -- `ZXA2`, a big-endian `u32` sample rate, and a
+big-endian `u32` target latency in milliseconds -- followed by
+`[big-endian u32 byte length][mono int16 little-endian]` blocks, the same
+framing the screen stream uses for PNGs. The latency travels with the stream
+so one `--audio-latency-ms` sets both the server's buffering and the depth of
+the client's own jitter buffer, rather than two settings that can disagree.
+
+`cpp-core/build/…/beep.exe` is a diagnostic that drives the whole path and
+writes a WAV you can listen to: `beep tone` for a known square wave, `beep
+rom` to call the ROM's own BEEPER routine, `beep serve` to stand the servers
+up on their own without `main.cpp`.
+
+## Tape
+
+`.tap` and `.tzx` images load in the C++ core. Both formats are detected from
+the file's contents rather than its extension.
+
+```bash
+zx_server --rom roms/48.rom --tape games/manic.tzx
+```
+
+That inserts the tape, resets, types `LOAD ""` for you, and starts it — so the
+machine is already loading by the time a client connects.
+`--no-tape-autostart` inserts it stopped instead, which is what you want for a
+program that loads its own next part.
+
+There is no tape in the repo (games are copyrighted), so
+`scripts/make_test_tape.py` generates one: a tiny autostarting BASIC program
+that turns the border yellow and prints `TAPE LOADED OK`, written to
+`tapes/loading-test.tap` and `.tzx`. Two launch configs point at it —
+**Tape (fast load)** and **Tape (real pulse load)** — which is the quickest way
+to see both paths working.
+
+A third, **Tape (waiting for LOAD)**, takes no tape at all: it boots, types
+`LOAD ""` and stops in the ROM loader, where a real Spectrum sits once you have
+typed the command and not yet pressed Play. Insert whatever you like afterwards
+and press Play:
+
+```jsonc
+load_tape    { "path": "...", "auto_start": false }
+tape_control { "action": "play" }
+```
+
+That always loads at real tape speed even with fast load on, and it is not a
+bug — the trap fires on *arriving* at `LD-BYTES`, and the ROM is already inside
+it by then. Insert with `auto_start` left on (what the VS Code command does) and
+it resets and retypes, so the trap gets its moment.
+
+Either way the machine does not have to be stopped first: the emulator's run
+loop services queued commands at its yields, so a tape dropped into a running
+machine is picked up and the run carries straight on into loading it.
+
+The same thing on the command line is `--wait-for-tape`.
+
+The same thing from the other three directions:
+
+- **launch.json**: `"tape": "${workspaceFolder}/games/manic.tzx"`, alongside
+  `"tapeAutoStart"` and `"tapeFastLoad"`.
+- **VS Code**: *ZX Spectrum: Load Tape…*, which puts a tape into a session that
+  is already running, and the **ZX Spectrum Tape** pane in the debug sidebar —
+  the block list, alongside Call Stack and Breakpoints, with the transport on
+  its title bar. See [the extension's README](vscode-extension/README.md).
+- **MCP**: `load_tape {path}` and `tape_control {action}` — play, stop, rewind,
+  seek, eject, status. Every reply lists the blocks, so `tape_control {}` on
+  its own is how to find out what an image contains. The transport bypasses the
+  emulator's command queue, so Play reaches a game that is already running and
+  asking for its next part; that is the only moment Play is any use.
+
+### How it loads
+
+Two mechanisms, and the fast one falls back to the slow one on its own.
+
+The foundation is **pulse-level playback**: the tape resolves to a one-bit EAR
+level on port `0xFE` bit 6, pulse by pulse, in the machine's own half-clock
+time base. That is what a real cassette does, so it works with any loader at
+all — turbo, custom `.tzx` block timings, whatever the publisher wrote. It is
+also as slow as a real cassette, which for a whole game is minutes. `set_speed
+uncapped` (MCP) or `"uncapped": true` (launch.json) is the way to hurry it up.
+
+On top of that sits a **fast-load trap**. When the CPU reaches the ROM's
+`LD-BYTES` at `0x0556` — and the bytes there really are the stock ROM's, which
+is checked — a standard-speed block is copied straight into memory, the flags
+and registers are set the way the routine would have left them, and the trap
+returns as if from its final `RET`. It costs zero emulated T-states. Anything
+that is *not* a standard-speed block (a turbo block, a pure-tone or pure-data
+block, a tape that has run out) makes the trap decline, and the real ROM
+routine then runs against real pulses. So a `.tzx` with a stock header and a
+turbo body fast-loads the header and pulse-loads the body, which is exactly
+right.
+
+Fast load is on by default; `--no-tape-fast-load`, `"tapeFastLoad": false`, or
+`load_tape {fast_load: false}` turns it off. Two differences when it is on:
+there are no loading stripes in the border, because the trap never runs the ROM
+code that draws them, and no loading screech, because the tape never plays.
+
+### The loading sound
+
+Worth being precise about, because the obvious guess is wrong. The ROM's loader
+never touches the speaker bit at all — `LD_SAMPLE` ends `AND $07 / OR $08 /
+OUT ($FE),A`, which is border bits plus a MIC bit that never changes. The
+stripes are the CPU's doing; the screech is not.
+
+What makes the noise is the EAR input itself: the ULA feeds the tape signal
+into the same audio output as the speaker. So the emulator mixes EAR into the
+beeper (`EAR_LEVEL` in `beeper.h`), sampled from the port reads the loader is
+already making — thousands a second, far finer than the tone being reproduced.
+A pilot pulse is 2168 T-states, so the leader comes out at 3.5e6/4336 ≈ 807 Hz,
+which is what `get_audio` reports while one is playing.
+
+Resetting the machine stops the motor but leaves the tape in the deck at the
+block it had reached — a reset zeroes the frame counter, and with it the clock
+every pulse timestamp is measured against.
 
 ## Testing
 
@@ -520,6 +836,7 @@ zx-spectrum-emulator/
   scripts/
     build_rom_source.py         # builds rom_disassembly/ (see below)
     build_manicminer.py           # builds game_disassembly/manicminer/ (see below)
+    build_aticatac.py             # builds game_disassembly/aticatac/ from a .tap (see below)
   examples/
     hello_rom_call/              # tiny original demo, committed
   tools/
@@ -581,8 +898,11 @@ code in it, same as DAP/MCP.
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
-- Tape loading (`.tap`/`.tzx`/`.pzx`)
-- Beeper audio synthesis (port writes are tracked, not turned into sound)
+- Tape loading — **done** in the C++ core for `.tap`/`.tzx` (see [Tape](#tape));
+  `.pzx` and tape *saving* are still open, as are the `.tzx` sampled-data block
+  types (`0x15` direct recording, `0x18` CSW, `0x19` generalized)
+- Beeper audio synthesis — **done** in the C++ core (see [Audio](#audio));
+  the Python and Rust cores still only track the port writes
 
 ## Rust core (`rust-core/`)
 

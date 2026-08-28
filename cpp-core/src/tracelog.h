@@ -34,8 +34,10 @@
 // reason to show. It breaks the byte-for-byte match on purpose; the viewer
 // reads the header row to discover the columns, so it handles either.
 
+#include <atomic>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -65,6 +67,16 @@ struct TraceOptions {
     uint32_t watch = TRACE_NO_WATCH;
     /// Adds the 48K-specific columns. See the note above.
     bool extra = false;
+    /// Resolves an address to a label, "MOVE_WILLY+3" style, or an empty
+    /// string when nothing is known. Supplied by the server layer, which owns
+    /// the SLD data -- zx_core deliberately never sees rom_source.h, so this
+    /// callback is the whole seam between the two.
+    ///
+    /// When set, the table gains a Symbol column naming where the running
+    /// instruction lives, and the Asm column annotates its 16-bit operands the
+    /// same way. When null, neither happens and the layout stays byte-for-byte
+    /// visualz80remix's.
+    std::function<std::string(uint16_t)> resolve_symbol;
 };
 
 class TraceLog {
@@ -80,9 +92,14 @@ public:
 
     /// True while rows are still being written. Goes false on its own once
     /// the row limit is reached.
-    bool active() const { return out_.is_open(); }
+    ///
+    /// Atomic, like rows(), and for the same reason: a capture is written by
+    /// the emulator thread but watched from another -- the trace panel's row
+    /// counter, and every trace_status caller behind it. Both are read while
+    /// record() is running, so neither can be a plain member.
+    bool active() const { return active_.load(std::memory_order_relaxed); }
 
-    uint64_t rows() const { return rows_; }
+    uint64_t rows() const { return rows_.load(std::memory_order_relaxed); }
     const std::string& path() const { return options_.path; }
     const TraceOptions& options() const { return options_; }
 
@@ -102,12 +119,20 @@ private:
     TraceOptions options_;
     std::ofstream out_;
     std::vector<Column> columns_;
-    uint64_t rows_ = 0;
+    std::atomic<uint64_t> rows_{0};
+    /// Mirrors out_.is_open() so a reader on another thread has something it
+    /// can safely look at -- an ofstream is not that.
+    std::atomic<bool> active_{false};
 
     /// Disassembly of the instruction currently in flight, repeated on every
     /// row belonging to it. Repeated rather than written once per group
     /// because the file's job is to be read raw as well as parsed.
     std::string current_asm_;
+    /// Where the running instruction lives ("MOVE_WILLY+3"), and its address.
+    /// Both follow current_asm_: resolved once per instruction, repeated on
+    /// every row of it.
+    std::string current_symbol_;
+    uint16_t current_instr_addr_ = 0;
     /// Detects interrupt acceptance without needing to see inside the CPU:
     /// the counter ticks in the same half-clock the interrupt is taken.
     uint64_t last_interrupt_count_ = 0;
@@ -119,6 +144,11 @@ private:
     /// T-state number shown in the Cycle/h column, counting from 1 at the
     /// start of the capture.
     uint64_t cycle_ = 1;
+
+    /// Appends "(LABEL+n)" after each 16-bit hex operand in a disassembly.
+    /// Done here rather than by calling rom_source.h's annotate_symbols so
+    /// that zx_core keeps needing nothing but the one callback above.
+    std::string annotate(const std::string& text) const;
 
     void build_columns();
     void write_border(const char* left, const char* mid, const char* right);

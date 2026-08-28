@@ -112,6 +112,29 @@
   .stats { color: var(--ink-dim); font-size: 12px; }
   .stats b { color: var(--ink); font-weight: 600; }
 
+  /* ---- live capture: only ever shown inside the VS Code panel, which is the
+     only place with a running emulator to record from ---- */
+  #recBox { display: flex; align-items: center; gap: 8px; }
+  #recBox label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-dim);
+    cursor: default;
+    font-size: 12px;
+  }
+  #recBox input[type="text"] { width: 5.5em; }
+  #recBox input[type="checkbox"] { width: auto; padding: 0; cursor: pointer; }
+  button:disabled, #recBox input:disabled { opacity: 0.45; cursor: default; }
+  button:disabled:hover { border-color: var(--edge); }
+  /* Recording is the one state worth colouring: it means a file on the other
+     side of the connection is growing by ~85 bytes a half-clock. */
+  #record.recording { background: var(--sel); border-color: var(--sel); color: #fff; }
+  #recStatus { color: var(--ink-dim); font-size: 12px; white-space: nowrap; }
+
   main { flex: 1 1 auto; position: relative; min-height: 0; }
   section.view { position: absolute; inset: 0; display: none; }
   section.view.active { display: flex; flex-direction: column; }
@@ -222,6 +245,17 @@
   <h1>ZX Trace Viewer <span id="fileName">— no trace loaded</span></h1>
   <label class="filebtn" for="file">Open trace…</label>
   <input type="file" id="file" accept=".zxtrace,.txt,.log,text/plain">
+  <div id="recBox" hidden>
+    <button id="record" title="Record the running emulator, then load what was captured">
+      ● Record</button>
+    <label title="Half-T-states to record before the capture closes itself. 139,776 is one frame; 0 means unlimited.">limit
+      <input type="text" id="recLimit" class="mono" value="25000"></label>
+    <label title="Address to sample into the Watch column on every half-clock. Blank for none.">watch
+      <input type="text" id="recWatch" class="mono" placeholder="$4000"></label>
+    <label title="Add the 48K-specific columns: HALT, WAIT, INT, NMI, frame and T-state.">
+      <input type="checkbox" id="recExtra"> 48K</label>
+    <span id="recStatus"></span>
+  </div>
   <div class="tabs">
     <button id="tabTable" aria-pressed="true">Trace Log</button>
     <button id="tabTiming" aria-pressed="false">Timing Diagram</button>
@@ -237,7 +271,7 @@
 <main>
   <div id="empty">
     <div><strong>Drop a trace file here</strong>, or use “Open trace…”.</div>
-    <div>Produce one with <code>zx_server --trace-log boot.zxtrace</code>,
+    <div id="emptyHow">Produce one with <code>zx_server --trace-log boot.zxtrace</code>,
       or the <code>start_trace</code> MCP tool.</div>
   </div>
 
@@ -268,7 +302,7 @@
   // Titles carrying a hex value rather than a level. Anything else that is not
   // metadata (Cycle/h, Frame, TState, Asm) is treated as a bus too, which is
   // what makes a watch column -- titled with its own address -- come out right.
-  var META_TITLES = ["Cycle/h", "Frame", "TState", "Asm"];
+  var META_TITLES = ["Cycle/h", "Frame", "TState", "Asm", "Symbol"];
 
   var ROW_H = 18;
   var BAR = "│"; // the box-drawing vertical the table is built from
@@ -864,25 +898,132 @@
     if (file) { readFile(file); }
   });
 
-  // The VS Code extension can't hand a webview a File, so it reads the trace in
-  // the extension host and posts the text through instead.
+  // ---- live capture --------------------------------------------------------
+  //
+  // Only reachable from the VS Code panel: recording means telling a running
+  // emulator to start writing a file, which a page opened from file:// has no
+  // way to do. The extension host owns the debug session and does the talking
+  // (see extension.js's startLiveTrace) -- this end is two messages out and a
+  // status message back.
+
+  var live = {
+    enabled: false,   // running inside the panel at all
+    available: false, // ...with a zxspectrum debug session to record from
+    recording: false
+  };
+
+  // "$4000", "0x4000" and "4000" all mean the same address, matching what the
+  // Go-to box already accepts. Returns null for blank, or -1 for nonsense.
+  function parseAddress(text) {
+    var trimmed = text.trim().replace(/^[$#]/, "").replace(/^0x/i, "");
+    if (trimmed === "") { return null; }
+    if (!/^[0-9a-fA-F]{1,4}$/.test(trimmed)) { return -1; }
+    return parseInt(trimmed, 16);
+  }
+
+  function recordClicked() {
+    if (!live.available) { return; }
+    if (live.recording) {
+      vscodeApi.postMessage({ type: "stopTrace" });
+      $("recStatus").textContent = "stopping…";
+      return;
+    }
+    var limit = $("recLimit").value.trim();
+    if (limit !== "" && !/^\d+$/.test(limit)) {
+      $("recStatus").textContent = "limit must be a number of half-T-states";
+      return;
+    }
+    var watch = parseAddress($("recWatch").value);
+    if (watch === -1) {
+      $("recStatus").textContent = "watch must be an address like $4000";
+      return;
+    }
+    vscodeApi.postMessage({
+      type: "startTrace",
+      limit: limit === "" ? null : Number(limit),
+      watch: watch,
+      extra: $("recExtra").checked
+    });
+    $("recStatus").textContent = "starting…";
+  }
+
+  // The one place the record controls' appearance is decided, so the button,
+  // the inputs and the status line cannot disagree about what is going on.
+  function paintLive(status, message) {
+    if (!live.enabled) { return; }
+    $("recBox").hidden = false;
+    var button = $("record");
+    button.disabled = !live.available;
+    button.textContent = live.recording ? "■ Stop" : "● Record";
+    button.classList.toggle("recording", live.recording);
+    button.title = live.available
+      ? (live.recording ? "Stop recording and load what was captured"
+                        : "Record the running emulator, then load what was captured")
+      : "Start a ZX Spectrum debug session to record from";
+    // The options describe the capture being started, so they are fixed for as
+    // long as one is running.
+    $("recLimit").disabled = live.recording;
+    $("recWatch").disabled = live.recording;
+    $("recExtra").disabled = live.recording;
+
+    if (message) {
+      $("recStatus").textContent = message;
+    } else if (!live.available) {
+      $("recStatus").textContent = "no debug session";
+    } else if (live.recording) {
+      var rows = status && status.rows ? status.rows : 0;
+      var limit = status && status.limit ? status.limit : 0;
+      $("recStatus").textContent = "recording · " + rows.toLocaleString()
+        + (limit ? " / " + limit.toLocaleString() : "") + " half-T-states";
+    } else if (status) {
+      // A capture that has just ended, whether by the Stop button or by
+      // reaching its limit -- the count is the same either way, and saying it
+      // is how you know the empty ones were empty.
+      $("recStatus").textContent = "captured " + (status.rows || 0).toLocaleString()
+        + " half-T-states";
+    } else {
+      $("recStatus").textContent = "";
+    }
+  }
+
+  // ---- messages from the extension host -------------------------------------
+
+  // The extension can't hand a webview a File, so it reads the trace in the
+  // extension host and posts the text through instead.
   window.addEventListener("message", function (event) {
     var message = event.data;
-    if (message && message.type === "trace") {
+    if (!message) { return; }
+    if (message.type === "trace") {
       load(message.name || "trace", message.text);
+    } else if (message.type === "live") {
+      // Sent when the panel opens and whenever a debug session starts or
+      // ends, so the button follows the session without being clicked first.
+      live.available = !!message.available;
+      if (!live.available) { live.recording = false; }
+      paintLive(null, null);
+    } else if (message.type === "traceStatus") {
+      live.recording = message.state === "recording";
+      paintLive(message.status, message.message || null);
     }
   });
 
   // Inside a VS Code webview the browser file picker cannot reach the
   // workspace, so "Open trace…" is handed to the extension host instead and
   // comes back as a "trace" message like any other load.
+  var vscodeApi = null;
   if (typeof acquireVsCodeApi === "function") {
-    var vscodeApi = acquireVsCodeApi();
+    vscodeApi = acquireVsCodeApi();
     var picker = document.querySelector("label.filebtn");
     picker.removeAttribute("for");
     picker.addEventListener("click", function () {
       vscodeApi.postMessage({ type: "pick" });
     });
+    live.enabled = true;
+    $("record").addEventListener("click", recordClicked);
+    $("emptyHow").textContent =
+      "Press Record above to capture the running emulator, or open a capture made "
+      + "with the start_trace MCP tool or zx_server --trace-log.";
+    paintLive(null, null);
     vscodeApi.postMessage({ type: "ready" });
   }
 })();

@@ -14,6 +14,8 @@
   "activationEvents": [
     "onCommand:zxspectrum.showScreen",
     "onCommand:zxspectrum.showTrace",
+    "onCommand:zxspectrum.loadTape",
+    "onView:zxspectrumTape",
     "onDebug:zxspectrum"
   ],
   "contributes": {
@@ -25,8 +27,123 @@
       {
         "command": "zxspectrum.showTrace",
         "title": "ZX Spectrum: Show Trace"
+      },
+      {
+        "command": "zxspectrum.loadTape",
+        "title": "ZX Spectrum: Load Tape...",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "zxspectrum.tapePlay",
+        "title": "ZX Spectrum: Play Tape",
+        "icon": "$(play)"
+      },
+      {
+        "command": "zxspectrum.tapeStop",
+        "title": "ZX Spectrum: Stop Tape",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "zxspectrum.tapeRewind",
+        "title": "ZX Spectrum: Rewind Tape",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "zxspectrum.tapeEject",
+        "title": "ZX Spectrum: Eject Tape",
+        "icon": "$(close)"
+      },
+      {
+        "command": "zxspectrum.tapeFastLoadOn",
+        "title": "ZX Spectrum: Turn Tape Fast Load On",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "zxspectrum.tapeFastLoadOff",
+        "title": "ZX Spectrum: Turn Tape Fast Load Off",
+        "icon": "$(watch)"
+      },
+      {
+        "command": "zxspectrum.tapeSeek",
+        "title": "Seek Tape To This Block",
+        "icon": "$(target)"
       }
     ],
+    "views": {
+      "debug": [
+        {
+          "id": "zxspectrumTape",
+          "name": "ZX Spectrum Tape",
+          "when": "debugType == 'zxspectrum'"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "zxspectrumTape",
+        "contents": "No tape in the deck.\n[Load tape...](command:zxspectrum.loadTape)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "zxspectrum.tapeSeek",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.tapeFastLoadOn",
+          "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.tapeFastLoadOff",
+          "when": "debugType == 'zxspectrum'"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "zxspectrum.tapeSeek",
+          "when": "view == zxspectrumTape && viewItem == zxspectrumTapeBlock",
+          "group": "inline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "zxspectrum.tapePlay",
+          "when": "view == zxspectrumTape",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.tapeStop",
+          "when": "view == zxspectrumTape",
+          "group": "navigation@2"
+        },
+        {
+          "command": "zxspectrum.tapeRewind",
+          "when": "view == zxspectrumTape",
+          "group": "navigation@3"
+        },
+        {
+          "command": "zxspectrum.tapeFastLoadOff",
+          "when": "view == zxspectrumTape && zxspectrum.tapeFastLoad",
+          "group": "navigation@4"
+        },
+        {
+          "command": "zxspectrum.tapeFastLoadOn",
+          "when": "view == zxspectrumTape && !zxspectrum.tapeFastLoad",
+          "group": "navigation@4"
+        },
+        {
+          "command": "zxspectrum.loadTape",
+          "when": "view == zxspectrumTape",
+          "group": "navigation@5"
+        },
+        {
+          "command": "zxspectrum.tapeEject",
+          "when": "view == zxspectrumTape",
+          "group": "navigation@6"
+        }
+      ]
+    },
     "debuggers": [
       {
         "type": "zxspectrum",
@@ -49,6 +166,25 @@
               "asm": {
                 "type": "string",
                 "description": "Path to the source the sld file was assembled from. Requires sld."
+              },
+              "tape": {
+                "type": "string",
+                "description": "Path to a .tap or .tzx tape image to insert at launch."
+              },
+              "tapeAutoStart": {
+                "type": "boolean",
+                "default": true,
+                "description": "Reset, type LOAD \"\" and start the tape automatically."
+              },
+              "waitForTape": {
+                "type": "boolean",
+                "default": false,
+                "description": "Boot and type LOAD \"\" with no tape, leaving the machine in the ROM loader ready for one to be inserted later. Ignored when a tape is given and auto-started, which already types it."
+              },
+              "tapeFastLoad": {
+                "type": "boolean",
+                "default": true,
+                "description": "Satisfy standard-speed tape blocks instantly by trapping the ROM's LD-BYTES routine. Turbo and custom loaders always fall back to real pulse playback."
               }
             }
           }

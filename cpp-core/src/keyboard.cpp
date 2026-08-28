@@ -75,8 +75,10 @@ uint8_t Keyboard::read_port(uint8_t row_select) const {
             bits &= rows_[r];
         }
     }
-    // Bits 5-7: bit 6 is the EAR input, left high (no tape). The rest float
-    // high on an unloaded bus.
+    // Bits 5-7 all float high on an unloaded bus. Bit 6 is the EAR input, and
+    // is pulled down from here by a playing tape -- see the read branch of
+    // Spectrum48K::service_bus(), which owns that line because it belongs to
+    // the tape rather than to any key.
     return uint8_t(bits | 0xE0);
 }
 

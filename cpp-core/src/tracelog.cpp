@@ -4,6 +4,7 @@
 #include "spectrum.h"
 #include "ula.h"
 
+#include <cctype>
 #include <cstdio>
 
 namespace zx {
@@ -28,6 +29,12 @@ const char* const BOX_BR = "┘";
 /// disassembler can emit is a DD CB form like `RES 0,(IX+0x00),B` at 17. 20
 /// leaves headroom without making the table unwieldy.
 constexpr int ASM_WIDTH = 20;
+
+/// Asm width once operands carry a "(LABEL+n)" suffix, and the width of the
+/// Symbol column itself. Both are generous: a label is whatever the source
+/// called it, and a truncated symbol is worse than a wide column.
+constexpr int ASM_WIDTH_ANNOTATED = 40;
+constexpr int SYMBOL_WIDTH = 22;
 
 std::string hex16(uint16_t v) {
     char buf[8];
@@ -99,7 +106,53 @@ void TraceLog::build_columns() {
     // record of where they came from.
     const bool watching = options_.watch != TRACE_NO_WATCH;
     columns_.push_back({watching ? hex16(uint16_t(options_.watch)) : "Watch", 5, false});
-    columns_.push_back({"Asm", ASM_WIDTH, false});
+    // Where the running instruction LIVES, which is the column that lets a
+    // trace be read against a source listing rather than a memory map. Only
+    // present when there is something to resolve against.
+    if (options_.resolve_symbol) {
+        columns_.push_back({"Symbol", SYMBOL_WIDTH, false});
+        columns_.push_back({"Asm", ASM_WIDTH_ANNOTATED, false});
+    } else {
+        columns_.push_back({"Asm", ASM_WIDTH, false});
+    }
+}
+
+std::string TraceLog::annotate(const std::string& text) const {
+    if (!options_.resolve_symbol) {
+        return text;
+    }
+    std::string out;
+    for (size_t i = 0; i < text.size(); i++) {
+        // Only 4-digit forms: an 8-bit immediate, an I/O port or an RST
+        // vector is not an address, and annotating those would be noise.
+        const bool is_hex_prefix = text[i] == '0' && i + 5 < text.size()
+                                   && (text[i + 1] == 'x' || text[i + 1] == 'X');
+        if (!is_hex_prefix) {
+            out += text[i];
+            continue;
+        }
+        unsigned value = 0;
+        size_t digits = 0;
+        while (digits < 4 && std::isxdigit(uint8_t(text[i + 2 + digits])) != 0) {
+            const char c = text[i + 2 + digits];
+            value = value * 16
+                    + unsigned(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+            digits++;
+        }
+        const bool five_digits = digits == 4 && i + 6 < text.size()
+                                 && std::isxdigit(uint8_t(text[i + 6])) != 0;
+        if (digits != 4 || five_digits) {
+            out += text[i];
+            continue;
+        }
+        out += text.substr(i, 6);
+        i += 5;
+        const std::string symbol = options_.resolve_symbol(uint16_t(value));
+        if (!symbol.empty()) {
+            out += " (" + symbol + ")";
+        }
+    }
+    return out;
 }
 
 void TraceLog::write_border(const char* left, const char* mid, const char* right) {
@@ -136,9 +189,11 @@ void TraceLog::write_row(const std::vector<std::string>& cells) {
 std::string TraceLog::open(const TraceOptions& options) {
     close();
     options_ = options;
-    rows_ = 0;
+    rows_.store(0, std::memory_order_relaxed);
     cycle_ = 1;
     current_asm_.clear();
+    current_symbol_.clear();
+    current_instr_addr_ = 0;
     seen_first_row_ = false;
     last_was_h_ = false;
     last_interrupt_count_ = 0;
@@ -153,6 +208,7 @@ std::string TraceLog::open(const TraceOptions& options) {
         return "couldn't open trace file " + options_.path;
     }
 
+    active_.store(true, std::memory_order_relaxed);
     build_columns();
     write_border(BOX_TL, BOX_TM, BOX_TR);
     std::vector<std::string> titles;
@@ -170,6 +226,7 @@ void TraceLog::close() {
     }
     write_border(BOX_BL, BOX_BM, BOX_BR);
     out_.close();
+    active_.store(false, std::memory_order_relaxed);
 }
 
 void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
@@ -187,13 +244,20 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
     if (interrupt_taken) {
         last_interrupt_count_ = machine.cpu.interrupt_count;
         current_asm_ = "INT ACK (IM" + decimal(machine.cpu.regs.im) + ")";
+        // The handler's address is not on the bus yet -- the ack cycle does not
+        // drive one -- so the Symbol column has nothing to name here.
+        current_symbol_.clear();
     } else if (machine.cpu.is_instruction_boundary()) {
         // This half-clock IS the fetch's T1H -- begin_fetch() ran during it,
         // putting the opcode's address on the bus. The ADDRESS BUS is the
         // right source for it, not PC: PC has already been incremented past
         // it, and while halted PC is parked somewhere else again.
         ReadFn read = [&machine](uint16_t a) { return machine.memory.read(a); };
-        current_asm_ = disassemble_one(read, get_addr(pins)).text;
+        current_instr_addr_ = get_addr(pins);
+        current_asm_ = annotate(disassemble_one(read, current_instr_addr_).text);
+        current_symbol_ = options_.resolve_symbol
+                              ? options_.resolve_symbol(current_instr_addr_)
+                              : std::string();
     } else if (!seen_first_row_) {
         // A capture almost always starts part-way through an instruction, and
         // that instruction's first fetch is already in the past. Name it from
@@ -201,7 +265,10 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
         const Registers regs = machine.registers();
         const uint16_t addr = machine.cpu.halted ? uint16_t(regs.pc - 1) : regs.pc;
         ReadFn read = [&machine](uint16_t a) { return machine.memory.read(a); };
-        current_asm_ = disassemble_one(read, addr).text;
+        current_instr_addr_ = addr;
+        current_asm_ = annotate(disassemble_one(read, addr).text);
+        current_symbol_ = options_.resolve_symbol ? options_.resolve_symbol(addr)
+                                                  : std::string();
     }
 
     // Which half of the T-state this is. Anchored to the fetch rather than
@@ -255,11 +322,14 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
     cells.push_back(options_.watch == TRACE_NO_WATCH
                         ? std::string("??")
                         : hex8(machine.memory.read(uint16_t(options_.watch))));
+    if (options_.resolve_symbol) {
+        cells.push_back(current_symbol_);
+    }
     cells.push_back(current_asm_);
     write_row(cells);
 
-    rows_++;
-    if (options_.limit != 0 && rows_ >= options_.limit) {
+    const uint64_t written = rows_.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (options_.limit != 0 && written >= options_.limit) {
         close();
     }
 }

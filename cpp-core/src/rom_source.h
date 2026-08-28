@@ -20,6 +20,7 @@
 // address<->line information of their own.
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -126,6 +127,15 @@ private:
     mutable std::mutex mutex_;
     RomSourcePtr debug_info_;
 };
+
+/// Bridges this symbol layer to the trace writer, which lives in zx_core and
+/// so cannot see this header -- TraceOptions takes exactly this callback and
+/// nothing else from here. Returns "MOVE_WILLY+3", or an empty string when the
+/// address resolves to nothing.
+///
+/// Captures `sources` by reference: it outlives every trace (both are owned by
+/// main), and copying it is not possible anyway -- it holds a mutex.
+std::function<std::string(uint16_t)> symbol_resolver(Sources& sources);
 
 /// Appends a resolved symbol after every 4-hex-digit address in `text`:
 /// "CALL 0x8000" -> "CALL 0x8000 (START)", "LD HL,(0x5C0E)" ->

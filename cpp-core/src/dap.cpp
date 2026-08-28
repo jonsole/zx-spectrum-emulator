@@ -108,12 +108,22 @@ json envelope_event(Connection& conn, const std::string& event, const json& body
 
 json envelope_response(Connection& conn, int64_t request_seq, const std::string& command,
                        bool success, const json& body) {
-    return json{{"seq", conn.seq.fetch_add(1)},
-                {"type", "response"},
-                {"request_seq", request_seq},
-                {"success", success},
-                {"command", command},
-                {"body", body}};
+    json response{{"seq", conn.seq.fetch_add(1)},
+                  {"type", "response"},
+                  {"request_seq", request_seq},
+                  {"success", success},
+                  {"command", command},
+                  {"body", body}};
+    if (!success && body.is_object() && body.contains("message")
+        && body["message"].is_string()) {
+        // DAP carries the human-readable reason for a failure in the
+        // response's TOP-LEVEL `message`, not in the body. That is where a
+        // client reads it from -- VS Code builds the Error that customRequest
+        // rejects with out of this field -- so a reason left only in the body
+        // reaches the user as "undefined" and the real problem is lost.
+        response["message"] = body["message"];
+    }
+    return response;
 }
 
 void broadcast_event(const std::string& event, const json& body) {
@@ -259,6 +269,53 @@ int64_t arg_int(const json& arguments, const char* name, int64_t fallback) {
 std::string arg_str(const json& arguments, const char* name) {
     const json& v = arg(arguments, name);
     return v.is_string() ? v.get<std::string>() : std::string();
+}
+
+// ---- trace ------------------------------------------------------------------
+
+/// The one shape all three trace requests answer with, so the viewer only has
+/// to learn it once. Field for field what the equivalent MCP tools report.
+json trace_body(const TraceStatus& status) {
+    json out{{"active", status.active},
+             {"path", status.path},
+             {"rows", status.rows},
+             {"limit", status.limit},
+             {"extra", status.extra}};
+    if (status.watching) {
+        out["watch"] = status.watch;
+    }
+    return out;
+}
+
+/// The block list, in the shape the tape pane's tree reads. Sent with every
+/// tape response rather than on request: it is a few hundred bytes for a whole
+/// game, and a viewer that polls the status would otherwise have to track for
+/// itself when the tape underneath it had been changed.
+json tape_block_list(const std::vector<TapeBlockInfo>& blocks) {
+    json out = json::array();
+    for (size_t i = 0; i < blocks.size(); i++) {
+        const TapeBlockInfo& b = blocks[i];
+        out.push_back(json{{"index", i},
+                           {"id", b.id},
+                           {"kind", b.kind},
+                           {"name", b.name},
+                           {"dataBytes", b.data_bytes},
+                           {"durationMs", b.duration_ms},
+                           {"standardSpeed", b.standard_speed},
+                           {"stopTape", b.stop_tape},
+                           {"pauseMs", b.pause_ms}});
+    }
+    return out;
+}
+
+json tape_body(const TapeStatus& status, const std::vector<TapeBlockInfo>& blocks) {
+    return json{{"inserted", status.inserted},   {"playing", status.playing},
+                {"atEnd", status.at_end},        {"fastLoad", status.fast_load},
+                {"name", status.name},           {"description", status.description},
+                {"block", status.block},         {"blocks", status.blocks},
+                {"positionMs", status.position_ms}, {"totalMs", status.total_ms},
+                {"warnings", status.warnings},
+                {"blockList", tape_block_list(blocks)}};
 }
 
 // ---- variables -------------------------------------------------------------
@@ -569,6 +626,43 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
             engine.reset();
         }
 
+        // After the snapshot branch, and after its reset: auto-start does a
+        // reset of its own, and it has to be the LAST one, since a reset
+        // zeroes global_hc() and would leave the tape's pulse timestamps in
+        // the future.
+        const std::string tape_path = arg_str(arguments, "tape");
+        if (!tape_path.empty()) {
+            std::vector<uint8_t> data;
+            if (!read_file(tape_path, data)) {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", "couldn't read tape " + tape_path}});
+            }
+            const json& fast = arg(arguments, "tapeFastLoad");
+            engine.set_tape_fast_load(!fast.is_boolean() || fast.get<bool>());
+            const json& start = arg(arguments, "tapeAutoStart");
+            const std::string load_error = engine.load_tape(
+                std::move(data), tape_path, !start.is_boolean() || start.get<bool>());
+            if (!load_error.empty()) {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", load_error}});
+            }
+        }
+
+        // Leaves the machine sitting in the ROM loader with no tape, ready for
+        // one to be inserted later. Skipped when a tape was inserted AND
+        // auto-started, since that has already typed the command -- doing it
+        // twice would reset the machine out from under a tape mid-load.
+        const json& waiting = arg(arguments, "waitForTape");
+        if (waiting.is_boolean() && waiting.get<bool>()
+            && !(!tape_path.empty() && (!arg(arguments, "tapeAutoStart").is_boolean()
+                                        || arg(arguments, "tapeAutoStart").get<bool>()))) {
+            const std::string type_error = engine.wait_for_tape();
+            if (!type_error.empty()) {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", type_error}});
+            }
+        }
+
         // Source-level debug info for the loaded program, acted on only when
         // BOTH are present. Deliberately not auto-cleared by a later launch
         // that omits them: a fresh load_debug_info, or another launch that
@@ -829,6 +923,116 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         const std::string key = arg_str(arguments, "key");
         engine.key_up(key);
         body = json{{"key", key}};
+
+    } else if (command == "startTrace") {
+        // Not standard DAP either -- the trace viewer's Record button, so a
+        // capture can be taken from the panel that displays it rather than
+        // only from an MCP client. Trace control bypasses the command queue
+        // (see engine.h), so this lands while a game is running, which is the
+        // only time a live capture is interesting at all.
+        TraceOptions options;
+        options.path = arg_str(arguments, "path");
+        if (options.path.empty()) {
+            options.path = "trace.zxtrace";
+        }
+        const int64_t limit = arg_int(arguments, "limit", int64_t(TRACE_DEFAULT_LIMIT));
+        if (limit < 0) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", "'limit' must not be negative"}});
+        }
+        options.limit = uint64_t(limit);
+        const json& watch = arg(arguments, "watch");
+        if (watch.is_number_integer()) {
+            const int64_t addr = watch.get<int64_t>();
+            if (addr < 0 || addr > 0xFFFF) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", "'watch' must be a 16-bit address (0..65535)"}});
+            }
+            options.watch = uint32_t(addr);
+        }
+        const json& extra = arg(arguments, "extra");
+        options.extra = extra.is_boolean() && extra.get<bool>();
+        // On unless asked otherwise, as the MCP tool has it: a capture is far
+        // easier to read against names than against bare addresses.
+        const json& symbols = arg(arguments, "symbols");
+        if (!symbols.is_boolean() || symbols.get<bool>()) {
+            options.resolve_symbol = symbol_resolver(sources);
+        }
+
+        const std::string error = engine.start_trace(options);
+        if (!error.empty()) {
+            return envelope_response(conn, request_seq, command, false, json{{"message", error}});
+        }
+        body = trace_body(engine.trace_status());
+
+    } else if (command == "stopTrace") {
+        body = trace_body(engine.stop_trace());
+
+    } else if (command == "traceStatus") {
+        // Cheap and queue-free by design: the viewer polls this while a
+        // capture runs, to show the row count climbing and to notice the
+        // moment a capture closes itself at its limit.
+        body = trace_body(engine.trace_status());
+
+    } else if (command == "loadTape") {
+        // Not standard DAP: the "ZX Spectrum: Load Tape" command, so a tape
+        // can be put into a session that is already running rather than only
+        // at launch.
+        const std::string path = arg_str(arguments, "path");
+        std::vector<uint8_t> data;
+        if (path.empty() || !read_file(path, data)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", "couldn't read tape " + path}});
+        }
+        const json& fast = arg(arguments, "fastLoad");
+        engine.set_tape_fast_load(!fast.is_boolean() || fast.get<bool>());
+        const json& start = arg(arguments, "autoStart");
+        // Serviced at the run loop's next yield when a run is in flight, so a
+        // tape can be dropped into a running machine and the run carries
+        // straight on into loading it -- no stop, no resume.
+        const std::string load_error = engine.load_tape(
+            std::move(data), path, !start.is_boolean() || start.get<bool>());
+        if (!load_error.empty()) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", load_error}});
+        }
+        body = tape_body(engine.tape_status(), engine.tape_blocks());
+
+    } else if (command == "tapeControl") {
+        // Queue-free, like the trace requests: Play has to reach a game that
+        // is already running and waiting for its next tape part.
+        // Applied before the action, so one request can turn fast load off
+        // and start the tape -- which is what the pane's toggle does when the
+        // tape is already running.
+        const json& fast = arg(arguments, "fastLoad");
+        if (fast.is_boolean()) {
+            engine.set_tape_fast_load(fast.get<bool>());
+        }
+        const std::string what = arg_str(arguments, "action");
+        if (what == "play") {
+            engine.tape_play();
+        } else if (what == "stop") {
+            engine.tape_stop();
+        } else if (what == "rewind") {
+            engine.tape_rewind();
+        } else if (what == "eject") {
+            engine.tape_eject();
+        } else if (what == "seek") {
+            const json& block = arg(arguments, "block");
+            if (!block.is_number_unsigned()) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", "'seek' needs a 'block' index"}});
+            }
+            engine.tape_seek(block.get<size_t>());
+        } else if (!what.empty() && what != "status") {
+            return envelope_response(
+                conn, request_seq, command, false,
+                json{{"message",
+                      "'action' must be play, stop, rewind, seek, eject or status"}});
+        }
+        body = tape_body(engine.tape_status(), engine.tape_blocks());
 
     } else {
         success = false;

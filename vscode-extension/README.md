@@ -9,12 +9,51 @@ Two things, in one small extension:
    fed by the emulator's screen-stream port (`--screen-port`, default `8500`) -- this is real
    extension code (`extension.js`), the first the project needed, since a webview panel can't be
    created any other way.
-3. **A trace viewer.** The "ZX Spectrum: Show Trace" command opens a `.zxtrace` capture (see
-   "Cycle-by-cycle bus tracing" in the root README) as a banded table and a timing diagram. The
-   page itself is `tools/trace_viewer.html` in the repo, hosted in a webview rather than copied
-   here -- the same file opens standalone in a browser. Unlike the screen panel there is no live
-   connection: the extension host reads the file and posts its text in, and re-posts it whenever
-   the capture is rewritten, so recapturing updates the panel in place.
+3. **A trace viewer and recorder.** The "ZX Spectrum: Show Trace" command opens a `.zxtrace`
+   capture (see "Cycle-by-cycle bus tracing" in the root README) as a banded table and a timing
+   diagram. The page itself is `tools/trace_viewer.html` in the repo, hosted in a webview rather
+   than copied here -- the same file opens standalone in a browser. The extension host reads the
+   file and posts its text in, and re-posts it whenever the capture is rewritten, so recapturing
+   updates the panel in place. Its **Record** button goes the other way, driving the debug
+   session's own emulator through `startTrace`/`stopTrace`/`traceStatus` custom requests: those
+   bypass the emulator's command queue, so a capture can be started and stopped while a game is
+   running, and the finished file loads into the panel by itself.
+4. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
+   what is on the inserted tape block by block. See "Tape pane" below.
+
+## Load Tape
+
+**"ZX Spectrum: Load Tape…"** puts a `.tap` or `.tzx` into a session that is
+already running, over a `loadTape` custom request — the same channel the trace
+panel's Record button uses. It resets, types `LOAD ""`, starts the tape and
+opens the screen panel, so the load is visible as it happens.
+
+A tape that is always the same is better named in `launch.json` (`tape`, plus
+`tapeAutoStart` and `tapeFastLoad`); this command is for reaching for a
+different one mid-session.
+
+## Tape pane
+
+**ZX Spectrum Tape** appears in the debug sidebar while a `zxspectrum` session
+is running, below Call Stack and Breakpoints. It lists the tape a block at a
+time — the headers with their filenames decoded, the data blocks that follow
+them, and the tone and pause blocks a `.tzx` can carry — with the block that is
+playing marked, the ones already loaded dimmed, and a clock icon on any block
+whose timings are non-standard, which is the answer to "why is this one loading
+at real speed".
+
+Expand a row for its `.tzx` block ID, its pause and whether fast load will take
+it. Hovering a row gives a **seek** button that positions the tape at that block
+with the motor stopped, so *Play* starts the load from there — which is how to
+replay one part of a multi-load tape without rewinding through everything in
+front of it.
+
+The title bar carries Play, Stop, Rewind, the fast-load toggle, Load tape and
+Eject. All of it goes over the `tapeControl` custom request, which bypasses the
+emulator's command queue, so every button works mid-load and mid-game.
+
+The pane polls for its position, and only while it is actually visible —
+collapse the section and it stops asking.
 
 ## Install
 
@@ -45,5 +84,8 @@ edits show up without re-copying) after changing anything here, then reload agai
 - "Show Trace" looks for `trace_viewer.html` beside `extension.js` first, then at
   `../tools/trace_viewer.html` (the symlink-install case), then in `tools/` of any open workspace
   folder. If none of those exist it says so rather than opening an empty panel.
+- Recording writes `live.zxtrace` into the first workspace folder, one fixed name that each
+  capture supersedes. Record is disabled, and says so, when there is no `zxspectrum` debug
+  session to record from.
 - If the image doesn't appear, check the webview's own console: **"Developer: Open Webview Developer
   Tools"** while the panel is focused.
