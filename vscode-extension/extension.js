@@ -51,7 +51,8 @@ let recvBuffer = Buffer.alloc(0);
 let tapeProvider;   // the block list shown in the debug sidebar
 let tapeView;
 let tapePoll;       // ticks while that pane is visible
-let tapeFastLoadContext; // last value pushed to the when-clause context key
+let tapeFastLoadContext; // last values pushed to the when-clause context keys
+let tapePlayingContext;
 
 let audioSocket;
 let audioReconnectTimer;
@@ -422,9 +423,11 @@ function makeBlockItem(block, status) {
 /// would play next, which is the one playing when the motor is running.
 function blockIcon(block, status) {
   if (block.index === status.block && !status.atEnd) {
+    // Playing and paused share one colour deliberately: both mean "this is
+    // where the tape is", and only the glyph says which of the two it is.
     return new vscode.ThemeIcon(
       status.playing ? 'play' : 'debug-pause',
-      new vscode.ThemeColor('charts.green')
+      new vscode.ThemeColor('charts.blue')
     );
   }
   if (block.index < status.block) {
@@ -497,6 +500,14 @@ function refreshTape(status) {
     // Drives which of the two fast-load buttons the title bar shows.
     tapeFastLoadContext = fastLoad;
     vscode.commands.executeCommand('setContext', 'zxspectrum.tapeFastLoad', fastLoad);
+  }
+  const playing = status ? status.playing === true : false;
+  if (tapePlayingContext !== playing) {
+    // Play and Stop share one slot in the title bar and swap according to
+    // this, the way the debug toolbar's Continue and Pause do -- a transport
+    // has one button there, not two, and which one it is IS the state.
+    tapePlayingContext = playing;
+    vscode.commands.executeCommand('setContext', 'zxspectrum.tapePlaying', playing);
   }
 }
 

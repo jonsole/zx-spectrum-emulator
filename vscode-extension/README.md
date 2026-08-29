@@ -50,9 +50,11 @@ with the motor stopped, so *Play* starts the load from there — which is how to
 replay one part of a multi-load tape without rewinding through everything in
 front of it.
 
-The title bar carries Play, Stop, Rewind, the fast-load toggle, Load tape and
-Eject. All of it goes over the `tapeControl` custom request, which bypasses the
-emulator's command queue, so every button works mid-load and mid-game.
+The title bar carries a play/pause button that swaps with the state of the
+motor — the way the debug toolbar's Continue and Pause share one slot — then
+Rewind, the fast-load toggle, Load tape and Eject. All of it goes over the
+`tapeControl` custom request, which bypasses the emulator's command queue, so
+every button works mid-load and mid-game.
 
 The pane polls for its position, and only while it is actually visible —
 collapse the section and it stops asking.

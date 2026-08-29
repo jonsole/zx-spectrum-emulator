@@ -36,7 +36,7 @@
       {
         "command": "zxspectrum.tapePlay",
         "title": "ZX Spectrum: Play Tape",
-        "icon": "$(play)"
+        "icon": "$(debug-continue)"
       },
       {
         "command": "zxspectrum.tapeStop",
@@ -109,13 +109,13 @@
       "view/title": [
         {
           "command": "zxspectrum.tapePlay",
-          "when": "view == zxspectrumTape",
+          "when": "view == zxspectrumTape && !zxspectrum.tapePlaying",
           "group": "navigation@1"
         },
         {
           "command": "zxspectrum.tapeStop",
-          "when": "view == zxspectrumTape",
-          "group": "navigation@2"
+          "when": "view == zxspectrumTape && zxspectrum.tapePlaying",
+          "group": "navigation@1"
         },
         {
           "command": "zxspectrum.tapeRewind",
