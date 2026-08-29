@@ -10,7 +10,7 @@ Two things, in one small extension:
    extension code (`extension.js`), the first the project needed, since a webview panel can't be
    created any other way.
 3. **A trace viewer and recorder.** The "ZX Spectrum: Show Trace" command opens a `.zxtrace`
-   capture (see "Cycle-by-cycle bus tracing" in the root README) as a banded table and a timing
+   capture (see [docs/tracing.md](../docs/tracing.md)) as a banded table and a timing
    diagram. The page itself is `tools/trace_viewer.html` in the repo, hosted in a webview rather
    than copied here -- the same file opens standalone in a browser. The extension host reads the
    file and posts its text in, and re-posts it whenever the capture is rewritten, so recapturing

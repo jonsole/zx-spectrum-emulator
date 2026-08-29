@@ -253,6 +253,12 @@ slightly out of phase. Native device or panel — one or the other, never both.
 
 ## Step 8 — Connect an MCP client
 
+> **Prerequisite: `zx_server.exe` must already be running.** The MCP endpoint
+> is not a separate program — it is served by the emulator process itself, so
+> until step 6 (or a manual `zx_server.exe` run) has started that process,
+> there is nothing listening on port 8000 and no MCP tool can work. Nothing in
+> the client launches it for you.
+
 The same running server exposes the machine over MCP, so an agent can inspect
 and drive the *same* emulator VS Code is stepping. Transport is **streamable
 HTTP** at `http://127.0.0.1:8000/mcp` (not SSE).
@@ -264,10 +270,17 @@ server automatically — approve it once. To register it manually:
 claude mcp add zx-spectrum --transport http --url http://127.0.0.1:8000/mcp
 ```
 
-The server must already be running (step 6 starts it); `.mcp.json` only says
-where to look. The server deliberately outlives the debug session — it is not
-started with `--exit-on-disconnect` — so stopping the debugger leaves MCP
-clients connected.
+Registering is not starting: `.mcp.json` and `claude mcp add` only record where
+to look. With the emulator down, the client lists `zx-spectrum` as failed and
+tool calls fail to connect to `127.0.0.1:8000` instead of returning emulator
+errors — start the server, then reconnect the client (in Claude Code, `/mcp`,
+or restart it).
+
+The dependency is one-way, though: the server deliberately outlives the debug
+session — it is not started with `--exit-on-disconnect` — so stopping the
+debugger leaves MCP clients connected and working. What does drop them is the
+server process ending, including the `stop-stale-server` task killing it before
+a rebuild.
 
 **Check:** with a session running, a raw probe answers:
 
@@ -291,6 +304,8 @@ equivalent check is `get_screen` returning a PNG of the boot screen.
 | `Configured debug type 'zxspectrum' is not supported` | Extension not installed, or the folder name does not match `publisher.name-version` | Redo step 4, then Developer: Reload Window |
 | Launch hangs on the preLaunchTask | The task waits for `DAP server listening`; the server never got there | Read the dedicated terminal — usually a build failure or a port already bound |
 | `bind: address already in use` on 4711/8000/8500 | An old server is still up | Stop it (see above), or run yours on spare ports |
+| MCP client shows `zx-spectrum` failed/disconnected, or tools error with connection refused on 127.0.0.1:8000 | `zx_server.exe` is not running — the MCP endpoint lives inside it | Start the server (step 6, or run it by hand), then reconnect the client |
+| MCP tools worked, then all stopped at once | The server exited — often the rebuild's `stop-stale-server` task killed it | Relaunch the server and reconnect; DAP disconnecting alone does *not* do this |
 | Screen panel stays black | Server started without a ROM, or `--screen-port` differs from the extension's hardcoded 8500 | Check `roms/48.rom`; keep the screen port at 8500 — both sides are hardcoded (`SCREEN_HOST`/`SCREEN_PORT` in `extension.js`) |
 | Screen panel shows nothing and no error | Webview-side failure | Focus the panel, run **Developer: Open Webview Developer Tools**, read its console |
 | Machine runs but never reaches BASIC | Wrong or truncated ROM | Re-verify size 16384 and first byte `F3` |
