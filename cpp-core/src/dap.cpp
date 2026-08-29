@@ -271,18 +271,62 @@ std::string arg_str(const json& arguments, const char* name) {
     return v.is_string() ? v.get<std::string>() : std::string();
 }
 
+/// An OPTIONAL address argument, as an integer or as a symbol expression
+/// ("KEY_INT+9", "0x0038", "0038"). `present` tells an omitted argument from a
+/// real 0. Unlike as_addr above this resolves names, so it needs the symbol
+/// tables -- which is why the trace requests take it and the DAP-standard ones
+/// (whose addresses come from VS Code, already numeric) do not.
+bool arg_opt_address(const json& arguments, const char* name, const Sources& sources,
+                     bool& present, uint16_t& out, std::string& error) {
+    const json& v = arg(arguments, name);
+    present = false;
+    if (v.is_null()) {
+        return true;
+    }
+    if (v.is_number_integer()) {
+        const int64_t n = v.get<int64_t>();
+        if (n < 0 || n > 0xFFFF) {
+            error = std::string("'") + name + "' must be a 16-bit address (0..65535)";
+            return false;
+        }
+        out = uint16_t(n);
+        present = true;
+        return true;
+    }
+    if (!v.is_string()) {
+        error = std::string("'") + name
+                + "' must be a 16-bit address, or a symbol expression like \"KEY_INT+9\"";
+        return false;
+    }
+    if (!sources.parse_address(v.get<std::string>(), out, error)) {
+        error = std::string("'") + name + "': " + error;
+        return false;
+    }
+    present = true;
+    return true;
+}
+
 // ---- trace ------------------------------------------------------------------
 
 /// The one shape all three trace requests answer with, so the viewer only has
 /// to learn it once. Field for field what the equivalent MCP tools report.
 json trace_body(const TraceStatus& status) {
     json out{{"active", status.active},
+             {"waiting", status.waiting},
              {"path", status.path},
              {"rows", status.rows},
              {"limit", status.limit},
              {"extra", status.extra}};
     if (status.watching) {
         out["watch"] = status.watch;
+    }
+    // Only when gated, so an ungated capture answers in the shape the viewer
+    // has always read.
+    if (status.has_start_pc) {
+        out["startPc"] = status.start_pc;
+    }
+    if (status.has_stop_pc) {
+        out["stopPc"] = status.stop_pc;
     }
     return out;
 }
@@ -941,15 +985,27 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                      json{{"message", "'limit' must not be negative"}});
         }
         options.limit = uint64_t(limit);
-        const json& watch = arg(arguments, "watch");
-        if (watch.is_number_integer()) {
-            const int64_t addr = watch.get<int64_t>();
-            if (addr < 0 || addr > 0xFFFF) {
-                return envelope_response(
-                    conn, request_seq, command, false,
-                    json{{"message", "'watch' must be a 16-bit address (0..65535)"}});
-            }
+        // Both take a symbol expression as readily as a number, so the panel
+        // can pass whatever was typed into its own fields straight through.
+        uint16_t addr = 0;
+        bool present = false;
+        std::string addr_error;
+        if (!arg_opt_address(arguments, "watch", sources, present, addr, addr_error)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", addr_error}});
+        }
+        if (present) {
             options.watch = uint32_t(addr);
+        }
+        // Where to begin: the capture opens now and waits for execution to
+        // reach this address. Paired with stopTrace's own `pc`, that is how a
+        // window of code is captured rather than a window of time.
+        if (!arg_opt_address(arguments, "pc", sources, present, addr, addr_error)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", addr_error}});
+        }
+        if (present) {
+            options.start_pc = uint32_t(addr);
         }
         const json& extra = arg(arguments, "extra");
         options.extra = extra.is_boolean() && extra.get<bool>();
@@ -967,7 +1023,16 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         body = trace_body(engine.trace_status());
 
     } else if (command == "stopTrace") {
-        body = trace_body(engine.stop_trace());
+        // With a `pc` the capture is not closed here at all: it is told where
+        // to close itself, and keeps recording until execution arrives.
+        uint16_t pc = 0;
+        bool present = false;
+        std::string addr_error;
+        if (!arg_opt_address(arguments, "pc", sources, present, pc, addr_error)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", addr_error}});
+        }
+        body = present ? trace_body(engine.stop_trace(pc)) : trace_body(engine.stop_trace());
 
     } else if (command == "traceStatus") {
         // Cheap and queue-free by design: the viewer polls this while a

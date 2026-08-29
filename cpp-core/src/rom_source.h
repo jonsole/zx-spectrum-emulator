@@ -118,6 +118,36 @@ public:
     /// named routine, not merely near one.
     bool label_at(uint16_t addr, std::string& name) const;
 
+    /// A named symbol's address, searching the loaded program's own symbols
+    /// before the ROM's. Exact match first, then case-insensitively -- a
+    /// caller typing `key_scan` for `KEY_SCAN` has not made an interesting
+    /// mistake, and no source here defines two labels differing only in case.
+    bool symbol_value(const std::string& name, uint16_t& addr) const;
+
+    /// An address written the way a person says one, rather than as a number:
+    ///
+    ///     KEY_INT          the label's own address
+    ///     KEY_INT+9        9 bytes into it
+    ///     MASK_INT-2       ...and backwards, wrapping at 64K
+    ///     0x0038  $0038  0038      hex, however you like to write it
+    ///
+    /// The two radix rules are the two the tools already PRINT, so anything
+    /// this codebase shows can be pasted straight back in: a bare address is
+    /// HEX (the trace's AB column, `--trace-watch`, the disassembly), and an
+    /// offset after a symbol is DECIMAL (the trace's Symbol column, which
+    /// writes "KEY_INT+9"). Write an offset as 0x.. or $.. for hex.
+    ///
+    /// A token is looked up as a symbol before being read as a number, so a
+    /// label that happens to be spelled in hex digits (BED, FACE) still wins;
+    /// write 0xBED for the number. Terms can be chained (A+8-2), which is
+    /// mostly a side effect of the parser being a loop, but SYM_B-SYM_A does
+    /// give the distance between two labels.
+    ///
+    /// False and fills `error` with something worth showing a user: an
+    /// unknown symbol, a malformed number, or nothing loaded to resolve
+    /// against.
+    bool parse_address(const std::string& text, uint16_t& addr, std::string& error) const;
+
     /// The source describing `path`, matched on the full path or just the
     /// file name (DAP clients are inconsistent about which they send).
     RomSourcePtr source_for_path(const std::string& path) const;

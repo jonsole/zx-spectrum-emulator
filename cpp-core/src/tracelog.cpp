@@ -209,6 +209,12 @@ std::string TraceLog::open(const TraceOptions& options) {
     }
 
     active_.store(true, std::memory_order_relaxed);
+    // A capture gated on a start address opens its file and writes its header
+    // straight away, then records nothing until execution arrives -- so a
+    // caller polling the status can tell "armed, nothing yet" from "recording"
+    // without having to guess from a row count that has not moved.
+    waiting_.store(options_.start_pc != TRACE_NO_PC, std::memory_order_relaxed);
+    stop_pc_.store(options_.stop_pc, std::memory_order_relaxed);
     build_columns();
     write_border(BOX_TL, BOX_TM, BOX_TR);
     std::vector<std::string> titles;
@@ -227,10 +233,36 @@ void TraceLog::close() {
     write_border(BOX_BL, BOX_BM, BOX_BR);
     out_.close();
     active_.store(false, std::memory_order_relaxed);
+    waiting_.store(false, std::memory_order_relaxed);
 }
 
 void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
     if (!out_.is_open()) {
+        return;
+    }
+
+    // ---- the address gates: where the capture begins and ends --------------
+    // Both are tested at a fetch's T1H, and against the ADDRESS BUS rather
+    // than PC, for the reason spelt out in tracelog.h: at that half-clock the
+    // bus holds the address of the instruction about to run and PC does not.
+    // The comparisons are 32-bit, so TRACE_NO_PC cannot collide with a real
+    // address and neither gate needs a second test to disarm it.
+    const bool fetching = machine.cpu.is_instruction_boundary();
+    if (waiting_.load(std::memory_order_relaxed)) {
+        if (!fetching || get_addr(pins) != options_.start_pc) {
+            return;
+        }
+        // Nothing before this half-clock was recorded, so nothing before it
+        // may show up in the first row either: an interrupt accepted while we
+        // were waiting would otherwise be reported as one accepted here.
+        last_interrupt_count_ = machine.cpu.interrupt_count;
+        waiting_.store(false, std::memory_order_relaxed);
+    } else if (fetching && get_addr(pins) == stop_pc_.load(std::memory_order_relaxed)) {
+        // Closed BEFORE this row is written, so the capture ends on ARRIVING
+        // at the address rather than part-way through the instruction there.
+        // Reached through the else, so start_pc == stop_pc traces one lap of a
+        // loop instead of closing the instant it opens.
+        close();
         return;
     }
 
@@ -240,14 +272,14 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
     // half-clock the interrupt is taken; is_instruction_boundary() is
     // deliberately false there, because no instruction is being fetched.
     const bool interrupt_taken = machine.cpu.interrupt_count != last_interrupt_count_;
-    const bool group_start = interrupt_taken || machine.cpu.is_instruction_boundary();
+    const bool group_start = interrupt_taken || fetching;
     if (interrupt_taken) {
         last_interrupt_count_ = machine.cpu.interrupt_count;
         current_asm_ = "INT ACK (IM" + decimal(machine.cpu.regs.im) + ")";
         // The handler's address is not on the bus yet -- the ack cycle does not
         // drive one -- so the Symbol column has nothing to name here.
         current_symbol_.clear();
-    } else if (machine.cpu.is_instruction_boundary()) {
+    } else if (fetching) {
         // This half-clock IS the fetch's T1H -- begin_fetch() ran during it,
         // putting the opcode's address on the bus. The ADDRESS BUS is the
         // right source for it, not PC: PC has already been incremented past

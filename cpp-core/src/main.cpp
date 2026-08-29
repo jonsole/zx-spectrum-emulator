@@ -65,8 +65,19 @@ struct Args {
     /// client has finished connecting.
     std::string trace_log;
     uint64_t trace_limit = zx::TRACE_DEFAULT_LIMIT;
-    /// Memory address sampled into the trace's Watch column, if any.
-    uint32_t trace_watch = zx::TRACE_NO_WATCH;
+    /// Memory address sampled into the trace's Watch column, if any, and the
+    /// addresses the boot capture starts and stops recording on. With a start
+    /// address the trace opens at boot but writes nothing until execution
+    /// arrives -- which is how to catch a ROM routine that has run and
+    /// finished long before a client could connect and breakpoint it.
+    ///
+    /// Kept as written rather than parsed here: all three take a symbol
+    /// ("KEY_INT+9") as readily as a number, and nothing can resolve one until
+    /// the SLD data is loaded, which happens well after the command line is
+    /// read. Empty means "not given".
+    std::string trace_watch;
+    std::string trace_start_pc;
+    std::string trace_stop_pc;
     /// Adds the 48K-specific trace columns (HALT/WAIT/INT/NMI, frame, T-state)
     /// at the cost of the byte-for-byte match with visualz80remix's layout.
     bool trace_extra = false;
@@ -135,8 +146,11 @@ bool parse_args(int argc, char** argv, Args& args) {
             if (!next(value)) return false;
             args.trace_limit = std::strtoull(value.c_str(), nullptr, 10);
         } else if (flag == "--trace-watch") {
-            if (!next(value)) return false;
-            args.trace_watch = uint32_t(std::strtoul(value.c_str(), nullptr, 16)) & 0xFFFF;
+            if (!next(args.trace_watch)) return false;
+        } else if (flag == "--trace-start-pc") {
+            if (!next(args.trace_start_pc)) return false;
+        } else if (flag == "--trace-stop-pc") {
+            if (!next(args.trace_stop_pc)) return false;
         } else if (flag == "--trace-extra") {
             args.trace_extra = true;
         } else if (flag == "--uncapped") {
@@ -148,6 +162,28 @@ bool parse_args(int argc, char** argv, Args& args) {
             return false;
         }
     }
+    return true;
+}
+
+/// Resolves one of the trace flags, which may name a symbol rather than an
+/// address. Leaves `out` at its "none" default when the flag was not given.
+///
+/// A failure stops the server rather than being warned about and ignored: a
+/// capture silently watching address 0 because a label was misspelt is worse
+/// than one that never starts, and unlike a client the command line has no
+/// way to correct itself afterwards.
+bool trace_address(const zx::Sources& sources, const char* flag, const std::string& text,
+                   uint32_t& out) {
+    if (text.empty()) {
+        return true;
+    }
+    uint16_t addr = 0;
+    std::string error;
+    if (!sources.parse_address(text, addr, error)) {
+        std::fprintf(stderr, "%s %s: %s\n", flag, text.c_str(), error.c_str());
+        return false;
+    }
+    out = addr;
     return true;
 }
 
@@ -240,7 +276,11 @@ int main(int argc, char** argv) {
         zx::TraceOptions trace;
         trace.path = args.trace_log;
         trace.limit = args.trace_limit;
-        trace.watch = args.trace_watch;
+        if (!trace_address(sources, "--trace-watch", args.trace_watch, trace.watch)
+            || !trace_address(sources, "--trace-start-pc", args.trace_start_pc, trace.start_pc)
+            || !trace_address(sources, "--trace-stop-pc", args.trace_stop_pc, trace.stop_pc)) {
+            return 1;
+        }
         trace.extra = args.trace_extra;
         trace.resolve_symbol = zx::symbol_resolver(sources);
         const std::string error = engine.start_trace(trace);
@@ -250,6 +290,14 @@ int main(int argc, char** argv) {
         }
         std::printf("Tracing to %s (limit %llu half-clocks)\n", args.trace_log.c_str(),
                     (unsigned long long)args.trace_limit);
+        if (trace.start_pc != zx::TRACE_NO_PC) {
+            std::printf("  recording starts when PC reaches %04X\n",
+                        trace.start_pc);
+        }
+        if (trace.stop_pc != zx::TRACE_NO_PC) {
+            std::printf("  recording stops when PC reaches %04X\n",
+                        trace.stop_pc);
+        }
     }
 
     if (args.audio_device) {

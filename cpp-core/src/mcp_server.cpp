@@ -169,6 +169,40 @@ bool arg_u16(const json& args, const char* name, uint16_t& out, std::string& err
     return true;
 }
 
+/// An OPTIONAL address argument in either shape a caller may write it: a JSON
+/// integer (decimal, as JSON numbers are), or a string holding a symbol
+/// expression -- "KEY_INT+9", "0x0038", "0038". `present` tells an omitted
+/// argument from a real 0, which matters when 0x0000 is a legitimate address.
+bool arg_opt_address(const json& args, const char* name, const Sources& sources, bool& present,
+                     uint16_t& out, std::string& error) {
+    const json& v = arg(args, name);
+    present = false;
+    if (v.is_null()) {
+        return true;
+    }
+    if (v.is_number_integer()) {
+        const int64_t n = v.get<int64_t>();
+        if (n < 0 || n > 0xFFFF) {
+            error = std::string("'") + name + "' must be a 16-bit address (0..65535)";
+            return false;
+        }
+        out = uint16_t(n);
+        present = true;
+        return true;
+    }
+    if (!v.is_string()) {
+        error = std::string("'") + name
+                + "' must be a 16-bit address, or a symbol expression like \"KEY_INT+9\"";
+        return false;
+    }
+    if (!sources.parse_address(v.get<std::string>(), out, error)) {
+        error = std::string("'") + name + "': " + error;
+        return false;
+    }
+    present = true;
+    return true;
+}
+
 bool arg_string(const json& args, const char* name, std::string& out, std::string& error) {
     const json& v = arg(args, name);
     if (!v.is_string()) {
@@ -199,12 +233,20 @@ AudioRing& capture_ring(Engine& engine) {
 /// trace_status so a caller only has to learn one shape.
 json trace_status_json(const TraceStatus& status) {
     json out{{"active", status.active},
+             {"waiting", status.waiting},
              {"path", status.path},
              {"rows", status.rows},
              {"limit", status.limit},
              {"extra", status.extra}};
     if (status.watching) {
         out["watch"] = status.watch;
+    }
+    // Only when gated, so a plain capture reports the shape it always has.
+    if (status.has_start_pc) {
+        out["start_pc"] = status.start_pc;
+    }
+    if (status.has_stop_pc) {
+        out["stop_pc"] = status.stop_pc;
     }
     return out;
 }
@@ -281,6 +323,13 @@ json schema(const json& properties, const std::vector<std::string>& required) {
 
 json integer_prop(const char* description) {
     return json{{"type", "integer"}, {"description", description}};
+}
+
+/// A parameter taking either a number or a symbol expression. Declared as
+/// both types rather than as a string, so a caller with an address already in
+/// hand does not have to format it first.
+json address_prop(const char* description) {
+    return json{{"type", json::array({"integer", "string"})}, {"description", description}};
 }
 
 json string_prop(const char* description) {
@@ -400,7 +449,13 @@ json tools_list() {
         "instruction something reaches the bus -- contention, interrupt timing, the exact "
         "T-state a write lands on. Start it, then run or step, then stop_trace -- both take "
         "effect immediately, so a capture can be opened and closed around part of a run rather "
-        "than only around the whole of one. It also stops "
+        "than only around the whole of one. Give both a `pc` to capture a code window instead: "
+        "start_trace {pc: A} records nothing until execution reaches A, and stop_trace {pc: B} "
+        "closes the capture when it reaches B -- so the file holds exactly the path from A to B, "
+        "however many frames of running it took to get there. `pc` and `watch` take a symbol "
+        "expression as well as a number -- \"KEY_INT\", \"KEY_INT+9\", \"0x0038\" or \"0038\" -- so a "
+        "row of a trace can be pasted straight back in (an offset after a symbol is decimal, a "
+        "bare number is hex, exactly as each is printed). It also stops "
         "itself at `limit` rows, so a forgotten capture cannot fill the disk. View the result "
         "with tools/trace_viewer.html, or the \"ZX Spectrum: Show Trace\" command in VS Code.",
         schema(json{{"path", string_prop("File to write. Relative paths resolve against the "
@@ -410,8 +465,12 @@ json tools_list() {
                                            "itself. 139,776 is one frame and 7,000,000 one "
                                            "emulated second; default 25000, and 0 means "
                                            "unlimited.")},
-                    {"watch", integer_prop("16-bit address to sample into the Watch column on "
-                                           "every half-clock. Omit for none.")},
+                    {"watch", address_prop("Address to sample into the Watch column on every "
+                                           "half-clock. Omit for none.")},
+                    {"pc", address_prop("Address to start recording at: the capture opens its "
+                                        "file now but writes nothing until the CPU fetches the "
+                                        "instruction here, and the first row is that fetch. Omit "
+                                        "to record from the very next half-clock.")},
                     {"symbols", json{{"type", "boolean"},
                                      {"description", "Resolve addresses against the loaded SLD "
                                                      "debug info: adds a Symbol column naming "
@@ -428,8 +487,14 @@ json tools_list() {
                {}));
     add("stop_trace",
         "Stop the running trace and report where it was written and how many half-T-states it "
-        "captured. Takes effect immediately, mid-run included -- no need to pause first",
-        no_params());
+        "captured. Takes effect immediately, mid-run included -- no need to pause first. With a "
+        "`pc` it stops LATER instead: the capture keeps recording and closes itself when "
+        "execution reaches that address, which is how to capture up to a point without having to "
+        "watch for it",
+        schema(json{{"pc", address_prop("Address to stop at: the capture closes on arriving "
+                                       "there, before the instruction is fetched, so it ends "
+                                       "exactly where a breakpoint would. Omit to stop now.")}},
+               {}));
     add("trace_status",
         "Report whether a trace is running, its file, and its row count. Safe to poll during a "
         "run, so it can be watched filling up",
@@ -687,13 +752,19 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             }
             options.limit = uint64_t(n);
         }
-        const json& watch = arg(args, "watch");
-        if (watch.is_number_integer()) {
-            const int64_t n = watch.get<int64_t>();
-            if (n < 0 || n > 0xFFFF) {
-                return error_result("'watch' must be a 16-bit address (0..65535)");
-            }
-            options.watch = uint32_t(n);
+        uint16_t addr = 0;
+        bool present = false;
+        if (!arg_opt_address(args, "watch", sources, present, addr, error)) {
+            return error_result(error);
+        }
+        if (present) {
+            options.watch = uint32_t(addr);
+        }
+        if (!arg_opt_address(args, "pc", sources, present, addr, error)) {
+            return error_result(error);
+        }
+        if (present) {
+            options.start_pc = uint32_t(addr);
         }
         const json& extra = arg(args, "extra");
         options.extra = extra.is_boolean() && extra.get<bool>();
@@ -710,7 +781,13 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "stop_trace") {
-        return json_result(trace_status_json(engine.stop_trace()));
+        uint16_t pc = 0;
+        bool present = false;
+        if (!arg_opt_address(args, "pc", sources, present, pc, error)) {
+            return error_result(error);
+        }
+        return json_result(trace_status_json(present ? engine.stop_trace(pc)
+                                                     : engine.stop_trace()));
     }
 
     if (name == "trace_status") {
@@ -754,13 +831,11 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (!arg_string(args, "name", symbol, error)) {
             return error_result(error);
         }
-        const std::vector<RomSourcePtr> active = sources.active();
-        for (const RomSourcePtr& source : active) {
-            auto it = source->symbols.find(symbol);
-            if (it != source->symbols.end()) {
-                return json_result(json{{"found", true}, {"address", it->second}});
-            }
+        uint16_t address = 0;
+        if (sources.symbol_value(symbol, address)) {
+            return json_result(json{{"found", true}, {"address", address}});
         }
+        const std::vector<RomSourcePtr> active = sources.active();
         const std::string reason =
             active.empty()
                 ? "no debug info loaded -- see load_debug_info / scripts/build_rom_source.py"

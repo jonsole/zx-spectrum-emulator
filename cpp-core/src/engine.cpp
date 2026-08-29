@@ -581,11 +581,19 @@ TraceStatus Engine::trace_snapshot() const {
         return s;
     }
     s.active = trace_->active();
+    s.waiting = trace_->waiting();
     s.path = trace_->path();
     s.rows = trace_->rows();
     s.limit = trace_->options().limit;
     s.watching = trace_->options().watch != TRACE_NO_WATCH;
     s.watch = uint16_t(trace_->options().watch);
+    s.has_start_pc = trace_->options().start_pc != TRACE_NO_PC;
+    s.start_pc = uint16_t(trace_->options().start_pc);
+    // From the capture rather than from its options: a stop_trace(pc) aimed at
+    // an already-running capture changes this and nothing else.
+    const uint32_t stop_pc = trace_->stop_pc();
+    s.has_stop_pc = stop_pc != TRACE_NO_PC;
+    s.stop_pc = uint16_t(stop_pc);
     s.extra = trace_->options().extra;
     return s;
 }
@@ -611,6 +619,17 @@ std::string Engine::start_trace(TraceOptions options) {
 TraceStatus Engine::stop_trace() {
     request_trace(nullptr);
     return trace_status();
+}
+
+TraceStatus Engine::stop_trace(uint16_t pc) {
+    // No handover and no wait: the lock is only what keeps the capture alive
+    // across the call, exactly as trace_status()' is, and the address itself
+    // goes into an atomic the recording thread reads each half-clock.
+    std::lock_guard<std::mutex> lock(trace_mutex_);
+    if (trace_ && trace_->active()) {
+        trace_->set_stop_pc(pc);
+    }
+    return trace_snapshot();
 }
 
 TraceStatus Engine::trace_status() const {

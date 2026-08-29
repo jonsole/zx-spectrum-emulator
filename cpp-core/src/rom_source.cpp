@@ -114,6 +114,99 @@ bool file_mtime(const std::string& path, int64_t& out) {
     return true;
 }
 
+bool equal_ignoring_case(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (std::tolower(uint8_t(a[i])) != std::tolower(uint8_t(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string trimmed(const std::string& s) {
+    size_t first = 0;
+    while (first < s.size() && std::isspace(uint8_t(s[first])) != 0) {
+        first++;
+    }
+    size_t last = s.size();
+    while (last > first && std::isspace(uint8_t(s[last - 1])) != 0) {
+        last--;
+    }
+    return s.substr(first, last - first);
+}
+
+/// One number of an address expression. `bare_is_hex` is the radix for digits
+/// written with no prefix at all -- see parse_address's contract for why that
+/// differs between an address and an offset.
+bool parse_number(const std::string& token, bool bare_is_hex, uint32_t& out) {
+    std::string body = token;
+    int base = bare_is_hex ? 16 : 10;
+    if (body.size() > 2 && body[0] == '0' && (body[1] == 'x' || body[1] == 'X')) {
+        body.erase(0, 2);
+        base = 16;
+    } else if (body.size() > 1 && body[0] == '$') {
+        body.erase(0, 1);
+        base = 16;
+    }
+    if (body.empty()) {
+        return false;
+    }
+    // Checked here rather than left to strtoul, which accepts a leading sign
+    // and stops happily at the first character it does not like.
+    for (size_t i = 0; i < body.size(); i++) {
+        const bool ok = base == 16 ? std::isxdigit(uint8_t(body[i])) != 0
+                                   : std::isdigit(uint8_t(body[i])) != 0;
+        if (!ok) {
+            return false;
+        }
+    }
+    out = uint32_t(std::strtoul(body.c_str(), nullptr, base));
+    return true;
+}
+
+/// One term: a symbol, or a number. The symbol table is consulted first, so a
+/// label spelled in hex digits is still a label.
+bool term_value(const Sources& sources, const std::string& token, bool is_base, uint32_t& out,
+                std::string& error) {
+    if (token.empty()) {
+        error = "an address expression cannot end with + or -";
+        return false;
+    }
+    const bool explicit_number =
+        token[0] == '$' || (token.size() > 2 && token[0] == '0'
+                            && (token[1] == 'x' || token[1] == 'X'));
+    if (explicit_number) {
+        if (!parse_number(token, true, out)) {
+            error = "\"" + token + "\" is not a hex number";
+            return false;
+        }
+        return true;
+    }
+    uint16_t symbol = 0;
+    if (sources.symbol_value(token, symbol)) {
+        out = symbol;
+        return true;
+    }
+    if (parse_number(token, is_base, out)) {
+        return true;
+    }
+    if (std::isdigit(uint8_t(token[0])) != 0) {
+        error = is_base ? "\"" + token + "\" is not a hex address"
+                        : "\"" + token + "\" is not a decimal offset (write 0x" + token
+                              + " if you meant hex)";
+    } else if (sources.active().empty()) {
+        error = "no debug info loaded, so \"" + token
+                + "\" cannot be resolved -- see load_debug_info, or "
+                  "scripts/build_rom_source.py for the ROM's own symbols";
+    } else {
+        error = "no symbol named \"" + token + "\"";
+    }
+    return false;
+}
+
 std::string file_name_of(const std::string& path) {
     const size_t slash = path.find_last_of("/\\");
     return slash == std::string::npos ? path : path.substr(slash + 1);
@@ -278,6 +371,62 @@ bool Sources::label_at(uint16_t addr, std::string& name) const {
         }
     }
     return false;
+}
+
+bool Sources::symbol_value(const std::string& name, uint16_t& addr) const {
+    const std::vector<RomSourcePtr> sources = active();
+    for (size_t i = 0; i < sources.size(); i++) {
+        auto it = sources[i]->symbols.find(name);
+        if (it != sources[i]->symbols.end()) {
+            addr = it->second;
+            return true;
+        }
+    }
+    // Only once every source has been asked exactly: an exact match in the
+    // ROM must still lose to an exact match in the user's own program.
+    for (size_t i = 0; i < sources.size(); i++) {
+        for (auto it = sources[i]->symbols.begin(); it != sources[i]->symbols.end(); ++it) {
+            if (equal_ignoring_case(it->first, name)) {
+                addr = it->second;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool Sources::parse_address(const std::string& text, uint16_t& addr, std::string& error) const {
+    const std::string expression = trimmed(text);
+    if (expression.empty()) {
+        error = "empty address";
+        return false;
+    }
+    // Signed, and only wrapped at the end: SYM-2 two bytes below 0x0000 is
+    // 0xFFFE, the same wrap the CPU itself does, rather than an error.
+    int64_t total = 0;
+    int64_t sign = 1;
+    size_t pos = 0;
+    bool is_base = true;
+    for (;;) {
+        size_t end = pos;
+        while (end < expression.size() && expression[end] != '+' && expression[end] != '-') {
+            end++;
+        }
+        uint32_t value = 0;
+        if (!term_value(*this, trimmed(expression.substr(pos, end - pos)), is_base, value,
+                        error)) {
+            return false;
+        }
+        total += sign * int64_t(value);
+        is_base = false;
+        if (end >= expression.size()) {
+            break;
+        }
+        sign = expression[end] == '+' ? 1 : -1;
+        pos = end + 1;
+    }
+    addr = uint16_t(((total % 0x10000) + 0x10000) % 0x10000);
+    return true;
 }
 
 RomSourcePtr Sources::source_for_path(const std::string& path) const {

@@ -132,6 +132,15 @@ zx_add_test(spectrum_tests)
 zx_add_test(tape_tests)
 zx_add_test(tape_audio_tests)
 zx_add_test(tracelog_tests)
+
+# Not a zx_add_test: the symbol/address-expression parsing it covers lives in
+# rom_source.cpp, which belongs to zx_server rather than zx_core (debug data is
+# file-based tooling, not machine state), so it is compiled in directly.
+add_executable(symbol_tests tests/symbol_tests.cpp src/rom_source.cpp)
+target_link_libraries(symbol_tests PRIVATE zx_core)
+target_include_directories(symbol_tests PRIVATE tests)
+target_compile_options(symbol_tests PRIVATE ${ZX_WARNINGS})
+add_test(NAME symbol_tests COMMAND symbol_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
 target_compile_definitions(tracelog_tests

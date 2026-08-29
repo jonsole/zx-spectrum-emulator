@@ -486,4 +486,111 @@ TEST(a_capture_starts_and_stops_across_a_running_machine) {
     std::remove(options.path.c_str());
 }
 
+// The two address gates, on the reference program's subroutine:
+//
+//     0008: LD HL,000Dh
+//     000B: INC (HL)
+//     000C: RET
+//
+// Starting at 0008 and stopping at 000C should leave a file holding those two
+// instructions and nothing else -- not the CALL that got there, and not the
+// RET that leaves. The program loops, so both addresses are reached over and
+// over: what is being checked is that the FIRST arrival at each is the one
+// that counts.
+TEST(address_gates_capture_exactly_the_window_between_them) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_window.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 0; // the stop address is what ends this one
+    options.start_pc = 0x0008;
+    options.stop_pc = 0x000C;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+    // Open, but recording nothing: the file exists and holds its header.
+    CHECK(log.active());
+    CHECK(log.waiting());
+    CHECK_EQ(log.rows(), uint64_t(0));
+
+    machine.trace = &log;
+    // The whole loop is 60 T-states, so this is several laps of it -- the
+    // capture has to close itself somewhere in the first one regardless.
+    for (uint32_t i = 0; i < 400; i++) {
+        machine.clock();
+    }
+    CHECK(!log.active());
+    CHECK(!log.waiting());
+
+    // LD HL,nn is 10 T-states and INC (HL) is 11, and the capture opens on the
+    // first's T1H and closes before the second's successor is fetched: 21
+    // T-states, two half-clocks each.
+    CHECK_EQ(log.rows(), uint64_t(42));
+
+    const std::vector<std::vector<std::string>> rows = data_rows(read_lines(path));
+    CHECK_EQ(rows.size(), size_t(42));
+    // First row: the fetch of the instruction AT the start address, numbered
+    // from 1 as though the machine had just been switched on.
+    CHECK_EQ(rows[0][0], std::string("1/0"));
+    CHECK_EQ(rows[0][7], std::string("0008"));
+    CHECK_EQ(normalise_asm(rows[0][11]), std::string("LD HL,000Dh"));
+    // Last row: still inside INC (HL). RET lives at the stop address and is
+    // never fetched, so it cannot appear anywhere.
+    CHECK_EQ(rows[41][11], std::string("INC (HL)"));
+    for (size_t i = 0; i < rows.size(); i++) {
+        CHECK(rows[i][11] != std::string("RET"));
+    }
+}
+
+// stop_trace(pc) aimed at a capture the emulator thread is already writing:
+// the request returns straight away, leaving the capture recording, and the
+// arrival at the address is what closes it. This is the thing a plain
+// stop_trace cannot do -- stopping AT a place rather than at a moment -- and
+// like every other trace command it has to work with a run in flight.
+TEST(a_stop_address_can_be_aimed_at_a_running_capture) {
+    Engine engine;
+    CHECK_EQ(engine.load_rom(reference_program()), std::string());
+    engine.set_speed(Speed::Uncapped);
+
+    std::thread runner([&engine] { engine.run(); });
+
+    TraceOptions options;
+    options.path = temp_path("tracelog_stop_pc.txt");
+    options.limit = 0; // only the address below can end this
+    CHECK_EQ(engine.start_trace(options), std::string());
+
+    // 000C is the RET, reached once per 60-T-state lap: whatever the run got
+    // through before the capture landed, it arrives within one lap.
+    const TraceStatus aimed = engine.stop_trace(0x000C);
+    CHECK(aimed.has_stop_pc);
+    CHECK_EQ(aimed.stop_pc, uint16_t(0x000C));
+    CHECK(!aimed.has_start_pc);
+
+    // Closed by the machine reaching the address, not by anyone asking. A
+    // failure here hangs rather than fails, so it is bounded.
+    TraceStatus done;
+    for (int i = 0; i < 1000; i++) {
+        done = engine.trace_status();
+        if (!done.active) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    engine.pause();
+    runner.join();
+
+    CHECK(!done.active);
+    CHECK(done.rows > 0);
+    CHECK(done.has_stop_pc);
+    // Closed properly, mid-run, by the gate: borders and header intact, and
+    // the last instruction recorded is the one BEFORE the stop address.
+    const std::vector<std::string> lines = read_lines(options.path);
+    CHECK_EQ(lines.size(), size_t(done.rows) + 4);
+    const std::vector<std::vector<std::string>> rows = data_rows(lines);
+    CHECK_EQ(rows.back()[11], std::string("INC (HL)"));
+    std::remove(options.path.c_str());
+}
+
 RUN_TESTS()

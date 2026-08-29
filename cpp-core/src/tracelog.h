@@ -49,6 +49,11 @@ class Spectrum48K;
 /// that "no watch" is representable without stealing a real address.
 constexpr uint32_t TRACE_NO_WATCH = 0xFFFFFFFFu;
 
+/// `TraceOptions::start_pc` / `TraceOptions::stop_pc` when the capture is not
+/// gated on an address. Not a uint16_t, for the same reason: 0x0000 is a real
+/// address (it is the reset vector, and a perfectly good place to start).
+constexpr uint32_t TRACE_NO_PC = 0xFFFFFFFFu;
+
 /// Rows a capture stops itself after when no limit is asked for. One 48K frame
 /// is 139,776 half-clocks, so this is a little under a fifth of a frame -- big
 /// enough to hold any plausible "what did those instructions do on the bus"
@@ -67,6 +72,24 @@ struct TraceOptions {
     uint32_t watch = TRACE_NO_WATCH;
     /// Adds the 48K-specific columns. See the note above.
     bool extra = false;
+    /// Where the capture BEGINS: nothing is written until the CPU fetches the
+    /// instruction at this address, and the first row is that fetch's T1H.
+    /// TRACE_NO_PC records from the very next half-clock, as a capture with
+    /// nowhere to wait for always has.
+    ///
+    /// Both gates are tested at a fetch's T1H, the one half-clock in which the
+    /// address of the instruction about to run is on the ADDRESS BUS -- PC
+    /// itself has already moved past it, and while halted is parked somewhere
+    /// else again, which is why neither is a comparison against PC despite
+    /// what a caller naturally calls them.
+    uint32_t start_pc = TRACE_NO_PC;
+    /// Where the capture ENDS: it closes itself on ARRIVING at this address,
+    /// before the instruction there is fetched. So a gated capture covers
+    /// [arrive at start_pc, arrive at stop_pc) -- the half-open interval, which
+    /// is what makes "trace from A to B" and "trace from B to C" join up
+    /// instead of overlapping. TRACE_NO_PC runs until the limit or an explicit
+    /// stop.
+    uint32_t stop_pc = TRACE_NO_PC;
     /// Resolves an address to a label, "MOVE_WILLY+3" style, or an empty
     /// string when nothing is known. Supplied by the server layer, which owns
     /// the SLD data -- zx_core deliberately never sees rom_source.h, so this
@@ -99,9 +122,24 @@ public:
     /// record() is running, so neither can be a plain member.
     bool active() const { return active_.load(std::memory_order_relaxed); }
 
+    /// True while the capture is open but still waiting for `start_pc`: the
+    /// file holds its header and nothing else, and rows() is 0. Atomic for the
+    /// same reason active() is -- it is read by every status poller while the
+    /// emulator thread is deciding to clear it.
+    bool waiting() const { return waiting_.load(std::memory_order_relaxed); }
+
     uint64_t rows() const { return rows_.load(std::memory_order_relaxed); }
     const std::string& path() const { return options_.path; }
     const TraceOptions& options() const { return options_; }
+
+    /// Arms, re-arms or (with TRACE_NO_PC) clears the address the capture
+    /// closes itself on reaching. Safe to call from another thread WHILE the
+    /// emulator thread is recording, which is the whole point of it being an
+    /// atomic rather than just another field of options(): a stop_trace(pc)
+    /// has to reach a capture that the emulator thread owns, and it must not
+    /// wait for a run to yield to do it.
+    void set_stop_pc(uint32_t pc) { stop_pc_.store(pc, std::memory_order_relaxed); }
+    uint32_t stop_pc() const { return stop_pc_.load(std::memory_order_relaxed); }
 
     /// Records one half-clock. A no-op once the capture has finished, so the
     /// caller's hot loop needs no second check beyond the null test.
@@ -123,6 +161,11 @@ private:
     /// Mirrors out_.is_open() so a reader on another thread has something it
     /// can safely look at -- an ofstream is not that.
     std::atomic<bool> active_{false};
+    /// Open but not yet triggered: see waiting(). Cleared by the half-clock
+    /// that reaches options_.start_pc, and by close().
+    std::atomic<bool> waiting_{false};
+    /// options_.stop_pc, but writable from another thread. See set_stop_pc().
+    std::atomic<uint32_t> stop_pc_{TRACE_NO_PC};
 
     /// Disassembly of the instruction currently in flight, repeated on every
     /// row belonging to it. Repeated rather than written once per group

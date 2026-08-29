@@ -68,12 +68,23 @@ struct MachineState {
 /// it, since a capture can also stop itself on reaching its row limit.
 struct TraceStatus {
     bool active = false;
+    /// Open, but holding nothing but its header: a capture gated on
+    /// `start_pc` records nothing until execution arrives there. Distinct from
+    /// `!active` (finished or never started) and from `active` with no rows
+    /// yet, which a poller would otherwise have to tell apart by guessing.
+    bool waiting = false;
     std::string path;
     uint64_t rows = 0;
     uint64_t limit = 0;
     /// False when the Watch column is the reference's inert "??".
     bool watching = false;
     uint16_t watch = 0;
+    /// False when the capture began recording straight away.
+    bool has_start_pc = false;
+    uint16_t start_pc = 0;
+    /// False when only the row limit or an explicit stop will end it.
+    bool has_stop_pc = false;
+    uint16_t stop_pc = 0;
     bool extra = false;
 };
 
@@ -175,6 +186,17 @@ public:
     /// closed capture stays on record, so its path and row count can still be
     /// read back afterwards.
     TraceStatus stop_trace();
+    /// Arms the capture to close itself when execution ARRIVES at `pc`,
+    /// instead of closing it now. Returns immediately -- it neither waits for
+    /// the emulator thread nor for the address to be reached, so the status it
+    /// returns is of a capture still running.
+    ///
+    /// Unlike every other trace command this needs no handover at all: the
+    /// address is an atomic on the capture itself (see TraceLog::set_stop_pc),
+    /// which is what lets a stop be aimed at a capture the emulator thread is
+    /// in the middle of writing. Ignored, rather than an error, when no
+    /// capture is running -- the returned status says so.
+    TraceStatus stop_trace(uint16_t pc);
     /// What the capture is doing right now, its row count included as that
     /// climbs -- read straight off the running capture, not sampled at some
     /// checkpoint, so a poller sees it fill up in real time. Never blocks on
