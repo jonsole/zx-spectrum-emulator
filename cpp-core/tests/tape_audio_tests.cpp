@@ -10,6 +10,7 @@
 // emulator's playback and Sinclair's loader, and only the code under test sits
 // between them.
 
+#include "beeper.h"
 #include "spectrum.h"
 #include "tape.h"
 #include "tape_audio.h"
@@ -769,6 +770,50 @@ TEST(a_tape_rendered_to_wav_reads_back_the_same_pulses) {
     // T-states, comfortably inside the tolerance, so a mismatch means a real
     // edge was invented or lost rather than merely rounded.
     CHECK_EQ(close, compared);
+}
+
+TEST(a_recording_is_audible_as_it_loads) {
+    // tape_tests.cpp proves a .tap is audible as it loads, by way of the EAR
+    // input being mixed into the audio output. This is the same statement for
+    // a tape that arrived as audio, and it is worth making separately: a
+    // recording reaches the beeper through the same set_ear() call but a
+    // different parse path, and "loads perfectly, in total silence" is exactly
+    // the kind of regression nothing else here would catch.
+    // It has to be an actual LOAD, not merely a tape with its motor running.
+    // The EAR level is resolved inside the port 0xFE READ branch, so what
+    // makes the sound is the LOADER POLLING that port thousands of times a
+    // second. Sitting at the BASIC prompt the ROM reads it only during the
+    // interrupt's key scan -- a few hundred times a second, nowhere near
+    // enough to reproduce an 800Hz tone -- so a tape playing to nothing is
+    // very nearly silent. See the note in spectrum.cpp's port read.
+    const std::vector<uint8_t> tap = program_tap({0x00, 0x0A, 0x04, 0x00, 0xEA, 0x61, 0x62, 0x0D});
+    Tape source;
+    CHECK_EQ(source.insert(tap.data(), tap.size(), "src.tap"), std::string());
+    const std::vector<uint8_t> wav = make_wav(render(source, 44100), 44100, 16, 1);
+
+    Spectrum48K m;
+    if (!load_rom(m)) {
+        return;
+    }
+    CHECK_EQ(m.tape.insert(wav.data(), wav.size(), "prog.wav"), std::string());
+    CHECK_EQ(type_load_command(m), std::string());
+    m.beeper.set_enabled(true, m.global_hc());
+
+    // A second of loading, well inside the header's leader.
+    for (uint32_t frame = 0; frame < 50; frame++) {
+        m.run_frame();
+    }
+
+    std::vector<int16_t> samples;
+    m.beeper.drain(samples);
+    CHECK(samples.size() > 2000);
+    if (samples.size() <= 2000) {
+        return;
+    }
+    float rms = 0.0f;
+    float peak = 0.0f;
+    measure_level(samples, rms, peak);
+    CHECK(rms > 0.01f); // not silence -- the whole point
 }
 
 TEST(the_real_rom_loads_a_wav_recording) {

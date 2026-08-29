@@ -51,6 +51,8 @@ snapshots/*.sna
 !snapshots/zexdoc.sna
 tapes/*.tap
 tapes/*.tzx
+tapes/*.wav
+tapes/*.csw
 !tapes/loading-test.tap
 !tapes/loading-test.tzx
 
