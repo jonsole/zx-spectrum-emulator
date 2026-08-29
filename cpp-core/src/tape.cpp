@@ -1,6 +1,7 @@
 #include "tape.h"
 
 #include "spectrum.h"
+#include "tape_audio.h"
 
 #include <cstdio>
 
@@ -11,12 +12,36 @@ namespace {
 uint64_t t_to_hc(uint32_t t) { return uint64_t(t) * HC_PER_TSTATE; }
 uint64_t ms_to_hc(uint32_t ms) { return uint64_t(ms) * (HC_PER_SEC / 1000); }
 
+/// T-states in a millisecond, for turning a recorded silence back into the
+/// pause figure a block carries.
+constexpr uint32_t T_PER_MS = uint32_t(HC_PER_SEC / 1000) / HC_PER_TSTATE;
+
 /// The lead-out edge every block gets before its pause proper. See advance().
 constexpr uint32_t TAPE_EDGE_PAUSE_MS = 1;
 
 /// Enough to tell the user what a tape contains without letting a hostile or
 /// simply strange file grow the status response without bound.
 constexpr size_t MAX_WARNINGS = 16;
+
+/// The silence that separates one recorded block from the next, above which a
+/// gap in an audio rip is taken as a block boundary rather than as signal.
+///
+/// Half a second is chosen with a wide margin either side: the longest gap
+/// INSIDE a block is the two-millisecond space between bits, and the shortest
+/// gap BETWEEN blocks is the ROM's own one-second pause. Anything in between
+/// would be a tape unlike any that exists.
+constexpr uint32_t AUDIO_SPLIT_MS = 500;
+
+/// How much signal a stretch needs before a silence after it counts as a block
+/// boundary. Without this, one click in the middle of a four-second leader cuts
+/// it into three "blocks", none of them meaning anything. A stretch shorter
+/// than this keeps accumulating and the silence stays in it as a long pulse --
+/// so a click costs a confusing listing entry at worst, never a timing change.
+constexpr size_t MIN_AUDIO_BLOCK_PULSES = 8;
+
+/// Below this, a rip is too coarse to hold the shortest pulses a turbo loader
+/// uses, and is worth saying so about even though it is still played.
+constexpr uint32_t COARSE_SAMPLE_RATE = 22'050;
 
 /// A ceiling on the block list after .tzx loops have been expanded. A real
 /// image is a few hundred blocks; this is only here so a file claiming a
@@ -242,6 +267,11 @@ std::string Tape::insert(const uint8_t* data, size_t len, const std::string& nam
     // .tzx signature is eight unambiguous bytes.
     const bool is_tzx = len >= 10 && std::string(reinterpret_cast<const char*>(data), 7) == "ZXTape!"
                         && data[7] == 0x1A;
+    // .wav and .csw are recordings rather than descriptions of a signal -- see
+    // tape_audio.h. They are sniffed the same way and, once decoded, become
+    // ordinary pulse blocks that playback cannot tell apart from a .tzx's.
+    const bool is_wav = looks_like_wav(data, len);
+    const bool is_csw = looks_like_csw(data, len);
 
     // Parsed into locals first: a tape that fails to parse must leave whatever
     // was already loaded alone rather than half-replacing it.
@@ -252,7 +282,14 @@ std::string Tape::insert(const uint8_t* data, size_t len, const std::string& nam
     description_.swap(description);
     warnings_.swap(warnings);
 
-    const std::string error = is_tzx ? parse_tzx(data, len) : parse_tap(data, len);
+    std::string error;
+    if (is_tzx) {
+        error = parse_tzx(data, len);
+    } else if (is_wav || is_csw) {
+        error = parse_audio(data, len, is_wav);
+    } else {
+        error = parse_tap(data, len);
+    }
     if (!error.empty()) {
         blocks_.swap(blocks);
         description_.swap(description);
@@ -297,7 +334,13 @@ void Tape::describe_blocks() {
             info.name = pending_name;
             pending_name.clear();
         } else if (!b.pulses.empty()) {
-            info.kind = b.id == 0x12 ? "Pure tone" : "Pulses";
+            if (b.id == 0x12) {
+                info.kind = "Pure tone";
+            } else if (b.id == 0x15 || b.id == 0x18) {
+                info.kind = "Recording";
+            } else {
+                info.kind = "Pulses";
+            }
         } else if (b.stop_tape) {
             info.kind = "Stop the tape";
         } else {
@@ -305,6 +348,65 @@ void Tape::describe_blocks() {
         }
         infos_.push_back(std::move(info));
     }
+}
+
+std::string Tape::parse_audio(const uint8_t* data, size_t len, bool is_wav) {
+    auto warn = [this](const std::string& what) {
+        if (warnings_.size() < MAX_WARNINGS) {
+            warnings_.push_back(what);
+        }
+    };
+
+    EdgeList edges;
+    const std::string error =
+        is_wav ? decode_wav(data, len, edges) : decode_csw(data, len, edges);
+    if (!error.empty()) {
+        return error;
+    }
+    if (edges.dropped > 0) {
+        warn("the recording has more than " + std::to_string(MAX_AUDIO_PULSES)
+             + " pulses in it and was cut short; is it really a tape?");
+    }
+    if (edges.sample_rate < COARSE_SAMPLE_RATE) {
+        warn("sampled at " + std::to_string(edges.sample_rate)
+             + "Hz, which is too coarse to hold a turbo loader's shortest pulses");
+    }
+
+    // Cut at the silences. A recording is one unbroken signal, and leaving it
+    // as one block would be defensible -- but then the listing says "Recording,
+    // 4 minutes" and seek() can only go to the start of the tape. A multi-load
+    // game is exactly the case where you want to replay part four without
+    // sitting through parts one to three.
+    const uint32_t split_t = AUDIO_SPLIT_MS * T_PER_MS;
+    TapeBlock b;
+    b.id = 0x15;
+    b.standard_speed = false;
+    b.pilot_pulses = 0;
+    b.pause_ms = 0;
+    for (uint32_t pulse : edges.pulses) {
+        if (pulse >= split_t && b.pulses.size() >= MIN_AUDIO_BLOCK_PULSES) {
+            // The silence becomes the block's pause rather than a pulse of its
+            // own, which is what it is -- and what makes the listing's
+            // durations add up to the same total either way.
+            b.pause_ms = pulse / T_PER_MS;
+            blocks_.push_back(std::move(b));
+            b = TapeBlock();
+            b.id = 0x15;
+            b.standard_speed = false;
+            b.pilot_pulses = 0;
+            b.pause_ms = 0;
+            continue;
+        }
+        b.pulses.push_back(pulse);
+    }
+    if (!b.pulses.empty()) {
+        blocks_.push_back(std::move(b));
+    }
+
+    if (blocks_.empty()) {
+        return "no signal in the recording";
+    }
+    return {};
 }
 
 std::string Tape::parse_tap(const uint8_t* data, size_t len) {
@@ -562,16 +664,71 @@ std::string Tape::parse_tzx(const uint8_t* data, size_t len) {
             // here starts by toggling anyway.
             warn("signal-level block" + where + " ignored");
 
-        } else if (id == 0x15 || id == 0x16 || id == 0x17 || id == 0x18 || id == 0x19) {
-            // These carry sampled or generalised signal data rather than
-            // pulses. Rejected by name rather than skipped: their bodies are
-            // the only thing that would tell us how long they are, so guessing
-            // would desync every block after them and produce garbage that
-            // looks like a tape that merely does not load.
+        } else if (id == 0x15) { // direct recording: one bit per sample
+            uint32_t t_per_sample = 0;
+            uint32_t pause = 0;
+            uint8_t used_bits = 0;
+            uint32_t block_len = 0;
+            std::vector<uint8_t> body;
+            if (!r.u16(t_per_sample) || !r.u16(pause) || !r.u8(used_bits) || !r.u24(block_len)
+                || !r.bytes(block_len, body)) {
+                return truncated();
+            }
+            EdgeList edges;
+            const std::string e = decode_direct_recording(body.data(), body.size(), t_per_sample,
+                                                          used_bits, edges);
+            if (!e.empty()) {
+                return e + where;
+            }
+            TapeBlock b;
+            b.id = id;
+            b.standard_speed = false;
+            b.pilot_pulses = 0;
+            b.pause_ms = pause;
+            b.pulses = std::move(edges.pulses);
+            blocks_.push_back(std::move(b));
+
+        } else if (id == 0x18) { // CSW recording, inline
+            uint32_t body_len = 0;
+            uint32_t pause = 0;
+            uint32_t rate = 0;
+            uint8_t compression = 0;
+            uint32_t pulse_count = 0;
+            // The length counts everything after itself, of which the ten
+            // bytes read next are the header.
+            if (!r.u32(body_len) || body_len < 10) {
+                return truncated();
+            }
+            std::vector<uint8_t> body;
+            if (!r.u16(pause) || !r.u24(rate) || !r.u8(compression) || !r.u32(pulse_count)
+                || !r.bytes(body_len - 10, body)) {
+                return truncated();
+            }
+            EdgeList edges;
+            // pulse_count is read but not used: it is a hint for preallocation
+            // in a decoder that streams, and the data itself is authoritative.
+            (void)pulse_count;
+            const std::string e =
+                decode_csw_stream(body.data(), body.size(), rate, compression, edges);
+            if (!e.empty()) {
+                return e + where;
+            }
+            TapeBlock b;
+            b.id = id;
+            b.standard_speed = false;
+            b.pilot_pulses = 0;
+            b.pause_ms = pause;
+            b.pulses = std::move(edges.pulses);
+            blocks_.push_back(std::move(b));
+
+        } else if (id == 0x16 || id == 0x17 || id == 0x19) {
+            // What is left of the sampled/generalised family. Rejected by name
+            // rather than skipped: their bodies are the only thing that would
+            // tell us how long they are, so guessing would desync every block
+            // after them and produce garbage that looks like a tape that merely
+            // does not load.
             return "unsupported .tzx block " + hex_byte(id) + " at offset " + std::to_string(at)
-                   + (id == 0x15 ? " (direct recording)"
-                                 : id == 0x18 ? " (CSW recording)"
-                                              : id == 0x19 ? " (generalized data)" : "");
+                   + (id == 0x19 ? " (generalized data)" : "");
 
         } else if (id == 0x21) { // group start
             uint8_t n = 0;

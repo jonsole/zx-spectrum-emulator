@@ -285,7 +285,12 @@ async function loadTape(context) {
   const chosen = await vscode.window.showOpenDialog({
     canSelectMany: false,
     openLabel: 'Load tape',
-    filters: { 'ZX Spectrum tape': ['tap', 'tzx'], 'All files': ['*'] },
+    filters: {
+      'ZX Spectrum tape': ['tap', 'tzx', 'wav', 'csw'],
+      'Tape image': ['tap', 'tzx'],
+      'Tape recording': ['wav', 'csw'],
+      'All files': ['*'],
+    },
     defaultUri: start,
   });
   if (!chosen || chosen.length === 0) {

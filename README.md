@@ -47,9 +47,10 @@ LLM agent inspects and drives the *same running emulator* over
 - **Keyboard**: the full 8×5 matrix on port `0xFE`.
 - **Snapshots**: `.sna` loading (registers + memory + border, including the
   format's PC-on-the-stack quirk).
-- **Tape**: `.tap` and `.tzx` loading in the C++ core, at pulse level through
-  the EAR line, with an optional fast-load trap on the ROM's LD-BYTES — see
-  [Tape](#tape).
+- **Tape**: `.tap`, `.tzx`, `.wav` and `.csw` loading in the C++ core, at pulse
+  level through the EAR line, with an optional fast-load trap on the ROM's
+  LD-BYTES. The two audio formats are recordings, decoded back into pulses by a
+  Schmitt trigger — see [Tape](#tape).
 - **Disassembler**: the full documented Z80 instruction set (unprefixed, `CB`,
   `ED`, `DD`, `FD`, and `DD CB d`/`FD CB d`), including the well-known
   undocumented `IXH`/`IXL`/`IYH`/`IYL` register forms.
@@ -680,8 +681,11 @@ up on their own without `main.cpp`.
 
 ## Tape
 
-`.tap` and `.tzx` images load in the C++ core. Both formats are detected from
-the file's contents rather than its extension.
+`.tap`, `.tzx`, `.wav` and `.csw` images load in the C++ core. Every format is
+detected from the file's contents rather than its extension.
+
+The first two *describe* a signal; the last two *are* one — see
+[Audio recordings](#audio-recordings).
 
 ```bash
 zx_server --rom roms/48.rom --tape games/manic.tzx
@@ -779,6 +783,55 @@ Resetting the machine stops the motor but leaves the tape in the deck at the
 block it had reached — a reset zeroes the frame counter, and with it the clock
 every pulse timestamp is measured against.
 
+### Audio recordings
+
+`.wav` and `.csw` are recordings rather than descriptions: a rip off a real
+cassette, or a pulse capture. They load the same way as anything else —
+
+```bash
+zx_server --rom roms/48.rom --tape "games/jet set willy side a.wav"
+```
+
+— because they are decoded into an edge list at insert time and then played by
+exactly the same pulse engine. Nothing downstream knows the difference.
+
+`.wav` may be 8/16/24/32-bit PCM or 32/64-bit float, at any sample rate, mono
+or multi-channel (channels are averaged: a stereo rip of a mono cassette is the
+same signal twice). `.csw` may be v1 or v2, RLE or Z-RLE. The two `.tzx` blocks
+that carry a recording inline — `0x15` direct recording and `0x18` CSW — go
+through the same code, so a `.tzx` built around either now loads where before
+it was refused outright.
+
+Recordings never fast-load. A recording is by definition not a standard-speed
+block, so the trap declines and the ROM reads real pulses at real cassette
+speed. `set_speed uncapped` is how to make that bearable.
+
+**Turning a waveform back into edges is the whole problem.** A `.csw` is
+already an edge list, but a `.wav` is an analogue signal with a DC offset that
+drifts, a level that varies between rips by 30dB, and decades of hiss on it.
+`tape_audio.cpp` runs a Schmitt trigger whose centre and hysteresis are both
+derived from the signal, by tracking a decaying maximum and minimum — the
+midpoint between those rails is the comparison point, a quarter of the gap
+between them is the hysteresis, and a floor under that gap is what makes
+silence read as silence instead of as hiss. That floor is also what lets a
+recording be **cut into blocks at its gaps**, so the block list is a list and
+`tape_control {action: "seek"}` can jump to part four of a multi-load without
+playing parts one to three.
+
+The pairing that does *not* work, for the record, is a low-pass follower for
+the centre plus a peak envelope for the hysteresis. After any long stretch at a
+constant level the follower has settled onto that level rather than onto the
+midpoint of the signal either side of it, so the first swing out of it reads as
+twice the real amplitude, doubles the threshold, and swallows the next two or
+three genuine edges. Inside a pilot tone that is invisible — every pulse is the
+same length as the one before — until the tone ends and the block turns out to
+be two edges out of step. Rails have no such transient.
+
+Sample rate matters. 44.1kHz resolves a pulse to 79 T-states, which is fine for
+anything including turbo loaders. Below 22kHz a recording still plays, and says
+so in the tape's warnings, but the shortest turbo pulses are then only two or
+three samples long and a marginal rip will not load.
+
 ## Testing
 
 ```powershell
@@ -787,13 +840,21 @@ cd cpp-core
 .\build.ps1 -Release -Slow     # ZEXALL + ZEXDOC only -- many minutes each
 ```
 
-109 assertions across nine executables: the ALU and a pin-level check diffed
+128 assertions across ten executables: the ALU and a pin-level check diffed
 against the vendored `z80.h` reference (`alu_tests`, `pin_level`, and
 `differential`, which runs both cores in lockstep), the 48K memory map, the
 beeper's decimator, interrupt timing, the machine layer against a real ROM
 (`spectrum_tests`), `.tap`/`.tzx` parsing and the fast-load trap
-(`tape_tests`, 49 of them), and the bus trace against a captured
-visualz80remix reference (`tracelog_tests`). Tests that need the real ROM skip
+(`tape_tests`, 49 of them), `.wav`/`.csw` decoding and the Schmitt trigger
+(`tape_audio_tests`, 19), and the bus trace against a captured
+visualz80remix reference (`tracelog_tests`).
+
+`tape_audio_tests` is worth singling out for how it is built: it renders a
+`.tap`'s own pulses out to 44.1kHz audio, dirties them the way a cassette and a
+sound card would, and requires the real ROM to load a BASIC program back off
+the result. Neither end of that can pass by agreeing with a bug -- one end is
+the emulator's playback and the other is Sinclair's loader, and only the code
+under test sits between them. Tests that need the real ROM skip
 themselves rather than fail when `roms/48.rom` is absent.
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)

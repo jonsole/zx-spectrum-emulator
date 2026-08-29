@@ -23,7 +23,8 @@ Two things, in one small extension:
 
 ## Load Tape
 
-**"ZX Spectrum: Load Tape…"** puts a `.tap` or `.tzx` into a session that is
+**"ZX Spectrum: Load Tape…"** puts a `.tap`, `.tzx`, `.wav` or `.csw` into a
+session that is
 already running, over a `loadTape` custom request — the same channel the trace
 panel's Record button uses. It resets, types `LOAD ""`, starts the tape and
 opens the screen panel, so the load is visible as it happens.
@@ -37,7 +38,8 @@ different one mid-session.
 **ZX Spectrum Tape** appears in the debug sidebar while a `zxspectrum` session
 is running, below Call Stack and Breakpoints. It lists the tape a block at a
 time — the headers with their filenames decoded, the data blocks that follow
-them, and the tone and pause blocks a `.tzx` can carry — with the block that is
+them, the tone and pause blocks a `.tzx` can carry, and the stretches of signal
+an audio recording is cut into at its silences — with the block that is
 playing marked, the ones already loaded dimmed, and a clock icon on any block
 whose timings are non-standard, which is the answer to "why is this one loading
 at real speed".

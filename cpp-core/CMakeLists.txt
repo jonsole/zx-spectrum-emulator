@@ -41,14 +41,31 @@ add_library(zx_core STATIC
   src/snapshot.cpp
   src/spectrum.cpp
   src/tape.cpp
+  src/tape_audio.cpp
   src/tracelog.cpp
   src/ula.cpp
   src/z80.cpp
 )
 find_package(Threads REQUIRED)
-target_link_libraries(zx_core PUBLIC Threads::Threads)
+target_link_libraries(zx_core PUBLIC Threads::Threads zx_miniz)
 target_include_directories(zx_core PUBLIC src)
+# third_party as SYSTEM so miniz.h's own warnings cannot fail our /WX build.
+target_include_directories(zx_core SYSTEM PRIVATE third_party)
 target_compile_options(zx_core PRIVATE ${ZX_WARNINGS})
+
+# ---- zx_miniz: inflate, and nothing else ------------------------------------
+# .csw v2 and .tzx 0x18 store their pulse lists zlib-compressed, which is the
+# only compression anywhere in the emulator. The defines below cut the
+# amalgamation down to the tinfl decompressor -- no compressor, no .zip, no
+# file I/O -- so what gets linked is a few kilobytes rather than all of miniz.
+add_library(zx_miniz STATIC third_party/miniz/miniz.c)
+target_include_directories(zx_miniz SYSTEM PUBLIC third_party)
+target_compile_definitions(zx_miniz PUBLIC
+  MINIZ_NO_DEFLATE_APIS
+  MINIZ_NO_ARCHIVE_APIS
+  MINIZ_NO_STDIO
+  MINIZ_NO_TIME
+)
 
 # ---- zx_server: the protocol layer VS Code talks to --------------------------
 # json.hpp and stb_image_write.h are header-only and vendored, so this is just
@@ -113,6 +130,7 @@ zx_add_test(int_timing)
 zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
 zx_add_test(tape_tests)
+zx_add_test(tape_audio_tests)
 zx_add_test(tracelog_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
@@ -126,6 +144,10 @@ target_compile_definitions(spectrum_tests
 # real ROM; those tests skip gracefully without it, the parser ones do not need
 # it at all.
 target_compile_definitions(tape_tests
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+# Same again: the round-trip tests drive the real ROM's loader off decoded
+# audio, and skip gracefully when the ROM is absent.
+target_compile_definitions(tape_audio_tests
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # ---- throughput benchmark ---------------------------------------------------

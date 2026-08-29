@@ -246,6 +246,10 @@ private:
 
     std::string parse_tap(const uint8_t* data, size_t len);
     std::string parse_tzx(const uint8_t* data, size_t len);
+    /// Decodes a recording -- .wav when `is_wav`, else .csw -- and cuts the
+    /// edges it triggers out of it into blocks at the silences. See
+    /// tape_audio.h for why a recording can become ordinary pulse blocks.
+    std::string parse_audio(const uint8_t* data, size_t len, bool is_wav);
     /// Fills infos_ from blocks_, once the durations are known.
     void describe_blocks();
     /// Positions the cursor at the start of block `block_` and returns false

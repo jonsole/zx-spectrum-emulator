@@ -439,15 +439,19 @@ json tools_list() {
         "as the host allows (what the ZEXALL-style exercisers want)",
         schema(json{{"speed", string_prop("\"realtime\" or \"uncapped\".")}}, {"speed"}));
     add("load_tape",
-        "Insert a .tap or .tzx tape image and, by default, start loading it: resets the machine, "
-        "types LOAD \"\" for you, and starts the tape, so all that is left is to `run`. "
-        "Standard-speed blocks are satisfied instantly by trapping the ROM's LD-BYTES routine; "
-        "anything non-standard (turbo loaders, custom .tzx blocks) automatically falls back to "
-        "real pulse-level playback through the EAR line, so every loader works -- just at tape "
-        "speed, which for a whole game is minutes. Use set_speed uncapped to hurry that along",
-        schema(json{{"path", string_prop("Path to the .tap or .tzx, resolved against the "
-                                         "server's working directory. The format is detected "
-                                         "from the file's contents, not its extension.")},
+        "Insert a .tap, .tzx, .wav or .csw tape image and, by default, start loading it: resets "
+        "the machine, types LOAD \"\" for you, and starts the tape, so all that is left is to "
+        "`run`. Standard-speed blocks are satisfied instantly by trapping the ROM's LD-BYTES "
+        "routine; anything non-standard (turbo loaders, custom .tzx blocks, and every audio "
+        "recording) automatically falls back to real pulse-level playback through the EAR line, "
+        "so every loader works -- just at tape speed, which for a whole game is minutes. Use "
+        "set_speed uncapped to hurry that along",
+        schema(json{{"path", string_prop("Path to the .tap, .tzx, .wav or .csw, resolved "
+                                         "against the server's working directory. The format is "
+                                         "detected from the file's contents, not its extension. "
+                                         "A .wav is a recording of a real cassette and is "
+                                         "decoded back into pulses, so it always loads at tape "
+                                         "speed.")},
                     {"auto_start", bool_prop("Reset, type LOAD \"\" and start the tape. "
                                              "True by default. False leaves the tape inserted "
                                              "and stopped, for a program that loads its own "
