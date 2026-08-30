@@ -180,6 +180,20 @@ diagonal. But an animation is a loop and can be entered anywhere, so rotating
 it to start on a frame at least as large as every other makes the rest fit, and
 they are offset to sit in the middle rather than the corner.
 
+Draw a thing before naming it. Two blocks at `$B03A` and `$B32A` were written
+up here as the title screen's character set and picture: a 94-character set and
+a 192-byte map, `8 rows of 24`. Rendering it showed the parchment scroll with
+TIME and SCORE on it — the status panel, 8 columns by 24 rows, at x=192. The
+dimensions were transposed and the name invented, and 192 bytes is 192 bytes
+either way, so nothing contradicted it.
+
+What made the wrong name plausible is worth naming too: there *is* a title
+screen, so something had to be drawing it. There isn't, in the game — it is a
+plain screen$ block on the tape, 6912 bytes loaded to `$4000` and shown while
+the 30K behind it loads. Disassembling only the 30K made "it must be in here
+somewhere" feel like a deduction rather than an assumption about the boundary
+of what was being looked at. The build now pulls it off the tape and shows it.
+
 Colour comes from the game too. An actor record's `+$05` is its attribute, and
 the objects and monsters in `INITIAL_STATE` are eight-byte records, so the
 colour of anything placed at the start can be read straight off: the mummy

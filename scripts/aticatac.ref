@@ -20,6 +20,7 @@ Architecture
 Data
 RoomTypes
 Sprites
+Graphics
 Sounds
 Bugs
 Facts
@@ -27,6 +28,7 @@ Pokes
 
 [Titles]
 Loading=How the tape protects itself
+Graphics=The graphics
 Architecture=How the game is put together
 Data=Where the 21K of data goes
 RoomTypes=The room types
@@ -35,6 +37,7 @@ Sounds=The sounds
 
 [PageHeaders]
 Loading=How the tape protects itself
+Graphics=The graphics
 Architecture=How the game is put together
 Data=Where the 21K of data goes
 RoomTypes=The room types
@@ -43,6 +46,7 @@ Sounds=The sounds
 
 [Links]
 Loading=How the tape protects itself
+Graphics=The graphics
 Architecture=How the game is put together
 Data=Where the 21K of data goes
 RoomTypes=The room types
@@ -248,9 +252,11 @@ game can print spaces, digits, punctuation and capitals and nothing else. The
 code never names that address: it loads $BE4C, which is the same block less $20
 characters, so a character's own code indexes it, and $BFCC, one bias further
 on, so that a digit's value indexes its own glyph.
-The title screen uses a second set of 94 characters and a 192-byte map of which
-piece goes in each of its 8 by 24 cells -- the picture is a little font, not a
-bitmap.
+A second set of 94 characters draws the status panel, with a 192-byte map of
+which piece goes in each of its 8 columns by 24 rows: the parchment scroll down
+the side of the screen is a little character set and an index, not a bitmap.
+Running the routine and photographing the screen is what established that --
+these tiles were written up here as a title picture until then.
 
 [Data:typo:CONGRATULATIONT]
 The message shown when the player escapes reads CONGRATULATION and then $D4,

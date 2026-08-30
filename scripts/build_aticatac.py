@@ -1685,7 +1685,233 @@ def render_victory_screens(snapshot: Path, out_dir: Path) -> None:
             writer.write_image([frame], f)
 
 
-def build_html(skool: Path, out: Path) -> None:
+# The two character sets, which are graphics too but of a different shape: one
+# character is eight consecutive bytes, so a UDG is a character, they sit eight
+# bytes apart, and sixteen to a row is 128 bytes to the next band.
+FONTS = (
+    ("The text font", 0xBF4C, 59,
+     "59 characters, $20 to $5A -- space, digits, punctuation and capitals, and"
+     " nothing else. The code never names this address: it loads $BE4C, which"
+     " is this block less $20 characters, so a character's own code indexes"
+     " it."),
+    ("The status panel's character set", 0xB03A, 94,
+     "94 characters, used with a 192-byte map of which piece goes in each of"
+     " the panel's 8 by 24 cells. The scroll is a little character set and an"
+     " index, not a bitmap."),
+)
+
+
+def font_columns(count: int) -> int:
+    """How many characters to a row so the grid ends as near flush as it can.
+
+    A #UDGARRAY fills its last row whatever the count, and what fills it here
+    is whatever bytes follow the font -- the next graphic, drawn as characters.
+    Nothing can be cropped away rectangularly, so the width is chosen to waste
+    as few cells as possible instead.
+    """
+    return min(range(12, 25),
+               key=lambda width: ((-(-count // width) * width - count), -width))
+
+
+DRAW_PANEL = 0xA219
+
+
+SCREEN_LENGTH = 6912
+SCREEN_ADDRESS = 0x4000
+
+
+def tape_blocks(tape: Path) -> list:
+    """The .tap file's blocks, each still carrying its flag and checksum.
+
+    A .tap is nothing but a run of two-byte lengths each followed by that many
+    bytes, so this needs no help from SkoolKit.
+    """
+    data = tape.read_bytes()
+    blocks, index = [], 0
+    while index + 2 <= len(data):
+        length = data[index] | (data[index + 1] << 8)
+        index += 2
+        blocks.append(data[index:index + length])
+        index += length
+    return blocks
+
+
+def render_loading_screen(tape: Path, out_dir: Path) -> bool:
+    """Write the loading screen, which is on the tape rather than in the game.
+
+    The game's own memory holds no title picture -- what looked like one turned
+    out to be the status panel. The picture everybody remembers is a plain
+    screen$ block, the second thing on the tape: 6912 bytes loaded straight to
+    $4000, shown while the 30K behind it loads.
+    """
+    from skoolkit.components import get_image_writer
+    from skoolkit.graphics import Frame, scr_udgs
+
+    headers = tape_blocks(tape)
+    screen = None
+    for index, block in enumerate(headers):
+        # A header names the length and address of the block after it.
+        if (len(block) >= 19 and block[0] == 0x00
+                and (block[12] | (block[13] << 8)) == SCREEN_LENGTH
+                and (block[14] | (block[15] << 8)) == SCREEN_ADDRESS
+                and index + 1 < len(headers)):
+            screen = headers[index + 1][1:1 + SCREEN_LENGTH]
+            break
+    if screen is None or len(screen) < SCREEN_LENGTH:
+        _log("  (no loading screen found on the tape)")
+        return False
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _log("Extracting the loading screen from the tape...")
+    memory = [0] * 65536
+    memory[SCREEN_ADDRESS:SCREEN_ADDRESS + SCREEN_LENGTH] = screen
+    with open(out_dir / "loading.png", "wb") as f:
+        get_image_writer().write_image(
+            [Frame(scr_udgs(memory, 0, 0, 32, 24), 2)], f)
+    return True
+
+
+def render_panel(snapshot: Path, out_dir: Path) -> None:
+    """Draw the status panel by running the routine that draws it.
+
+    It is 24 rows of 8 cells of tile numbers indexing a 94-character set, so
+    there is nothing an image macro can point at -- the map holds indices, not
+    addresses. Running it and photographing the screen is both easier and more
+    honest than reimplementing the lookup, and it is what showed that these
+    tiles draw the scroll rather than a title picture.
+    """
+    from skoolkit.components import get_image_writer
+    from skoolkit.graphics import Frame, scr_udgs
+    from skoolkit.simulator import Simulator
+    from skoolkit.simutils import PC
+    from skoolkit.trace import Tracer
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _log("Drawing the title picture...")
+    simulator = Simulator(machine_memory(snapshot),
+                          state={"iff": 0, "im": 1, "tstates": 0})
+    simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
+    for address in range(0x4000, 0x5800):
+        simulator.memory[address] = 0
+    # The routine colours only the cells it draws into, so the rest of the
+    # attribute file has to start as something visible or the picture comes out
+    # as black ink on black paper.
+    for address in range(0x5800, 0x5B00):
+        simulator.memory[address] = SPRITE_ATTR
+    simulator.memory[SOUND_STACK] = SOUND_SENTINEL & 0xFF
+    simulator.memory[SOUND_STACK + 1] = SOUND_SENTINEL >> 8
+    simulator.registers[24] = SOUND_STACK
+    simulator.registers[PC] = DRAW_PANEL
+    # It does not end in a clean RET -- it is entered with more on the stack
+    # than a forced call gives it -- so the capture stops as soon as it leaves
+    # the game's own address space, by which point it has finished drawing.
+    for _ in range(5_000_000):
+        simulator.run()
+        if (simulator.registers[PC] == SOUND_SENTINEL
+                or simulator.registers[PC] < ENTRY):
+            break
+    frame = Frame(scr_udgs(simulator.memory, 0, 0, 32, 24), 2)
+    with open(out_dir / "panel.png", "wb") as f:
+        get_image_writer().write_image([frame], f)
+
+
+def write_graphics_ref(snapshot: Path, path: Path,
+                       has_screen: bool = False) -> None:
+    """A generated ref file for everything drawn that is not a sprite.
+
+    The pieces the rooms are furnished with, and the two character sets. These
+    are the graphics with a width in their header, drawn by different code from
+    the creatures, and they are what codes above SPRITE_CODE_MAX select.
+    """
+    memory = game_memory(snapshot)
+    named = {}
+    for low, high, name in sprite_names():
+        for code in range(low, high + 1):
+            named[code] = name
+
+    owners = {}
+    for code in range(SPRITE_CODE_MAX + 1, GFX_TABLE_ENTRIES + 1):
+        graphic = sprite_graphic(memory, code)
+        if graphic:
+            owners.setdefault(graphic[0], []).append(code)
+
+    lines = [
+        "; Generated by scripts/build_aticatac.py -- do not edit.",
+        "",
+        "[Page:Graphics]",
+        "SectionPrefix=Graphics",
+        "",
+        "[Graphics:intro:What the castle is made of]",
+        "The creatures are on the sprites page. These are the other half: the"
+        " pieces a room is furnished with -- door frames, a clock, a bookcase,"
+        " a skeleton in chains -- and the two character sets.",
+        "They are a different shape from a sprite. A creature is always two"
+        " bytes wide and stores only a row count; these carry a width as well,"
+        " and are drawn by different code. Which format applies is decided by"
+        " the sprite code rather than by anything in the bytes: above $%02X is"
+        " furniture." % SPRITE_CODE_MAX,
+        "%d graphics for %d codes. The names are pobtastic's, from the Atic"
+        " Atac disassembly at skoolkit.arcadegeek.co.uk; the ones still shown"
+        " by number are unnamed here."
+        % (len(owners), sum(len(c) for c in owners.values())),
+    ]
+    if has_screen:
+        lines += [
+            "",
+            "[Graphics:loading:The title screen]",
+            "It is not in the game. The game's memory holds no title picture at"
+            " all -- what was written up here as one turned out to be the"
+            " status panel. The picture everybody remembers is a plain screen$"
+            " block, the second thing on the tape: 6912 bytes loaded straight"
+            " to $4000 and shown while the 30K behind it loads.",
+            "So it is the one graphic in this disassembly that no game code"
+            " ever draws, and the only one in full colour.",
+            '<img src="images/loading/loading.png" alt="the loading screen"/>',
+        ]
+    lines += [
+        "",
+        "[Graphics:furniture:The furniture]",
+        "#UDGTABLE",
+        "{ =h Picture | =h Codes | =h What it is | =h Size | =h Address }",
+    ]
+    for address in sorted(owners):
+        codes = owners[address]
+        _, header, width, rows = sprite_graphic(memory, codes[0])
+        lines.append("{ %s | %s | %s | %d&times;%d | #R$%04X }" % (
+            udgarray(address, header, width, rows, "gfxpage%02X" % codes[0],
+                     wrap=False),
+            ", ".join("$%02X" % c for c in codes),
+            named.get(codes[0], "&mdash;"), width * 8, rows, address))
+    lines.append("UDGTABLE#")
+
+    lines += [
+        "",
+        "[Graphics:panel:The status panel]",
+        "The 94 characters below are not a font in any useful sense -- they are"
+        " one picture cut into cells. DRAW_PANEL points the tile source at them"
+        " and draws 8 columns by 24 rows from a 192-byte map of which piece"
+        " goes where, so the parchment scroll down the side of the screen is"
+        " stored as a little character set and an index.",
+        "This is the routine's own output, captured off the screen: the map"
+        " holds tile numbers rather than addresses, so there is nothing for an"
+        " image macro to point at.",
+        '<img src="images/panel/panel.png" alt="the status panel"/>',
+    ]
+
+    for title, address, count in [(f[0], f[1], f[2]) for f in FONTS]:
+        description = [f[3] for f in FONTS if f[1] == address][0]
+        lines += [
+            "",
+            "[Graphics:font%04X:%s]" % (address, title),
+            description,
+            "#UDGARRAY%d,%d,2,1($%04X-$%04X-8-%d)(font%04X)" % (
+                font_columns(count), SPRITE_ATTR, address,
+                address + (count - 1) * 8, font_columns(count) * 8, address),
+        ]
+    lines.append("")
+    path.write_text(NEWLINE.join(lines), encoding="utf-8")
+
+
+def build_html(skool: Path, out: Path, tape: Path) -> None:
     """Render the skool file as a browsable HTML disassembly.
 
     -a makes the pages use the labels from the annotations file rather than
@@ -1710,6 +1936,11 @@ def build_html(skool: Path, out: Path) -> None:
     write_sprites_ref(groups, snapshot,
                       entry_addresses(OUT_DIR / "aticatac.ctl"), sprites_ref)
     args.append(str(sprites_ref))
+    graphics_ref = OUT_DIR / "aticatac-graphics-page.ref"
+    has_screen = render_loading_screen(
+        tape, out / "aticatac" / "images" / "loading")
+    write_graphics_ref(snapshot, graphics_ref, has_screen)
+    args.append(str(graphics_ref))
     sounds_ref = OUT_DIR / "aticatac-sounds.ref"
     sounds = record_sounds(snapshot, out / "aticatac" / "audio")
     write_sounds_ref(sounds, entry_addresses(OUT_DIR / "aticatac.ctl"), sounds_ref)
@@ -1717,6 +1948,7 @@ def build_html(skool: Path, out: Path) -> None:
     _capture(skool2html.main, args)
     render_shapes(snapshot, shapes, out / "aticatac" / "images" / "shapes")
     render_victory_screens(snapshot, out / "aticatac" / "images" / "bugs")
+    render_panel(snapshot, out / "aticatac" / "images" / "panel")
 
 
 def verify(game_bytes: bytes, snapshot: Path) -> None:
@@ -1794,7 +2026,7 @@ def main() -> None:
     verify(game_bytes, snapshot)
     write_snapshot(game_bytes, snapshot, sna)
     if args.html:
-        build_html(skool, OUT_DIR / "html")
+        build_html(skool, OUT_DIR / "html", args.tape)
 
     _log("")
     _log(f"Entry point: 0x{ENTRY:04X} (the game's own entry is 0x7C19)")

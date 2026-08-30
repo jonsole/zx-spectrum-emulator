@@ -1813,16 +1813,17 @@ B $645D,4384,16
 # --------------------------------------------------------------------------
 
 ; span $B03A,752
-@ $B03A label=TITLE_TILES
-b $B03A The character set the title picture is drawn from
-D $B03A 94 characters, eight bytes each, top row first. $A219 points the tile source at this and then draws 24 columns by 8 rows from TITLE_PICTURE, so the picture on the title screen is not a bitmap at all -- it is a little font, and a 192-byte map naming which piece goes in each cell.
+@ $B03A label=PANEL_TILES
+b $B03A The character set the status panel is drawn from
+D $B03A 94 characters, eight bytes each, top row first. DRAW_PANEL points the tile source at this and then draws 8 columns by 24 rows from PANEL_LAYOUT, so the parchment scroll down the right of the screen is not a bitmap at all -- it is a little character set, and a 192-byte map naming which piece goes in each cell.
+D $B03A Running DRAW_PANEL and photographing the screen settles what it draws: the scroll, with the words TIME and SCORE on it and the compass at its foot. An earlier note here called it the title picture, which it is not.
 D $B03A That the count is exactly 94 is confirmed by the map: the highest value in it is $5D, which is 93, the last character here.
 B $B03A,752,8
 
 ; span $B32A,192
-@ $B32A label=TITLE_PICTURE
-b $B32A The title picture, as tile numbers
-D $B32A 8 rows of 24, each byte an index into TITLE_TILES. The loop at $A228 walks it a row at a time, calling PLOT_TILE for each cell and colouring it as it goes.
+@ $B32A label=PANEL_LAYOUT
+b $B32A The status panel, as tile numbers
+D $B32A 24 rows of 8, each byte an index into PANEL_TILES. The loop at $A228 walks it a row at a time, calling PLOT_TILE for each cell and colouring it as it goes. The eight columns start at x=192, which is the first character column past the play area -- the same place PAINT_PANEL colours.
 B $B32A,192,24
 
 ; span $BF4C,472
