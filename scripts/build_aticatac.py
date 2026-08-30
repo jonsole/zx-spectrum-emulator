@@ -826,6 +826,10 @@ SPRITE_ATTR = 0x47
 # The game moves a walking character on every fourth frame, so a little over
 # ten frames a second. #FRAMES delays are in hundredths.
 FRAME_DELAY = 12
+# The objects and monsters in the initial-state template, which are eight
+# bytes each. The doors after them are sixteen and would not line up.
+TEMPLATE_RECORDS = 0x6025
+TEMPLATE_DOORS = 0x645D
 
 
 def sprite_graphic(memory, code: int):
@@ -847,7 +851,8 @@ def sprite_graphic(memory, code: int):
 
 
 def udgarray(address: int, header: int, width: int, rows: int, name: str,
-             limit: int = None) -> str:
+             limit: int = None, wrap: bool = True,
+             attr: int = SPRITE_ATTR) -> str:
     """A #UDGARRAY that draws one graphic straight out of the snapshot.
 
     The bytes are row-major and `width` wide, so a UDG takes every `width`th
@@ -863,9 +868,10 @@ def udgarray(address: int, header: int, width: int, rows: int, name: str,
     top = SPRITE_SCALE * ((8 - rows % 8) % 8)
     # Wrapped in #HTML because the same comments go through skool2asm, which
     # has no way to render an image and refuses the macro outright.
-    return "#HTML(#UDGARRAY%d,%d,%d,%d,,2($%04X-$%04X-1-%d){0,%d,%d,%d}(%s))" % (
-        width, SPRITE_ATTR, SPRITE_SCALE, width, start, end, width * 8,
+    macro = "#UDGARRAY%d,%d,%d,%d,,2($%04X-$%04X-1-%d){0,%d,%d,%d}(%s)" % (
+        width, attr, SPRITE_SCALE, width, start, end, width * 8,
         top, width * 8 * SPRITE_SCALE, rows * SPRITE_SCALE, name)
+    return "#HTML(%s)" % macro if wrap else macro
 
 
 def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
@@ -1187,6 +1193,46 @@ def sprite_names() -> list:
     return names
 
 
+def walk_cycles(codes: list, addresses: dict) -> list:
+    """Split a run of frames into the separate headings it holds.
+
+    A creature that walks has one set of frames per heading, laid out one after
+    another, and each set is a cycle whose fourth frame reuses the second's
+    picture -- there are only three drawings in a four-frame walk. Where that
+    pattern holds all the way through, the run is split on it; where it does
+    not, the run is left as one row.
+    """
+    if len(codes) < 8 or len(codes) % 4:
+        return [codes]
+    groups = [codes[i:i + 4] for i in range(0, len(codes), 4)]
+    for group in groups:
+        if addresses[group[1]] != addresses[group[3]]:
+            return [codes]
+    return groups
+
+
+def sprite_attributes(memory) -> dict:
+    """The colour the game gives each creature, read out of INITIAL_STATE.
+
+    An actor record's +$05 is its attribute, and the objects and monsters in
+    the template are eight bytes each, so the colour of anything that starts
+    the game somewhere can simply be read off. They come out as bright ink on
+    black paper, $42 to $47, which is the palette PAINT_PANEL works in: the
+    mummy white, Frankenstein red, the devil magenta, Dracula green.
+
+    Only where every record agrees. Anything else -- the player, whose colour
+    comes from the character chosen, and anything not placed at the start --
+    keeps the default.
+    """
+    found = {}
+    for address in range(TEMPLATE_RECORDS, TEMPLATE_DOORS, 8):
+        code, attr = memory[address], memory[address + 5]
+        if code and attr:
+            found.setdefault(code, set()).add(attr)
+    return {code: attrs.pop() for code, attrs in found.items()
+            if len(attrs) == 1}
+
+
 def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
                       path: Path) -> None:
     """A generated ref file cataloguing the sprites, grouped by handler.
@@ -1196,6 +1242,7 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
     so the creatures walk.
     """
     memory = game_memory(snapshot)
+    colours = sprite_attributes(memory)
     named_ranges = sprite_names()
 
     def picture(code):
@@ -1227,16 +1274,21 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
         " selects the picture drawn for it. So the sprites are catalogued here"
         " in the order the handler table groups them, which is why the frames"
         " of one creature sit together.",
-        "Each picture is the game's own. The code is put into UI_RECORD and the"
-        " two calls DRAW_TITLE_ICONS makes are run, so nothing here depends on"
-        " having decoded the sprite format correctly.",
+        "Every picture here is drawn by SkoolKit straight out of the game's"
+        " own bytes, so a sprite and the DEFBs listed for it cannot disagree."
+        " Where a run of frames is a walk, each heading gets its own row and"
+        " an animation at the pace the game plays it -- a step every fourth"
+        " frame. A four-frame walk holds only three drawings: the fourth"
+        " frame points at the second one's picture rather than a copy of it.",
         "Codes $01 to $%02X are the pictures; %d of them draw something, and"
         " the rest are entries whose handler is a sound effect, or an"
         " animation that draws itself -- $66 and $67, the sinking and rising"
         " the player does on dying, have no picture of their own. Codes above"
-        " $%02X are in the handler table too but draw only fragments of a few"
-        " pixels, so they are left out." % (SPRITE_CODE_MAX, len(drawn),
-                                            SPRITE_CODE_MAX),
+        " $%02X are the pieces the rooms are furnished with, drawn by"
+        " different code from a format that carries a width as well; those are"
+        " listed with the data rather than here." % (SPRITE_CODE_MAX,
+                                                     len(drawn),
+                                                     SPRITE_CODE_MAX),
     ]
     for group in groups:
         shown = [c for c in group["codes"] if c in drawn]
@@ -1267,31 +1319,42 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
             else:
                 lines.append("Driven by #R$%04X, which has not been named yet."
                              % handler)
-            if name and len(codes) > 1:
+            if name and len(codes) > 1 and len(
+                    walk_cycles(codes, {c: picture(c)[0] for c in codes})) == 1:
                 lines.append("%d frames." % len(codes))
-            # Each frame is drawn once, named so #FRAMES can animate it.
-            for code in codes:
-                address, header, width, rows = picture(code)
-                lines.append(udgarray(address, header, width, rows,
-                                      "sprite%02X*f%02X" % (code, code)))
-            lines.append('<div style="display:flex;flex-wrap:wrap;gap:10px;'
-                         'align-items:flex-end">')
-            # #FRAMES needs every frame the same size, and a few runs mix
-            # heights -- the frames of one creature are usually but not always
-            # drawn on the same grid. Those get their stills and no animation.
-            sizes = {picture(c)[2:] for c in codes}
-            if len(codes) > 1 and len(sizes) == 1:
-                lines.append(
-                    '<div style="text-align:center;font-size:11px">'
-                    '#HTML(#FRAMES(%s)(anim%02X))<div>animated</div></div>'
-                    % (";".join("f%02X,%d" % (c, FRAME_DELAY) for c in codes),
-                       codes[0]))
-            for code in codes:
-                lines.append(
-                    '<div style="text-align:center;font-size:11px">'
-                    '<img src="images/udgs/sprite%02X.png" alt="sprite $%02X"'
-                    ' style="display:block"/>$%02X</div>' % (code, code, code))
-            lines += ["</div>", '<div style="clear:both"></div>']
+            cycles = walk_cycles(codes, {c: picture(c)[0] for c in codes})
+            if len(cycles) > 1:
+                lines.append("%d headings of %d frames."
+                             % (len(cycles), len(cycles[0])))
+            columns = max(len(cycle) for cycle in cycles)
+            lines.append("#UDGTABLE")
+            lines.append("{ " + " | ".join(
+                "=h Frame %d" % (i + 1) for i in range(columns))
+                + " | =h Animated }")
+            for cycle in cycles:
+                row = []
+                for code in cycle:
+                    address, header, width, rows = picture(code)
+                    # Drawing the frame here both puts it in the cell and names
+                    # it, so #FRAMES can pick it up. The animation is the last
+                    # column because its frames have to exist by then.
+                    row.append("%s<div style=\"font-size:11px\">$%02X</div>"
+                               % (udgarray(address, header, width, rows,
+                                           "sprite%02X*f%02X" % (code, code),
+                                           wrap=False,
+                                           attr=colours.get(code, SPRITE_ATTR)),
+                                  code))
+                row += [""] * (columns - len(row))
+                # #FRAMES needs every frame the same size, and a few runs mix
+                # heights, so those get their stills and no animation.
+                if len(cycle) > 1 and len({picture(c)[2:] for c in cycle}) == 1:
+                    row.append("#FRAMES(%s)(anim%02X)" % (
+                        ";".join("f%02X,%d" % (c, FRAME_DELAY) for c in cycle),
+                        cycle[0]))
+                else:
+                    row.append("")
+                lines.append("{ " + " | ".join(x or "&nbsp;" for x in row) + " }")
+            lines.append("UDGTABLE#")
     lines.append("")
     path.write_text(NEWLINE.join(lines), encoding="utf-8")
 

@@ -152,6 +152,20 @@ follow a semicolon; on 10.x they go in brackets. And the macros need wrapping
 in `#HTML(...)`, because the same comments go through `skool2asm`, which has no
 way to render an image and refuses them outright.
 
+What to animate is a question the data answers. A creature's run of codes is
+not a single sequence: sixteen codes are four headings of four frames, and each
+heading is a cycle whose fourth frame's table entry points at the *second
+frame's picture* rather than a copy of it — a four-frame walk drawn three
+times. Animating all sixteen together produces something that spins through
+every direction at once. The split is detected on that repeated entry rather
+than assumed, so a run that does not fit the pattern stays as one row.
+
+Colour comes from the game too. An actor record's `+$05` is its attribute, and
+the objects and monsters in `INITIAL_STATE` are eight-byte records, so the
+colour of anything placed at the start can be read straight off: the mummy
+white, Frankenstein red, the devil magenta, Dracula green, all bright ink on
+black. Applied only where every record for a code agrees.
+
 And a **sound page**, on the same principle again: each effect is captured by
 running its routine on a machine of its own and recording the writes to bit 4
 of port `$FE`, which is the only sound hardware a 48K has. The WAVs go into
