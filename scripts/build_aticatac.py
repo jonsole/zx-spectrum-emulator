@@ -803,11 +803,69 @@ def render_sprites(snapshot: Path, out_dir: Path,
 GFX_TABLE = 0xA4BE
 GFX_TABLE_ENTRIES = 239
 GFX_FIRST = 0xA69C
-# Below this the graphics carry a width as well as a height and are the
-# wider pieces the room is built from; above it every sprite is two bytes
-# wide and only the row count is stored. The boundary is not a guess: the
-# 14 records from $A69C tile that region exactly, ending on ROOM_TABLE.
-GFX_NARROW = 0xAD2E
+# Two formats, and which one applies is decided by the sprite code rather than
+# by where the bytes are. Codes up to SPRITE_CODE_MAX are the creatures and
+# objects the handler table drives: two bytes -- sixteen pixels -- wide, with a
+# single byte of row count. Above it are the pieces the rooms are furnished
+# with, drawn by different code, and those carry a width as well as a height.
+# Read the wide ones as narrow and they come out nine bytes long instead of a
+# hundred and thirty, and the rest of each looks like unreferenced artwork.
+# With this rule the 194 graphics tile their region, the only gaps are the
+# tables and fonts that genuinely sit among them, and the last one ends exactly
+# where TAIL_PADDING begins.
+
+
+# Sprite pictures are built by SkoolKit from the game's own bytes rather than
+# drawn by a simulator and pasted in, so a picture and the DEFBs beside it
+# cannot disagree. Taken from pobtastic's Atic Atac disassembly at
+# skoolkit.arcadegeek.co.uk, which does it far more neatly than a page of <img>
+# tags -- though the macro syntax below is SkoolKit 10's, where the UDG
+# specifications go in brackets rather than after a semicolon as in 9.x.
+SPRITE_SCALE = 4
+SPRITE_ATTR = 0x47
+# The game moves a walking character on every fourth frame, so a little over
+# ten frames a second. #FRAMES delays are in hundredths.
+FRAME_DELAY = 12
+
+
+def sprite_graphic(memory, code: int):
+    """Where a sprite code's picture is, and how big: (address, header, width,
+    rows). None if the code has no well-formed graphic."""
+    if not 1 <= code <= GFX_TABLE_ENTRIES:
+        return None
+    entry = GFX_TABLE + (code - 1) * 2
+    address = memory[entry] | (memory[entry + 1] << 8)
+    if not GFX_FIRST <= address < GAME_END:
+        return None
+    if code > SPRITE_CODE_MAX:
+        width, rows, header = memory[address], memory[address + 1], 2
+    else:
+        width, rows, header = 2, memory[address], 1
+    if width == 0 or rows == 0 or address + header + width * rows > GAME_END:
+        return None
+    return address, header, width, rows
+
+
+def udgarray(address: int, header: int, width: int, rows: int, name: str,
+             limit: int = None) -> str:
+    """A #UDGARRAY that draws one graphic straight out of the snapshot.
+
+    The bytes are row-major and `width` wide, so a UDG takes every `width`th
+    byte, consecutive UDGs are one byte apart, and the next band of UDGs starts
+    `width * 8` bytes on. The array always comes out a whole number of cells
+    tall, so it is cropped back to the real height.
+    """
+    start = address + header
+    end = (limit if limit is not None else address + header + width * rows) - 1
+    # The rows are stored bottom up, so the array is flipped vertically. That
+    # pushes the padding -- the array is always a whole number of cells tall --
+    # from the bottom to the top, so the crop starts below it rather than at 0.
+    top = SPRITE_SCALE * ((8 - rows % 8) % 8)
+    # Wrapped in #HTML because the same comments go through skool2asm, which
+    # has no way to render an image and refuses the macro outright.
+    return "#HTML(#UDGARRAY%d,%d,%d,%d,,2($%04X-$%04X-1-%d){0,%d,%d,%d}(%s))" % (
+        width, SPRITE_ATTR, SPRITE_SCALE, width, start, end, width * 8,
+        top, width * 8 * SPRITE_SCALE, rows * SPRITE_SCALE, name)
 
 
 def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
@@ -833,7 +891,7 @@ def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
         address = memory[entry] | (memory[entry + 1] << 8)
         if not GFX_FIRST <= address < GAME_END:
             continue
-        if address < GFX_NARROW:
+        if code > SPRITE_CODE_MAX:
             width, rows = memory[address], memory[address + 1]
             if width == 0 or rows == 0 or address + 2 + width * rows > GAME_END:
                 continue
@@ -848,7 +906,7 @@ def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
     starts = sorted(owners)
     for index, address in enumerate(starts):
         width, rows, codes = owners[address]
-        wide = address < GFX_NARROW
+        wide = codes[0] > SPRITE_CODE_MAX
         header = 2 if wide else 1
         end = address + header + width * rows
         # A few graphics overlap: $C219 is eighteen rows, but $C23A -- another
@@ -892,8 +950,8 @@ def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
                             limit, (shared + width - 1) // width,
                             "" if shared < width * 2 else "s", rows))
         if any(memory[address + header:end]):
-            lines.append("D $%04X #HTML(<img src=\"../images/sprites/sprite%02X.png\" "
-                         "alt=\"sprite $%02X\"/>)" % (address, first, first))
+            lines.append("D $%04X %s" % (address, udgarray(
+                address, header, width, rows, "gfx%02X" % first, end)))
         else:
             lines.append("D $%04X Every byte is zero, so this one draws nothing "
                          "-- a blank frame in an animation." % address)
@@ -1129,9 +1187,27 @@ def sprite_names() -> list:
     return names
 
 
-def write_sprites_ref(groups: list[dict], drawn: set, entries: set, path: Path) -> None:
-    """A generated ref file cataloguing the sprites, grouped by handler."""
+def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
+                      path: Path) -> None:
+    """A generated ref file cataloguing the sprites, grouped by handler.
+
+    Every picture on the page is a #UDGARRAY over the game's own bytes, and a
+    run of frames also gets a #FRAMES animation at the pace the game plays it,
+    so the creatures walk.
+    """
+    memory = game_memory(snapshot)
     named_ranges = sprite_names()
+
+    def picture(code):
+        graphic = sprite_graphic(memory, code)
+        if graphic is None:
+            return None
+        address, header, width, rows = graphic
+        if not any(memory[address + header:address + header + width * rows]):
+            return None
+        return graphic
+
+    drawn = {c for c in range(1, SPRITE_CODE_MAX + 1) if picture(c)}
 
     def depicted(code):
         for low, high, name in named_ranges:
@@ -1193,11 +1269,27 @@ def write_sprites_ref(groups: list[dict], drawn: set, entries: set, path: Path) 
                              % handler)
             if name and len(codes) > 1:
                 lines.append("%d frames." % len(codes))
-            lines.append('<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end">')
+            # Each frame is drawn once, named so #FRAMES can animate it.
+            for code in codes:
+                address, header, width, rows = picture(code)
+                lines.append(udgarray(address, header, width, rows,
+                                      "sprite%02X*f%02X" % (code, code)))
+            lines.append('<div style="display:flex;flex-wrap:wrap;gap:10px;'
+                         'align-items:flex-end">')
+            # #FRAMES needs every frame the same size, and a few runs mix
+            # heights -- the frames of one creature are usually but not always
+            # drawn on the same grid. Those get their stills and no animation.
+            sizes = {picture(c)[2:] for c in codes}
+            if len(codes) > 1 and len(sizes) == 1:
+                lines.append(
+                    '<div style="text-align:center;font-size:11px">'
+                    '#HTML(#FRAMES(%s)(anim%02X))<div>animated</div></div>'
+                    % (";".join("f%02X,%d" % (c, FRAME_DELAY) for c in codes),
+                       codes[0]))
             for code in codes:
                 lines.append(
                     '<div style="text-align:center;font-size:11px">'
-                    '<img src="images/sprites/sprite%02X.png" alt="sprite $%02X"'
+                    '<img src="images/udgs/sprite%02X.png" alt="sprite $%02X"'
                     ' style="display:block"/>$%02X</div>' % (code, code, code))
             lines += ["</div>", '<div style="clear:both"></div>']
     lines.append("")
@@ -1374,6 +1466,50 @@ def write_sounds_ref(sounds: list[dict], entries: set, path: Path) -> None:
     path.write_text(NEWLINE.join(lines), encoding="utf-8")
 
 
+# The one real bug -------------------------------------------------------------
+#
+# $971F holds $D4 -- "T" with the end marker set -- where it should hold $D3,
+# so the screen shown to a player who escapes reads CONGRATULATIONT. Both
+# screens below are drawn by running the game's own end-of-game routine; the
+# only difference between them is that one byte.
+
+VICTORY_SCREEN = 0x96EC
+TYPO_ADDRESS = 0x971F
+TYPO_SHIPPED = 0xD4
+TYPO_FIXED = 0xD3
+
+
+def render_victory_screens(snapshot: Path, out_dir: Path) -> None:
+    """Draw the end-of-game screen as it ships, and with the typo corrected."""
+    from skoolkit.components import get_image_writer
+    from skoolkit.graphics import Frame, scr_udgs
+    from skoolkit.simulator import Simulator
+    from skoolkit.simutils import PC
+    from skoolkit.trace import Tracer
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    writer = get_image_writer()
+    _log("Drawing the end-of-game screen, as it ships and corrected...")
+    for name, byte in (("shipped", TYPO_SHIPPED), ("fixed", TYPO_FIXED)):
+        memory = machine_memory(snapshot)
+        memory[TYPO_ADDRESS] = byte
+        simulator = (Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
+        simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
+        for address in range(0x4000, 0x5B00):
+            simulator.memory[address] = 0
+        simulator.memory[SOUND_STACK] = SOUND_SENTINEL & 0xFF
+        simulator.memory[SOUND_STACK + 1] = SOUND_SENTINEL >> 8
+        simulator.registers[24] = SOUND_STACK
+        simulator.registers[PC] = VICTORY_SCREEN
+        for _ in range(3_000_000):
+            simulator.run()
+            if simulator.registers[PC] == SOUND_SENTINEL:
+                break
+        frame = Frame(scr_udgs(simulator.memory, 4, 2, 24, 5), 2)
+        with open(out_dir / ("congratulations-%s.png" % name), "wb") as f:
+            writer.write_image([frame], f)
+
+
 def build_html(skool: Path, out: Path) -> None:
     """Render the skool file as a browsable HTML disassembly.
 
@@ -1396,9 +1532,8 @@ def build_html(skool: Path, out: Path) -> None:
     args.append(str(shapes_ref))
     sprites_ref = OUT_DIR / "aticatac-sprites.ref"
     groups = read_sprite_groups(snapshot)
-    drawn = render_sprites(snapshot, out / "aticatac" / "images" / "sprites",
-                           linked_sprite_codes(OUT_DIR / "aticatac-graphics.ctl"))
-    write_sprites_ref(groups, drawn, entry_addresses(OUT_DIR / "aticatac.ctl"), sprites_ref)
+    write_sprites_ref(groups, snapshot,
+                      entry_addresses(OUT_DIR / "aticatac.ctl"), sprites_ref)
     args.append(str(sprites_ref))
     sounds_ref = OUT_DIR / "aticatac-sounds.ref"
     sounds = record_sounds(snapshot, out / "aticatac" / "audio")
@@ -1406,6 +1541,7 @@ def build_html(skool: Path, out: Path) -> None:
     args.append(str(sounds_ref))
     _capture(skool2html.main, args)
     render_shapes(snapshot, shapes, out / "aticatac" / "images" / "shapes")
+    render_victory_screens(snapshot, out / "aticatac" / "images" / "bugs")
 
 
 def verify(game_bytes: bytes, snapshot: Path) -> None:

@@ -21,6 +21,9 @@ Data
 RoomTypes
 Sprites
 Sounds
+Bugs
+Facts
+Pokes
 
 [Titles]
 Loading=How the tape protects itself
@@ -256,3 +259,86 @@ says CONGRATULATIONT. The sequence that plays it -- a note climbing while the
 screen flashes in and out from the middle -- is never reached by a machine
 playing the game at random, which is why it sat in the disassembly as data
 until it was picked apart by hand.
+
+[Bug:congratulationt:CONGRATULATIONT]
+$971F holds $D4. Bit 7 is the end-of-string marker, so the character is $54 --
+"T" -- where it should be $53, "S". The screen a player sees on escaping the
+castle reads CONGRATULATIONT.
+It is not a misreading of the data. Both pictures below were drawn by running
+the game's own end-of-game routine at #R$96EC, and the only difference between
+them is that one byte.
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<div><div style="font-size:11px;margin-bottom:4px">As it ships</div>
+<img src="../images/bugs/congratulations-shipped.png" alt="the shipped screen"/></div>
+<div><div style="font-size:11px;margin-bottom:4px">With $971F set to $D3</div>
+<img src="../images/bugs/congratulations-fixed.png" alt="the corrected screen"/></div>
+</div>
+<div style="clear:both"></div>
+It survived because almost nobody saw it. Reaching this screen means finishing
+the game, and the sequence that plays it -- ESCAPE_SEQUENCE, a note climbing
+while the screen flashes out from the middle -- is never entered by a machine
+playing the game at random. A code map built from playthroughs classified the
+whole routine as data until it was picked apart by hand.
+
+[Poke:congratulations:Spell CONGRATULATIONS correctly]
+One byte, and nothing else moves: the string is the same length.
+POKE 38687,211
+
+[Fact:nops:The eight NOPs are not padding]
+Every one is a hole the game pokes an instruction into. Each has a LD (nn),A a
+few bytes earlier that writes the AND, OR or XOR combining a sprite with what is
+already on the screen. Remove them and sprite drawing breaks.
+
+[Fact:sharedbytes:Two sprites share four bytes]
+Sprite $54 at $C219 says eighteen rows, which runs four bytes past $C23A where
+sprite $58 begins. Neither is wrong. Drawing $54 reads all eighteen rows and the
+seventeenth continues the taper of the sixteenth exactly; the byte they share,
+$0C, is the last row's left half and also $58's row count. Three bytes saved by
+a coincidence someone noticed.
+
+[Fact:blanksprite:A sprite that is entirely zero]
+$31 draws nothing at all. That is what a blank frame in an animation looks like.
+
+[Fact:trapdoor:Shape $0C is the trapdoor fall]
+Twelve nested rectangles, appearing in no room's entry -- if you read the first
+149 entries of ROOM_TABLE. The table has 151, and the last is not a room but the
+fall. Drawn with the walk limits closing in, concentric squares read as dropping
+down a shaft. This one caught the author of these pages, which is why it is
+written down.
+
+[Fact:sound:What was checked and found sound]
+Every branch in the game -- 4823 instructions' worth of JP, JR, CALL and DJNZ --
+lands on an instruction boundary. None jumps into the middle of another, which
+is worth knowing in a game that patches its own code in eight places and enters
+routines part-way through in a dozen more.
+Nothing writes to an address below $4000, so no write is silently thrown away
+against the ROM. And the disassembly reassembles to the same 30208 bytes the
+tape produces, so nothing on these pages describes a byte that is not there.
+
+[Fact:twoformats:Two graphics formats, chosen by sprite code]
+A creature or object is two bytes wide with a single byte of row count. The
+pieces the rooms are furnished with -- the clock, the bookcase, the barrel, the
+skeleton in chains -- are drawn by different code and carry a width as well.
+Nothing in the bytes says which is which: the rule is the sprite code, and
+codes above $A1 are furniture.
+Reading the furniture as sprites makes each one nine or eleven bytes long
+instead of a hundred and thirty, and leaves the rest of every one of them
+looking like artwork nothing points at. That is exactly what this disassembly
+said until it was compared against pobtastic's, whose graphics macro reads a
+width where this one had assumed a row count.
+And the rows are stored bottom up. Every picture here is flipped vertically to
+match what the game draws.
+
+[Fact:dead:Code and data that nothing reaches]
+Two routines are complete, correct and called from nowhere: NEXT_PIXEL_ROW,
+which steps a screen address down one pixel row, and SETUP_BOTH_BANKS. Neither
+address appears anywhere in the game as a call, a jump or a table entry.
+Shapes $06 and $07 are two of the four orientations of the staircase, sharing
+their edge list with $05 and $08 and differing only in their corners; the game
+uses the other two.
+With the 251 bytes of padding at the top of the image that comes to 444 bytes,
+one and a half per cent, removable without changing anything a player would see.
+An earlier version of this page claimed 556 bytes of unreferenced artwork on top
+of that. There is none: those bytes were the tails of the room furniture, read
+in the sprite format instead of their own and so cut to a fraction of their real
+length. See the note beside GFX_FIRST.

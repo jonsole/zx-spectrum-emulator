@@ -139,9 +139,18 @@ handler table covers, 190 draw something; the rest are entries whose handler is
 a sound effect, plus the two the player uses while sinking and rising on death,
 which have no picture of their own.
 
-Each picture is drawn by putting the code into `UI_RECORD` and running the two
-calls `DRAW_TITLE_ICONS` makes, so nothing on the page depends on having
-decoded the sprite format correctly — the same reasoning as the room pictures.
+Every picture is a `#UDGARRAY` over the game's own bytes, so the image and the
+`DEFB`s beside it cannot drift apart, and a run of frames also gets a `#FRAMES`
+animation at the pace the game plays it — a step every four frames — so the
+creatures walk. That approach is taken from pobtastic's Atic Atac disassembly
+at skoolkit.arcadegeek.co.uk; an earlier version here rendered each sprite in a
+simulator and pasted in a PNG, which worked but tied the pictures to a separate
+pass that could silently disagree with the listing.
+
+Two things to know if you copy it. On SkoolKit 9.x the UDG specifications
+follow a semicolon; on 10.x they go in brackets. And the macros need wrapping
+in `#HTML(...)`, because the same comments go through `skool2asm`, which has no
+way to render an image and refuses them outright.
 
 And a **sound page**, on the same principle again: each effect is captured by
 running its routine on a machine of its own and recording the writes to bit 4
@@ -169,9 +178,29 @@ The second is measuring extents rather than inferring them. To find out how
 long a sprite is, run the game's own drawing code for every sprite code on a
 machine of its own with a memory wrapper logging reads, and see which bytes it
 touches. All 235 that draw read exactly `1 + 2 × rowcount` bytes, contiguously,
-from the address the table holds — so the format is one header byte and rows of
-two bytes, and that is measured rather than guessed. The same trick, applied to
-the room redraw, separates the room vector data from the sprites around it.
+from the address the table holds. The same trick, applied to the room redraw,
+separates the room vector data from the sprites around it.
+
+That measurement was correct and the conclusion drawn from it was not, which is
+worth dwelling on. Feeding all 239 codes to `DRAW_ONE_SPRITE` measures what
+*that routine* reads, not what the game reads. Codes above `$A1` are the pieces
+rooms are furnished with — the clock, the bookcase, the skeleton in chains —
+and they are drawn by different code, from a format that carries a width as
+well as a row count. Pushed through the sprite routine they came back nine or
+eleven bytes long instead of a hundred and thirty, contiguous and consistent
+every time, because the routine faithfully read the first few rows of each and
+stopped.
+
+The tell was there and got explained away: the leftover tails were written up
+as 556 bytes of artwork nothing points at. "No pointer reaches these bytes" was
+true, and meant only that the pointer reached the *start*, which had already
+been truncated. It took comparing against another disassembly — whose macro
+reads a width where this one assumed a row count — to see it.
+
+So: an instrument only measures inside its domain, and a measurement repeated
+239 times is not 239 pieces of evidence if the same wrong instrument took them
+all. When a measurement leaves a residue, prefer explaining the residue to
+naming it.
 
 The third is that this game tiles. The template is exactly the runtime area;
 the room lists fill everything up to the byte before the entry point; the

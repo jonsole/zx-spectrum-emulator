@@ -29,6 +29,16 @@
 # Entry
 # --------------------------------------------------------------------------
 
+# Sprite images are built from the game's own bytes by SkoolKit rather than
+# drawn by a simulator and pasted in, so a picture and the DEFBs beside it can
+# never disagree. The approach is taken from pobtastic's Atic Atac disassembly
+# at skoolkit.arcadegeek.co.uk.
+#
+# A sprite is one byte of row count, then that many rows of two bytes. So: two
+# UDGs across, stepping 2 within a UDG and 1 between them, 16 bytes on to the
+# next row of UDGs, and cropped to the real height because it is rarely a
+# multiple of 8.
+
 @ $6000 label=ENTRY
 c $6000 Entry point, and the second half of the tape protection
 D $6000 The 18-byte decryptor at $5B80 (in the printer buffer, entered by the loader's PRINT USR 23424) RRDs a nibble through the whole game block and then jumps here.
@@ -776,10 +786,11 @@ D $8D32 +$07 has been carrying the character's sprite since LOSE_LIFE put it the
 ; sprite $90-$93 Witch
 ; sprite $98-$9B Bat, a third kind
 ; sprite $9C-$9F Humpback
-; sprite $AE-$B1 Door, locked, opened by a matching key
-; sprite $B2 Door, knight only
-; sprite $B9 Door, wizard only
-; sprite $BC Door, serf only
+# $AE-$B1, $B2, $B9 and $BC were named here as doors. They are not: drawn at
+# their real size they are a cave door, a grandfather clock, a framed picture,
+# a trapdoor and a rug. The mistake came of reading them in the sprite format,
+# nine bytes instead of a hundred and thirty, and naming the fragment. The
+# names further down are pobtastic's and are what the pictures actually show.
 ; sprite $A1 Mushroom, which drains the player's life force
 
 @ $807A label=INERT_SPRITE
@@ -1865,43 +1876,12 @@ b $D505 The tail of the game image
 D $D505 251 bytes, of which three are not zero: a $01 seven bytes in, and $3A $85 at the very end. Nothing points here and nothing reads it -- it is the space between the last of the graphics and the end of what the tape loads.
 B $D505,251,16
 
-; span $C782,112
-@ $C782 label=SPARE_GFX_C782
-b $C782 Graphics nothing points at
-D $C782 Sits between two sprites but belongs to neither: no entry in SPRITE_TABLE points here, and drawing every sprite the game has with the reads logged never touches a byte of it. Laid out sixteen pixels wide it is clearly a picture rather than noise -- and the rows alternate between the left byte and the right, which is what pre-shifted graphics look like -- but nothing in the game draws it.
-B $C782,112,2
 
-; span $C804,112
-@ $C804 label=SPARE_GFX_C804
-b $C804 More graphics nothing points at
-D $C804 The same as SPARE_GFX_C782: structured, sixteen pixels wide, and unreachable.
-B $C804,112,2
 
-; span $D003,84
-@ $D003 label=SPARE_GFX_D003
-b $D003 More graphics nothing points at
-D $D003 84 bytes, again unreferenced. The bottom third is entirely zero, so whatever it was is shorter than the space left for it.
-B $D003,84,2
 
-; span $C2CF,65
-@ $C2CF label=SPARE_GFX_C2CF
-b $C2CF More graphics nothing points at
-B $C2CF,65,2
 
-; span $D4BE,49
-@ $D4BE label=SPARE_GFX_D4BE
-b $D4BE More graphics nothing points at
-B $D4BE,49,2
 
-; span $CB1D,41
-@ $CB1D label=SPARE_GFX_CB1D
-b $CB1D More graphics nothing points at
-B $CB1D,41,2
 
-; span $D1BC,25
-@ $D1BC label=SPARE_GFX_D1BC
-b $D1BC More graphics nothing points at
-B $D1BC,25,2
 
 # --------------------------------------------------------------------------
 # Two routines nothing calls
@@ -2020,24 +2000,50 @@ b $8B85 Five creatures
 D $8B85 $62, $4C, $4E, $68, $6A -- a ghost, the pumpkin, a bat, another ghost and another bat. Five sprite codes in a row immediately before the routine that both $9340 and the mushroom handler call.
 B $8B85,5,5
 
-; span $D193,24
-@ $D193 label=SPARE_GFX_D193
-b $D193 Dither patterns nothing reads
-D $D193 Seven bytes of $55, then $56; seven of $AA, then $AC; then eight zeros. $55 and $AA are the two halves of a checkerboard, so this is a shading pattern -- but no sprite points at it and no trace ever reads it.
-B $D193,24,8
 
-; span $BD19,23
-@ $BD19 label=SPARE_GFX_BD19
-b $BD19 More bytes nothing reads
-B $BD19,23,8
 
-; span $D3C3,16
-@ $D3C3 label=SPARE_ATTRS
-b $D3C3 Attribute bytes nothing reads
-D $D3C3 $FF and $47 in a pattern. $47 is the colour the game paints most things; $FF is not a colour it ever writes. Unreferenced, like the rest of the odds and ends in this region.
-B $D3C3,16,8
 
-; span $C993,5
-@ $C993 label=SPARE_ATTRS_C993
-b $C993 Five bytes of $43
-B $C993,5,5
+
+# --------------------------------------------------------------------------
+# What the rooms are furnished with
+#
+# Names for the wide graphics, codes $A2 upwards. These are from pobtastic's
+# Atic Atac disassembly at skoolkit.arcadegeek.co.uk, whose graphics pages
+# name all of them. Its own index counts from a base of $A600, which is entry
+# 162 of SPRITE_TABLE, so its id $0F is this disassembly's code $B1; the two
+# tables agree address for address.
+#
+# Reading these as sprites rather than furniture is what made their tails look
+# like unreferenced artwork -- see the note beside GFX_FIRST.
+# --------------------------------------------------------------------------
+
+; sprite $A2 Cave door frame
+; sprite $A3 Door frame
+; sprite $A4 Big door frame
+; sprite $A9 Door, locked, red
+; sprite $AA Door, locked, green
+; sprite $AB Door, locked, cyan
+; sprite $AC Door, locked, yellow
+; sprite $AD Cave door, locked, red
+; sprite $AE Cave door, locked, green
+; sprite $AF Cave door, locked, cyan
+; sprite $B0 Cave door, locked, yellow
+; sprite $B1 Clock
+; sprite $B2 Ghost picture
+; sprite $B3 Table
+; sprite $B6 Wall antlers
+; sprite $B7 Wall trophy
+; sprite $B8 Bookcase
+; sprite $B9 Trapdoor, closed
+; sprite $BA Trapdoor, open
+; sprite $BB Barrel
+; sprite $BC Rug
+; sprite $BD A.C.G. shield
+; sprite $BE Wall shield
+; sprite $BF Suit of armour
+; sprite $C1 Door, shut
+; sprite $C3 Cave door, shut
+; sprite $C5 A.C.G. door
+; sprite $C6 Pumpkin picture
+; sprite $C7 Skeleton
+; sprite $C8 Barrel stack
