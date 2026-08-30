@@ -1261,6 +1261,57 @@ def joined_runs() -> list:
     return runs
 
 
+def animation(cycle: list, sizes: dict) -> str:
+    """A #FRAMES specification for one cycle, or "" if it cannot be animated.
+
+    #FRAMES refuses a frame larger than the first one, and plenty of these
+    cycles change shape as they go -- a spinning sword is tall upright and
+    short on the diagonal, a burst grows. Since an animation is a loop, it can
+    be entered anywhere: rotating it so that a frame at least as big as every
+    other leads makes the rest fit, and the smaller frames are then offset to
+    sit in the middle of it rather than in the corner.
+
+    If no single frame is at least as large in both directions, there is
+    nothing to rotate to and the cycle gets its stills only.
+    """
+    widest = max(sizes[code][0] for code in cycle)
+    tallest = max(sizes[code][1] for code in cycle)
+    lead = None
+    for index, code in enumerate(cycle):
+        if sizes[code] == (widest, tallest):
+            lead = index
+            break
+    if lead is None:
+        return ""
+    specs = []
+    for code in cycle[lead:] + cycle[:lead]:
+        width, rows = sizes[code]
+        specs.append("f%02X,%d,%d,%d" % (
+            code, FRAME_DELAY,
+            (widest - width) * 8 * SPRITE_SCALE // 2,
+            (tallest - rows) * SPRITE_SCALE // 2))
+    return ";".join(specs)
+
+
+def placed_sprites(memory) -> dict:
+    """How many times each sprite code is placed in INITIAL_STATE.
+
+    This is what separates a set of different things from the frames of one
+    thing, and it comes out of the game's data rather than out of judgement. A
+    record's +$00 is the picture it starts as, so an animation places only its
+    first frame -- the mummy puts $70 in one room and never mentions $71 to
+    $73 -- while a collection places every member: eight kinds of food, ten of
+    each, all eight codes. Two or more codes of a run appearing here means the
+    run is a set, and animating it would flick between unrelated objects.
+    """
+    counts = {}
+    for address in range(TEMPLATE_RECORDS, TEMPLATE_DOORS, 8):
+        code = memory[address]
+        if code:
+            counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
 def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
                       path: Path) -> None:
     """A generated ref file cataloguing the sprites, grouped by handler.
@@ -1272,6 +1323,7 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
     memory = game_memory(snapshot)
     colours = sprite_attributes(memory)
     joined = joined_runs()
+    placed = placed_sprites(memory)
     named_ranges = sprite_names()
 
     def picture(code):
@@ -1348,7 +1400,9 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
             else:
                 lines.append("Driven by #R$%04X, which has not been named yet."
                              % handler)
+            collection = sum(1 for code in codes if placed.get(code)) > 1
             if (name and len(codes) > 1 and (first, last) not in joined
+                    and not collection
                     and len(walk_cycles(
                         codes, {c: picture(c)[0] for c in codes})) == 1):
                 lines.append("%d frames." % len(codes))
@@ -1361,6 +1415,19 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
                     return image
                 return "%s<div style=\"font-size:11px\">%s</div>" % (image, label)
 
+            if collection:
+                lines.append("%d different things, not frames of one: each has "
+                             "its own record in INITIAL_STATE."
+                             % len(codes))
+                lines.append("#UDGTABLE")
+                for start in range(0, len(codes), 8):
+                    chunk = codes[start:start + 8]
+                    lines.append("{ " + " | ".join(
+                        "=h $%02X" % c for c in chunk) + " }")
+                    lines.append("{ " + " | ".join(
+                        cell(c) for c in chunk) + " }")
+                lines.append("UDGTABLE#")
+                continue
             if (first, last) in joined:
                 lines.append("One picture in two halves, not an animation.")
                 lines.append("#UDGTABLE")
@@ -1395,14 +1462,9 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
                     # column because its frames have to exist by then.
                     row.append(cell(code, "$%02X" % code))
                 row += [""] * (columns + bool(headings) - len(row))
-                # #FRAMES needs every frame the same size, and a few runs mix
-                # heights, so those get their stills and no animation.
-                if len(cycle) > 1 and len({picture(c)[2:] for c in cycle}) == 1:
-                    row.append("#FRAMES(%s)(anim%02X)" % (
-                        ";".join("f%02X,%d" % (c, FRAME_DELAY) for c in cycle),
-                        cycle[0]))
-                else:
-                    row.append("")
+                spec = animation(cycle, {c: picture(c)[2:] for c in cycle})                     if len(cycle) > 1 else ""
+                row.append("#FRAMES(%s)(anim%02X)" % (spec, cycle[0])
+                           if spec else "")
                 lines.append("{ " + " | ".join(x or "&nbsp;" for x in row) + " }")
             lines.append("UDGTABLE#")
     lines.append("")

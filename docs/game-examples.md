@@ -160,6 +160,26 @@ times. Animating all sixteen together produces something that spins through
 every direction at once. The split is detected on that repeated entry rather
 than assumed, so a run that does not fit the pattern stays as one row.
 
+Whether a run is an animation at all is also answerable from the data, and
+getting it wrong is easy: a run of consecutive codes under one handler looks
+like frames whatever it actually is. Three kinds turn up. Frames of one thing;
+a set of different things, like the eight foods; and one picture cut into
+pieces, like the control-selection icons, which are two sprites side by side
+because a sprite is only ever sixteen pixels wide.
+
+`INITIAL_STATE` separates the first two. A record's `+$00` is the picture it
+starts as, so an animation places only its first frame — the mummy puts `$70`
+in one room and never mentions `$71`–`$73` — while a collection places every
+member: eight foods, ten of each, all eight codes. Two or more codes of a run
+appearing there means it is a set. The third kind is not derivable and is
+declared, `; joined $48-$49`.
+
+`#FRAMES` refuses a frame larger than the first, which rules out anything that
+changes shape as it goes — a spinning sword is tall upright and short on the
+diagonal. But an animation is a loop and can be entered anywhere, so rotating
+it to start on a frame at least as large as every other makes the rest fit, and
+they are offset to sit in the middle rather than the corner.
+
 Colour comes from the game too. An actor record's `+$05` is its attribute, and
 the objects and monsters in `INITIAL_STATE` are eight-byte records, so the
 colour of anything placed at the start can be read straight off: the mummy
