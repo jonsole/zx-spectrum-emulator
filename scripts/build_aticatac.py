@@ -830,6 +830,16 @@ FRAME_DELAY = 12
 # bytes each. The doors after them are sixteen and would not line up.
 TEMPLATE_RECORDS = 0x6025
 TEMPLATE_DOORS = 0x645D
+# The knight, the wizard and the serf: sixteen codes each, four headings of
+# four frames, and the headings run left, right, up, down.
+#
+# That order is not derived from anything here. The four sets are drawn by hand
+# rather than mirrored -- comparing them byte for byte finds no pair that is
+# the reverse of another -- so nothing in the data says which set faces which
+# way. It applies to the three characters only; the creatures are left with
+# their headings unnamed rather than assumed to match.
+PLAYER_CODE_MAX = 0x30
+PLAYER_HEADINGS = ("Left", "Right", "Up", "Down")
 
 
 def sprite_graphic(memory, code: int):
@@ -1233,6 +1243,24 @@ def sprite_attributes(memory) -> dict:
             if len(attrs) == 1}
 
 
+def joined_runs() -> list:
+    """Runs of codes that are one picture in pieces, not frames.
+
+    Declared in the annotations as `; joined $32-$33`. A sprite is only ever
+    sixteen pixels wide, so a wider icon is two of them drawn side by side --
+    the control-selection icons on the title screen are all like this. Animated
+    they simply flick between the halves of one picture.
+    """
+    runs = []
+    if ANNOTATIONS.exists():
+        for line in ANNOTATIONS.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^;\s*joined\s+\$([0-9A-F]{2})-\$([0-9A-F]{2})\s*$",
+                             line)
+            if match:
+                runs.append((int(match.group(1), 16), int(match.group(2), 16)))
+    return runs
+
+
 def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
                       path: Path) -> None:
     """A generated ref file cataloguing the sprites, grouped by handler.
@@ -1243,6 +1271,7 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
     """
     memory = game_memory(snapshot)
     colours = sprite_attributes(memory)
+    joined = joined_runs()
     named_ranges = sprite_names()
 
     def picture(code):
@@ -1319,32 +1348,53 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
             else:
                 lines.append("Driven by #R$%04X, which has not been named yet."
                              % handler)
-            if name and len(codes) > 1 and len(
-                    walk_cycles(codes, {c: picture(c)[0] for c in codes})) == 1:
+            if (name and len(codes) > 1 and (first, last) not in joined
+                    and len(walk_cycles(
+                        codes, {c: picture(c)[0] for c in codes})) == 1):
                 lines.append("%d frames." % len(codes))
+            def cell(code, label=None):
+                address, header, width, rows = picture(code)
+                image = udgarray(address, header, width, rows,
+                                 "sprite%02X*f%02X" % (code, code), wrap=False,
+                                 attr=colours.get(code, SPRITE_ATTR))
+                if label is None:
+                    return image
+                return "%s<div style=\"font-size:11px\">%s</div>" % (image, label)
+
+            if (first, last) in joined:
+                lines.append("One picture in two halves, not an animation.")
+                lines.append("#UDGTABLE")
+                lines.append("{ =h Icon | " + " | ".join(
+                    "=h $%02X" % c for c in codes) + " }")
+                lines.append("{ <span style=\"display:inline-flex\">%s</span> | %s }"
+                             % ("".join(cell(c) for c in codes),
+                                " | ".join(cell(c) for c in codes)))
+                lines.append("UDGTABLE#")
+                continue
             cycles = walk_cycles(codes, {c: picture(c)[0] for c in codes})
-            if len(cycles) > 1:
+            headings = PLAYER_HEADINGS if (
+                codes[-1] <= PLAYER_CODE_MAX
+                and len(cycles) == len(PLAYER_HEADINGS)) else None
+            if headings:
+                lines.append("Four headings of %d frames: %s."
+                             % (len(cycles[0]),
+                                _and_list([h.lower() for h in headings])))
+            elif len(cycles) > 1:
                 lines.append("%d headings of %d frames."
                              % (len(cycles), len(cycles[0])))
             columns = max(len(cycle) for cycle in cycles)
             lines.append("#UDGTABLE")
-            lines.append("{ " + " | ".join(
+            lines.append("{ " + ("=h Heading | " if headings else "") + " | ".join(
                 "=h Frame %d" % (i + 1) for i in range(columns))
                 + " | =h Animated }")
-            for cycle in cycles:
-                row = []
+            for index, cycle in enumerate(cycles):
+                row = ["=h %s" % headings[index]] if headings else []
                 for code in cycle:
-                    address, header, width, rows = picture(code)
                     # Drawing the frame here both puts it in the cell and names
                     # it, so #FRAMES can pick it up. The animation is the last
                     # column because its frames have to exist by then.
-                    row.append("%s<div style=\"font-size:11px\">$%02X</div>"
-                               % (udgarray(address, header, width, rows,
-                                           "sprite%02X*f%02X" % (code, code),
-                                           wrap=False,
-                                           attr=colours.get(code, SPRITE_ATTR)),
-                                  code))
-                row += [""] * (columns - len(row))
+                    row.append(cell(code, "$%02X" % code))
+                row += [""] * (columns + bool(headings) - len(row))
                 # #FRAMES needs every frame the same size, and a few runs mix
                 # heights, so those get their stills and no animation.
                 if len(cycle) > 1 and len({picture(c)[2:] for c in cycle}) == 1:

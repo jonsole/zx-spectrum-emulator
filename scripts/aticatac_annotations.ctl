@@ -761,6 +761,15 @@ D $8D32 +$07 has been carrying the character's sprite since LOSE_LIFE put it the
 ; sprite $11-$20 The wizard
 ; sprite $21-$30 The serf
 ; sprite $32-$33 Cursor keys icon, in two halves
+
+# Runs that are one picture cut into pieces rather than frames of an
+# animation. A sprite is only ever sixteen pixels wide, so anything wider
+# is drawn as two side by side; showing them as an animation flicks
+# between the halves of one icon.
+; joined $32-$33
+; joined $48-$49
+; joined $4A-$4B
+
 ; sprite $6C-$6F Burst, expanding
 ; sprite $34-$37 Spell, thrown by the wizard
 ; sprite $38-$3F Sword, spinning, thrown by the serf
