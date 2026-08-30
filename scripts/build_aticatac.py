@@ -803,6 +803,16 @@ def render_sprites(snapshot: Path, out_dir: Path,
 GFX_TABLE = 0xA4BE
 GFX_TABLE_ENTRIES = 239
 GFX_FIRST = 0xA69C
+# SPRITE_TABLE is really three tables end to end, which is why it came to 239
+# entries. The first 161 are the creatures and objects, two bytes wide with a
+# row count. The next 39, from $A600, are the pieces the rooms are furnished
+# with, which carry a width as well. The last 39, from $A64E, are not pictures
+# at all: they are those same pieces' attribute tables, one colour per
+# character cell, in the same width-and-height format. The four locked doors
+# share a single graphic and differ only here -- $43 $42 for red, $44 green,
+# $45 cyan, $46 yellow.
+FURNITURE_CODE_MAX = 200
+ATTR_CODE_MAX = 239
 # Two formats, and which one applies is decided by the sprite code rather than
 # by where the bytes are. Codes up to SPRITE_CODE_MAX are the creatures and
 # objects the handler table drives: two bytes -- sixteen pixels -- wide, with a
@@ -823,6 +833,8 @@ GFX_FIRST = 0xA69C
 # specifications go in brackets rather than after a semicolon as in 9.x.
 SPRITE_SCALE = 4
 SPRITE_ATTR = 0x47
+# Not a colour but a marker: leave this cell as it is.
+TRANSPARENT_ATTR = 0xFF
 # The game moves a walking character on every fourth frame, so a little over
 # ten frames a second. #FRAMES delays are in hundredths.
 FRAME_DELAY = 12
@@ -862,7 +874,7 @@ def sprite_graphic(memory, code: int):
 
 def udgarray(address: int, header: int, width: int, rows: int, name: str,
              limit: int = None, wrap: bool = True,
-             attr: int = SPRITE_ATTR) -> str:
+             attr: int = SPRITE_ATTR, colours: tuple = None) -> str:
     """A #UDGARRAY that draws one graphic straight out of the snapshot.
 
     The bytes are row-major and `width` wide, so a UDG takes every `width`th
@@ -878,10 +890,49 @@ def udgarray(address: int, header: int, width: int, rows: int, name: str,
     top = SPRITE_SCALE * ((8 - rows % 8) % 8)
     # Wrapped in #HTML because the same comments go through skool2asm, which
     # has no way to render an image and refuses the macro outright.
-    macro = "#UDGARRAY%d,%d,%d,%d,,2($%04X-$%04X-1-%d){0,%d,%d,%d}(%s)" % (
-        width, attr, SPRITE_SCALE, width, start, end, width * 8,
-        top, width * 8 * SPRITE_SCALE, rows * SPRITE_SCALE, name)
+    if colours:
+        # One cell at a time, because a cell whose attribute is $FF has to be
+        # given a colour of its own. $FF is not one: the real values are $00,
+        # $07 and $42 to $47. It means leave this cell's colour alone, so the
+        # pixels are drawn and the cell keeps whatever the room painted there
+        # -- which is how a doorway is drawn in the colour of the room it is
+        # cut into. There is no room here to take a colour from, so those cells
+        # are drawn black rather than as the white-on-white $FF would give.
+        across, down, cells = colours
+        specs = []
+        for cell_y in range(down):
+            for cell_x in range(across):
+                cell = cells[cell_y * across + cell_x]
+                specs.append("$%04X,%d,%d" % (
+                    start + cell_y * width * 8 + cell_x,
+                    0 if cell == TRANSPARENT_ATTR else cell, width))
+        body = "%d,,%d,,,2(%s)" % (width, SPRITE_SCALE, ";".join(specs))
+    else:
+        body = "%d,%d,%d,%d,,2($%04X-$%04X-1-%d)" % (
+            width, attr, SPRITE_SCALE, width, start, end, width * 8)
+    macro = "#UDGARRAY%s{0,%d,%d,%d}(%s)" % (
+        body, top, width * 8 * SPRITE_SCALE, rows * SPRITE_SCALE, name)
     return "#HTML(%s)" % macro if wrap else macro
+
+
+def furniture_colours(memory) -> dict:
+    """Each furniture code's attribute table: {code: (address, width, rows)}.
+
+    Entry N of the attribute half of SPRITE_TABLE belongs to entry N of the
+    graphics half, so the two line up by position.
+    """
+    tables = {}
+    for code in range(SPRITE_CODE_MAX + 1, FURNITURE_CODE_MAX + 1):
+        entry = GFX_TABLE + (code - 1 + FURNITURE_CODE_MAX
+                             - SPRITE_CODE_MAX) * 2
+        address = memory[entry] | (memory[entry + 1] << 8)
+        if not GFX_FIRST <= address < GAME_END:
+            continue
+        width, rows = memory[address], memory[address + 1]
+        if width and rows and address + 2 + width * rows <= GAME_END:
+            tables[code] = (address, width, rows,
+                            list(memory[address + 2:address + 2 + width * rows]))
+    return tables
 
 
 def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
@@ -938,11 +989,21 @@ def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
         first = codes[0]
         name = depicted(first)
         shown = ", ".join("$%02X" % c for c in codes)
-        title = ("%s, drawn for sprite %s" % (name, shown) if name
-                 else "The graphics for sprite %s" % shown)
-        lines.append("@ $%04X label=GFX_%02X" % (address, first))
+        colours = codes[0] > FURNITURE_CODE_MAX
+        if colours:
+            title = "Colours for a graphic, entry %s of the attribute table"                     % shown
+        else:
+            title = ("%s, drawn for sprite %s" % (name, shown) if name
+                     else "The graphics for sprite %s" % shown)
+        lines.append("@ $%04X label=%s_%02X"
+                     % (address, "ATTRS" if colours else "GFX", first))
         lines.append("b $%04X %s" % (address, title))
-        if wide:
+        if colours:
+            lines.append("D $%04X One attribute per character cell, %d across "
+                         "by %d down, behind the graphic this entry pairs with. "
+                         "The first two bytes are the width and the height."
+                         % (address, width, rows))
+        elif wide:
             lines.append("D $%04X %d rows of %d pixels. The first two bytes are "
                          "the width in bytes and the height in rows; the rest "
                          "are the rows, top down." % (address, rows, width * 8))
@@ -965,7 +1026,9 @@ def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
                          % (address, shared, "" if shared == 1 else "s", limit,
                             limit, (shared + width - 1) // width,
                             "" if shared < width * 2 else "s", rows))
-        if any(memory[address + header:end]):
+        if colours:
+            pass
+        elif any(memory[address + header:end]):
             lines.append("D $%04X %s" % (address, udgarray(
                 address, header, width, rows, "gfx%02X" % first, end)))
         else:
@@ -1714,6 +1777,13 @@ def font_columns(count: int) -> int:
 
 
 DRAW_PANEL = 0xA219
+PAINT_PANEL = 0xA240
+ROOM_COLOUR = 0x5E1A
+# The panel takes its colour from the room, as the complement of the room's
+# ink, so there is no one right answer -- $42 is picked because it is the
+# commonest room colour in ROOM_TABLE.
+PANEL_ROOM_COLOUR = 0x42
+PANEL_COLUMN = 24
 
 
 SCREEN_LENGTH = 6912
@@ -1792,11 +1862,9 @@ def render_panel(snapshot: Path, out_dir: Path) -> None:
     simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
     for address in range(0x4000, 0x5800):
         simulator.memory[address] = 0
-    # The routine colours only the cells it draws into, so the rest of the
-    # attribute file has to start as something visible or the picture comes out
-    # as black ink on black paper.
     for address in range(0x5800, 0x5B00):
         simulator.memory[address] = SPRITE_ATTR
+    simulator.memory[ROOM_COLOUR] = PANEL_ROOM_COLOUR
     simulator.memory[SOUND_STACK] = SOUND_SENTINEL & 0xFF
     simulator.memory[SOUND_STACK + 1] = SOUND_SENTINEL >> 8
     simulator.registers[24] = SOUND_STACK
@@ -1809,9 +1877,38 @@ def render_panel(snapshot: Path, out_dir: Path) -> None:
         if (simulator.registers[PC] == SOUND_SENTINEL
                 or simulator.registers[PC] < ENTRY):
             break
-    frame = Frame(scr_udgs(simulator.memory, 0, 0, 32, 24), 2)
+    # Then let the game colour it, rather than leaving it in the placeholder
+    # attribute. PAINT_PANEL takes the room's ink and complements it, so the
+    # panel is one colour chosen by whichever room the player is standing in.
+    simulator.memory[SOUND_STACK] = SOUND_SENTINEL & 0xFF
+    simulator.memory[SOUND_STACK + 1] = SOUND_SENTINEL >> 8
+    simulator.registers[24] = SOUND_STACK
+    simulator.registers[PC] = PAINT_PANEL
+    for _ in range(1_000_000):
+        simulator.run()
+        if (simulator.registers[PC] == SOUND_SENTINEL
+                or simulator.registers[PC] < ENTRY):
+            break
+    # Only the eight columns the panel occupies; the play area beside it is
+    # empty here because nothing has drawn a room.
+    frame = Frame(scr_udgs(simulator.memory, PANEL_COLUMN, 0, 8, 24), 2)
     with open(out_dir / "panel.png", "wb") as f:
         get_image_writer().write_image([frame], f)
+
+
+def colour_note(colours) -> str:
+    """The Colours cell: where the table is, and how much of it is $FF."""
+    if not colours:
+        return "&mdash;"
+    address, across, down, cells = colours
+    blank = sum(1 for cell in cells if cell == TRANSPARENT_ATTR)
+    note = "#R$%04X" % address
+    if blank == len(cells):
+        return note + " &mdash; every cell takes the room's colour, so there is nothing to draw here on its own"
+    if blank:
+        return note + " &mdash; %d of %d cells take the room's colour" % (
+            blank, len(cells))
+    return note
 
 
 def write_graphics_ref(snapshot: Path, path: Path,
@@ -1828,11 +1925,12 @@ def write_graphics_ref(snapshot: Path, path: Path,
         for code in range(low, high + 1):
             named[code] = name
 
-    owners = {}
-    for code in range(SPRITE_CODE_MAX + 1, GFX_TABLE_ENTRIES + 1):
+    tables = furniture_colours(memory)
+    entries = []
+    for code in range(SPRITE_CODE_MAX + 1, FURNITURE_CODE_MAX + 1):
         graphic = sprite_graphic(memory, code)
         if graphic:
-            owners.setdefault(graphic[0], []).append(code)
+            entries.append((code, graphic, tables.get(code)))
 
     lines = [
         "; Generated by scripts/build_aticatac.py -- do not edit.",
@@ -1849,10 +1947,20 @@ def write_graphics_ref(snapshot: Path, path: Path,
         " and are drawn by different code. Which format applies is decided by"
         " the sprite code rather than by anything in the bytes: above $%02X is"
         " furniture." % SPRITE_CODE_MAX,
-        "%d graphics for %d codes. The names are pobtastic's, from the Atic"
-        " Atac disassembly at skoolkit.arcadegeek.co.uk; the ones still shown"
-        " by number are unnamed here."
-        % (len(owners), sum(len(c) for c in owners.values())),
+        "Each is drawn in its own colours. Those are a second table, running"
+        " alongside the graphics one and in the same format -- one attribute"
+        " per character cell rather than one byte per eight pixels. It is what"
+        " separates the four locked doors below: one picture between them, and"
+        " four colour tables.",
+        "$FF in one of those tables is not a colour. The real values are $00,"
+        " $07 and $42 to $47; $FF means leave this cell as it is, so the pixels"
+        " are drawn and the cell keeps whatever the room painted there. That is"
+        " how a doorway is drawn in the colour of the wall it is cut into. On"
+        " this page there is no room to take a colour from, so those cells are"
+        " black -- and four of the graphics are nothing but.",
+        "%d of them. The names are pobtastic's, from the Atic Atac disassembly"
+        " at skoolkit.arcadegeek.co.uk; the ones still shown by number are"
+        " unnamed here." % len(entries),
     ]
     if has_screen:
         lines += [
@@ -1871,16 +1979,16 @@ def write_graphics_ref(snapshot: Path, path: Path,
         "",
         "[Graphics:furniture:The furniture]",
         "#UDGTABLE",
-        "{ =h Picture | =h Codes | =h What it is | =h Size | =h Address }",
+        "{ =h Picture | =h Code | =h What it is | =h Size | =h Graphic "
+        "| =h Colours }",
     ]
-    for address in sorted(owners):
-        codes = owners[address]
-        _, header, width, rows = sprite_graphic(memory, codes[0])
-        lines.append("{ %s | %s | %s | %d&times;%d | #R$%04X }" % (
-            udgarray(address, header, width, rows, "gfxpage%02X" % codes[0],
-                     wrap=False),
-            ", ".join("$%02X" % c for c in codes),
-            named.get(codes[0], "&mdash;"), width * 8, rows, address))
+    for code, (address, header, width, rows), colours in entries:
+        lines.append("{ %s | $%02X | %s | %d&times;%d | #R$%04X | %s }" % (
+            udgarray(address, header, width, rows, "gfxpage%02X" % code,
+                     wrap=False,
+                     colours=colours[1:] if colours else None),
+            code, named.get(code, "&mdash;"), width * 8, rows, address,
+            colour_note(colours)))
     lines.append("UDGTABLE#")
 
     lines += [

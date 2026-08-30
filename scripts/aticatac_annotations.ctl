@@ -900,8 +900,10 @@ R $9E89 DE On exit, that sprite's graphics
 @ $A4BE label=SPRITE_TABLE
 b $A4BE The address of every sprite's graphics
 D $A4BE 239 addresses, two bytes each, indexed by sprite number less one, running from $A4BE to $A69B. The graphics themselves start immediately after it.
+D $A4BE It is three tables end to end, which is why the count is 239. The first 161 entries, to $A5FF, are the creatures and objects -- two bytes wide, one byte of row count. The next 39, from $A600, are the pieces the rooms are furnished with, which carry a width as well. The last 39, from $A64E, are not pictures at all: they are those same pieces' attribute tables, one colour per character cell in the same width-and-height format.
+D $A4BE Entry N of the third table belongs to entry N of the second, which is how one picture serves four doors: $A9 to $AC all point at the graphic at $A69C and differ only in their colours -- $43 $42 for red, $44 green, $45 cyan, $46 yellow. The three bases the code uses, $A4BE, $A600 and $A64E, are not a bias trick after all; they are simply where each table starts.
 D $A4BE The count is measured rather than assumed: every code was drawn on a machine of its own with its reads logged, and 239 is the highest whose entry points at something the drawing code can read. Entries beyond that hold values like $1804 and $33F8, which are not addresses in this game at all.
-D $A4BE FETCH_SPRITE and FETCH_SPRITE_ATTRS look like they have tables of their own at $A600 and $A64E, but those are inside this one: $A600 is its 161st entry and $A64E its 200th. Both do the same "number minus one, times two, add the base" arithmetic, so asking either of them for sprite 1 really fetches entry 161 or 200 of this table. The base is carrying the category, exactly the way the tile source at $5E01 is biased so that a digit indexes its own character.
+D $A4BE FETCH_SPRITE and FETCH_SPRITE_ATTRS were read here as biased views of a single table, on the grounds that $A600 is its 161st entry and $A64E its 200th. That is arithmetically true and the wrong way round: they are separate tables, and the arithmetic works because they follow each other.
 
 # --------------------------------------------------------------------------
 # Drawing a sprite at any x

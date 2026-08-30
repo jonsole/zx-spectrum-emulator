@@ -180,6 +180,23 @@ diagonal. But an animation is a loop and can be entered anywhere, so rotating
 it to start on a frame at least as large as every other makes the rest fit, and
 they are offset to sit in the middle rather than the corner.
 
+A base address that lands inside a table is not evidence of a bias trick. The
+sprite pointer table was documented here as one table of 239 entries that three
+routines index from three different bases, `$A4BE`, `$A600` and `$A64E` — the
+arithmetic works out, since `$A600` really is its 161st entry. It is three
+tables laid end to end: 161 sprite pointers, then 39 for the pieces rooms are
+furnished with, then 39 that are not pictures at all but those pieces' colours,
+one attribute per character cell. The bases work because the tables follow each
+other, which is the opposite of the explanation given. 161 + 39 + 39 = 239 was
+sitting there the whole time.
+
+That is what makes the four locked doors four doors: one graphic between them,
+four colour tables. And `$FF` in a colour table is not a colour — the real
+values are `$00`, `$07` and `$42`–`$47` — it means leave this cell alone, so
+the pixels are drawn and the cell keeps whatever the room painted there. Four
+graphics are nothing but `$FF`: they exist only to be drawn in the colour of
+the room around them.
+
 Draw a thing before naming it. Two blocks at `$B03A` and `$B32A` were written
 up here as the title screen's character set and picture: a 94-character set and
 a 192-byte map, `8 rows of 24`. Rendering it showed the parchment scroll with
