@@ -125,6 +125,16 @@ ROOM_SHAPES = 0xA982
 # black on black -- and entry 151 is really the first two bytes of the shape
 # table. See COUNT_ROOMS_EXPLORED, whose arithmetic only works out at 149.
 ROOM_COUNT = 149
+# Three tables, three lengths, and they are not interchangeable. ROOM_TABLE has
+# 151 entries: the 149 rooms the player walks around, and two more. Entry 150 is
+# the one that matters -- it is shape $0C, the concentric squares drawn while
+# the player falls through a trapdoor, which is a room as far as the drawing
+# code is concerned but not one anybody walks into. Scanning only the first 149
+# makes that shape look unused when it is nothing of the kind.
+ROOM_TABLE_ENTRIES = 151
+# The contents index is shorter: 150 entries, ending where the first list
+# begins at $76A9. The fall has nothing in it.
+ROOM_LIST_ENTRIES = 150
 # The index of what each room holds. The lists it points at follow it and
 # fill everything up to the game's entry point exactly.
 ROOM_CONTENTS = 0x757D
@@ -500,6 +510,10 @@ SHAPE_NAMES = {
     0x09: "Cavern, wide",
     0x0A: "Cavern, tall",
     0x0B: "Passage",
+    # Not a room: ROOM_TABLE's last entry, drawn while the player drops through
+    # a trapdoor. Twelve nested rectangles, so redrawing it with the walk
+    # limits closing in reads as falling down a shaft.
+    0x0C: "Trapdoor fall",
 }
 
 
@@ -514,7 +528,7 @@ def read_shapes(snapshot: Path) -> list[dict]:
 
     memory = game_memory(snapshot)
     rooms_by_shape: dict[int, list[int]] = {}
-    for room in range(ROOM_COUNT):
+    for room in range(ROOM_TABLE_ENTRIES):
         rooms_by_shape.setdefault(memory[ROOM_TABLE + room * 2 + 1], []).append(room)
 
     shapes = []
@@ -646,7 +660,7 @@ def write_shapes_ref(shapes: list[dict], path: Path) -> None:
             % (shape, shape),
             '<table class="default">',
             "<tr><th>Rooms with this outline</th><td>%d of %d</td></tr>"
-            % (len(rooms), ROOM_COUNT),
+            % (len(rooms), ROOM_TABLE_ENTRIES),
             "<tr><th>Player may walk from centre</th><td>%d across, %d down</td></tr>"
             % (entry["half_width"], entry["half_height"]),
             "<tr><th>Vertex table</th><td>$%04X, %d points</td></tr>"
@@ -909,7 +923,7 @@ def room_list_blocks(snapshot: Path) -> tuple[str, list[Span]]:
     memory = game_memory(snapshot)
     lines = ["", "; Room contents lists.", ""]
     spans = []
-    for room in range(ROOM_COUNT + 1):
+    for room in range(ROOM_LIST_ENTRIES):
         entry = ROOM_CONTENTS + room * 2
         address = memory[entry] | (memory[entry + 1] << 8)
         count = 0
@@ -945,7 +959,7 @@ def shape_blocks(snapshot: Path) -> tuple[str, list[Span]]:
 
     memory = game_memory(snapshot)
     used = set()
-    for room in range(ROOM_COUNT):
+    for room in range(ROOM_TABLE_ENTRIES):
         used.add(memory[ROOM_TABLE + room * 2 + 1])
 
     regions = {}
@@ -993,8 +1007,10 @@ def shape_blocks(snapshot: Path) -> tuple[str, list[Span]]:
                          "its mirror image are drawn from one description."
                          % (address, len(shapes)))
         if unused:
-            lines.append("D $%04X No room uses shape %s: it is in the game but "
-                         "never drawn."
+            lines.append("D $%04X Nothing in ROOM_TABLE uses shape %s. That is "
+                         "not the same as never drawn -- the table's last entry "
+                         "is the trapdoor fall rather than a room -- but for "
+                         "these there is no entry at all."
                          % (address, ", ".join("$%02X" % s for s in unused)))
         lines.append("B $%04X,%d,%d" % (address, length,
                                         2 if kind == "vertices" else 8))

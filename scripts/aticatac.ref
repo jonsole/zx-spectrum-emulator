@@ -225,8 +225,16 @@ game.
 [Data:outlines:The rooms]
 A room is a shape number and a colour. The shape gives how far the player may
 walk from the centre each way, a table of corners, and a list of which corners
-to join up. There are thirteen shapes; three of them -- $06, $07 and $0C --
-are complete, with corners and edges of their own, and no room uses any of them.
+to join up. There are thirteen of them.
+Count the entries in ROOM_TABLE carefully: there are 151, not 149. The last is
+not a room at all but the trapdoor fall -- shape $0C, twelve nested rectangles,
+drawn with the walk limits closing in so that it reads as dropping down a
+shaft. Stopping at 149 makes that shape look like unused artwork, which it very
+much is not.
+Two shapes really are unused. $05 to $08 are one staircase in four
+orientations, sharing a single edge list and differing only in their corners;
+the game uses $05 for five rooms and $08 for one, and leaves $06 and $07 --
+both complete, both drawable -- untouched.
 What is in a room is a separate list, and those lists follow their index with no
 gaps at all, filling everything up to $7C18, the byte before the game's own
 entry point.

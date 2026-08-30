@@ -180,6 +180,21 @@ its edge list begins. So "does this length leave a gap?" is a real test, and it
 caught two shapes that no room uses (`$06` and `$07`) purely because their
 vertex tables were sitting in gaps the used shapes left behind.
 
+Get the table lengths from the data, not from what the game appears to have.
+Atic Atac has 149 rooms, so `range(149)` over `ROOM_TABLE` looks obviously
+right — and quietly hides two entries, because the table has 151. Entry 150 is
+shape `$0C`, the concentric squares drawn while the player falls through a
+trapdoor: a room to the drawing code, but not one anybody walks into. Scanning
+149 made a shape that the game draws every time you hit a trapdoor look like
+unused artwork. The contents index alongside it is 150 long, and the rooms
+themselves 149, so three lengths that differ by one are all in play at once and
+none should be derived from another. `ROOM_TABLE_ENTRIES`, `ROOM_LIST_ENTRIES`
+and `ROOM_COUNT` are separate constants for that reason.
+
+The general trap: a bound that is too small produces no error, no gap and no
+failed check. It just silently narrows what you are looking at, and everything
+downstream agrees with it.
+
 The round-trip check cannot see any of this, which is worth being explicit
 about. A table sliced into pieces, a block whose sub-blocks stop short of its
 span, two blocks claiming the same bytes — all of them still reassemble
