@@ -835,6 +835,14 @@ SPRITE_SCALE = 4
 SPRITE_ATTR = 0x47
 # Not a colour but a marker: leave this cell as it is.
 TRANSPARENT_ATTR = 0xFF
+# A few graphics have no attribute table -- their entry points at the null one
+# at $AEEA -- because the game draws them into cells the panel has already
+# coloured, and the drawing routine writes no attributes of its own. Running it
+# confirms that: it puts 78 bytes of pixels on the screen and does not touch
+# the attribute file. So their colour is not in the data anywhere, and what is
+# used here is what the game shows: the roast that counts your life force down
+# is yellow.
+GRAPHIC_COLOURS = {0xB4: 0x46, 0xB5: 0x46}
 # The game moves a walking character on every fourth frame, so a little over
 # ten frames a second. #FRAMES delays are in hundredths.
 FRAME_DELAY = 12
@@ -897,7 +905,10 @@ def udgarray(address: int, header: int, width: int, rows: int, name: str,
         # pixels are drawn and the cell keeps whatever the room painted there
         # -- which is how a doorway is drawn in the colour of the room it is
         # cut into. There is no room here to take a colour from, so those cells
-        # are drawn black rather than as the white-on-white $FF would give.
+        # are drawn bright white on black. Drawing them as $FF would give white
+        # on white, and drawing them black would lose the four graphics whose
+        # every cell is $FF -- the cave door frame and the wall shield among
+        # them -- which would then show as nothing at all.
         across, down, cells = colours
         specs = []
         for cell_y in range(down):
@@ -905,7 +916,7 @@ def udgarray(address: int, header: int, width: int, rows: int, name: str,
                 cell = cells[cell_y * across + cell_x]
                 specs.append("$%04X,%d,%d" % (
                     start + cell_y * width * 8 + cell_x,
-                    0 if cell == TRANSPARENT_ATTR else cell, width))
+                    SPRITE_ATTR if cell == TRANSPARENT_ATTR else cell, width))
         body = "%d,,%d,,,2(%s)" % (width, SPRITE_SCALE, ";".join(specs))
     else:
         body = "%d,%d,%d,%d,,2($%04X-$%04X-1-%d)" % (
@@ -1293,17 +1304,24 @@ def sprite_attributes(memory) -> dict:
     black paper, $42 to $47, which is the palette PAINT_PANEL works in: the
     mummy white, Frankenstein red, the devil magenta, Dracula green.
 
-    Only where every record agrees. Anything else -- the player, whose colour
-    comes from the character chosen, and anything not placed at the start --
-    keeps the default.
+    The monsters are placed once each and so have one colour. The things there
+    are many of do not: the eight foods are scattered in tens, and a given food
+    is red in one room and yellow in another, so what is shown here is the
+    colour it is most often placed in -- the drumstick is yellow in six of its
+    ten records. Ties go to the lower attribute so that the build stays
+    reproducible.
+
+    Anything with no record at all keeps the default: the player, whose colour
+    comes from the character chosen, and anything the game creates as it runs.
     """
     found = {}
     for address in range(TEMPLATE_RECORDS, TEMPLATE_DOORS, 8):
         code, attr = memory[address], memory[address + 5]
         if code and attr:
-            found.setdefault(code, set()).add(attr)
-    return {code: attrs.pop() for code, attrs in found.items()
-            if len(attrs) == 1}
+            found.setdefault(code, {})
+            found[code][attr] = found[code].get(attr, 0) + 1
+    return {code: min(attrs, key=lambda a: (-attrs[a], a))
+            for code, attrs in found.items()}
 
 
 def joined_runs() -> list:
@@ -1420,6 +1438,12 @@ def write_sprites_ref(groups: list[dict], snapshot: Path, entries: set,
         " of one creature sit together.",
         "Every picture here is drawn by SkoolKit straight out of the game's"
         " own bytes, so a sprite and the DEFBs listed for it cannot disagree."
+        " The colours are the game's too, read from the +$05 of its records in"
+        " INITIAL_STATE. The monsters are placed once each and so have one"
+        " colour; the things there are many of do not, and a food is red in one"
+        " room and yellow in another, so what is shown is the colour it is most"
+        " often placed in. Anything with no record keeps white -- the player"
+        " takes its colour from the character chosen."
         " Where a run of frames is a walk, each heading gets its own row and"
         " an animation at the pace the game plays it -- a step every fourth"
         " frame. A four-frame walk holds only three drawings: the fourth"
@@ -1899,14 +1923,14 @@ def render_panel(snapshot: Path, out_dir: Path) -> None:
 def colour_note(colours) -> str:
     """The Colours cell: where the table is, and how much of it is $FF."""
     if not colours:
-        return "&mdash;"
+        return "no table &mdash; it takes the colour of whatever it is drawn on"
     address, across, down, cells = colours
     blank = sum(1 for cell in cells if cell == TRANSPARENT_ATTR)
     note = "#R$%04X" % address
     if blank == len(cells):
-        return note + " &mdash; every cell takes the room's colour, so there is nothing to draw here on its own"
+        return note + " &mdash; every cell takes the room's colour; shown white here"
     if blank:
-        return note + " &mdash; %d of %d cells take the room's colour" % (
+        return note + " &mdash; %d of %d cells take the room's colour, shown white" % (
             blank, len(cells))
     return note
 
@@ -1957,7 +1981,8 @@ def write_graphics_ref(snapshot: Path, path: Path,
         " are drawn and the cell keeps whatever the room painted there. That is"
         " how a doorway is drawn in the colour of the wall it is cut into. On"
         " this page there is no room to take a colour from, so those cells are"
-        " black -- and four of the graphics are nothing but.",
+        " drawn bright white on black -- four of the graphics are nothing but"
+        " $FF, and would otherwise show as nothing at all.",
         "%d of them. The names are pobtastic's, from the Atic Atac disassembly"
         " at skoolkit.arcadegeek.co.uk; the ones still shown by number are"
         " unnamed here." % len(entries),
@@ -1986,6 +2011,7 @@ def write_graphics_ref(snapshot: Path, path: Path,
         lines.append("{ %s | $%02X | %s | %d&times;%d | #R$%04X | %s }" % (
             udgarray(address, header, width, rows, "gfxpage%02X" % code,
                      wrap=False,
+                     attr=GRAPHIC_COLOURS.get(code, SPRITE_ATTR),
                      colours=colours[1:] if colours else None),
             code, named.get(code, "&mdash;"), width * 8, rows, address,
             colour_note(colours)))

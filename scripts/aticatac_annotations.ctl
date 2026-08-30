@@ -2043,6 +2043,8 @@ B $8B85,5,5
 ; sprite $B1 Clock
 ; sprite $B2 Ghost picture
 ; sprite $B3 Table
+; sprite $B4 Roast chicken, whole -- the health indicator
+; sprite $B5 Roast chicken, picked to the bones
 ; sprite $B6 Wall antlers
 ; sprite $B7 Wall trophy
 ; sprite $B8 Bookcase
