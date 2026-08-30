@@ -86,6 +86,7 @@ import argparse
 import contextlib
 import io
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -102,16 +103,35 @@ OUT_DIR = PROJECT_ROOT / "game_disassembly" / "aticatac"
 # everything in OUT_DIR this is source, not output: it contains no game bytes,
 # only addresses and prose, so it is committed rather than gitignored.
 ANNOTATIONS = PROJECT_ROOT / "scripts" / "aticatac_annotations.ctl"
+# Titles, prose pages and the game's name for the HTML build. Source, like the
+# annotations, and committed for the same reason.
+REF = PROJECT_ROOT / "scripts" / "aticatac.ref"
 ROM = PROJECT_ROOT / "roms" / "48.rom"
 SJASMPLUS = PROJECT_ROOT / "tools" / "sjasmplus" / "sjasmplus.exe"
 
 # Where the decryptor hands over, and the extent of the loaded game block:
 # 0x5FFF + 30209 bytes, less the unused byte at 0x5FFF itself.
 ENTRY = 0x6000
+# The room-redraw entry: mark the room seen, blank the play area, draw the
+# room, colour the panel. Running it with a room number in $EA91 and stopping
+# at REDRAW_DONE leaves that room -- and nothing else -- on the screen.
+REDRAW_ROOM = 0x9147
+REDRAW_DONE = 0x9156
+CURRENT_ROOM = 0xEA91
+ROOM_TABLE = 0xA854
+ROOM_SHAPES = 0xA982
+# Rooms 0-148. The table has 151 entries, but the last two are colour $00 --
+# black on black -- and entry 151 is really the first two bytes of the shape
+# table. See COUNT_ROOMS_EXPLORED, whose arithmetic only works out at 149.
+ROOM_COUNT = 149
+# The index of what each room holds. The lists it points at follow it and
+# fill everything up to the game's entry point exactly.
+ROOM_CONTENTS = 0x757D
 GAME_END = 0xD600
 STACK = 0x5E00  # what the game's own first instructions set SP to
 
 TSTATES_PER_SECOND = 3500000
+NEWLINE = chr(10)
 
 
 def _log(message: str) -> None:
@@ -261,14 +281,105 @@ def _capture(func, args) -> str:
     return buf.getvalue()
 
 
+_COMMENT_RE = re.compile(r"^\s{2}\$([0-9A-F]{4})(?:,(\d+))?\s")
+_SPAN_RE = re.compile(r"^;\s*span\s+\$([0-9A-F]{4}),(\d+)\s*$")
+_BLOCK_RE = re.compile(r"^[bctwsi] \$([0-9A-F]{4})")
+
+
+def declared_spans() -> list[tuple[int, int]]:
+    """Data-block extents the annotations claim, as `; span $ADDR,LENGTH`.
+
+    sna2ctl's heuristics happily start a new block in the middle of a table --
+    ROOM_TABLE gets cut after one byte, and a stretch of ROOM_SHAPES is read as
+    text. Those boundaries come from the generated control file, and a second
+    control file can add boundaries but never remove them, so the only way to
+    keep a table whole is to drop them before the two are merged.
+    """
+    if not ANNOTATIONS.exists():
+        return []
+    spans = []
+    for line in ANNOTATIONS.read_text(encoding="utf-8").splitlines():
+        match = _SPAN_RE.match(line)
+        if match:
+            start = int(match.group(1), 16)
+            spans.append((start, start + int(match.group(2))))
+    return spans
+
+
+def strip_spanned_blocks(ctl_text: str, spans: list[tuple[int, int]]) -> str:
+    """Drop generated block directives that fall strictly inside a span."""
+    if not spans:
+        return ctl_text
+    kept = []
+    for line in ctl_text.splitlines():
+        match = _BLOCK_RE.match(line)
+        if match:
+            address = int(match.group(1), 16)
+            if any(start < address < end for start, end in spans):
+                continue
+        kept.append(line)
+    return NEWLINE.join(kept)
+
+
+def check_annotations(bare_skool: str) -> None:
+    """Warn about instruction comments whose length splits an instruction.
+
+    A `  $ADDR,N` directive whose N does not land on an instruction boundary
+    makes sna2skool cut an instruction in half and re-decode from the middle
+    of it, which shifts every address after that point. The round-trip check
+    catches the damage, but only as a byte count that is a few too many --
+    this says which line caused it.
+    """
+    if not ANNOTATIONS.exists():
+        return
+    # Lines are "c$8093 ...", " $8096 ..." or "*$809A ..." -- the star marks
+    # a jump target, and those are instruction boundaries just as much as
+    # the rest, so the pattern has to allow it.
+    boundaries = {int(m.group(1), 16)
+                  for m in (re.match(r"^[bctwsi ]?\*?\$([0-9A-F]{4})\s", line)
+                            for line in bare_skool.split("\n")) if m}
+    problems = []
+    for number, line in enumerate(ANNOTATIONS.read_text(encoding="utf-8").split("\n"), 1):
+        match = _COMMENT_RE.match(line)
+        if not match or match.group(2) is None:
+            continue
+        address = int(match.group(1), 16)
+        end = address + int(match.group(2))
+        if address in boundaries and end not in boundaries:
+            valid = min((b for b in boundaries if b >= end), default=None)
+            problems.append(f"  {ANNOTATIONS.name}:{number}: ${address:04X},"
+                            f"{match.group(2)} ends mid-instruction"
+                            + (f" -- try ,{valid - address}" if valid else ""))
+    if problems:
+        _log("Annotation lengths that split an instruction:")
+        for problem in problems:
+            _log(problem)
+
+
 def build_asm(snapshot: Path, code_map: Path, ctl: Path, skool: Path, asm: Path) -> None:
     from skoolkit import skool2asm, sna2ctl, sna2skool
 
     _log("Generating control file...")
-    ctl.write_text(_capture(sna2ctl.main, [
+    generated = _capture(sna2ctl.main, [
         "-m", str(code_map), "-h",
         "-s", str(ENTRY), "-e", str(GAME_END), str(snapshot),
-    ]), encoding="utf-8")
+    ])
+    graphics_ctl = OUT_DIR / "aticatac-graphics.ctl"
+    graphics_text, graphics_spans = graphics_blocks(snapshot)
+    rooms_text, rooms_spans = room_list_blocks(snapshot)
+    shapes_text, shapes_spans = shape_blocks(snapshot)
+    graphics_ctl.write_text(graphics_text + rooms_text + shapes_text,
+                            encoding="utf-8")
+    _log(f"  {graphics_text.count('label=')} sprite graphics, "
+         f"{rooms_text.count('label=')} room lists and "
+         f"{shapes_text.count('label=')} outline tables located from their tables")
+    spans = declared_spans() + graphics_spans + rooms_spans + shapes_spans
+    kept = strip_spanned_blocks(generated, spans)
+    if spans:
+        dropped = generated.count(NEWLINE) - kept.count(NEWLINE)
+        _log(f"  {len(spans)} declared span(s); dropped {dropped} generated "
+             f"block boundar{'y' if dropped == 1 else 'ies'} inside them")
+    ctl.write_text(kept, encoding="utf-8")
 
     _log("Generating skool file...")
     # ANNOTATIONS is layered over the generated control file: sna2skool takes
@@ -276,8 +387,24 @@ def build_asm(snapshot: Path, code_map: Path, ctl: Path, skool: Path, asm: Path)
     # what lets the code/data map be regenerated from scratch on every build
     # without throwing away the hand-written comments, which live in a file
     # this script only ever reads.
-    ctls = ["-c", str(ctl)]
+    ctls = ["-c", str(ctl), "-c", str(graphics_ctl)]
     if ANNOTATIONS.exists():
+        # Disassemble once without the annotations first, purely to learn
+        # where the instruction boundaries are, so misaligned comment lengths
+        # can be reported by line number rather than as a byte-count mismatch
+        # a hundred lines of output later.
+        # The boundary pass needs the block directives -- a block forced from
+        # data to code has no instruction boundaries without them, and every
+        # comment inside it then looks misaligned. The titles and comments are
+        # stripped so only the structure is applied.
+        structure = OUT_DIR / "aticatac-structure.ctl"
+        structure.write_text(NEWLINE.join(
+            line.split(" ", 2)[0] + " " + line.split(" ", 2)[1]
+            for line in ANNOTATIONS.read_text(encoding="utf-8").splitlines()
+            if re.match(r"^[bctwsi] \$[0-9A-F]{4}", line)), encoding="utf-8")
+        check_annotations(_capture(sna2skool.main,
+                                   ["-H", "-c", str(ctl), "-c", str(structure),
+                                    str(snapshot)]))
         ctls += ["-c", str(ANNOTATIONS)]
     else:
         _log(f"  (no annotations file at {ANNOTATIONS} -- output will be bare)")
@@ -313,6 +440,806 @@ def assemble(asm: Path, sld: Path) -> bytes:
     game_bytes = raw.read_bytes()
     raw.unlink()
     return game_bytes
+
+
+# Names for the ten outlines, read off the pictures they draw.
+SHAPE_NAMES = {
+    0x00: "Square hall",
+    0x01: "Cave",
+    0x02: "Octagonal hall",
+    0x03: "Wide hall",
+    0x04: "Tall hall",
+    0x05: "Staircase, head-on",
+    0x08: "Staircase, side-on",
+    0x09: "Cavern, wide",
+    0x0A: "Cavern, tall",
+    0x0B: "Passage",
+}
+
+
+def read_shapes(snapshot: Path) -> list[dict]:
+    """Every distinct room outline, with the data behind it.
+
+    A shape entry is six bytes: how far the player may walk from the centre
+    each way, then the address of its vertex table, then the address of its
+    edge list. Neither table carries a length -- the edge list ends at a
+    doubled $FF, and the vertex table is however many points it mentions.
+    """
+    from skoolkit.snapshot import Snapshot
+
+    memory = Snapshot.get(str(snapshot)).memory
+    rooms_by_shape: dict[int, list[int]] = {}
+    for room in range(ROOM_COUNT):
+        rooms_by_shape.setdefault(memory[ROOM_TABLE + room * 2 + 1], []).append(room)
+
+    shapes = []
+    for shape in sorted(rooms_by_shape):
+        entry = ROOM_SHAPES + shape * 6
+        vertices = memory[entry + 2] | (memory[entry + 3] << 8)
+        edges = memory[entry + 4] | (memory[entry + 5] << 8)
+        # Walk the edge list: a vertex begins a group, the vertices after it
+        # are drawn to from it, $FF closes the group and a second $FF the list.
+        address, groups, group, highest = edges, [], None, -1
+        while True:
+            value = memory[address]
+            address += 1
+            if value == 0xFF:
+                if group is None:
+                    break
+                groups.append(group)
+                group = None
+                continue
+            highest = max(highest, value)
+            if group is None:
+                group = [value]
+            else:
+                group.append(value)
+        points = [(memory[vertices + i * 2], memory[vertices + i * 2 + 1])
+                  for i in range(highest + 1)]
+        shapes.append({
+            "shape": shape,
+            "name": SHAPE_NAMES.get(shape, "Shape $%02X" % shape),
+            "half_width": memory[entry],
+            "half_height": memory[entry + 1],
+            "vertices": vertices,
+            "edges": edges,
+            "points": points,
+            "lines": sum(len(g) - 1 for g in groups),
+            "rooms": rooms_by_shape[shape],
+        })
+    return shapes
+
+
+def render_shapes(snapshot: Path, shapes: list[dict], out_dir: Path) -> None:
+    """Draw one room of each shape with the game's own code.
+
+    Rather than reimplementing the vector format, this puts a room number in
+    $EA91 and runs the redraw entry, so the picture is whatever the real thing
+    would have drawn. Only the 24x24 cells of the play area are captured,
+    which leaves the status panel out.
+    """
+    from skoolkit import CSimulator, read_bin_file
+    from skoolkit.components import get_image_writer
+    from skoolkit.graphics import Frame, scr_udgs
+    from skoolkit.simulator import Simulator
+    from skoolkit.simutils import T
+    from skoolkit.snapshot import Snapshot
+    from skoolkit.trace import Tracer
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    memory = list(Snapshot.get(str(snapshot)).memory)
+    memory[:0x4000] = read_bin_file(str(ROM))
+    simulator = (CSimulator or Simulator)(
+        memory, state={"iff": 0, "im": 1, "tstates": 0})
+    simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
+    writer = get_image_writer()
+
+    _log(f"Drawing one room of each of the {len(shapes)} outlines...")
+    for entry in shapes:
+        simulator.memory[CURRENT_ROOM] = entry["rooms"][0]
+        simulator.registers[24] = STACK
+        simulator.trace(REDRAW_ROOM, REDRAW_DONE, 0,
+                        simulator.registers[T] + 20_000_000,
+                        False, None, None, None, None, None)
+        frame = Frame(scr_udgs(simulator.memory, 0, 0, 24, 24), 1)
+        with open(out_dir / ("shape%02X.png" % entry["shape"]), "wb") as f:
+            writer.write_image([frame], f)
+
+
+def _and_list(items: list[str]) -> str:
+    """a, b and c."""
+    if len(items) < 3:
+        return " and ".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def write_shapes_ref(shapes: list[dict], path: Path) -> None:
+    """A generated ref file documenting each room outline.
+
+    Generated rather than committed because every number in it is read out of
+    the game's own tables; the hand-written prose lives in scripts/aticatac.ref.
+    """
+    shared: dict[int, list[int]] = {}
+    for entry in shapes:
+        shared.setdefault(entry["edges"], []).append(entry["shape"])
+
+    # This file supplies only [Page:RoomTypes] and the content sections. The
+    # page's title, header, link text and its place in the index all live in
+    # scripts/aticatac.ref, because ref file sections do not merge across
+    # files: when two of them declare the same section, SkoolKit keeps the one
+    # it parsed first and silently ignores the other.
+    lines = [
+        "; Generated by scripts/build_aticatac.py -- do not edit.",
+        "",
+        "[Page:RoomTypes]",
+        "SectionPrefix=RoomTypes",
+        "",
+        "[RoomTypes:intro:Ten outlines for 149 rooms]",
+        "Every room in the castle is one of these ten shapes in one of six"
+        " colours. A room's own entry in ROOM_TABLE is just those two bytes,"
+        " and the shape number selects the geometry below -- which is what lets"
+        " 149 rooms cost barely more than 300 bytes between them.",
+        "Each outline is a list of points and a list of lines between them,"
+        " drawn by DRAW_OUTLINE. The pictures are the game's own: a room number"
+        " goes into $EA91, the redraw at $9147 runs, and the 24 by 24 cells of"
+        " the play area are captured with the status panel left out.",
+    ]
+    for edges, group in sorted(shared.items()):
+        if len(group) > 1:
+            lines.append(
+                "Shapes " + _and_list(["$%02X" % s for s in group])
+                + " share the edge list at $%04X" % edges
+                + " -- the same topology over a different set of points, which"
+                " is how the wide and tall variants come for free.")
+
+    for entry in shapes:
+        shape = entry["shape"]
+        rooms = entry["rooms"]
+        lines += [
+            "",
+            "[RoomTypes:shape%02X:$%02X &mdash; %s]" % (shape, shape, entry["name"]),
+            '<img src="images/shapes/shape%02X.png" width="192"'
+            ' alt="room shape $%02X" style="float:right;margin-left:12px"/>'
+            % (shape, shape),
+            '<table class="default">',
+            "<tr><th>Rooms with this outline</th><td>%d of %d</td></tr>"
+            % (len(rooms), ROOM_COUNT),
+            "<tr><th>Player may walk from centre</th><td>%d across, %d down</td></tr>"
+            % (entry["half_width"], entry["half_height"]),
+            "<tr><th>Vertex table</th><td>$%04X, %d points</td></tr>"
+            % (entry["vertices"], len(entry["points"])),
+            "<tr><th>Edge list</th><td>$%04X, %d lines</td></tr>"
+            % (entry["edges"], entry["lines"]),
+            "</table>",
+            "Used by rooms " + ", ".join("$%02X" % r for r in rooms) + ".",
+        ]
+        if len(entry["points"]) <= 16:
+            lines.append("Points: "
+                         + ", ".join("(%d,%d)" % p for p in entry["points"]) + ".")
+        else:
+            lines.append("Drawn from %d points, too many to list here."
+                         % len(entry["points"]))
+        lines.append('<div style="clear:both"></div>')
+    lines.append("")
+    path.write_text(NEWLINE.join(lines), encoding="utf-8")
+
+
+# Sprite catalogue -----------------------------------------------------------
+#
+# Every actor is drawn from its sprite byte, and that same byte chooses its
+# handler, so the two catalogues are really one: the pictures below are grouped
+# by the routine that drives them.
+
+ACTOR_HANDLERS = 0x7EE6
+# Codes above $A1 are in the handler table but draw nothing recognisable --
+# fragments of a few pixels rather than pictures -- so the catalogue stops
+# there rather than filling itself with noise.
+SPRITE_CODE_MAX = 0xA1
+# Where a sprite is drawn for its portrait, and the window captured around it.
+SPRITE_X, SPRITE_Y = 0x40, 0x70
+SPRITE_WINDOW = (7, 7, 10, 8)      # character cells: x, y, width, height
+# DRAW_TITLE_ICONS draws one record; entering at its two CALLs draws whatever
+# has been put in UI_RECORD, which is how a sprite is rendered on its own.
+DRAW_ONE_SPRITE = 0xA325
+DRAW_ONE_SPRITE_DONE = 0xA32B
+UI_RECORD = 0xA17D
+
+
+def annotation_labels() -> dict:
+    """Routine names from the annotations file, keyed by address."""
+    labels = {}
+    if ANNOTATIONS.exists():
+        for line in ANNOTATIONS.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^@ \$([0-9A-F]{4}) label=(\w+)", line)
+            if match:
+                labels[int(match.group(1), 16)] = match.group(2)
+    return labels
+
+
+def read_sprite_groups(snapshot: Path) -> list[dict]:
+    """Sprite codes grouped by the handler ACTOR_HANDLERS sends them to."""
+    from skoolkit.snapshot import Snapshot
+
+    memory = Snapshot.get(str(snapshot)).memory
+    labels = annotation_labels()
+    groups, current = [], None
+    for code in range(1, SPRITE_CODE_MAX + 1):
+        entry = ACTOR_HANDLERS + code * 2
+        handler = memory[entry] | (memory[entry + 1] << 8)
+        if current is None or handler != current["handler"]:
+            current = {"handler": handler,
+                       "name": labels.get(handler, "$%04X" % handler),
+                       "named": handler in labels,
+                       "codes": []}
+            groups.append(current)
+        current["codes"].append(code)
+    return groups
+
+
+def render_sprites(snapshot: Path, out_dir: Path) -> set:
+    """Draw each sprite on its own, with the game's own drawing code.
+
+    The same approach as the room pictures: rather than decoding the sprite
+    format, put the code into UI_RECORD and run the two calls DRAW_TITLE_ICONS
+    makes, so what comes out is whatever the real thing would have drawn.
+    Returns the codes that drew anything -- a handful are sound effects or
+    animations with no picture of their own.
+    """
+    from skoolkit import CSimulator, read_bin_file
+    from skoolkit.components import get_image_writer
+    from skoolkit.graphics import Frame, scr_udgs
+    from skoolkit.simulator import Simulator
+    from skoolkit.simutils import IXh, IXl, T
+    from skoolkit.snapshot import Snapshot
+    from skoolkit.trace import Tracer
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    memory = list(Snapshot.get(str(snapshot)).memory)
+    memory[:0x4000] = read_bin_file(str(ROM))
+    simulator = (CSimulator or Simulator)(
+        memory, state={"iff": 0, "im": 1, "tstates": 0})
+    simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
+    writer = get_image_writer()
+
+    # Every code the graphics table has an entry for, not just the ones the
+    # handler table drives: the disassembly puts a picture beside each block
+    # of graphics bytes, and those run well past the last handler.
+    _log(f"Drawing {GFX_TABLE_ENTRIES} sprites...")
+    drawn = set()
+    for code in range(1, GFX_TABLE_ENTRIES + 1):
+        for address in range(0x4000, 0x5B00):
+            simulator.memory[address] = 0
+        for offset, value in enumerate(
+                (code, 0, 0, SPRITE_X, SPRITE_Y, 0x47, 0, 0)):
+            simulator.memory[UI_RECORD + offset] = value
+        simulator.registers[IXl] = UI_RECORD & 0xFF
+        simulator.registers[IXh] = UI_RECORD >> 8
+        simulator.registers[24] = STACK
+        simulator.trace(DRAW_ONE_SPRITE, DRAW_ONE_SPRITE_DONE, 0,
+                        simulator.registers[T] + 5_000_000,
+                        False, None, None, None, None, None)
+        if not any(simulator.memory[0x4000:0x5800]):
+            continue
+        drawn.add(code)
+        frame = Frame(scr_udgs(simulator.memory, *SPRITE_WINDOW), 1)
+        with open(out_dir / ("sprite%02X.png" % code), "wb") as f:
+            writer.write_image([frame], f)
+    _log(f"  {len(drawn)} of {GFX_TABLE_ENTRIES} codes draw a picture")
+    return drawn
+
+
+# Sprite graphics -------------------------------------------------------------
+#
+# SPRITE_TABLE gives the address; the first byte there gives the height, and
+# every sprite is two bytes -- sixteen pixels -- wide. That was not guessed:
+# each code was drawn on a machine of its own with the reads into the graphics
+# region logged, and all 235 that draw read exactly `1 + 2 * height` bytes,
+# contiguously, starting at the address the table holds. So the extents below
+# are computed from the table rather than traced, and are known to match what
+# the game itself reads.
+
+GFX_TABLE = 0xA4BE
+GFX_TABLE_ENTRIES = 239
+GFX_FIRST = 0xA69C
+# Below this the graphics carry a width as well as a height and are the
+# wider pieces the room is built from; above it every sprite is two bytes
+# wide and only the row count is stored. The boundary is not a guess: the
+# 14 records from $A69C tile that region exactly, ending on ROOM_TABLE.
+GFX_NARROW = 0xAD2E
+
+
+def graphics_blocks(snapshot: Path) -> tuple:
+    """A control file naming every sprite's graphics, and the spans it covers.
+
+    Returned rather than written into the annotations file because it is
+    derived entirely from the table: 194 blocks of bytes that no one wants to
+    maintain by hand.
+    """
+    from skoolkit.snapshot import Snapshot
+
+    memory = Snapshot.get(str(snapshot)).memory
+    named = sprite_names()
+
+    def depicted(code):
+        for low, high, name in named:
+            if low <= code <= high:
+                return name
+        return None
+
+    owners = {}
+    for code in range(1, GFX_TABLE_ENTRIES + 1):
+        entry = GFX_TABLE + (code - 1) * 2
+        address = memory[entry] | (memory[entry + 1] << 8)
+        if not GFX_FIRST <= address < GAME_END:
+            continue
+        if address < GFX_NARROW:
+            width, rows = memory[address], memory[address + 1]
+            if width == 0 or rows == 0 or address + 2 + width * rows > GAME_END:
+                continue
+        else:
+            width, rows = 2, memory[address]
+            if rows == 0 or address + 1 + rows * 2 > GAME_END:
+                continue
+        owners.setdefault(address, (width, rows, []))[2].append(code)
+
+    lines = ["; Generated by scripts/build_aticatac.py -- do not edit.", ""]
+    spans = []
+    for address in sorted(owners):
+        width, rows, codes = owners[address]
+        wide = address < GFX_NARROW
+        header = 2 if wide else 1
+        spans.append((address, address + header + width * rows))
+        first = codes[0]
+        name = depicted(first)
+        shown = ", ".join("$%02X" % c for c in codes)
+        title = "%s, drawn for sprite %s" % (name, shown) if name else                 "The graphics for sprite %s" % shown
+        lines.append("@ $%04X label=GFX_%02X" % (address, first))
+        lines.append("b $%04X %s" % (address, title))
+        if wide:
+            lines.append("D $%04X %d rows of %d pixels. The first two bytes are "
+                         "the width in bytes and the height in rows; the rest "
+                         "are the rows, top down." % (address, rows, width * 8))
+        else:
+            lines.append("D $%04X %d rows of 16 pixels. The first byte is the "
+                         "row count; the rest are the rows, two bytes each, "
+                         "top down." % (address, rows))
+        if len(codes) > 1:
+            lines.append("D $%04X Shared by %d codes, which is how the game "
+                         "gets a mirrored or repeated frame without a second "
+                         "copy of the picture." % (address, len(codes)))
+        if any(memory[address + header:address + header + width * rows]):
+            lines.append("D $%04X #HTML(<img src=\"../images/sprites/sprite%02X.png\" "
+                         "alt=\"sprite $%02X\"/>)" % (address, first, first))
+        else:
+            lines.append("D $%04X Every byte is zero, so this one draws nothing "
+                         "-- a blank frame in an animation." % address)
+        lines.append("B $%04X,%d,%d" % (address, header, header))
+        lines.append("B $%04X,%d,%d" % (address + header, width * rows, width))
+        lines.append("")
+    return NEWLINE.join(lines), spans
+
+
+def room_list_blocks(snapshot: Path) -> tuple:
+    """One block per room's contents list, and the spans they cover.
+
+    ROOM_CONTENTS is only the index; the lists themselves follow it and run to
+    $7C18, the byte before the game's entry point, with no gaps at all. Each is
+    a run of record addresses ended by a zero, and each address is a template
+    one, so it needs the same +$8A83 relocation POPULATE_ROOM applies.
+    """
+    from skoolkit.snapshot import Snapshot
+
+    memory = Snapshot.get(str(snapshot)).memory
+    lines = ["", "; Room contents lists.", ""]
+    spans = []
+    for room in range(ROOM_COUNT + 1):
+        entry = ROOM_CONTENTS + room * 2
+        address = memory[entry] | (memory[entry + 1] << 8)
+        count = 0
+        while memory[address + count * 2] | (memory[address + count * 2 + 1] << 8):
+            count += 1
+        length = count * 2 + 2
+        spans.append((address, address + length))
+        lines.append("@ $%04X label=ROOM_LIST_%02X" % (address, room))
+        lines.append("b $%04X What is in room $%02X" % (address, room))
+        if count:
+            lines.append("D $%04X %d record%s, then a zero to end the list. "
+                         "Add $8A83 to each to get where it ends up at run "
+                         "time." % (address, count, "" if count == 1 else "s"))
+        else:
+            lines.append("D $%04X Nothing at all: just the terminator. An empty "
+                         "room." % address)
+        lines.append("W $%04X,%d,2" % (address, length))
+        lines.append("")
+    return NEWLINE.join(lines), spans
+
+
+SHAPE_COUNT = 13
+
+
+def shape_blocks(snapshot: Path) -> tuple:
+    """The vertex tables and edge lists behind every room outline.
+
+    Neither carries a length. An edge list ends at a doubled $FF, and a vertex
+    table holds one point for every index the edge list mentions -- which is
+    exactly right, because with those lengths the thirteen shapes' tables tile
+    their region without leaving a byte over.
+    """
+    from skoolkit.snapshot import Snapshot
+
+    memory = Snapshot.get(str(snapshot)).memory
+    used = set()
+    for room in range(ROOM_COUNT):
+        used.add(memory[ROOM_TABLE + room * 2 + 1])
+
+    regions = {}
+    for shape in range(SHAPE_COUNT):
+        entry = ROOM_SHAPES + shape * 6
+        vertices = memory[entry + 2] | (memory[entry + 3] << 8)
+        edges = memory[entry + 4] | (memory[entry + 5] << 8)
+        address, in_group, highest = edges, False, -1
+        while True:
+            value = memory[address]
+            address += 1
+            if value == 0xFF:
+                if not in_group:
+                    break
+                in_group = False
+                continue
+            highest = max(highest, value)
+            in_group = True
+        regions.setdefault(("edges", edges), [address - edges, []])[1].append(shape)
+        regions.setdefault(("vertices", vertices),
+                           [(highest + 1) * 2, []])[1].append(shape)
+
+    lines = ["", "; Room outlines.", ""]
+    spans = []
+    for (kind, address), (length, shapes) in sorted(regions.items(),
+                                                    key=lambda kv: kv[0][1]):
+        spans.append((address, address + length))
+        shown = ", ".join("$%02X" % s for s in shapes)
+        unused = [s for s in shapes if s not in used]
+        lines.append("@ $%04X label=SHAPE_%s_%02X"
+                     % (address, kind.upper()[:5], shapes[0]))
+        if kind == "edges":
+            lines.append("b $%04X Which corners to join up, for shape %s"
+                         % (address, shown))
+            lines.append("D $%04X Groups of vertex numbers, each closed by an "
+                         "$FF, and a second $FF ends the list. DRAW_OUTLINE "
+                         "draws from the first number in a group to each of "
+                         "the others in turn." % address)
+        else:
+            lines.append("b $%04X The corners of shape %s" % (address, shown))
+            lines.append("D $%04X %d points, x then y, indexed by the numbers "
+                         "in the edge list." % (address, length // 2))
+        if len(shapes) > 1:
+            lines.append("D $%04X Shared by %d shapes, which is how a room and "
+                         "its mirror image are drawn from one description."
+                         % (address, len(shapes)))
+        if unused:
+            lines.append("D $%04X No room uses shape %s: it is in the game but "
+                         "never drawn."
+                         % (address, ", ".join("$%02X" % s for s in unused)))
+        lines.append("B $%04X,%d,%d" % (address, length,
+                                        2 if kind == "vertices" else 8))
+        lines.append("")
+    return NEWLINE.join(lines), spans
+
+
+def entry_addresses(ctl: Path) -> set:
+    """Addresses that begin a disassembly entry.
+
+    #R only resolves against those. Several handlers in the table are entered
+    part-way into a routine, and pointing #R at one of them fails the whole
+    build, so those are written as plain addresses instead.
+    """
+    entries = set()
+    for line in ctl.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^[bctwsi] \$([0-9A-F]{4})", line)
+        if match:
+            entries.add(int(match.group(1), 16))
+    return entries
+
+
+def sprite_names() -> list:
+    """What each run of sprite codes actually depicts.
+
+    Declared in the annotations file as `; sprite $4C-$4D Pumpkin`. They are
+    kept separate from the routine labels because the two do not line up: one
+    handler often drives several creatures -- MOVE_ACTOR is both the pumpkin
+    and the spider -- and one group of codes can hold two pictures, as the
+    keyboard and joystick icons do.
+    """
+    names = []
+    if ANNOTATIONS.exists():
+        for line in ANNOTATIONS.read_text(encoding="utf-8").splitlines():
+            match = re.match(
+                r"^;\s*sprite\s+\$([0-9A-F]{2})(?:-\$([0-9A-F]{2}))?\s+(.+?)\s*$",
+                line)
+            if match:
+                low = int(match.group(1), 16)
+                high = int(match.group(2), 16) if match.group(2) else low
+                names.append((low, high, match.group(3)))
+    return names
+
+
+def write_sprites_ref(groups: list[dict], drawn: set, entries: set, path: Path) -> None:
+    """A generated ref file cataloguing the sprites, grouped by handler."""
+    named_ranges = sprite_names()
+
+    def depicted(code):
+        for low, high, name in named_ranges:
+            if low <= code <= high:
+                return name
+        return None
+
+    lines = [
+        "; Generated by scripts/build_aticatac.py -- do not edit.",
+        "",
+        "[Page:Sprites]",
+        "SectionPrefix=Sprites",
+        "",
+        "[Sprites:intro:One byte, two jobs]",
+        "An actor's +$00 is both what it looks like and what it does: it"
+        " indexes ACTOR_HANDLERS to find the routine that drives it, and it"
+        " selects the picture drawn for it. So the sprites are catalogued here"
+        " in the order the handler table groups them, which is why the frames"
+        " of one creature sit together.",
+        "Each picture is the game's own. The code is put into UI_RECORD and the"
+        " two calls DRAW_TITLE_ICONS makes are run, so nothing here depends on"
+        " having decoded the sprite format correctly.",
+        "Codes $01 to $%02X are the pictures; %d of them draw something, and"
+        " the rest are entries whose handler is a sound effect, or an"
+        " animation that draws itself -- $66 and $67, the sinking and rising"
+        " the player does on dying, have no picture of their own. Codes above"
+        " $%02X are in the handler table too but draw only fragments of a few"
+        " pixels, so they are left out." % (SPRITE_CODE_MAX, len(drawn),
+                                            SPRITE_CODE_MAX),
+    ]
+    for group in groups:
+        shown = [c for c in group["codes"] if c in drawn]
+        if not shown:
+            continue
+        # One handler can drive several creatures, and one run of codes can
+        # hold more than one picture, so split the run wherever the name does.
+        runs, current = [], None
+        for code in shown:
+            name = depicted(code)
+            if current is None or name != current[0]:
+                current = (name, [code])
+                runs.append(current)
+            else:
+                current[1].append(code)
+        handler = group["handler"]
+        for name, codes in runs:
+            first, last = codes[0], codes[-1]
+            span = "$%02X" % first if first == last else "$%02X-$%02X" % (first, last)
+            title = "%s &mdash; %s" % (span, name) if name else \
+                    "%s &mdash; %s" % (span, group["name"])
+            lines += ["", "[Sprites:s%02X:%s]" % (first, title)]
+            if handler not in entries:
+                lines.append("Driven from part-way into the routine at $%04X."
+                             % handler)
+            elif group["named"]:
+                lines.append("Driven by #R$%04X." % handler)
+            else:
+                lines.append("Driven by #R$%04X, which has not been named yet."
+                             % handler)
+            if name and len(codes) > 1:
+                lines.append("%d frames." % len(codes))
+            lines.append('<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end">')
+            for code in codes:
+                lines.append(
+                    '<div style="text-align:center;font-size:11px">'
+                    '<img src="images/sprites/sprite%02X.png" alt="sprite $%02X"'
+                    ' style="display:block"/>$%02X</div>' % (code, code, code))
+            lines += ["</div>", '<div style="clear:both"></div>']
+    lines.append("")
+    path.write_text(NEWLINE.join(lines), encoding="utf-8")
+
+
+# Sound effects ---------------------------------------------------------------
+#
+# Recorded by running the routine and capturing the writes to bit 4 of port
+# $FE, which is the only way a 48K makes a noise. Everything here is the
+# game's own code making its own sound; nothing is synthesised.
+
+FRAME_TSTATES = 69888
+# Somewhere harmless to leave a return address, so a forced call has something
+# to come back to and the capture knows when the routine has finished.
+SOUND_SENTINEL = 0x0008
+SOUND_STACK = 0x5DFC
+
+# (file, entry, B, C, title, description). B and C are None where the routine
+# sets them itself.
+SOUND_EFFECTS = [
+    ("footstep_low", 0xA3AA, 0x60, 0x04, "Footstep, the low one",
+     "$6004 -- four cycles of half-period $60, from the branch at $A3DB."),
+    ("footstep_high", 0xA3AA, 0x40, 0x04, "Footstep, the high one",
+     "$4004, from the branch at $A3D3. SOUND_FOOTSTEP alternates the two."),
+    ("bonus", 0xA3E0, None, None, "The bonus note",
+     "Played by FLASH_SCORE every sixteenth step of its countdown."),
+    ("spell_A445", 0xA445, None, None, "The wizard's spell",
+     "Its starting pitch comes from $5E25, the number of actors in the room,"
+     " so it is never quite the same twice."),
+    ("spell_A4B0", 0xA4B0, None, None, "The spell's second sound",
+     "The other of the two SPIN_SPELL makes."),
+    ("sweep_up", 0xA427, None, None, "A rising sweep",
+     "Sixteen calls to BEEP with the pitch walked upwards."),
+    ("sweep_down", 0xA438, None, None, "A falling blip",
+     "Eight steps with the pitch complemented, so it falls."),
+    ("sweep_A41B", 0xA41B, None, None, "The sweep at $A41B", "Reached from $8134."),
+    ("noise_burst", 0xA46E, None, None, "A rasp",
+     "119 edges in eight milliseconds with the gaps swinging wildly -- not a"
+     " note at all. Reached from $917D."),
+    ("beep_one_cycle", 0xA3A8, 0x40, 0x01, "One cycle of BEEP",
+     "The smallest sound the game can make: a single square wave."),
+]
+
+
+def _capture_sound(sim, tracer, entry, b, c, seconds=3.0):
+    """Run one routine from a clean machine and return its beeper edges."""
+    from skoolkit.simutils import B, C, T
+
+    tracer.audio_log.clear()
+    sim.memory[SOUND_STACK] = SOUND_SENTINEL & 0xFF
+    sim.memory[SOUND_STACK + 1] = SOUND_SENTINEL >> 8
+    sim.registers[24] = SOUND_STACK
+    if b is not None:
+        sim.registers[B], sim.registers[C] = b, c
+    start = sim.registers[T]
+    sim.trace(entry, SOUND_SENTINEL, 0, start + int(seconds * TSTATES_PER_SECOND),
+              False, None, None, None, None, None)
+    return tracer.get_delays(), sim.registers[T] - start
+
+
+def record_sounds(snapshot: Path, out_dir: Path) -> list[dict]:
+    """Write a WAV of every sound effect, plus the footstep at its real pace.
+
+    Each is captured on a machine of its own. Running them one after another on
+    a shared one lets each inherit whatever the last left behind, which is how
+    an eight-millisecond rasp was once measured as a full second of sweep.
+    """
+    from skoolkit import CSimulator, read_bin_file
+    from skoolkit.audio import BeeperOptions
+    from skoolkit.components import get_audio_writer
+    from skoolkit.simulator import Simulator
+    from skoolkit.snapshot import Snapshot
+    from skoolkit.trace import Tracer
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rom = read_bin_file(str(ROM))
+    writer = get_audio_writer()
+    options = BeeperOptions(100, False, False, 0, False)
+    base = Snapshot.get(str(snapshot)).memory
+    recorded, tones = [], {}
+
+    _log(f"Recording {len(SOUND_EFFECTS)} sound effects...")
+    for name, entry, b, c, title, description in SOUND_EFFECTS:
+        memory = list(base)
+        memory[:0x4000] = rom
+        simulator = (CSimulator or Simulator)(
+            memory, state={"iff": 0, "im": 1, "tstates": 0})
+        tracer = Tracer(simulator, 0, 0, 0, [0] * 16, 0, True)  # port_fe: log the beeper
+        simulator.set_tracer(tracer)
+        delays, ran = _capture_sound(simulator, tracer, entry, b, c)
+        if not delays:
+            continue
+        tones[name] = delays
+        with open(out_dir / (name + ".wav"), "wb") as f:
+            writer.write_audio(f, delays, options)
+        sounding = sum(delays)
+        recorded.append({
+            "file": name + ".wav", "title": title, "description": description,
+            "entry": entry, "edges": len(delays) + 1,
+            "ms": sounding / (TSTATES_PER_SECOND / 1000.0),
+            "low": TSTATES_PER_SECOND / (2 * max(delays)),
+            "high": TSTATES_PER_SECOND / (2 * min(delays)),
+        })
+
+    # The footstep as it is actually heard. SOUND_FOOTSTEP is called from the
+    # every-fourth-frame branch of the character handlers and its counter
+    # silences every other call, so a step lands every eight frames.
+    low, high = tones.get("footstep_low"), tones.get("footstep_high")
+    if low and high:
+        period = FRAME_TSTATES * 8
+        sequence, total, step = [], 0, 0
+        while total + period <= TSTATES_PER_SECOND:
+            tone = low if step % 2 == 0 else high
+            sequence += tone + [period - sum(tone)]
+            total += period
+            step += 1
+        with open(out_dir / "footstep.wav", "wb") as f:
+            writer.write_audio(f, sequence, options)
+        recorded.insert(0, {
+            "file": "footstep.wav", "title": "Walking",
+            "description": "The two tones at the pace they are really played:"
+                           " a step every eight frames, %d ms apart, alternating"
+                           " low and high. Almost all of it is silence, which is"
+                           " what makes it read as footsteps rather than a tone."
+                           % (period / (TSTATES_PER_SECOND / 1000.0)),
+            "entry": 0xA3C7, "edges": len(sequence) + 1,
+            "ms": total / (TSTATES_PER_SECOND / 1000.0), "low": 0, "high": 0,
+        })
+    return recorded
+
+
+def write_sounds_ref(sounds: list[dict], entries: set, path: Path) -> None:
+    """A generated ref file with a player for each effect."""
+    lines = [
+        "; Generated by scripts/build_aticatac.py -- do not edit.",
+        "",
+        "[Page:Sounds]",
+        "SectionPrefix=Sounds",
+        "",
+        "[Sounds:intro:Everything the beeper does]",
+        "A 48K has one bit of sound hardware -- bit 4 of port $FE -- and every"
+        " noise in the game is made by toggling it and counting. BEEP does the"
+        " toggling; the routines below choose the pitch and how long to hold it.",
+        "These recordings are the game's own code running: each routine was"
+        " called on a machine of its own and the writes to port $FE captured."
+        " Nothing here is synthesised or approximated.",
+        "There are two ways a sound gets started. Most are called directly and"
+        " run to completion inside the call, which is why they are all a few"
+        " milliseconds long -- the game is not doing anything else while they"
+        " play. The rest are spawned as actors and glide over many frames; see"
+        " the note on the architecture page.",
+    ]
+    for sound in sounds:
+        lines += [
+            "",
+            "[Sounds:%s:%s]" % (sound["file"].replace(".wav", ""), sound["title"]),
+            sound["description"],
+            '<audio controls preload="none" src="audio/%s">'
+            '<a href="audio/%s">%s</a></audio>' % (sound["file"], sound["file"],
+                                                   sound["file"]),
+        ]
+        detail = "%.1f ms, %d edges" % (sound["ms"], sound["edges"])
+        if sound["low"]:
+            if round(sound["low"]) == round(sound["high"]):
+                detail += ", %.0f Hz" % sound["low"]
+            else:
+                detail += ", %.0f to %.0f Hz" % (sound["low"], sound["high"])
+        if sound["entry"] in entries:
+            detail += " &mdash; #R$%04X" % sound["entry"]
+        else:
+            detail += " &mdash; $%04X" % sound["entry"]
+        lines.append(detail + ".")
+    lines.append("")
+    path.write_text(NEWLINE.join(lines), encoding="utf-8")
+
+
+def build_html(skool: Path, out: Path) -> None:
+    """Render the skool file as a browsable HTML disassembly.
+
+    -a makes the pages use the labels from the annotations file rather than
+    bare addresses, so a call reads as CALL PLOT_TILE there too, and the #R
+    macros in the ref file's prose resolve to links with those same names.
+    """
+    from skoolkit import skool2html
+
+    _log("Writing HTML disassembly...")
+    snapshot = OUT_DIR / "aticatac.z80"
+    shapes = read_shapes(snapshot)
+    shapes_ref = OUT_DIR / "aticatac-rooms.ref"
+    write_shapes_ref(shapes, shapes_ref)
+    args = ["-H", "-a", "-d", str(out), str(skool)]
+    if REF.exists():
+        args.append(str(REF))
+    else:
+        _log(f"  (no ref file at {REF} -- pages will be untitled)")
+    args.append(str(shapes_ref))
+    sprites_ref = OUT_DIR / "aticatac-sprites.ref"
+    groups = read_sprite_groups(snapshot)
+    drawn = render_sprites(snapshot, out / "aticatac" / "images" / "sprites")
+    write_sprites_ref(groups, drawn, entry_addresses(OUT_DIR / "aticatac.ctl"), sprites_ref)
+    args.append(str(sprites_ref))
+    sounds_ref = OUT_DIR / "aticatac-sounds.ref"
+    sounds = record_sounds(snapshot, out / "aticatac" / "audio")
+    write_sounds_ref(sounds, entry_addresses(OUT_DIR / "aticatac.ctl"), sounds_ref)
+    args.append(str(sounds_ref))
+    _capture(skool2html.main, args)
+    render_shapes(snapshot, shapes, out / "aticatac" / "images" / "shapes")
 
 
 def verify(game_bytes: bytes, snapshot: Path) -> None:
@@ -359,6 +1286,9 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tape", required=True, type=Path,
                         help="the Atic Atac .tap file to disassemble")
+    parser.add_argument("--html", action="store_true",
+                        help="also write a browsable HTML disassembly under "
+                             "game_disassembly/aticatac/html/")
     parser.add_argument("--cycles", type=int, default=10,
                         help="key-mashing cycles per playthrough session "
                              "(default 10; coverage saturates around 8)")
@@ -389,10 +1319,14 @@ def main() -> None:
     game_bytes = assemble(asm, sld)
     verify(game_bytes, snapshot)
     write_snapshot(game_bytes, snapshot, sna)
+    if args.html:
+        build_html(skool, OUT_DIR / "html")
 
     _log("")
     _log(f"Entry point: 0x{ENTRY:04X} (the game's own entry is 0x7C19)")
     _log(f"Wrote {asm}, {sld}, and {sna}")
+    if args.html:
+        _log(f"HTML disassembly: {OUT_DIR / 'html' / 'aticatac' / 'index.html'}")
     _log("Load roms/48.rom first (write_sna doesn't touch it), then this .sna + .sld.")
 
 
