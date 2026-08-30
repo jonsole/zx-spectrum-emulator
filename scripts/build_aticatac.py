@@ -84,6 +84,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import io
 import os
 import re
@@ -141,6 +142,33 @@ def _log(message: str) -> None:
 # --------------------------------------------------------------------------
 # Step 1: run the tape's own decryptor to get a plaintext memory image.
 # --------------------------------------------------------------------------
+
+# The snapshot is read by a dozen different steps -- the table readers, the
+# block generators, the renderers, the sound capture, the round-trip check --
+# so it is parsed once and handed out. game_memory returns it as a tuple to
+# make it obvious that the shared copy is not to be written to; anything that
+# runs code wants machine_memory, which is a fresh mutable 64K with the real
+# ROM underneath so that RST and the ROM's own routines behave.
+@functools.lru_cache(maxsize=None)
+def _read_snapshot(path: str) -> tuple:
+    from skoolkit.snapshot import Snapshot
+
+    return tuple(Snapshot.get(path).memory)
+
+
+def game_memory(snapshot: Path) -> tuple:
+    """The snapshot's 64K, read once and shared. Read-only."""
+    return _read_snapshot(str(snapshot))
+
+
+def machine_memory(snapshot: Path) -> list:
+    """A fresh, writable 64K with the ROM in place, for running the game."""
+    from skoolkit import read_bin_file
+
+    memory = list(game_memory(snapshot))
+    memory[:0x4000] = read_bin_file(str(ROM))
+    return memory
+
 
 def make_snapshot(tape: Path, out: Path) -> None:
     """Simulate the real LOAD, stopping once the decryptor reaches 0x6000."""
@@ -283,10 +311,18 @@ def _capture(func, args) -> str:
 
 _COMMENT_RE = re.compile(r"^\s{2}\$([0-9A-F]{4})(?:,(\d+))?\s")
 _SPAN_RE = re.compile(r"^;\s*span\s+\$([0-9A-F]{4}),(\d+)\s*$")
+
+# A span is (start, end), with end exclusive, the way a Python slice reads --
+# never (start, length). Both are pairs of plausible-looking integers, so the
+# mistake type-checks, runs, and produces a disassembly that still reassembles
+# byte-for-byte; only check_structure notices. The annotations spell it the
+# other way, `; span $ADDR,LENGTH`, because a length is what a person counting
+# bytes in a table actually knows -- declared_spans converts.
+Span = tuple[int, int]
 _BLOCK_RE = re.compile(r"^[bctwsi] \$([0-9A-F]{4})")
 
 
-def declared_spans() -> list[tuple[int, int]]:
+def declared_spans() -> list[Span]:
     """Data-block extents the annotations claim, as `; span $ADDR,LENGTH`.
 
     sna2ctl's heuristics happily start a new block in the middle of a table --
@@ -306,7 +342,7 @@ def declared_spans() -> list[tuple[int, int]]:
     return spans
 
 
-def strip_spanned_blocks(ctl_text: str, spans: list[tuple[int, int]]) -> str:
+def strip_spanned_blocks(ctl_text: str, spans: list[Span]) -> str:
     """Drop generated block directives that fall strictly inside a span."""
     if not spans:
         return ctl_text
@@ -360,7 +396,7 @@ def build_asm(snapshot: Path, code_map: Path, ctl: Path, skool: Path, asm: Path)
     from skoolkit import skool2asm, sna2ctl, sna2skool
 
     _log("Generating control file...")
-    generated = _capture(sna2ctl.main, [
+    auto_ctl = _capture(sna2ctl.main, [
         "-m", str(code_map), "-h",
         "-s", str(ENTRY), "-e", str(GAME_END), str(snapshot),
     ])
@@ -368,15 +404,25 @@ def build_asm(snapshot: Path, code_map: Path, ctl: Path, skool: Path, asm: Path)
     graphics_text, graphics_spans = graphics_blocks(snapshot)
     rooms_text, rooms_spans = room_list_blocks(snapshot)
     shapes_text, shapes_spans = shape_blocks(snapshot)
-    graphics_ctl.write_text(graphics_text + rooms_text + shapes_text,
-                            encoding="utf-8")
+    generated = graphics_text + rooms_text + shapes_text
+    graphics_ctl.write_text(generated, encoding="utf-8")
     _log(f"  {graphics_text.count('label=')} sprite graphics, "
          f"{rooms_text.count('label=')} room lists and "
          f"{shapes_text.count('label=')} outline tables located from their tables")
-    spans = declared_spans() + graphics_spans + rooms_spans + shapes_spans
-    kept = strip_spanned_blocks(generated, spans)
+    # Spans are (start, end), not (start, length) -- check_structure enforces
+    # that they agree with the sub-blocks, which is the only thing that would
+    # notice if a generator got it wrong.
+    sources = [
+        ("the annotations", declared_spans()),
+        ("graphics_blocks", graphics_spans),
+        ("room_list_blocks", rooms_spans),
+        ("shape_blocks", shapes_spans),
+    ]
+    check_structure(sources, generated)
+    spans = [span for _, group in sources for span in group]
+    kept = strip_spanned_blocks(auto_ctl, spans)
     if spans:
-        dropped = generated.count(NEWLINE) - kept.count(NEWLINE)
+        dropped = auto_ctl.count(NEWLINE) - kept.count(NEWLINE)
         _log(f"  {len(spans)} declared span(s); dropped {dropped} generated "
              f"block boundar{'y' if dropped == 1 else 'ies'} inside them")
     ctl.write_text(kept, encoding="utf-8")
@@ -465,9 +511,8 @@ def read_shapes(snapshot: Path) -> list[dict]:
     edge list. Neither table carries a length -- the edge list ends at a
     doubled $FF, and the vertex table is however many points it mentions.
     """
-    from skoolkit.snapshot import Snapshot
 
-    memory = Snapshot.get(str(snapshot)).memory
+    memory = game_memory(snapshot)
     rooms_by_shape: dict[int, list[int]] = {}
     for room in range(ROOM_COUNT):
         rooms_by_shape.setdefault(memory[ROOM_TABLE + room * 2 + 1], []).append(room)
@@ -523,12 +568,10 @@ def render_shapes(snapshot: Path, shapes: list[dict], out_dir: Path) -> None:
     from skoolkit.graphics import Frame, scr_udgs
     from skoolkit.simulator import Simulator
     from skoolkit.simutils import T
-    from skoolkit.snapshot import Snapshot
     from skoolkit.trace import Tracer
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    memory = list(Snapshot.get(str(snapshot)).memory)
-    memory[:0x4000] = read_bin_file(str(ROM))
+    memory = machine_memory(snapshot)
     simulator = (CSimulator or Simulator)(
         memory, state={"iff": 0, "im": 1, "tstates": 0})
     simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
@@ -658,9 +701,8 @@ def annotation_labels() -> dict:
 
 def read_sprite_groups(snapshot: Path) -> list[dict]:
     """Sprite codes grouped by the handler ACTOR_HANDLERS sends them to."""
-    from skoolkit.snapshot import Snapshot
 
-    memory = Snapshot.get(str(snapshot)).memory
+    memory = game_memory(snapshot)
     labels = annotation_labels()
     groups, current = [], None
     for code in range(1, SPRITE_CODE_MAX + 1):
@@ -676,7 +718,8 @@ def read_sprite_groups(snapshot: Path) -> list[dict]:
     return groups
 
 
-def render_sprites(snapshot: Path, out_dir: Path) -> set:
+def render_sprites(snapshot: Path, out_dir: Path,
+                   required: set = frozenset()) -> set:
     """Draw each sprite on its own, with the game's own drawing code.
 
     The same approach as the room pictures: rather than decoding the sprite
@@ -690,12 +733,10 @@ def render_sprites(snapshot: Path, out_dir: Path) -> set:
     from skoolkit.graphics import Frame, scr_udgs
     from skoolkit.simulator import Simulator
     from skoolkit.simutils import IXh, IXl, T
-    from skoolkit.snapshot import Snapshot
     from skoolkit.trace import Tracer
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    memory = list(Snapshot.get(str(snapshot)).memory)
-    memory[:0x4000] = read_bin_file(str(ROM))
+    memory = machine_memory(snapshot)
     simulator = (CSimulator or Simulator)(
         memory, state={"iff": 0, "im": 1, "tstates": 0})
     simulator.set_tracer(Tracer(simulator, 0, 0, 0, [0] * 16, 0, False))
@@ -725,6 +766,13 @@ def render_sprites(snapshot: Path, out_dir: Path) -> set:
         with open(out_dir / ("sprite%02X.png" % code), "wb") as f:
             writer.write_image([frame], f)
     _log(f"  {len(drawn)} of {GFX_TABLE_ENTRIES} codes draw a picture")
+    missing = sorted(set(required) - drawn)
+    if missing:
+        raise SystemExit(
+            "the disassembly links %d sprite image(s) that nothing drew: %s. "
+            "graphics_blocks and render_sprites disagree about which codes "
+            "have a picture, and the pages would carry broken images."
+            % (len(missing), ", ".join("$%02X" % c for c in missing)))
     return drawn
 
 
@@ -748,16 +796,15 @@ GFX_FIRST = 0xA69C
 GFX_NARROW = 0xAD2E
 
 
-def graphics_blocks(snapshot: Path) -> tuple:
+def graphics_blocks(snapshot: Path) -> tuple[str, list[Span]]:
     """A control file naming every sprite's graphics, and the spans it covers.
 
     Returned rather than written into the annotations file because it is
     derived entirely from the table: 194 blocks of bytes that no one wants to
     maintain by hand.
     """
-    from skoolkit.snapshot import Snapshot
 
-    memory = Snapshot.get(str(snapshot)).memory
+    memory = game_memory(snapshot)
     named = sprite_names()
 
     def depicted(code):
@@ -784,15 +831,27 @@ def graphics_blocks(snapshot: Path) -> tuple:
 
     lines = ["; Generated by scripts/build_aticatac.py -- do not edit.", ""]
     spans = []
-    for address in sorted(owners):
+    starts = sorted(owners)
+    for index, address in enumerate(starts):
         width, rows, codes = owners[address]
         wide = address < GFX_NARROW
         header = 2 if wide else 1
-        spans.append((address, address + header + width * rows))
+        end = address + header + width * rows
+        # A few graphics overlap: $C219 is eighteen rows, but $C23A -- another
+        # sprite's first byte -- falls four bytes inside it, and the traces
+        # confirm the game really does read both ranges. Stop the block where
+        # the next one starts, or the two would claim the same bytes and the
+        # listing would silently come out shorter than the description.
+        limit = starts[index + 1] if index + 1 < len(starts) else GAME_END
+        shared = max(0, end - limit)
+        if shared:
+            end = limit
+        spans.append((address, end))
         first = codes[0]
         name = depicted(first)
         shown = ", ".join("$%02X" % c for c in codes)
-        title = "%s, drawn for sprite %s" % (name, shown) if name else                 "The graphics for sprite %s" % shown
+        title = ("%s, drawn for sprite %s" % (name, shown) if name
+                 else "The graphics for sprite %s" % shown)
         lines.append("@ $%04X label=GFX_%02X" % (address, first))
         lines.append("b $%04X %s" % (address, title))
         if wide:
@@ -807,19 +866,38 @@ def graphics_blocks(snapshot: Path) -> tuple:
             lines.append("D $%04X Shared by %d codes, which is how the game "
                          "gets a mirrored or repeated frame without a second "
                          "copy of the picture." % (address, len(codes)))
-        if any(memory[address + header:address + header + width * rows]):
+        if shared:
+            lines.append("D $%04X The last %d byte%s of it are also the start "
+                         "of the next graphic, at $%04X, which begins inside "
+                         "this one. Both are real: running the game's own "
+                         "drawing code for each sprite reads each range in "
+                         "full. The listing below stops at $%04X so the two "
+                         "blocks do not claim the same bytes, so it is %d row%s "
+                         "short of the %d this graphic actually has."
+                         % (address, shared, "" if shared == 1 else "s", limit,
+                            limit, (shared + width - 1) // width,
+                            "" if shared < width * 2 else "s", rows))
+        if any(memory[address + header:end]):
             lines.append("D $%04X #HTML(<img src=\"../images/sprites/sprite%02X.png\" "
                          "alt=\"sprite $%02X\"/>)" % (address, first, first))
         else:
             lines.append("D $%04X Every byte is zero, so this one draws nothing "
                          "-- a blank frame in an animation." % address)
+        available = end - address - header
         lines.append("B $%04X,%d,%d" % (address, header, header))
-        lines.append("B $%04X,%d,%d" % (address + header, width * rows, width))
+        if available >= width:
+            lines.append("B $%04X,%d,%d"
+                         % (address + header, available - available % width,
+                            width))
+        if available % width:
+            lines.append("B $%04X,%d,%d"
+                         % (end - available % width, available % width,
+                            available % width))
         lines.append("")
     return NEWLINE.join(lines), spans
 
 
-def room_list_blocks(snapshot: Path) -> tuple:
+def room_list_blocks(snapshot: Path) -> tuple[str, list[Span]]:
     """One block per room's contents list, and the spans they cover.
 
     ROOM_CONTENTS is only the index; the lists themselves follow it and run to
@@ -827,9 +905,8 @@ def room_list_blocks(snapshot: Path) -> tuple:
     a run of record addresses ended by a zero, and each address is a template
     one, so it needs the same +$8A83 relocation POPULATE_ROOM applies.
     """
-    from skoolkit.snapshot import Snapshot
 
-    memory = Snapshot.get(str(snapshot)).memory
+    memory = game_memory(snapshot)
     lines = ["", "; Room contents lists.", ""]
     spans = []
     for room in range(ROOM_COUNT + 1):
@@ -857,7 +934,7 @@ def room_list_blocks(snapshot: Path) -> tuple:
 SHAPE_COUNT = 13
 
 
-def shape_blocks(snapshot: Path) -> tuple:
+def shape_blocks(snapshot: Path) -> tuple[str, list[Span]]:
     """The vertex tables and edge lists behind every room outline.
 
     Neither carries a length. An edge list ends at a doubled $FF, and a vertex
@@ -865,9 +942,8 @@ def shape_blocks(snapshot: Path) -> tuple:
     exactly right, because with those lengths the thirteen shapes' tables tile
     their region without leaving a byte over.
     """
-    from skoolkit.snapshot import Snapshot
 
-    memory = Snapshot.get(str(snapshot)).memory
+    memory = game_memory(snapshot)
     used = set()
     for room in range(ROOM_COUNT):
         used.add(memory[ROOM_TABLE + room * 2 + 1])
@@ -924,6 +1000,80 @@ def shape_blocks(snapshot: Path) -> tuple:
                                         2 if kind == "vertices" else 8))
         lines.append("")
     return NEWLINE.join(lines), spans
+
+
+_SUBBLOCK_RE = re.compile(r"^([BWT]) \$([0-9A-F]{4}),(\d+)")
+
+
+def check_structure(sources: list, generated_ctl: str) -> None:
+    """Fail the build if the spans and sub-blocks do not describe one layout.
+
+    The round-trip check cannot see any of this. A table sliced into pieces, a
+    block whose sub-blocks stop short of its span, two blocks claiming the same
+    bytes -- all of them still reassemble byte-for-byte, because the bytes are
+    all there and in order. The only symptom is that the disassembly quietly
+    describes less than it did before, which is how a span returned as
+    (start, length) rather than (start, end) went unnoticed while it undid
+    about seven per cent of the coverage.
+    """
+    problems = []
+
+    ordered = sorted((start, end, name)
+                     for name, spans in sources for start, end in spans)
+    for (start, end, name), (next_start, _, next_name) in zip(ordered,
+                                                              ordered[1:]):
+        if next_start < end:
+            problems.append(
+                "$%04X-$%04X from %s overlaps $%04X from %s by %d byte(s)"
+                % (start, end - 1, name, next_start, next_name,
+                   end - next_start))
+
+    lengths = {start: end - start
+               for name, spans in sources for start, end in spans}
+    block, covered = None, 0
+    for line in generated_ctl.splitlines() + ["b $0000 end"]:
+        match = _BLOCK_RE.match(line)
+        if match:
+            if block is not None and covered != lengths.get(block, covered):
+                problems.append(
+                    "the block at $%04X covers %d byte(s) but its span is %d"
+                    % (block, covered, lengths[block]))
+            block, covered = int(match.group(1), 16), 0
+            continue
+        match = _SUBBLOCK_RE.match(line)
+        if match and block is not None:
+            start, length = int(match.group(2), 16), int(match.group(3))
+            if start != block + covered:
+                problems.append(
+                    "the sub-block at $%04X in the block at $%04X should start "
+                    "at $%04X" % (start, block, block + covered))
+            covered += length
+
+    if problems:
+        for problem in problems:
+            _log(f"  STRUCTURE: {problem}")
+        raise SystemExit(
+            f"{len(problems)} structural problem(s) in the generated control "
+            f"file -- see above. Nothing is wrong with the bytes; the "
+            f"disassembly would still reassemble. What is wrong is what it "
+            f"claims about them.")
+    _log(f"  {len(ordered)} spans, no overlaps, every sub-block accounted for")
+
+
+def linked_sprite_codes(ctl: Path) -> set:
+    """The sprite codes the generated blocks put a picture beside.
+
+    graphics_blocks decides from the bytes -- a graphic that is all zeros draws
+    nothing, so it gets a sentence instead of an image. render_sprites decides
+    by running the game and seeing whether anything landed on the screen. Two
+    rules for one question, and if they ever disagree the disassembly links an
+    image that was never rendered. Reading the codes back out of the control
+    file makes the published pages the authority, and lets render_sprites check
+    it drew everything they ask for.
+    """
+    return {int(code, 16) for code in
+            re.findall(r"images/sprites/sprite([0-9A-F]{2})\.png",
+                       ctl.read_text(encoding="utf-8"))}
 
 
 def entry_addresses(ctl: Path) -> set:
@@ -1104,14 +1254,13 @@ def record_sounds(snapshot: Path, out_dir: Path) -> list[dict]:
     from skoolkit.audio import BeeperOptions
     from skoolkit.components import get_audio_writer
     from skoolkit.simulator import Simulator
-    from skoolkit.snapshot import Snapshot
     from skoolkit.trace import Tracer
 
     out_dir.mkdir(parents=True, exist_ok=True)
     rom = read_bin_file(str(ROM))
     writer = get_audio_writer()
     options = BeeperOptions(100, False, False, 0, False)
-    base = Snapshot.get(str(snapshot)).memory
+    base = game_memory(snapshot)
     recorded, tones = [], {}
 
     _log(f"Recording {len(SOUND_EFFECTS)} sound effects...")
@@ -1231,7 +1380,8 @@ def build_html(skool: Path, out: Path) -> None:
     args.append(str(shapes_ref))
     sprites_ref = OUT_DIR / "aticatac-sprites.ref"
     groups = read_sprite_groups(snapshot)
-    drawn = render_sprites(snapshot, out / "aticatac" / "images" / "sprites")
+    drawn = render_sprites(snapshot, out / "aticatac" / "images" / "sprites",
+                           linked_sprite_codes(OUT_DIR / "aticatac-graphics.ctl"))
     write_sprites_ref(groups, drawn, entry_addresses(OUT_DIR / "aticatac.ctl"), sprites_ref)
     args.append(str(sprites_ref))
     sounds_ref = OUT_DIR / "aticatac-sounds.ref"
@@ -1243,9 +1393,8 @@ def build_html(skool: Path, out: Path) -> None:
 
 
 def verify(game_bytes: bytes, snapshot: Path) -> None:
-    from skoolkit.snapshot import Snapshot
 
-    reference = bytes(Snapshot.get(str(snapshot)).memory[ENTRY:GAME_END])
+    reference = bytes(game_memory(snapshot)[ENTRY:GAME_END])
     if len(game_bytes) != len(reference):
         sys.exit(f"error: assembled {len(game_bytes)} bytes, expected {len(reference)}")
     if game_bytes != reference:
@@ -1268,9 +1417,7 @@ def write_snapshot(game_bytes: bytes, snapshot: Path, out: Path) -> None:
     including FRAMES, without which the check at 0x6000 drops straight back
     to BASIC.
     """
-    from skoolkit.snapshot import Snapshot
-
-    memory = list(Snapshot.get(str(snapshot)).memory)
+    memory = list(game_memory(snapshot))
     memory[ENTRY:GAME_END] = game_bytes
     ram = bytes(bytearray(memory[0x4000:0x4000 + RAM_SIZE]))
 

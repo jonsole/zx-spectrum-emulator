@@ -180,13 +180,32 @@ its edge list begins. So "does this length leave a gap?" is a real test, and it
 caught two shapes that no room uses (`$06` and `$07`) purely because their
 vertex tables were sitting in gaps the used shapes left behind.
 
-Watch the shape of the `; span` tuples. `declared_spans()` returns
-`(start, end)`; a generator that returns `(start, length)` will silently match
-nothing and every generated table gets sliced back up. That mistake cost about
-7% of the coverage and was invisible in the round-trip check, because a
-mis-split block still reassembles byte-for-byte.
+The round-trip check cannot see any of this, which is worth being explicit
+about. A table sliced into pieces, a block whose sub-blocks stop short of its
+span, two blocks claiming the same bytes — all of them still reassemble
+byte-for-byte, because the bytes are all there and in order. The only symptom
+is that the disassembly quietly describes less than it did before. A span
+returned as `(start, length)` rather than `(start, end)` matched nothing, undid
+about 7% of the coverage, and the build stayed green throughout.
 
-Two things worth knowing about the game itself came out of this. The victory
+So `check_structure()` runs before the control files are merged and fails the
+build on overlapping spans, a sub-block that doesn't start where the last one
+ended, or a block whose sub-blocks don't sum to its span. On a good build it
+prints one line — `412 spans, no overlaps, every sub-block accounted for`. If
+you add a generator, have it return `(start, end)`; the `Span` alias says so
+and this check is what enforces it.
+
+The same reasoning applies to anything the disassembly asserts but doesn't
+assemble. `render_sprites()` refuses to finish if the pages link a sprite image
+it didn't draw, because `graphics_blocks` decides a graphic is blank from its
+bytes while the renderer decides by running the game — two rules for one
+question, and a disagreement would only show up as a broken image in a browser.
+
+Three things worth knowing about the game itself came out of this. Two sprites
+overlap: `$C219` is eighteen rows but `$C23A`, another sprite's first byte,
+falls four bytes inside it, and the traces confirm the game reads both ranges
+in full. The generator stops a block where the next one starts and says so, so
+the description and the listing agree. The victory
 message is misspelt — the bytes read `CONGRATULATION` then `$D4`, which is "T"
 with the end marker set, and drawing the screen confirms the game says
 `CONGRATULATIONT`. And the sequence that plays it is never reached by a machine
