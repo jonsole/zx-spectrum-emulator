@@ -3,6 +3,14 @@
     "zx-spectrum": {
       "type": "http",
       "url": "http://127.0.0.1:8000/mcp"
+    },
+    "rigol": {
+      "type": "stdio",
+      "command": ".venv-win\\Scripts\\python.exe",
+      "args": ["tools/rigol/mcp_server.py"],
+      "env": {
+        "RIGOL_ADDR": "192.168.88.200"
+      }
     }
   }
 }
