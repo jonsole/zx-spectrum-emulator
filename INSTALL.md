@@ -237,10 +237,18 @@ script assembles the disassembly and compares it byte-for-byte against
 `roms/48.rom`, refusing to write output if they differ — so a pass is also a
 second confirmation the ROM is genuine.
 
-**Game disassemblies.** `scripts/build_manicminer.py`, `build_fairlight.py`,
-`build_aticatac.py` fetch and assemble third-party disassemblies into
-`game_disassembly/`. They need the same venv and `sjasmplus`, and most need a
-game image the user supplies. Copyrighted; never committed.
+**Game disassemblies.** These live in their own repository now,
+[zx-spectrum-disassemblies](https://github.com/jonsole/zx-spectrum-disassemblies),
+and are checked out here as the `game-disassemblies/` submodule:
+
+```
+git clone --recurse-submodules https://github.com/jonsole/zx-spectrum-emulator.git
+```
+
+or, in a clone that predates it, `git submodule update --init`. The build
+scripts are `game-disassemblies/scripts/build_*.py`; they need the same venv
+and `sjasmplus`, plus a game image and a `roms/48.rom` of their own. They write
+into `game-disassemblies/game_disassembly/`. Copyrighted; never committed.
 
 **Tape images.** `tapes/loading-test.tap` / `.tzx` are already committed.
 `python scripts\make_test_tape.py` regenerates them.

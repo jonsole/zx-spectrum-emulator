@@ -75,13 +75,13 @@
     {
       // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
       // fetched and assembled rather than committed -- see
-      // scripts/build_fairlight.py and .gitignore. Cheap enough (~0.2s of
+      // game-disassemblies/scripts/build_fairlight.py. Cheap enough (~0.2s of
       // sjasmplus) to rerun on every launch, which also means editing the
       // fetched .asm and relaunching picks the change up.
       "label": "fairlight.build",
       "type": "shell",
       "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
-      "args": ["scripts/build_fairlight.py"],
+      "args": ["game-disassemblies/scripts/build_fairlight.py"],
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
       "problemMatcher": []

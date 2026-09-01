@@ -156,7 +156,7 @@ The detail lives in [docs/](docs/), one file per topic:
 |---|---|
 | [Connecting an MCP client](docs/mcp.md) | Pointing an agent at the running server, and the full tool list |
 | [Debugging in VS Code](docs/vscode-debugging.md) | The DAP front end: launch configs, live screen viewer, call stack, source-level debugging of the ROM and of your own programs |
-| [Game examples](docs/game-examples.md) | Manic Miner, Fairlight and Atic Atac, disassembled and source-level debuggable |
+| [Game disassemblies](https://github.com/jonsole/zx-spectrum-disassemblies) | Manic Miner, Fairlight and Atic Atac &mdash; their own repository, checked out here as `game-disassemblies/` |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |

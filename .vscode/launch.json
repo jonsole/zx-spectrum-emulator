@@ -69,9 +69,9 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
-      // The speed-patched build from scripts/build_manicminer_fast.py: same
+      // The speed-patched build from game-disassemblies/scripts/build_manicminer_fast.py: same
       // game, ~1.65x through its main loop. Run that script first -- it needs
-      // mm.asm, so scripts/build_manicminer.py has to have run at least once.
+      // mm.asm, so game-disassemblies/scripts/build_manicminer.py has to have run at least once.
       "name": "ZX Spectrum: Manic Miner (fast)",
       "type": "zxspectrum",
       "request": "launch",

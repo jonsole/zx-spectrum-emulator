@@ -16,16 +16,16 @@ detail yet -- just captured here so they don't get lost.
 
 - [ ] **Integrate SkoolKit to reverse-engineer an unknown binary from an execution trace.**
       Depends on the memory classification above. SkoolKit's
-      `sna2skool.py` (already vendored -- see `build_rom_source.py`/
-      `build_manicminer.py`) takes a snapshot plus a `.ctl` control file
+      `sna2skool.py` (already vendored -- see `build_rom_source.py`, and
+      the game builds in the `game-disassemblies` submodule) takes a
+      snapshot plus a `.ctl` control file
       marking address ranges as code/byte/word/text/etc; without one it
       blindly disassembles everything as code, misreading embedded data
       tables as bogus instructions. Export the live code/data
       classification as a `.ctl` file, then run `sna2skool.py` against it
       to get a real annotated disassembly of a program we don't already
-      have source for -- unlike `build_rom_source.py`/
-      `build_manicminer.py`, which lean on a disassembly someone else
-      already did. Limitation worth flagging: coverage only reflects
+      have source for -- unlike `build_rom_source.py`, which leans on a
+      disassembly someone else already did. Limitation worth flagging: coverage only reflects
       what a given run actually executed/touched, so a thin run (e.g.
       never past a title screen) will under-classify most of the image
       as unvisited/unknown.

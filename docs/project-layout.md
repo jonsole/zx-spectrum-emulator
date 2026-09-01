@@ -31,8 +31,6 @@ zx-spectrum-emulator/
     tests/                    # CTest executables, benchmarks, diagnostics
   scripts/                    # Python helpers -- still current
     build_rom_source.py         # builds rom_disassembly/ (see vscode-debugging.md)
-    build_manicminer.py           # builds game_disassembly/manicminer/ (see game-examples.md)
-    build_aticatac.py             # builds game_disassembly/aticatac/ from a .tap (see game-examples.md)
     make_test_tape.py             # generates tapes/
   examples/
     hello_rom_call/              # tiny original demo, committed
@@ -41,7 +39,8 @@ zx-spectrum-emulator/
   vscode-extension/            # debugger type registration + screen/trace/tape panels
   roms/                        # gitignored; drop your 48K ROM here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
-  game_disassembly/            # gitignored; scripts/build_manicminer.py output
+  game-disassemblies/          # submodule: github.com/jonsole/zx-spectrum-disassemblies
+  game_disassembly/            # gitignored; left over from before that split
   tapes/                       # scripts/make_test_tape.py output, committed
   snapshots/                   # the Z80 exercisers, committed; games gitignored
 

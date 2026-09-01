@@ -1,4 +1,5 @@
-"""scripts/build_manicminer_fast.py: the dirty-span patch must not change what
+"""game-disassemblies/scripts/build_manicminer_fast.py: the dirty-span patch
+must not change what
 the game draws, only how much of it gets copied.
 
 Each patched build is dropped into the same cavern in the same state as stock
@@ -10,8 +11,8 @@ file must match byte for byte -- including for the frame-locked build, where
 HALT only changes how long a pass takes.
 
 Skipped unless the snapshots have been built -- they are derived from the
-copyrighted game and are never committed. See scripts/build_manicminer.py and
-scripts/build_manicminer_fast.py.
+copyrighted game and are never committed. See
+game-disassemblies/scripts/build_manicminer.py and build_manicminer_fast.py.
 """
 from pathlib import Path
 
@@ -20,7 +21,11 @@ import pytest
 from zxspectrum.core.machine import Spectrum48K
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MM = PROJECT_ROOT / "game_disassembly" / "manicminer"
+# The builds that produce these moved to their own repository, checked out here
+# as the game-disassemblies submodule, so their output lands inside it. Without
+# this the paths still resolve, find nothing, and the whole module skips --
+# which looks exactly like "you have not built Manic Miner yet".
+MM = PROJECT_ROOT / "game-disassemblies" / "game_disassembly" / "manicminer"
 ROM_PATH = PROJECT_ROOT / "roms" / "48.rom"
 STOCK = MM / "mm.sna"
 # Both patched builds: free-running, and locked to the frame interrupt.

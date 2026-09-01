@@ -1,0 +1,3 @@
+[submodule "game-disassemblies"]
+	path = game-disassemblies
+	url = https://github.com/jonsole/zx-spectrum-disassemblies.git

@@ -32,9 +32,10 @@ rust-core/target/
 .rom-disassembly-src/
 rom_disassembly/
 
-# Fetched/generated game disassemblies (copyrighted game code/data, plus
-# the disassembly's own annotations) -- same treatment, see README and
-# scripts/build_manicminer.py / scripts/build_fairlight.py
+# Left over from before the game disassemblies moved to their own repository
+# (github.com/jonsole/zx-spectrum-disassemblies, checked out here as the
+# game-disassemblies submodule). Kept ignored so an existing clone's output
+# does not suddenly show up as untracked; safe to delete.
 .manicminer-disassembly-src/
 .fairlight-disassembly-src/
 game_disassembly/
