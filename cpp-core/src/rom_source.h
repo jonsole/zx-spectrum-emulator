@@ -88,6 +88,14 @@ RomSourcePtr load_source(const std::string& sld_path, const std::string& asm_pat
 /// re-parsing ~9000 records on every request.
 RomSourcePtr get_rom_source(const std::string& directory);
 
+/// One candidate for a partly-typed symbol name. Enough to offer it and to
+/// show what it would resolve to, which is the difference between a list of
+/// names and a useful one.
+struct SymbolMatch {
+    std::string name;
+    uint16_t addr = 0;
+};
+
 /// The currently-loaded program's own debug info, plus the always-available
 /// ROM disassembly, with the resolution helpers the DAP and MCP servers both
 /// need. Deliberately NOT part of Engine: source and symbol parsing is
@@ -147,6 +155,21 @@ public:
     /// unknown symbol, a malformed number, or nothing loaded to resolve
     /// against.
     bool parse_address(const std::string& text, uint16_t& addr, std::string& error) const;
+
+    /// Symbols whose name begins with `prefix`, case-insensitively, for a
+    /// caller offering completions on a half-typed one. Ordered the way they
+    /// should be offered: the loaded program's own symbols before the ROM's,
+    /// alphabetically within each, at most `limit` of them. `more` comes back
+    /// true when there were others past that, which a caller can say out loud
+    /// rather than leaving a truncated list looking complete.
+    ///
+    /// An empty prefix matches everything, so a field that has just been
+    /// focused has somewhere to start. A name already offered by an earlier
+    /// source is not offered again: that is the same shadowing symbol_value()
+    /// does, and a list holding one name twice would be a list of two
+    /// different addresses with nothing to tell them apart.
+    std::vector<SymbolMatch> match_symbols(const std::string& prefix, size_t limit,
+                                           bool& more) const;
 
     /// The source describing `path`, matched on the full path or just the
     /// file name (DAP clients are inconsistent about which they send).

@@ -54,6 +54,10 @@ constexpr uint32_t TRACE_NO_WATCH = 0xFFFFFFFFu;
 /// address (it is the reset vector, and a perfectly good place to start).
 constexpr uint32_t TRACE_NO_PC = 0xFFFFFFFFu;
 
+/// "No T-state gate", for TraceOptions::start_tstate. Distinct from T-state 0,
+/// which is a real and interesting one -- the interrupt itself.
+constexpr uint32_t TRACE_NO_TSTATE = 0xFFFFFFFFu;
+
 /// Rows a capture stops itself after when no limit is asked for. One 48K frame
 /// is 139,776 half-clocks, so this is a little under a fifth of a frame -- big
 /// enough to hold any plausible "what did those instructions do on the bus"
@@ -72,6 +76,10 @@ struct TraceOptions {
     uint32_t watch = TRACE_NO_WATCH;
     /// Adds the 48K-specific columns. See the note above.
     bool extra = false;
+    /// Adds the ULA's own bus: what the display fetch read this half-clock.
+    /// Separate from `extra` because it is a different question -- `extra` is
+    /// about the CPU's remaining pins, this is about the second bus master.
+    bool ula = false;
     /// Where the capture BEGINS: nothing is written until the CPU fetches the
     /// instruction at this address, and the first row is that fetch's T1H.
     /// TRACE_NO_PC records from the very next half-clock, as a capture with
@@ -83,6 +91,21 @@ struct TraceOptions {
     /// else again, which is why neither is a comparison against PC despite
     /// what a caller naturally calls them.
     uint32_t start_pc = TRACE_NO_PC;
+    /// Where the capture begins in TIME rather than in code: the T-state
+    /// within the video frame, counted from the interrupt exactly as the
+    /// `extra` T-state column prints it, so the first row of a capture gated
+    /// here reads the number that was asked for.
+    ///
+    /// This is the gate for "what is on the bus at T-state 14336", which is a
+    /// question about the ULA and not about the program -- the half-clock
+    /// wanted is usually in the middle of an instruction, where no fetch is
+    /// happening for a start_pc to match against. Arms for the next frame
+    /// when the machine is already past it, so it always lands on the T-state
+    /// named rather than on "as soon as possible".
+    ///
+    /// Mutually exclusive with start_pc: two answers to "where does this
+    /// begin" is a question, not a configuration. TRACE_NO_TSTATE for none.
+    uint32_t start_tstate = TRACE_NO_TSTATE;
     /// Where the capture ENDS: it closes itself on ARRIVING at this address,
     /// before the instruction there is fetched. So a gated capture covers
     /// [arrive at start_pc, arrive at stop_pc) -- the half-open interval, which

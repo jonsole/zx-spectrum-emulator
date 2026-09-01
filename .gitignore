@@ -74,6 +74,8 @@ trace_screen.rgb
 # the reference the tests diff against.
 *.zxtrace
 zx_test_*.txt
+# ...and the SLD fixture symbol_tests writes beside them.
+zx_test_*.sld
 
 # Scope screenshots and waveform CSVs pulled off the Rigol MSO5074
 # (tools/rigol/) -- bench captures, not project source.

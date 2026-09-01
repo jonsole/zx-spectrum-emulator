@@ -76,6 +76,10 @@ public:
     Registers registers() const { return cpu.registers(); }
     void set_registers(const Registers& r);
 
+    /// Loads registers and performs the CPU's priming half-clock, giving the
+    /// ULA that same half-clock so the two stay in step. See the definition.
+    void prime_cpu(const Registers& r);
+
     /// Empty string on success, else the error message.
     std::string load_rom(const uint8_t* data, size_t len);
 

@@ -82,10 +82,16 @@ struct TraceStatus {
     /// False when the capture began recording straight away.
     bool has_start_pc = false;
     uint16_t start_pc = 0;
+    /// The other way a capture can be gated: a T-state within the frame,
+    /// rather than an address. Never set at the same time as has_start_pc.
+    bool has_start_tstate = false;
+    uint32_t start_tstate = 0;
     /// False when only the row limit or an explicit stop will end it.
     bool has_stop_pc = false;
     uint16_t stop_pc = 0;
     bool extra = false;
+    /// The ULA's own bus columns, the trace's other opt-in column group.
+    bool ula = false;
 };
 
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.

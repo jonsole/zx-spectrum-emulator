@@ -17,7 +17,9 @@ Two things, in one small extension:
    updates the panel in place. Its **Record** button goes the other way, driving the debug
    session's own emulator through `startTrace`/`stopTrace`/`traceStatus` custom requests: those
    bypass the emulator's command queue, so a capture can be started and stopped while a game is
-   running, and the finished file loads into the panel by itself.
+   running, and the finished file loads into the panel by itself. Its **start** and **stop**
+   triggers capture a window of code (an address or symbol name, which the server resolves) or a
+   window of the video frame (a T-state) rather than only a window of time.
 4. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
 
@@ -54,7 +56,8 @@ The title bar carries a play/pause button that swaps with the state of the
 motor — the way the debug toolbar's Continue and Pause share one slot — then
 Rewind, the fast-load toggle, Load tape and Eject. All of it goes over the
 `tapeControl` custom request, which bypasses the emulator's command queue, so
-every button works mid-load and mid-game.
+every button works mid-load and mid-game — and greys out when there is no
+session to send it to.
 
 The pane polls for its position, and only while it is actually visible —
 collapse the section and it stops asking.
@@ -91,5 +94,20 @@ edits show up without re-copying) after changing anything here, then reload agai
 - Recording writes `live.zxtrace` into the first workspace folder, one fixed name that each
   capture supersedes. Record is disabled, and says so, when there is no `zxspectrum` debug
   session to record from.
+- A **to** address is armed with a second `stopTrace` request once `startTrace` has answered,
+  since that is the request which carries one. If the address will not resolve, the capture just
+  started is closed again rather than left running with no stop on it.
+- The address fields complete against the session's symbol table over a `matchSymbols` custom
+  request, one per keystroke (debounced, latest answer wins). It reads a parsed file and never
+  touches the machine, so it answers mid-game. A server too old to have the request simply
+  offers nothing rather than reporting an error.
+- If a start or stop trigger comes back unarmed, Record cancels the capture and says the gate
+  was ignored. DAP drops request arguments it does not recognise without complaining, so a
+  server or extension host older than a field would otherwise record from the wrong place in
+  silence -- which reads as a broken trigger rather than a stale link. Note the panel HTML is
+  re-read from disk whenever the panel opens, but `extension.js` is only loaded when the window
+  loads: new fields can appear in a strip that an old host does not yet know how to send.
+  "Developer: Reload Window" is the fix for that half; restarting the debug session (which
+  rebuilds via the preLaunchTask) is the fix for the server half.
 - If the image doesn't appear, check the webview's own console: **"Developer: Open Webview Developer
   Tools"** while the panel is focused.

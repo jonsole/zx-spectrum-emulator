@@ -159,4 +159,55 @@ TEST(with_no_debug_info_a_number_still_works_and_a_name_explains_itself) {
     CHECK(error.find("no debug info loaded") != std::string::npos);
 }
 
+TEST(matching_offers_names_by_prefix_ignoring_case) {
+    Sources sources("no_such_directory");
+    load_symbols(sources);
+    bool more = true;
+
+    // Alphabetical within a source, which is the order they are offered in.
+    std::vector<SymbolMatch> matches = sources.match_symbols("S", 10, more);
+    CHECK_EQ(matches.size(), size_t(1));
+    CHECK_EQ(matches[0].name, std::string("SPRITE"));
+    CHECK_EQ(matches[0].addr, uint16_t(33000));
+    CHECK(!more);
+
+    // Typed in lower case, as anyone reaching for a completion would.
+    matches = sources.match_symbols("int_h", 10, more);
+    CHECK_EQ(matches.size(), size_t(1));
+    CHECK_EQ(matches[0].name, std::string("INT_HANDLER"));
+
+    // An empty prefix is every name, so a field just focused has a starting
+    // point rather than nothing.
+    matches = sources.match_symbols("", 10, more);
+    CHECK_EQ(matches.size(), size_t(3));
+    CHECK_EQ(matches[0].name, std::string("BED"));
+
+    matches = sources.match_symbols("NOT_A_LABEL", 10, more);
+    CHECK_EQ(matches.size(), size_t(0));
+    CHECK(!more);
+}
+
+TEST(matching_stops_at_the_limit_and_says_there_was_more) {
+    Sources sources("no_such_directory");
+    load_symbols(sources);
+    bool more = false;
+
+    std::vector<SymbolMatch> matches = sources.match_symbols("", 2, more);
+    CHECK_EQ(matches.size(), size_t(2));
+    // The difference between a short list and a complete one -- a dropdown
+    // that silently drops the name being typed is worse than one that says
+    // "keep typing".
+    CHECK(more);
+
+    matches = sources.match_symbols("", 0, more);
+    CHECK_EQ(matches.size(), size_t(0));
+}
+
+TEST(matching_with_no_debug_info_offers_nothing_rather_than_failing) {
+    Sources sources("no_such_directory");
+    bool more = true;
+    CHECK_EQ(sources.match_symbols("", 10, more).size(), size_t(0));
+    CHECK(!more);
+}
+
 RUN_TESTS()

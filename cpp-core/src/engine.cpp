@@ -589,12 +589,15 @@ TraceStatus Engine::trace_snapshot() const {
     s.watch = uint16_t(trace_->options().watch);
     s.has_start_pc = trace_->options().start_pc != TRACE_NO_PC;
     s.start_pc = uint16_t(trace_->options().start_pc);
+    s.has_start_tstate = trace_->options().start_tstate != TRACE_NO_TSTATE;
+    s.start_tstate = trace_->options().start_tstate;
     // From the capture rather than from its options: a stop_trace(pc) aimed at
     // an already-running capture changes this and nothing else.
     const uint32_t stop_pc = trace_->stop_pc();
     s.has_stop_pc = stop_pc != TRACE_NO_PC;
     s.stop_pc = uint16_t(stop_pc);
     s.extra = trace_->options().extra;
+    s.ula = trace_->options().ula;
     return s;
 }
 

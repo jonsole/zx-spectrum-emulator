@@ -96,6 +96,16 @@ void TraceLog::build_columns() {
     columns_.push_back({"AB", 4, false});
     columns_.push_back({"DB", 2, false});
     columns_.push_back({"PC", 4, false});
+    if (options_.ula) {
+        // Beside the CPU's own AB/DB rather than off at the end: the point of
+        // these is to be read against them, one bus master under the other.
+        columns_.push_back({"ULA-AB", 6, false});
+        columns_.push_back({"ULA-DB", 6, false});
+        // How many bytes the ULA moved this half-clock. Reads 4 at the start
+        // of every 16-pixel group today and 1 once the fetch is staggered, so
+        // nothing is silently dropped in the meantime.
+        columns_.push_back({"n", 1, true});
+    }
     if (options_.extra) {
         columns_.push_back({"Frame", 6, true});
         columns_.push_back({"TState", 6, true});
@@ -201,6 +211,15 @@ std::string TraceLog::open(const TraceOptions& options) {
     if (options_.path.empty()) {
         return "trace path is empty";
     }
+    if (options_.start_pc != TRACE_NO_PC && options_.start_tstate != TRACE_NO_TSTATE) {
+        return "a trace starts at an address or at a T-state, not both";
+    }
+    if (options_.start_tstate != TRACE_NO_TSTATE
+        && options_.start_tstate >= TSTATES_PER_FRAME) {
+        return "start T-state must be within a frame (0.."
+               + std::to_string(TSTATES_PER_FRAME - 1) + ")";
+    }
+
     // Binary, so Windows does not rewrite the line endings: the reference
     // files are LF-only and a capture should stay byte-comparable with them.
     out_.open(options_.path, std::ios::binary | std::ios::trunc);
@@ -209,11 +228,13 @@ std::string TraceLog::open(const TraceOptions& options) {
     }
 
     active_.store(true, std::memory_order_relaxed);
-    // A capture gated on a start address opens its file and writes its header
-    // straight away, then records nothing until execution arrives -- so a
-    // caller polling the status can tell "armed, nothing yet" from "recording"
-    // without having to guess from a row count that has not moved.
-    waiting_.store(options_.start_pc != TRACE_NO_PC, std::memory_order_relaxed);
+    // A gated capture opens its file and writes its header straight away,
+    // then records nothing until it is reached -- so a caller polling the
+    // status can tell "armed, nothing yet" from "recording" without having to
+    // guess from a row count that has not moved.
+    waiting_.store(options_.start_pc != TRACE_NO_PC
+                       || options_.start_tstate != TRACE_NO_TSTATE,
+                   std::memory_order_relaxed);
     stop_pc_.store(options_.stop_pc, std::memory_order_relaxed);
     build_columns();
     write_border(BOX_TL, BOX_TM, BOX_TR);
@@ -241,15 +262,30 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
         return;
     }
 
-    // ---- the address gates: where the capture begins and ends --------------
-    // Both are tested at a fetch's T1H, and against the ADDRESS BUS rather
-    // than PC, for the reason spelt out in tracelog.h: at that half-clock the
-    // bus holds the address of the instruction about to run and PC does not.
-    // The comparisons are 32-bit, so TRACE_NO_PC cannot collide with a real
-    // address and neither gate needs a second test to disarm it.
+    // ---- the gates: where the capture begins and ends ----------------------
+    // The address gates are tested at a fetch's T1H, and against the ADDRESS
+    // BUS rather than PC, for the reason spelt out in tracelog.h: at that
+    // half-clock the bus holds the address of the instruction about to run and
+    // PC does not. The comparisons are 32-bit, so TRACE_NO_PC cannot collide
+    // with a real address and neither gate needs a second test to disarm it.
     const bool fetching = machine.cpu.is_instruction_boundary();
     if (waiting_.load(std::memory_order_relaxed)) {
-        if (!fetching || get_addr(pins) != options_.start_pc) {
+        bool arrived;
+        if (options_.start_tstate != TRACE_NO_TSTATE) {
+            // A gate in time rather than in code, so no fetch is required --
+            // the T-state asked for is usually in the middle of an
+            // instruction, which is the entire point of asking for it.
+            //
+            // The ULA's counter still describes THIS half-clock (it is
+            // advanced at the end of Spectrum48K::clock(), below us), so this
+            // fires on the first half-clock of the T-state asked for. The
+            // same counter fills the TState column, so the first row carries
+            // the number that was requested and means it.
+            arrived = machine.ula.tstate() == options_.start_tstate;
+        } else {
+            arrived = fetching && get_addr(pins) == options_.start_pc;
+        }
+        if (!arrived) {
             return;
         }
         // Nothing before this half-clock was recorded, so nothing before it
@@ -318,9 +354,10 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
         h_phase = !last_was_h_;
     } else {
         // The opening row of a capture, with no fetch yet to anchor to. Fall
-        // back to the ULA's counter, which trails the CPU's phase by exactly
-        // the one half-clock the priming fetch consumed -- so an EVEN
-        // frame_hc_ (already advanced past this half-clock) is an H phase.
+        // back to the ULA's counter, which now agrees with the CPU's phase:
+        // the priming half-clock is charged to the ULA as well (see
+        // Spectrum48K::prime_cpu), so an EVEN frame_hc_ -- the first half of a
+        // T-state -- is the CPU's H phase.
         h_phase = (machine.ula.frame_hc() % HC_PER_TSTATE) == 0;
     }
     if (seen_first_row_ && h_phase) {
@@ -347,7 +384,19 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
     cells.push_back(hex16(get_addr(pins)));
     cells.push_back(hex8(get_data(pins)));
     cells.push_back(hex16(machine.cpu.regs.pc));
+    if (options_.ula) {
+        // Blank rather than zero when the ULA read nothing: an idle bus and a
+        // read of 0x0000 are not the same thing, and every other column here
+        // already uses blank for "not this half-clock".
+        const uint32_t fetched = machine.ula.fetch_count();
+        cells.push_back(fetched > 0 ? hex16(machine.ula.fetch_addr()) : std::string());
+        cells.push_back(fetched > 0 ? hex8(machine.ula.fetch_data()) : std::string());
+        cells.push_back(fetched > 0 ? decimal(fetched) : std::string());
+    }
     if (options_.extra) {
+        // The frame and T-state THIS half-clock belongs to. Both halves of a
+        // T-state therefore carry the same number, and the last half-clock of
+        // a frame belongs to that frame rather than to the one starting.
         cells.push_back(decimal(machine.ula.frame_count()));
         cells.push_back(decimal(machine.ula.tstate()));
     }

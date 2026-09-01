@@ -114,6 +114,21 @@ bool file_mtime(const std::string& path, int64_t& out) {
     return true;
 }
 
+/// Prefix match, the comparison a completion list is built from. An empty
+/// prefix matches everything, which is what makes a just-focused field offer
+/// the first names rather than none.
+bool starts_with_ignoring_case(const std::string& s, const std::string& prefix) {
+    if (prefix.size() > s.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < prefix.size(); i++) {
+        if (std::tolower(uint8_t(s[i])) != std::tolower(uint8_t(prefix[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool equal_ignoring_case(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) {
         return false;
@@ -393,6 +408,46 @@ bool Sources::symbol_value(const std::string& name, uint16_t& addr) const {
         }
     }
     return false;
+}
+
+std::vector<SymbolMatch> Sources::match_symbols(const std::string& prefix, size_t limit,
+                                                bool& more) const {
+    std::vector<SymbolMatch> matches;
+    more = false;
+    if (limit == 0) {
+        return matches;
+    }
+    const std::vector<RomSourcePtr> sources = active();
+    for (size_t i = 0; i < sources.size(); i++) {
+        // symbols is a std::map, so this walks them in name order already --
+        // the order they are offered in is the order they come out.
+        for (auto it = sources[i]->symbols.begin(); it != sources[i]->symbols.end(); ++it) {
+            if (!starts_with_ignoring_case(it->first, prefix)) {
+                continue;
+            }
+            bool seen = false;
+            for (size_t j = 0; j < matches.size(); j++) {
+                if (equal_ignoring_case(matches[j].name, it->first)) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (seen) {
+                continue;
+            }
+            if (matches.size() == limit) {
+                // Found one too many: stop, but say that the list is short of
+                // what matched rather than pretending it is all of it.
+                more = true;
+                return matches;
+            }
+            SymbolMatch match;
+            match.name = it->first;
+            match.addr = it->second;
+            matches.push_back(match);
+        }
+    }
+    return matches;
 }
 
 bool Sources::parse_address(const std::string& text, uint16_t& addr, std::string& error) const {

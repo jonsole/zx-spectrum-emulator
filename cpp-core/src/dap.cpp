@@ -28,6 +28,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cstdio>
@@ -306,6 +307,11 @@ bool arg_opt_address(const json& arguments, const char* name, const Sources& sou
     return true;
 }
 
+/// Most completions a `matchSymbols` request will answer with, however many
+/// were asked for. A dropdown is read, not scrolled through: past this the
+/// answer is "keep typing", which is what the `more` flag says.
+const size_t SYMBOL_MATCH_LIMIT = 50;
+
 // ---- trace ------------------------------------------------------------------
 
 /// The one shape all three trace requests answer with, so the viewer only has
@@ -316,7 +322,8 @@ json trace_body(const TraceStatus& status) {
              {"path", status.path},
              {"rows", status.rows},
              {"limit", status.limit},
-             {"extra", status.extra}};
+             {"extra", status.extra},
+             {"ula", status.ula}};
     if (status.watching) {
         out["watch"] = status.watch;
     }
@@ -324,6 +331,9 @@ json trace_body(const TraceStatus& status) {
     // has always read.
     if (status.has_start_pc) {
         out["startPc"] = status.start_pc;
+    }
+    if (status.has_start_tstate) {
+        out["startTstate"] = status.start_tstate;
     }
     if (status.has_stop_pc) {
         out["stopPc"] = status.stop_pc;
@@ -1007,8 +1017,23 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         if (present) {
             options.start_pc = uint32_t(addr);
         }
+        // The other way to say where a capture begins: a T-state within the
+        // frame. A plain number, not an address -- there is nothing for a
+        // symbol to name here, and the range is a frame's rather than 64K.
+        const json& tstate = arg(arguments, "tstate");
+        if (!tstate.is_null()) {
+            if (!tstate.is_number_unsigned() || tstate.get<uint64_t>() >= TSTATES_PER_FRAME) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", "'tstate' must be a T-state within the frame (0.."
+                                         + std::to_string(TSTATES_PER_FRAME - 1) + ")"}});
+            }
+            options.start_tstate = uint32_t(tstate.get<uint64_t>());
+        }
         const json& extra = arg(arguments, "extra");
         options.extra = extra.is_boolean() && extra.get<bool>();
+        const json& ula = arg(arguments, "ula");
+        options.ula = ula.is_boolean() && ula.get<bool>();
         // On unless asked otherwise, as the MCP tool has it: a capture is far
         // easier to read against names than against bare addresses.
         const json& symbols = arg(arguments, "symbols");
@@ -1039,6 +1064,29 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         // capture runs, to show the row count climbing and to notice the
         // moment a capture closes itself at its limit.
         body = trace_body(engine.trace_status());
+
+    } else if (command == "matchSymbols") {
+        // Not standard DAP: what the trace panel's `from`/`to`/`watch` fields
+        // offer as you type into them. Every one of those takes a symbol name
+        // as readily as a number, and nothing else out here can enumerate the
+        // ROM disassembly's 1000-odd labels to know what is on offer.
+        //
+        // Deliberately not queued and never touching the machine: this is a
+        // keystroke-rate request against a parsed file, and must answer while
+        // a game runs as readily as while one is stopped.
+        const json& limit_arg = arg(arguments, "limit");
+        size_t limit = SYMBOL_MATCH_LIMIT;
+        if (limit_arg.is_number_unsigned()) {
+            limit = std::min(size_t(limit_arg.get<uint64_t>()), SYMBOL_MATCH_LIMIT);
+        }
+        bool more = false;
+        const std::vector<SymbolMatch> matches =
+            sources.match_symbols(arg_str(arguments, "prefix"), limit, more);
+        json list = json::array();
+        for (size_t i = 0; i < matches.size(); i++) {
+            list.push_back(json{{"name", matches[i].name}, {"address", matches[i].addr}});
+        }
+        body = json{{"symbols", list}, {"more", more}};
 
     } else if (command == "loadTape") {
         // Not standard DAP: the "ZX Spectrum: Load Tape" command, so a tape

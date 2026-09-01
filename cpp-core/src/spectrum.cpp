@@ -61,11 +61,35 @@ Spectrum48K::Spectrum48K() {
     reset();
 }
 
+// Z80::set_registers() performs one priming half-clock -- T1H of the next
+// opcode fetch, the overlapped half the pipeline needs in hand before machine
+// clocking can begin. That is a real half-clock of machine time, so the ULA is
+// given it too.
+//
+// Without this the CPU stays one half-clock ahead of the ULA for the rest of
+// the machine's life: the start of every T-state would land on the CPU's L
+// phase, and every contended access would be placed half a T-state from where
+// the hardware puts it. Worse, it is not even a constant -- each re-prime
+// (a snapshot load, a debugger register write, a fast-loaded tape block) shifts
+// it again, so the error drifts rather than staying somewhere it could be
+// corrected for.
+void Spectrum48K::prime_cpu(const Registers& r) {
+    cpu.set_registers(r, memory);
+    pins_ = cpu.pins();
+    // The ULA's own half-clock for the same instant. Given after the CPU's
+    // rather than before it only because the priming clock starts from
+    // PINS_IDLE and would discard anything the ULA drove -- and T1H samples
+    // neither INT nor WAIT, so nothing observable turns on the order.
+    ula.clock(pins_, memory);
+    ula.advance();
+}
+
 void Spectrum48K::reset() {
     Registers regs;
-    cpu.set_registers(regs, memory);
-    pins_ = cpu.pins();
+    // Before priming, not after: reset() zeroes the ULA's counters, which
+    // would otherwise throw away the half-clock just accounted for.
     ula.reset();
+    prime_cpu(regs);
     beeper.reset();
     keyboard.clear();
     // The cassette stays in the deck and keeps its block position -- resetting
@@ -77,8 +101,7 @@ void Spectrum48K::reset() {
 }
 
 void Spectrum48K::set_registers(const Registers& r) {
-    cpu.set_registers(r, memory);
-    pins_ = cpu.pins();
+    prime_cpu(r);
     // Any wholesale register write can leave normal call/return flow, so a
     // tracked chain is no longer meaningful. Cleared unconditionally rather
     // than trying to detect whether PC specifically moved.
@@ -107,7 +130,9 @@ void Spectrum48K::write_memory(uint16_t addr, const uint8_t* data, size_t length
 void Spectrum48K::clock() {
     // The ULA goes first. It drives INT, does its own screen fetch, and --
     // once contention lands -- decides whether the CPU's clock is allowed
-    // through at all this half-cycle.
+    // through at all this half-cycle. It does not move its counters on here;
+    // ula.advance() at the bottom does, once everything below has had this
+    // half-clock with the counters still describing it.
     ula.clock(pins_, memory);
 
     pins_ = cpu.clock(pins_);
@@ -121,6 +146,11 @@ void Spectrum48K::clock() {
     }
 
     service_bus();
+
+    // The half-clock is over: the ULA moves to the next one. Last, so that
+    // everything above -- the trace especially -- sees frame_hc/tstate/frame
+    // for the half-clock it was actually working on.
+    ula.advance();
 }
 
 void Spectrum48K::service_bus() {
@@ -263,12 +293,15 @@ bool Spectrum48K::fast_load_block() {
     r.sp = uint16_t(r.sp + 2);
 
     // NOT set_registers(): that clears the whole call stack, and this is an
-    // ordinary RET -- one frame, not all of them. Z80::set_registers re-primes
-    // the fetch pipeline on an internal half-clock that never reaches
-    // Ula::clock, so global_hc() does not move and a fast load costs exactly
-    // zero emulated time, which is the entire point of it.
-    cpu.set_registers(r, memory);
-    pins_ = cpu.pins();
+    // ordinary RET -- one frame, not all of them.
+    //
+    // prime_cpu() costs the machine ONE half-clock, where re-priming the CPU
+    // alone would cost none. That is still the entire point of a fast load --
+    // a block that takes five seconds of tape lands in 0.14 microseconds
+    // instead -- and the half-clock buys something worth more than it costs:
+    // the CPU and the ULA stay in step. Priming without it would slide the
+    // two apart by half a T-state per block loaded.
+    prime_cpu(r);
     if (!call_stack.empty()) {
         call_stack.pop_back();
     }

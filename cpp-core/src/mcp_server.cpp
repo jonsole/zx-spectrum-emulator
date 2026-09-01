@@ -237,13 +237,17 @@ json trace_status_json(const TraceStatus& status) {
              {"path", status.path},
              {"rows", status.rows},
              {"limit", status.limit},
-             {"extra", status.extra}};
+             {"extra", status.extra},
+             {"ula", status.ula}};
     if (status.watching) {
         out["watch"] = status.watch;
     }
     // Only when gated, so a plain capture reports the shape it always has.
     if (status.has_start_pc) {
         out["start_pc"] = status.start_pc;
+    }
+    if (status.has_start_tstate) {
+        out["start_tstate"] = status.start_tstate;
     }
     if (status.has_stop_pc) {
         out["stop_pc"] = status.stop_pc;
@@ -471,6 +475,15 @@ json tools_list() {
                                         "file now but writes nothing until the CPU fetches the "
                                         "instruction here, and the first row is that fetch. Omit "
                                         "to record from the very next half-clock.")},
+                    {"tstate", integer_prop("T-state within the video frame to start recording "
+                                            "at, counted from the interrupt (0..69887) exactly "
+                                            "as the `extra` T-state column prints it. For "
+                                            "questions about raster position -- what the bus is "
+                                            "doing when the beam reaches a given line -- where "
+                                            "the wanted half-clock is usually mid-instruction "
+                                            "and so has no fetch for `pc` to match. Waits for "
+                                            "the next frame if the machine is already past it. "
+                                            "Mutually exclusive with `pc`.")},
                     {"symbols", json{{"type", "boolean"},
                                      {"description", "Resolve addresses against the loaded SLD "
                                                      "debug info: adds a Symbol column naming "
@@ -483,7 +496,15 @@ json tools_list() {
                                                    "INT, NMI, frame, T-state). Off by default, "
                                                    "which keeps the layout identical to "
                                                    "visualz80remix's for side-by-side "
-                                                   "comparison."}}}},
+                                                   "comparison."}}},
+                    {"ula", json{{"type", "boolean"},
+                                 {"description", "Add the ULA's own bus columns (ULA-AB, ULA-DB "
+                                                 "and a byte count): what the display fetch read "
+                                                 "from memory each half-clock. The ULA is the "
+                                                 "machine's other bus master, and this is the "
+                                                 "traffic memory contention and the snow artifact "
+                                                 "are about. Blank on half-clocks where it read "
+                                                 "nothing."}}}},
                {}));
     add("stop_trace",
         "Stop the running trace and report where it was written and how many half-T-states it "
@@ -766,8 +787,18 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (present) {
             options.start_pc = uint32_t(addr);
         }
+        const json& tstate = arg(args, "tstate");
+        if (!tstate.is_null()) {
+            if (!tstate.is_number_unsigned() || tstate.get<uint64_t>() >= TSTATES_PER_FRAME) {
+                return error_result("'tstate' must be a T-state within the frame (0.."
+                                    + std::to_string(TSTATES_PER_FRAME - 1) + ")");
+            }
+            options.start_tstate = uint32_t(tstate.get<uint64_t>());
+        }
         const json& extra = arg(args, "extra");
         options.extra = extra.is_boolean() && extra.get<bool>();
+        const json& ula = arg(args, "ula");
+        options.ula = ula.is_boolean() && ula.get<bool>();
         const json& symbols = arg(args, "symbols");
         if (!symbols.is_boolean() || symbols.get<bool>()) {
             options.resolve_symbol = symbol_resolver(sources);

@@ -51,8 +51,7 @@ let recvBuffer = Buffer.alloc(0);
 let tapeProvider;   // the block list shown in the debug sidebar
 let tapeView;
 let tapePoll;       // ticks while that pane is visible
-let tapeFastLoadContext; // last values pushed to the when-clause context keys
-let tapePlayingContext;
+const tapeContextKeys = new Map(); // last value pushed for each when-clause key
 
 let audioSocket;
 let audioReconnectTimer;
@@ -137,6 +136,7 @@ function activate(context) {
         showScreenPanel(context);
         startTapePolling();
       }
+      publishTapeContext();
       publishLiveState();
     })
   );
@@ -156,6 +156,7 @@ function activate(context) {
       // The session is not necessarily active yet when onDidStartDebugSession
       // fires, so this is the event that reliably has one to poll.
       startTapePolling();
+      publishTapeContext();
       publishLiveState();
     })
   );
@@ -495,19 +496,34 @@ function refreshTape(status) {
   if (tapeProvider && before !== after) {
     tapeProvider.refresh();
   }
-  const fastLoad = status ? status.fastLoad === true : true;
-  if (tapeFastLoadContext !== fastLoad) {
-    // Drives which of the two fast-load buttons the title bar shows.
-    tapeFastLoadContext = fastLoad;
-    vscode.commands.executeCommand('setContext', 'zxspectrum.tapeFastLoad', fastLoad);
-  }
-  const playing = status ? status.playing === true : false;
-  if (tapePlayingContext !== playing) {
-    // Play and Stop share one slot in the title bar and swap according to
-    // this, the way the debug toolbar's Continue and Pause do -- a transport
-    // has one button there, not two, and which one it is IS the state.
-    tapePlayingContext = playing;
-    vscode.commands.executeCommand('setContext', 'zxspectrum.tapePlaying', playing);
+  publishTapeContext();
+}
+
+/// The keys the title bar's buttons are drawn from: whether there is a session
+/// to talk to at all, which greys the lot (package.json's `enablement`), and
+/// which way round the play/pause and fast-load pairs go.
+///
+/// Called on every debug session event as well as from refreshTape, because
+/// the session can go away without a status arriving to say so.
+function publishTapeContext() {
+  setTapeContext('zxspectrum.tapeSession', zxDebugSession() !== undefined);
+  setTapeContext(
+    'zxspectrum.tapeFastLoad',
+    tapeStatus ? tapeStatus.fastLoad === true : true
+  );
+  // Play and Stop share one slot in the title bar and swap according to this,
+  // the way the debug toolbar's Continue and Pause do -- a transport has one
+  // button there, not two, and which one it is IS the state.
+  setTapeContext('zxspectrum.tapePlaying', tapeStatus ? tapeStatus.playing === true : false);
+}
+
+/// Pushes a when-clause context key, but only when it has actually changed.
+/// The poll runs four times a second and every one of these is a round trip
+/// into the workbench.
+function setTapeContext(key, value) {
+  if (tapeContextKeys.get(key) !== value) {
+    tapeContextKeys.set(key, value);
+    vscode.commands.executeCommand('setContext', key, value);
   }
 }
 
@@ -698,6 +714,8 @@ async function handleTraceMessage(message) {
     await startLiveTrace(message);
   } else if (message.type === 'stopTrace') {
     await stopLiveTrace();
+  } else if (message.type === 'symbols') {
+    await sendSymbolMatches(message);
   }
 }
 
@@ -768,6 +786,68 @@ function publishLiveState() {
   postTrace({ type: 'live', available: zxDebugSession() !== undefined });
 }
 
+// Whatever the far end refused with. A failed custom request is not always an
+// Error -- a DAP failure response arrives as a bare message -- so this is
+// wanted at all three call sites below.
+function errorText(err) {
+  return err && err.message ? err.message : String(err);
+}
+
+// What the panel's address fields offer as they are typed into. The symbol
+// table lives in the server (the ROM disassembly's thousand-odd labels, plus
+// whatever the loaded program's own debug info adds), so this is a round trip
+// per keystroke -- a cheap one: matchSymbols reads a parsed file and never
+// touches the machine, so it answers mid-game as readily as at a breakpoint.
+async function sendSymbolMatches(message) {
+  const session = zxDebugSession();
+  let body;
+  if (session) {
+    try {
+      body = await session.customRequest('matchSymbols', { prefix: message.prefix || '' });
+    } catch (err) {
+      // An older server with no such request. Completion is a convenience:
+      // a field that quietly offers nothing is a better answer than an error
+      // nobody asked for, and typing the name out still works.
+      body = undefined;
+    }
+  }
+  postTrace({
+    type: 'symbolMatches',
+    // Echoed back so the page can drop an answer to a prefix it has already
+    // typed past -- these are issued per keystroke and can land out of order.
+    token: message.token,
+    symbols: body && body.symbols ? body.symbols : [],
+    more: body ? body.more === true : false
+  });
+}
+
+// Closes a capture that has just been started and should not have been. Used
+// where the capture itself is fine but is not the one that was asked for.
+async function cancelLiveTrace(session) {
+  try {
+    await session.customRequest('stopTrace');
+  } catch (ignored) {
+    // The session is going away; there is nothing left to close it with.
+  }
+}
+
+// DAP ignores request arguments it does not recognise, so a gate this panel
+// asks for and the far end has never heard of is dropped in silence -- and a
+// capture that quietly begins in the wrong place looks like a broken gate
+// rather than a stale link. The status echoes the gates actually installed
+// (from the capture's own options, not from whether they have fired yet), so
+// asking for one and not seeing it come back is exactly that mismatch.
+function droppedGates(request, status) {
+  const dropped = [];
+  if (request.pc && typeof status.startPc !== 'number') {
+    dropped.push('start address');
+  }
+  if (typeof request.tstate === 'number' && typeof status.startTstate !== 'number') {
+    dropped.push('start T-state');
+  }
+  return dropped;
+}
+
 async function startLiveTrace(options) {
   const session = zxDebugSession();
   if (!session) {
@@ -775,11 +855,22 @@ async function startLiveTrace(options) {
     return;
   }
   const file = liveTracePath();
-  const request = { path: file, extra: options.extra === true };
+  const request = {
+    path: file,
+    extra: options.extra === true,
+    ula: options.ula === true
+  };
   // Left out rather than sent as null: the server has its own defaults for
-  // both, and "not specified" is not the same as a value.
+  // all of them, and "not specified" is not the same as a value.
   if (typeof options.limit === 'number') request.limit = options.limit;
-  if (typeof options.watch === 'number') request.watch = options.watch;
+  // Addresses travel as the strings they were typed as, blanks dropped. The
+  // server resolves a symbol expression as readily as a number and says which
+  // it could not, so nothing here needs to know what a symbol looks like.
+  if (options.watch) request.watch = options.watch;
+  if (options.pc) request.pc = options.pc;
+  // The other start gate, and a plain number rather than an address: a point
+  // in the video frame, which no symbol names.
+  if (typeof options.tstate === 'number') request.tstate = options.tstate;
 
   // The file is about to be rewritten from underneath any watcher on it, a
   // block at a time -- reloading the panel from a half-written capture would
@@ -795,11 +886,57 @@ async function startLiveTrace(options) {
     postTrace({
       type: 'traceStatus',
       state: 'error',
-      message: 'could not start: ' + (err && err.message ? err.message : String(err))
+      message: 'could not start: ' + errorText(err)
+    });
+    return;
+  }
+  const dropped = droppedGates(request, status);
+  if (dropped.length > 0) {
+    await cancelLiveTrace(session);
+    postTrace({
+      type: 'traceStatus',
+      state: 'error',
+      message: dropped.join(' and ') + ' was ignored by the debug session -- '
+               + 'reload the window (and restart the session) to pick up the current build'
     });
     return;
   }
   postTrace({ type: 'traceStatus', state: 'recording', status });
+
+  // Where to stop is armed as a second request, which is what stopTrace's own
+  // `pc` is for -- with an address it aims the capture rather than closing it.
+  // startTrace has already answered by now, and that answer means the capture
+  // is installed, so this lands on it rather than on nothing.
+  if (options.stopPc) {
+    try {
+      status = await session.customRequest('stopTrace', { pc: options.stopPc });
+    } catch (err) {
+      // A capture that would never stop where it was asked to is worse than no
+      // capture: it has recorded microseconds so far, and the address wants
+      // retyping anyway, so close it and say why rather than leave a
+      // half-armed one running.
+      await cancelLiveTrace(session);
+      postTrace({
+        type: 'traceStatus',
+        state: 'error',
+        message: 'could not stop at ' + options.stopPc + ': ' + errorText(err)
+      });
+      return;
+    }
+    // Same silence, one request later: a stop address the far end dropped
+    // would leave a capture running to its limit instead of to the address.
+    if (typeof status.stopPc !== 'number') {
+      await cancelLiveTrace(session);
+      postTrace({
+        type: 'traceStatus',
+        state: 'error',
+        message: 'stop address was ignored by the debug session -- reload the window '
+                 + '(and restart the session) to pick up the current build'
+      });
+      return;
+    }
+    postTrace({ type: 'traceStatus', state: 'recording', status });
+  }
   startTracePolling();
 }
 
@@ -817,7 +954,7 @@ async function stopLiveTrace() {
     postTrace({
       type: 'traceStatus',
       state: 'error',
-      message: 'could not stop: ' + (err && err.message ? err.message : String(err))
+      message: 'could not stop: ' + errorText(err)
     });
     return;
   }

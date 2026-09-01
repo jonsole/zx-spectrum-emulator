@@ -42,6 +42,11 @@ void Ula::reset() {
 }
 
 void Ula::clock(uint64_t& pins, Memory& mem) {
+    // Nothing fetched until proven otherwise. Read back by the trace later in
+    // the same half-clock -- Spectrum48K::clock() runs the ULA first, then the
+    // CPU, then record().
+    fetch_count_ = 0;
+
     // ---- interrupt ---------------------------------------------------------
     // The ULA drives this line, not the CPU. Active low.
     if (frame_hc_ < INT_PULSE_HC) {
@@ -65,10 +70,18 @@ void Ula::clock(uint64_t& pins, Memory& mem) {
             // visible effect would be a one-group display lag.
             uint16_t y = uint16_t(line_ - PAPER_LINE_BEGIN);
             uint16_t x = uint16_t(px);
-            pixel0_ = mem.read(pixel_addr(x, y));
+            const uint16_t first = pixel_addr(x, y);
+            pixel0_ = mem.read(first);
             attr0_ = mem.read(attr_addr(x, y));
             pixel1_ = mem.read(pixel_addr(uint16_t(x + 8), y));
             attr1_ = mem.read(attr_addr(uint16_t(x + 8), y));
+            // Reported as four bytes read at one instant, which is what this
+            // currently is. Once the fetch is staggered these become four
+            // separate half-clocks of one byte each and only the count
+            // changes.
+            fetch_count_ = 4;
+            fetch_addr_ = first;
+            fetch_data_ = pixel0_;
         }
     }
 
@@ -83,7 +96,12 @@ void Ula::clock(uint64_t& pins, Memory& mem) {
     // ---- emit exactly one pixel -------------------------------------------
     emit_pixel();
 
-    // ---- advance ----------------------------------------------------------
+    // Deliberately does NOT advance: see advance(), which Spectrum48K::clock()
+    // calls once the CPU, the trace and the bus service have all had this same
+    // half-clock at the counters describing it.
+}
+
+void Ula::advance() {
     if (++dot_ >= HC_PER_LINE) {
         dot_ = 0;
         if (++line_ >= LINES_PER_FRAME) {

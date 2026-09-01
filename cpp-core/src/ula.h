@@ -38,6 +38,9 @@ constexpr uint32_t HC_PER_TSTATE = 2;
 constexpr uint32_t HC_PER_LINE = 224 * HC_PER_TSTATE;   // 448
 constexpr uint32_t LINES_PER_FRAME = 312;
 constexpr uint32_t HC_PER_FRAME = HC_PER_LINE * LINES_PER_FRAME; // 139776
+/// The same frame counted the way people quote ZX timings -- "the border
+/// starts at T-state 14335" -- which is what a T-state gate is written in.
+constexpr uint32_t TSTATES_PER_FRAME = HC_PER_FRAME / HC_PER_TSTATE; // 69888
 
 /// The ULA pulls INT low for 32 T-states once per frame. Purely a function of
 /// raster position: it is not extended, re-armed or suppressed by anything the
@@ -105,10 +108,45 @@ public:
 
     /// One half-clock. Drives INT on `pins`, performs whatever screen fetch
     /// this position calls for, and emits one pixel.
+    ///
+    /// Does NOT move the counters on -- advance() does, and Spectrum48K::clock()
+    /// calls it once everything else has had this half-clock. The two are a
+    /// pair and nothing but that function should be calling either.
     void clock(uint64_t& pins, Memory& mem);
+
+    /// Moves to the next half-clock, ending the frame if this was its last.
+    ///
+    /// Separate from clock() so that for the whole duration of a half-clock --
+    /// the ULA's work, the CPU's, the trace's and the bus service -- the
+    /// counters below describe THE HALF-CLOCK BEING PROCESSED rather than the
+    /// one after it. Anything reading them mid-half-clock (the trace's Frame
+    /// and TState columns, and the T-state gate that opens a capture) would
+    /// otherwise be half a T-state out, which is a whole contended cycle.
+    void advance();
+
+    /// What the ULA itself read from memory during this half-clock, for the
+    /// trace's ULA-AB/ULA-DB columns. The ULA is the machine's OTHER bus
+    /// master, and until now it fetched the screen without leaving any record
+    /// of having done so -- which is precisely the traffic contention and
+    /// snow are about.
+    ///
+    /// Shaped for one fetch per half-clock, which is what this becomes once
+    /// the display fetch is staggered across four T-states the way the
+    /// hardware does it. Until then a whole 16-pixel group is read in one
+    /// half-clock (see clock()), so `fetch_count` is 4 there and 0 everywhere
+    /// else, and the address and byte are the FIRST of the four -- the one
+    /// that will still belong to this half-clock afterwards.
+    uint32_t fetch_count() const { return fetch_count_; }
+    uint16_t fetch_addr() const { return fetch_addr_; }
+    uint8_t fetch_data() const { return fetch_data_; }
 
     /// Half-clocks since the interrupt, 0..HC_PER_FRAME-1. This is the
     /// "T-states since interrupt" programs reason about, times two.
+    ///
+    /// These describe the half-clock CURRENTLY BEING PROCESSED, and keep doing
+    /// so until advance() is called at the end of it -- so both halves of a
+    /// T-state report the same tstate(), and the last half-clock of a frame
+    /// belongs to that frame rather than to the one about to start.
     uint32_t frame_hc() const { return frame_hc_; }
     uint32_t tstate() const { return frame_hc_ / HC_PER_TSTATE; }
     uint64_t frame_count() const { return frame_count_; }
@@ -124,6 +162,11 @@ public:
 
 private:
     uint32_t frame_hc_ = 0;
+    // Cleared at the top of every clock(), so "did the ULA read anything this
+    // half-clock" is answered by fetch_count_ alone.
+    uint32_t fetch_count_ = 0;
+    uint16_t fetch_addr_ = 0;
+    uint8_t fetch_data_ = 0;
     // Raster position, tracked incrementally rather than divided out of
     // frame_hc_ every clock -- this runs 7 million times a second.
     uint32_t line_ = 0;

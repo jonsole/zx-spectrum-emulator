@@ -117,6 +117,13 @@ std::vector<std::string> cells_of(const std::string& line) {
 
 /// The header row's cells, so a comparison can name a column rather than an
 /// index.
+/// The trace writes its numeric columns in plain decimal; this is just
+/// std::to_string, named so a CHECK_EQ against a cell reads as a comparison of
+/// what the column should say.
+std::string decimal_string(uint32_t value) {
+    return std::to_string(value);
+}
+
 std::vector<std::string> header_of(const std::vector<std::string>& lines) {
     for (size_t i = 0; i < lines.size(); i++) {
         std::vector<std::string> cells = cells_of(lines[i]);
@@ -591,6 +598,281 @@ TEST(a_stop_address_can_be_aimed_at_a_running_capture) {
     const std::vector<std::vector<std::string>> rows = data_rows(lines);
     CHECK_EQ(rows.back()[11], std::string("INC (HL)"));
     std::remove(options.path.c_str());
+}
+
+// The other start gate: a point in the FRAME rather than a point in the code.
+// Nothing about it involves a fetch -- T-state 100 lands wherever it lands,
+// usually mid-instruction -- which is exactly why an address gate cannot
+// answer questions about raster position.
+TEST(a_t_state_gate_starts_at_that_point_in_the_frame) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_tstate.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 8;
+    options.start_tstate = 100;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+    CHECK(log.active());
+    CHECK(log.waiting());
+
+    machine.trace = &log;
+    // Where the first row actually landed, rather than a count of how many
+    // half-clocks it took to get there. Sampled BEFORE each clock: the
+    // counters describe the half-clock being processed, so the values going
+    // into the clock that produces the first row are that row's own.
+    uint32_t first_row_tstate = 0xFFFFFFFF;
+    uint32_t first_row_hc = 0xFFFFFFFF;
+    for (uint32_t i = 0; i < 400; i++) {
+        const uint32_t tstate = machine.ula.tstate();
+        const uint32_t hc = machine.ula.frame_hc();
+        machine.clock();
+        if (log.rows() > 0) {
+            first_row_tstate = tstate;
+            first_row_hc = hc;
+            break;
+        }
+    }
+    CHECK_EQ(first_row_tstate, uint32_t(100));
+    // The FIRST half of T-state 100, not the second half of 99. Half a
+    // T-state is a whole contended cycle, so this is pinned exactly.
+    CHECK_EQ(first_row_hc, uint32_t(200));
+    CHECK(!log.waiting());
+
+    // Still bounded by the limit like any other capture.
+    for (uint32_t i = 0; i < 100; i++) {
+        machine.clock();
+    }
+    CHECK(!log.active());
+    CHECK_EQ(log.rows(), uint64_t(8));
+    std::remove(path.c_str());
+}
+
+// A gate the machine is already past is a gate for the NEXT frame, not an
+// instruction to start as soon as possible -- "T-state 100" has to mean the
+// same half-clock however late the capture was set up.
+TEST(a_t_state_gate_already_passed_waits_for_the_next_frame) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    // Run past T-state 100 with nothing recording.
+    for (uint32_t i = 0; i < 400; i++) {
+        machine.clock();
+    }
+    CHECK(machine.ula.tstate() > 100);
+    const uint64_t frame_before = machine.ula.frame_count();
+
+    TraceOptions options;
+    options.path = temp_path("tracelog_tstate_wrap.txt");
+    options.limit = 4;
+    options.start_tstate = 100;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+
+    machine.trace = &log;
+    uint32_t first_row_tstate = 0xFFFFFFFF;
+    uint64_t first_row_frame = 0;
+    for (uint32_t i = 0; i < HC_PER_FRAME + 1000; i++) {
+        const uint32_t tstate = machine.ula.tstate();
+        const uint64_t frame = machine.ula.frame_count();
+        machine.clock();
+        if (log.rows() > 0) {
+            first_row_tstate = tstate;
+            first_row_frame = frame;
+            break;
+        }
+    }
+    CHECK_EQ(first_row_tstate, uint32_t(100));
+    // A whole frame later, which is what "the next one" means.
+    CHECK_EQ(first_row_frame, frame_before + 1);
+    std::remove(options.path.c_str());
+}
+
+TEST(a_t_state_gate_that_cannot_mean_anything_is_refused) {
+    const std::string path = temp_path("tracelog_tstate_bad.txt");
+    std::remove(path.c_str());
+
+    TraceOptions options;
+    options.path = path;
+    options.start_pc = 0x0008;
+    options.start_tstate = 100;
+    TraceLog both;
+    // Two answers to "where does this begin" is a question, not a setting.
+    CHECK(both.open(options).find("not both") != std::string::npos);
+
+    options.start_pc = TRACE_NO_PC;
+    options.start_tstate = TSTATES_PER_FRAME;
+    TraceLog past_the_end;
+    CHECK(past_the_end.open(options).find("within a frame") != std::string::npos);
+
+    // Refused before the file is created, so a rejected capture leaves nothing
+    // behind for the next one to find.
+    std::ifstream leftover(path.c_str());
+    CHECK(!leftover.is_open());
+
+    // The last T-state of the frame is a real one, and interesting: it is the
+    // half-clock before the interrupt.
+    options.start_tstate = TSTATES_PER_FRAME - 1;
+    TraceLog last;
+    CHECK_EQ(last.open(options), std::string());
+    std::remove(path.c_str());
+}
+
+// The ULA's own bus. Everything above traces ONE bus master; the machine has
+// two, and until these columns the second one fetched the whole screen without
+// leaving any record of having done so. That traffic is what memory contention
+// and the snow artifact are about, so it has to be visible before either can
+// be reasoned about.
+//
+// Gated on a T-state inside the display area, because that is the only place
+// the ULA reads anything at all.
+TEST(ula_columns_show_the_display_fetch) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+    // Something recognisable in the first screen cell, so the byte in the
+    // ULA-DB column can be checked against what was put there rather than
+    // just against itself.
+    machine.memory.write(pixel_addr(0, 0), 0xA5);
+
+    const std::string path = temp_path("tracelog_ula.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 0;
+    options.ula = true;
+    options.extra = true;
+    // 14336 is the first paper T-state: the ULA's first fetch of the frame.
+    options.start_tstate = 14336;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+
+    machine.trace = &log;
+    for (uint32_t i = 0; i < HC_PER_FRAME + 200 && log.rows() < 40; i++) {
+        machine.clock();
+    }
+    log.close();
+
+    const std::vector<std::string> lines = read_lines(path);
+    const std::vector<std::string> titles = header_of(lines);
+    const std::vector<std::vector<std::string>> rows = data_rows(lines);
+    size_t ab = titles.size(), db = titles.size(), n = titles.size();
+    for (size_t i = 0; i < titles.size(); i++) {
+        if (titles[i] == "ULA-AB") { ab = i; }
+        if (titles[i] == "ULA-DB") { db = i; }
+        if (titles[i] == "n") { n = i; }
+    }
+    CHECK(ab < titles.size());
+    CHECK(db < titles.size());
+    CHECK(n < titles.size());
+
+    // Row 0, not row 1. T-state 14336 is where the ULA's first fetch of the
+    // frame happens, so a gate on it must open on the very half-clock that
+    // fetch lands -- if this ever slips to row 1 again, the gate is reading a
+    // counter that has already advanced past the half-clock being recorded.
+    size_t first_fetch = rows.size();
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (!rows[i][ab].empty()) {
+            first_fetch = i;
+            break;
+        }
+    }
+    CHECK_EQ(first_fetch, size_t(0));
+
+    // Four bytes at one instant, the reported address and byte being the
+    // first of them. 0x4000 is the first screen cell, where the non-linear
+    // layout puts paper row 0, column 0.
+    CHECK_EQ(pixel_addr(0, 0), uint16_t(0x4000));
+    CHECK_EQ(rows[first_fetch][ab], std::string("4000"));
+    CHECK_EQ(rows[first_fetch][db], std::string("A5"));
+    CHECK_EQ(rows[first_fetch][n], std::string("4"));
+
+    // And blank in between: an idle ULA bus is not a read of 0x0000, and a
+    // group is 16 pixels apart, so the next 15 half-clocks fetch nothing.
+    size_t fetches = 0;
+    for (size_t i = first_fetch + 1; i < rows.size() && i < first_fetch + 16; i++) {
+        if (!rows[i][ab].empty()) { fetches++; }
+    }
+    CHECK_EQ(fetches, size_t(0));
+
+    // ...and then the next group, exactly 16 half-clocks on.
+    if (rows.size() > first_fetch + 16) {
+        CHECK_EQ(rows[first_fetch + 16][n], std::string("4"));
+    }
+    std::remove(path.c_str());
+}
+
+// The default layout must not move: these columns are opt-in for the same
+// reason `extra` is, so that a capture can still be diffed byte-for-byte
+// against visualz80remix's own export.
+TEST(ula_columns_are_absent_unless_asked_for) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_no_ula.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 8;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+    machine.trace = &log;
+    for (uint32_t i = 0; i < 40; i++) {
+        machine.clock();
+    }
+
+    const std::vector<std::string> titles = header_of(read_lines(path));
+    for (size_t i = 0; i < titles.size(); i++) {
+        CHECK(titles[i] != "ULA-AB");
+        CHECK(titles[i] != "ULA-DB");
+    }
+    std::remove(path.c_str());
+}
+
+// The frame and T-state columns label the half-clock they are ON. Both halves
+// of a T-state therefore carry the same number, and the last half-clock of a
+// frame belongs to that frame rather than to the one about to start -- neither
+// of which was true while the columns read a counter that clock() had already
+// advanced.
+TEST(frame_and_tstate_columns_label_the_half_clock_they_are_on) {
+    Spectrum48K machine;
+    const std::vector<uint8_t> rom = reference_program();
+    CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
+
+    const std::string path = temp_path("tracelog_tstate_pairs.txt");
+    TraceOptions options;
+    options.path = path;
+    options.limit = 12;
+    options.extra = true;
+    options.start_tstate = 500;
+    TraceLog log;
+    CHECK_EQ(log.open(options), std::string());
+
+    machine.trace = &log;
+    for (uint32_t i = 0; i < 2000 && log.active(); i++) {
+        machine.clock();
+    }
+
+    const std::vector<std::string> lines = read_lines(path);
+    const std::vector<std::string> titles = header_of(lines);
+    const std::vector<std::vector<std::string>> rows = data_rows(lines);
+    size_t ts = titles.size();
+    for (size_t i = 0; i < titles.size(); i++) {
+        if (titles[i] == "TState") { ts = i; }
+    }
+    CHECK(ts < titles.size());
+    CHECK_EQ(rows.size(), size_t(12));
+
+    // Twelve half-clocks from the first half of T-state 500: 500 500 501 501
+    // ... Each number appears exactly twice, in order.
+    for (size_t i = 0; i < rows.size(); i++) {
+        const uint32_t want = 500 + uint32_t(i / 2);
+        CHECK_EQ(rows[i][ts], decimal_string(want));
+    }
+    std::remove(path.c_str());
 }
 
 RUN_TESTS()

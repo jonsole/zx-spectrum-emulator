@@ -127,6 +127,16 @@
     font-size: 12px;
   }
   #recBox input[type="text"] { width: 5.5em; }
+  /* A trigger is a mode and a value, kept together so the pair reads as one
+     control rather than two that happen to be adjacent. */
+  #recBox .trigger { display: flex; align-items: center; gap: 4px; }
+  #recBox .trigger > span {
+    color: var(--ink-dim);
+    font-size: 12px;
+  }
+  /* Wide enough for the longest thing either can hold: "MASK_INT+9", not four
+     hex digits. */
+  #recStartValue, #recStopValue { width: 8.5em; }
   #recBox input[type="checkbox"] { width: auto; padding: 0; cursor: pointer; }
   button:disabled, #recBox input:disabled { opacity: 0.45; cursor: default; }
   button:disabled:hover { border-color: var(--edge); }
@@ -248,12 +258,37 @@
   <div id="recBox" hidden>
     <button id="record" title="Record the running emulator, then load what was captured">
       ● Record</button>
-    <label title="Half-T-states to record before the capture closes itself. 139,776 is one frame; 0 means unlimited.">limit
-      <input type="text" id="recLimit" class="mono" value="25000"></label>
-    <label title="Address to sample into the Watch column on every half-clock. Blank for none.">watch
-      <input type="text" id="recWatch" class="mono" placeholder="$4000"></label>
+    <span class="trigger" title="What opens the capture. immediate starts on the next half-clock; address waits for execution to arrive somewhere (a symbol works -- start typing one for a list); T-state waits for a point in the video frame, counted from the interrupt, which is where to ask what the bus is doing at a given raster position.">
+      <span>start</span>
+      <select id="recStartMode">
+        <option value="now">immediate</option>
+        <option value="pc">address</option>
+        <option value="tstate">T-state</option>
+      </select>
+      <input type="text" id="recStartValue" class="mono" autocomplete="off" hidden>
+    </span>
+    <span class="trigger" title="What closes it. after records a number of half-T-states from wherever it started -- 139,776 is one frame. at address closes the capture on arriving somewhere, before that instruction is fetched, so two captures split at the same address join up rather than overlap.">
+      <span>stop</span>
+      <select id="recStopMode">
+        <option value="limit">after</option>
+        <option value="pc">at address</option>
+      </select>
+      <input type="text" id="recStopValue" class="mono" value="25000" autocomplete="off">
+    </span>
+    <label id="recMaxBox" title="A bound on a capture that is waiting for an address: half-T-states to record before closing anyway, so an address that is never reached cannot fill the disk. 0 to run until it is." hidden>max
+      <input type="text" id="recMax" class="mono" value="250000"></label>
+    <label title="Address to sample into the Watch column on every half-clock. A symbol works too -- start typing one for a list. Blank for none.">watch
+      <input type="text" id="recWatch" class="mono" placeholder="$4000"
+             list="symbolList" autocomplete="off"></label>
+    <!-- Shared by all three address fields: only one of them has the focus at
+         a time, so one list refilled for whichever it is beats three kept in
+         step. Empty until typed into, and empty outside the panel, where
+         there is no server to ask. -->
+    <datalist id="symbolList"></datalist>
     <label title="Add the 48K-specific columns: HALT, WAIT, INT, NMI, frame and T-state.">
       <input type="checkbox" id="recExtra"> 48K</label>
+    <label title="Add the ULA's own bus: what the display fetch read from memory each half-clock. The machine's other bus master, blank on half-clocks where it read nothing.">
+      <input type="checkbox" id="recUla"> ULA</label>
     <span id="recStatus"></span>
   </div>
   <div class="tabs">
@@ -912,13 +947,105 @@
     recording: false
   };
 
-  // "$4000", "0x4000" and "4000" all mean the same address, matching what the
-  // Go-to box already accepts. Returns null for blank, or -1 for nonsense.
-  function parseAddress(text) {
-    var trimmed = text.trim().replace(/^[$#]/, "").replace(/^0x/i, "");
+  // An address the server reports back, in the form its own AB column prints.
+  function addressText(value) {
+    return "$" + ("000" + value.toString(16).toUpperCase()).slice(-4);
+  }
+
+  // ---- symbol completion ---------------------------------------------------
+  //
+  // The names live in the server: the ROM disassembly's thousand-odd labels,
+  // plus whatever the loaded program's own debug info adds. So each keystroke
+  // asks the extension host, which asks the session (matchSymbols), and the
+  // answer refills the shared <datalist> the three address fields point at.
+
+  var symbolToken = 0;  // ...of the request whose answer is still wanted
+  var symbolTimer;
+
+  // Typing runs ahead of the round trip, so answers can arrive out of order
+  // and for prefixes already typed past. Debounced, and each answer carries
+  // the token of the request that asked for it.
+  function symbolsWanted(input) {
+    if (!live.enabled) { return; }
+    clearTimeout(symbolTimer);
+    symbolTimer = setTimeout(function () {
+      // Only while this field is actually holding an address: the same two
+      // inputs hold a T-state and a half-T-state count in the other modes,
+      // and paintRecordFields is what says which.
+      if (!input.hasAttribute("list")) {
+        showSymbols([]);
+        return;
+      }
+      var text = input.value.trim();
+      // Only a bare name can be completed. "KEY_INT+9" is already past the
+      // part a list of names could help with, and picking one would replace
+      // the whole field -- offset and all -- with a label.
+      if (/[+\-]/.test(text)) {
+        showSymbols([]);
+        return;
+      }
+      symbolToken++;
+      vscodeApi.postMessage({ type: "symbols", prefix: text, token: symbolToken });
+    }, 120);
+  }
+
+  // <option value> is what a pick puts in the field; <option label> is the
+  // address shown beside it, so the list says which SPRITE you are choosing.
+  function showSymbols(symbols) {
+    var list = $("symbolList");
+    while (list.firstChild) { list.removeChild(list.firstChild); }
+    for (var i = 0; i < symbols.length; i++) {
+      var option = document.createElement("option");
+      option.value = symbols[i].name;
+      option.label = addressText(symbols[i].address);
+      list.appendChild(option);
+    }
+  }
+
+  // One 48K frame, and the server's own cap on a T-state gate. Checked here
+  // as well so a typo answers instantly instead of after a round trip.
+  var TSTATES_PER_FRAME = 69888;
+
+  // A whole number, null for blank, or -1 for anything that is not one. Blank
+  // is "not specified" and lets the server apply its own default -- NOT 0,
+  // which means unlimited and is something you have to ask for on purpose.
+  function wholeNumber(text) {
+    var trimmed = text.trim();
     if (trimmed === "") { return null; }
-    if (!/^[0-9a-fA-F]{1,4}$/.test(trimmed)) { return -1; }
-    return parseInt(trimmed, 16);
+    if (!/^\d+$/.test(trimmed)) { return -1; }
+    return Number(trimmed);
+  }
+
+  // Which fields each trigger shows, and what they hold. The one place that
+  // decides, so the mode, the placeholder, whether symbols are offered and
+  // what gets sent cannot drift apart.
+  function paintRecordFields() {
+    var startValue = $("recStartValue");
+    var start = $("recStartMode").value;
+    startValue.hidden = start === "now";
+    if (start === "pc") {
+      startValue.placeholder = "$8000 or MASK_INT";
+      startValue.setAttribute("list", "symbolList");
+    } else if (start === "tstate") {
+      startValue.placeholder = "0-" + (TSTATES_PER_FRAME - 1);
+      // Nothing a symbol can name: this is a point in the frame, not in
+      // memory, and the completion list would only be in the way.
+      startValue.removeAttribute("list");
+    }
+
+    var stopValue = $("recStopValue");
+    var stop = $("recStopMode").value;
+    if (stop === "limit") {
+      stopValue.placeholder = "25000";
+      stopValue.removeAttribute("list");
+    } else {
+      stopValue.placeholder = "$8123 or KEY_INT";
+      stopValue.setAttribute("list", "symbolList");
+    }
+    // A capture waiting for an address still needs a bound: an address that is
+    // never reached would otherwise record until the disk filled. The limit
+    // stops being the intent here and becomes the seatbelt, so it says "max".
+    $("recMaxBox").hidden = stop !== "pc";
   }
 
   function recordClicked() {
@@ -928,22 +1055,60 @@
       $("recStatus").textContent = "stopping…";
       return;
     }
-    var limit = $("recLimit").value.trim();
-    if (limit !== "" && !/^\d+$/.test(limit)) {
-      $("recStatus").textContent = "limit must be a number of half-T-states";
-      return;
-    }
-    var watch = parseAddress($("recWatch").value);
-    if (watch === -1) {
-      $("recStatus").textContent = "watch must be an address like $4000";
-      return;
-    }
-    vscodeApi.postMessage({
+
+    // Addresses go through exactly as typed. The server resolves them --
+    // "$8000", "8000" and "MASK_INT+9" all alike, against the loaded
+    // program's symbols and then the ROM's -- and names what it could not,
+    // which is a better answer than anything this page could work out.
+    var request = {
       type: "startTrace",
-      limit: limit === "" ? null : Number(limit),
-      watch: watch,
-      extra: $("recExtra").checked
-    });
+      watch: $("recWatch").value.trim(),
+      extra: $("recExtra").checked,
+      ula: $("recUla").checked
+    };
+
+    var startValue = $("recStartValue").value.trim();
+    var start = $("recStartMode").value;
+    if (start === "pc") {
+      if (startValue === "") {
+        $("recStatus").textContent = "start address is empty";
+        return;
+      }
+      request.pc = startValue;
+    } else if (start === "tstate") {
+      var tstate = wholeNumber(startValue);
+      if (tstate === null || tstate === -1 || tstate >= TSTATES_PER_FRAME) {
+        $("recStatus").textContent = "start T-state must be 0-" + (TSTATES_PER_FRAME - 1);
+        return;
+      }
+      request.tstate = tstate;
+    }
+
+    var stopValue = $("recStopValue").value.trim();
+    var bound;
+    if ($("recStopMode").value === "limit") {
+      bound = wholeNumber(stopValue);
+      if (bound === -1) {
+        $("recStatus").textContent = "stop after must be a number of half-T-states";
+        return;
+      }
+    } else {
+      if (stopValue === "") {
+        $("recStatus").textContent = "stop address is empty";
+        return;
+      }
+      request.stopPc = stopValue;
+      bound = wholeNumber($("recMax").value);
+      if (bound === -1) {
+        $("recStatus").textContent = "max must be a number of half-T-states";
+        return;
+      }
+    }
+    if (bound !== null) {
+      request.limit = bound;
+    }
+
+    vscodeApi.postMessage(request);
     $("recStatus").textContent = "starting…";
   }
 
@@ -962,9 +1127,12 @@
       : "Start a ZX Spectrum debug session to record from";
     // The options describe the capture being started, so they are fixed for as
     // long as one is running.
-    $("recLimit").disabled = live.recording;
-    $("recWatch").disabled = live.recording;
-    $("recExtra").disabled = live.recording;
+    var options = [$("recStartMode"), $("recStartValue"), $("recStopMode"),
+                   $("recStopValue"), $("recMax"), $("recWatch"), $("recExtra"),
+                   $("recUla")];
+    for (var i = 0; i < options.length; i++) {
+      options[i].disabled = live.recording;
+    }
 
     if (message) {
       $("recStatus").textContent = message;
@@ -973,8 +1141,25 @@
     } else if (live.recording) {
       var rows = status && status.rows ? status.rows : 0;
       var limit = status && status.limit ? status.limit : 0;
-      $("recStatus").textContent = "recording · " + rows.toLocaleString()
-        + (limit ? " / " + limit.toLocaleString() : "") + " half-T-states";
+      // Where it will close itself, so a stop that failed to arm is visible
+      // as an absence rather than being discovered when it never happens.
+      var stop = status && typeof status.stopPc === "number"
+        ? " → " + addressText(status.stopPc) : "";
+      if (status && status.waiting) {
+        // Open but not triggered: the file holds its header and nothing else.
+        // "recording · 0" would read as a capture that had started and found
+        // nothing, which is the opposite of what is going on.
+        var at = "start";
+        if (typeof status.startPc === "number") {
+          at = addressText(status.startPc);
+        } else if (typeof status.startTstate === "number") {
+          at = "T-state " + status.startTstate.toLocaleString();
+        }
+        $("recStatus").textContent = "armed · waiting for " + at + stop;
+      } else {
+        $("recStatus").textContent = "recording · " + rows.toLocaleString()
+          + (limit ? " / " + limit.toLocaleString() : "") + " half-T-states" + stop;
+      }
     } else if (status) {
       // A capture that has just ended, whether by the Stop button or by
       // reaching its limit -- the count is the same either way, and saying it
@@ -1001,6 +1186,10 @@
       live.available = !!message.available;
       if (!live.available) { live.recording = false; }
       paintLive(null, null);
+    } else if (message.type === "symbolMatches") {
+      // Anything but the newest request is a stale answer to a prefix that
+      // has already been typed past.
+      if (message.token === symbolToken) { showSymbols(message.symbols || []); }
     } else if (message.type === "traceStatus") {
       live.recording = message.state === "recording";
       paintLive(message.status, message.message || null);
@@ -1020,6 +1209,19 @@
     });
     live.enabled = true;
     $("record").addEventListener("click", recordClicked);
+    $("recStartMode").addEventListener("change", paintRecordFields);
+    $("recStopMode").addEventListener("change", paintRecordFields);
+    paintRecordFields();
+    // All three take a symbol, so all three offer them. "focus" as well as
+    // "input" so an empty field opens with something in it rather than
+    // needing a character typed first.
+    var addressFields = [$("recStartValue"), $("recStopValue"), $("recWatch")];
+    for (var i = 0; i < addressFields.length; i++) {
+      (function (input) {
+        input.addEventListener("input", function () { symbolsWanted(input); });
+        input.addEventListener("focus", function () { symbolsWanted(input); });
+      })(addressFields[i]);
+    }
     $("emptyHow").textContent =
       "Press Record above to capture the running emulator, or open a capture made "
       + "with the start_trace MCP tool or zx_server --trace-log.";

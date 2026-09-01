@@ -65,6 +65,11 @@ struct Args {
     /// client has finished connecting.
     std::string trace_log;
     uint64_t trace_limit = zx::TRACE_DEFAULT_LIMIT;
+    /// The other way a boot capture can be gated: a T-state within the frame
+    /// rather than an address, for a question about raster position rather
+    /// than about code. A plain number, so unlike the three below it needs
+    /// nothing resolved and is parsed here.
+    uint32_t trace_start_tstate = zx::TRACE_NO_TSTATE;
     /// Memory address sampled into the trace's Watch column, if any, and the
     /// addresses the boot capture starts and stops recording on. With a start
     /// address the trace opens at boot but writes nothing until execution
@@ -81,6 +86,10 @@ struct Args {
     /// Adds the 48K-specific trace columns (HALT/WAIT/INT/NMI, frame, T-state)
     /// at the cost of the byte-for-byte match with visualz80remix's layout.
     bool trace_extra = false;
+    /// Adds the ULA's own bus columns: what the display fetch read each
+    /// half-clock. The machine's other bus master, and the traffic contention
+    /// is about.
+    bool trace_ula = false;
     /// Exits the whole process once the last open DAP connection closes
     /// (e.g. VS Code's Stop action), so a preLaunchTask can rebind the same
     /// port next launch instead of colliding with a stale server. Off by
@@ -149,10 +158,15 @@ bool parse_args(int argc, char** argv, Args& args) {
             if (!next(args.trace_watch)) return false;
         } else if (flag == "--trace-start-pc") {
             if (!next(args.trace_start_pc)) return false;
+        } else if (flag == "--trace-start-tstate") {
+            if (!next(value)) return false;
+            args.trace_start_tstate = uint32_t(std::strtoul(value.c_str(), nullptr, 10));
         } else if (flag == "--trace-stop-pc") {
             if (!next(args.trace_stop_pc)) return false;
         } else if (flag == "--trace-extra") {
             args.trace_extra = true;
+        } else if (flag == "--trace-ula") {
+            args.trace_ula = true;
         } else if (flag == "--uncapped") {
             args.uncapped = true;
         } else if (flag == "--exit-on-disconnect") {
@@ -281,7 +295,9 @@ int main(int argc, char** argv) {
             || !trace_address(sources, "--trace-stop-pc", args.trace_stop_pc, trace.stop_pc)) {
             return 1;
         }
+        trace.start_tstate = args.trace_start_tstate;
         trace.extra = args.trace_extra;
+        trace.ula = args.trace_ula;
         trace.resolve_symbol = zx::symbol_resolver(sources);
         const std::string error = engine.start_trace(trace);
         if (!error.empty()) {
@@ -293,6 +309,10 @@ int main(int argc, char** argv) {
         if (trace.start_pc != zx::TRACE_NO_PC) {
             std::printf("  recording starts when PC reaches %04X\n",
                         trace.start_pc);
+        }
+        if (trace.start_tstate != zx::TRACE_NO_TSTATE) {
+            std::printf("  recording starts at T-state %u of the frame\n",
+                        trace.start_tstate);
         }
         if (trace.stop_pc != zx::TRACE_NO_PC) {
             std::printf("  recording stops when PC reaches %04X\n",

@@ -30,41 +30,49 @@
       },
       {
         "command": "zxspectrum.loadTape",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Load Tape...",
         "icon": "$(folder-opened)"
       },
       {
         "command": "zxspectrum.tapePlay",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Play Tape",
         "icon": "$(debug-continue)"
       },
       {
         "command": "zxspectrum.tapeStop",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Stop Tape",
         "icon": "$(debug-pause)"
       },
       {
         "command": "zxspectrum.tapeRewind",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Rewind Tape",
         "icon": "$(debug-restart)"
       },
       {
         "command": "zxspectrum.tapeEject",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Eject Tape",
         "icon": "$(close)"
       },
       {
         "command": "zxspectrum.tapeFastLoadOn",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Turn Tape Fast Load On",
         "icon": "$(rocket)"
       },
       {
         "command": "zxspectrum.tapeFastLoadOff",
+        "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Turn Tape Fast Load Off",
         "icon": "$(watch)"
       },
       {
         "command": "zxspectrum.tapeSeek",
+        "enablement": "zxspectrum.tapeSession",
         "title": "Seek Tape To This Block",
         "icon": "$(target)"
       }
