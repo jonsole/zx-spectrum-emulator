@@ -1,11 +1,11 @@
 {
   // Every configuration here connects to the same thing: zx_server.exe's DAP
   // port. `debugServer` tells VS Code to talk to an already-running adapter
-  // rather than launching one, and the `preLaunchTask` is what starts it --
+  // rather than launching one, and the `preLaunchTask` -- the same one for
+  // every configuration here -- is what starts it:
   //
-  //   zxspectrum-cpp.start-server         build, then serve (silent)
-  //   zxspectrum-cpp.start-server-audio   the same, with sound out of the
-  //                                       host's speakers rather than the panel
+  //   zxspectrum-cpp.start-server   build, then serve, with sound out of the
+  //                                 host's speakers rather than the screen panel
   //
   // The `type` is still required to match the vscode-extension/ debugger
   // registration before VS Code will attempt the connection at all.
@@ -66,7 +66,7 @@
       "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // The speed-patched build from scripts/build_manicminer_fast.py: same
@@ -80,7 +80,7 @@
       "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sna",
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // As above, but locked to the frame interrupt via IM 2 + HALT: a steady
@@ -93,7 +93,7 @@
       "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sna",
       "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sld",
       "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       "name": "ZX Spectrum: Fairlight",
@@ -113,7 +113,7 @@
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // Multichannel beeper music -- it drives port 0xFE far harder than a
@@ -124,7 +124,7 @@
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/Chronos.sna",
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // Tape loading, the fast way: the ROM's LD-BYTES is trapped and each
@@ -144,7 +144,7 @@
       // The same tape, loaded the way a real cassette would be: fast load off,
       // so the ROM reads actual pulses off the EAR line. Press Continue and
       // watch it take about ten seconds, with loading stripes in the border
-      // and the loading screech through the audio panel. This is the path
+      // and the loading screech out of the speakers. This is the path
       // every turbo and custom loader falls back to.
       "name": "ZX Spectrum: Tape (real pulse load)",
       "type": "zxspectrum",
@@ -153,7 +153,7 @@
       "rom": "${workspaceFolder}/roms/48.rom",
       "tape": "${workspaceFolder}/tapes/loading-test.tzx",
       "tapeFastLoad": false,
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // The generic one: boots, types LOAD "" and stops in the ROM loader with
@@ -178,12 +178,13 @@
       "rom": "${workspaceFolder}/roms/48.rom",
       "waitForTape": true,
       "tapeFastLoad": false,
-      "preLaunchTask": "zxspectrum-cpp.start-server-audio"
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
       // The exercisers below all run `uncapped`: they have no visual output to
-      // get wrong and take minutes even so, and the silent start-server task
-      // keeps them off the sound card for the duration.
+      // get wrong and take minutes even so. Nothing comes out of the speakers
+      // while they do -- the beeper is switched off entirely at uncapped
+      // speed -- even though they start the same audio-enabled server.
       "name": "ZX Spectrum: Z80 full test suite",
       "type": "zxspectrum",
       "request": "launch",

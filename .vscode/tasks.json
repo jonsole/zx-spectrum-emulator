@@ -27,40 +27,8 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "zxspectrum-cpp.start-server",
-      "type": "shell",
-      "command": "${workspaceFolder}\\cpp-core\\build\\RelWithDebInfo\\zx_server.exe",
-      "args": [
-        "--dap-port", "4711",
-        "--mcp-port", "8000",
-        "--screen-port", "8500"
-        // Deliberately NOT --exit-on-disconnect: the MCP server lives in this
-        // same process, so exiting when the debug session stops would drop
-        // every connected agent too. The stale-server kill above is what keeps
-        // the next launch working instead.
-      ],
-      "options": { "cwd": "${workspaceFolder}" },
-      "dependsOn": "zxspectrum-cpp.build",
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": {
-        "owner": "zxspectrum-cpp",
-        "pattern": {
-          "regexp": "^.*$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "Starting ZX Spectrum server",
-          "endsPattern": "DAP server listening"
-        }
-      }
-    },
-    {
-      // Same server, with sound coming out of the host's speakers.
+      // The one server task: every launch configuration starts this, so sound
+      // always comes out of the host's speakers.
       //
       // --audio-device opens the default output from inside zx_server; the
       // --no-audio alongside it stops the audio STREAM server binding, which
@@ -70,11 +38,11 @@
       // both. Drop --no-audio (and --audio-device) to go back to hearing it
       // through the panel instead.
       //
-      // A separate task rather than flags on zxspectrum-cpp.start-server:
-      // that one is shared with ZEXALL/ZEXDOC/z80full, which run uncapped
-      // (audio is dropped there anyway) and have no business holding the
-      // sound card open for the minutes they take.
-      "label": "zxspectrum-cpp.start-server-audio",
+      // The uncapped exercisers (ZEXALL/ZEXDOC/z80full) start it too. They
+      // make no sound -- Engine disables the beeper outright when the speed
+      // is uncapped -- so all they cost is holding the sound card open for
+      // the minutes they run.
+      "label": "zxspectrum-cpp.start-server",
       "type": "shell",
       "command": "${workspaceFolder}\\cpp-core\\build\\RelWithDebInfo\\zx_server.exe",
       "args": [
@@ -121,7 +89,7 @@
     {
       "label": "fairlight.build-and-start-server",
       "dependsOrder": "sequence",
-      "dependsOn": ["fairlight.build", "zxspectrum-cpp.start-server-audio"],
+      "dependsOn": ["fairlight.build", "zxspectrum-cpp.start-server"],
       "problemMatcher": []
     }
   ]

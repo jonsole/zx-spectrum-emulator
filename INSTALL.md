@@ -245,9 +245,9 @@ game image the user supplies. Copyrighted; never committed.
 **Tape images.** `tapes/loading-test.tap` / `.tzx` are already committed.
 `python scripts\make_test_tape.py` regenerates them.
 
-**Sound out of the speakers.** Launch configurations whose `preLaunchTask` is
-`zxspectrum-cpp.start-server-audio` pass `--audio-device --no-audio`: the
-emulator opens the host sound card directly and the audio *stream* server is
+**Sound out of the speakers.** Every launch configuration starts the one
+`zxspectrum-cpp.start-server` task, and it passes `--audio-device --no-audio`:
+the emulator opens the host sound card directly and the audio *stream* server is
 suppressed, so the screen panel does not play the same samples a second time
 slightly out of phase. Native device or panel — one or the other, never both.
 
