@@ -33,6 +33,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -58,6 +59,23 @@ constexpr size_t LABEL_COLUMN_WIDTH = 12 + 3; // 12 + strlen(":  ")
 std::string file_name_of(const std::string& path) {
     const size_t slash = path.find_last_of("/\\");
     return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+/// A DAP client resolves `source.path` against nothing -- it has no idea what
+/// directory this server was started in, so a relative path (the default
+/// `rom_disassembly/rom.asm`) is one it cannot open. It then falls back to
+/// asking the adapter for the text with a `source` request, which is served
+/// below but hands back a read-only buffer. An absolute path instead lets the
+/// client open the real file, which is what makes editing and breakpoints in
+/// it work. Unresolvable paths are passed through untouched rather than
+/// guessed at.
+std::string absolute_source_path(const std::string& path) {
+    std::error_code ec;
+    const std::filesystem::path full = std::filesystem::weakly_canonical(path, ec);
+    if (ec || full.empty()) {
+        return path;
+    }
+    return full.string();
 }
 
 std::string hex4(uint16_t v) {
@@ -93,7 +111,11 @@ std::mutex g_connections_mutex;
 std::vector<std::shared_ptr<Connection>> g_connections;
 
 void send_message(Connection& conn, const json& message) {
-    const std::string body = message.dump();
+    // `replace` rather than the default handler: text lifted from files the
+    // user supplies -- a `source` response, a symbol name out of an SLD --
+    // need not be valid UTF-8, and a throw here would take down the
+    // connection's request loop rather than merely garbling a character.
+    const std::string body = message.dump(-1, ' ', false, json::error_handler_t::replace);
     const std::string framed =
         "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
     std::lock_guard<std::mutex> lock(conn.write_mutex);
@@ -512,7 +534,7 @@ json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, u
             frame["name"] = label + "  " + name;
         }
         frame["source"] = json{{"name", file_name_of(source->asm_path)},
-                               {"path", source->asm_path}};
+                               {"path", absolute_source_path(source->asm_path)}};
         frame["line"] = it->second;
         frame["column"] = 1;
         break;
@@ -827,6 +849,30 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         conn.source_breakpoints[source_path] = std::move(addrs);
         sync_breakpoints(engine, conn);
         body = json{{"breakpoints", results}};
+
+    } else if (command == "source") {
+        // Only reached when the client could not open the path itself -- one
+        // it cannot resolve, or a client with no access to this machine's
+        // disk. Serve the text, but only for a path that names a source we
+        // hold debug info for: this port is not a way to read arbitrary
+        // files.
+        const json& source = arg(arguments, "source");
+        const std::string source_path =
+            source.is_object() ? source.value("path", std::string()) : "";
+        const RomSourcePtr rom_source = sources.source_for_path(source_path);
+        if (rom_source == nullptr) {
+            return envelope_response(
+                conn, request_seq, command, false,
+                json{{"message", "no debug info loaded for " + source_path}});
+        }
+        std::vector<uint8_t> bytes;
+        if (!read_file(rom_source->asm_path, bytes)) {
+            return envelope_response(
+                conn, request_seq, command, false,
+                json{{"message", "couldn't read " + rom_source->asm_path}});
+        }
+        body = json{{"content", std::string(bytes.begin(), bytes.end())},
+                    {"mimeType", "text/x-asm"}};
 
     } else if (command == "continue") {
         // Detached, mirroring the Rust server's spawned task: a run that
