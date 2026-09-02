@@ -1,8 +1,14 @@
 {
   "mcpServers": {
     "zx-spectrum": {
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp"
+      "type": "stdio",
+      "command": ".venv-win\\Scripts\\python.exe",
+      "args": [
+        "tools/zxserver/mcp_server.py"
+      ],
+      "env": {
+        "ZX_SERVER_ARGS": "--audio-device --no-audio"
+      }
     },
     "rigol": {
       "type": "stdio",
