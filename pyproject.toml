@@ -24,3 +24,10 @@ zxspectrum = ["_native/shim.h"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# Tests marked `live` go out to a third-party service (the ZXInfo API), so a
+# plain `pytest` run leaves them out -- ask for them with `-m live`, which
+# overrides this.
+addopts = "-m 'not live'"
+markers = [
+    "live: hits the real ZXInfo API over the network; deselected by default",
+]
