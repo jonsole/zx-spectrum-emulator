@@ -184,7 +184,12 @@ void Spectrum48K::service_bus() {
     // simply does not decode the upper bits -- and it is why programs can use
     // 0xFE, 0x00FE or any other even port interchangeably.
     if (asserted(pins_, RD)) {
-        uint8_t value = 0xFF; // unmapped: floating bus, not modelled further
+        // An odd port reaches nothing at all in a 48K: no device answers, and
+        // what the CPU latches is whatever the ULA happens to be driving --
+        // the floating bus. Returning a fixed 0xFF instead looks harmless and
+        // is not: a program using it as a raster clock waits for a value that
+        // then never comes. See Ula::floating_bus.
+        uint8_t value = ula.floating_bus();
         if ((addr & 1) == 0) {
             value = keyboard.read_port(uint8_t(addr >> 8));
             // Bit 6 is the EAR input. Resolved here rather than inside

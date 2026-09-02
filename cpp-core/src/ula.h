@@ -83,6 +83,10 @@ constexpr uint32_t CANVAS_LEAD_HC = BORDER_LEFT_PX; // 48
 /// a group does not take visual effect until the next one.
 constexpr uint32_t BORDER_LATCH_DOTS = 8;
 
+/// What a read of a port nothing answers finds on the bus when the ULA is not
+/// driving it: nothing pulls it down, so every line reads high.
+constexpr uint8_t FLOATING_BUS_IDLE = 0xFF;
+
 constexpr uint16_t BITMAP_BASE = 0x4000;
 constexpr uint16_t ATTR_BASE = 0x5800;
 
@@ -140,6 +144,23 @@ public:
     uint16_t fetch_addr() const { return fetch_addr_; }
     uint8_t fetch_data() const { return fetch_data_; }
 
+    /// What the ULA is putting on the data bus THIS half-clock -- the
+    /// "floating bus".
+    ///
+    /// Reading a port nothing decodes does not return a defined value: the
+    /// CPU simply latches whatever happens to be on the bus, and on a
+    /// Spectrum the other thing using the bus is the ULA fetching the screen.
+    /// So a read of an odd port during the paper area hands back a byte of
+    /// the display, and the same read during the border finds nothing driving
+    /// and reads 0xFF.
+    ///
+    /// That is not a curiosity -- it is a raster clock. A program with no
+    /// interrupt to hand can sit in `IN A,(0xFF)` until the byte it sees says
+    /// the beam has reached a particular part of the screen, which is how
+    /// several games synchronise to the display. Cobra's loader does exactly
+    /// this, and without it the wait never ends.
+    uint8_t floating_bus() const;
+
     /// Half-clocks since the interrupt, 0..HC_PER_FRAME-1. This is the
     /// "T-states since interrupt" programs reason about, times two.
     ///
@@ -179,6 +200,13 @@ private:
 
     std::vector<uint8_t> framebuffer_;
     std::vector<uint8_t> last_frame_;
+
+    /// Whether the beam is over paper right now -- the only time the ULA
+    /// fetches, and so the only time it drives the bus.
+    bool in_paper_area() const {
+        return line_ >= PAPER_LINE_BEGIN && line_ < PAPER_LINE_END && dot_ >= PAPER_DOT_BEGIN
+               && dot_ < PAPER_DOT_END;
+    }
 
     void emit_pixel();
     void on_frame_boundary();

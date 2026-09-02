@@ -56,9 +56,7 @@ void Ula::clock(uint64_t& pins, Memory& mem) {
     }
 
     // ---- screen fetch ------------------------------------------------------
-    const bool in_paper = line_ >= PAPER_LINE_BEGIN && line_ < PAPER_LINE_END
-                          && dot_ >= PAPER_DOT_BEGIN && dot_ < PAPER_DOT_END;
-    if (in_paper) {
+    if (in_paper_area()) {
         uint32_t px = dot_ - PAPER_DOT_BEGIN; // 0..255 across the paper
         if ((px & 15) == 0) {
             // Start of a 16-pixel group: fetch the two cells' bitmap and
@@ -99,6 +97,40 @@ void Ula::clock(uint64_t& pins, Memory& mem) {
     // Deliberately does NOT advance: see advance(), which Spectrum48K::clock()
     // calls once the CPU, the trace and the bus service have all had this same
     // half-clock at the counters describing it.
+}
+
+uint8_t Ula::floating_bus() const {
+    // Outside paper -- both borders, retrace, and the whole of the top and
+    // bottom borders -- the ULA has nothing to fetch, so nothing drives the
+    // bus.
+    if (!in_paper_area()) {
+        return FLOATING_BUS_IDLE;
+    }
+    // A 16-pixel group is 8 T-states, and that is exactly the ULA's fetch
+    // cycle: four bytes read in the first four T-states, then four T-states
+    // with the bus idle. Those four bytes are already latched -- clock() reads
+    // them at the group's first dot -- so this reports them rather than
+    // fetching anything again.
+    //
+    // Real hardware fetches the group it is ABOUT to display, so its floating
+    // bus runs one group (8 T-states, half a character cell) ahead of what
+    // this returns. That offset is below the resolution of what the effect is
+    // used for -- a program waiting for the beam to reach a region of the
+    // screen -- and closing it would mean the display pipeline that clock()
+    // deliberately does not model.
+    switch (((dot_ - PAPER_DOT_BEGIN) & 15) / HC_PER_TSTATE) {
+    case 0:
+        return pixel0_;
+    case 1:
+        return attr0_;
+    case 2:
+        return pixel1_;
+    case 3:
+        return attr1_;
+    default:
+        // The idle half of the group: fetched, not fetching.
+        return FLOATING_BUS_IDLE;
+    }
 }
 
 void Ula::advance() {
