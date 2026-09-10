@@ -359,7 +359,10 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 .clear_end:
 .restore_sp:		ld		sp,0		; operand set just above
 
-					call	redraw_orient
+					; No orientation pass here any more. It settled the shared
+					; graphics once for the whole region, which is one decision
+					; too few: objects_draw_all now asks per object, in
+					; sprite_orient, at the point it is about to draw one.
 					call	objects_draw_all
 
 					; the copy routine for this width...

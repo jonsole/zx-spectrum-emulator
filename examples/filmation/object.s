@@ -481,6 +481,51 @@ view_x_extent:		dw		0
 view_y_extent:		dw		0
 
 
+; Make the shared graphic the way round this object wants it.
+;
+; A graphic is shared by every object drawn from it, and an object that wants
+; it the other way round mirrors it where it lies. So the bytes may not be the
+; way THIS object wants them: another object in the same region may have turned
+; them since. Knight Lore compares the two in print_sprite, per object, for
+; exactly this reason.
+;
+; Settling it once per region cannot work, which is what redraw_orient used to
+; try. Two objects in one region wanting opposite orientations leave whichever
+; the pass reached last holding the graphic, and the other draws mirrored --
+; room $88 puts the north arch's leaf and the east arch's leaf, one flipped and
+; one not, in the same region at the foot of an arch, and a few pixels of the
+; one landed on the other.
+;
+;   HL -> the object's sprite data (the record + 2)
+;   E' -  the object's FLAGS, popped alongside BLIT_IDX
+;
+; Preserves everything, the flags included, so it can sit in the middle of the
+; offset arithmetic.
+sprite_orient:		push	af
+					push	bc
+					push	de
+					push	hl
+					exx
+					ld		a,e					; FLAGS
+					exx
+					and		OBJ_SHIFTED
+					jr		nz,.done			; its own private copy, and SPRITE - 2
+					; is not a sprite header at all
+					dec		l					; SPRITE is the record + 2, and records
+					dec		l					; are ALIGN 4, so this cannot borrow
+					exx
+					ld		a,e
+					exx
+					xor		(hl)
+					and		SPRITE_FLIPPED
+					call	nz,sprite_flip_h	; HL -> the record, which is what it wants
+.done:				pop		hl
+					pop		de
+					pop		bc
+					pop		af
+					ret
+
+
 objects_draw_all:				
 					ld		hl,(view_x_extent)			
 					ld		(.set_x_extent + 1),hl
@@ -495,7 +540,8 @@ objects_draw_all:
 					
 					; Walk though objects filtering out those outside the view extent
 					ld		iy,(object_list)					
-					jr		.next_object		; the same test also covers an empty list
+					jp		.next_object		; the same test also covers an empty list
+					; JP, not JR: the loop below no longer fits in a byte's reach
 .filter_loop:		ld		sp,iy
 					pop		iy					; get next object
 
@@ -577,6 +623,13 @@ objects_draw_all:
 					sub		l					; A += sprite_x_adjustment
 					add		a					; Double for interleaved mask and data
 					pop		hl					; Get sprite address					
+
+					; The sprite address is the last thing the record walk wants, so
+					; SP is free -- and putting the real stack back is what lets this
+					; call anything at all. sprite_orient leaves every register alone,
+					; the carry from the doubling above included.
+					ld		sp,(.set_stack + 1)
+					call	sprite_orient
 
 					; That doubling is the one step here that can leave eight
 					; bits. A holds rows-skipped * columns + the x adjustment,
