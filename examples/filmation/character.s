@@ -96,12 +96,17 @@ FLOOR_HI			EQU		180
 ; Bit 0 says mirrored. So the order here is not free -- it has to keep the
 ; pairs that mirror each other next to one another.
 ;
+; Note that the towards pair runs the other way round from the away pair. The
+; two blocks are not drawn facing the same way: unmirrored, 16-21 walk to the
+; left of the screen and 24-29 to the right, so the same mirror bit means the
+; opposite direction in each.
+;
 ; With screenX = U + V - 128 and the base hung off (V - U) >> 1, a step along
 ; +U goes down and right, +V up and right, and their negatives the other two.
 character_steps:	DB		-1, 0		; 0  -U  away, up and left
 					DB		0, 1		; 1  +V  away, up and right
-					DB		0, -1		; 2  -V  towards, down and left
-					DB		1, 0		; 3  +U  towards, down and right
+					DB		1, 0		; 2  +U  towards, down and right
+					DB		0, -1		; 3  -V  towards, down and left
 
 
 ; Give both halves the graphics this character's facing and phase call for,

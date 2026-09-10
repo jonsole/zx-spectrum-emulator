@@ -235,9 +235,9 @@ player_step:        ld      bc,KEY_UPLEFT
                     jr      .walk
 .up_right:          ld      a,1
                     jr      .walk
-.down_left:         ld      a,2
+.down_left:         ld      a,3
                     jr      .walk
-.down_right:        ld      a,3
+.down_right:        ld      a,2
 .walk:              ld      ix,player
                     jp      character_walk
 
