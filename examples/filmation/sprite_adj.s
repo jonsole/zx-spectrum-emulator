@@ -25,12 +25,12 @@ sprite_adj:
                     DB        -8,  -4        ; graphic 13
                     DB        -8,  -4        ; graphic 14
                     DB        -8,  -4        ; graphic 15
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 16
+                    DB       -12,  -6        ; graphic 17
+                    DB       -12,  -6        ; graphic 18
+                    DB       -12,  -6        ; graphic 19
+                    DB       -12,  -6        ; graphic 20
+                    DB       -12,  -6        ; graphic 21
                     DB       -12,  -7        ; graphic 22
                     DB         0,   0
                     DB         0,   0
@@ -41,13 +41,13 @@ sprite_adj:
                     DB         0,   0
                     DB       -12,   3        ; graphic 30
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -8        ; graphic 32
+                    DB       -12,  -8        ; graphic 33
+                    DB       -12,  -8        ; graphic 34
+                    DB       -12,  -8        ; graphic 35
+                    DB       -12,  -8        ; graphic 36
+                    DB       -12,  -8        ; graphic 37
+                    DB       -12,  -8        ; graphic 38
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -90,7 +90,7 @@ sprite_adj:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 81
                     DB         0,   0
                     DB       -12,  -6        ; graphic 83
                     DB       -16,  -8        ; graphic 84
@@ -106,6 +106,12 @@ sprite_adj:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
+                    DB       -12,  -4        ; graphic 97
+                    DB       -12,  -4        ; graphic 98
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,  -4        ; graphic 102
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -123,20 +129,14 @@ sprite_adj:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -4        ; graphic 120
+                    DB       -12,  -4        ; graphic 121
+                    DB       -12,  -4        ; graphic 122
+                    DB       -12,  -4        ; graphic 123
+                    DB       -12,  -4        ; graphic 124
+                    DB       -12,  -4        ; graphic 125
+                    DB       -12,  -4        ; graphic 126
+                    DB       -12,  -4        ; graphic 127
                     DB        -8,  -2        ; graphic 128
                     DB        -8,  -2        ; graphic 129
                     DB        -8,  -2        ; graphic 130
@@ -169,7 +169,7 @@ sprite_adj:
                     DB         0,   0
                     DB       -12,   3        ; graphic 158
                     DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -4        ; graphic 160
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -276,7 +276,7 @@ sprite_adj_flipped:
                     DB         0,   0
                     DB         0,   0
                     DB       -12,  -6        ; graphic 8
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 9
                     DB       -20,  -1        ; graphic 10
                     DB       -12,  -2        ; graphic 11
                     DB        -8,  -4        ; graphic 12
@@ -348,7 +348,7 @@ sprite_adj_flipped:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 81
                     DB         0,   0
                     DB       -12,  -6        ; graphic 83
                     DB         0,   0
