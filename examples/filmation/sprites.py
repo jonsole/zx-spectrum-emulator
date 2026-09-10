@@ -1,4 +1,21 @@
+import io
+import sys
 from pathlib import Path
+
+# The two halves of the output go to different places in the image. The table
+# has to be ALIGNed to its own 512 bytes, and when it comes last that
+# alignment lands between the bitmaps and the table as padding -- 308 bytes of
+# it, and it swallows anything saved anywhere else in the image, since the
+# total is rounded up to a boundary either way. Emitted separately, the table
+# goes where a 512 boundary already falls and the bitmaps go last, with
+# nothing after them that has to be aligned.
+#
+#   python sprites.py table     the graphic-number table alone
+#   python sprites.py bitmaps   the sprites alone
+#   python sprites.py           both, bitmaps first, for reading by hand
+part = sys.argv[1] if len(sys.argv) > 1 else "all"
+bitmaps = io.StringIO()
+console, sys.stdout = sys.stdout, bitmaps
 
 f_data = Path('sprite_data.bin').read_bytes()
 
@@ -18,7 +35,10 @@ while f_data:
     spr_num += 1
 
     #print("\t\t\tDB\t{},{}".format(spr_w * 8, spr_h))
-    print("\t\t\tDB\t{},{}".format((spr_w - 2) * 32, spr_h)) 
+    # The blit index, not a width: (width - 2) scaled by the stride of a
+    # sprite_jump_table group, which puts the width class in bits 4 to 6
+    # and leaves bit 0 for the mirrored flag.
+    print("\t\t\tDB\t{},{}".format((spr_w - 2) * 16, spr_h))
 
     num_bytes = spr_w * spr_h * 2
     spr_bytes = f_data[:num_bytes]
@@ -66,8 +86,13 @@ while f_data:
 # 256 entries is 512 bytes, so the table is ALIGNed to its own size and
 # object_update reaches it by doubling a pre-halved base, rather than the
 # single `ld h,high sprite_table` that a 128-entry table allowed.
+sys.stdout = console
+if part in ("all", "bitmaps"):
+    print(bitmaps.getvalue(), end="")
+if part == "bitmaps":
+    sys.exit()
+
 gmap = Path('graphic_map.bin').read_bytes()
-print()
 print("\t\t\tALIGN\t512")
 print("sprite_table:")
 for row in range(0, 256, 4):

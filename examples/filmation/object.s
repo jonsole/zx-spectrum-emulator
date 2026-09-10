@@ -236,11 +236,8 @@ object_update:
 					; sprites.py changed that encoding, see the commented-out line
 					; beside it. So unpack the width back out rather than adding it
 					; raw, which is what the old "adc (hl) / inc a" did.
-					ld		a,(hl)		; blit index: (width - 2) * 32
-					rlca	
-					rlca	
-					rlca			; 0/32/64/96 -> 0/1/2/3 in the low bits
-					and		7		; width - 2, with room for the wider classes
+					ld		a,(hl)		; blit index: (width - 2) * JUMP_GROUP
+					sprite_width_class
 					add		a,2		; width in bytes
 					add		a,(ix+OBJ.MIN_X)
 					ld		(ix+OBJ.MAX_X),a		; max_x (byte position, exclusive)
@@ -334,7 +331,7 @@ object_update:
 					; get address of byte shifting routine
 					ld		h,high sprite_jump_table
 					ld		a,(ix+OBJ.BLIT_IDX)
-					add		a,30
+					add		a,SHIFT_FINAL_AT
 					ld		l,a
 					ld		sp,hl
 					pop		iy
@@ -427,7 +424,7 @@ object_update:
 					; the right way round: redraw_orient
 					; leaves it alone
 					ld		a,(ix+OBJ.BLIT_IDX)
-					add		a,32				; the rotated copy has one extra overflow column vs the sprite's own bitmap - bump to the next width-class
+					add		a,JUMP_GROUP		; the rotated copy has one extra overflow column vs the sprite's own bitmap - bump to the next width-class
 					ld		(ix+OBJ.BLIT_IDX),a
 					inc		(ix+OBJ.MAX_X)		; ...and one column wider, so widen the extent
 

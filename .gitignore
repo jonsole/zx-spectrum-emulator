@@ -93,6 +93,12 @@ examples/filmation/output/
 # packed sprite_data.bin IS committed; the example does not build without it.
 examples/filmation/sprite_data.s
 
+# ...and the graphic-number table that sprites.py writes beside it. It is a
+# second file only because the two go to different places in the image: the
+# table wants a 512-byte boundary, and behind the bitmaps its padding was the
+# last thing in the image and rounded the whole thing up.
+examples/filmation/sprite_table.s
+
 # Likewise the assembly form of examples/filmation/room_data.bin: every room
 # in Knight Lore, the templates they are built from, and the tables that index
 # them. rooms.py regenerates it, so only the packed file is carried. Note that

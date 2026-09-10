@@ -1,17 +1,41 @@
-
-
-
-
-; Byte 0 of a sprite record is the blit index, (width - 2) * 32, so bits 5-7
-; are the width class and bits 0-4 are spare. Bit 0 says which way round the
-; bytes currently are -- see sprite_flip_h. Knight Lore keeps the same state
-; in the same byte, but at bit 6, which is part of the width field for us.
+; Byte 0 of a sprite record is the blit index, (width - 2) * JUMP_GROUP, so
+; bits 4-6 are the width class and the rest are spare. Bit 0 says which way
+; round the bytes currently are -- see sprite_flip_h. Knight Lore keeps the
+; same state in the same byte, but at bit 6, which is part of the width field
+; for us.
+;
+; The class used to be scaled by 32, when a group held a jump entry for every
+; column count as well. One blitter later there is nothing in a group but the
+; index arithmetic for its width and, for the widths that can be rotated, the
+; entry shift_sprite finishes on -- and sixteen is room enough for both.
 ;
 ; Anything that uses byte 0 as a jump-table index must mask it with
-; BLIT_IDX_MASK first. The width unpack does not need to: it rotates the
-; class down and masks with 7, which drops the spare bits on the way past.
+; BLIT_IDX_MASK first. The width unpack does not need to: it rotates the class
+; down and masks with 7, which drops the spare bits on the way past.
 SPRITE_FLIPPED		EQU		0x01
-BLIT_IDX_MASK		EQU		0xE0
+WIDTH_CLASS_SHIFT	EQU		4		; where the class sits in byte 0, and so
+JUMP_GROUP			EQU		1 << WIDTH_CLASS_SHIFT		; the stride of a group
+SHIFT_FINAL_AT		EQU		JUMP_GROUP - 2		; the shift entry ends a group
+BLIT_IDX_MASK		EQU		7 * JUMP_GROUP		; the three class bits, in place
+
+
+; The width class out of a sprite's byte 0 and down into the low bits.
+;
+; Four places want this, and they each used to spell it out. When the class
+; moved down from bits 5-7 -- one blitter having emptied most of a group --
+; three of them were changed and the fourth, shift_alloc, was not: every
+; rotated object then got a buffer sized for the wrong width, and they wrote
+; over each other in the arena. A macro cannot be changed in three places.
+;
+;   in  A - byte 0 of a sprite record
+;   out A - width - 2, so add 2 for the width in bytes, or 3 for the width
+;           of a rotated copy, which carries one more column
+				MACRO	sprite_width_class
+				REPT	8 - WIDTH_CLASS_SHIFT
+					rlca
+				ENDR
+					and		7
+				ENDM
 
 					align 256
 byte_position_table:
@@ -24,90 +48,59 @@ byte_position_table:
 					ENDR
 
 
-				MACRO	jump_entry addr
-					jp		addr
-					DB		0
-				ENDM
-				
 					ALIGN	256					
+; Indexed by BLIT_IDX. Each group starts with the arithmetic that turns a
+; row count into a byte offset for that width -- rows * width, done as shifts
+; and adds -- and ends, for the widths a sprite can still be rotated into, with
+; the address shift_sprite's unrolled row finishes on.
 sprite_jump_table:	
-					; 2 bytes
-					add	a
+.w2:				add	a
 					jp	objects_draw_all.x_adjust
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0
+					DS	SHIFT_FINAL_AT - ($ - .w2), 0
 					DW	object_update.shift_final - (18 * 1)
+					ASSERT	$ - .w2 == JUMP_GROUP
 
-					; 3 bytes
-					ld	l,a
+.w3:				ld	l,a
 					add	a
 					add	l
 					jp	objects_draw_all.x_adjust
-					DB	0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0
+					DS	SHIFT_FINAL_AT - ($ - .w3), 0
 					DW	object_update.shift_final - (18 * 2)
+					ASSERT	$ - .w3 == JUMP_GROUP
 
-					; 4 bytes
-					add	a
+.w4:				add	a
 					add	a
 					jp	objects_draw_all.x_adjust
-					DB	0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0
+					DS	SHIFT_FINAL_AT - ($ - .w4), 0
 					DW	object_update.shift_final - (18 * 3)
+					ASSERT	$ - .w4 == JUMP_GROUP
 
-					; 5 bytes
-					ld	l,a
+.w5:				ld	l,a
 					add	a
 					add	a
 					add	l
 					jp	objects_draw_all.x_adjust
-					DB	0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0
+					DS	SHIFT_FINAL_AT - ($ - .w5), 0
 					DW	object_update.shift_final - (18 * 4)
+					ASSERT	$ - .w5 == JUMP_GROUP
 
 					; 6 bytes. Nothing gets here from a sprite record -- the widest
 					; bitmap in the set is 5 -- only from a 5-byte sprite that has been
 					; rotated, which is one column wider than its own bitmap. So there
-					; is no 6-byte sprite left to rotate in turn, this group needs no
-					; shift_final entry, and its six blit entries fill the 32 bytes
-					; exactly where the other groups have room to spare.
-					add	a					; *2
+					; is no 6-byte sprite left to rotate in turn, and this group needs
+					; no shift_final entry.
+.w6:				add	a					; *2
 					ld	l,a
 					add	a					; *4
 					add	l					; *6
 					jp	objects_draw_all.x_adjust
-					DB	0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
-					DB	0,0,0,0
+					DS	JUMP_GROUP - ($ - .w6), 0
 
 					; The table is indexed by a single byte in L, so it has to stay
-					; inside its page. Groups are 32 bytes at (width - 2) * 32, which
-					; leaves room up to width 9 -- and note that width 1 wraps to 224,
-					; where there is deliberately no group: no 1-byte sprite is drawn.
+					; inside its page. Groups are JUMP_GROUP bytes at
+					; (width - 2) * JUMP_GROUP, which leaves room up to width 17 --
+					; and note that width 1 wraps to 240, where there is deliberately
+					; no group: no 1-byte sprite is drawn.
 					ASSERT	($ - sprite_jump_table) <= 256
 
 
@@ -147,10 +140,7 @@ sprite_jump_table:
 sprite_blit_setup:
 					ld		c,a					; c = columns to composite
 					ld		a,d					; blit index back to a width
-					rlca
-					rlca
-					rlca
-					and		7
+					sprite_width_class
 					add		a,2
 					sub		c
 					ld		b,a					; b = columns to step over
@@ -290,6 +280,14 @@ sprite_rotate_table:	REPT	7,r
 SPRITE_ROTATE_BASE	EQU		sprite_rotate_table - 512
 
 
+; The graphic-number table goes here, in front of the bitmaps, because
+; sprite_rotate_table happens to end on a 512 boundary and the table needs
+; one. Behind them it needed a boundary of its own, and the padding to reach
+; it was the last thing in the image -- so it rounded the whole image up, and
+; anything saved anywhere else disappeared into it.
+					INCLUDE "sprite_table.s"
+
+
 					ALIGN	256
 ; Every byte with its bits the other way round, for mirroring a sprite.
 ; Knight Lore keeps the same table at $F100 and reaches it exactly this way,
@@ -325,10 +323,7 @@ bit_reverse_table:	REPT	256,x
 sprite_flip_h:		ld		a,(hl)
 					xor		SPRITE_FLIPPED
 					ld		(hl),a		; the header now says which way round it is
-					rlca
-					rlca
-					rlca			; the width class, back down into the low bits
-					and		7
+					sprite_width_class
 					add		a,2		; width, in columns
 					ld		(.columns),a
 					add		a

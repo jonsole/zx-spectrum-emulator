@@ -64,6 +64,7 @@ def generate_sprite_data() -> None:
     generator = HERE / "sprites.py"
     packed = HERE / "sprite_data.bin"
     generated = HERE / "sprite_data.s"
+    table = HERE / "sprite_table.s"
 
     if not packed.is_file():
         # sprite_data.bin is the committed one and sprite_data.s is not, so
@@ -73,18 +74,22 @@ def generate_sprite_data() -> None:
         return
 
     newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime)
-    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+    if all(f.is_file() and f.stat().st_mtime >= newest_input
+           for f in (generated, table)):
         return
 
-    print(f"Regenerating {generated.name} from {packed.name}")
-    result = subprocess.run(
-        [sys.executable, str(generator)],
-        cwd=HERE,
-        capture_output=True,
-        encoding="utf-8",
-        check=True,
-    )
-    generated.write_text(result.stdout, encoding="utf-8")
+    # Two files, because the two halves go to different places in the image --
+    # see the note at the top of sprites.py.
+    for out, part in ((generated, "bitmaps"), (table, "table")):
+        print(f"Regenerating {out.name} from {packed.name}")
+        result = subprocess.run(
+            [sys.executable, str(generator), part],
+            cwd=HERE,
+            capture_output=True,
+            encoding="utf-8",
+            check=True,
+        )
+        out.write_text(result.stdout, encoding="utf-8")
 
 
 def assemble(sjasmplus: str) -> None:

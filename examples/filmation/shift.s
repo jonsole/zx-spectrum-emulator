@@ -71,11 +71,8 @@ shift_reset:		ld		hl,shift_arena
 ; buffer guard, which is the same fallback.
 shift_alloc:		push	hl
 					ld		a,(hl)
-					rlca
-					rlca
-					rlca			; the width class, down into the low bits
-					and		7		; width - 2
-					add		a,3		; ...so this is width + 1
+					sprite_width_class
+					add		a,3		; width - 2, so this is width + 1
 					add		a		; two bytes a column
 					ld		e,a
 					ld		d,0		; de = bytes in one row
