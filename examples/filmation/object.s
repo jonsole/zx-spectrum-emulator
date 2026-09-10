@@ -938,24 +938,6 @@ depth_insert_placed:	ld		hl,(sort_head)
 ; Out: cf = 1  still in the right place, leave it alone
 ;      cf = 0  it has crossed a neighbour and must be re-inserted
 ; Corrupts A, BC, DE, HL, IY.
-; Is this object still in depth order where it sits?
-;
-; Only a CERTAIN violation counts. depth_cmp sums the axes on which two
-; boxes do not overlap and returns that count less one, so zero means one
-; axis separates them and the answer is not a guess. Anything else is: two
-; axes pulling opposite ways, or the empty sum of two boxes in the same
-; place. The scan in depth_insert_placed already declines to act on a guess,
-; and this declines too -- which is what lets depth_relink walk out from
-; where an object already is instead of starting over. The test that says
-; stay and the walk that says move have to be the same test, or the walk has
-; nowhere to stop.
-;
-; It also leaves two objects in the same place in the order they had. A
-; character whose body rides at its legs' own Z -- the soldier, the wizard --
-; is exactly that, and it used to churn: the legs read as out of order
-; against their own body every step it took.
-;
-; Out: cf = 1  still in order
 depth_in_order:		ld		l,(ix+OBJ.PREV)
 					ld		h,(ix+OBJ.PREV+1)
 					ld		de,(sort_head)		; the front of the sorted run
@@ -968,9 +950,7 @@ depth_in_order:		ld		l,(ix+OBJ.PREV)
 .have_prev:			push	hl
 					pop		iy		; PREV is the predecessor itself here
 					call	depth_cmp
-					jr		nc,.check_next		; not further than it: nothing to answer
-					and		a
-					jr		z,.out_of_order		; certainly further: we must move back
+					jr		c,.out_of_order		; further than it: we must move back
 
 .check_next:		ld		l,(ix+OBJ.NEXT)
 					ld		h,(ix+OBJ.NEXT+1)
@@ -980,9 +960,7 @@ depth_in_order:		ld		l,(ix+OBJ.PREV)
 					push	hl
 					pop		iy
 					call	depth_cmp
-					jr		c,.in_order		; further than it: that is the way round
-					and		a
-					jr		z,.out_of_order		; certainly nearer: we must move on
+					jr		nc,.out_of_order		; nearer than it: we must move on
 .in_order:			scf		
 					ret		
 .out_of_order:		and		a		; clear carry
@@ -1034,63 +1012,5 @@ depth_relink:		ld		hl,prev_u
 .moved:				call	depth_cmp_setup
 					call	depth_in_order
 					ret		c		; moved, but not past anyone
-
-					; It has certainly crossed a neighbour, so it has to be put back -- but
-					; the list is in order apart from this one object, and a step of one
-					; carries it past very few of them. So walk out from where it already
-					; is, rather than scanning from the front of the sorted run: that
-					; compares against every object ahead of the answer, which for something
-					; near the end of the list is nearly all of them. It cost 12,400 T a
-					; call, twice a step.
-					;
-					; insert_at names the NEXT field the object came out of, so splicing
-					; there and stopping would put it back exactly where it was. Each walk
-					; below moves that field on while depth_in_order's own test says the
-					; object is on the wrong side of the neighbour there -- so the walk stops
-					; exactly where that test would call it settled, and cannot be asked to
-					; move again next step for the same reason.
-					ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)
-					ld		(insert_at),hl
 					call	depth_unlink
-
-					; Back, while it is certainly further than the object whose NEXT
-					; field it would go in.
-.walk_back:			ld		hl,(insert_at)
-					ld		de,(sort_head)
-					ld		a,l
-					cp		e
-					jr		nz,.back_cmp
-					ld		a,h
-					cp		d
-					jr		z,.walk_on		; the front of the sorted run
-.back_cmp:			push	hl
-					pop		iy		; an object IS its own NEXT field
-					call	depth_cmp
-					jr		nc,.walk_on		; not further than it: stop here
-					and		a
-					jr		nz,.walk_on		; further, but only a guess
-					ld		l,(iy+OBJ.PREV)
-					ld		h,(iy+OBJ.PREV+1)
-					ld		(insert_at),hl
-					jr		.walk_back
-
-					; ...and on, while it is certainly nearer than whoever would
-					; follow it. Only one of the two can ever take a step.
-.walk_on:			ld		hl,(insert_at)
-					ld		a,(hl)
-					inc		hl
-					ld		h,(hl)
-					ld		l,a		; whoever follows
-					ld		a,h
-					and		a
-					jr		z,.splice		; nothing does
-					push	hl
-					pop		iy
-					call	depth_cmp
-					jr		c,.splice		; further than it: this is the place
-					and		a
-					jr		nz,.splice		; only a guess: leave it be
-					ld		(insert_at),iy		; certainly nearer: go past it
-					jr		.walk_on
-.splice:			jp		depth_insert_placed.link
+					jp		depth_insert_placed		; the setup above still stands
