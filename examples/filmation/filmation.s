@@ -118,6 +118,22 @@ start:              di
                     ld      hl,room_shown
                     cp      (hl)
                     jr      nz,.enter
+
+                    ; Wait for the frame. Interrupts are off everywhere else --
+                    ; every part of the drawing path repurposes SP, so one taken
+                    ; mid-blit would push a return address into a sprite -- so
+                    ; they are let in here and nowhere else, for exactly one.
+                    ;
+                    ; IM 1 sends it to the ROM at $0038, which scans the keyboard
+                    ; through IY, so IY has to point at the system variables
+                    ; while that runs. Nothing else in the engine leaves it
+                    ; there: objects_draw_all uses IY as its list pointer, and
+                    ; sets it itself.
+                    ld      iy,$5C3A
+                    ei
+                    halt
+                    di
+
                     call    mover_step
                     jr      .loop
 
