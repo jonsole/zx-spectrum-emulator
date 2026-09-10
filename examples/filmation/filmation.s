@@ -203,7 +203,18 @@ PLAYER_BODY_GFX     EQU     39          ; 3 x 24
 PLAYER_U            EQU     128
 PLAYER_V            EQU     104         ; clear of the cauldron at 128,128
 PLAYER_Z            EQU     128         ; the floor
-PLAYER_BODY_UP      EQU     12          ; where the body rides above the legs
+; Where the body rides above the legs. Knight Lore uses 12 and so did this,
+; but it left a two-pixel gap, because the game also nudges the two graphics by
+; different amounts: sprite_adj has -6 for the legs and -8 for the body, and
+; calc_screen_xy subtracts that, so the body ends up two pixels further down
+; than its Z alone would put it.
+;
+; We have (0,0) for both, because adj.py harvests the object table from slot 4
+; -- "room objects start at slot 4" -- and the player lives in slots 0 to 3, so
+; its own graphics are never seen. Ten closes the gap; filling those entries in
+; would be the better answer, and would fix the horizontal placement too, since
+; the game nudges both halves 12 pixels left and we nudge them not at all.
+PLAYER_BODY_UP      EQU     10
 
 
 ; Put the player in the room that has just been built.
