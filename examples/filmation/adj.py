@@ -47,9 +47,19 @@ GFX, FLAGS, ADJ_X, ADJ_Y = 0x00, 0x07, 0x12, 0x13
 # Ten rooms are enough to see all the (graphic, mirrored) pairs the castle uses.
 ROOMS = [0x88, 0x08, 0x01, 0xE3, 0x67, 0x9B, 0xB4, 0xD7, 0x09, 0x5E]
 
-# Keys that make the knight walk. Knight Lore reads whole keyboard rows, so
-# several keys mean the same direction; these nine between them cover all four.
-WALK_KEYS = ["O", "P", "I", "U", "Y", "W", "E", "R", "T"]
+# Knight Lore does not have a key per direction. It scans four groups of keys
+# as units -- the routine at $B5F7 is called with masks that pull several
+# address lines low at once -- and the two that matter here are:
+#
+#   A S D F G / ENTER L K J H   walk forward
+#   CAPS Z X C V / SPACE SYM M N B   turn on the spot
+#
+# so he has to be turned before he will wear anything but the one facing. That
+# is why the first harvest came back with graphics 16-21 and 32-37 and nothing
+# for 24-29 and 40-45: he walked the same way for the whole run.
+WALK_KEY = "S"
+TURN_KEY = "X"
+TURNS = 9           # more than the four facings, so each is walked in twice
 
 
 class Dap:
@@ -141,16 +151,20 @@ def harvest():
     found = {}
 
     # The knight first. He is two objects -- legs in slot 0 and body in slot 1
-    # -- and he only wears his walking frames (16-21, and 32-37 for the body)
-    # while he is actually walking, so hold each direction key in turn. He
-    # faces both ways as he goes, which gets the mirrored pairs too.
-    for key in WALK_KEYS:
-        d.req("keyDown", {"key": key})
-        for _ in range(6):
-            d.go(0.1)
-            scan(d, found, "key " + key)
-        d.req("keyUp", {"key": key})
-        d.go(0.15)
+    # -- and he only wears his walking frames while he is actually walking, so
+    # turn him and walk him, over and over. Each facing is a different block of
+    # graphics or the same block mirrored, and both want harvesting.
+    for _ in range(TURNS):
+        d.req("keyDown", {"key": TURN_KEY})
+        d.go(0.12)
+        d.req("keyUp", {"key": TURN_KEY})
+        d.go(0.1)
+        d.req("keyDown", {"key": WALK_KEY})
+        for _ in range(8):
+            d.go(0.08)
+            scan(d, found, "walking")
+        d.req("keyUp", {"key": WALK_KEY})
+        d.go(0.12)
     print("walked the knight: %d pairs known" % len(found))
 
     # make every frame rebuild the room named at $5C10
@@ -178,6 +192,12 @@ def signed(v):
     return v - 256 if v > 127 else v
 
 
+# Written on a mirrored entry that was copied from the unmirrored one rather
+# than harvested. previous() skips these, so a re-run neither counts them as
+# known nor lets them stand in the way of the real value turning up.
+INHERITED = "; graphic %d, from the other way round"
+
+
 def emit(found):
     """Two tables of 256 signed pairs, one for each way round."""
     lines = [
@@ -199,6 +219,13 @@ def emit(found):
             note = ""
             if (g, flip) in found:
                 note = "; graphic %d" % g
+            elif flip and (g, 0) in found:
+                # Never seen mirrored. The other way round is a far better
+                # guess than nothing: a graphic mirrored in place stays within
+                # a pixel or two of where it was, where (0,0) puts it twelve
+                # out. Marked, so previous() does not read it back as harvest.
+                x, y = found[(g, 0)]
+                note = INHERITED % g
             lines.append("%-20s%-8s%4d,%4d%s"
                          % ("", "DB", signed(x), signed(y),
                             (" " * 8 + note) if note else ""))
@@ -229,7 +256,7 @@ def previous():
             m = re.match(r"\s+DB\s+(-?\d+),\s*(-?\d+)", line)
             if m:
                 pair = (int(m.group(1)) & 0xFF, int(m.group(2)) & 0xFF)
-                if pair != (0, 0):
+                if pair != (0, 0) and "from the other way round" not in line:
                     was[(g, flip)] = pair
                 g += 1
     return was

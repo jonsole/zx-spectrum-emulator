@@ -63,6 +63,7 @@ room_data_end:
 					INCLUDE "sprite.s"
 					INCLUDE "object.s"
 					INCLUDE "shift.s"
+					INCLUDE "character.s"
                     INCLUDE "room.s"
 
 					STRUCT SPRITE
@@ -185,62 +186,30 @@ mover_add:          ld      ix,mover
 
 ; --- the player -------------------------------------------------------------
 ;
-; Two objects, as Knight Lore draws it: legs on the floor and the body and head
-; a dozen units above them, moving together. That is why the game keeps two
-; records at the player's position rather than one.
-;
-; Same arrangement as the mover -- not part of the room, joins the sorted list
-; once the room is built. Both halves need the ALIGN after them: object_record
-; lays down 23 bytes and a record is ROOM_STRIDE wide.
-                    ALIGN   ROOM_STRIDE
-player_legs:        object_record   OBJ_MOVABLE, 0, 6, 6, 12
-                    ALIGN   ROOM_STRIDE
-player_body:        object_record   OBJ_MOVABLE, 0, 6, 6, 12
-                    ALIGN   ROOM_STRIDE
-
-; The knight is two objects, and the game numbers them in step: legs 16 to 21
-; are one walk cycle, and bodies 32 to 37 are the same cycle sixteen higher.
-PLAYER_LEGS_GFX     EQU     18          ; 3 x 16
-PLAYER_BODY_GFX     EQU     PLAYER_LEGS_GFX + 16    ; 3 x 24
+; A character like any other -- see character.s. The knight's legs are the
+; block at 16 and his body the one at 32; he starts facing away from the
+; viewer and up the screen.
+PLAYER_LEGS_GFX     EQU     16
+PLAYER_BODY_GFX     EQU     32
 PLAYER_U            EQU     128
 PLAYER_V            EQU     104         ; clear of the cauldron at 128,128
-PLAYER_Z            EQU     128         ; the floor
-; Where the body rides above the legs, the same twelve Knight Lore uses. The
-; two halves meet because the game nudges them by different amounts as well:
-; sprite_adj has -6 for the legs and -8 for the body, and calc_screen_xy
-; subtracts that, so the body lands two pixels lower than its Z alone says.
-PLAYER_BODY_UP      EQU     12
+PLAYER_FACING       EQU     0           ; -U, up and left
+
+player:             character_record PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
 
 
 ; Put the player in the room that has just been built.
-player_add:         ld      ix,player_legs
-                    ld      a,PLAYER_LEGS_GFX
-                    ld      e,PLAYER_Z
-                    call    .half
-                    ld      ix,player_body
-                    ld      a,PLAYER_BODY_GFX
-                    ld      e,PLAYER_Z + PLAYER_BODY_UP
-        ;; NB: fall through
-.half:              ld      (ix+OBJ.GFX),a
-                    ld      (ix+OBJ.U),PLAYER_U
-                    ld      (ix+OBJ.V),PLAYER_V
-                    ld      (ix+OBJ.Z),e
-                    ld      (ix+OBJ.FLAGS),OBJ_MOVABLE
-                    ld      (ix+OBJ.BUF_L),0        ; the old arena went with the
-                    ld      (ix+OBJ.BUF_H),0        ; old room
-                    push    af
-                    call    room_adjust
-                    pop     af
-                    call    object_place
-                    jp      depth_insert
+player_add:         ld      ix,player
+                    ld      b,PLAYER_U
+                    ld      c,PLAYER_V
+                    jp      character_add
 
 
-; Read the keys and step the player.
+; Read the keys and walk the player.
 ;
-; The four isometric directions are the two floor axes both ways. With
-; screenX = U + V - 128 and the base hung off (V - U) >> 1, a step along +U
-; goes down and right, +V up and right, and their negatives the other two --
-; so the keys pair up as a diamond.
+; The four isometric directions are the two floor axes both ways, so the keys
+; pair up as a diamond. Which facing each of them is comes from
+; character_steps, and the numbers here are indexes into it.
 KEY_UPLEFT          EQU     $FBFE       ; Q, bit 0
 KEY_DOWNRIGHT       EQU     $FDFE       ; A, bit 0
 KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
@@ -262,86 +231,15 @@ player_step:        ld      bc,KEY_UPLEFT
                     ret                         ; nothing held: nothing moved,
                     ; and so nothing to repaint
 
-        ; D is the step in U, E the step in V -- so LD DE,$FF00 is one back
-        ; along U and nothing along V. Going the other way: +U is down and
-        ; right, +V up and right, and the negatives are the opposite corners.
-.up_left:           ld      de,$FF00            ; -U
-                    jr      .move
-.down_right:        ld      de,$0100            ; +U
-                    jr      .move
-.up_right:          ld      de,$0001            ; +V
-                    jr      .move
-.down_left:         ld      de,$00FF            ; -V
-
-        ; The knight is one thing in two records, so he repaints as one region.
-        ; Doing a half at a time flickered along his waist: the legs and the
-        ; body overlap by six rows, and repainting the legs composites the
-        ; body wherever it is at that moment -- which, halfway through a step,
-        ; is still where it was. The body's own repaint put it right, but not
-        ; before the raster had had a chance to show the wrong one. Both
-        ; halves move first now, and the seam is painted once.
-.move:              call    region_reset
-                    ld      ix,player_legs
-                    call    region_add          ; where he was
-                    ld      ix,player_body
-                    call    region_add
-                    push    de
-                    ld      ix,player_legs
-                    call    player_move
-                    pop     de
-                    ld      ix,player_body
-                    call    player_move
-                    ld      ix,player_legs
-                    call    region_add          ; and where he is now
-                    ld      ix,player_body
-                    call    region_add
-                    jp      redraw_view
-
-; How far the player may walk before the wall stops it.
-;
-; Provisional. The right answer is room_size_tbl, which gives each room shape
-; its floor in U and V -- room_shape reads that table already but keeps only
-; the Z. Until the two are wired through, these are the numbers the room looks
-; right at: the blocks stand at 88 to 168 and the walls at 59 and 196, so the
-; floor between them is about this.
-;
-; Something has to stop it, though. Walk out of the room and the projection
-; puts the object at screen coordinates that wrap, so a repaint region wraps
-; with it and scribbles down the far edge of the screen.
-; The upper one is not a matter of taste: the worst case is U and V both at
-; it, where x = U + V - 128 is largest, and a 3-byte sprite from there has to
-; stay under 256 or the repaint region wraps to the far side of the screen.
-; That puts the ceiling at 180. The floor is where x would go negative, 64,
-; with a little to spare.
-FLOOR_LO            EQU     72
-FLOOR_HI            EQU     180
-
-
-; Move one object by D in U and E in V. The caller repaints.
-player_move:        push    de
-                    call    extent_save
-                    pop     de
-        ; Work the step out, and only keep it if it lands between the walls.
-        ; Simpler than moving and undoing, and it does not need to know which
-        ; of the two axes this step was along.
-                    ld      a,(ix+OBJ.U)
-                    add     a,d
-                    cp      FLOOR_LO
-                    jr      c,.keep_u
-                    cp      FLOOR_HI + 1
-                    jr      nc,.keep_u
-                    ld      (ix+OBJ.U),a
-.keep_u:            ld      a,(ix+OBJ.V)
-                    add     a,e
-                    cp      FLOOR_LO
-                    jr      c,.keep_v
-                    cp      FLOOR_HI + 1
-                    jr      nc,.keep_v
-                    ld      (ix+OBJ.V),a
-.keep_v:
-                    ld      a,(ix+OBJ.GFX)
-                    call    object_place
-                    jp      depth_relink
+.up_left:           ld      a,0
+                    jr      .walk
+.up_right:          ld      a,1
+                    jr      .walk
+.down_left:         ld      a,2
+                    jr      .walk
+.down_right:        ld      a,3
+.walk:              ld      ix,player
+                    jp      character_walk
 
 
 ; One unit along the square, then repaint only what that disturbed.

@@ -33,12 +33,12 @@ sprite_adj:
                     DB       -12,  -6        ; graphic 21
                     DB       -12,  -7        ; graphic 22
                     DB         0,   0
+                    DB       -12,  -6        ; graphic 24
+                    DB       -12,  -6        ; graphic 25
+                    DB       -12,  -6        ; graphic 26
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 28
+                    DB       -12,  -6        ; graphic 29
                     DB       -12,   3        ; graphic 30
                     DB         0,   0
                     DB       -12,  -8        ; graphic 32
@@ -49,13 +49,13 @@ sprite_adj:
                     DB       -12,  -8        ; graphic 37
                     DB       -12,  -8        ; graphic 38
                     DB         0,   0
+                    DB       -12,  -8        ; graphic 40
                     DB         0,   0
+                    DB       -12,  -8        ; graphic 42
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -8        ; graphic 44
+                    DB       -12,  -8        ; graphic 45
+                    DB       -12,  -8        ; graphic 46
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -273,64 +273,64 @@ sprite_adj_flipped:
                     DB        -7,  -2        ; graphic 3
                     DB       -17,  -2        ; graphic 4
                     DB        -7,  -2        ; graphic 5
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -16,  -8        ; graphic 6, from the other way round
+                    DB       -16,  -8        ; graphic 7, from the other way round
                     DB       -12,  -6        ; graphic 8
                     DB       -12,  -6        ; graphic 9
                     DB       -20,  -1        ; graphic 10
                     DB       -12,  -2        ; graphic 11
                     DB        -8,  -4        ; graphic 12
-                    DB         0,   0
-                    DB         0,   0
+                    DB        -8,  -4        ; graphic 13, from the other way round
+                    DB        -8,  -4        ; graphic 14, from the other way round
                     DB        -8,  -4        ; graphic 15
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 16
+                    DB       -12,  -6        ; graphic 17
+                    DB       -12,  -6        ; graphic 18
+                    DB       -12,  -6        ; graphic 19
+                    DB       -12,  -6        ; graphic 20
+                    DB       -12,  -6        ; graphic 21
+                    DB       -12,  -7        ; graphic 22, from the other way round
                     DB       -16,  -8        ; graphic 23
+                    DB       -12,  -6        ; graphic 24
+                    DB       -12,  -6        ; graphic 25
+                    DB       -12,  -6        ; graphic 26
+                    DB       -12,  -6        ; graphic 27
+                    DB       -12,  -6        ; graphic 28
+                    DB       -12,  -6        ; graphic 29
+                    DB       -12,   3        ; graphic 30, from the other way round
+                    DB         0,   0
+                    DB       -12,  -8        ; graphic 32
+                    DB       -12,  -8        ; graphic 33
+                    DB       -12,  -8        ; graphic 34
+                    DB       -12,  -8        ; graphic 35
+                    DB       -12,  -8        ; graphic 36
+                    DB       -12,  -8        ; graphic 37
+                    DB       -12,  -8        ; graphic 38, from the other way round
+                    DB         0,   0
+                    DB       -12,  -8        ; graphic 40
+                    DB       -12,  -8        ; graphic 41
+                    DB       -12,  -8        ; graphic 42
+                    DB       -12,  -8        ; graphic 43
+                    DB       -12,  -8        ; graphic 44
+                    DB       -12,  -8        ; graphic 45
+                    DB       -12,  -8        ; graphic 46
+                    DB       -12,  -8        ; graphic 47
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
+                    DB       -16,  -8        ; graphic 54, from the other way round
+                    DB       -16,  -8        ; graphic 55, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -16,  -8        ; graphic 62, from the other way round
+                    DB       -16,  -8        ; graphic 63, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -351,6 +351,25 @@ sprite_adj_flipped:
                     DB       -12,  -6        ; graphic 81
                     DB         0,   0
                     DB       -12,  -6        ; graphic 83
+                    DB       -16,  -8        ; graphic 84, from the other way round
+                    DB       -16,  -8        ; graphic 85, from the other way round
+                    DB         0,   0
+                    DB        -8,  -4        ; graphic 87, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -16,  -8        ; graphic 91, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,  -4        ; graphic 97, from the other way round
+                    DB       -12,  -4        ; graphic 98, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,  -4        ; graphic 102, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -368,33 +387,14 @@ sprite_adj_flipped:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB       -12,  -4        ; graphic 120, from the other way round
+                    DB       -12,  -4        ; graphic 121, from the other way round
+                    DB       -12,  -4        ; graphic 122, from the other way round
+                    DB       -12,  -4        ; graphic 123, from the other way round
+                    DB       -12,  -4        ; graphic 124, from the other way round
+                    DB       -12,  -4        ; graphic 125, from the other way round
+                    DB       -12,  -4        ; graphic 126, from the other way round
+                    DB       -12,  -4        ; graphic 127, from the other way round
                     DB        -8,  -2        ; graphic 128
                     DB        -8,  -2        ; graphic 129
                     DB        -8,  -2        ; graphic 130
@@ -408,6 +408,31 @@ sprite_adj_flipped:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
+                    DB       -16, -12        ; graphic 141, from the other way round
+                    DB       -24,  12        ; graphic 142, from the other way round
+                    DB       -16,  -8        ; graphic 143, from the other way round
+                    DB         0,   0
+                    DB       -12,  -6        ; graphic 145, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,   7        ; graphic 150, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,   3        ; graphic 158, from the other way round
+                    DB         0,   0
+                    DB       -12,  -4        ; graphic 160, from the other way round
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB         0,   0
+                    DB       -12,  -4        ; graphic 165, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
@@ -421,36 +446,11 @@ sprite_adj_flipped:
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0
+                    DB        -8,  -4        ; graphic 179, from the other way round
+                    DB        -8,  -4        ; graphic 180, from the other way round
                     DB         0,   0
                     DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
-                    DB         0,   0
+                    DB        -8,  -4        ; graphic 183, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0

@@ -64,6 +64,20 @@ ADJ_Y:				DS		1
 ; fact to look the pixel adjustments up, and animation will need it to step
 ; from one frame to the next.
 GFX:				DS		1
+
+; --- and these belong to a character, and to nothing else ------------------
+;
+; A character is two records that move as one -- legs on the floor, body a
+; dozen units above -- and the state that steers them lives in the tail of the
+; legs record. A record is OBJ bytes inside a ROOM_STRIDE slot, so this space
+; is already there: the room's own objects simply never look at it.
+FACING:				DS		1	; 0 to 3 -- see character_walk
+PHASE:				DS		1	; where in the six-frame walk cycle
+TICK:				DS		1	; frames left on this one
+LEGS_BASE:			DS		1	; first graphic of the legs, facing 0 phase 0
+BODY_BASE:			DS		1	; ...and of the body, which is a separate
+					; number because the castle's walkers share
+					; leg artwork and each bring their own top
 					ENDS
 
 
@@ -100,6 +114,7 @@ OBJ_BACKGROUND		EQU		0x40
 ; as SPRITE_FLIPPED in the sprite's own header, so the comparison between
 ; the two is a plain XOR.
 OBJ_FLIP_H			EQU		SPRITE_FLIPPED
+OBJ_FLIP_BIT		EQU		0		; ...and its bit number, for SET and RES
 
 ; One object record. The list owns NEXT and PREV -- they start zero and
 ; depth_insert fills them in. `shift_buf` is the object's own rotation
