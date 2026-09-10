@@ -413,16 +413,6 @@ prev_u:				DB		0
 prev_v:				DB		0
 prev_z:				DB		0
 
-; The copy routine for each region width, 1 to VIEW_BUF_WIDTH. These read a
-; plain buffer -- one composited byte per column, which is what view_buffer
-; holds. vid_buff_blit_5 is the odd one out and is not in here: it reads an
-; interleaved mask/data source, which nothing in this engine copies to the
-; screen.
-copy_routines:		DW		vid_buff_copy_1, vid_buff_copy_2, vid_buff_copy_3
-					DW		vid_buff_copy_4, vid_buff_copy_5, vid_buff_copy_6
-					DW		vid_buff_copy_7, vid_buff_copy_8
-
-
 ; redraw_orient used to live here: one pass per region, settling every
 ; shared graphic before objects_draw_all ran. That is one decision too few
 ; -- two objects in a region wanting opposite orientations leave whichever
@@ -599,18 +589,17 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; sprite_orient, at the point it is about to draw one.
 					call	objects_draw_all
 
-					; the copy routine for this width...
+					; Set the copy routine up for this width. There is one
+					; of it: how many bytes of a row to move, and the step from
+					; the end of one row of the buffer to the start of the
+					; next, both go in as immediates.
 					ld		a,(region_width)
-					dec		a
-					add		a		; (width - 1) * 2
-					ld		e,a
-					ld		d,0
-					ld		hl,copy_routines
-					add		hl,de
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					ld		(.copy + 1),de
+					ld		b,a		; B is not wanted until pixelAddress
+					ld		a,VIEW_BUF_WIDTH
+					sub		b
+					ld		(vid_buff_copy.hstride+1),a
+					add		a		; the LDI chain is two bytes a column
+					ld		(vid_buff_copy.entry+1),a
 
 					; ...and where on the screen it goes
 					ld		a,(view_x_extent)		; min x, in bytes
@@ -628,7 +617,7 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; routine's own -- it resets it per row so
 					; that LDI's countdown can never borrow
 					; into B and lose a row.
-.copy:				call	0		; -> vid_buff_copy_N
+					call	vid_buff_copy
 					ret		
 
 

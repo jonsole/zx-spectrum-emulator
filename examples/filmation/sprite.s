@@ -35,8 +35,8 @@ sprite_jump_table:
 					add	a
 					jp	objects_draw_all.x_adjust
 					DB	0,0,0,0
-					jump_entry sprite_blit_1_of_2
-					jump_entry sprite_blit_2_of_2
+					DB	0,0,0,0
+					DB	0,0,0,0
 					DB	0,0,0,0
 					DB	0,0,0,0
 					DB	0,0,0,0
@@ -49,9 +49,9 @@ sprite_jump_table:
 					add	l
 					jp	objects_draw_all.x_adjust
 					DB	0,0
-					jump_entry sprite_blit_1_of_3
-					jump_entry sprite_blit_2_of_3
-					jump_entry sprite_blit_3_of_3
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
 					DB	0,0,0,0
 					DB	0,0,0,0
 					DB	0,0
@@ -62,10 +62,10 @@ sprite_jump_table:
 					add	a
 					jp	objects_draw_all.x_adjust
 					DB	0,0,0
-					jump_entry sprite_blit_1_of_4
-					jump_entry sprite_blit_2_of_4
-					jump_entry sprite_blit_3_of_4
-					jump_entry sprite_blit_4_of_4
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
 					DB	0,0,0,0
 					DB	0,0
 					DW	object_update.shift_final - (18 * 3)
@@ -77,11 +77,11 @@ sprite_jump_table:
 					add	l
 					jp	objects_draw_all.x_adjust
 					DB	0
-					jump_entry sprite_blit_1_of_5
-					jump_entry sprite_blit_2_of_5
-					jump_entry sprite_blit_3_of_5
-					jump_entry sprite_blit_4_of_5
-					jump_entry sprite_blit_5_of_5
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
 					DB	0,0
 					DW	object_update.shift_final - (18 * 4)
 
@@ -97,12 +97,12 @@ sprite_jump_table:
 					add	l					; *6
 					jp	objects_draw_all.x_adjust
 					DB	0
-					jump_entry sprite_blit_1_of_6
-					jump_entry sprite_blit_2_of_6
-					jump_entry sprite_blit_3_of_6
-					jump_entry sprite_blit_4_of_6
-					jump_entry sprite_blit_5_of_6
-					jump_entry sprite_blit_6_of_6
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
+					DB	0,0,0,0
 
 					; The table is indexed by a single byte in L, so it has to stay
 					; inside its page. Groups are 32 bytes at (width - 2) * 32, which
@@ -113,85 +113,156 @@ sprite_jump_table:
 
 				; DE' - view buffer address
 				; HL' - sprite mask/data address
-				; B' - number of lines
-
-				; macro to generate routine to blit num_bytes of a sprite
+				; B'  - number of rows
+				; IX  - where to go when the sprite is drawn
 				;
-				; The view buffer is 512 bytes, so DE cannot be walked with `inc e`
-				; throughout -- E wrapping past 255 has to carry into D. It does not
-				; have to carry often, though. Rows are VIEW_BUF_WIDTH bytes on a
-				; VIEW_BUF_WIDTH boundary, so the only address in the buffer where E
-				; wraps is a row start; every increment strictly inside a row is safe
-				; as `inc e`, and only the ones that can land on a row start need the
-				; 16-bit form. Those are the last column increment (which lands on the
-				; next row when the sprite runs to the right edge of the region) and
-				; the row advance.
-				MACRO sprite_blit width,num_bytes
-					exx
-					ld 		(.restore_sp+1),sp	; save SP
-					ld		sp,hl				; load SP with sprite data address
-.loop:				REPT	width,x
-						pop     hl				; pop mask+data.  Even if not needed pop is quicker than sp += 2
-						IF (num_bytes > x)
-							ld      a, (de)		; get byte from view buffer
-							and		l
-							xor     h			; or data
-							ld      (de), a		; write back to view buffer
-						ENDIF
-						IF (x < width - 1)
-							inc     e			; still inside this row: E cannot wrap
-						ENDIF
-					ENDR
+				; One blitter, not twenty. A blit is two numbers: how many
+				; columns of a row land inside the region, and how many more
+				; the sprite has that do not. The clipped ones are always on
+				; the right, and while nothing is composited from them their
+				; source bytes still have to be stepped over, or the next row
+				; would start in the wrong place. There used to be a fully
+				; unrolled routine for every (columns, width) pair the sprite
+				; set can produce -- twenty of them, 756 bytes.
+				;
+				; Both numbers are settled before the first row and hold for
+				; all of them, so they are written into the code instead of
+				; tested in it. The entry jump picks which column of the chain
+				; to start at, and a DJNZ is laid over the run of POPs at the
+				; point where the clipped columns end. Nothing is decided per
+				; row, so a row costs what it always did.
+				;
+				; The two bytes that DJNZ covers are POPs again by the time the
+				; next sprite is drawn, which is what `patched` is for.
+; Point the one blitter at this sprite.
+;
+;   A - the columns of a row that land inside the region
+;   D - BLIT_IDX, which matches however many columns a row of the sprite
+;       actually has: shift_sprite bumps it by a width class when it rotates,
+;       for the overflow column
+;
+; Once per object drawn, against that sprite's sixteen to sixty-four rows. B,
+; C, E, H and L are all dead here -- the blit's own registers are in the other
+; bank -- and A is finished with by the time it jumps.
+sprite_blit_setup:
+					ld		c,a					; c = columns to composite
+					ld		a,d					; blit index back to a width
+					rlca
+					rlca
+					rlca
+					and		7
+					add		a,2
+					sub		c
+					ld		b,a					; b = columns to step over
 
-					; The last column's step and the gap to the next row, in one
-					; move. Nothing is read between them, so there is no reason to
-					; land on the row's last byte at all -- which is what makes this
-					; cheaper than the stride it walks. A is free here, the column
-					; loop having finished with it.
-					;
-					; This is the one step that can cross the buffer's page break, so
-					; it is also the only one that has to carry into D. Off the fast
-					; path: one row per region at most, and only for a region tall
-					; enough to reach row 32.
-					IF (VIEW_BUF_WIDTH-width+1) <= 3
-						REPT	VIEW_BUF_WIDTH-width+1
-							inc		de			; the chain is cheaper when this short
-						ENDR
-					ELSE
-						ld		a,e
-						add		a,VIEW_BUF_WIDTH-width+1
-						ld		e,a
-						jr		nc,.same_page
-						inc		d
+					ld		a,VIEW_BUF_WIDTH + 1
+					sub		c
+					ld		(sprite_blit.vstride+1),a
+
+					; How far into the column chain to start. The columns are
+					; all one size bar the last, so this counts from the wide
+					; end, and the answer is a displacement rather than an
+					; address because .entry is a JR sitting right in front of
+					; the chain.
+					ld		a,BLIT_COLUMNS
+					sub		c
+					add		a					; * 2
+					ld		e,a
+					add		a					; * 4
+					add		e					; * BLIT_COLUMN_SIZE
+					ld		(sprite_blit.entry+1),a
+					ld		e,a					; the DJNZ below wants it too
+
+					; Put back the two bytes the last DJNZ covered...
+					ld		hl,(sprite_blit.patched)
+					ld		(hl),$F1			; POP AF
+					inc		hl
+					ld		(hl),$F1
+
+					; ...and lay a new one over the POPs this sprite does not
+					; need. Its own displacement is the entry's, less the POPs
+					; it now sits in front of, and a constant for the distance
+					; between the two runs.
+					ld		a,low sprite_blit.pops
+					add		a,b
+					ld		l,a
+					ld		h,high sprite_blit.pops
+					ld		(sprite_blit.patched),hl
+					ld		(hl),$10			; DJNZ
+					inc		hl
+					ld		a,e
+					sub		b
+					add		a,(sprite_blit.c6 - sprite_blit.pops - 2) & $FF
+					ld		(hl),a
+					jp		sprite_blit
+
+
+BLIT_COLUMNS		EQU		6		; the widest a sprite gets: five bytes of
+					; bitmap, and one more when it is rotated
+BLIT_COLUMN_SIZE	EQU		6		; and what one column of the chain assembles
+					; to. sprite_blit_setup multiplies by this
+					; with a shift and an add, so it cannot
+					; read the EQU -- the ASSERT below is what
+					; keeps the two honest.
+
+sprite_blit:		exx
+					ld		(.restore_sp+1),sp	; save SP
+					ld		sp,hl				; SP walks the sprite
+
+.entry:				DB		$18, 0				; JR, with the displacement patched:
+					; which column of the chain to enter at.
+					; Zero is BLIT_COLUMNS of them, and
+					; falls straight through to .c6.
+
+					; One column: pop the interleaved mask/data pair and
+					; composite it into the view buffer. The buffer is 512
+					; bytes, so E wrapping has to carry into D -- but the only
+					; address where that can happen is a row start, and every
+					; increment here is strictly inside a row. The last column
+					; has no increment at all: the row advance below does its
+					; step as part of the stride, and carries properly.
+.c6:
+				REPT	BLIT_COLUMNS - 1
+					pop		hl
+					ld		a,(de)
+					and		l
+					xor		h
+					ld		(de),a
+					inc		e
+				ENDR
+.c1:				pop		hl
+					ld		a,(de)
+					and		l
+					xor		h
+					ld		(de),a
+
+					; The same column of the next row.
+					ld		a,e
+.vstride:			add		a,0					; patched: VIEW_BUF_WIDTH + 1 - columns
+					ld		e,a
+					jr		nc,.same_page
+					inc		d
 .same_page:
-					ENDIF
-					djnz	.loop
+					; Step over the columns clipped off the right-hand side.
+					; The DJNZ sits just past however many of these this sprite
+					; needs, so the rest are never reached -- and when none are
+					; needed it sits at the front and this costs nothing.
+.pops:			REPT	BLIT_COLUMNS - 1
+					pop		af
+				ENDR
+					DB		0,0					; room for it past the lot
+
 .restore_sp:		ld		sp,0				; restore SP, value set before loop
-					jp 		(ix)
-				ENDM
+					jp		(ix)
 
+; Where the DJNZ went last time, so those two bytes can be made POPs again.
+.patched:			DW		.pops
 
+					ASSERT	sprite_blit.c1 - sprite_blit.c6 == (BLIT_COLUMNS - 1) * BLIT_COLUMN_SIZE
 
-sprite_blit_1_of_2:	sprite_blit 2,1
-sprite_blit_2_of_2:	sprite_blit 2,2
-sprite_blit_1_of_3:	sprite_blit 3,1
-sprite_blit_2_of_3:	sprite_blit 3,2
-sprite_blit_3_of_3:	sprite_blit 3,3
-sprite_blit_1_of_4:	sprite_blit 4,1
-sprite_blit_2_of_4:	sprite_blit 4,2
-sprite_blit_3_of_4:	sprite_blit 4,3
-sprite_blit_4_of_4:	sprite_blit 4,4
-sprite_blit_1_of_5:	sprite_blit 5,1
-sprite_blit_2_of_5:	sprite_blit 5,2
-sprite_blit_3_of_5:	sprite_blit 5,3
-sprite_blit_4_of_5:	sprite_blit 5,4
-sprite_blit_5_of_5:	sprite_blit 5,5
-sprite_blit_1_of_6:	sprite_blit 6,1
-sprite_blit_2_of_6:	sprite_blit 6,2
-sprite_blit_3_of_6:	sprite_blit 6,3
-sprite_blit_4_of_6:	sprite_blit 6,4
-sprite_blit_5_of_6:	sprite_blit 6,5
-sprite_blit_6_of_6:	sprite_blit 6,6
+					; The DJNZ is addressed as `low .pops + skip`, so the run
+					; must not straddle a page.
+					ASSERT	high sprite_blit.pops == high (sprite_blit.pops + BLIT_COLUMNS - 1)
 
 
 

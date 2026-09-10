@@ -666,20 +666,19 @@ objects_draw_all:
 					; DE' - view buffer address + adjustment
 					; B' - blit line count
 
-					; Calculate index into blit jump table
-					ex		af,af'				; Get x overlap (number of bytes in each row to blit)
-					inc		a					; 1 + (x_overlap)
-					add		a					; 2 + (x_overlap * 2)
-					add		a					; 4 + (x_overlap * 4)
-					add		d					; A = 4 + (x_overlap * 4) + blit_table_index; D/BLIT_IDX matches however many columns/row SPRITE_L/H actually has (shift_sprite bumps it by one width-class when it shifts, to account for the overflow column)
-
 					; HL' - sprite address + adjustment
 					; DE' - view buffer address + adjustment
 					; B' - blit line count
 
-					; Jump to width specific blit routine
-					ld		l,a
-					jp		(hl)
+					; Set the blitter up for this sprite and go. There is one
+					; blitter, and sprite_blit_setup writes into it the two
+					; numbers that used to pick between twenty.
+					;
+					; Out of line only to keep this loop inside a byte's reach:
+					; the four filter tests above are JRs, and the setup is
+					; longer than what is left of their range.
+					ex		af,af'				; x overlap: the columns to composite
+					jp		sprite_blit_setup
 
 					; Return here after blit routine
 .next_object:		ld		a,iyh
