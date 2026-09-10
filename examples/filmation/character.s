@@ -253,8 +253,21 @@ character_move:		call	region_reset
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 
+					; The lower half is re-sorted against the whole run. The upper
+					; one starts from wherever the lower ended up, which Head Over
+					; Heels does too, in EnlistAux, and for the same reason: the two
+					; share U and V and the upper is the nearer, so it can never
+					; belong in front of the lower. Everything the scan would compare
+					; on its way down to the lower half it answers the same way for
+					; the upper -- so this is not a shortcut past the walk, it is the
+					; rest of it.
 					push	de
+					ld		hl,0
+					ld		(relink_from),hl
 					call	character_half
+					push	ix
+					pop		hl		; the lower half is its own NEXT field
+					ld		(relink_from),hl
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
 					pop		de

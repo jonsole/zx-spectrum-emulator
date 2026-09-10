@@ -861,6 +861,10 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)
 
 insert_at:			DW		0		; the NEXT field we will write
 
+; Where a re-insert starts looking, or zero for the front of the sorted run.
+; Only the upper half of a two-part object sets it -- see character_move.
+relink_from:		DW		0
+
 ; Put an object into the list in depth order. It must not already be in
 ; the list -- NEXT and PREV are written, not read.
 ;   IX -> the object
@@ -875,8 +879,12 @@ insert_at:			DW		0		; the NEXT field we will write
 depth_insert:		call	depth_cmp_setup
 					; NB: depth_insert_placed assumes depth_cmp_setup has already run for
 					; this object -- depth_relink calls it once and then uses both.
-depth_insert_placed:	ld		hl,(sort_head)
-					ld		(insert_at),hl		; default: the front of the SORTED run
+depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
+					; NB: fall through
+
+; ...and the same, starting at the NEXT field HL names instead of at the front.
+;   IX -> the object, HL -> where to start looking
+depth_insert_from:	ld		(insert_at),hl
 					ld		a,(hl)
 					inc		hl
 					ld		h,(hl)
@@ -973,7 +981,7 @@ depth_in_order:		ld		l,(ix+OBJ.PREV)
 ; Corrupts A, BC, DE, HL.
 background_insert:	ld		hl,(sort_head)
 					ld		(insert_at),hl
-					call	depth_insert_placed.link
+					call	depth_insert_from.link
 					push	ix
 					pop		hl
 					ld		(sort_head),hl		; our NEXT field is the new boundary
@@ -1013,4 +1021,9 @@ depth_relink:		ld		hl,prev_u
 					call	depth_in_order
 					ret		c		; moved, but not past anyone
 					call	depth_unlink
-					jp		depth_insert_placed		; the setup above still stands
+					ld		hl,(relink_from)
+					ld		a,h
+					or		l
+					jr		nz,.from		; part-way down: pick up from there
+					ld		hl,(sort_head)		; ...or the front of the sorted run
+.from:				jp		depth_insert_from		; the setup above still stands
