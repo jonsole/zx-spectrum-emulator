@@ -577,7 +577,21 @@ objects_draw_all:
 					sub		l					; A += sprite_x_adjustment
 					add		a					; Double for interleaved mask and data
 					pop		hl					; Get sprite address					
-					add		l					; A = L + adjustment 
+
+					; That doubling is the one step here that can leave eight
+					; bits. A holds rows-skipped * columns + the x adjustment,
+					; and doubling it for the mask/data pair takes a 52-row
+					; arch leaf clipped 49 rows into a region past 255: 198
+					; doubles to 396, which wraps to 140 and reads row 17 of
+					; the sprite instead of row 49. It drew as a few stray
+					; pixels at the foot of both rear arches, because that is
+					; the only place a sprite this tall is clipped this deeply.
+					;
+					; POP does not touch the flags, so the carry is still the
+					; one ADD A left.
+					jr		nc,.low_half
+					inc		h
+.low_half:			add		l					; A = L + adjustment 
 					ld		l,a					; L = A
  					adc		h 	  	 			; A = A+L+H+carry
     				sub		l       			; A = H+carry
