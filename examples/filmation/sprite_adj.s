@@ -32,11 +32,11 @@ sprite_adj:
                     DB       -12,  -6        ; graphic 20
                     DB       -12,  -6        ; graphic 21
                     DB       -12,  -7        ; graphic 22
-                    DB         0,   0
+                    DB       -16,  -8        ; graphic 23, from the other way round
                     DB       -12,  -6        ; graphic 24
                     DB       -12,  -6        ; graphic 25
                     DB       -12,  -6        ; graphic 26
-                    DB         0,   0
+                    DB       -12,  -6        ; graphic 27, from the other way round
                     DB       -12,  -6        ; graphic 28
                     DB       -12,  -6        ; graphic 29
                     DB       -12,   3        ; graphic 30
@@ -50,13 +50,13 @@ sprite_adj:
                     DB       -12,  -8        ; graphic 38
                     DB         0,   0
                     DB       -12,  -8        ; graphic 40
-                    DB         0,   0
+                    DB       -12,  -8        ; graphic 41, from the other way round
                     DB       -12,  -8        ; graphic 42
-                    DB         0,   0
+                    DB       -12,  -8        ; graphic 43, from the other way round
                     DB       -12,  -8        ; graphic 44
                     DB       -12,  -8        ; graphic 45
                     DB       -12,  -8        ; graphic 46
-                    DB         0,   0
+                    DB       -12,  -8        ; graphic 47, from the other way round
                     DB         0,   0
                     DB         0,   0
                     DB         0,   0

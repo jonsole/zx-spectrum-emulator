@@ -219,12 +219,14 @@ def emit(found):
             note = ""
             if (g, flip) in found:
                 note = "; graphic %d" % g
-            elif flip and (g, 0) in found:
-                # Never seen mirrored. The other way round is a far better
-                # guess than nothing: a graphic mirrored in place stays within
-                # a pixel or two of where it was, where (0,0) puts it twelve
-                # out. Marked, so previous() does not read it back as harvest.
-                x, y = found[(g, 0)]
+            elif (g, 1 - flip) in found:
+                # Never seen this way round. The other way round is a far
+                # better guess than nothing: a graphic mirrored in place stays
+                # within a pixel or two of where it was, where (0,0) puts it
+                # twelve out -- which is what the knight's walk did, jumping
+                # sideways on the three frames of it the harvest had missed.
+                # Marked, so previous() does not read it back as harvest.
+                x, y = found[(g, 1 - flip)]
                 note = INHERITED % g
             lines.append("%-20s%-8s%4d,%4d%s"
                          % ("", "DB", signed(x), signed(y),
