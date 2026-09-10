@@ -20,6 +20,7 @@
 #include "beeper.h"
 #include "http.h"
 #include "net.h"
+#include "register_names.h"
 #include "screen_stream.h"
 #include "snapshot.h"
 
@@ -358,6 +359,15 @@ json tools_list() {
         "Load a .sna snapshot (base64-encoded) -- restores RAM, registers, and border",
         schema(json{{"sna_base64", string_prop("Base64-encoded 49179-byte .sna snapshot.")}},
                {"sna_base64"}));
+    add("save_snapshot",
+        "Save the machine as a 48K .sna file -- RAM, registers and border, taken between two "
+        "instructions so it is consistent even mid-run. Reload it later with load_snapshot to "
+        "return to exactly this point: past a long tape load, at the start of a level, or just "
+        "before the thing being debugged goes wrong.",
+        schema(json{{"path", string_prop("File to write, .sna extension included. Relative "
+                                         "paths resolve against the server's working directory "
+                                         "(the workspace folder). Overwrites an existing file.")}},
+               {"path"}));
     add("reset", "Reset the machine (registers only -- RAM/ROM contents are unaffected)",
         no_params());
     add("step", "Step one or more whole instructions, or a given number of T-states",
@@ -381,16 +391,47 @@ json tools_list() {
                {"addr", "data_hex"}));
     add("get_registers", "Get the full Z80 register set", no_params());
     add("set_registers",
-        "Set individual Z80 registers (fetch-modify-writeback -- omit fields to leave them "
-        "unchanged)",
-        schema(json{{"pc", integer_prop("Program counter.")},
-                    {"sp", integer_prop("Stack pointer.")},
-                    {"af", integer_prop("AF register pair.")},
-                    {"bc", integer_prop("BC register pair.")},
-                    {"de", integer_prop("DE register pair.")},
-                    {"hl", integer_prop("HL register pair.")},
-                    {"ix", integer_prop("IX index register.")},
-                    {"iy", integer_prop("IY index register.")},
+        "Set any Z80 registers (fetch-modify-writeback -- omit fields to leave them unchanged). "
+        "Every register is addressable: the pairs, their 8-bit halves, the shadow set (af_, "
+        "bc_, de_, hl_ and a_ ... l_), the index registers and their halves, I, R, IM and the "
+        "flip-flops. A 16-bit value may be a symbol expression -- \"KEY_INT+9\", \"0x8000\", "
+        "\"8000\" (bare is hex) -- so pc: \"MAIN_LOOP\" jumps straight there. Pairs are "
+        "applied before halves, so {hl: 0x1234, l: 0} ends with HL=0x1200. Replies with the "
+        "full register set afterwards",
+        schema(json{{"pc", address_prop("Program counter.")},
+                    {"sp", address_prop("Stack pointer.")},
+                    {"af", address_prop("AF register pair.")},
+                    {"bc", address_prop("BC register pair.")},
+                    {"de", address_prop("DE register pair.")},
+                    {"hl", address_prop("HL register pair.")},
+                    {"ix", address_prop("IX index register.")},
+                    {"iy", address_prop("IY index register.")},
+                    {"af_", address_prop("AF' shadow pair.")},
+                    {"bc_", address_prop("BC' shadow pair.")},
+                    {"de_", address_prop("DE' shadow pair.")},
+                    {"hl_", address_prop("HL' shadow pair.")},
+                    {"a", integer_prop("Accumulator.")},
+                    {"f", integer_prop("Flags byte (S Z 5 H 3 P/V N C, bit 7 down to 0).")},
+                    {"b", integer_prop("B.")},
+                    {"c", integer_prop("C.")},
+                    {"d", integer_prop("D.")},
+                    {"e", integer_prop("E.")},
+                    {"h", integer_prop("H.")},
+                    {"l", integer_prop("L.")},
+                    {"a_", integer_prop("A'.")},
+                    {"f_", integer_prop("F'.")},
+                    {"b_", integer_prop("B'.")},
+                    {"c_", integer_prop("C'.")},
+                    {"d_", integer_prop("D'.")},
+                    {"e_", integer_prop("E'.")},
+                    {"h_", integer_prop("H'.")},
+                    {"l_", integer_prop("L'.")},
+                    {"ixh", integer_prop("High byte of IX.")},
+                    {"ixl", integer_prop("Low byte of IX.")},
+                    {"iyh", integer_prop("High byte of IY.")},
+                    {"iyl", integer_prop("Low byte of IY.")},
+                    {"i", integer_prop("Interrupt vector register.")},
+                    {"r", integer_prop("Memory refresh register.")},
                     {"im", integer_prop("Interrupt mode (0, 1 or 2).")},
                     {"iff1", json{{"type", "boolean"}, {"description", "Interrupt flip-flop 1."}}},
                     {"iff2", json{{"type", "boolean"}, {"description", "Interrupt flip-flop 2."}}}},
@@ -586,6 +627,28 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         return message.empty() ? text_result("snapshot loaded") : error_result(message);
     }
 
+    if (name == "save_snapshot") {
+        std::string path;
+        if (!arg_string(args, "path", path, error)) {
+            return error_result(error);
+        }
+        std::vector<uint8_t> sna;
+        const std::string message = engine.save_snapshot(sna);
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        if (!write_file(path, sna)) {
+            return error_result("couldn't write " + path);
+        }
+        // PC as the file holds it -- on top of the saved stack -- rather than
+        // a fresh registers() read, which mid-run is already somewhere else.
+        const uint8_t* h = sna.data();
+        const size_t sp = size_t(h[23] | (h[24] << 8)) - ROM_SIZE;
+        const uint8_t* ram = h + SNA_HEADER_SIZE;
+        const uint16_t pc = uint16_t(ram[sp] | (ram[sp + 1] << 8));
+        return json_result(json{{"path", path}, {"bytes", sna.size()}, {"pc", pc}});
+    }
+
     if (name == "reset") {
         const Registers r = engine.reset();
         return json_result(json{{"pc", r.pc}});
@@ -663,35 +726,44 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "set_registers") {
         // Fetch-modify-writeback: anything not named keeps its current value.
+        // 16-bit registers first, so a pair and one of its halves in the same
+        // call compose the way the description promises.
+        static const char* const ORDER[] = {
+            "pc", "sp", "af", "bc", "de", "hl", "ix", "iy", "af_", "bc_", "de_", "hl_",
+            "a", "f", "b", "c", "d", "e", "h", "l", "a_", "f_", "b_", "c_", "d_", "e_", "h_", "l_",
+            "ixh", "ixl", "iyh", "iyl", "i", "r", "im", "iff1", "iff2",
+        };
         Registers r = engine.registers();
-        auto apply16 = [&args](const char* key, uint16_t& field) {
+        for (const char* key : ORDER) {
             const json& v = arg(args, key);
-            if (v.is_number_integer()) {
-                field = uint16_t(v.get<int64_t>());
+            if (v.is_null()) {
+                continue;
             }
-        };
-        auto apply_pair = [&args, &r](const char* key, void (Registers::*setter)(uint16_t)) {
-            const json& v = arg(args, key);
-            if (v.is_number_integer()) {
-                (r.*setter)(uint16_t(v.get<int64_t>()));
+            uint32_t value = 0;
+            if (v.is_boolean()) {
+                if (register_width(key) != 1) {
+                    return error_result(std::string("'") + key + "' takes a number, not a boolean");
+                }
+                value = v.get<bool>() ? 1 : 0;
+            } else if (v.is_number_integer()) {
+                const int64_t n = v.get<int64_t>();
+                if (n < 0 || n > 0xFFFF) {
+                    return error_result(std::string("'") + key + "' is out of range");
+                }
+                value = uint32_t(n);
+            } else if (v.is_string() && register_width(key) == 16) {
+                uint16_t addr = 0;
+                if (!sources.parse_address(v.get<std::string>(), addr, error)) {
+                    return error_result(std::string("'") + key + "': " + error);
+                }
+                value = addr;
+            } else {
+                return error_result(std::string("'") + key + "' must be a number"
+                                    + (register_width(key) == 16 ? " or a symbol expression" : ""));
             }
-        };
-        apply16("pc", r.pc);
-        apply16("sp", r.sp);
-        apply16("ix", r.ix);
-        apply16("iy", r.iy);
-        apply_pair("af", &Registers::set_af);
-        apply_pair("bc", &Registers::set_bc);
-        apply_pair("de", &Registers::set_de);
-        apply_pair("hl", &Registers::set_hl);
-        if (arg(args, "im").is_number_integer()) {
-            r.im = uint8_t(arg(args, "im").get<int64_t>());
-        }
-        if (arg(args, "iff1").is_boolean()) {
-            r.iff1 = arg(args, "iff1").get<bool>();
-        }
-        if (arg(args, "iff2").is_boolean()) {
-            r.iff2 = arg(args, "iff2").get<bool>();
+            if (!set_register(r, key, value, error)) {
+                return error_result(error);
+            }
         }
         return json_result(registers_json(engine.set_registers(r)));
     }

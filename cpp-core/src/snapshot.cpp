@@ -1,5 +1,7 @@
 #include "snapshot.h"
 
+#include <cstdio>
+
 namespace zx {
 namespace {
 
@@ -55,6 +57,49 @@ std::string load_sna(Spectrum48K& m, const uint8_t* data, size_t len) {
     }
     m.set_registers(r); // also clears the call stack
     m.ula.border = border;
+    return {};
+}
+
+std::string save_sna(const Spectrum48K& m, std::vector<uint8_t>& out) {
+    const Registers r = m.registers();
+
+    // PC goes on the stack, so SP has to have two bytes of RAM below it.
+    const uint16_t sp = uint16_t(r.sp - 2);
+    const size_t stack_offset = size_t(sp) - ROM_SIZE;
+    if (sp < ROM_SIZE || r.sp < ROM_SIZE + 2 || stack_offset + 1 >= RAM_SIZE) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf,
+                      "SP=0x%04X leaves no RAM to push PC onto, so a .sna cannot be saved", r.sp);
+        return buf;
+    }
+
+    out.assign(SNA_48K_SIZE, 0);
+    uint8_t* h = out.data();
+    uint8_t* ram = out.data() + SNA_HEADER_SIZE;
+
+    h[0] = r.i;
+    h[1] = r.l_;  h[2] = r.h_;
+    h[3] = r.e_;  h[4] = r.d_;
+    h[5] = r.c_;  h[6] = r.b_;
+    h[7] = r.f_;  h[8] = r.a_;
+    h[9] = r.l;   h[10] = r.h;
+    h[11] = r.e;  h[12] = r.d;
+    h[13] = r.c;  h[14] = r.b;
+    h[15] = uint8_t(r.iy);  h[16] = uint8_t(r.iy >> 8);
+    h[17] = uint8_t(r.ix);  h[18] = uint8_t(r.ix >> 8);
+    h[19] = r.iff2 ? 0x04 : 0x00;
+    h[20] = r.r;
+    h[21] = r.f;
+    h[22] = r.a;
+    h[23] = uint8_t(sp);  h[24] = uint8_t(sp >> 8);
+    h[25] = r.im;
+    h[26] = uint8_t(m.ula.border & 0x07);
+
+    for (size_t i = 0; i < RAM_SIZE; i++) {
+        ram[i] = m.memory.ram[i];
+    }
+    ram[stack_offset] = uint8_t(r.pc);
+    ram[stack_offset + 1] = uint8_t(r.pc >> 8);
     return {};
 }
 

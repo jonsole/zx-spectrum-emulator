@@ -43,6 +43,7 @@ leaves it running and MCP clients connected. Killing the server (or the
 |---|---|
 | `load_rom(rom_base64)` | Load a 16K ROM image (base64) |
 | `load_snapshot(sna_base64)` | Load a `.sna` snapshot (base64) |
+| `save_snapshot(path)` | Save the machine as a 48K `.sna` file, consistent even mid-run |
 | `load_debug_info(sld_path, asm_path)` | Attach source-level debug info for the loaded program (see [source-level debugging](vscode-debugging.md#source-level-debugging-of-your-own-program)) |
 | `reset()` | Reset the machine |
 | `step(instructions=1, ticks=None)` | Step N instructions (default 1), or N T-states if `ticks` is given |
@@ -50,7 +51,7 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `pause()` | Interrupt an in-flight `run()` |
 | `set_breakpoint(addr)` / `clear_breakpoint(addr)` | PC breakpoints |
 | `read_memory(addr, length)` / `write_memory(addr, data_hex)` | Memory access (hex-encoded) |
-| `get_registers()` / `set_registers(pc=…, af=…, …)` | CPU register access |
+| `get_registers()` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. Every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
 | `get_audio(duration_ms, include_wav)` | Measure the beeper: sample count, RMS, peak and pitch in Hz (C++ core only) |

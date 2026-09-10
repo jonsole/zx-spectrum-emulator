@@ -132,6 +132,10 @@ public:
     // ---- queued: these wait for the actor thread ---------------------------
     std::string load_rom(std::vector<uint8_t> data);
     std::string load_snapshot(std::vector<uint8_t> data);
+    /// Captures the machine as a 48K .sna into `out`. Runs on the emulator
+    /// thread between instructions, so registers and RAM are from the same
+    /// instant even mid-run. Returns "" on success, else why it could not.
+    std::string save_snapshot(std::vector<uint8_t>& out);
     /// Inserts a .tap or .tzx image. With `auto_start`, also resets, types
     /// LOAD "" and starts the tape, so the caller's next `run` is already
     /// loading. Returns "" on success, else why it could not be loaded.

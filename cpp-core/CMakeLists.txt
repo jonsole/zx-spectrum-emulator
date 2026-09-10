@@ -38,6 +38,7 @@ add_library(zx_core STATIC
   src/engine.cpp
   src/keyboard.cpp
   src/memory.cpp
+  src/register_names.cpp
   src/snapshot.cpp
   src/spectrum.cpp
   src/tape.cpp
@@ -123,6 +124,7 @@ function(zx_add_test name)
 endfunction()
 
 zx_add_test(memory_tests)
+zx_add_test(register_names_tests)
 zx_add_test(beeper_tests)
 zx_add_test(alu_tests USES_REFERENCE)
 zx_add_test(pin_level)

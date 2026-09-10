@@ -24,6 +24,7 @@
 #include "disassembler.h"
 #include "file_io.h"
 #include "net.h"
+#include "register_names.h"
 #include "rom_source.h"
 
 #include <nlohmann/json.hpp>
@@ -294,6 +295,38 @@ std::string arg_str(const json& arguments, const char* name) {
     return v.is_string() ? v.get<std::string>() : std::string();
 }
 
+std::string trimmed_copy(const std::string& text) {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end && std::isspace(uint8_t(text[begin]))) {
+        begin++;
+    }
+    while (end > begin && std::isspace(uint8_t(text[end - 1]))) {
+        end--;
+    }
+    return text.substr(begin, end - begin);
+}
+
+/// "1"/"0"/"true"/"false", in any case and with surrounding spaces, as a
+/// Variables-pane edit of a flag or flip-flop arrives.
+bool parse_bool_or_bit(const std::string& text, bool& out) {
+    std::string t;
+    for (char c : text) {
+        if (!std::isspace(uint8_t(c))) {
+            t.push_back(char(std::tolower(uint8_t(c))));
+        }
+    }
+    if (t == "1" || t == "true") {
+        out = true;
+        return true;
+    }
+    if (t == "0" || t == "false") {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
 /// An OPTIONAL address argument, as an integer or as a symbol expression
 /// ("KEY_INT+9", "0x0038", "0038"). `present` tells an omitted argument from a
 /// real 0. Unlike as_addr above this resolves names, so it needs the symbol
@@ -422,7 +455,8 @@ json register_variables(const Registers& r) {
     json out = json::array();
     for (const Entry& e : entries) {
         char buf[16];
-        std::snprintf(buf, sizeof buf, e.value > 0xFF ? "0x%04X" : "0x%02X", e.value);
+        std::snprintf(buf, sizeof buf, register_width(e.name) == 16 ? "0x%04X" : "0x%02X",
+                      e.value);
         out.push_back(json{{"name", e.name},
                            {"value", buf},
                            {"variablesReference", 0},
@@ -663,6 +697,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                     {"supportsReadMemoryRequest", true},
                     {"supportsWriteMemoryRequest", true},
                     {"supportsDisassembleRequest", true},
+                    {"supportsSetVariable", true},
                     {"supportsSteppingGranularity", false}};
 
     } else if (command == "launch") {
@@ -977,6 +1012,61 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
             variables = debug_variables(engine.state());
         }
         body = json{{"variables", variables}};
+
+    } else if (command == "setVariable") {
+        // Editing a value in the Variables pane. Registers take anything an
+        // address does -- "0x8000", "8000", "KEY_INT+9" -- since the pane
+        // shows them in hex and that is what a user will type back. Flags,
+        // IM and the flip-flops are too narrow for that to make sense and
+        // take a plain 0/1 (or true/false) instead.
+        const int64_t reference = arg_int(arguments, "variablesReference", 0);
+        const std::string name = arg_str(arguments, "name");
+        const std::string text = arg_str(arguments, "value");
+        Registers r = engine.registers();
+        std::string error;
+        bool ok = false;
+        if (reference == 1000) {
+            const int width = register_width(name);
+            if (width == 0) {
+                error = "\"" + name + "\" is not a register";
+            } else if (width <= 2) {
+                // IM is 0, 1 or 2; a flip-flop is 0/1 or true/false.
+                bool flag = false;
+                if (parse_bool_or_bit(text, flag)) {
+                    ok = set_register(r, name, flag ? 1 : 0, error);
+                } else if (width == 2 && trimmed_copy(text) == "2") {
+                    ok = set_register(r, name, 2, error);
+                } else {
+                    error = "\"" + text + "\" is not a value for " + name;
+                }
+            } else {
+                uint16_t value = 0;
+                ok = sources.parse_address(text, value, error) && set_register(r, name, value, error);
+            }
+        } else if (reference == 1001) {
+            bool value = false;
+            if (!parse_bool_or_bit(text, value)) {
+                error = "a flag is 0 or 1";
+            } else {
+                ok = set_flag(r, name, value, error);
+            }
+        } else {
+            error = "\"" + name + "\" is read-only";
+        }
+        if (!ok) {
+            return envelope_response(conn, request_seq, command, false, json{{"message", error}});
+        }
+        const Registers after = engine.set_registers(r);
+        // Echo the value as the pane formats it, so the edit shows exactly
+        // what the machine now holds -- "0x0038" for a PC typed as KEY_INT.
+        std::string shown;
+        const json variables = reference == 1000 ? register_variables(after) : flag_variables(after);
+        for (const json& v : variables) {
+            if (v["name"] == name) {
+                shown = v["value"].get<std::string>();
+            }
+        }
+        body = json{{"value", shown}, {"variablesReference", 0}};
 
     } else if (command == "readMemory") {
         uint16_t addr = 0;

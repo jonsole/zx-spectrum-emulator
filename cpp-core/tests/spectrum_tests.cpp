@@ -5,6 +5,7 @@
 // interrupt, the memory map and the screen layout simultaneously, and it only
 // produces the familiar copyright screen if all of them are right together.
 
+#include "snapshot.h"
 #include "spectrum.h"
 #include "test_main.h"
 
@@ -240,6 +241,73 @@ TEST(real_rom_boots_to_the_copyright_screen) {
         }
     }
     CHECK_EQ(ink_top, 0);
+}
+
+// ---- snapshots -------------------------------------------------------------
+
+TEST(sna_round_trip_restores_registers_ram_and_border) {
+    Spectrum48K m;
+    Registers r;
+    r.set_af(0x1234);  r.set_bc(0x5678);  r.set_de(0x9ABC);  r.set_hl(0xDEF0);
+    r.a_ = 0x11;  r.f_ = 0x22;  r.b_ = 0x33;  r.c_ = 0x44;
+    r.d_ = 0x55;  r.e_ = 0x66;  r.h_ = 0x77;  r.l_ = 0x88;
+    r.ix = 0xABCD;  r.iy = 0x4321;  r.sp = 0xFF00;  r.pc = 0x8123;
+    r.i = 0x3F;  r.r = 0x5A;  r.iff1 = r.iff2 = true;  r.im = 2;
+    m.set_registers(r);
+    m.ula.border = 5;
+    for (size_t i = 0; i < RAM_SIZE; i++) {
+        m.memory.ram[i] = uint8_t(i * 7 + 3);
+    }
+
+    std::vector<uint8_t> sna;
+    CHECK_EQ(save_sna(m, sna), std::string());
+    CHECK_EQ(sna.size(), SNA_48K_SIZE);
+    // The file's SP is two below the machine's, with PC pushed there.
+    CHECK_EQ(int(sna[23] | (sna[24] << 8)), 0xFEFE);
+    CHECK_EQ(int(sna[SNA_HEADER_SIZE + 0xFEFE - ROM_SIZE]), 0x23);
+    CHECK_EQ(int(sna[SNA_HEADER_SIZE + 0xFEFF - ROM_SIZE]), 0x81);
+    // ...and the machine itself was not touched by that push.
+    CHECK_EQ(int(m.memory.ram[0xFEFE - ROM_SIZE]), int(((0xFEFE - ROM_SIZE) * 7 + 3) & 0xFF));
+    CHECK_EQ(int(m.registers().sp), 0xFF00);
+
+    Spectrum48K back;
+    CHECK_EQ(load_sna(back, sna.data(), sna.size()), std::string());
+    const Registers b = back.registers();
+    CHECK_EQ(int(b.af()), 0x1234);
+    CHECK_EQ(int(b.bc()), 0x5678);
+    CHECK_EQ(int(b.de()), 0x9ABC);
+    CHECK_EQ(int(b.hl()), 0xDEF0);
+    CHECK_EQ(int(b.a_), 0x11);  CHECK_EQ(int(b.f_), 0x22);
+    CHECK_EQ(int(b.b_), 0x33);  CHECK_EQ(int(b.c_), 0x44);
+    CHECK_EQ(int(b.d_), 0x55);  CHECK_EQ(int(b.e_), 0x66);
+    CHECK_EQ(int(b.h_), 0x77);  CHECK_EQ(int(b.l_), 0x88);
+    CHECK_EQ(int(b.ix), 0xABCD);
+    CHECK_EQ(int(b.iy), 0x4321);
+    CHECK_EQ(int(b.sp), 0xFF00);
+    CHECK_EQ(int(b.pc), 0x8123);
+    CHECK_EQ(int(b.i), 0x3F);
+    CHECK_EQ(int(b.r), 0x5A);
+    CHECK_EQ(b.iff1, true);
+    CHECK_EQ(b.iff2, true);
+    CHECK_EQ(int(b.im), 2);
+    CHECK_EQ(int(back.ula.border), 5);
+    size_t differing = 0;
+    for (size_t i = 0; i < RAM_SIZE; i++) {
+        if (back.memory.ram[i] != m.memory.ram[i]) {
+            differing++;
+        }
+    }
+    // Only the two bytes PC was pushed over may differ.
+    CHECK_EQ(differing, size_t(2));
+}
+
+TEST(sna_cannot_be_saved_with_sp_in_rom) {
+    Spectrum48K m;
+    Registers r;
+    r.sp = 0x4001; // one byte of RAM below SP: not enough for PC
+    m.set_registers(r);
+    std::vector<uint8_t> sna;
+    CHECK_EQ(save_sna(m, sna).empty(), false);
 }
 
 RUN_TESTS()

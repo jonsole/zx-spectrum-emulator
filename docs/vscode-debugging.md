@@ -42,7 +42,10 @@ disassembled instruction at its address (no symbol name). Stepping is `next`
 `continue`/`next`/`stepIn`/`stepOut`/`pause`, `threads`, `stackTrace`,
 `disassemble`, `scopes`/`variables` (a **Registers** scope — including the
 shadow set `AF'`/`BC'`/`DE'`/`HL'` — and a **Flags** scope breaking `F` out
-into `S`/`Z`/`H`/`P·V`/`N`/`C` booleans), `readMemory`/`writeMemory`, and
+into `S`/`Z`/`H`/`P·V`/`N`/`C` booleans), `setVariable` (double-click a
+register or flag in the Variables pane to change it — a register takes
+anything an address does, `0x8000`, `8000` or `KEY_INT+9`; a flag, `IM` or a
+flip-flop takes `0`/`1` or `true`/`false`), `readMemory`/`writeMemory`, and
 `disconnect`.
 
 **Verified working in an actual live VS Code session**, not just

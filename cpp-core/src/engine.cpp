@@ -359,6 +359,10 @@ std::string Engine::load_snapshot(std::vector<uint8_t> data) {
     return err;
 }
 
+std::string Engine::save_snapshot(std::vector<uint8_t>& out) {
+    return submit<std::string>([&out](Spectrum48K& m) { return save_sna(m, out); });
+}
+
 std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool auto_start) {
     std::string err = submit<std::string>(
         [this, data = std::move(data), name = std::move(name), auto_start](Spectrum48K& m) {
