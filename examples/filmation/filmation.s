@@ -72,29 +72,11 @@ HEIGHT:				DS		1
 					
 	
 
-; Aligned to its own size, so that a row start is a multiple of the stride in
-; both pages and `high view_buffer` is even -- the row address folds its top
-; bit into D with a single `rl d`, which only works on an even base.
-					ALIGN	512
-view_buffer:		DS		VIEW_BUF_ROWS * VIEW_BUF_WIDTH
+; The view buffer and the object pool used to sit here, at the top of the
+; image. They are reserved at the foot of this file instead, in the gap between
+; the room data and the code -- see there for why.
 
-
-;sprite_shift_buffer:
-;					DS	6*64*2
-
-
-
-
-; The object pool. A room owns all of it: room_build refills it from the
-; start, so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest
-; room in the castle, which rooms.py works out while generating room_data.s.
-room_objects:
-                REPT    ROOM_MAX_OBJECTS
-                    ALIGN   32
-                    object_record   0,      0,              0, 0, 0
-                ENDR
-
-; The stride between records, which the ALIGN above fixes.
+; The stride between records, which the pool's ALIGN fixes.
 ROOM_STRIDE         EQU     32
 
 
@@ -307,8 +289,13 @@ player_step:        ld      bc,KEY_UPLEFT
 ; Something has to stop it, though. Walk out of the room and the projection
 ; puts the object at screen coordinates that wrap, so a repaint region wraps
 ; with it and scribbles down the far edge of the screen.
-FLOOR_LO            EQU     68
-FLOOR_HI            EQU     188
+; The upper one is not a matter of taste: the worst case is U and V both at
+; it, where x = U + V - 128 is largest, and a 3-byte sprite from there has to
+; stay under 256 or the repaint region wraps to the far side of the screen.
+; That puts the ceiling at 180. The floor is where x would go negative, 64,
+; with a little to spare.
+FLOOR_LO            EQU     72
+FLOOR_HI            EQU     180
 
 
 ; Move one object by D in U and E in V, and repaint what that disturbed.
@@ -418,69 +405,11 @@ copy_routines:		DW		vid_buff_copy_1, vid_buff_copy_2, vid_buff_copy_3
 					DW		vid_buff_copy_7, vid_buff_copy_8
 
 
-; Put every object about to be composited into the orientation it wants.
-;
-; Mirrored graphics are shared, not copied: an object that draws one
-; unmirrored can find that another object has mirrored the bytes since. So
-; the check has to happen at render time, which is what Knight Lore does in
-; print_sprite -- compare what the object wants against what the bytes
-; currently are, and mirror them if they differ.
-;
-; It sits here rather than inside objects_draw_all because that routine
-; repurposes SP as its record pointer and reads the record as a sequential
-; run of POPs: IY holds the NEXT object, not this one, and FLAGS and the
-; sprite address end up in opposite register sets either side of a jump
-; through sprite_jump_table. This pass runs at the same point in the frame
-; with a normal stack and free registers, and leaves the hot loop alone.
-;
-; The extent cull is the same one objects_draw_all applies. Without it, every
-; object in the room would be dragged into whichever orientation it wanted on
-; every single region -- and objects sharing a graphic in opposite
-; orientations would mirror it back and forth for nothing.
-redraw_orient:		ld		iy,(object_list)
-.next:				ld		a,iyh
-					and		a
-					ret		z
-
-					ld		hl,(view_y_extent)		; l = min, h = max
-					ld		a,(iy+OBJ.MIN_Y)
-					cp		h
-					jr		nc,.skip		; starts past the bottom of the region
-					ld		a,l
-					cp		(iy+OBJ.MAX_Y)
-					jr		nc,.skip		; ends above the top of it
-					ld		hl,(view_x_extent)
-					ld		a,(iy+OBJ.MIN_X)
-					cp		h
-					jr		nc,.skip
-					ld		a,l
-					cp		(iy+OBJ.MAX_X)
-					jr		nc,.skip
-
-					; In the region. Is it drawn from the shared graphic, and if
-					; so, is that graphic the way round this object wants?
-					ld		a,(iy+OBJ.FLAGS)
-					and		OBJ_SHIFTED
-					jr		nz,.skip		; no -- its own rotated copy
-
-					ld		l,(iy+OBJ.SPRITE_L)
-					ld		h,(iy+OBJ.SPRITE_H)
-					dec		l		; SPRITE is the record + 2, and records
-					dec		l		; are ALIGN 4, so this cannot borrow
-					ld		a,(hl)
-					xor		(iy+OBJ.FLAGS)
-					and		SPRITE_FLIPPED
-					jr		z,.skip		; already right
-
-					push	iy
-					call	sprite_flip_h
-					pop		iy
-
-.skip:				ld		l,(iy+OBJ.NEXT)
-					ld		h,(iy+OBJ.NEXT+1)
-					push	hl
-					pop		iy
-					jr		.next
+; redraw_orient used to live here: one pass per region, settling every
+; shared graphic before objects_draw_all ran. That is one decision too few
+; -- two objects in a region wanting opposite orientations leave whichever
+; the pass reached last holding the graphic. sprite_orient asks per object
+; instead, at the point of drawing, so this is gone.
 
 
 ; Remember an object's extent, before it moves.
@@ -712,4 +641,35 @@ screen_lo_address_table:
 					ENDR
 
 
-					SAVESNA "output/filmation.sna", start
+; The stack grows down from STACK_TOP, so the image has to stop below it. This
+; is the check that was missing when the player pushed the top past $FF00.
+                    ASSERT  $ <= STACK_TOP
+
+; ---------------------------------------------------------------------------
+; Two reservations, put where there is room for them.
+;
+; The room data ends well short of $8000 and nothing uses what is left, so the
+; view buffer and the object pool go there rather than on the end of the image.
+; They were on the end until the player arrived and pushed it past $FF00, where
+; the stack would have pushed straight into the code -- and nothing would have
+; said so, because an image that overruns the stack still assembles.
+;
+; The view buffer is aligned to its own size, so a row start is a multiple of
+; the stride in both pages and `high view_buffer` is even -- the row address
+; folds its top bit into D with a single `rl d`, which needs an even base.
+                    ORG     $7400
+                    ALIGN   512
+view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
+
+; The object pool. A room owns all of it: room_build refills it from the start,
+; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
+; the castle, which rooms.py works out while generating room_data.s.
+                    ALIGN   32
+room_objects:
+                REPT    ROOM_MAX_OBJECTS
+                    ALIGN   32
+                    object_record   0,      0,              0, 0, 0
+                ENDR
+                    ASSERT  $ <= $8000      ; still inside the gap
+
+                    SAVESNA "output/filmation.sna", start

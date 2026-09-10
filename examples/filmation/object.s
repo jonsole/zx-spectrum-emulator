@@ -86,6 +86,16 @@ OBJ_MOVABLE			EQU		0x80		; FLAGS bit 7
 ; sprite header at all but whatever happens to precede the buffer.
 OBJ_SHIFTED			EQU		0x20
 
+; FLAGS bit 6: scenery. Drawn before everything else and never sorted, so it
+; is permanently behind -- see background_insert. Walls and trees are solid and
+; never walked through, so there is nothing for the sort to decide about them;
+; arches and gates are doorways the player does pass behind, and keep their
+; place in the order.
+;
+; Bit 6 is free here. The sprite header uses it for the width class, but every
+; comparison against FLAGS masks down to the one bit it wants.
+OBJ_BACKGROUND		EQU		0x40
+
 ; FLAGS bit 0: the orientation this object wants, in the same bit position
 ; as SPRITE_FLIPPED in the sprite's own header, so the comparison between
 ; the two is a plain XOR.

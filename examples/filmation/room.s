@@ -32,6 +32,10 @@ room_packed:		DB		0
 ; How many objects the room has produced so far.
 room_object_count:	DB		0
 
+; Whether the scenery template being expanded is background -- OBJ_BACKGROUND
+; or zero. room_add ors it into each piece's FLAGS.
+room_bg_flag:		DB		0
+
 ; An object on its way into a record: sprite, U, V, Z, size U, size V, size Z,
 ; flags -- the same eight bytes a scenery piece already is, which is why both
 ; paths can share room_add.
@@ -86,7 +90,10 @@ room_build:			ld		l,a
 
 					ld		ix,room_objects
 					call	room_scenery
-					call	room_objects_of
+					xor		a
+					ld		(room_bg_flag),a		; nothing past the scenery is
+					call	room_objects_of		; background
+
 					jp		room_show
 
 
@@ -151,6 +158,21 @@ room_scenery:		ld		a,(room_scenery_left)
 
 					ld		l,a
 					ld		h,0
+
+					; Walls and trees are scenery: solid, never walked through,
+					; and so never worth sorting against anything. Arches and
+					; gates are doorways the player passes behind, and the
+					; wizard and the pot are objects in their own right -- all
+					; of those keep their place in the sort.
+					cp		BG_WALLS_0
+					jr		c,.sorted
+					cp		BG_TREES_2 + 1
+					jr		nc,.sorted
+					ld		a,OBJ_BACKGROUND
+					jr		.classified
+.sorted:			xor		a
+.classified:		ld		(room_bg_flag),a
+
 					add		hl,hl
 					ld		de,background_type_tbl
 					add		hl,de
@@ -363,6 +385,9 @@ room_add:			ld		a,(room_object_count)
 					rlca
 					and		OBJ_FLIP_H
 					ld		(ix+OBJ.FLAGS),a
+					ld		a,(room_bg_flag)		; and whether this template is
+					or		(ix+OBJ.FLAGS)		; scenery rather than an object
+					ld		(ix+OBJ.FLAGS),a
 
 					; A rotation buffer belongs to the room, not the object;
 					; shift_reset has just taken the last room's back.
@@ -434,8 +459,13 @@ room_show:			ld		a,(room_object_count)
 					ld		ix,room_objects
 .insert:			push	bc
 					push	ix
-					call	depth_insert
-					pop		ix
+					ld		a,(ix+OBJ.FLAGS)
+					and		OBJ_BACKGROUND
+					jr		z,.sort_it
+					call	background_insert		; straight to the front, never
+					jr		.inserted		; compared with anything
+.sort_it:			call	depth_insert
+.inserted:			pop		ix
 					ld		bc,ROOM_STRIDE
 					add		ix,bc
 					pop		bc
