@@ -110,15 +110,16 @@ start:              di
 .enter:             ld      a,(room_number)
                     ld      (room_shown),a
                     call    room_build
+                    call    mover_add
 
-                    ; Nothing moves yet, so the loop only watches for the
-                    ; room number changing. Poke room_number from the
-                    ; debugger and the castle turns over.
+                    ; Poke room_number from the debugger and the castle turns
+                    ; over; otherwise the mover just keeps walking.
 .loop:              ld      a,(room_number)
                     ld      hl,room_shown
                     cp      (hl)
-                    jr      z,.loop
-                    jr      .enter
+                    jr      nz,.enter
+                    call    mover_step
+                    jr      .loop
 
 
 ; Which room to build. $88 is the cauldron room; $B3 is where the game begins.
@@ -126,9 +127,101 @@ room_number:        DB      $88
 room_shown:         DB      $88
 
 
-; The movers, their MOVER records and the ghost's square path all went with
-; the demo scene -- this room is static. The redraw machinery below is still
-; live: start: uses redraw_object to paint each object once.
+; --- the mover --------------------------------------------------------------
+;
+; One object walking a square around the room, which is the thing a static
+; scene cannot show: the depth sort, as it passes in front of some scenery and
+; behind the rest, and the redraw, which repaints the union of where it was and
+; where it is rather than the screen.
+;
+; It is not part of the room. room_objects is sized to the fullest room in the
+; castle, so there is no spare slot, and room_build refills it from the start
+; anyway -- nothing in it survives a room change. This record joins the sorted
+; list once the room is built, and rejoins after the next one.
+;
+; Its rotation buffer comes from the room's arena like everyone else's, taken
+; lazily the first time the path puts it off the byte grid. shift_reset hands
+; the whole arena back on a room change, so BUF has to be cleared again with
+; it, which mover_add does.
+                    ALIGN   32
+mover:              object_record   OBJ_MOVABLE, 0, 7, 7, 12
+                    ; The macro lays down 23 bytes and a record is ROOM_STRIDE
+                    ; wide. In the pool the next record's own ALIGN covers the
+                    ; difference; a record on its own has to say so, or what
+                    ; follows lands inside it -- mover_leg sat on ADJ_X and the
+                    ; path table on ADJ_Y and GFX, so room_adjust rewrote the
+                    ; route every frame.
+                    ALIGN   ROOM_STRIDE
+
+MOVER_GFX           EQU     178         ; Knight Lore's ball: 3 x 19
+MOVER_Z             EQU     128         ; the floor
+MOVER_LO            EQU     84          ; the square it walks, chosen to weave
+MOVER_HI            EQU     172         ; through the ring of blocks
+
+; Which side of the square it is on, and what that adds to U and V.
+mover_leg:          DB      0
+mover_legs:         DB       1,  0
+                    DB       0,  1
+                    DB      -1,  0
+                    DB       0, -1
+
+
+; Put the mover into the room that has just been built.
+mover_add:          ld      ix,mover
+                    ld      (ix+OBJ.GFX),MOVER_GFX
+                    ld      (ix+OBJ.U),MOVER_LO
+                    ld      (ix+OBJ.V),MOVER_LO
+                    ld      (ix+OBJ.Z),MOVER_Z
+                    ld      (ix+OBJ.FLAGS),OBJ_MOVABLE
+                    ld      (ix+OBJ.BUF_L),0        ; the old arena went with the
+                    ld      (ix+OBJ.BUF_H),0        ; old room
+                    xor     a
+                    ld      (mover_leg),a
+                    call    room_adjust             ; the pixel nudge for this graphic
+                    ld      a,MOVER_GFX
+                    call    object_place
+                    jp      depth_insert
+
+
+; One unit along the square, then repaint only what that disturbed.
+mover_step:         ld      ix,mover
+                    call    extent_save             ; where it was, for the union
+
+                    ld      a,(mover_leg)
+                    add     a,a
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,mover_legs
+                    add     hl,de
+                    ld      a,(ix+OBJ.U)
+                    add     a,(hl)
+                    ld      (ix+OBJ.U),a
+                    inc     hl
+                    ld      a,(ix+OBJ.V)
+                    add     a,(hl)
+                    ld      (ix+OBJ.V),a
+
+                    ; A leg ends when the coordinate IT moves reaches the far
+                    ; side. Testing both would turn at once in the corner it
+                    ; starts in, where U and V are equal.
+                    ld      a,(mover_leg)
+                    and     1
+                    ld      a,(ix+OBJ.U)
+                    jr      z,.at_edge
+                    ld      a,(ix+OBJ.V)
+.at_edge:           cp      MOVER_HI
+                    jr      z,.turn
+                    cp      MOVER_LO
+                    jr      nz,.placed
+.turn:              ld      a,(mover_leg)
+                    inc     a
+                    and     3
+                    ld      (mover_leg),a
+
+.placed:            ld      a,MOVER_GFX
+                    call    object_place
+                    call    depth_relink            ; only re-sorts if it crossed
+                    jp      redraw_moved
 
 
 
