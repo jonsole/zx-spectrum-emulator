@@ -30,14 +30,12 @@ CHARACTER_BODY		EQU		ROOM_STRIDE		; the body is the slot above the legs
 CHARACTER_BLOCK		EQU		8		; graphics per facing block
 CHARACTER_PHASES	EQU		6		; ...of which this many are the walk
 CHARACTER_TICKS		EQU		3		; frames each frame of it is held for
-CHARACTER_BODY_UP	EQU		12		; how far the body rides above the legs,
-					; the same twelve Knight Lore uses. They
-					; meet because the game nudges the two by
-					; different amounts as well: sprite_adj
-					; has -6 for the legs and -8 for the body
-					; and calc_screen_xy subtracts that, so
-					; the body lands two pixels lower than
-					; its Z alone would put it.
+					; A walking body rides twelve above the legs, the same
+					; twelve Knight Lore uses -- see walking_character. They
+					; meet because the game nudges the two by different amounts
+					; as well: sprite_adj has -6 for the legs and -8 for the
+					; body and calc_screen_xy subtracts that, so the body lands
+					; two pixels lower than its Z alone would put it.
 CHARACTER_Z			EQU		128		; the floor
 
 ; How far a character may walk before the wall stops it.
@@ -70,14 +68,34 @@ FLOOR_HI			EQU		180
 ; as a macro call takes the address BEFORE the macro's first line, so an ALIGN
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
-				MACRO	character_record legs_base, body_base, facing
+				MACRO	character_record legs_base, body_base, body_block, body_phase, body_up, facing
 					object_record	OBJ_MOVABLE, 0, 6, 6, 12
 					DS		OBJ.FACING - OBJ.ADJ_X, 0		; ADJ_X, ADJ_Y, GFX
 					DB		facing, 0, CHARACTER_TICKS
 					DB		legs_base, body_base
+					DB		body_block, body_phase, body_up
 					DS		ROOM_STRIDE - OBJ, 0		; out to a whole slot
 					object_record	OBJ_MOVABLE, 0, 6, 6, 12
 					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; and the body's own tail
+				ENDM
+
+
+				; One whose body walks with its legs: the knight, and the
+				; werewolf he turns into at night. Six body graphics to a
+				; facing, the two blocks eight apart, riding twelve above.
+				MACRO	walking_character legs_base, body_base, facing
+					character_record legs_base, body_base, CHARACTER_BLOCK, $FF, 12, facing
+				ENDM
+
+				; And one whose body is a single frame each way round, held
+				; still over the same walking legs -- the castle's soldier and
+				; its wizard, who share the knight's boots and bring their own
+				; top half. Their body sits at the legs' own Z and is lifted
+				; by its pixel nudge instead of by Z, which is why it rides
+				; nothing: the game gives graphic 30 a nudge of +3 against the
+				; legs' -6, and calc_screen_xy subtracts both.
+				MACRO	standing_character legs_base, body_base, facing
+					character_record legs_base, body_base, 1, $00, 0, facing
 				ENDM
 
 					; A character's state has to fit in the slack of a slot.
@@ -112,16 +130,30 @@ character_steps:	DB		-1, 0		; 0  -U  away, up and left
 ; Give both halves the graphics this character's facing and phase call for,
 ; and turn them the way it is facing.
 ;   IX -> the legs record
-; Corrupts AF and C.
+; Corrupts AF, B and C.
 character_frame:	ld		a,(ix+OBJ.FACING)
 					and		2		; the block: away from the viewer, or
-					add		a		; towards it. Bit 1 doubled twice is
-					add		a		; 0 or 8, which is CHARACTER_BLOCK
+					rrca			; towards it, as 0 or 1
+					ld		b,a
+
+					add		a		; legs are always eight graphics a block
+					add		a
+					add		a		; * CHARACTER_BLOCK
 					add		a,(ix+OBJ.PHASE)
-					ld		c,a		; the frame, which both halves share
 					add		a,(ix+OBJ.LEGS_BASE)
 					ld		(ix+OBJ.GFX),a
-					ld		a,c
+
+					; The body's block is its own -- eight for a body that
+					; walks, one for a body that is a single frame each way
+					; round -- and the phase reaches it through a mask, so a
+					; still body simply never moves off its first frame.
+					ld		c,0
+					bit		0,b
+					jr		z,.first_block
+					ld		c,(ix+OBJ.BODY_BLOCK)
+.first_block:		ld		a,(ix+OBJ.PHASE)
+					and		(ix+OBJ.BODY_PHASE)
+					add		a,c
 					add		a,(ix+OBJ.BODY_BASE)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
@@ -146,7 +178,9 @@ character_add:		ld		(ix+OBJ.PHASE),0
 					ld		(ix+OBJ.Z),CHARACTER_Z
 					ld		(ix+CHARACTER_BODY+OBJ.U),b
 					ld		(ix+CHARACTER_BODY+OBJ.V),c
-					ld		(ix+CHARACTER_BODY+OBJ.Z),CHARACTER_Z + CHARACTER_BODY_UP
+					ld		a,CHARACTER_Z
+					add		a,(ix+OBJ.BODY_UP)
+					ld		(ix+CHARACTER_BODY+OBJ.Z),a
 
 					; A fresh start: the rotation buffers went back with the
 					; old room's arena, and OBJ_SHIFTED with them.

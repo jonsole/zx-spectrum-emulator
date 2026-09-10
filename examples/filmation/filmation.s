@@ -93,11 +93,11 @@ start:              di
 .enter:             ld      a,(room_number)
                     ld      (room_shown),a
                     call    room_build
-                    call    mover_add
+                    call    wolf_add
                     call    player_add
 
                     ; Poke room_number from the debugger and the castle turns
-                    ; over; otherwise the mover just keeps walking.
+                    ; over; otherwise the soldier just keeps walking.
 .loop:              ld      a,(room_number)
                     ld      hl,room_shown
                     cp      (hl)
@@ -118,7 +118,7 @@ start:              di
                     halt
                     di
 
-                    call    mover_step
+                    call    wolf_step
                     call    player_step
                     jr      .loop
 
@@ -128,60 +128,81 @@ room_number:        DB      $88
 room_shown:         DB      $88
 
 
-; --- the mover --------------------------------------------------------------
+; --- the soldier -------------------------------------------------------------
 ;
-; One object walking a square around the room, which is the thing a static
-; scene cannot show: the depth sort, as it passes in front of some scenery and
-; behind the rest, and the redraw, which repaints the union of where it was and
-; where it is rather than the screen.
+; A second character, walking a square around the room. That is the thing a
+; static scene cannot show: the depth sort, as it passes in front of some
+; scenery and behind the rest, and the redraw, which repaints the union of
+; where it was and where it is rather than the screen.
 ;
-; It is not part of the room. room_objects is sized to the fullest room in the
-; castle, so there is no spare slot, and room_build refills it from the start
-; anyway -- nothing in it survives a room change. This record joins the sorted
-; list once the room is built, and rejoins after the next one.
+; It used to be a ball on a four-legged path, and it is a soldier now because
+; there is nothing more to say: the same two records the player is built from
+; with two numbers changed. He walks on the knight's own legs, which is how
+; the castle does it -- the soldier and the wizard both stand on graphic 145,
+; the shared leg block at 144 -- and the only thing that makes him a different
+; sort of character is that his torso is one frame each way round rather than
+; six.
 ;
-; Its rotation buffer comes from the room's arena like everyone else's, taken
-; lazily the first time the path puts it off the byte grid. shift_reset hands
-; the whole arena back on a room change, so BUF has to be cleared again with
-; it, which mover_add does.
-                    ALIGN   32
-mover:              object_record   OBJ_MOVABLE, 0, 7, 7, 12
-                    ; The macro lays down 23 bytes and a record is ROOM_STRIDE
-                    ; wide. In the pool the next record's own ALIGN covers the
-                    ; difference; a record on its own has to say so, or what
-                    ; follows lands inside it -- mover_leg sat on ADJ_X and the
-                    ; path table on ADJ_Y and GFX, so room_adjust rewrote the
-                    ; route every frame.
-                    ALIGN   ROOM_STRIDE
+; Only one of him, though. The player and a second character between them
+; repaint two regions a frame and the frame no longer fits: the loop takes two
+; of them per turn, so the demo runs at 25Hz. A third would cost another.
+;
+; Neither is part of the room. room_objects is sized to the fullest room in
+; the castle, so there is no spare slot, and room_build refills it from the
+; start anyway -- nothing in it survives a room change. These records join the
+; sorted list once the room is built, and rejoin after the next one.
+; The soldier: the player's own legs under a helmeted torso that does not
+; animate. Legs 16 rather than the 144 the game gives him, because the two are
+; the same four sprites under different numbers and only the numbers the knight
+; wears have been harvested both ways round -- graphic 145's nudge is 16-21's
+; to the pixel, so nothing is lost by using theirs.
+;
+; Swapping these two numbers is the whole of making it someone else:
+;   48, 64 with walking_character   the werewolf
+;   16, 158 with standing_character the wizard
+WOLF_LEGS_GFX       EQU     16
+WOLF_BODY_GFX       EQU     30
+WOLF_LO             EQU     84          ; the square it walks, chosen to weave
+WOLF_HI             EQU     172         ; through the ring of blocks
+WOLF_FACING         EQU     0           ; -U, so it starts by walking up-left
 
-MOVER_GFX           EQU     178         ; Knight Lore's ball: 3 x 19
-MOVER_Z             EQU     128         ; the floor
-MOVER_LO            EQU     84          ; the square it walks, chosen to weave
-MOVER_HI            EQU     172         ; through the ring of blocks
-
-; Which side of the square it is on, and what that adds to U and V.
-mover_leg:          DB      0
-mover_legs:         DB       1,  0
-                    DB       0,  1
-                    DB      -1,  0
-                    DB       0, -1
+wolf:               standing_character WOLF_LEGS_GFX, WOLF_BODY_GFX, WOLF_FACING
 
 
-; Put the mover into the room that has just been built.
-mover_add:          ld      ix,mover
-                    ld      (ix+OBJ.GFX),MOVER_GFX
-                    ld      (ix+OBJ.U),MOVER_LO
-                    ld      (ix+OBJ.V),MOVER_LO
-                    ld      (ix+OBJ.Z),MOVER_Z
-                    ld      (ix+OBJ.FLAGS),OBJ_MOVABLE
-                    ld      (ix+OBJ.BUF_L),0        ; the old arena went with the
-                    ld      (ix+OBJ.BUF_H),0        ; old room
-                    xor     a
-                    ld      (mover_leg),a
-                    call    room_adjust             ; the pixel nudge for this graphic
-                    ld      a,MOVER_GFX
-                    call    object_place
-                    jp      depth_insert
+; Put the soldier into the room that has just been built.
+wolf_add:           ld      ix,wolf
+                    ld      (ix+OBJ.FACING),WOLF_FACING
+                    ld      b,WOLF_HI
+                    ld      c,WOLF_LO
+                    jp      character_add
+
+
+; One step along the square. The facings run 0 to 3 in the order the sides of
+; a square do, which is not a coincidence -- character_steps is laid out so
+; that they do.
+wolf_step:          ld      ix,wolf
+                    ld      a,(ix+OBJ.FACING)
+                    call    character_walk
+                    ld      ix,wolf                 ; the repaint took IX
+
+                    ; A side ends when the coordinate IT moves reaches the far
+                    ; wall. Testing both would turn twice in the corner it
+                    ; starts in, where U and V are both against a bound. Even
+                    ; facings walk along U and odd ones along V.
+                    ld      a,(ix+OBJ.FACING)
+                    bit     0,a
+                    ld      a,(ix+OBJ.U)
+                    jr      z,.at_edge
+                    ld      a,(ix+OBJ.V)
+.at_edge:           cp      WOLF_HI
+                    jr      z,.turn
+                    cp      WOLF_LO
+                    ret     nz
+.turn:              ld      a,(ix+OBJ.FACING)
+                    inc     a
+                    and     3
+                    ld      (ix+OBJ.FACING),a
+                    ret
 
 
 ; --- the player -------------------------------------------------------------
@@ -195,7 +216,7 @@ PLAYER_U            EQU     128
 PLAYER_V            EQU     104         ; clear of the cauldron at 128,128
 PLAYER_FACING       EQU     0           ; -U, up and left
 
-player:             character_record PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
+player:             walking_character PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
 
 
 ; Put the player in the room that has just been built.
@@ -242,54 +263,12 @@ player_step:        ld      bc,KEY_UPLEFT
                     jp      character_walk
 
 
-; One unit along the square, then repaint only what that disturbed.
-mover_step:         ld      ix,mover
-                    call    extent_save             ; where it was, for the union
-
-                    ld      a,(mover_leg)
-                    add     a,a
-                    ld      e,a
-                    ld      d,0
-                    ld      hl,mover_legs
-                    add     hl,de
-                    ld      a,(ix+OBJ.U)
-                    add     a,(hl)
-                    ld      (ix+OBJ.U),a
-                    inc     hl
-                    ld      a,(ix+OBJ.V)
-                    add     a,(hl)
-                    ld      (ix+OBJ.V),a
-
-                    ; A leg ends when the coordinate IT moves reaches the far
-                    ; side. Testing both would turn at once in the corner it
-                    ; starts in, where U and V are equal.
-                    ld      a,(mover_leg)
-                    and     1
-                    ld      a,(ix+OBJ.U)
-                    jr      z,.at_edge
-                    ld      a,(ix+OBJ.V)
-.at_edge:           cp      MOVER_HI
-                    jr      z,.turn
-                    cp      MOVER_LO
-                    jr      nz,.placed
-.turn:              ld      a,(mover_leg)
-                    inc     a
-                    and     3
-                    ld      (mover_leg),a
-
-.placed:            ld      a,MOVER_GFX
-                    call    object_place
-                    call    depth_relink            ; only re-sorts if it crossed
-                    jp      redraw_moved
-
-
-
 ; --- redrawing ------------------------------------------------------
 ;
 ; Nothing draws the whole screen. Each moving object repaints only the
 ; area it disturbed -- the union of where it was and where it now is --
 ; and objects_draw_all composites every object that intersects that area,
-; so whatever the mover passed over is put back in the same pass.
+; so whatever it passed over is put back in the same pass.
 ;
 ; An area is bounded by what the view buffer holds: VIEW_BUF_WIDTH bytes
 ; across and VIEW_BUF_ROWS rows down, which is 8 x 64. A one-pixel step

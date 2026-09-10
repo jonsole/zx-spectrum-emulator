@@ -78,6 +78,15 @@ LEGS_BASE:			DS		1	; first graphic of the legs, facing 0 phase 0
 BODY_BASE:			DS		1	; ...and of the body, which is a separate
 					; number because the castle's walkers share
 					; leg artwork and each bring their own top
+
+; How the body is put together, which is not the same for all of them. The
+; knight's walks with his legs: six graphics a facing, the two facing blocks
+; eight apart, riding twelve above the legs in Z. The soldier's and the
+; wizard's is one frame each way round, held still over the same walking legs,
+; sitting at the legs' own Z and lifted by its pixel nudge instead.
+BODY_BLOCK:			DS		1	; what the facing block adds: 8, or 1
+BODY_PHASE:			DS		1	; a mask on the walk phase: $FF, or 0 to stand
+BODY_UP:			DS		1	; and how far it rides above the legs in Z
 					ENDS
 
 

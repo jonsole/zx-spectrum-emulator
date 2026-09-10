@@ -59,7 +59,10 @@ ROOMS = [0x88, 0x08, 0x01, 0xE3, 0x67, 0x9B, 0xB4, 0xD7, 0x09, 0x5E]
 # for 24-29 and 40-45: he walked the same way for the whole run.
 WALK_KEY = "S"
 TURN_KEY = "X"
-TURNS = 9           # more than the four facings, so each is walked in twice
+TURNS = 26          # far more than the four facings, because the point is to
+                    # still be walking when night falls: the knight turns into
+                    # a werewolf, whose frames are a whole second character
+                    # (48-61 legs, 64-77 body) with its own adjustments
 
 
 class Dap:
@@ -192,10 +195,19 @@ def signed(v):
     return v - 256 if v > 127 else v
 
 
-# Written on a mirrored entry that was copied from the unmirrored one rather
-# than harvested. previous() skips these, so a re-run neither counts them as
-# known nor lets them stand in the way of the real value turning up.
+# Written on an entry that was copied from another rather than harvested.
+# previous() skips these, so a re-run neither counts them as known nor lets
+# them stand in the way of the real value turning up.
 INHERITED = "; graphic %d, from the other way round"
+ASSUMED = "; graphic %d, assumed from %d"
+
+# Graphics the game never draws, but a character assembled out of its artwork
+# does. The castle's soldier and wizard stand still and never turn, so only one
+# of their two body facings is ever on screen -- 30 and 158 -- and the other is
+# not observable at any length of harvest. It is the same figure at the same
+# size facing the other way, so it is the same nudge: 004 and 005 are one
+# torso drawn twice, as 012 and 013 are.
+STANDS_IN = {31: 30, 151: 150, 159: 158}
 
 
 def emit(found):
@@ -219,6 +231,12 @@ def emit(found):
             note = ""
             if (g, flip) in found:
                 note = "; graphic %d" % g
+            elif g in STANDS_IN and (STANDS_IN[g], flip) in found:
+                x, y = found[(STANDS_IN[g], flip)]
+                note = ASSUMED % (g, STANDS_IN[g])
+            elif g in STANDS_IN and (STANDS_IN[g], 1 - flip) in found:
+                x, y = found[(STANDS_IN[g], 1 - flip)]
+                note = ASSUMED % (g, STANDS_IN[g])
             elif (g, 1 - flip) in found:
                 # Never seen this way round. The other way round is a far
                 # better guess than nothing: a graphic mirrored in place stays
@@ -258,7 +276,9 @@ def previous():
             m = re.match(r"\s+DB\s+(-?\d+),\s*(-?\d+)", line)
             if m:
                 pair = (int(m.group(1)) & 0xFF, int(m.group(2)) & 0xFF)
-                if pair != (0, 0) and "from the other way round" not in line:
+                copied = ("from the other way round" in line
+                          or "assumed from" in line)
+                if pair != (0, 0) and not copied:
                     was[(g, flip)] = pair
                 g += 1
     return was
