@@ -20,8 +20,24 @@
 ; a static placed in world coordinates lands on an arbitrary pixel, and only
 ; the ones that land off the byte grid need rotating. In room $B3 that is 7
 ; objects of 19, wanting 1,838 bytes between them.
+;
+; $B3 is not the worst room, though, and sizing the arena to it was a bug --
+; a quiet one, because a failed allocation is not an error here: the object
+; falls back to byte-aligned and draws up to seven pixels left of where it
+; belongs. Room $88 wants 2,728 bytes across 10 objects, so three of them
+; missed out and stood seven pixels left of true -- one of them the right-hand
+; half of the far corner, which is why the two walls did not meet there.
+;
+; So the size is measured rather than guessed. Every room in the castle was
+; built in turn and its objects' sub-byte offsets totted up; the hungriest is
+; $97 at 4,922 bytes, with $CF, $D5, $D4, $D3 and $67 all above 4,600. 5,120
+; covers the castle with a little to spare.
+;
+; It is worth keeping in mind that this is a fallback that hides itself. If
+; the sprite set or the placement ever changes, this number wants
+; re-measuring -- the failure will not announce itself.
 
-SHIFT_ARENA_SIZE	EQU		2048
+SHIFT_ARENA_SIZE	EQU		5120
 
 shift_arena:		DS		SHIFT_ARENA_SIZE
 shift_arena_next:	DW		shift_arena
