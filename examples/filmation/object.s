@@ -958,7 +958,7 @@ depth_in_order:		ld		l,(ix+OBJ.PREV)
 .have_prev:			push	hl
 					pop		iy		; PREV is the predecessor itself here
 					call	depth_cmp
-					jr		c,.out_of_order		; further than it: we must move back
+					jr		c,.out_of_order_back	; further than it: we must move back
 
 .check_next:		ld		l,(ix+OBJ.NEXT)
 					ld		h,(ix+OBJ.NEXT+1)
@@ -968,10 +968,15 @@ depth_in_order:		ld		l,(ix+OBJ.PREV)
 					push	hl
 					pop		iy
 					call	depth_cmp
-					jr		nc,.out_of_order		; nearer than it: we must move on
+					jr		nc,.out_of_order_on	; nearer than it: we must move on
 .in_order:			scf		
 					ret		
-.out_of_order:		and		a		; clear carry
+					; Which side failed decides where the search can start, so say so.
+					; XOR clears the carry as well, which is what says out of order.
+.out_of_order_back:	xor		a		; 0: it belongs earlier than it is
+					ret		
+.out_of_order_on:	xor		a
+					inc		a		; 1: later. INC leaves the carry alone
 					ret		
 ; Put an object into the background run: drawn before everything else and
 ; never sorted, so it is permanently behind. Splices in at sort_head --
@@ -1020,10 +1025,43 @@ depth_relink:		ld		hl,prev_u
 .moved:				call	depth_cmp_setup
 					call	depth_in_order
 					ret		c		; moved, but not past anyone
+
+					; It has to be put back, and the list is in order apart from it, so
+					; the search need not always start at the front of the run.
+					;
+					; The scan only ever advances, and where it may start depends on which
+					; way the object has gone. depth_in_order has just said: A is 1 if it
+					; belongs later than it sits, 0 if earlier.
+					;
+					; Later, and starting where it already is gives the same answer as
+					; starting from the front: everything ahead of it was not-further last
+					; time it was placed, and moving nearer cannot have changed that.
+					;
+					; Earlier is not the mirror of that, and it took a measurement to
+					; believe it. Backing up to a point and scanning forward from there
+					; loses what the scan learns on the way down -- insert_at, the last
+					; object it was NEARER than -- so it can settle in front of where a
+					; scan from the front would put it. It differed on 22 frames of 180.
+					; So that half goes the long way round, and only the cheap half is
+					; taken cheaply.
+					push	af		; depth_unlink wants A
+					ld		l,(ix+OBJ.PREV)
+					ld		h,(ix+OBJ.PREV+1)
+					ld		(insert_at),hl		; where it came out of
 					call	depth_unlink
+					pop		af
+
+					; The upper half of a two-part object overrides this: it starts
+					; from the lower half, which cannot be behind it.
 					ld		hl,(relink_from)
+					ld		c,a
 					ld		a,h
 					or		l
-					jr		nz,.from		; part-way down: pick up from there
-					ld		hl,(sort_head)		; ...or the front of the sorted run
+					jr		nz,.from
+					ld		a,c
+					and		a
+					jr		z,.from_front		; belongs earlier: start over
+					ld		hl,(insert_at)		; belongs later: on from where it was
+					jr		.from
+.from_front:		ld		hl,(sort_head)
 .from:				jp		depth_insert_from		; the setup above still stands
