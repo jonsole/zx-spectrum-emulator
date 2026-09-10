@@ -273,16 +273,29 @@ player_step:        ld      bc,KEY_UPLEFT
                     jr      .move
 .down_left:         ld      de,$00FF            ; -V
 
-        ; Both halves move, then each repaints its own area. Repainting the
-        ; legs before the body has moved composites the body at its old place
-        ; inside the legs' region -- but the body's own repaint covers where it
-        ; was, so that is put right a moment later.
-.move:              push    de
+        ; The knight is one thing in two records, so he repaints as one region.
+        ; Doing a half at a time flickered along his waist: the legs and the
+        ; body overlap by six rows, and repainting the legs composites the
+        ; body wherever it is at that moment -- which, halfway through a step,
+        ; is still where it was. The body's own repaint put it right, but not
+        ; before the raster had had a chance to show the wrong one. Both
+        ; halves move first now, and the seam is painted once.
+.move:              call    region_reset
+                    ld      ix,player_legs
+                    call    region_add          ; where he was
+                    ld      ix,player_body
+                    call    region_add
+                    push    de
                     ld      ix,player_legs
                     call    player_move
                     pop     de
                     ld      ix,player_body
-        ;; NB: fall through
+                    call    player_move
+                    ld      ix,player_legs
+                    call    region_add          ; and where he is now
+                    ld      ix,player_body
+                    call    region_add
+                    jp      redraw_view
 
 ; How far the player may walk before the wall stops it.
 ;
@@ -304,7 +317,7 @@ FLOOR_LO            EQU     72
 FLOOR_HI            EQU     180
 
 
-; Move one object by D in U and E in V, and repaint what that disturbed.
+; Move one object by D in U and E in V. The caller repaints.
 player_move:        push    de
                     call    extent_save
                     pop     de
@@ -328,8 +341,7 @@ player_move:        push    de
 .keep_v:
                     ld      a,(ix+OBJ.GFX)
                     call    object_place
-                    call    depth_relink
-                    jp      redraw_moved
+                    jp      depth_relink
 
 
 ; One unit along the square, then repaint only what that disturbed.
@@ -416,6 +428,44 @@ copy_routines:		DW		vid_buff_copy_1, vid_buff_copy_2, vid_buff_copy_3
 ; -- two objects in a region wanting opposite orientations leave whichever
 ; the pass reached last holding the graphic. sprite_orient asks per object
 ; instead, at the point of drawing, so this is gone.
+
+
+; Start a region that several objects will be folded into. The bounds begin
+; impossible -- a minimum nothing can be above, a maximum nothing can be below
+; -- so the first region_add sets both. Adding nothing at all leaves them that
+; way, which redraw_view would read as a region and try to draw, so every
+; region_reset must be followed by at least one region_add.
+region_reset:       ld      hl,$00FF            ; l = min, h = max
+                    ld      (view_y_extent),hl
+                    ld      (view_x_extent),hl
+                    ret
+
+
+; Widen the pending region to take in one object's extent.
+;   IX -> the object
+; Corrupts A and HL. DE, BC and IX are untouched, so a caller can hold a step
+; in DE across it.
+region_add:         ld      hl,view_y_extent
+                    ld      a,(ix+OBJ.MIN_Y)
+                    cp      (hl)
+                    jr      nc,.max_y           ; keep whichever is smaller
+                    ld      (hl),a
+.max_y:             inc     hl
+                    ld      a,(ix+OBJ.MAX_Y)
+                    cp      (hl)
+                    jr      c,.min_x            ; keep whichever is larger
+                    ld      (hl),a
+.min_x:             ld      hl,view_x_extent
+                    ld      a,(ix+OBJ.MIN_X)
+                    cp      (hl)
+                    jr      nc,.max_x
+                    ld      (hl),a
+.max_x:             inc     hl
+                    ld      a,(ix+OBJ.MAX_X)
+                    cp      (hl)
+                    ret     c
+                    ld      (hl),a
+                    ret
 
 
 ; Remember an object's extent, before it moves.
