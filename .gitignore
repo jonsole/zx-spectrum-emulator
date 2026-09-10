@@ -93,6 +93,13 @@ examples/filmation/output/
 # packed sprite_data.bin IS committed; the example does not build without it.
 examples/filmation/sprite_data.s
 
+# Likewise the assembly form of examples/filmation/room_data.bin: every room
+# in Knight Lore, the templates they are built from, and the tables that index
+# them. rooms.py regenerates it, so only the packed file is carried. Note that
+# sprite_adj.s is NOT here -- adj.py can only produce it from a running game,
+# so that one is committed.
+examples/filmation/room_data.s
+
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:

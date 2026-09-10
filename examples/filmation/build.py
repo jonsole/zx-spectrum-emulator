@@ -4,9 +4,13 @@ The .sna comes out of the SAVESNA directive at the bottom of filmation.s, so
 one sjasmplus invocation produces everything the debugger needs -- the
 snapshot to load, the SLD to map addresses to source lines, and a listing.
 
-sprite_data.s is generated rather than hand-written (see sprites.py); it is
-regenerated here whenever sprite_data.bin or the generator is newer than it,
-which is the one build step beyond calling the assembler.
+sprite_data.s and room_data.s are generated rather than hand-written -- see
+sprites.py and rooms.py -- and are regenerated here whenever their packed
+inputs or their generators are newer, which is the one build step beyond
+calling the assembler.
+
+sprite_adj.s is generated too, but by adj.py from a RUNNING Knight Lore, so it
+is committed and never rebuilt here.
 
 Run it directly, or via the "filmation.build" VS Code task that
 .vscode/launch.json's "ZX Spectrum: Filmation" configuration depends on.
@@ -102,9 +106,33 @@ def assemble(sjasmplus: str) -> None:
     print(f"Wrote {OUT_DIR / 'filmation.sna'} and {OUT_DIR / 'filmation.sld'}")
 
 
+def generate_room_data() -> None:
+    """Regenerates room_data.s when its inputs have moved on.
+
+    rooms.py writes the file itself rather than to stdout, because it is
+    thousands of lines of named templates and commented room records rather
+    than one table.
+    """
+    generator = HERE / "rooms.py"
+    packed = HERE / "room_data.bin"
+    generated = HERE / "room_data.s"
+
+    if not packed.is_file():
+        sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
+                 "own copy of Knight Lore to produce it")
+
+    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime)
+    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+        return
+
+    print(f"Regenerating {generated.name} from {packed.name}")
+    subprocess.run([sys.executable, str(generator)], cwd=HERE, check=True)
+
+
 def main() -> None:
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
+    generate_room_data()
     assemble(sjasmplus)
 
 

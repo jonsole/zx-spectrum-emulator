@@ -58,6 +58,12 @@ SIZE_Z:				DS		1
 ; because their pixel Y counts up from the bottom and ours counts down.
 ADJ_X:				DS		1
 ADJ_Y:				DS		1
+
+; The Knight Lore graphic number this object is drawn from. object_update
+; takes it in A and does not keep it, but room building needs it after the
+; fact to look the pixel adjustments up, and animation will need it to step
+; from one frame to the next.
+GFX:				DS		1
 					ENDS
 
 
@@ -72,6 +78,18 @@ ADJ_Y:				DS		1
 ; so it needs no buffer at all and passes 0.
 
 OBJ_MOVABLE			EQU		0x80		; FLAGS bit 7
+
+; FLAGS bit 5: SPRITE_L/H points at this object's own rotated copy rather
+; than at the shared graphic. Set by shift_sprite, cleared on the byte-
+; aligned path. redraw_orient skips these -- the copy is private, it was
+; rotated from the orientation the object wanted, and SPRITE - 2 is not a
+; sprite header at all but whatever happens to precede the buffer.
+OBJ_SHIFTED			EQU		0x20
+
+; FLAGS bit 0: the orientation this object wants, in the same bit position
+; as SPRITE_FLIPPED in the sprite's own header, so the comparison between
+; the two is a plain XOR.
+OBJ_FLIP_H			EQU		SPRITE_FLIPPED
 
 ; One object record. The list owns NEXT and PREV -- they start zero and
 ; depth_insert fills them in. `shift_buf` is the object's own rotation
@@ -148,15 +166,42 @@ object_place:		push	af
 
 
 object_update:
-					add		a,a
-					ld		h,high sprite_table
+					; A is a Knight Lore graphic number, and sprite_table has an
+					; entry for all 256 of them -- 512 bytes, so it cannot be reached
+					; by putting the doubled index in L. Hold the base pre-halved
+					; instead and double the pair: the index doubles with it, and its
+					; carry lands in the high byte where it belongs. Needs ALIGN 512,
+					; same as the view buffer's row address.
 					ld		l,a
+					ld		h,(high sprite_table) / 2
+					add		hl,hl		; hl = sprite_table + graphic * 2
 					ld		a,(hl)
-					inc		l
+					inc		l		; the low byte is even, so this cannot wrap
 					ld		h,(hl)
 					ld		l,a
 
 					; sprite in HL
+
+					; Mirror the graphic now if this object wants the other way
+					; round. It has to happen here, before the width is read and
+					; before shift_sprite rotates: a rotated copy is private to one
+					; object and nothing looks at it again, so it must be taken from
+					; the orientation that object asked for. An unshifted object gets
+					; checked again at draw time, in redraw_orient, because some
+					; other object may mirror the shared bytes in the meantime.
+					;
+					; BC is the screen position and is wanted below; DE is not live
+					; yet, so sprite_flip_h is free to use it.
+					ld		a,(hl)
+					xor		(ix+OBJ.FLAGS)
+					and		SPRITE_FLIPPED
+					jr		z,.oriented
+					push	bc
+					push	hl
+					call	sprite_flip_h
+					pop		hl
+					pop		bc
+.oriented:
 
 					; x extent
 					ld		a,c
@@ -190,8 +235,11 @@ object_update:
 					add		a,(ix+OBJ.MIN_X)
 					ld		(ix+OBJ.MAX_X),a		; max_x (byte position, exclusive)
 
-					; blit table index
+					; blit table index -- masked, because byte 0 also carries the
+					; sprite's current orientation and this value is used raw as an
+					; index into sprite_jump_table, here and in shift_sprite
 					ld		a,(hl)
+					and		BLIT_IDX_MASK
 					ld		(ix+OBJ.BLIT_IDX),a
 
 					; Y extent. B is the sprite's BASE -- the row just past its bottom --
@@ -201,31 +249,67 @@ object_update:
 					inc		l		; hl -> the sprite's height
 					ld		a,b
 					sub		(hl)
-					ld		(ix+OBJ.MIN_Y),a		; top = base - height
+					jr		nc,.on_screen
+
+					; It runs off the top of the screen. Nothing here clips a
+					; sprite against row 0: the extents are single bytes, so a
+					; negative MIN_Y wraps to something near 255, the region
+					; that implies is hundreds of rows tall, and the Y offset
+					; into the view buffer overflows the one carry the row
+					; address can take -- which puts the blit outside the
+					; buffer altogether. Give it an empty extent instead, so
+					; every cull drops it, and leave it undrawn until there is
+					; something here that can clip properly.
+					xor		a
+					ld		(ix+OBJ.MIN_Y),a
+					ld		(ix+OBJ.MAX_Y),a
+					jr		.y_done
+
+.on_screen:			ld		(ix+OBJ.MIN_Y),a		; top = base - height
 					ld		a,b
 					ld		(ix+OBJ.MAX_Y),a		; base (exclusive)
+.y_done:
                     
 					; rotate sprite in HL to buffer in DE
                     ex      af,af'                  ; A - shift amount / Z set, A' - height
 					jr		z,.no_shift		; already byte-aligned: nothing to rotate
-					; An object with no shift buffer cannot be rotated. That is not
-					; supposed to happen -- a movable object is given one -- but placing a
-					; "static" object in world coordinates lands it on an arbitrary pixel,
-					; and rotating into a null pointer reads the blit back out of ROM.
-					; Draw it byte-aligned instead: up to 7 pixels left of true, and
-					; MIN_X/MAX_X already describe exactly that.
+					; This object needs rotating. Has it somewhere to rotate into?
 					ld		b,(ix+OBJ.BUF_H)		; B is free here; A still holds the
 					inc		b		; shift amount, which .shift_sprite
 					dec		b		; needs, so test without touching it
 					jp		nz,.shift_sprite
-.no_shift:			
+
+					; No. Take one from the room's arena, sized for this sprite.
+					; Which objects need a buffer is a property of where the room
+					; puts them -- a static placed in world coordinates lands on an
+					; arbitrary pixel -- so it is settled here, the first time one
+					; turns out to be off the byte grid, rather than declared with
+					; the record. An animated object wants its buffer sized for its
+					; largest frame instead: allocate that one up front and this
+					; will find it already there.
+					push	af		; the shift amount, which shift_alloc clobbers
+					dec		l		; hl -> the sprite record; ALIGN 4 makes this safe
+					call	shift_alloc
+					inc		l
+					pop		af
+
+					; A null buffer here means the arena is full. Nothing can be
+					; rotated into a null pointer -- it would read the blit back out
+					; of ROM -- so draw it byte-aligned instead: up to 7 pixels left
+					; of true, which MIN_X/MAX_X already describe exactly.
+					ld		b,(ix+OBJ.BUF_H)
+					inc		b
+					dec		b
+					jp		nz,.shift_sprite
+.no_shift:
 
 					; store sprite mask/data address: sprite's own bitmap, BLIT_IDX
 					; already matches its raw width (no +1 - no shift overflow column)
 					inc		l
                     ld		(ix+OBJ.SPRITE_L),l
 					ld		(ix+OBJ.SPRITE_H),h
-					ret
+					res		5,(ix+OBJ.FLAGS)		; drawn from the shared graphic, so
+					ret		; redraw_orient must keep an eye on it
 
 .shift_sprite:
                     ; A - shift amount, A' - height
@@ -329,6 +413,9 @@ object_update:
 					ld		(ix+OBJ.SPRITE_L),a
 					ld		a,(ix+OBJ.BUF_H)
 					ld		(ix+OBJ.SPRITE_H),a
+					set		5,(ix+OBJ.FLAGS)		; this copy is private and already
+					; the right way round: redraw_orient
+					; leaves it alone
 					ld		a,(ix+OBJ.BLIT_IDX)
 					add		a,32				; the rotated copy has one extra overflow column vs the sprite's own bitmap - bump to the next width-class
 					ld		(ix+OBJ.BLIT_IDX),a

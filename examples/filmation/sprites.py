@@ -57,7 +57,22 @@ while f_data:
 
     f_data = f_data[num_bytes:]
 
-print("\t\t\tALIGN\t256")
+# The table is indexed by KNIGHT LORE's graphic number, not by our sprite
+# number. Its own table at $7112 is 256 pointers into sprite memory and
+# several graphic numbers share a bitmap -- 186 valid graphics across 103
+# sprites -- so the room templates can name sprites directly only if we
+# number them its way. graphic_map.bin holds that mapping; see kl_extract.py.
+#
+# 256 entries is 512 bytes, so the table is ALIGNed to its own size and
+# object_update reaches it by doubling a pre-halved base, rather than the
+# single `ld h,high sprite_table` that a 128-entry table allowed.
+gmap = Path('graphic_map.bin').read_bytes()
+print()
+print("\t\t\tALIGN\t512")
 print("sprite_table:")
-for l in [spr_list[i:i + 4] for i in range(0, len(spr_list), 4)]:
-    print('\t\t\tDW\t' + ', '.join(l))
+for row in range(0, 256, 4):
+    cells = []
+    for g in range(row, row + 4):
+        n = gmap[g]
+        cells.append(spr_list[n] if n < len(spr_list) else '0')
+    print('\t\t\tDW\t' + ', '.join(cells) + '\t; $%02X' % row)

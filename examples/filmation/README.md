@@ -269,6 +269,175 @@ rows past the region are never read. `push de` is one byte, so where the run of
 pushes is entered decides how much it clears — enter it `rows * 4` pushes from
 the end. A 30-row region costs 1320T, under what the old flat clear cost.
 
+## Building a room
+
+The example no longer draws one hand-copied room. It builds any of Knight
+Lore's 128 from the game's own data.
+
+Knight Lore does not store rooms as lists of objects. It stores **templates**,
+and a room is four bytes plus a handful of indices naming them. Room $B3 is:
+
+```
+room_B3:            DB      $06, 4, 0
+                    DB      BG_ARCH_N, BG_ARCH_E, BG_ARCH_S, BG_WALLS_0
+```
+
+an attribute byte, a scenery count, an object-byte count, and four indices --
+which expand to exactly the 19 objects that used to be pasted into
+`filmation.s`. The attribute byte carries the room's colour in bits 0-2 and its
+shape in bits 3 up; there are three shapes, `64 x 64 x 128` and two narrower
+ones, and only the floor changes.
+
+**Scenery** templates carry their own positions, so a piece is
+`sprite, U, V, Z, size U, size V, size Z, flags` -- our object record almost
+field for field, which makes the expansion a copy. **Object** templates carry
+no position at all, so one block template serves every block in the castle;
+their positions come from the room, one packed byte each, three bits of U,
+three of V and two of Z, unpacked in `room_unpack`.
+
+### Numbering sprites the game's way
+
+The templates name Knight Lore's graphic numbers, so `sprite_table` is indexed
+by those rather than by our own: 256 entries, several of which point at the
+same bitmap. The game's table at `$7112` maps 186 valid graphics onto the 103
+sprites we hold, and `graphic_map.bin` carries that mapping. At 512 bytes the
+table no longer fits the `ld h,high sprite_table` a 128-entry one allowed, so
+`object_update` doubles a pre-halved base instead -- the same trick the view
+buffer's row address uses, and it needs the same `ALIGN 512`.
+
+### Adjustments are harvested, not ported
+
+Every sprite is nudged a few pixels so its artwork lines up with its logical
+position. Knight Lore picks those inside **29 different per-graphic update
+routines** -- it is behaviour, not a table -- so `adj.py` takes the values
+rather than the code, driving a running game and reading the pairs out of live
+object records. Ten rooms cover all 50 (graphic, mirrored) pairs the castle
+uses. The result reproduces all 19 of room $B3's adjustments exactly.
+
+Forcing a room needs no register writes: the frame loop ends with `JP $AFBD` at
+`$B085`, one instruction past the room-entry call, so pointing it at `$AFBA`
+makes the game rebuild whatever room `$5C10` names, every frame.
+
+### What is not clipped
+
+An object whose top runs off the screen is **dropped**. `MIN_Y` is a single
+byte, so `base - height` wraps when a sprite is taller than its base row; the
+region that implies is hundreds of rows tall, and the offset into the view
+buffer overflows the one carry the row address can take, which puts the blit
+outside the buffer entirely. It found this by overwriting the room templates.
+
+Rooms with tall stacks lose a few objects to this. Clipping a sprite against
+row 0 -- clamping the extent and starting the bitmap that many rows in -- is
+the fix, and it has to work through the rotation path too, so it is its own
+piece of work rather than a guard.
+
+Foreground objects are placed but inert: no monster moves and nothing
+animates. Placement is room generation; behaviour is not.
+
+### The pipeline
+
+Nothing here is hand-written:
+
+| | |
+|---|---|
+| `kl_extract.py` | run once against your own game; writes `room_data.bin` and `graphic_map.bin` |
+| `rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
+| `sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` |
+| `adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
+
+`build.py` regenerates the first three. The room data and the adjustment tables
+live in contended memory at `$6000`: they are read when a room is built and
+never again, which is where the game itself kept them.
+
+## Mirroring
+
+A wall running along U and the same wall running along V are one graphic seen
+from two sides, and only one of them is stored. That is not a nicety — it is
+most of why the artwork fits at all. Room $B3 has 19 objects drawn from 8
+graphics, and **10 of those objects are mirrored**; six of the eight graphics
+serve both orientations.
+
+The mirror is horizontal, about the screen's vertical axis. Row order does not
+enter into it, so nothing here has to know that `sprites.py` already turned
+Ultimate's bottom-up rows the right way up. Knight Lore also has a vertical
+flip, but no object in the game ever asks for one — every site touching the
+flags byte uses `$40` — and only one sprite in our set (`sprite_014`, 4x32, not
+used in this room) is stored upside down. So `sprite_flip_h` is all there is.
+
+### One copy, mirrored where it lies
+
+`sprite_flip_h` mirrors a sprite **in place** and records which way round it
+now is in bit 0 of the sprite's own header. Objects share the bytes; nobody
+keeps a second copy. Knight Lore does the same thing in `flip_sprite` ($D6EF).
+The alternative — building mirrored copies into an arena at room load — costs
+about 1.2 KB for this room alone and grows with every room, which gives back
+exactly what mirroring was for.
+
+The header has room for the flag because byte 0 is the blit index,
+`(width - 2) * 32`, so bits 5-7 are the width class and bits 0-4 are spare.
+Knight Lore keeps the same state in the same byte at bit 6, which is part of
+the width field for us. Anything using byte 0 as a jump-table index masks it
+with `BLIT_IDX_MASK` first; the width unpack does not need to, since it rotates
+the class down and masks with 7 on the way past.
+
+`sprite_flip_h` makes two passes over each row: the first reverses the bits of
+every byte where it lies, the second swaps the columns end for end. Splitting
+them is what keeps the second free of a special case for an odd middle column —
+widths 1, 3 and 5 all occur — because a column with no partner is simply never
+reached, and the first pass has already dealt with it.
+
+### Sharing means checking at render time
+
+Because the bytes are shared, an object that draws a graphic unmirrored can find
+that another object has mirrored it since. So the orientation is checked **when
+the object is about to be rendered**, not when it is placed. Two places do it:
+
+- `object_update`, before the width is read and before `shift_sprite` rotates. A
+  rotated copy is private to one object and nothing looks at it again, so it has
+  to be taken from the orientation that object asked for.
+- `redraw_orient`, walking the list immediately before `objects_draw_all`, for
+  every object still drawing from the shared graphic.
+
+`FLAGS` bit 5 says which of the two an object is: set by `shift_sprite`, cleared
+on the byte-aligned path. `redraw_orient` skips the shifted ones — their
+`SPRITE_L/H` points into a private buffer, so `SPRITE - 2` is not a sprite
+header at all. For an unshifted object it is, because `SPRITE` is the record
+plus 2 and records are `ALIGN 4`, so the two `dec l` cannot borrow.
+
+`FLAGS` bit 0 is the orientation the object wants, in the same bit position as
+`SPRITE_FLIPPED` in the header, so comparing them is a plain `XOR`.
+
+### Why not inside `objects_draw_all`
+
+That is where the check belongs by rights, and it will not fit. The routine
+repurposes `SP` as its record pointer and reads the record as a sequential run
+of `POP`s: `pop iy` takes NEXT, so `IY` holds the *next* object rather than this
+one, and the record is reachable only through `SP`. `FLAGS` lands in `E` and the
+sprite address in `HL'`, on opposite sides of a `jp (hl)` through
+`sprite_jump_table` and an `exx`. `redraw_orient` runs at the same point in the
+frame with a normal stack and free registers, and leaves the hot loop alone.
+
+It applies the same extent cull `objects_draw_all` does. Without it, every object
+in the room would be dragged into whichever orientation it wanted on every single
+region, and objects sharing a graphic in opposite orientations would mirror it
+back and forth for nothing.
+
+### What it costs
+
+Painting the room went from 301,113 T to 373,598 T, a one-off 24% on the opening
+screen: 15 mirrors during the draw against a floor of about 11 (a graphic must be
+turned once for each run of objects wanting the same side), plus `redraw_orient`
+walking 19 objects for each of 19 regions.
+
+Steady state is the cull walk, roughly 1.3 kT per region, and nothing else —
+mirrors only happen when two objects sharing a graphic in **opposite**
+orientations fall inside the **same** region. Dirty-rectangle redraw makes that
+much rarer than it is in Knight Lore, which repaints every dirty object every
+frame. This room never hits it: the three copies of graphic 71 are far apart.
+
+Placement costs 14 mirrors, which is exactly the number of times the requested
+orientation differs from the last one asked for, walking `room_data` in order.
+
 ## Shift buffers, one per movable object
 
 An object at a sub-byte X offset is drawn by rotating its sprite into a buffer
@@ -333,6 +502,13 @@ Two further engine changes, both in `object.s`:
   padding.
 
 ## Cost
+
+These figures were taken on the **demo scene**, which had three movers walking
+around a stack of cubes. That scene is gone -- the example now draws a static
+Knight Lore room -- and they predate both the 8 x 64 view buffer and mirroring,
+so treat them as a profile of the drawing path rather than of what runs today.
+The current numbers for the room are under "The buffer is 8 x 64" and
+"Mirroring" above.
 
 Measured on a cycle-accurate bus trace of one main-loop iteration, with three
 movers: **95,494 T-states, or 1.37 of a 69,888 T frame.** With two movers it was
