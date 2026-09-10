@@ -103,21 +103,20 @@ start:              di
                     cp      (hl)
                     jr      nz,.enter
 
-                    ; Wait for the frame. Interrupts are off everywhere else --
-                    ; every part of the drawing path repurposes SP, so one taken
-                    ; mid-blit would push a return address into a sprite -- so
-                    ; they are let in here and nowhere else, for exactly one.
+                    ; Nothing waits for the frame. There used to be an
+                    ; `ei; halt; di` here, and it cost more than it bought: the
+                    ; drawing takes longer than a frame, so the HALT found the
+                    ; interrupt already gone and sat out a whole second one --
+                    ; the loop ran at 25Hz to stay in step with a raster it was
+                    ; never going to keep up with anyway. Knight Lore does not
+                    ; wait either.
                     ;
-                    ; IM 1 sends it to the ROM at $0038, which scans the keyboard
-                    ; through IY, so IY has to point at the system variables
-                    ; while that runs. Nothing else in the engine leaves it
-                    ; there: objects_draw_all uses IY as its list pointer, and
-                    ; sets it itself.
-                    ld      iy,$5C3A
-                    ei
-                    halt
-                    di
-
+                    ; Interrupts stay off, then, as they are everywhere else in
+                    ; the engine: every part of the drawing path repurposes SP,
+                    ; so one taken mid-blit would push a return address into a
+                    ; sprite. Nothing needs them -- the keyboard is read
+                    ; directly, in player_step, rather than through the ROM's
+                    ; scan.
                     call    wolf_step
                     call    player_step
                     jr      .loop
