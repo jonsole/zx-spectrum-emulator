@@ -111,6 +111,7 @@ start:              di
                     ld      (room_shown),a
                     call    room_build
                     call    mover_add
+                    call    player_add
 
                     ; Poke room_number from the debugger and the castle turns
                     ; over; otherwise the mover just keeps walking.
@@ -135,6 +136,7 @@ start:              di
                     di
 
                     call    mover_step
+                    call    player_step
                     jr      .loop
 
 
@@ -197,6 +199,144 @@ mover_add:          ld      ix,mover
                     ld      a,MOVER_GFX
                     call    object_place
                     jp      depth_insert
+
+
+; --- the player -------------------------------------------------------------
+;
+; Two objects, as Knight Lore draws it: legs on the floor and the body and head
+; a dozen units above them, moving together. That is why the game keeps two
+; records at the player's position rather than one.
+;
+; Same arrangement as the mover -- not part of the room, joins the sorted list
+; once the room is built. Both halves need the ALIGN after them: object_record
+; lays down 23 bytes and a record is ROOM_STRIDE wide.
+                    ALIGN   ROOM_STRIDE
+player_legs:        object_record   OBJ_MOVABLE, 0, 6, 6, 12
+                    ALIGN   ROOM_STRIDE
+player_body:        object_record   OBJ_MOVABLE, 0, 6, 6, 12
+                    ALIGN   ROOM_STRIDE
+
+PLAYER_LEGS_GFX     EQU     18          ; 3 x 16
+PLAYER_BODY_GFX     EQU     39          ; 3 x 24
+PLAYER_U            EQU     128
+PLAYER_V            EQU     104         ; clear of the cauldron at 128,128
+PLAYER_Z            EQU     128         ; the floor
+PLAYER_BODY_UP      EQU     12          ; where the body rides above the legs
+
+
+; Put the player in the room that has just been built.
+player_add:         ld      ix,player_legs
+                    ld      a,PLAYER_LEGS_GFX
+                    ld      e,PLAYER_Z
+                    call    .half
+                    ld      ix,player_body
+                    ld      a,PLAYER_BODY_GFX
+                    ld      e,PLAYER_Z + PLAYER_BODY_UP
+        ;; NB: fall through
+.half:              ld      (ix+OBJ.GFX),a
+                    ld      (ix+OBJ.U),PLAYER_U
+                    ld      (ix+OBJ.V),PLAYER_V
+                    ld      (ix+OBJ.Z),e
+                    ld      (ix+OBJ.FLAGS),OBJ_MOVABLE
+                    ld      (ix+OBJ.BUF_L),0        ; the old arena went with the
+                    ld      (ix+OBJ.BUF_H),0        ; old room
+                    push    af
+                    call    room_adjust
+                    pop     af
+                    call    object_place
+                    jp      depth_insert
+
+
+; Read the keys and step the player.
+;
+; The four isometric directions are the two floor axes both ways. With
+; screenX = U + V - 128 and the base hung off (V - U) >> 1, a step along +U
+; goes down and right, +V up and right, and their negatives the other two --
+; so the keys pair up as a diamond.
+KEY_UPLEFT          EQU     $FBFE       ; Q, bit 0
+KEY_DOWNRIGHT       EQU     $FDFE       ; A, bit 0
+KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
+
+player_step:        ld      bc,KEY_UPLEFT
+                    in      a,(c)
+                    rra                         ; a key reads 0 while it is held
+                    jr      nc,.up_left
+                    ld      bc,KEY_DOWNRIGHT
+                    in      a,(c)
+                    rra
+                    jr      nc,.down_right
+                    ld      bc,KEY_RIGHT
+                    in      a,(c)
+                    rra
+                    jr      nc,.up_right
+                    rra
+                    jr      nc,.down_left
+                    ret                         ; nothing held: nothing moved,
+                    ; and so nothing to repaint
+
+        ; D is the step in U, E the step in V -- so LD DE,$FF00 is one back
+        ; along U and nothing along V. Going the other way: +U is down and
+        ; right, +V up and right, and the negatives are the opposite corners.
+.up_left:           ld      de,$FF00            ; -U
+                    jr      .move
+.down_right:        ld      de,$0100            ; +U
+                    jr      .move
+.up_right:          ld      de,$0001            ; +V
+                    jr      .move
+.down_left:         ld      de,$00FF            ; -V
+
+        ; Both halves move, then each repaints its own area. Repainting the
+        ; legs before the body has moved composites the body at its old place
+        ; inside the legs' region -- but the body's own repaint covers where it
+        ; was, so that is put right a moment later.
+.move:              push    de
+                    ld      ix,player_legs
+                    call    player_move
+                    pop     de
+                    ld      ix,player_body
+        ;; NB: fall through
+
+; How far the player may walk before the wall stops it.
+;
+; Provisional. The right answer is room_size_tbl, which gives each room shape
+; its floor in U and V -- room_shape reads that table already but keeps only
+; the Z. Until the two are wired through, these are the numbers the room looks
+; right at: the blocks stand at 88 to 168 and the walls at 59 and 196, so the
+; floor between them is about this.
+;
+; Something has to stop it, though. Walk out of the room and the projection
+; puts the object at screen coordinates that wrap, so a repaint region wraps
+; with it and scribbles down the far edge of the screen.
+FLOOR_LO            EQU     68
+FLOOR_HI            EQU     188
+
+
+; Move one object by D in U and E in V, and repaint what that disturbed.
+player_move:        push    de
+                    call    extent_save
+                    pop     de
+        ; Work the step out, and only keep it if it lands between the walls.
+        ; Simpler than moving and undoing, and it does not need to know which
+        ; of the two axes this step was along.
+                    ld      a,(ix+OBJ.U)
+                    add     a,d
+                    cp      FLOOR_LO
+                    jr      c,.keep_u
+                    cp      FLOOR_HI + 1
+                    jr      nc,.keep_u
+                    ld      (ix+OBJ.U),a
+.keep_u:            ld      a,(ix+OBJ.V)
+                    add     a,e
+                    cp      FLOOR_LO
+                    jr      c,.keep_v
+                    cp      FLOOR_HI + 1
+                    jr      nc,.keep_v
+                    ld      (ix+OBJ.V),a
+.keep_v:
+                    ld      a,(ix+OBJ.GFX)
+                    call    object_place
+                    call    depth_relink
+                    jp      redraw_moved
 
 
 ; One unit along the square, then repaint only what that disturbed.
