@@ -136,6 +136,8 @@ OBJ_BACKGROUND		EQU		0x40
 OBJ_FLIP_H			EQU		SPRITE_FLIPPED
 OBJ_FLIP_BIT		EQU		0		; ...and its bit number, for SET and RES
 
+SCREEN_ROWS			EQU		192		; the last row an object may be drawn on
+
 ; One object record. The list owns NEXT and PREV -- they start zero and
 ; depth_insert fills them in. `shift_buf` is the object's own rotation
 ; buffer, or 0 when it is never drawn at a sub-byte X offset.
@@ -308,8 +310,32 @@ object_update:
 					jr		.y_done
 
 .on_screen:			ld		(ix+OBJ.MIN_Y),a		; top = base - height
+
+					; ...and the other end. A room can stand something below
+					; the bottom of the screen -- a wall base in a room whose
+					; floor sits low -- and nothing downstream notices: the
+					; copy walks down from wherever the region starts, so rows
+					; past 191 land in the attribute file and then in the
+					; system variables, which is a room of coloured squares and
+					; then whatever happens next.
+					;
+					; A base past the last row is clipped to it, which is all
+					; the drawing needs: extent_intersect takes the overlap
+					; from the extents, so a shortened one simply blits fewer
+					; rows. A top past it is an empty extent, the same answer
+					; the other end gives.
+					cp		SCREEN_ROWS
+					jr		nc,.under
 					ld		a,b
-					ld		(ix+OBJ.MAX_Y),a		; base (exclusive)
+					cp		SCREEN_ROWS + 1
+					jr		c,.base_on_screen
+					ld		a,SCREEN_ROWS		; only the top of it shows
+.base_on_screen:	ld		(ix+OBJ.MAX_Y),a		; base (exclusive)
+					jr		.y_done
+
+.under:				xor		a		; wholly below the screen
+					ld		(ix+OBJ.MIN_Y),a
+					ld		(ix+OBJ.MAX_Y),a
 .y_done:
                     
 					; rotate sprite in HL to buffer in DE
