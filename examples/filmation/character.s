@@ -36,6 +36,11 @@ CHARACTER_TICKS		EQU		3		; frames each frame of it is held for
 					; as well: sprite_adj has -6 for the legs and -8 for the
 					; body and calc_screen_xy subtracts that, so the body lands
 					; two pixels lower than its Z alone would put it.
+CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
+					; the same twelve Knight Lore gives the
+					; knight. Z is what the depth sort reads, so
+					; the height belongs here and not in the
+					; pixel nudge -- see ADJ_LIFT.
 CHARACTER_Z			EQU		128		; the floor
 
 ; How far a character may walk before the wall stops it.
@@ -68,15 +73,17 @@ FLOOR_HI			EQU		180
 ; as a macro call takes the address BEFORE the macro's first line, so an ALIGN
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
-				MACRO	character_record legs_base, body_base, body_block, body_phase, body_up, facing
+				MACRO	character_record legs_base, body_base, body_block, body_phase, body_lift, facing
 					object_record	OBJ_MOVABLE, 0, 6, 6, 12
 					DS		OBJ.FACING - OBJ.ADJ_X, 0		; ADJ_X, ADJ_Y, GFX
 					DB		facing, 0, CHARACTER_TICKS
 					DB		legs_base, body_base
-					DB		body_block, body_phase, body_up
+					DB		body_block, body_phase, 0		; the legs' nudge stands as it is
 					DS		ROOM_STRIDE - OBJ, 0		; out to a whole slot
 					object_record	OBJ_MOVABLE, 0, 6, 6, 12
-					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; and the body's own tail
+					DS		OBJ.ADJ_LIFT - OBJ.ADJ_X, 0
+					DB		body_lift		; ...and the body's may not
+					DS		ROOM_STRIDE - OBJ, 0
 				ENDM
 
 
@@ -84,7 +91,7 @@ FLOOR_HI			EQU		180
 				; werewolf he turns into at night. Six body graphics to a
 				; facing, the two blocks eight apart, riding twelve above.
 				MACRO	walking_character legs_base, body_base, facing
-					character_record legs_base, body_base, CHARACTER_BLOCK, $FF, 12, facing
+					character_record legs_base, body_base, CHARACTER_BLOCK, $FF, 0, facing
 				ENDM
 
 				; And one whose body is a single frame each way round, held
@@ -95,7 +102,7 @@ FLOOR_HI			EQU		180
 				; nothing: the game gives graphic 30 a nudge of +3 against the
 				; legs' -6, and calc_screen_xy subtracts both.
 				MACRO	standing_character legs_base, body_base, facing
-					character_record legs_base, body_base, 1, $00, 0, facing
+					character_record legs_base, body_base, 1, $00, -CHARACTER_BODY_UP, facing
 				ENDM
 
 					; A character's state has to fit in the slack of a slot.
@@ -178,9 +185,7 @@ character_add:		ld		(ix+OBJ.PHASE),0
 					ld		(ix+OBJ.Z),CHARACTER_Z
 					ld		(ix+CHARACTER_BODY+OBJ.U),b
 					ld		(ix+CHARACTER_BODY+OBJ.V),c
-					ld		a,CHARACTER_Z
-					add		a,(ix+OBJ.BODY_UP)
-					ld		(ix+CHARACTER_BODY+OBJ.Z),a
+					ld		(ix+CHARACTER_BODY+OBJ.Z),CHARACTER_Z + CHARACTER_BODY_UP
 
 					; A fresh start: the rotation buffers went back with the
 					; old room's arena, and OBJ_SHIFTED with them.
@@ -199,6 +204,7 @@ character_add:		ld		(ix+OBJ.PHASE),0
 .half:				ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
 					call	room_adjust
+					call	character_lift
 					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					jp		depth_insert
@@ -309,6 +315,18 @@ character_half:		push	de
 		; artwork up may have changed with it -- and it certainly has if the
 		; character has just turned round.
 					call	room_adjust
+					call	character_lift
 					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					jp		depth_relink
+
+
+; Take the height back out of the nudge, for a body whose graphic was drawn
+; assuming it sits at its legs' Z. See ADJ_LIFT.
+;   IX -> the record, its nudge fresh from room_adjust
+character_lift:		ld		a,(ix+OBJ.ADJ_LIFT)
+					and		a
+					ret		z
+					add		a,(ix+OBJ.ADJ_Y)
+					ld		(ix+OBJ.ADJ_Y),a
+					ret

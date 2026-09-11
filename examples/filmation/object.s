@@ -86,7 +86,18 @@ BODY_BASE:			DS		1	; ...and of the body, which is a separate
 ; sitting at the legs' own Z and lifted by its pixel nudge instead.
 BODY_BLOCK:			DS		1	; what the facing block adds: 8, or 1
 BODY_PHASE:			DS		1	; a mask on the walk phase: $FF, or 0 to stand
-BODY_UP:			DS		1	; and how far it rides above the legs in Z
+
+; What to add to the pixel nudge this record gets from sprite_adj.
+;
+; Every body rides CHARACTER_BODY_UP above its legs in Z, because Z is what the
+; depth sort reads: a body that carries its height in its nudge instead sits in
+; the same box as its own legs, and the sort has nothing to tell them apart by.
+; Knight Lore does exactly that for the soldier and the wizard -- their body is
+; at the legs' own Z with a nudge of +3 against the legs' -6 -- so their
+; graphics want the height taking back out of the nudge, which is what this is
+; for. It is a byte of the object, not of the graphic, so re-running adj.py
+; cannot lose it.
+ADJ_LIFT:			DS		1
 					ENDS
 
 
