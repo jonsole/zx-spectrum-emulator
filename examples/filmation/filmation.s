@@ -90,9 +90,20 @@ ROOM_STRIDE         EQU     32
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
 
+        ; Nothing goes into a room that was not built. room_build leaves the
+        ; old room up when it is handed a number with no entry in room_tbl,
+        ; and the old room's objects are still in the list -- so adding the
+        ; characters again would insert records that are already there, and
+        ; an object compared against itself ties, which makes the scan take
+        ; itself as its own insertion point and link its NEXT to itself.
 .enter:             ld      a,(room_number)
-                    ld      (room_shown),a
                     call    room_build
+                    jr      c,.entered
+                    ld      a,(room_shown)      ; stay where we are
+                    ld      (room_number),a
+                    jr      .loop
+.entered:           ld      a,(room_number)
+                    ld      (room_shown),a
                     call    wolf_add
                     call    player_add
 
@@ -119,7 +130,54 @@ start:              di
                     ; scan.
                     call    wolf_step
                     call    player_step
+                    call    room_keys
                     jr      .loop
+
+
+; 1 goes back a room, 2 on to the next.
+;
+; Most numbers between one room and the next have no room against them, so
+; this steps over them rather than making you press the key twenty times: it
+; walks room_tbl until it finds an entry. A room always finds itself again if
+; there is nothing else, so the walk cannot run away.
+;
+; One room a press, not one a frame -- the whole row is compared against what
+; it read last time, so holding the key down does nothing after the first.
+KEY_ROOMS           EQU     $F7FE       ; 1 bit 0, 2 bit 1
+
+room_keys:          ld      bc,KEY_ROOMS
+                    in      a,(c)
+                    cpl                         ; a key reads 0 while it is held
+                    and     3
+                    ld      hl,room_key_held
+                    cp      (hl)
+                    ld      (hl),a              ; LD does not touch the flags
+                    ret     z                   ; nothing has changed
+                    and     a
+                    ret     z                   ; ...and nothing is held now
+                    rra
+                    ld      e,-1                ; 1: back a room
+                    jr      c,.step
+                    ld      e,1                 ; 2: on to the next
+.step:              ld      a,(room_number)
+.try:               add     a,e
+                    ld      l,a
+                    ld      h,0
+                    add     hl,hl
+                    ld      bc,room_tbl
+                    add     hl,bc
+                    ld      c,(hl)
+                    inc     hl
+                    ld      b,(hl)
+                    ld      d,a                 ; the number we are trying
+                    ld      a,b
+                    or      c
+                    ld      a,d
+                    jr      z,.try              ; no room there: keep going
+                    ld      (room_number),a
+                    ret
+
+room_key_held:      DB      0
 
 
 ; Which room to build. $88 is the cauldron room; $B3 is where the game begins.

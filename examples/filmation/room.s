@@ -58,7 +58,12 @@ room_build:			ld		l,a
 					ld		d,(hl)
 					ld		a,d
 					or		e
-					ret		z		; no such room; leave the old one up
+					ret		z		; no such room. OR clears the carry, and the
+					; caller must not go on to put anything in
+					; a room that was never built: the list is
+					; still the old room's, with the old room's
+					; objects in it, and adding one that is
+					; already there makes it its own successor
 
 					push	de		; the record
 
@@ -94,7 +99,9 @@ room_build:			ld		l,a
 					ld		(room_bg_flag),a		; nothing past the scenery is
 					call	room_objects_of		; background
 
-					jp		room_show
+					call	room_show
+					scf				; built
+					ret		
 
 
 ; Wipe the last room off the screen. Only whole rooms are drawn this way --
