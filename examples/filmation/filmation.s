@@ -55,6 +55,10 @@ STACK_TOP			EQU		0xFF00
                     ORG     $6000
                     INCLUDE "room_data.s"
                     INCLUDE "sprite_adj.s"
+
+; The one buffer every deferred rotation goes through, moved down here for the
+; same reason -- see shift.s for what it is and how it is sized.
+shift_shared:       DS      SHIFT_SHARED_SIZE
 room_data_end:
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
 
@@ -65,6 +69,7 @@ room_data_end:
 					INCLUDE "shift.s"
 					INCLUDE "character.s"
                     INCLUDE "room.s"
+					INCLUDE "mover.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -106,11 +111,10 @@ start:              di
                     jr      .loop
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
-                    call    wolf_add
                     call    player_add
 
                     ; Poke room_number from the debugger and the castle turns
-                    ; over; otherwise the soldier just keeps walking.
+                    ; over. The 1 and 2 keys do it from the keyboard.
 .loop:              ld      a,(room_number)
                     ld      hl,room_shown
                     cp      (hl)
@@ -130,7 +134,7 @@ start:              di
                     ; sprite. Nothing needs them -- the keyboard is read
                     ; directly, in player_step, rather than through the ROM's
                     ; scan.
-                    call    wolf_step
+                    call    movers_step
                     call    player_step
                     call    room_keys
                     jr      .loop
@@ -187,100 +191,6 @@ room_shown:         DB      $88
 ; Which side of the room being built the player is walking in through, or $FF
 ; for a room he did not walk into. player_entry spends it and puts it back.
 enter_dir:          DB      $FF
-
-
-; --- the soldier -------------------------------------------------------------
-;
-; A second character, walking a square around the room. That is the thing a
-; static scene cannot show: the depth sort, as it passes in front of some
-; scenery and behind the rest, and the redraw, which repaints the union of
-; where it was and where it is rather than the screen.
-;
-; It used to be a ball on a four-legged path, and it is a soldier now because
-; there is nothing more to say: the same two records the player is built from
-; with two numbers changed. He walks on the knight's own legs, which is how
-; the castle does it -- the soldier and the wizard both stand on graphic 145,
-; the shared leg block at 144 -- and the only thing that makes him a different
-; sort of character is that his torso is one frame each way round rather than
-; six.
-;
-; Only one of him, though. The player and a second character between them
-; repaint two regions a frame and the frame no longer fits: the loop takes two
-; of them per turn, so the demo runs at 25Hz. A third would cost another.
-;
-; Neither is part of the room. room_objects is sized to the fullest room in
-; the castle, so there is no spare slot, and room_build refills it from the
-; start anyway -- nothing in it survives a room change. These records join the
-; sorted list once the room is built, and rejoin after the next one.
-; The soldier: the player's own legs under a helmeted torso that does not
-; animate. Legs 16 rather than the 144 the game gives him, because the two are
-; the same four sprites under different numbers and only the numbers the knight
-; wears have been harvested both ways round -- graphic 145's nudge is 16-21's
-; to the pixel, so nothing is lost by using theirs.
-;
-; Swapping these two numbers is the whole of making it someone else:
-;   48, 64 with walking_character   the werewolf
-;   16, 158 with standing_character the wizard
-WOLF_LEGS_GFX       EQU     16
-WOLF_BODY_GFX       EQU     30
-WOLF_LO             EQU     84          ; the square it walks, chosen to weave
-WOLF_HI             EQU     172         ; through the ring of blocks
-WOLF_FACING         EQU     0           ; -U, so it starts by walking up-left
-
-wolf:               standing_character WOLF_LEGS_GFX, WOLF_BODY_GFX, WOLF_FACING
-
-
-; Put the soldier into the room that has just been built.
-wolf_add:           ld      ix,wolf
-                    ld      (ix+CHARACTER_FACING),WOLF_FACING
-                    ld      b,WOLF_HI
-                    ld      c,WOLF_LO
-                    ld      a,CHARACTER_Z
-                    jp      character_add
-
-
-; One step along the square. The facings run 0 to 3 in the order the sides of
-; a square do, which is not a coincidence -- character_steps is laid out so
-; that they do.
-wolf_step:          ld      ix,wolf
-                    ld      hl,player
-                    ld      (collide_other),hl
-                    xor     a
-                    ld      (character_jump_held),a     ; it never jumps
-                    ld      a,(ix+CHARACTER_FACING)
-                    call    character_walk
-                    ld      ix,wolf                 ; the repaint took IX
-
-                    ; ...or when something stops it. It walks a fixed square
-                    ; and the square runs through whatever the room happens to
-                    ; stand in it, so without this it wedges against the first
-                    ; block it meets and stays there for the life of the room.
-                    ; Turning is the whole of its intelligence.
-                    ld      a,(collide_hit)
-                    and     COLLIDE_U | COLLIDE_V
-                    jr      nz,.turn
-
-                    ; A side ends when the coordinate IT moves reaches the far
-                    ; wall. Testing both would turn twice in the corner it
-                    ; starts in, where U and V are both against a bound. Even
-                    ; facings walk along U and odd ones along V.
-                    ld      a,(ix+CHARACTER_FACING)
-                    bit     0,a
-                    ld      a,(ix+OBJ.U)
-                    jr      z,.at_edge
-                    ld      a,(ix+OBJ.V)
-                    ; Reached or passed, not landed on exactly. A step is
-                    ; three units now and the square is 88 across, so it steps
-                    ; over the corner rather than onto it.
-.at_edge:           cp      WOLF_HI
-                    jr      nc,.turn
-                    cp      WOLF_LO + 1
-                    ret     nc
-.turn:              ld      a,(ix+CHARACTER_FACING)
-                    inc     a
-                    and     3
-                    ld      (ix+CHARACTER_FACING),a
-                    ret
 
 
 ; --- the player -------------------------------------------------------------
@@ -370,8 +280,12 @@ KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
 KEY_JUMP            EQU     $7FFE       ; SPACE, bit 0
 
 player_step:        ld      ix,player
-                    ld      hl,wolf                 ; the one other thing that
-                    ld      (collide_other),hl      ; is not in the room's pool
+
+                    ; Nobody else is walking about. object_collide tests this
+                    ; on top of the room's pool, for the characters that are
+                    ; not in it; there is one of those now, and it is him.
+                    ld      hl,0
+                    ld      (collide_other),hl
 
                     ; Whether he is standing in a doorway, worked out before
                     ; he moves and read twice after: character_collide lifts
@@ -759,6 +673,25 @@ room_objects:
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
+
+; Two tables that were up in the code region until it ran out of room. Neither
+; is touched by anything that cares about contention -- bit_reverse_table only
+; while a graphic is being mirrored, which happens when a room is built, and
+; sprite_table once per object placed -- and both want an alignment that there
+; is room to honour here and was not up there.
+;
+; sprite_table is read as `ld h,(high sprite_table)/2 / ld l,a / add hl,hl`, so
+; its page has to be even: a 512 boundary, not merely a 256 one.
+                    ALIGN   256
+; Every byte with its bits the other way round, for mirroring a sprite. Knight
+; Lore keeps the same table at $F100 and reaches it exactly this way, with the
+; page in B and the byte in C.
+bit_reverse_table:  REPT    256,x
+                    DB      ((x & 0x01) << 7) | ((x & 0x02) << 5) | ((x & 0x04) << 3) | ((x & 0x08) << 1) | ((x & 0x10) >> 1) | ((x & 0x20) >> 3) | ((x & 0x40) >> 5) | ((x & 0x80) >> 7)
+                ENDR
+
+                    ALIGN   512
+                    INCLUDE "sprite_table.s"
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end

@@ -131,7 +131,11 @@ SHARED_SHIFT_FLAG = 0x08    # rotate into the shared buffer, at draw time
 # rotates ten objects and eight of them are never redrawn at all. Arches, gates
 # and the objects a character walks around keep their own buffers, because a
 # shared-buffer piece is re-rotated on every single draw.
-SHARED_SHIFT_TEMPLATES = ("bg_walls", "bg_trees")
+# Nothing, now. The walls and trees were marked for a while, to keep the
+# rotation arena small; it cost more in redrawing than it saved in memory --
+# see SHIFT_ARENA_SIZE in shift.s. The flag and the machinery behind it are
+# still there, and object_place falls back on them when the arena runs out.
+SHARED_SHIFT_TEMPLATES = ()
 
 
 def room_pieces(bg, fg, scenery, objects):

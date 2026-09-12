@@ -37,19 +37,29 @@
 ; drawn from a private copy of its graphic, out of the same arena, and that
 ; costs up to 1,398 bytes in a room -- one copy a graphic, not one a piece.
 ;
-; And it buys less rotation than it did, because the walls and trees are marked
-; OBJ_SHARED_SHIFT and rotate into shift_shared at draw time instead. That took
-; the worst room from 5,682 bytes to 4,122: $87 is now the hungriest, then $88
-; at 3,042 and $78 at 2,962. 4,608 leaves it 486 to spare.
+; The walls and the trees used to be marked OBJ_SHARED_SHIFT so that they
+; rotated into shift_shared at draw time rather than each holding a buffer.
+; That took the hungriest room from 5,682 bytes to 4,122 and let the arena be
+; 4,608. They are not marked any more and the arena is 6,144, because the trade
+; turns out badly as soon as anything else is moving: rotating at draw time is
+; work done again on every redraw, and a wall is redrawn once per region. It
+; was the single largest item in the frame -- 14 ms of a 62 ms turn in room
+; $9B, more than the blitting it fed, and dropping it took that room from 16
+; turns a second to 21.
 ;
-; Measured the same way throughout, by counting every block asked for rather
-; than every block granted, since a refusal is silent.
+; Measured, not guessed. Every room built in turn with shift_alloc totting up
+; what it was asked for: the hungriest is $41 at 5,682, then $CF at 5,458, $67
+; at 5,306 and $84 at 5,298. 6,144 leaves the worst room 462 to spare and no
+; room in the castle is refused anything. Counted by what was asked for rather
+; than what was granted, because a refusal used to be silent.
 ;
-; It is worth keeping in mind that this is a fallback that hides itself. If
-; the sprite set or the placement ever changes, this number wants
-; re-measuring -- the failure will not announce itself.
+; It is not silent now. A refusal falls back on rotating at draw time, which is
+; slow but in the right place, where it used to fall back on drawing
+; byte-aligned, which is fast and up to seven pixels wrong. So this number is a
+; budget for speed and no longer something the picture breaks on -- but it
+; still wants re-measuring if the artwork or the placement changes.
 
-SHIFT_ARENA_SIZE	EQU		4608
+SHIFT_ARENA_SIZE	EQU		6144
 
 shift_arena:		DS		SHIFT_ARENA_SIZE
 shift_arena_next:	DW		shift_arena
@@ -67,7 +77,10 @@ shift_arena_next:	DW		shift_arena
 ; grows, and like the arena it will not say so itself.
 SHIFT_SHARED_SIZE	EQU		416
 
-shift_shared:		DS		SHIFT_SHARED_SIZE
+; Reserved down in the castle's own memory, with the view buffer and the pool
+; -- see the foot of filmation.s. It is written once and read once per
+; object drawn, so contention costs it almost nothing, and the code region
+; had run out of room for it.
 
 
 ; Every object that survives objects_draw_all's filter comes through here on
@@ -182,6 +195,7 @@ shift_alloc:		push	hl
 					ld		hl,0
 .size:				add		hl,de
 					djnz	.size		; hl = bytes wanted
+
 
 					ld		de,(shift_arena_next)
 					add		hl,de		; where the block would end

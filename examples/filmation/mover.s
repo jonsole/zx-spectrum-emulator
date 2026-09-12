@@ -1,0 +1,727 @@
+; ---------------------------------------------------------------------------
+; The things in a room that move.
+;
+; Knight Lore gives every object an update routine and dispatches on its
+; GRAPHIC: jump_to_upd_object at $B25C takes byte 0 of the record and indexes
+; upd_sprite_jmp_tbl with it. That works there because a graphic number is a
+; type -- the four arch leaves are 2 to 5, the sliding blocks 54 and 55 -- and
+; it costs 512 bytes of addresses, most of them saying nothing happens.
+;
+; We dispatch on the TEMPLATE instead. Our rooms are built from templates and
+; the template is what carries the behaviour, so the answer is worked out once
+; when the room is built and kept in the record. Two graphics that look the
+; same but behave differently are then two templates rather than a problem --
+; which is just as well, because ball_ud_y and ball_ud_xy are both graphic 178.
+; ---------------------------------------------------------------------------
+
+MOVE_NONE			EQU		0
+MOVE_SLIDE_U		EQU		1
+MOVE_SLIDE_V		EQU		2
+MOVE_BALL			EQU		3
+MOVE_FIRE_U		EQU		4
+MOVE_FIRE_V		EQU		5
+MOVE_GUARD_U		EQU		6
+MOVE_GUARD_SQ	EQU		7
+MOVE_GATE			EQU		8
+
+; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
+; same mask both says which way a thing is going and tests collide_hit for
+; whether it just ran into something -- which is how the game numbers them.
+MOVE_RISING		EQU		4		; bit 2, as in the game's byte $0D
+
+; How fast each of them goes, and how high a ball bounces.
+FIRE_STEP			EQU		2
+BALL_RISE			EQU		3		; before gravity takes one back
+BALL_RISE_TO		EQU		32
+
+
+; Which templates move, and how. Room-build time only, so a walk will do.
+; Ends with $FF, which is not a template.
+mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
+					DB		FG_BLOCK_NS, MOVE_SLIDE_V
+					DB		FG_FIRE_EW, MOVE_FIRE_U
+					DB		FG_FIRE_NS, MOVE_FIRE_V
+					; All four of these are graphic 178 and all four bounce. They are
+					; four templates because of where they SIT, not what they do: the
+					; names are about which axes get a half-cell offset, and the last
+					; byte of each is $00, $01, $02 or $03 accordingly.
+					DB		FG_BALL_UD, MOVE_BALL
+					DB		FG_BALL_UD_X, MOVE_BALL
+					DB		FG_BALL_UD_Y, MOVE_BALL
+					DB		FG_BALL_UD_XY, MOVE_BALL
+					DB		FG_GUARD_EW, MOVE_GUARD_U
+					DB		FG_GUARD_SQUARE, MOVE_GUARD_SQ
+					DB		FG_GATE_UD_1, MOVE_GATE
+					DB		FG_GATE_UD_2, MOVE_GATE
+					DB		$FF
+
+mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
+					DW		mover_slide_v		; MOVE_SLIDE_V
+					DW		mover_ball			; MOVE_BALL
+					DW		mover_fire_u		; MOVE_FIRE_U
+					DW		mover_fire_v		; MOVE_FIRE_V
+					DW		mover_guard_u		; MOVE_GUARD_U
+					DW		mover_guard_sq	; MOVE_GUARD_SQ
+					DW		mover_gate			; MOVE_GATE
+
+
+; How many turns have gone by. Every mover in the castle is driven from this
+; one number, which is what keeps them all in step with each other -- Knight
+; Lore reads its frame counter at $5BA2 the same way.
+move_tick:			DB		0
+
+; How high the balls in this room bounce. Zero until the first ball takes its
+; turn, which sets it to its own Z plus BALL_RISE_TO -- so every ball in the
+; room bounces to whatever height the first one happened to start at, however
+; far up or down the others are. That is the game's, at $5BBD: one variable,
+; zeroed when the room is built and claimed by whichever ball runs first.
+mover_ball_top:	DB		0
+
+; The record being updated, kept because object_place and depth_relink are
+; both free to corrupt IX.
+mover_ix:			DW		0
+
+
+; What drives a template, or MOVE_NONE.
+;   A  - the template index
+; Out: A - the behaviour. Preserves DE.
+mover_find:			ld		hl,mover_of
+.next:				ld		c,(hl)
+					inc		c		; $FF ends the list
+					jr		z,.none
+					dec		c
+					cp		c
+					inc		hl
+					jr		z,.found
+					inc		hl
+					jr		.next
+.found:				ld		a,(hl)
+					ret		
+.none:				xor		a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; Give every mover in the room its turn.
+;
+; The whole pool is walked and the behaviour byte read, rather than a list of
+; movers being kept: a room holds at most a couple of dozen objects, and a
+; walk that reads one byte and moves on costs less than the list would to
+; maintain across a room change.
+movers_step:		ld		hl,move_tick
+					inc		(hl)
+
+					ld		a,(room_object_count)
+					or		a
+					ret		z
+					ld		b,a
+					ld		ix,room_objects
+
+.next:				ld		a,(ix+OBJ.BEHAVIOUR)
+					or		a
+					jr		z,.still
+
+					push	bc
+					ld		(mover_ix),ix
+					dec		a		; MOVE_NONE is not in the table
+					add		a,a
+					ld		l,a
+					ld		h,0
+					ld		de,mover_tbl
+					add		hl,de
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ex		de,hl
+					ld		de,.done
+					push	de
+					jp		(hl)
+.done:				ld		ix,(mover_ix)
+					pop		bc
+
+.still:				ld		de,ROOM_STRIDE
+					add		ix,de
+					djnz	.next
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A block that slides to and fro along one axis, a unit a turn.
+;
+; This is Knight Lore's, from loc_B6BF, which upd_54 and upd_55 share by
+; patching the two instructions that name the axis -- and it is patched here
+; for the same reason, because (IX+d) takes its displacement as an immediate.
+;
+; The block does not remember which way it is going. Instead the turn counter
+; is folded into a triangle: bit 4 says which way the ramp runs and the low
+; four bits are how far along it is, so the wave climbs 0 to 15 and falls back
+; over thirty-two turns. The block compares where it is against where the wave
+; says it should be and steps one unit towards it.
+;
+; Bit 5 of the record's own address is added in first. Records are thirty-two
+; bytes apart, so that bit alternates, and neighbouring blocks run in
+; antiphase -- one going out as the other comes back.
+;
+; Position is taken as (coordinate + 8) & 15, so a block standing in the
+; middle of its cell is in the middle of its travel and swings eight either
+; way.
+;   IX -> the record
+mover_slide_u:		ld		hl,OBJ.DU * 256 + OBJ.U
+					jr		mover_slide
+mover_slide_v:		ld		hl,OBJ.DV * 256 + OBJ.V
+
+mover_slide:		ld		a,l
+					ld		(.here + 2),a		; LD A,(IX+d) is DD 7E d
+					ld		a,h
+					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
+
+					xor		a		; it moves along one axis and no other
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DZ),1	; ...and does not fall: mover_move's own
+									; DEC takes this back to nothing, which
+									; is how upd_54 does it too
+
+					; Where the wave says it should be.
+					push	ix
+					pop		bc
+					ld		a,c
+					rrca
+					and		$10		; half a cycle for every other record
+					ld		c,a
+					ld		a,(move_tick)
+					add		a,c
+					bit		4,a
+					jr		z,.climbing
+					cpl				; the falling half of the ramp
+.climbing:			and		$0F
+					ld		c,a
+
+					; ...and where it is.
+.here:				ld		a,(ix+OBJ.U)		; patched: U or V
+					add		a,8
+					and		$0F
+					cp		c
+					ret		z		; already there, and nothing to draw
+
+					ld		a,1
+					jr		c,.step		; below the wave: out
+					neg				; above it: back
+.step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
+
+					;; NB: fall through into mover_move
+
+
+; ---------------------------------------------------------------------------
+; Move an object by the step its record now holds, and repaint what that
+; disturbed. mover_move draws only when the step came to something; a mover
+; whose graphic changes every turn wants mover_move_always instead, or it
+; animates in the record and nowhere else.
+;
+; The DEC in mover_clamp is gravity, and it is gravity for everything. Knight
+; Lore puts it in dec_dZ_and_update_XYZ, which every object's move goes
+; through, and anything not meant to fall cancels it by setting DZ to one
+; first. That is why a bouncing ball needs no gravity code of its own and a
+; sliding block needs one instruction.
+;   IX -> the record, with DU, DV and DZ set
+mover_move:			call	mover_clamp
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					or		(ix+OBJ.DZ)
+					ret		z		; the room took the whole step away
+					jr		mover_paint
+
+mover_move_always:	call	mover_clamp
+
+mover_paint:		call	region_reset
+					call	region_add		; where it was
+					call	extent_save
+
+					ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.DU)
+					ld		(ix+OBJ.U),a
+					ld		a,(ix+OBJ.V)
+					add		a,(ix+OBJ.DV)
+					ld		(ix+OBJ.V),a
+					ld		a,(ix+OBJ.Z)
+					add		a,(ix+OBJ.DZ)
+					ld		(ix+OBJ.Z),a
+
+					ld		hl,0		; re-sorted against the whole run
+					ld		(relink_from),hl
+					call	room_adjust
+					ld		a,(ix+OBJ.GFX)
+					call	object_place
+					call	depth_relink
+
+					ld		ix,(mover_ix)
+					call	region_add		; and where it is now
+					call	redraw_view
+					ld		ix,(mover_ix)		; the draw is free to corrupt it
+					ret		
+
+
+; Gravity, then the room's edges, then its floor, then everything standing in
+; it. Nothing may be clamped against itself, and a mover IS in the pool the
+; clamp walks -- so it is made passable for the length of its own test. A
+; character never needed this: neither of them is in the room's pool.
+mover_clamp:		dec		(ix+OBJ.DZ)
+					ld		a,(ix+OBJ.FLAGS)
+					push	af
+					or		OBJ_PASSABLE
+					ld		(ix+OBJ.FLAGS),a
+					ld		d,(ix+OBJ.DU)
+					ld		e,(ix+OBJ.DV)
+					call	object_collide_room
+					pop		af
+					ld		(ix+OBJ.FLAGS),a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A fire that paces to and fro along one axis, two units a turn, turning round
+; whenever something stops it.
+;
+; Knight Lore's, from upd_86_87 and upd_180_181 -- two routines that are the
+; same routine with the axis changed, which is why this is one with the axis
+; patched. The neat part is theirs: the bit that says which way it is going is
+; numbered by axis, and so is the bit that says which axis the clamp had to
+; cut, so the same mask does both and the turn is an XOR.
+;
+; It animates as it goes, between its graphic and the one below it. The
+; template names the taller of the two -- 181 of 180/181, 87 of 86/87 -- so
+; the rotation buffer the first frame takes from the arena fits the second.
+;   IX -> the record
+mover_fire_u:		ld		hl,OBJ.DU * 256 + COLLIDE_U
+					jr		mover_fire
+mover_fire_v:		ld		hl,OBJ.DV * 256 + COLLIDE_V
+
+mover_fire:			ld		a,h
+					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
+					ld		a,l
+					ld		(.which + 1),a		; the axis, as a mask
+					ld		(.turn + 1),a
+					ld		(.flip + 1),a
+
+					ld		a,(ix+OBJ.GFX)
+					xor		1
+					ld		(ix+OBJ.GFX),a
+
+					xor		a
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DZ),1		; it does not fall
+
+					ld		a,(ix+OBJ.MOVE_STATE)
+.which:				and		0		; patched: the axis bit
+					ld		a,FIRE_STEP
+					jr		nz,.forward
+					neg
+.forward:
+.step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
+
+					call	mover_move_always
+					ld		a,(collide_hit)
+.turn:				and		0		; patched: the same bit again
+					ret		z		; nothing in the way
+
+					ld		a,(ix+OBJ.MOVE_STATE)
+.flip:				xor		0		; patched below, from .turn's operand
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A ball that bounces on the spot: falls, and on landing climbs again until it
+; is BALL_RISE_TO above where the room's first ball started.
+;
+; That last part is the game's and it is odd enough to be worth saying twice.
+; upd_178_179 reads $5BBD, and if it is still zero -- which it is until the
+; first ball of the room takes its turn -- fills it in from its own Z plus 32.
+; Every other ball in the room then bounces to THAT height, wherever it sits
+; itself. Whichever ball the object walk reaches first decides for all of them.
+;
+; Falling needs no code: mover_clamp's DEC is the gravity, and the clamp stops
+; it on the floor or on whatever it lands on. Climbing sets DZ to three, which
+; the same DEC turns into two.
+;   IX -> the record
+mover_ball:			ld		a,(mover_ball_top)
+					or		a
+					jr		nz,.have_top
+					ld		a,(ix+OBJ.Z)
+					add		a,BALL_RISE_TO
+					ld		(mover_ball_top),a
+.have_top:
+					ld		a,(ix+OBJ.GFX)
+					xor		1
+					ld		(ix+OBJ.GFX),a
+
+					xor		a		; it bounces where it stands
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+
+					bit		2,(ix+OBJ.MOVE_STATE)
+					jr		nz,.rising
+
+					call	mover_move_always		; DZ is whatever gravity left it
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still in the air
+					ld		a,(ix+OBJ.MOVE_STATE)
+					or		MOVE_RISING		; it has landed: up again
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret		
+
+.rising:			ld		(ix+OBJ.DZ),BALL_RISE
+					call	mover_move_always
+					ld		a,(mover_ball_top)
+					cp		(ix+OBJ.Z)
+					ret		nc		; not up to it yet
+					ld		a,(ix+OBJ.MOVE_STATE)
+					and		~MOVE_RISING & $FF
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A guard: two records that walk as one figure.
+;
+; The template gives it two sprites, and they are two records in the pool, one
+; after the other -- a torso carrying the height, and legs that are passable
+; and carry none. That is how the knight is built too, and for the same reason:
+; the sort has to be free to put the two halves in different places.
+;
+; Knight Lore drives them as two objects with two update routines. The torso's,
+; upd_150_151, works out the step, writes it into BOTH records, moves itself,
+; and then copies its own X and Y down to the legs; the legs' own routine,
+; upd_144_to_149_152_to_157, sees a step in its record and animates. Ours is
+; one routine because our movers are dispatched per object rather than per
+; record, and the legs record carries no behaviour at all.
+GUARD_LEGS			EQU		ROOM_STRIDE		; the record after the torso
+GUARD_STEP			EQU		2
+
+
+; The frame both halves should wear, from the step they are about to take.
+;
+; Knight Lore decides this twice, in set_guard_wizard_sprite for the torso and
+; at the head of the legs' routine, with the same four-way test each time and a
+; different bit to show for it -- bit 0 of the torso's graphic, bit 3 of the
+; legs'. The test is on the deltas, and it is the game's own: compare dU with
+; dV unsigned, and then look at the sign of whichever won.
+;
+;   IX -> the torso record, DU and DV set
+; Corrupts AF, BC.
+mover_guard_face:	ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					ret		z		; going nowhere: leave it as it stands
+
+					ld		a,(ix+OBJ.DU)
+					cp		(ix+OBJ.DV)
+					jr		c,.along_v
+					bit		7,a
+					jr		nz,.minus_u
+					ld		bc,$0100		; +U: the far frame, not mirrored
+					jr		.apply
+.minus_u:			ld		bc,$0000		; -U: the near frame, not mirrored
+					jr		.apply
+.along_v:			bit		7,(ix+OBJ.DV)
+					jr		z,.plus_v
+					ld		bc,$0101		; -V: the far frame, mirrored
+					jr		.apply
+.plus_v:			ld		bc,$0001		; +V: the near frame, mirrored
+
+					; B says which way the figure faces, C whether it is drawn
+					; mirrored. The torso shows the first in bit 0 of its
+					; graphic and the legs in bit 3, which is their facing
+					; block -- 144 one way and 152 the other.
+.apply:				ld		a,(ix+OBJ.GFX)
+					and		~1 & $FF
+					or		b
+					ld		(ix+OBJ.GFX),a
+
+					ld		a,(ix+GUARD_LEGS+OBJ.GFX)
+					and		~8 & $FF
+					bit		0,b
+					jr		z,.legs_block
+					or		8
+.legs_block:		ld		e,a		; and now the walk cycle, which is the
+					inc		a		; bottom three bits counting 0 to 5 --
+					and		7		; animate_human_legs at $C983
+					cp		6
+					jr		nz,.phase
+					xor		a
+.phase:				ld		d,a
+					ld		a,e
+					and		$F8
+					or		d
+					ld		(ix+GUARD_LEGS+OBJ.GFX),a
+
+					res		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
+					res		OBJ_FLIP_BIT,(ix+GUARD_LEGS+OBJ.FLAGS)
+					bit		0,c
+					ret		z
+					set		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
+					set		OBJ_FLIP_BIT,(ix+GUARD_LEGS+OBJ.FLAGS)
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; Move a two-record figure by the step in the first of them, and repaint both
+; as one region.
+;
+; The LEGS are re-sorted first, and against the whole run; the torso then
+; starts its own scan from wherever they landed. That order is not a detail.
+; The two share U and V, and with the torso's box reaching 24 above the floor
+; and the legs' reaching nothing at all, the torso is the nearer of the two --
+; so it can never belong in front of the legs, which is exactly what lets it
+; start from them. character_move sorts the knight the same way round, and
+; doing it backwards here put the guard in front of scenery it should have
+; been behind, because starting the legs at the torso pinned them later in the
+; list than they belonged.
+;
+; The legs take the torso's new U and V and keep their own Z -- (IX+$01) and
+; (IX+$02) into (IX+$21) and (IX+$22) is all the game copies. They are worked
+; out from the torso's old position plus the step, because the torso has not
+; moved yet when the legs need them.
+;   IX -> the torso record, with DU, DV and DZ set
+mover_move_pair:	call	mover_clamp
+
+					call	region_reset
+					call	region_add		; the torso, where it was
+					ld		bc,GUARD_LEGS
+					add		ix,bc
+					call	region_add		; and the legs
+					ld		ix,(mover_ix)
+
+					ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.DU)
+					ld		c,a
+					ld		a,(ix+OBJ.V)
+					add		a,(ix+OBJ.DV)
+					ld		b,a
+
+					push	bc
+					ld		bc,GUARD_LEGS
+					add		ix,bc
+					pop		bc
+					call	extent_save
+					ld		(ix+OBJ.U),c
+					ld		(ix+OBJ.V),b
+					ld		hl,0		; against the whole run
+					ld		(relink_from),hl
+					call	room_adjust
+					ld		a,(ix+OBJ.GFX)
+					call	object_place
+					call	depth_relink
+
+					ld		ix,(mover_ix)
+					ld		bc,GUARD_LEGS
+					add		ix,bc
+					push	ix
+					pop		hl		; the legs are their own NEXT field
+					ld		(relink_from),hl
+					ld		ix,(mover_ix)
+
+					call	extent_save
+					ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.DU)
+					ld		(ix+OBJ.U),a
+					ld		a,(ix+OBJ.V)
+					add		a,(ix+OBJ.DV)
+					ld		(ix+OBJ.V),a
+					ld		a,(ix+OBJ.Z)
+					add		a,(ix+OBJ.DZ)
+					ld		(ix+OBJ.Z),a
+					call	room_adjust
+					ld		a,(ix+OBJ.GFX)
+					call	object_place
+					call	depth_relink
+
+					ld		ix,(mover_ix)
+					ld		bc,GUARD_LEGS
+					add		ix,bc
+					call	region_add		; the legs, where they are now
+					ld		ix,(mover_ix)
+					call	region_add		; and the torso
+					call	redraw_view
+					ld		ix,(mover_ix)
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A guard that paces along U, turning at whatever stops it -- upd_150_151.
+;
+; It does not cancel gravity the way a fire does: the game calls
+; dec_dZ_and_update_XYZ without setting DZ first, so a guard falls if it walks
+; off something, and the floor stops it where it stands.
+;   IX -> the torso record
+mover_guard_u:		xor		a
+					ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DZ),a
+					ld		a,GUARD_STEP
+					bit		0,(ix+OBJ.MOVE_STATE)
+					jr		nz,.forward
+					neg
+.forward:			ld		(ix+OBJ.DU),a
+
+					call	mover_guard_face
+					call	mover_move_pair
+
+					ld		a,(collide_hit)
+					and		COLLIDE_U
+					ret		z
+					ld		a,(ix+OBJ.MOVE_STATE)
+					xor		1
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A guard that walks a circuit: west until something stops it, then north, then
+; east, then south, and round again -- upd_30_31_158_159 through the four
+; routines in guard_NSEW_tbl.
+;
+; Nothing measures the square out. Each leg simply runs until the clamp says
+; that axis gave, and the next leg starts from wherever that was, so the shape
+; of the walk is the shape of the room and whatever is standing in it. The two
+; bits of MOVE_STATE are which leg it is on, and they are the game's own bits
+; 0 and 1 of $0D.
+;   IX -> the torso record
+GUARD_SQ_MASK		EQU		3
+
+mover_guard_sq_tbl:	DB		-GUARD_STEP, 0, COLLIDE_U		; west
+					DB		0, GUARD_STEP, COLLIDE_V		; north
+					DB		GUARD_STEP, 0, COLLIDE_U		; east
+					DB		0, -GUARD_STEP, COLLIDE_V		; south
+
+mover_guard_sq:		ld		a,(ix+OBJ.MOVE_STATE)
+					and		GUARD_SQ_MASK
+					ld		c,a
+					ld		b,0
+					ld		hl,mover_guard_sq_tbl
+					add		hl,bc
+					add		hl,bc
+					add		hl,bc		; three bytes a leg
+
+					ld		a,(hl)
+					ld		(ix+OBJ.DU),a
+					inc		hl
+					ld		a,(hl)
+					ld		(ix+OBJ.DV),a
+					inc		hl
+					ld		a,(hl)
+					ld		(.blocked + 1),a		; the axis this leg walks
+					ld		(ix+OBJ.DZ),0
+
+					call	mover_guard_face
+					call	mover_move_pair
+
+					ld		a,(collide_hit)
+.blocked:			and		0		; patched just above
+					ret		z		; the leg is not done yet
+
+					ld		a,(ix+OBJ.MOVE_STATE)
+					inc		a		; on to the next side
+					and		GUARD_SQ_MASK
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A portcullis: rises a unit a turn to GATE_RISE above the floor, waits, then
+; drops under its own weight and waits again.
+;
+; Knight Lore splits it across two graphics and two routines. Graphic 8 is a
+; gate standing still and upd_8 only decides whether to set off; graphic 9 is
+; the same gate in motion and upd_9 does the moving. Setting bit 0 of the
+; graphic is how it changes its own mind, which costs no state at all -- and
+; the two frames are the same three bytes by 42 rows, so the rotation buffer
+; one took from the arena fits the other.
+;
+; Two facts belong to the room rather than the gate, and both are the game's:
+; only one gate moves at a time ($5BAF), and a gate drops to a schedule for
+; its first four drops and on the dice after that ($5BB0). Room $87 has four
+; of them and they take it in turns.
+;
+; Rising is a unit a turn. Falling is not: the game decrements dZ itself on
+; top of the one dec_dZ_and_update_XYZ already does, so a dropping portcullis
+; accelerates at two a turn and lands hard.
+GATE_RISE			EQU		31
+GATE_DROPS			EQU		4
+
+mover_gate_busy:	DB		0		; a gate has the room
+mover_gate_drops:	DB		0		; how many times one has fallen
+mover_seed:			DB		0
+
+; One turn in thirty-two, near enough. The game stirs the refresh register into
+; a seed on every object it updates -- ret_from_tbl_jp at $B27C -- and then
+; looks at five bits of it; this stirs it where it is asked instead.
+; Out: zf set when the dice come up.
+mover_dice:			ld		a,r
+					ld		hl,mover_seed
+					add		a,(hl)
+					ld		(hl),a
+					and		$1F
+					ret		
+
+
+mover_gate:			xor		a		; it only ever moves in Z
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+
+					bit		0,(ix+OBJ.GFX)
+					jr		nz,.moving
+
+					; Standing still, at one end of its travel or the other.
+					ld		a,(mover_gate_busy)
+					or		a
+					ret		nz
+
+					ld		a,(room_floor_z)
+					cp		(ix+OBJ.Z)
+					jr		z,.go_up		; fully down
+					add		a,GATE_RISE
+					cp		(ix+OBJ.Z)
+					jr		nc,.go_up		; not up yet
+
+					; Fully up. The first few drops come without waiting.
+					ld		a,(mover_gate_drops)
+					cp		GATE_DROPS
+					jr		c,.drop
+					call	mover_dice
+					ret		nz
+.drop:				ld		hl,mover_gate_drops
+					inc		(hl)
+					ld		(ix+OBJ.DZ),-1
+					jr		.set_off
+
+.go_up:				call	mover_dice
+					ret		nz
+					ld		(ix+OBJ.DZ),1
+.set_off:			set		0,(ix+OBJ.GFX)		; the moving frame
+					ld		a,1
+					ld		(mover_gate_busy),a
+					ret		
+
+.moving:			ld		a,(ix+OBJ.DZ)
+					or		a
+					jp		p,.rising
+
+					dec		(ix+OBJ.DZ)		; falling, and gathering pace
+					call	mover_move_always
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still on its way down
+					jr		.stop
+
+.rising:			ld		(ix+OBJ.DZ),2		; a unit a turn, after the DEC
+					call	mover_move_always
+					ld		a,(room_floor_z)
+					add		a,GATE_RISE
+					cp		(ix+OBJ.Z)
+					ret		nc		; not at the top yet
+
+.stop:				xor		a
+					ld		(mover_gate_busy),a
+					res		0,(ix+OBJ.GFX)
+					ret		

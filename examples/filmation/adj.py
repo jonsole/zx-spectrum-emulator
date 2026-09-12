@@ -211,6 +211,69 @@ ASSUMED = "; graphic %d, assumed from %d"
 STANDS_IN = {31: 30, 151: 150, 159: 158}
 
 
+# Nudges taken from the game's CODE rather than from watching it run.
+#
+# Most of the 29 update routines work the adjustment out from the object, so
+# the only way to know those is to read one back from a live record -- which is
+# what the harvest does, and why it misses whatever the game did not happen to
+# draw while it was watching. The rest load a fixed HL and hand it to
+# set_pixel_adj, directly or through one of the adj_* helpers, and those cover
+# every graphic they serve whether or not one was ever seen.
+#
+# Two things make this worth having beyond filling holes. Both frames of an
+# animating pair come through the same routine, so they get the same nudge --
+# and when one was harvested and the other was not, the missing one filled in
+# as (0,0) and the thing jumped eight pixels sideways every time it animated.
+# And it is checkable: of the 166 graphics here, 109 were also harvested, and
+# every single one of those agrees. Not one disagreement, which is a fair test
+# of the extraction and of the harvest at the same time.
+#
+# Extracted from the dispatch table and the adj_* helpers in the disassembly,
+# grouped by value. Several helpers are a single LD HL that falls through into
+# set_pixel_adj rather than jumping to it.
+FROM_CODE = {}
+for _xy, _graphics in {
+    ( -24,   12): (
+     142,),
+    ( -20,   -1): (
+     10,),
+    ( -16,  -12): (
+     88, 89, 90,),
+    ( -16,   -8): (
+     6, 7, 62, 63, 84, 85, 91, 143,),
+    ( -12,  -12): (
+     64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+     78, 79,),
+    ( -12,   -8): (
+     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+     46, 47,),
+    ( -12,   -7): (
+     48, 49, 50, 51, 52, 53, 56, 57, 58, 59, 60, 61,),
+    ( -12,   -6): (
+     8, 9, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 80,
+     81, 82, 83, 144, 145, 146, 147, 148, 149, 152, 153, 154,
+     155, 156, 157,),
+    ( -12,   -4): (
+     96, 97, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108,
+     109, 110, 112, 113, 114, 115, 116, 117, 118, 119, 120,
+     121, 122, 123, 124, 125, 126, 127, 131, 132, 133, 160,
+     161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171,
+     172, 173, 174, 175, 184,),
+    ( -12,   -2): (
+     11, 92, 93, 94, 95,),
+    ( -12,    3): (
+     30, 31, 158, 159,),
+    ( -12,    7): (
+     150, 151,),
+    (  -8,   -4): (
+     12, 13, 14, 15, 86, 87, 176, 177, 178, 179, 180, 181,
+     182, 183,),
+    (  -8,   -2): (
+     103, 128, 129, 130,),
+}.items():
+    FROM_CODE.update(dict.fromkeys(_graphics, _xy))
+
+
 def resolve(found):
     """Every graphic, both ways round, as a signed pair.
 
@@ -223,7 +286,11 @@ def resolve(found):
     out, borrowed = {}, {}
     for flip in (0, 1):
         for g in range(256):
-            if (g, flip) in found:
+            if g in FROM_CODE:
+                out[(g, flip)] = tuple(v & 0xFF for v in FROM_CODE[g])
+                if (g, flip) not in found:
+                    borrowed[(g, flip)] = "the routine's own constant"
+            elif (g, flip) in found:
                 out[(g, flip)] = found[(g, flip)]
             elif g in STANDS_IN and (STANDS_IN[g], flip) in found:
                 out[(g, flip)] = found[(STANDS_IN[g], flip)]

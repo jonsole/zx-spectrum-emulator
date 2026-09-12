@@ -269,23 +269,6 @@ sprite_rotate_table:	REPT	7,r
 SPRITE_ROTATE_BASE	EQU		sprite_rotate_table - 512
 
 
-; The graphic-number table goes here, in front of the bitmaps, because
-; sprite_rotate_table happens to end on a 512 boundary and the table needs
-; one. Behind them it needed a boundary of its own, and the padding to reach
-; it was the last thing in the image -- so it rounded the whole image up, and
-; anything saved anywhere else disappeared into it.
-					INCLUDE "sprite_table.s"
-
-
-					ALIGN	256
-; Every byte with its bits the other way round, for mirroring a sprite.
-; Knight Lore keeps the same table at $F100 and reaches it exactly this way,
-; with the page in B and the byte in C.
-bit_reverse_table:	REPT	256,x
-					DB		((x & 0x01) << 7) | ((x & 0x02) << 5) | ((x & 0x04) << 3) | ((x & 0x08) << 1) | ((x & 0x10) >> 1) | ((x & 0x20) >> 3) | ((x & 0x40) >> 5) | ((x & 0x80) >> 7)
-				ENDR
-
-
 ; ---------------------------------------------------------------------------
 ; Mirror a sprite about its vertical axis, IN PLACE, and record in the
 ; sprite's own header which way round it now is.

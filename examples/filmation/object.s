@@ -90,6 +90,19 @@ ADJ_LIFT:			DS		1
 ; placement -- see OBJ_SHARED_SHIFT. Zero for everything else, which is what
 ; objects_draw_all tests. This is the last byte of a ROOM_STRIDE slot.
 SHIFT:				DS		1
+					
+; Which mover routine drives this object, or MOVE_NONE. Knight Lore asks the
+; graphic instead -- jump_to_upd_object at $B25C indexes a 256-entry table of
+; addresses with byte 0 of the record -- but our rooms are built from templates
+; and the template is what says whether a thing moves.
+BEHAVIOUR:			DS		1
+
+; Whatever that routine needs to remember between turns. Knight Lore keeps the
+; same thing in byte $0D of its records, and numbers the bits by axis: bit 0 for
+; U and bit 1 for V, which is also how collide_hit numbers them, so one mask
+; serves both the direction a thing is going and the test for whether it just
+; ran into something.
+MOVE_STATE:		DS		1
 					ENDS
 
 
@@ -269,6 +282,15 @@ collide_hit:		DB		0
 COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
 COLLIDE_Z			EQU		4
+
+; What stopped a thing before object_collide gets its say: the room's own edges
+; and its floor. object_collide opens by clearing collide_hit, so neither can go
+; straight in there -- they are gathered here and folded in afterwards.
+;
+; The edges matter to more than the walker. Knight Lore sets the same bit from
+; inside the bound check itself, SET 0,(IX+$0C) at $CCF6, and it is what tells a
+; pacing fire to turn at the wall rather than stand pressed against it.
+collide_bound:		DB		0
 
 ; The bit object_clamp sets when it has to cut the axis it was given.
 collide_mask:		DB		0
@@ -724,7 +746,7 @@ object_update:
 					jr		z,.no_shift		; the deferred path sets it again
 					; This object needs rotating. Where does it rotate into?
 					bit		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT: not here, but
-					jr		nz,.defer_shift		; at the moment it is drawn
+					jp		nz,.defer_shift		; at the moment it is drawn
 					ld		b,(ix+OBJ.BUF_H)		; B is free here; A still holds the
 					inc		b		; shift amount, which .shift_sprite
 					dec		b		; needs, so test without touching it
@@ -744,14 +766,20 @@ object_update:
 					inc		l
 					pop		af
 
-					; A null buffer here means the arena is full. Nothing can be
+					; A null buffer here means the arena is full, and nothing can be
 					; rotated into a null pointer -- it would read the blit back out
-					; of ROM -- so draw it byte-aligned instead: up to 7 pixels left
-					; of true, which MIN_X/MAX_X already describe exactly.
+					; of ROM. The fallback used to be to draw it byte-aligned, up to
+					; seven pixels left of true; it rotates into the shared buffer at
+					; draw time instead, which is slower every time it is drawn but
+					; is in the right place. So the arena is a budget for speed now
+					; rather than a cliff the picture falls off, and a sprite set
+					; that outgrows it gets slower rather than wrong.
 					ld		b,(ix+OBJ.BUF_H)
 					inc		b
 					dec		b
 					jp		nz,.shift_sprite
+					set		3,(ix+OBJ.FLAGS)	; OBJ_SHARED_SHIFT, from here on
+					jp		.defer_shift
 .no_shift:
 					; Sharing the graphic is what we want, unless this is one of
 					; the pieces the room data has marked as contested -- see
@@ -1311,23 +1339,26 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 ; both floor axes descend. Change calc_screen_xy and this must follow.
 ;
 ; Out: cf = 1  the placed object is FURTHER than the candidate
-;      a  = 0  exactly one axis separates them, so that is certain;
+;      a  = 0  every axis that separates them agrees, so that is certain;
 ;              any other value and the ordering is only a guess
 ; Corrupts A, BC, DE, HL. IX, IY and the shadow set are untouched.
 depth_cmp:			ld		hl,0		; running difference, signed
-					ld		b,l		; separating axes so far
+					ld		b,l		; which of us the separating axes name
 
 					; U -- nearer as U grows
 					ld		c,(iy+OBJ.U)		; c = their centre
 					ld		a,c
 					add		a,(iy+OBJ.SIZE_U)		; a = their max
 .u_min:				cp		0		; imm = our min + 1
-					jr		c,.u_sep		; their max <= our min
+					jr		c,.u_near		; their max <= our min: we are nearer
 					ld		a,c
 					sub		(iy+OBJ.SIZE_U)		; a = their min
 .u_max:				cp		0		; imm = our max
 					jr		c,.u_over		; their min < our max: they overlap
-.u_sep:				inc		b
+					set		1,b		; their min >= our max: they are nearer
+					jr		.u_sep
+.u_near:			set		0,b
+.u_sep:
 .u_ours:			ld		a,0		; imm = our U
 					sub		c
 					ld		e,a
@@ -1336,18 +1367,21 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					add		hl,de
 .u_over:			
 
-					; V -- FURTHER as V grows, so the operands swap and the term negates
+					; V -- FURTHER as V grows, so the operands swap, the term
+					; negates, and so does which of us a separation names
 					ld		c,(iy+OBJ.V)
 					ld		a,c
 					add		a,(iy+OBJ.SIZE_V)
 .v_min:				cp		0
-					jr		c,.v_sep
+					jr		c,.v_far		; their V is the lower: they are nearer
 					ld		a,c
 					sub		(iy+OBJ.SIZE_V)
 .v_max:				cp		0
 					jr		c,.v_over
-.v_sep:				inc		b
-					ld		a,c		; a = their V
+					set		0,b
+					jr		.v_sep
+.v_far:				set		1,b
+.v_sep:				ld		a,c		; a = their V
 .v_ours:			sub		0		; imm = our V, so theirV - ourV
 					ld		e,a
 					sbc		a,a
@@ -1360,11 +1394,14 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					ld		c,a
 					add		a,(iy+OBJ.SIZE_Z)
 .z_min:				cp		0
-					jr		c,.z_sep
+					jr		c,.z_near
 					ld		a,c
 .z_max:				cp		0
 					jr		c,.z_over
-.z_sep:				inc		b
+					set		1,b
+					jr		.z_sep
+.z_near:			set		0,b
+.z_sep:
 .z_ours:			ld		a,0
 					sub		c
 					ld		e,a
@@ -1373,9 +1410,35 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					add		hl,de
 .z_over:			
 
+					; What decides it is not how MANY axes separate the two but
+					; whether they agree. Two axes that both say the same object
+					; is in front are more certain than one, not less -- this
+					; used to count them and call anything but a single axis a
+					; guess, and a guess does not stop the scan, so a guard with
+					; a spike to its east and below it walked straight past the
+					; spike in the list and drew in front of it.
+					;
+					; Only b = 3 is genuinely ambiguous: one axis saying we are
+					; in front while another says they are, which is the
+					; non-transitive case the lagging insertion point exists for.
+					; b = 0 is interpenetration, and just as unanswerable.
+					;
+					; The direction comes from b and not from the sum, because a
+					; separating axis can still give a zero term: a box of no
+					; height sits at the same Z as the one standing on it, and
+					; the two are disjoint all the same.
 					ld		a,b
-					dec		a		; zero when exactly one axis separates
-					sla		h		; cf = sign of the difference; a survives
+					cp		1
+					jr		z,.we_are_nearer
+					cp		2
+					jr		z,.they_are_nearer
+					sla		h		; cf = sign of the difference, which is
+					ld		a,1		; the best guess there is
+					ret		
+.we_are_nearer:		xor		a		; certain, and cf clear says nearer
+					ret		
+.they_are_nearer:	xor		a
+					scf				; certain, and further
 					ret		
 
 

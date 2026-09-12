@@ -272,8 +272,8 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 					; because nothing may go into a room that was not built --
 					; so without this he is in the sort and on nobody's screen,
 					; and stays invisible until something repaints over him: his
-					; own first step, or the soldier walking past and dragging a
-					; region across half of him.
+					; own first step, or anything else moving past and dragging
+					; a region across half of him.
 					call	region_reset
 					call	region_add
 					ld		bc,CHARACTER_BODY
@@ -572,7 +572,19 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 					; of how the knight ever leaves a room.
 					ld		a,(ix+CHARACTER_DOOR)
 					inc		a
-					jp		nz,.keep_v
+					jr		z,object_collide_room
+					xor		a		; in a doorway: no edge cut anything
+					ld		(collide_bound),a
+					jr		object_collide_free
+
+
+; The same, for anything at all: the room's edges, then its floor, then
+; everything standing in it. A mover comes straight in here -- Knight Lore's
+; adj_for_out_of_bounds at $CB45 is one routine for every object too.
+;   IX -> the record
+;   D  - the step it would like in U, E the step in V
+object_collide_room:	xor		a
+					ld		(collide_bound),a
 
 .u_bound:			ld		a,(ix+OBJ.U)
 					add		a,d
@@ -583,6 +595,10 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 					ld		hl,room_half_u
 					cp		(hl)
 					jr		c,.keep_u		; still inside
+					ld		hl,collide_bound	; the wall is in the way, and whatever
+					ld		a,COLLIDE_U		; walked into it may want to know
+					or		(hl)
+					ld		(hl),a
 					ld		a,d
 					or		a
 					jr		z,.keep_u		; nothing left to give
@@ -602,6 +618,10 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 					ld		hl,room_half_v
 					cp		(hl)
 					jr		c,.keep_v
+					ld		hl,collide_bound	; the wall is in the way, and whatever
+					ld		a,COLLIDE_V		; walked into it may want to know
+					or		(hl)
+					ld		(hl),a
 					ld		a,e
 					or		a
 					jr		z,.keep_v
@@ -611,6 +631,9 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 .v_back:			inc		e
 					jr		.v_bound
 .keep_v:
+
+; And with the room's edges already settled, or deliberately not applied.
+object_collide_free:
 					; And the floor, which is not an object -- nothing in a room
 					; stands for the ground, so a fall has to be stopped here or
 					; it never ends. Knight Lore does exactly this at $CA5A,
@@ -631,7 +654,9 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 					ld		a,COLLIDE_Z
 					jr		.floor_done
 .above_floor:		xor		a
-.floor_done:		ld		(.floor_hit + 1),a
+.floor_done:		ld		hl,collide_bound
+					or		(hl)
+					ld		(hl),a
 
 					ld		(ix+OBJ.DU),d
 					ld		(ix+OBJ.DV),e
@@ -640,7 +665,7 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 
 					; The floor counts as something having stopped us, the same
 					; as a block would, so that character_land sees it.
-.floor_hit:			ld		a,0		; patched just above
+					ld		a,(collide_bound)
 					ld		hl,collide_hit
 					or		(hl)
 					ld		(hl),a

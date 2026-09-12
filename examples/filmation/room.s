@@ -68,6 +68,14 @@ room_bg_flag:		DB		0
 room_stage:			DS		8
 
 
+; What drives the record room_add is about to fill in, and what drives the
+; group it belongs to. Only the FIRST sprite of an object is given the
+; behaviour -- a guard is drawn from two records and only one of them may be
+; the one that walks.
+room_behaviour:		DB		0
+room_group_move:	DB		0
+
+
 ; ---------------------------------------------------------------------------
 ; Find a room's record, by walking the list and comparing each record's own
 ; number. That is how Knight Lore does it -- find_screen at $D3CF -- and for
@@ -141,6 +149,11 @@ room_build:			ld		c,a
 					ld		(room_door_z + ROOM_DOOR_E),a
 					ld		(room_door_z + ROOM_DOOR_S),a
 					ld		(room_door_z + ROOM_DOOR_W),a
+					ld		(room_behaviour),a
+					ld		(room_group_move),a
+					ld		(mover_ball_top),a
+					ld		(mover_gate_busy),a
+					ld		(mover_gate_drops),a
 
 					pop		de
 					inc		de		; past its own number
@@ -367,6 +380,10 @@ room_objects_of:	ld		a,(room_bytes_left)
 					and		$1F		; the template index
 
 					push	de
+					push	af
+					call		mover_find
+					ld		(room_group_move),a
+					pop		af
 					ld		l,a
 					ld		h,0
 					add		hl,hl
@@ -395,6 +412,8 @@ room_objects_of:	ld		a,(room_bytes_left)
 
 					push	de
 					ld		hl,(room_template)
+					ld		a,(room_group_move)
+					ld		(room_behaviour),a
 
 					; A template may hold several sprites -- a guard is drawn
 					; from two -- and they all sit at this one position.
@@ -405,6 +424,8 @@ room_objects_of:	ld		a,(room_bytes_left)
 					push	hl
 					ld		hl,room_stage
 					call	room_add
+					xor		a
+					ld		(room_behaviour),a	; only the first sprite drives
 					pop		hl
 					ld		bc,6
 					add		hl,bc		; on to the next sprite of the template
@@ -548,6 +569,10 @@ room_add:			ld		a,(room_object_count)
 
 					; A rotation buffer belongs to the room, not the object;
 					; shift_reset has just taken the last room's back.
+					ld		a,(room_behaviour)
+					ld		(ix+OBJ.BEHAVIOUR),a
+					ld		(ix+OBJ.MOVE_STATE),0
+
 					ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
 
