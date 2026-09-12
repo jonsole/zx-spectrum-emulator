@@ -56,6 +56,15 @@ STACK_TOP			EQU		0xFF00
                     INCLUDE "room_data.s"
                     INCLUDE "sprite_adj.s"
 
+; The game's own font: forty 8x8 characters, which is all the text Knight Lore
+; has. Digits first and then letters, no lower case and no punctuation beyond
+; what a word needs -- so a hex digit is its own character index and needs no
+; translating, which is the whole of why printing a room number is six
+; instructions. kl_extract.py pulls it from $6108, immediately in front of the
+; room tables; the game's own object walk uses it as the end of its object
+; table for the same reason.
+font:               INCBIN  "font.bin"
+
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
 shift_shared:       DS      SHIFT_SHARED_SIZE
@@ -68,7 +77,6 @@ room_data_end:
 					INCLUDE "object.s"
 					INCLUDE "shift.s"
 					INCLUDE "character.s"
-                    INCLUDE "room.s"
 					INCLUDE "mover.s"
 
 					STRUCT SPRITE
@@ -136,6 +144,7 @@ start:              di
                     ; scan.
                     call    movers_step
                     call    player_step
+                    call    print_room
                     call    room_keys
                     jr      .loop
 
@@ -603,8 +612,7 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; routine's own -- it resets it per row so
 					; that LDI's countdown can never borrow
 					; into B and lose a row.
-					call	vid_buff_copy
-					ret		
+					jp		vid_buff_copy	; the last thing it does, so tail-jump
 
 
 
@@ -647,6 +655,27 @@ pixelAddress:   ld      a, b
 image_end:
                     ASSERT  $ <= STACK_TOP
                     DISPLAY "code and data   $8000..", /H, image_end, "   free below the stack: ", /D, STACK_TOP - image_end
+
+; ---------------------------------------------------------------------------
+; Building a room, down where the ROM keeps its system variables.
+;
+; $5B00 to $5FFF is the printer buffer and the system variables, and none of it
+; is wanted: interrupts are off for good, nothing here calls the ROM, and the
+; stack is up at STACK_TOP. room_wipe stops at $57FF and room_paper at $5AFF,
+; so nothing the engine does reaches it either. Knight Lore makes the same
+; judgement and parks its object table at $5C08.
+;
+; It is contended memory, so what goes here has to be code that does not run
+; every turn -- and building a room is the definition of that. It happens once,
+; when the room changes, and everything else in the file is untouched by it.
+; The few bytes of it that ARE read every turn are room_half_u, room_floor_z
+; and the door table, which is a handful of loads.
+                    ORG     $5B00
+                    INCLUDE "room.s"
+room_code_end:
+                    ASSERT  room_code_end <= $6000
+                    DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end
+
 
 ; ---------------------------------------------------------------------------
 ; Two reservations, put where there is room for them.

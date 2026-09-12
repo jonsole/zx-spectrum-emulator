@@ -698,3 +698,52 @@ room_show:			ld		a,(room_object_count)
 					pop		bc
 					djnz	.draw
 					ret
+
+
+; ---------------------------------------------------------------------------
+; The room number in the top-left corner, for finding your way about.
+;
+; Printed every turn rather than once when the room is built, because a redraw
+; region that reaches the corner would otherwise wipe it and it would not come
+; back until the next room.
+;
+; Straight to the screen, byte-aligned, no mask: it is a debug read-out and
+; whatever it lands on is meant to be covered.
+DEBUG_AT			EQU		$4000		; the top-left character cell
+
+print_room:			ld		a,(room_shown)
+					rrca
+					rrca
+					rrca
+					rrca
+					and		$0F
+					ld		hl,DEBUG_AT
+					call	print_char
+					ld		a,(room_shown)
+					and		$0F
+					ld		hl,DEBUG_AT + 1
+
+					;; NB: fall through into print_char
+
+
+; One character of the font, eight rows of it.
+;   A  - which character, HL -> the top row of its cell
+; Corrupts AF, BC, DE, HL.
+print_char:			push	hl
+					ld		l,a
+					ld		h,0
+					add		hl,hl
+					add		hl,hl
+					add		hl,hl		; eight bytes a character
+					ld		de,font
+					add		hl,de
+					ex		de,hl		; de -> the glyph
+					pop		hl		; hl -> the screen
+
+					ld		b,8
+.row:				ld		a,(de)
+					ld		(hl),a
+					inc		de
+					inc		h		; the next pixel row of the same cell
+					djnz	.row
+					ret		

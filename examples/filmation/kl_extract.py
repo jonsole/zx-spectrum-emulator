@@ -4,8 +4,14 @@ Run this once, by hand, against your own copy of the game:
 
     python kl_extract.py "path/to/Knight Lore.sna"
 
-It writes two small files next to itself, and those are what the build uses --
-the snapshot itself is never needed again and is not in this repository:
+It writes three small files next to itself, and those are what the build uses
+-- the snapshot itself is never needed again and is not in this repository:
+
+  font.bin         $6108-$6247, 320 bytes: forty 8x8 characters, which is all
+                   the text the game has. Digits first, then letters; no lower
+                   case and no punctuation beyond what a word needs. It sits
+                   immediately in front of the room tables, which is why the
+                   game's object walk uses it as the end of the object table.
 
   room_data.bin    $6248-$6FF1, 2,986 bytes: the room size table, every room
                    definition, and the scenery and object templates they are
@@ -26,6 +32,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
+FONT_START = 0x6108
+FONT_END = 0x6248               # exclusive, and the room data starts here
 ROOM_DATA_START = 0x6248
 ROOM_DATA_END = 0x6FF2          # exclusive
 SPRITE_TBL = 0x7112
@@ -80,6 +88,11 @@ def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     ram = load_sna(sys.argv[1])
+
+    font = ram[FONT_START - 0x4000:FONT_END - 0x4000]
+    (HERE / "font.bin").write_bytes(font)
+    print("font.bin         %d bytes ($%04X-$%04X), %d characters"
+          % (len(font), FONT_START, FONT_END - 1, len(font) // 8))
 
     rooms = ram[ROOM_DATA_START - 0x4000:ROOM_DATA_END - 0x4000]
     (HERE / "room_data.bin").write_bytes(rooms)
