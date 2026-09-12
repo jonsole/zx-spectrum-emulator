@@ -16,6 +16,32 @@
 
 ; The Z of a room's floor, from room_size_tbl. Object positions are measured
 ; up from it; scenery carries absolute Z and does not need it.
+; How far this room's floor reaches from its centre, along each axis. Knight
+; Lore keeps the same numbers at $5BAB and $5BAE and clamps against them the
+; same way -- see character_collide.
+; Which sides of the room have a doorway, and where each one stands. A
+; doorway is an arch, and an arch is scenery, so both facts are already in
+; the room's own data -- room_door_note picks them out as the scenery goes by.
+;
+; The directions are the scenery data's own: north is +V, east +U, south -V
+; and west -U, which is the order the four arch templates come in, so the
+; index falls out of the bottom two bits of the template number.
+;
+; room_door_z is the height of the arch's floor, and doubles as whether there
+; is a door at all -- nothing in the castle stands at Z=0. room_door_at is how
+; far the arch stands out along its own axis. The game's arches sit four units
+; beyond the wall, and the two ends of the castle are not quite symmetric
+; about 128, so this is read from the artwork rather than assumed.
+ROOM_DOOR_N		EQU		0
+ROOM_DOOR_E		EQU		1
+ROOM_DOOR_S		EQU		2
+ROOM_DOOR_W		EQU		3
+
+room_door_z:		DS		4
+room_door_at:	DS		4
+
+room_half_u:		DB		0
+room_half_v:		DB		0
 room_floor_z:		DB		0
 
 ; What the record said, and how much of it is left to walk.
@@ -43,29 +69,65 @@ room_stage:			DS		8
 
 
 ; ---------------------------------------------------------------------------
+; Find a room's record, by walking the list and comparing each record's own
+; number. That is how Knight Lore does it -- find_screen at $D3CF -- and for
+; the reason its author will have had: an index over all 256 numbers is 512
+; bytes to hold 128 rooms, and half of it is zero. The walk is a few hundred
+; T-states and it happens once, when the room changes.
+;
+;   C  - the room wanted
+; Out: cf set and HL -> its record; cf clear if there is no such room.
+; Corrupts AF, DE, HL.
+room_find:			ld		hl,room_list
+.next:				ld		a,(hl)
+					cp		c
+					scf
+					ret		z
+
+					; Step over the header and then the body, whose length is
+					; the two counts added together.
+					inc		hl
+					inc		hl		; -> the counts
+					ld		a,(hl)
+					inc		hl		; -> the body
+					ld		e,a
+					and		ROOM_OBJ_MASK
+					ld		d,a
+					ld		a,e
+					rlca
+					rlca
+					rlca
+					and		7
+					add		a,d
+					ld		e,a
+					ld		d,0
+					add		hl,de
+
+					ld		de,room_list_end
+					push	hl
+					and		a
+					sbc		hl,de
+					pop		hl		; POP leaves the flags alone
+					jr		c,.next
+					and		a		; off the end: no such room
+					ret		
+
+
 ; Build a room and draw it.
 ;   A = room number
 ;
 ; Everything the previous room owned goes with it: the sorted list is emptied,
 ; the rotation arena handed back, and the object pool refilled from the start.
-room_build:			ld		l,a
-					ld		h,0
-					add		hl,hl
-					ld		de,room_tbl
-					add		hl,de
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					ld		a,d
-					or		e
-					ret		z		; no such room. OR clears the carry, and the
-					; caller must not go on to put anything in
-					; a room that was never built: the list is
-					; still the old room's, with the old room's
-					; objects in it, and adding one that is
-					; already there makes it its own successor
+room_build:			ld		c,a
+					call	room_find
+					ret		nc		; no such room, and the caller must not go
+					; on to put anything in one that was never
+					; built: the list is still the old room's,
+					; with the old room's objects in it, and
+					; adding one that is already there makes it
+					; its own successor
 
-					push	de		; the record
+					push	hl		; the record
 
 					; Nothing survives a room change.
 					call	shift_reset
@@ -75,17 +137,27 @@ room_build:			ld		l,a
 					ld		(sort_head),hl
 					xor		a
 					ld		(room_object_count),a
+					ld		(room_door_z + ROOM_DOOR_N),a
+					ld		(room_door_z + ROOM_DOOR_E),a
+					ld		(room_door_z + ROOM_DOOR_S),a
+					ld		(room_door_z + ROOM_DOOR_W),a
 
 					pop		de
+					inc		de		; past its own number
 					ld		a,(de)
 					ld		(room_attr),a
 					inc		de
-					ld		a,(de)
-					ld		(room_scenery_left),a
-					inc		de
-					ld		a,(de)
-					ld		(room_bytes_left),a
+					ld		a,(de)		; both counts in the one byte
 					inc		de		; -> the scenery indices
+					ld		c,a
+					and		ROOM_OBJ_MASK
+					ld		(room_bytes_left),a
+					ld		a,c
+					rlca
+					rlca
+					rlca		; three left is five right
+					and		7
+					ld		(room_scenery_left),a
 
 					push	de
 					call	room_wipe
@@ -141,8 +213,12 @@ room_shape:			ld		a,(room_attr)
 					ld		h,0
 					ld		de,room_size_tbl
 					add		hl,de
+					ld		a,(hl)		; how far the floor reaches along U,
+					ld		(room_half_u),a		; measured from the room's centre
 					inc		hl
-					inc		hl		; -> the Z of this shape
+					ld		a,(hl)
+					ld		(room_half_v),a
+					inc		hl
 					ld		a,(hl)
 					ld		(room_floor_z),a
 					ret
@@ -162,6 +238,7 @@ room_scenery:		ld		a,(room_scenery_left)
 					ld		a,(de)
 					inc		de
 					push	de
+					ld		c,a		; which template, kept for room_door_note
 
 					ld		l,a
 					ld		h,0
@@ -187,6 +264,7 @@ room_scenery:		ld		a,(room_scenery_left)
 					inc		hl
 					ld		d,(hl)
 					ex		de,hl		; -> the template
+					call		room_door_note
 
 .piece:				ld		a,(hl)
 					or		a		; a zero sprite ends it
@@ -196,6 +274,61 @@ room_scenery:		ld		a,(room_scenery_left)
 
 .done:				pop		de
 					jr		room_scenery
+
+
+; If this piece of scenery is an arch, remember the doorway it makes.
+;
+; Knight Lore keeps the same three facts -- which side, how far out, what
+; height -- but reaches them from the other end: each arch is an object with
+; an update routine, and that routine walks the characters every frame and
+; marks any one standing in its opening ($C7DB). Ours cannot, because our
+; scenery has no update routines; but an arch never moves, so the answer is
+; the same all room long and is worth working out once.
+;
+; The first piece of an arch template is the one the game measures from --
+; its opening is centred thirteen units from that leaf, which is the middle
+; of the room -- so its position is the one to keep.
+;
+;   C  - the scenery template index
+;   HL -> the template
+; Corrupts AF and BC. HL comes back where it was.
+room_door_note:		ld		a,c
+					cp		8		; 0-7 are the four arches, plain and
+					jr		c,.plain		; among the trees; the side is in bit 0-1
+					cp		BG_HIGH_ARCH_E
+					ret		c
+					cp		BG_HIGH_ARCH_S + 1
+					ret		nc		; not an arch at all
+					; The two high arches are a doorway on the walkway of a
+					; tall room, and they only ever face east or south.
+					sub		BG_HIGH_ARCH_E - ROOM_DOOR_E
+					jr		.have
+.plain:				and		3
+.have:				push	hl
+					ld		c,a
+					ld		b,0
+
+					inc		hl
+					inc		hl
+					inc		hl		; sprite, U, V, Z
+					ld		a,(hl)
+					push	hl
+					ld		hl,room_door_z
+					add		hl,bc
+					ld		(hl),a
+					pop		hl
+
+					; North and south face along V, east and west along U.
+					dec		hl		; -> V
+					bit		0,c
+					jr		z,.along
+					dec		hl		; -> U
+.along:				ld		a,(hl)
+					ld		hl,room_door_at
+					add		hl,bc
+					ld		(hl),a
+					pop		hl
+					ret		
 
 
 ; ---------------------------------------------------------------------------
@@ -388,10 +521,27 @@ room_add:			ld		a,(room_object_count)
 
 					; Their mirror flag is bit 6; ours is bit 0, next to the
 					; sprite header's so that comparing them is one XOR.
+					;
+					; Bits 0 and 3 of that byte are rooms.py's own additions, and
+					; they are tested here rather than rotated into place with the
+					; mirror bit. The game's own flags use bits 1, 2, 4 and 6 --
+					; $10, $12, $14 and $50 are the four values it ever writes --
+					; so those two are the free ones, and they are not two places
+					; below where they have to end up.
+					ld		c,a		; the raw byte; BC is free until the stride below
 					rlca
 					rlca
 					and		OBJ_FLIP_H
-					ld		(ix+OBJ.FLAGS),a
+					bit		0,c		; draw from a private copy of the graphic
+					jr		z,.not_cached
+					or		OBJ_CACHE
+.not_cached:		bit		3,c		; rotate into the shared buffer, at draw time
+					jr		z,.not_shared
+					or		OBJ_SHARED_SHIFT
+.not_shared:		bit		1,c		; the game's own: nothing collides with it
+					jr		z,.not_passable
+					or		OBJ_PASSABLE
+.not_passable:		ld		(ix+OBJ.FLAGS),a
 					ld		a,(room_bg_flag)		; and whether this template is
 					or		(ix+OBJ.FLAGS)		; scenery rather than an object
 					ld		(ix+OBJ.FLAGS),a
@@ -424,21 +574,45 @@ room_add:			ld		a,(room_object_count)
 ; harvested the values into two tables, one for each way round.
 ;   IX -> the record, with GFX and FLAGS already set
 room_adjust:		push	hl
-					ld		a,(ix+OBJ.FLAGS)
-					and		OBJ_FLIP_H
-					ld		hl,sprite_adj
-					jr		z,.table
-					ld		hl,sprite_adj_flipped
-.table:				ld		c,(ix+OBJ.GFX)
+					ld		h,high sprite_adj_index
+					ld		l,(ix+OBJ.GFX)		; the table is page-aligned, so the
+					ld		a,(hl)		; graphic number is the address
+
+					; Bit 7 says this graphic wants a different nudge mirrored,
+					; which four of them do. Everything else uses the one index
+					; whichever way round it is drawn.
+					bit		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
+					jr		z,.found
+					and		a		; bit 7 into the sign flag
+					jp		p,.found
+					call	.mirrored
+
+.found:				and		$7F		; the index, already doubled
+					ld		c,a
 					ld		b,0
+					ld		hl,sprite_adj_pairs
 					add		hl,bc
-					add		hl,bc		; + graphic * 2
 					ld		a,(hl)
 					ld		(ix+OBJ.ADJ_X),a
 					inc		hl
 					ld		a,(hl)
 					ld		(ix+OBJ.ADJ_Y),a
 					pop		hl
+					ret
+
+					; One of the four. Walk the short list for this graphic and
+					; take the index it names instead.
+.mirrored:			ld		hl,sprite_adj_mirror
+					ld		c,(ix+OBJ.GFX)
+.look:				ld		a,(hl)
+					and		a
+					ret		z		; not there after all: keep what we had
+					inc		hl
+					cp		c
+					jr		z,.take
+					inc		hl
+					jr		.look
+.take:				ld		a,(hl)
 					ret
 
 

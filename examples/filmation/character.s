@@ -29,7 +29,15 @@
 CHARACTER_BODY		EQU		ROOM_STRIDE		; the body is the slot above the legs
 CHARACTER_BLOCK		EQU		8		; graphics per facing block
 CHARACTER_PHASES	EQU		6		; ...of which this many are the walk
-CHARACTER_TICKS		EQU		3		; frames each frame of it is held for
+CHARACTER_TICKS		EQU		1		; turns each frame of the cycle is held
+					; for. One, because Knight Lore animates the
+					; legs every turn it is walking -- $C969
+					; falls into animate_human_legs whenever the
+					; forward key is down. Three units a turn
+					; over six frames of cycle is the same ground
+					; per frame as one unit over three ticks; what
+					; changes is that he covers it in six turns
+					; instead of eighteen.
 					; A walking body rides twelve above the legs, the same
 					; twelve Knight Lore uses -- see walking_character. They
 					; meet because the game nudges the two by different amounts
@@ -43,24 +51,66 @@ CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; pixel nudge -- see ADJ_LIFT.
 CHARACTER_Z			EQU		128		; the floor
 
-; How far a character may walk before the wall stops it.
+; How wide a character is, as a half-extent about U and V -- see COLLIDE_HEIGHT
+; for why that is the convention. Knight Lore gives the knight five each way.
+CHARACTER_HALF_U	EQU		5
+CHARACTER_HALF_V	EQU		5
+
+; Vertical state, two bytes past the pair of slots. It cannot live in either
+; record: an object record is exactly a ROOM_STRIDE slot now, with nothing
+; spare. It does not have to, either -- a character is not in the room's pool,
+; so its records can be followed by whatever it needs.
+CHARACTER_DZ		EQU		ROOM_STRIDE * 2		; velocity, signed
+CHARACTER_STATE		EQU		ROOM_STRIDE * 2 + 1
+
+; And the seven that used to be fields of the object record. They are a
+; character's business only -- a wall has no facing and no walk cycle -- and
+; every one of the room's thirty-six slots was carrying them unused.
+CHARACTER_FACING	EQU		ROOM_STRIDE * 2 + 2	; 0 to 3, see character_walk
+CHARACTER_PHASE		EQU		ROOM_STRIDE * 2 + 3	; where in the six-frame cycle
+CHARACTER_TICK		EQU		ROOM_STRIDE * 2 + 4	; turns left on this frame
+CHARACTER_LEGS		EQU		ROOM_STRIDE * 2 + 5	; first graphic of the legs
+CHARACTER_BODY_G	EQU		ROOM_STRIDE * 2 + 6	; ...and of the body
+CHARACTER_BLOCK_A	EQU		ROOM_STRIDE * 2 + 7	; what the facing block adds
+CHARACTER_PHASE_M	EQU		ROOM_STRIDE * 2 + 8	; mask on the walk phase
+; Which of the room's doorways this character is standing in, or $FF. Only
+; the player ever has it set: it is what lifts the room's edge so he can walk
+; out, and nothing else in the castle is allowed through. Knight Lore draws
+; the same line with bit 3 of an object's flags, which says whether an arch
+; should bother looking at it -- see chk_plyr_spec_near_arch at $C7DB.
+CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 9
+
+; How close to an arch counts as standing in it: six units across the opening,
+; fifteen along it and four in height. Knight Lore's own numbers, from the
+; box its arches test against ($06/$0F either way round, and $04 in Z).
+DOOR_ACROSS		EQU		6
+DOOR_ALONG		EQU		15
+DOOR_LEVEL		EQU		4
+CHARACTER_JUMPING	EQU		1		; bit 0 of the above
+
+; Knight Lore gives the knight an impulse of eight and then takes one a turn
+; off it while the jump key is still down and two once it is let go, so how
+; long you hold the key is how high he goes. That is the whole of a
+; variable-height jump and it costs one test a turn. Head Over Heels has no
+; velocity at all -- a counter of rising steps, four or eight or ten of them,
+; at one unit each -- so its jump is the same height however it is asked for.
+CHARACTER_JUMP_DZ	EQU		8
+CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
+					; clamp never has far to walk back
+
+; Where the floor ends is the room's business, not a constant here -- see
+; room_half_u and character_collide. It used to be a pair of hand-picked
+; limits, 72 and 180, which were not even symmetric about the room's centre at
+; 128: 56 one way and 52 the other, so a character could walk four units
+; further north-west than north-east.
 ;
-; Provisional. The right answer is room_size_tbl, which gives each room shape
-; its floor in U and V -- room_shape reads that table already but keeps only
-; the Z. Until the two are wired through, these are the numbers the room looks
-; right at: the blocks stand at 88 to 168 and the walls at 59 and 196, so the
-; floor between them is about this.
-;
-; Something has to stop it, though. Walk out of the room and the projection
-; puts the object at screen coordinates that wrap, so a repaint region wraps
-; with it and scribbles down the far edge of the screen. The upper bound is
-; not a matter of taste: the worst case is U and V both at it, where
-; x = U + V - 128 is largest, and a 3-byte sprite from there has to stay under
-; 256 or the repaint region wraps to the far side of the screen. That puts the
-; ceiling at 180. The floor is where x would go negative, 64, with a little to
-; spare.
-FLOOR_LO			EQU		72
-FLOOR_HI			EQU		180
+; The worry they were guarding was real, though. Walk out of a room and the
+; projection puts the object at screen coordinates that wrap, so a repaint
+; region wraps with it and scribbles down the far edge of the screen. The
+; room's own bounds turn out to be safe: swept over all 900 positions of a
+; square room's floor, MIN_X never goes below 0 and MAX_X never past 32, which
+; is the edge exactly. The far corner puts the centre at x = 244 and a
+; three-byte sprite reaches 255 and stops.
 
 
 ; One character: two records, with the state that steers them in the tail of
@@ -74,16 +124,19 @@ FLOOR_HI			EQU		180
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
 				MACRO	character_record legs_base, body_base, body_block, body_phase, body_lift, facing
-					object_record	OBJ_MOVABLE, 0, 6, 6, 12
-					DS		OBJ.FACING - OBJ.ADJ_X, 0		; ADJ_X, ADJ_Y, GFX
+					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
+					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; the rest of the legs' slot
+					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
+					DS		OBJ.ADJ_LIFT - OBJ.ADJ_X, 0
+					DB		body_lift		; the body's nudge may want the height back
+					DS		ROOM_STRIDE - OBJ.ADJ_LIFT - 1, 0
+
+					; ...and then the character's own, in the order the EQUs give
+					DB		0, 0			; CHARACTER_DZ, CHARACTER_STATE
 					DB		facing, 0, CHARACTER_TICKS
 					DB		legs_base, body_base
-					DB		body_block, body_phase, 0		; the legs' nudge stands as it is
-					DS		ROOM_STRIDE - OBJ, 0		; out to a whole slot
-					object_record	OBJ_MOVABLE, 0, 6, 6, 12
-					DS		OBJ.ADJ_LIFT - OBJ.ADJ_X, 0
-					DB		body_lift		; ...and the body's may not
-					DS		ROOM_STRIDE - OBJ, 0
+					DB		body_block, body_phase
+					DB		$FF		; CHARACTER_DOOR: in no doorway
 				ENDM
 
 
@@ -105,8 +158,12 @@ FLOOR_HI			EQU		180
 					character_record legs_base, body_base, 1, $00, -CHARACTER_BODY_UP, facing
 				ENDM
 
-					; A character's state has to fit in the slack of a slot.
+					; A character's state has to fit in the slack of a slot,
+					; and the record itself in a slot. Moving the seven
+					; character-only fields out left room for the three deltas
+					; the game gives every object, with four bytes still spare.
 					ASSERT	OBJ <= ROOM_STRIDE
+					DISPLAY "object record: ", /D, OBJ, " of ", /D, ROOM_STRIDE
 
 					; character_frame works the block out by doubling bit 1 of
 					; the facing twice, so it cannot read this EQU -- which is
@@ -128,17 +185,23 @@ FLOOR_HI			EQU		180
 ;
 ; With screenX = U + V - 128 and the base hung off (V - U) >> 1, a step along
 ; +U goes down and right, +V up and right, and their negatives the other two.
-character_steps:	DB		-1, 0		; 0  -U  away, up and left
-					DB		0, 1		; 1  +V  away, up and right
-					DB		1, 0		; 2  +U  towards, down and right
-					DB		0, -1		; 3  -V  towards, down and left
+; Three units a turn, which is what the game walks: move_plyr_W at $CA3A
+; is ADD A,$FD and its three siblings match. The clamp still stops him
+; exactly on a face, because it walks the step back a unit at a time --
+; three only changes how fast the ground goes by, not where he ends up.
+CHARACTER_STEP		EQU		3
+
+character_steps:	DB		-CHARACTER_STEP, 0		; 0  -U  away, up and left
+					DB		0, CHARACTER_STEP		; 1  +V  away, up and right
+					DB		CHARACTER_STEP, 0		; 2  +U  towards, down and right
+					DB		0, -CHARACTER_STEP		; 3  -V  towards, down and left
 
 
 ; Give both halves the graphics this character's facing and phase call for,
 ; and turn them the way it is facing.
 ;   IX -> the legs record
 ; Corrupts AF, B and C.
-character_frame:	ld		a,(ix+OBJ.FACING)
+character_frame:	ld		a,(ix+CHARACTER_FACING)
 					and		2		; the block: away from the viewer, or
 					rrca			; towards it, as 0 or 1
 					ld		b,a
@@ -146,8 +209,8 @@ character_frame:	ld		a,(ix+OBJ.FACING)
 					add		a		; legs are always eight graphics a block
 					add		a
 					add		a		; * CHARACTER_BLOCK
-					add		a,(ix+OBJ.PHASE)
-					add		a,(ix+OBJ.LEGS_BASE)
+					add		a,(ix+CHARACTER_PHASE)
+					add		a,(ix+CHARACTER_LEGS)
 					ld		(ix+OBJ.GFX),a
 
 					; The body's block is its own -- eight for a body that
@@ -157,15 +220,15 @@ character_frame:	ld		a,(ix+OBJ.FACING)
 					ld		c,0
 					bit		0,b
 					jr		z,.first_block
-					ld		c,(ix+OBJ.BODY_BLOCK)
-.first_block:		ld		a,(ix+OBJ.PHASE)
-					and		(ix+OBJ.BODY_PHASE)
+					ld		c,(ix+CHARACTER_BLOCK_A)
+.first_block:		ld		a,(ix+CHARACTER_PHASE)
+					and		(ix+CHARACTER_PHASE_M)
 					add		a,c
-					add		a,(ix+OBJ.BODY_BASE)
+					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
 					; Bit 0 of the facing is the mirror, in both halves.
-					bit		0,(ix+OBJ.FACING)
+					bit		0,(ix+CHARACTER_FACING)
 					jr		nz,.mirrored
 					res		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
 					res		OBJ_FLIP_BIT,(ix+CHARACTER_BODY+OBJ.FLAGS)
@@ -177,15 +240,19 @@ character_frame:	ld		a,(ix+OBJ.FACING)
 
 ; Put a character in the room that has just been built.
 ;   IX -> its legs record
-;   B  - U, C - V
-character_add:		ld		(ix+OBJ.PHASE),0
-					ld		(ix+OBJ.TICK),CHARACTER_TICKS
+;   B  - U, C - V, A - the Z its legs stand at
+character_add:		ld		(ix+CHARACTER_PHASE),0
+					ld		(ix+CHARACTER_TICK),CHARACTER_TICKS
 					ld		(ix+OBJ.U),b
 					ld		(ix+OBJ.V),c
-					ld		(ix+OBJ.Z),CHARACTER_Z
+					ld		(ix+OBJ.Z),a
 					ld		(ix+CHARACTER_BODY+OBJ.U),b
 					ld		(ix+CHARACTER_BODY+OBJ.V),c
-					ld		(ix+CHARACTER_BODY+OBJ.Z),CHARACTER_Z + CHARACTER_BODY_UP
+					add		a,CHARACTER_BODY_UP
+					ld		(ix+CHARACTER_BODY+OBJ.Z),a
+					ld		(ix+CHARACTER_DZ),0		; on the floor, and staying
+					ld		(ix+CHARACTER_STATE),0		; there until asked
+					ld		(ix+CHARACTER_DOOR),$FF	; and in no doorway
 
 					; A fresh start: the rotation buffers went back with the
 					; old room's arena, and OBJ_SHIFTED with them.
@@ -199,7 +266,22 @@ character_add:		ld		(ix+OBJ.PHASE),0
 					call	.half
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
-					ret
+
+					; And paint him. room_show drew the room before he was put
+					; in it -- the characters join the list after room_build,
+					; because nothing may go into a room that was not built --
+					; so without this he is in the sort and on nobody's screen,
+					; and stays invisible until something repaints over him: his
+					; own first step, or the soldier walking past and dragging a
+					; region across half of him.
+					call	region_reset
+					call	region_add
+					ld		bc,CHARACTER_BODY
+					add		ix,bc
+					call	region_add
+					ld		bc,-CHARACTER_BODY
+					add		ix,bc
+					jp		redraw_view
 
 .half:				ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
@@ -213,24 +295,24 @@ character_add:		ld		(ix+OBJ.PHASE),0
 ; Walk a character one step in facing A, and repaint what that disturbed.
 ;   IX -> the legs record
 ;   A  - the facing, 0 to 3
-character_walk:		ld		(ix+OBJ.FACING),a
+character_walk:		ld		(ix+CHARACTER_FACING),a
 
 					; The walk cycle, a frame every CHARACTER_TICKS. Tying it
 					; to steps rather than to the clock is what keeps the feet
 					; on the ground: the knight covers the same distance per
 					; frame of the cycle however often he is asked to move.
-					dec		(ix+OBJ.TICK)
+					dec		(ix+CHARACTER_TICK)
 					jr		nz,.same_frame
-					ld		(ix+OBJ.TICK),CHARACTER_TICKS
-					inc		(ix+OBJ.PHASE)
-					ld		a,(ix+OBJ.PHASE)
+					ld		(ix+CHARACTER_TICK),CHARACTER_TICKS
+					inc		(ix+CHARACTER_PHASE)
+					ld		a,(ix+CHARACTER_PHASE)
 					cp		CHARACTER_PHASES
 					jr		c,.same_frame
-					ld		(ix+OBJ.PHASE),0
+					ld		(ix+CHARACTER_PHASE),0
 .same_frame:		call	character_frame
 
 					; The step for this facing.
-					ld		a,(ix+OBJ.FACING)
+					ld		a,(ix+CHARACTER_FACING)
 					add		a		; two bytes an entry
 					ld		c,a
 					ld		b,0
@@ -239,9 +321,52 @@ character_walk:		ld		(ix+OBJ.FACING),a
 					ld		d,(hl)
 					inc		hl
 					ld		e,(hl)
-		;; NB: fall through
+
+					;; NB: fall through into character_walk_on
 
 
+; A character that is walking always repaints, whether or not the step got
+; anywhere. It has turned to face the way it was asked, and its legs have
+; moved on a frame, so there is something new to draw even when a wall takes
+; the whole step away -- which is what walking on the spot against a wall
+; looks like, and what the game does: handle_forward at $C969 animates and
+; print_sprite draws, neither of them caring whether the move came off.
+character_walk_on:	call	character_settle
+					jp		character_move
+
+
+; And one that is only standing there repaints only if something moved it --
+; gravity, or being shoved. The whole engine rests on not repainting what did
+; not change, and this is the case that would repaint every turn for nothing.
+character_stand:	ld		d,0
+					ld		e,0
+					call	character_settle
+					ld		a,d
+					or		e
+					or		(ix+OBJ.DZ)
+					ret		z
+					jp		character_move
+
+
+; What a turn does to a character before anything is drawn: gravity proposes a
+; step in Z, the clamp cuts the whole step down to what fits, and the landing
+; is settled against what had to give.
+;   IX -> the legs record
+;   D  - the step it would like in U, E the step in V
+character_settle:	call	character_gravity
+					call	character_collide
+					jp		character_land
+
+
+; Everything a character does in a turn once the step along the floor is known.
+;
+;   IX -> the legs record
+;   D  - the step it would like in U, E the step in V
+;   (character_jump_held) - whether the jump key is down, which is what makes
+;                           the difference between a short hop and a long one
+;
+; Falling is not a special case here: gravity proposes a step in Z every turn
+; and the clamp cuts it to nothing while there is ground under the feet.
 ; Move both halves by D in U and E in V, and repaint the one region.
 ;   IX -> the legs record
 ;
@@ -251,7 +376,10 @@ character_walk:		ld		(ix+OBJ.FACING),a
 ; moment -- which, halfway through a step, is still where it was. The body's
 ; own repaint put it right, but not before the raster had had a chance to show
 ; the wrong one.
-character_move:		call	region_reset
+character_move:		ld		a,(ix+OBJ.DZ)		; the body rides with the legs, and
+					ld		(ix+CHARACTER_BODY+OBJ.DZ),a		; reads its own copy
+
+character_move_go:	call	region_reset
 					call	region_add		; where he was
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
@@ -286,6 +414,242 @@ character_move:		call	region_reset
 					jp		redraw_view
 
 
+; Whether the jump key is down this turn. Gravity asks, because how long it is
+; held is how high the jump goes.
+character_jump_held:	DB		0
+
+
+; Start a jump, if this is a moment one may be started.
+;   IX -> the legs record
+; Corrupts AF.
+character_jump:		bit		0,(ix+CHARACTER_STATE)
+					ret		nz		; already in the air
+					ld		a,(ix+CHARACTER_DZ)
+					inc		a
+					ret		m		; falling faster than a unit a turn: too
+					; late to call it a jump. Knight Lore
+					; makes the same test at $C956.
+					set		0,(ix+CHARACTER_STATE)
+					ld		(ix+CHARACTER_DZ),CHARACTER_JUMP_DZ
+					ret
+
+
+; Turn the character's velocity into this turn's proposed step in Z.
+;   IX -> the legs record
+; Corrupts AF and B.
+character_gravity:	ld		a,(character_jump_held)
+					ld		b,a
+					ld		a,(ix+CHARACTER_DZ)
+					or		a
+					jp		m,.heavy		; on the way down already
+					inc		b
+					dec		b
+					jr		z,.heavy		; on the way up, but let go of
+					dec		a		; ...still held: half as much
+					jr		.limit
+.heavy:				dec		a
+					dec		a
+.limit:				jp		p,.store		; only a fall needs limiting
+					cp		CHARACTER_FALL_MAX
+					jr		nc,.store
+					ld		a,CHARACTER_FALL_MAX
+.store:				ld		(ix+CHARACTER_DZ),a
+					ld		(ix+OBJ.DZ),a		; what it would like to do; the
+					ret		; clamp says what it may
+
+
+; Settle the vertical state against what the clamp had to do.
+;   IX -> the legs record
+; Corrupts AF.
+character_land:		ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; nothing stopped us in Z
+
+					; Coming down, that is the ground and the jump is over.
+					; Going up it is the underside of something, and all that
+					; happens is that the rise stops -- the jump flag stays
+					; set, so letting go of the key still does what it would
+					; have done. Knight Lore ends a jump on the same pair of
+					; conditions, at $C9E2.
+					ld		a,(ix+CHARACTER_DZ)
+					or		a
+					ld		(ix+CHARACTER_DZ),0		; LD leaves the flags alone
+					ret		p		; was on the way up: a bumped head
+					res		0,(ix+CHARACTER_STATE)
+					ret
+
+
+; Is this character standing in one of the room's doorways, and which?
+;   IX -> the legs record
+; Corrupts AF, BC, DE, HL.
+;
+; An arch's opening is a box around a point on the wall: six units either side
+; of the room's middle, fifteen either side of the arch, and four in height.
+; The height is what keeps a knight on the floor of a tall room out of the
+; high arch on its walkway, and a knight on the walkway out of the floor.
+character_door_find:
+					ld		(ix+CHARACTER_DOOR),$FF
+					ld		c,0
+
+.side:				ld		b,0
+					ld		hl,room_door_z
+					add		hl,bc
+					ld		a,(hl)
+					or		a
+					jr		z,.next		; no door on this side
+
+					sub		(ix+OBJ.Z)
+					call	.abs
+					cp		DOOR_LEVEL
+					jr		nc,.next		; the wrong storey
+
+					; North and south face along V, east and west along U; the
+					; other axis is the one across the opening.
+					ld		e,(ix+OBJ.U)
+					ld		a,(ix+OBJ.V)
+					bit		0,c
+					jr		z,.along
+					ld		e,(ix+OBJ.V)
+					ld		a,(ix+OBJ.U)
+.along:				ld		hl,room_door_at
+					add		hl,bc
+					sub		(hl)
+					call	.abs
+					cp		DOOR_ALONG
+					jr		nc,.next		; not up to the wall yet
+
+					ld		a,e
+					sub		128		; the opening is centred on the room
+					call	.abs
+					cp		DOOR_ACROSS
+					jr		nc,.next		; beside it, not in it
+
+					ld		(ix+CHARACTER_DOOR),c
+					ret		
+
+.next:				inc		c
+					ld		a,c
+					cp		4
+					jr		c,.side
+					ret		
+
+					; B has to survive this -- it is the top of the index.
+.abs:				or		a
+					ret		p
+					neg		
+					ret		
+
+
+; Cut a character's step down to what the room allows.
+;
+;   IX -> the legs record
+;   D  - the step it would like in U, E the step in V
+; Returns them cut to what fits, and collide_hit saying which axes gave.
+;
+; Two things stop a character. The room's own edges are a plain range test:
+; walk out of one and the projection puts the figure at screen coordinates
+; that wrap, and a repaint region wraps with them and scribbles down the far
+; side of the screen. Then everything standing in the room, which is
+; object_collide's business.
+;
+; Corrupts AF, BC, HL, IY.
+					; The room first. Knight Lore's test, at $CCEC: a room is
+					; centred on 128 and room_half_u says how far its floor
+					; reaches, so the distance from that centre plus our own half
+					; has to stay inside it. Symmetric by construction, which a
+					; pair of hand-picked limits was not -- the old ones sat 56
+					; below the centre and 52 above, which is why he could walk
+					; further one way than the other.
+					;
+					; And the step is walked back a unit at a time rather than
+					; thrown away, so he ends up against the wall rather than
+					; wherever the last whole step left him -- which with a step
+					; of three could be two units short.
+character_collide:	; Unless he is in a doorway, in which case neither edge
+					; applies and he can walk straight out. Knight Lore opens
+					; both of its bound checks with the same test and the same
+					; bit -- $CCE3 for X and $CD0E for Y -- and it is the whole
+					; of how the knight ever leaves a room.
+					ld		a,(ix+CHARACTER_DOOR)
+					inc		a
+					jp		nz,.keep_v
+
+.u_bound:			ld		a,(ix+OBJ.U)
+					add		a,d
+					sub		128		; distance from the room's centre
+					jp		p,.u_abs
+					neg
+.u_abs:				add		a,(ix+OBJ.SIZE_U)
+					ld		hl,room_half_u
+					cp		(hl)
+					jr		c,.keep_u		; still inside
+					ld		a,d
+					or		a
+					jr		z,.keep_u		; nothing left to give
+					jp		m,.u_back
+					dec		d
+					jr		.u_bound
+.u_back:			inc		d
+					jr		.u_bound
+
+.keep_u:
+.v_bound:			ld		a,(ix+OBJ.V)
+					add		a,e
+					sub		128
+					jp		p,.v_abs
+					neg
+.v_abs:				add		a,(ix+OBJ.SIZE_V)
+					ld		hl,room_half_v
+					cp		(hl)
+					jr		c,.keep_v
+					ld		a,e
+					or		a
+					jr		z,.keep_v
+					jp		m,.v_back
+					dec		e
+					jr		.v_bound
+.v_back:			inc		e
+					jr		.v_bound
+.keep_v:
+					; And the floor, which is not an object -- nothing in a room
+					; stands for the ground, so a fall has to be stopped here or
+					; it never ends. Knight Lore does exactly this at $CA5A,
+					; against the room's own floor at $5BAE -- which is what
+					; room_shape has been working out into room_floor_z all
+					; along and nothing was reading.
+					ld		a,(ix+OBJ.DZ)
+					add		a,(ix+OBJ.Z)
+					ld		c,a
+					ld		a,(room_floor_z)
+					ld		b,a
+					ld		a,c
+					cp		b
+					jr		nc,.above_floor
+					ld		a,b
+					sub		(ix+OBJ.Z)		; only as far as the floor
+					ld		(ix+OBJ.DZ),a
+					ld		a,COLLIDE_Z
+					jr		.floor_done
+.above_floor:		xor		a
+.floor_done:		ld		(.floor_hit + 1),a
+
+					ld		(ix+OBJ.DU),d
+					ld		(ix+OBJ.DV),e
+
+					call	object_collide
+
+					; The floor counts as something having stopped us, the same
+					; as a block would, so that character_land sees it.
+.floor_hit:			ld		a,0		; patched just above
+					ld		hl,collide_hit
+					or		(hl)
+					ld		(hl),a
+
+					ld		d,(ix+OBJ.DU)
+					ld		e,(ix+OBJ.DV)
+					ret
+
+
 ; One half: step it, work out where that puts it on the screen, and re-thread
 ; it in the sorted list. The caller repaints.
 ;   IX -> the record
@@ -293,24 +657,18 @@ character_move:		call	region_reset
 character_half:		push	de
 					call	extent_save
 					pop		de
-		; Work the step out, and only keep it if it lands between the walls.
-		; Simpler than moving and undoing, and it does not need to know which
-		; of the two axes this step was along.
+		; The step is already everything it is allowed to be -- the room's
+		; walls and everything standing in it were taken out of it by
+		; character_collide, before either half was touched.
 					ld		a,(ix+OBJ.U)
 					add		a,d
-					cp		FLOOR_LO
-					jr		c,.keep_u
-					cp		FLOOR_HI + 1
-					jr		nc,.keep_u
 					ld		(ix+OBJ.U),a
-.keep_u:			ld		a,(ix+OBJ.V)
+					ld		a,(ix+OBJ.V)
 					add		a,e
-					cp		FLOOR_LO
-					jr		c,.keep_v
-					cp		FLOOR_HI + 1
-					jr		nc,.keep_v
 					ld		(ix+OBJ.V),a
-.keep_v:
+					ld		a,(ix+OBJ.DZ)
+					add		a,(ix+OBJ.Z)
+					ld		(ix+OBJ.Z),a
 		; The graphic changed with the phase, so the nudge that lines its
 		; artwork up may have changed with it -- and it certainly has if the
 		; character has just turned round.

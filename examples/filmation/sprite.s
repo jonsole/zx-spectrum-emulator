@@ -37,17 +37,6 @@ BLIT_IDX_MASK		EQU		7 * JUMP_GROUP		; the three class bits, in place
 					and		7
 				ENDM
 
-					align 256
-byte_position_table:
-					REPT 	256,x
-						IF	((x & 7) == 0)					
-							DB 		(x / 8) << 1 
-						ELSE
-							DB 		((x / 8) << 1) + 1
-						ENDIF
-					ENDR
-
-
 					ALIGN	256					
 ; Indexed by BLIT_IDX. Each group starts with the arithmetic that turns a
 ; row count into a byte offset for that width -- rows * width, done as shifts

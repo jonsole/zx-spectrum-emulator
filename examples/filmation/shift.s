@@ -29,18 +29,119 @@
 ; half of the far corner, which is why the two walls did not meet there.
 ;
 ; So the size is measured rather than guessed. Every room in the castle was
-; built in turn and its objects' sub-byte offsets totted up; the hungriest is
-; $97 at 4,922 bytes, with $CF, $D5, $D4, $D3 and $67 all above 4,600. 5,120
-; covers the castle with a little to spare.
+; built in turn and its objects' sub-byte offsets totted up; the hungriest was
+; $97 at 4,922 bytes, with $CF, $D5, $D4, $D3 and $67 all above 4,600, and
+; 5,120 covered the castle with a little to spare.
+;
+; It buys more than rotation now. A piece the room data marks OBJ_CACHE is
+; drawn from a private copy of its graphic, out of the same arena, and that
+; costs up to 1,398 bytes in a room -- one copy a graphic, not one a piece.
+;
+; And it buys less rotation than it did, because the walls and trees are marked
+; OBJ_SHARED_SHIFT and rotate into shift_shared at draw time instead. That took
+; the worst room from 5,682 bytes to 4,122: $87 is now the hungriest, then $88
+; at 3,042 and $78 at 2,962. 4,608 leaves it 486 to spare.
+;
+; Measured the same way throughout, by counting every block asked for rather
+; than every block granted, since a refusal is silent.
 ;
 ; It is worth keeping in mind that this is a fallback that hides itself. If
 ; the sprite set or the placement ever changes, this number wants
 ; re-measuring -- the failure will not announce itself.
 
-SHIFT_ARENA_SIZE	EQU		5120
+SHIFT_ARENA_SIZE	EQU		4608
 
 shift_arena:		DS		SHIFT_ARENA_SIZE
 shift_arena_next:	DW		shift_arena
+
+
+; The one buffer every OBJ_SHARED_SHIFT object rotates into, on its way to
+; being blitted. One is enough because it is filled immediately before the blit
+; reads it and nothing has to survive the object that filled it -- which is
+; exactly how Head Over Heels does all of its rotation, with a single Buffer at
+; $BF20.
+;
+; Sized for the largest rotated form in the sprite set: sprite_071, the arch
+; leaf, three bytes wide and 52 rows, which rotates to four columns of mask and
+; data -- 416 bytes. Like the arena, this wants re-measuring if the artwork
+; grows, and like the arena it will not say so itself.
+SHIFT_SHARED_SIZE	EQU		416
+
+shift_shared:		DS		SHIFT_SHARED_SIZE
+
+
+; Every object that survives objects_draw_all's filter comes through here on
+; its way to the blit. SHIFT is zero for all but the marked ones, so this is
+; usually a load, a test and a return.
+;
+;   HL -> the sprite's bitmap
+; The object comes from draw_object, which objects_draw_all patches as it
+; walks the record -- see there for why IY cannot be used.
+; Preserves everything, the flags included.
+shift_if_deferred:	push	af
+					push	iy
+draw_object:		ld		iy,0		; patched: the record + 10, where the
+					; walk had got to when it stored SP
+					ld		a,(iy+OBJ.SHIFT-10)
+					or		a
+					call	nz,shift_at_draw
+					pop		iy
+					pop		af
+					ret
+
+
+; Rotate this object's sprite into the shared buffer, for objects_draw_all.
+;
+;   HL -> the sprite's bitmap, the way round this object wants it
+;   IY -> the object, as shift_if_deferred has just set it: the record + 10
+; Returns HL -> the shared buffer, and preserves everything else, both
+; register sets included -- the caller is mid-blit and every one of them is
+; live.
+shift_at_draw:		push	bc
+					push	de
+					push	ix
+					exx
+					push	bc
+					push	de
+					push	hl
+					exx
+					ex		af,af'
+					push	af
+					ex		af,af'
+
+					push	iy
+					pop		ix
+					ld		bc,-10
+					add		ix,bc		; the rotation wants the record itself, in IX
+
+					; The blit index has already been widened to the rotated
+					; width, at placement; the rotation wants the artwork's own.
+					ld		a,(ix+OBJ.BLIT_IDX)
+					sub		JUMP_GROUP
+					ld		(ix+OBJ.BLIT_IDX),a
+
+					dec		l		; hl -> the height byte. SPRITE is the record
+					; + 2 and records are ALIGN 4, so this cannot borrow
+					ld		de,shift_shared
+					ld		a,(ix+OBJ.SHIFT)
+					call	object_update.rotate
+
+					ld		a,(ix+OBJ.BLIT_IDX)
+					add		a,JUMP_GROUP		; put the drawn width back
+					ld		(ix+OBJ.BLIT_IDX),a
+					ex		af,af'
+					pop		af		; the x overlap, back into the shadow
+					ex		af,af'
+					exx
+					pop		hl
+					pop		de
+					pop		bc
+					exx
+					pop		ix
+					pop		de
+					pop		bc
+					ld		hl,shift_shared
+					ret
 
 
 ; Hand the whole arena back. Called when a room is built; every object in the
@@ -73,7 +174,7 @@ shift_alloc:		push	hl
 					ld		a,(hl)
 					sprite_width_class
 					add		a,3		; width - 2, so this is width + 1
-					add		a		; two bytes a column
+.sized:				add		a		; two bytes a column
 					ld		e,a
 					ld		d,0		; de = bytes in one row
 					inc		hl
@@ -99,3 +200,55 @@ shift_alloc:		push	hl
 
 .full:				pop		hl
 					ret
+
+
+; As shift_alloc, but for a straight copy rather than a rotated one: nothing
+; spills sideways, so the sprite's own width exactly.
+copy_alloc:			push	hl
+					ld		a,(hl)
+					sprite_width_class
+					add		a,2		; the blit index holds width - 2
+					jr		shift_alloc.sized
+
+
+; Take a private copy of the graphic this object is carrying, so that nothing
+; else can mirror it out from under us.
+;
+; A graphic is shared by everything drawn from it, and an object that wants it
+; the other way round mirrors it where it lies. That is fine until two of them
+; are on screen at once wanting opposite orientations: then every draw mirrors
+; the whole sprite back, 10,251 T at a time for the castle arch, twice a region
+; for as long as both are in one. Room $88's two right-hand arches are exactly
+; that pair, and it cost 85% of the frame to stand in front of them.
+;
+; Rotating already gives an object private bytes -- that is why sprite_orient
+; skips a shifted one -- so this is the same answer for the objects that do not
+; rotate, and it is settled once at placement rather than twice a frame.
+;
+;   IX -> the object, its buffer already allocated
+;   HL -> the sprite's height byte, where object_update holds it
+; Corrupts AF, BC, DE, HL.
+sprite_copy:		ld		b,(hl)		; rows
+					dec		l		; -> the header. ALIGN 4 makes this safe
+					ld		a,(hl)
+					sprite_width_class
+					add		a,2		; width
+					add		a		; two bytes a column
+					ld		c,a		; c = bytes in one row
+					inc		l
+					inc		l		; -> the bitmap
+					ld		e,(ix+OBJ.BUF_L)
+					ld		d,(ix+OBJ.BUF_H)
+					push	de		; where it lands, for SPRITE below
+.row:				push	bc
+					ld		b,0		; LDIR wants the count in BC, and the row
+					ldir			; counter is in B, so it goes on the stack
+					pop		bc
+					djnz	.row
+
+					pop		hl
+					ld		(ix+OBJ.SPRITE_L),l
+					ld		(ix+OBJ.SPRITE_H),h
+					set		5,(ix+OBJ.FLAGS)		; private bytes: nothing re-orients
+					set		1,(ix+OBJ.FLAGS)		; them, and another piece may share
+					ret		

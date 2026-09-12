@@ -71,33 +71,25 @@ GFX:				DS		1
 ; dozen units above -- and the state that steers them lives in the tail of the
 ; legs record. A record is OBJ bytes inside a ROOM_STRIDE slot, so this space
 ; is already there: the room's own objects simply never look at it.
-FACING:				DS		1	; 0 to 3 -- see character_walk
-PHASE:				DS		1	; where in the six-frame walk cycle
-TICK:				DS		1	; frames left on this one
-LEGS_BASE:			DS		1	; first graphic of the legs, facing 0 phase 0
-BODY_BASE:			DS		1	; ...and of the body, which is a separate
-					; number because the castle's walkers share
-					; leg artwork and each bring their own top
-
-; How the body is put together, which is not the same for all of them. The
-; knight's walks with his legs: six graphics a facing, the two facing blocks
-; eight apart, riding twelve above the legs in Z. The soldier's and the
-; wizard's is one frame each way round, held still over the same walking legs,
-; sitting at the legs' own Z and lifted by its pixel nudge instead.
-BODY_BLOCK:			DS		1	; what the facing block adds: 8, or 1
-BODY_PHASE:			DS		1	; a mask on the walk phase: $FF, or 0 to stand
-
-; What to add to the pixel nudge this record gets from sprite_adj.
+; What Knight Lore calls dX, dY and dZ, at +$09, +$0A and +$0B of its own
+; records: what this object would like to do this turn, before anything has
+; been allowed to stop it. object_collide cuts them down and whoever asked
+; for them applies what is left.
 ;
-; Every body rides CHARACTER_BODY_UP above its legs in Z, because Z is what the
-; depth sort reads: a body that carries its height in its nudge instead sits in
-; the same box as its own legs, and the sort has nothing to tell them apart by.
-; Knight Lore does exactly that for the soldier and the wizard -- their body is
-; at the legs' own Z with a nudge of +3 against the legs' -6 -- so their
-; graphics want the height taking back out of the nudge, which is what this is
-; for. It is a byte of the object, not of the graphic, so re-running adj.py
-; cannot lose it.
+; Every object carries them, as in the game, and the room's pool can afford
+; it because the seven fields that used to sit here were only ever a
+; character's -- facing, walk phase and the graphic bases -- and no piece of
+; scenery has a walk cycle. They live past the character's two slots now.
+DU:				DS		1		; signed, along U
+DV:				DS		1
+DZ:				DS		1
+
 ADJ_LIFT:			DS		1
+
+; Pixels of sub-byte X, for an object that rotates at DRAW time rather than at
+; placement -- see OBJ_SHARED_SHIFT. Zero for everything else, which is what
+; objects_draw_all tests. This is the last byte of a ROOM_STRIDE slot.
+SHIFT:				DS		1
 					ENDS
 
 
@@ -119,6 +111,54 @@ OBJ_MOVABLE			EQU		0x80		; FLAGS bit 7
 ; rotated from the orientation the object wanted, and SPRITE - 2 is not a
 ; sprite header at all but whatever happens to precede the buffer.
 OBJ_SHIFTED			EQU		0x20
+
+; FLAGS bit 4: draw this object from a private copy of its graphic rather than
+; from the shared bytes. A graphic is shared by everything drawn from it, and
+; an object wanting it the other way round mirrors it where it lies, so two
+; objects in one room wanting opposite ways mirror it back and forth -- twice a
+; region, and ten thousand T a time for something the size of an arch. Room
+; $88's two right-hand arch leaves are exactly that pair, and standing in front
+; of them cost 85% of a turn.
+;
+; Which pieces those are is fixed by the room data, not discovered here:
+; rooms.py works out the graphics some room wants both ways, nominates one
+; orientation of each, and sets this bit on every piece wearing it. Only the
+; nominated ones spend a buffer; everything else goes on sharing.
+OBJ_CACHE			EQU		0x10
+
+; FLAGS bit 1: SPRITE points at a straight copy of the graphic rather than at a
+; rotated one. Both are private bytes and both set OBJ_SHIFTED, but only a copy
+; is the same for every object that wants that graphic that way round, so only
+; a copy can be shared -- see object_update's twin scan.
+OBJ_COPIED			EQU		0x02
+
+; FLAGS bit 2: nothing collides with this. It is the game's own flag, bit 1 of
+; a piece's flags byte, and $B538 tests it at the top of every one of Knight
+; Lore's collision scans.
+;
+; Every piece that carries it is the upper half of a two-part object with a
+; height of zero -- the wizard's torso over his legs, the pot's lid, a guard's
+; head. The lower half holds the box for both of them, which is the same
+; arrangement the knight himself has: his legs are W=5 D=5 H=23 and his body
+; is H=0.
+OBJ_PASSABLE		EQU		0x04
+
+; FLAGS bit 3: rotate this object into the one shared buffer, at the moment it
+; is drawn, instead of giving it a buffer of its own out of the room's arena.
+;
+; The two are a straight trade. A private buffer is rotated once, when the
+; object is placed, and a static then costs nothing however often it is
+; redrawn -- but it holds its bytes for the life of the room whether it is ever
+; redrawn or not. Room $88 rotates ten objects and eight of them are never
+; inside a redraw region again, so eight buffers sit idle.
+;
+; The shared buffer costs no room memory at all and is rotated afresh on every
+; draw, at about 47 T a byte of output: 6,100 T for a character's half, 19,500
+; for an arch leaf. So it is the right answer for something drawn rarely and
+; the wrong one for something a character walks past every turn -- a judgement
+; about where a piece sits in its room rather than anything the engine can work
+; out for itself. Hence a flag, set from the room data.
+OBJ_SHARED_SHIFT	EQU		0x08
 
 ; FLAGS bit 6: scenery. Drawn before everything else and never sorted, so it
 ; is permanently behind -- see background_insert. Walls and trees are solid and
@@ -206,6 +246,346 @@ calc_screen_xy:		ld		a,(ix+OBJ.U)
 ; Place an object from its world coordinates and update it.
 ;   IX -> the object, with U, V and Z set
 ;   A  = sprite index
+; ---------------------------------------------------------------------------
+; Collision.
+;
+; A character proposes a step and this cuts it down until it fits. Knight Lore
+; does the same thing and the shape is worth keeping: one axis at a time, Z
+; first and then U and then V, each settled before the next is looked at, and
+; each cut by stepping the delta one unit towards zero and testing again. That
+; one loop gives walls, sliding along them, landing on a block and bumping your
+; head into its underside, without any of them being written down separately.
+;
+; Head Over Heels answers the same question a different way -- a move function
+; and a collide function per direction, walking the sorted list forwards or
+; backwards so that the nearest obstacle is met first -- which is tidier when
+; the boxes are four fixed shapes, as its are. Ours are real sizes already,
+; because the depth sort needs them, so the clamp is the cheaper fit.
+
+; Which axes had to give, one bit each. The caller reads it to know it has hit
+; something -- landing on a floor is the Z bit and a step into a wall is the U
+; or V one.
+collide_hit:		DB		0
+COLLIDE_U			EQU		1
+COLLIDE_V			EQU		2
+COLLIDE_Z			EQU		4
+
+; The bit object_clamp sets when it has to cut the axis it was given.
+collide_mask:		DB		0
+
+; The step as the tests may see it, which is not the whole of what the object
+; asked for. Knight Lore carries dX, dY and dZ through its clamp in C, L and H
+; and starts with L and C at zero -- LD L,$00 / LD C,L at $CB56 -- loading each
+; only when its own axis comes up. So an axis is tested against the world with
+; the axes BEFORE it settled and the axes after it standing still.
+;
+; That is not a detail. Walk into a block and press jump: with the sideways
+; step included, the Z test finds the box already inside the block and refuses
+; to let it rise. With the sideways step held at zero, as here, the box is
+; beside the block and the jump goes up -- and by the time the sideways axes
+; are looked at, dZ has settled and they are tested at the new height.
+collide_eff_u:		DB		0
+collide_eff_v:		DB		0
+collide_eff_z:		DB		0
+
+
+; The list object_clamp is to walk. Knight Lore has one table and walks all
+; forty slots; ours are in two places, the room's pool and the characters,
+; which are not in it. Every axis has to see both before the next axis is
+; looked at, so the scan takes its list rather than knowing one.
+clamp_base:			DW		0
+clamp_count:		DB		0
+clamp_stride:		DB		0
+
+; The character to test against as well as the room, or zero. There are only
+; ever two of them and each needs the other, so a single pointer does.
+collide_other:		DW		0
+
+; Our own box with the step already in it, worked out once and then read by
+; every test in the scan. It was being recomputed from the record and the
+; deltas for each object, which is four indexed loads an axis for something
+; that only changes when an axis is actually cut.
+collide_u_min:		DB		0
+collide_u_max:		DB		0
+collide_v_min:		DB		0
+collide_v_max:		DB		0
+collide_z_min:		DB		0
+collide_z_max:		DB		0
+
+; SIZE_U and SIZE_V are HALF-extents about U and V, not sizes reaching up from
+; them. That is the game's own convention and it is not a guess: Knight Lore
+; tests two boxes as abs(Xa - Xb) < Wa + Wb, which only means anything for a
+; centre and a half-width, and it makes two blocks on neighbouring cells touch
+; exactly -- centres sixteen apart, halves of eight. The artwork agrees. A
+; block's sprite is 32 pixels wide and its nudge is -16, and with
+; screenX = U + V - 128 the footprint U+-8, V+-8 projects to exactly those 32
+; pixels, where a min-and-size box would cover half of them and sit to one
+; side.
+;
+; Z is the odd one out: there the coordinate is the base and SIZE_Z is the
+; whole height, which is why an object stands ON the floor at Z = 128 rather
+; than straddling it.
+;
+; depth_cmp reads the fields the same way. It did not always: it took all
+; three axes as min-and-size, which put every box half a width too far along
+; +U and +V. Nothing showed, because scenery sits on a sixteen grid with
+; halves of eight and the two readings agree exactly there -- it is only a
+; character, free to stand anywhere and only five each way, that can sit in
+; the band where one says touching and the other says clear.
+
+; A character walks into things as one figure, not as the two records it is
+; drawn from. Knight Lore says the same thing with its own numbers: the
+; knight's legs carry W=5, D=5, H=23 and his body carries H=0, so the whole
+; of him is one box hung on the lower half.
+COLLIDE_HEIGHT		EQU		23
+
+
+; Do our box and this object's overlap on all three axes?
+;
+;   IX -> the character's legs record
+;   IY -> the object to test against
+;   OBJ.DU/DV/DZ of ours - the step being considered
+;
+; Carry set if they overlap, clear if any axis separates them. Touching
+; exactly counts as apart, which is what lets a character stand on a block
+; rather than sink into it.
+;
+; Corrupts AF, DE. Preserves BC and HL, which object_clamp is using.
+					; U first, because it is the axis most likely to settle it:
+					; almost everything in a room is somewhere else along the
+					; floor, and this way most objects cost one test.
+					; Knight Lore writes this test as the distance between the
+					; two centres against the sum of the two halves -- $CC9D --
+					; and that is exactly what these edge comparisons say. It
+					; is kept in this form because it is faster HERE: a centre
+					; distance has to compute the sum and then an absolute
+					; value before it can decide anything, where an edge
+					; comparison throws most objects out on its first compare,
+					; and most objects in a room are somewhere else entirely.
+					; Measured, the game's own form cost 9% more a turn.
+object_overlaps:	ld		a,(iy+OBJ.U)
+					ld		d,a		; their centre
+					add		a,(iy+OBJ.SIZE_U)		; their max
+					ld		e,a
+					ld		a,(collide_u_min)
+					cp		e
+					jr		nc,.apart		; our min >= their max
+					ld		a,d
+					sub		(iy+OBJ.SIZE_U)		; their min
+					ld		d,a
+					ld		a,(collide_u_max)
+					ld		e,a
+					ld		a,d
+					cp		e
+					jr		nc,.apart		; their min >= our max
+
+					ld		a,(iy+OBJ.V)
+					ld		d,a
+					add		a,(iy+OBJ.SIZE_V)
+					ld		e,a
+					ld		a,(collide_v_min)
+					cp		e
+					jr		nc,.apart
+					ld		a,d
+					sub		(iy+OBJ.SIZE_V)
+					ld		d,a
+					ld		a,(collide_v_max)
+					ld		e,a
+					ld		a,d
+					cp		e
+					jr		nc,.apart
+
+					; Z is a base and a full height, not a centre and a half,
+					; so it keeps the edge comparison.
+					;
+					; A character is the exception at this end too: its record
+					; says twelve because that is the box the depth sort wants,
+					; and the figure is the whole COLLIDE_HEIGHT.
+					ld		a,(iy+OBJ.Z)
+					ld		d,a
+					bit		7,(iy+OBJ.FLAGS)		; OBJ_MOVABLE
+					jr		z,.their_height
+					add		a,COLLIDE_HEIGHT
+					jr		.their_top
+.their_height:		add		a,(iy+OBJ.SIZE_Z)
+.their_top:			ld		e,a
+					ld		a,(collide_z_min)
+					cp		e
+					jr		nc,.apart
+					ld		a,(collide_z_max)
+					ld		e,a
+					ld		a,d
+					cp		e
+					jr		nc,.apart
+
+					; All three axes overlap. The only thing that can save it
+					; now is the object saying nothing collides with it -- and
+					; asking here rather than at the top of the loop is what
+					; makes it free, because almost nothing gets this far.
+					bit		2,(iy+OBJ.FLAGS)		; OBJ_PASSABLE
+					jr		nz,.apart
+					scf
+					ret
+
+.apart:				or		a		; carry clear: nothing in the way
+					ret
+
+
+; Work our box out from the record and the step as it currently stands.
+;   IX -> the character's legs record
+; Corrupts AF.
+collide_box:		ld		a,(collide_eff_u)
+					add		a,(ix+OBJ.U)
+					ld		c,a		; our centre in U
+					sub		(ix+OBJ.SIZE_U)
+					ld		(collide_u_min),a
+					ld		a,c
+					add		a,(ix+OBJ.SIZE_U)
+					ld		(collide_u_max),a
+					ld		a,(collide_eff_v)
+					add		a,(ix+OBJ.V)
+					ld		c,a
+					sub		(ix+OBJ.SIZE_V)
+					ld		(collide_v_min),a
+					ld		a,c
+					add		a,(ix+OBJ.SIZE_V)
+					ld		(collide_v_max),a
+					ld		a,(collide_eff_z)
+					add		a,(ix+OBJ.Z)		; Z is the base, so no halving
+					ld		(collide_z_min),a
+					add		a,COLLIDE_HEIGHT
+					ld		(collide_z_max),a
+					ret
+
+
+; Cut one axis of the step back until nothing in the room is in the way.
+;
+;   HL -> the delta to cut, one of this object's DU, DV or DZ
+;   IX -> the character's legs record
+;   collide_mask - the bit to set in collide_hit if this axis has to give
+;
+; Every object in the room is tested with the step as it currently stands, so
+; the axes have to be done in a fixed order and each sees the ones before it
+; already settled. An object that is in the way takes one unit off this axis,
+; and is then tested again from the new position -- so a step of eight into a
+; wall ends up as however much of it fits, not as nothing.
+;
+; Corrupts AF, BC, DE, IY. Preserves HL and IX.
+object_clamp:		ld		a,(hl)
+					or		a
+					ret		z		; not moving along this axis
+
+					ld		a,(clamp_count)
+					or		a
+					ret		z
+					ld		b,a
+					ld		iy,(clamp_base)
+					call	collide_box
+
+.object:			call	object_overlaps
+					jr		nc,.next
+
+					; In the way. Give a unit back and look again -- at the
+					; same object, because one unit may not be enough.
+					ld		a,(hl)
+					or		a		; LD does not touch the flags, and the sign
+					jp		m,.negative		; of the step is what picks the way back
+					dec		a
+					jr		.gave
+.negative:			inc		a
+.gave:				ld		(hl),a
+					push	af
+					ld		a,(collide_mask)
+					ld		c,a
+					ld		a,(collide_hit)
+					or		c
+					ld		(collide_hit),a
+					call	collide_box
+					pop		af
+					or		a
+					ret		z		; nothing left to give, and nothing else
+					; can take any: the rest of the room
+					; cannot make a zero step smaller
+					jr		.object
+
+.next:				ld		a,(clamp_stride)
+					ld		e,a
+					ld		d,0
+					add		iy,de
+					djnz	.object
+					ret
+
+
+; Cut a whole step down to what fits, Z first and then U and then V.
+;
+;   IX -> the character's legs record
+;   OBJ.DU/DV/DZ - what it would like to do
+;
+; Leaves them as what it may do, and collide_hit saying which axes gave.
+; Corrupts AF, BC, DE, HL, IY.
+object_collide:		xor		a
+					ld		(collide_hit),a
+					ld		(collide_eff_u),a		; nothing is moving yet, as
+					ld		(collide_eff_v),a		; far as any test can see
+					ld		(collide_eff_z),a
+
+					; Z, then U, then V. Each takes what the object asked for on
+					; its own axis, has it cut down against everything, and hands
+					; the answer back to the record -- where the axes after it
+					; will see it, and the axes before it already have.
+					ld		a,COLLIDE_Z
+					ld		(collide_mask),a
+					ld		a,(ix+OBJ.DZ)
+					ld		(collide_eff_z),a
+					ld		hl,collide_eff_z
+					call	.axis
+					ld		a,(collide_eff_z)
+					ld		(ix+OBJ.DZ),a
+
+					ld		a,COLLIDE_U
+					ld		(collide_mask),a
+					ld		a,(ix+OBJ.DU)
+					ld		(collide_eff_u),a
+					ld		hl,collide_eff_u
+					call	.axis
+					ld		a,(collide_eff_u)
+					ld		(ix+OBJ.DU),a
+
+					ld		a,COLLIDE_V
+					ld		(collide_mask),a
+					ld		a,(ix+OBJ.DV)
+					ld		(collide_eff_v),a
+					ld		hl,collide_eff_v
+					call	.axis
+					ld		a,(collide_eff_v)
+					ld		(ix+OBJ.DV),a
+					ret
+
+
+.axis:				push	hl
+					ld		hl,room_objects
+					ld		(clamp_base),hl
+					ld		a,(room_object_count)
+					ld		(clamp_count),a
+					ld		a,ROOM_STRIDE
+					ld		(clamp_stride),a
+					pop		hl
+					push	hl
+					call	object_clamp
+					pop		hl
+
+					ld		de,(collide_other)
+					ld		a,d
+					or		e
+					ret		z		; nobody else about
+					push	hl
+					ld		(clamp_base),de
+					ld		a,1
+					ld		(clamp_count),a
+					pop		hl
+					jp		object_clamp
+
+
 object_place:		push	af
 					call	calc_screen_xy
 					pop		af
@@ -340,8 +720,11 @@ object_update:
                     
 					; rotate sprite in HL to buffer in DE
                     ex      af,af'                  ; A - shift amount / Z set, A' - height
-					jr		z,.no_shift		; already byte-aligned: nothing to rotate
-					; This object needs rotating. Has it somewhere to rotate into?
+					ld		(ix+OBJ.SHIFT),0		; LD does not touch the flags, and
+					jr		z,.no_shift		; the deferred path sets it again
+					; This object needs rotating. Where does it rotate into?
+					bit		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT: not here, but
+					jr		nz,.defer_shift		; at the moment it is drawn
 					ld		b,(ix+OBJ.BUF_H)		; B is free here; A still holds the
 					inc		b		; shift amount, which .shift_sprite
 					dec		b		; needs, so test without touching it
@@ -370,16 +753,139 @@ object_update:
 					dec		b
 					jp		nz,.shift_sprite
 .no_shift:
+					; Sharing the graphic is what we want, unless this is one of
+					; the pieces the room data has marked as contested -- see
+					; OBJ_CACHE. Those take a private copy, and then nothing in
+					; the room ever mirrors anything.
+					bit		4,(ix+OBJ.FLAGS)		; OBJ_CACHE
+					jp		z,.share
 
+					; One copy a graphic, though, not one an object. A room can
+					; hold several pieces wearing the same marked graphic the
+					; same way round -- an east arch and a west arch are the
+					; same two leaves twice -- and a copy is the same bytes
+					; whoever made it. Room $87 marks nine pieces between four
+					; graphics: 2,520 bytes of arena copied per piece, 1,398
+					; copied per graphic.
+					;
+					; Only a straight copy can be shared. A marked piece that
+					; landed off the byte grid took the rotating path instead,
+					; and its bytes are rotated for its own position, which is
+					; why the scan wants OBJ_COPIED and not just OBJ_SHIFTED.
+					push	hl
+					push	iy
+					ld		a,(ix+OBJ.FLAGS)
+					and		OBJ_FLIP_H
+					or		OBJ_COPIED
+					ld		e,a		; what a twin's flags must look like
+					ld		c,(ix+OBJ.GFX)
+					ld		iy,room_objects
+					ld		a,(room_object_count)
+					ld		b,a
+					or		a
+					jr		z,.no_twin
+
+.twin:				ld		a,(iy+OBJ.FLAGS)
+					and		OBJ_COPIED | OBJ_FLIP_H
+					cp		e
+					jr		nz,.next_twin
+					ld		a,(iy+OBJ.GFX)
+					cp		c
+					jr		z,.twinned
+.next_twin:			push	bc
+					ld		bc,ROOM_STRIDE
+					add		iy,bc
+					pop		bc
+					djnz	.twin
+
+.no_twin:			pop		iy
+					pop		hl
+					ld		a,(ix+OBJ.BUF_H)		; a buffer already, sized for
+					or		a		; this object's largest frame?
+					jr		nz,.copy
+					dec		l		; hl -> the sprite record; ALIGN 4 makes this safe
+					call	copy_alloc
+					inc		l
+					ld		a,(ix+OBJ.BUF_H)
+					or		a
+					jr		z,.share		; arena full: share, and let them mirror
+
+.copy:				jp		sprite_copy		; stores SPRITE and sets the two flags
+
+.twinned:			ld		a,(iy+OBJ.SPRITE_L)
+					ld		(ix+OBJ.SPRITE_L),a
+					ld		a,(iy+OBJ.SPRITE_H)
+					ld		(ix+OBJ.SPRITE_H),a
+					set		5,(ix+OBJ.FLAGS)		; OBJ_SHIFTED: private bytes, so
+					set		1,(ix+OBJ.FLAGS)		; sprite_orient leaves them be
+					pop		iy
+					pop		hl
+					ret
+
+					; Rotated at draw time. Nothing is rotated now and no buffer is
+					; taken: the object draws from the shared graphic, exactly as an
+					; aligned one does, and objects_draw_all rotates it on the way
+					; past.
+					;
+					; The extents and the blit index still describe the ROTATED
+					; form, because that is what gets blitted -- one column wider
+					; than the artwork. OBJ_SHIFTED stays clear, though, because the
+					; bytes really are shared: sprite_orient must go on keeping them
+					; the way round this object wants them.
+.defer_shift:		ld		(ix+OBJ.SHIFT),a
+					inc		l
+					ld		(ix+OBJ.SPRITE_L),l
+					ld		(ix+OBJ.SPRITE_H),h
+					res		5,(ix+OBJ.FLAGS)
+					ld		a,(ix+OBJ.BLIT_IDX)
+					add		a,JUMP_GROUP
+					ld		(ix+OBJ.BLIT_IDX),a
+					inc		(ix+OBJ.MAX_X)
+					ret
+
+.share:
 					; store sprite mask/data address: sprite's own bitmap, BLIT_IDX
 					; already matches its raw width (no +1 - no shift overflow column)
 					inc		l
                     ld		(ix+OBJ.SPRITE_L),l
 					ld		(ix+OBJ.SPRITE_H),h
 					res		5,(ix+OBJ.FLAGS)		; drawn from the shared graphic, so
-					ret		; redraw_orient must keep an eye on it
+					ret		; sprite_orient must keep an eye on it
 
-.shift_sprite:
+					; Rotate into this object's own buffer, once, here at placement.
+					; The core takes its destination in DE so that the draw-time
+					; path can hand it the shared buffer instead, and everything
+					; that is true only of a private copy is settled out here.
+.shift_sprite:		ld		e,(ix+OBJ.BUF_L)
+					ld		d,(ix+OBJ.BUF_H)
+					call	.rotate
+
+					ld		a,(ix+OBJ.BUF_L)
+					ld		(ix+OBJ.SPRITE_L),a
+					ld		a,(ix+OBJ.BUF_H)
+					ld		(ix+OBJ.SPRITE_H),a
+					set		5,(ix+OBJ.FLAGS)		; this copy is private and already
+					; the right way round: sprite_orient
+					; leaves it alone
+					ld		a,(ix+OBJ.BLIT_IDX)
+					add		a,JUMP_GROUP		; the rotated copy carries one overflow
+					ld		(ix+OBJ.BLIT_IDX),a		; column the artwork does not
+					inc		(ix+OBJ.MAX_X)		; ...so the extent widens with it
+					ret
+
+
+					; Rotate a sprite. A local label, because the rest of
+					; object_update's locals sit below it and a global one here
+					; would take them out of its scope -- objects_draw_all calls
+					; it as object_update.rotate.
+					;   A  - shift amount, 1..7
+					;   DE - where the rotated copy goes
+					;   HL -> the sprite record's height byte
+					;   IX -> the object, for BLIT_IDX -- which must be the
+					;         UNROTATED index, as it is at placement
+					; Corrupts AF, AF', BC, DE, HL and their shadows, and IY.
+					; Restores SP.
+.rotate:
                     ; A - shift amount, A' - height
                     ; C - BLIT_INX
 
@@ -399,8 +905,6 @@ object_update:
 
                     exx
                     inc     l                       ; HL was sprite_record+1 (height); skip past it to mask/data
-					ld		e,(ix+OBJ.BUF_L)		; this object's own buffer, in the bank
-					ld		d,(ix+OBJ.BUF_H)		; .loop's writes use
                     ex      af,af'
                     
 					; get sprite mask and data in stack pointer
@@ -477,20 +981,7 @@ object_update:
 					exx
 					djnz	.loop
 
-					ld		a,(ix+OBJ.BUF_L)
-					ld		(ix+OBJ.SPRITE_L),a
-					ld		a,(ix+OBJ.BUF_H)
-					ld		(ix+OBJ.SPRITE_H),a
-					set		5,(ix+OBJ.FLAGS)		; this copy is private and already
-					; the right way round: redraw_orient
-					; leaves it alone
-					ld		a,(ix+OBJ.BLIT_IDX)
-					add		a,JUMP_GROUP		; the rotated copy has one extra overflow column vs the sprite's own bitmap - bump to the next width-class
-					ld		(ix+OBJ.BLIT_IDX),a
-					inc		(ix+OBJ.MAX_X)		; ...and one column wider, so widen the extent
-
 .restore_sp:		ld		sp,0				; restore SP, value set before loop
-
 					ret
 
                     ret
@@ -690,7 +1181,14 @@ objects_draw_all:
 .x_adjust:			exx							; switch to X adjustments                    
 					sub		l					; A += sprite_x_adjustment
 					add		a					; Double for interleaved mask and data
-					pop		hl					; Get sprite address					
+					pop		hl					; Get sprite address
+
+					; Which object this is, for shift_if_deferred. IY is no use for
+					; that: the walk read NEXT into it at the top, so it already
+					; names the object AFTER this one -- and for the last object in
+					; the list that is zero, which indexes into the ROM. SP is ten
+					; bytes into the record here, having just read SPRITE out of it.
+					ld		(draw_object + 2),sp		; LD IY,nn is a two-byte opcode
 
 					; The sprite address is the last thing the record walk wants, so
 					; SP is free -- and putting the real stack back is what lets this
@@ -698,6 +1196,19 @@ objects_draw_all:
 					; the carry from the doubling above included.
 					ld		sp,(.set_stack + 1)
 					call	sprite_orient
+
+					; An OBJ_SHARED_SHIFT object has no rotated copy of its own:
+					; it rotates here, into the one shared buffer, and the blit
+					; below reads that instead of the artwork. SHIFT is zero for
+					; everything else, which is every object in a room that has
+					; not been marked, so this is a load and a test.
+					;
+					; Out of line, and AF saved inside it: the carry out of the
+					; doubling above is read three instructions further down, and
+					; this is the one thing between them that could disturb it.
+					; Out of line because the four filter tests above are JRs and
+					; nine more bytes here puts .next_object out of their reach.
+					call	shift_if_deferred		; HL -> the shared buffer
 
 					; That doubling is the one step here that can leave eight
 					; bits. A holds rows-skipped * columns + the x adjustment,
@@ -807,12 +1318,13 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					ld		b,l		; separating axes so far
 
 					; U -- nearer as U grows
-					ld		a,(iy+OBJ.U)
-					ld		c,a		; c = their min
+					ld		c,(iy+OBJ.U)		; c = their centre
+					ld		a,c
 					add		a,(iy+OBJ.SIZE_U)		; a = their max
 .u_min:				cp		0		; imm = our min + 1
 					jr		c,.u_sep		; their max <= our min
 					ld		a,c
+					sub		(iy+OBJ.SIZE_U)		; a = their min
 .u_max:				cp		0		; imm = our max
 					jr		c,.u_over		; their min < our max: they overlap
 .u_sep:				inc		b
@@ -825,12 +1337,13 @@ depth_cmp:			ld		hl,0		; running difference, signed
 .u_over:			
 
 					; V -- FURTHER as V grows, so the operands swap and the term negates
-					ld		a,(iy+OBJ.V)
-					ld		c,a
+					ld		c,(iy+OBJ.V)
+					ld		a,c
 					add		a,(iy+OBJ.SIZE_V)
 .v_min:				cp		0
 					jr		c,.v_sep
 					ld		a,c
+					sub		(iy+OBJ.SIZE_V)
 .v_max:				cp		0
 					jr		c,.v_over
 .v_sep:				inc		b
@@ -872,6 +1385,7 @@ depth_cmp:			ld		hl,0		; running difference, signed
 ;   IX -> the object
 depth_cmp_setup:	ld		a,(ix+OBJ.U)
 					ld		(depth_cmp.u_ours+1),a
+					sub		(ix+OBJ.SIZE_U)
 					inc		a
 					ld		(depth_cmp.u_min+1),a
 					ld		a,(ix+OBJ.U)
@@ -880,6 +1394,7 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)
 
 					ld		a,(ix+OBJ.V)
 					ld		(depth_cmp.v_ours+1),a
+					sub		(ix+OBJ.SIZE_V)
 					inc		a
 					ld		(depth_cmp.v_min+1),a
 					ld		a,(ix+OBJ.V)

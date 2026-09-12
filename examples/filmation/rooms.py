@@ -18,6 +18,7 @@ each table is and what its entries are called.
 
 Run via build.py, which regenerates when room_data.bin or this script is newer.
 """
+import collections
 import sys
 from pathlib import Path
 
@@ -117,6 +118,79 @@ def pieces_by_index(table, count, stride):
     return [block(w(table + i * 2), stride) for i in range(count)]
 
 
+# Our own bits in a piece's flags byte, which is otherwise the game's. The
+# game only ever writes $10, $12, $14 and $50, so bits 0, 3, 5 and 7 are free;
+# room_add tests these two directly rather than rotating them into place with
+# the mirror flag.
+CACHE_FLAG = 0x01           # draw from a private copy of the graphic
+SHARED_SHIFT_FLAG = 0x08    # rotate into the shared buffer, at draw time
+
+# Templates whose pieces rotate at draw time instead of holding a buffer for
+# the life of the room. Walls and trees line the edges of a room and a
+# character is rarely in front of one, so their buffers sit idle -- room $88
+# rotates ten objects and eight of them are never redrawn at all. Arches, gates
+# and the objects a character walks around keep their own buffers, because a
+# shared-buffer piece is re-rotated on every single draw.
+SHARED_SHIFT_TEMPLATES = ("bg_walls", "bg_trees")
+
+
+def room_pieces(bg, fg, scenery, objects):
+    """(graphic, mirrored) for every piece a room expands to."""
+    out = []
+    for i in scenery:
+        if i < len(bg):
+            for p in bg[i]:
+                if p[0] >= 2:
+                    out.append((p[0], 1 if p[7] & 0x40 else 0))
+    i = 0
+    while i < len(objects):
+        typ, count = (objects[i] >> 3) & 0x1F, (objects[i] & 7) + 1
+        if typ < len(fg):
+            for _ in range(count):
+                for p in fg[typ]:
+                    if p[0] >= 2:
+                        out.append((p[0], 1 if p[4] & 0x40 else 0))
+        i += 1 + count
+    return out
+
+
+def cache_way(table, bg, fg):
+    """Which way round of each graphic should be drawn from a private copy.
+
+    A graphic is shared by everything drawn from it, and an object that wants
+    it the other way round mirrors it where it lies. Two objects in one room
+    wanting opposite ways therefore mirror it back and forth, twice a region,
+    ten thousand T at a time for something the size of an arch -- and every
+    room in the castle has at least one such pair, because the north and south
+    arches are the east and west ones mirrored.
+
+    Nothing about that is discoverable only at run time: the rooms are fixed
+    and so are the templates they expand to. So work out here which graphics
+    some room wants both ways, nominate one orientation of each, and mark
+    every piece that wears it. Those take a private copy at placement and the
+    rest go on sharing, so nothing is ever mirrored twice.
+
+    The orientation nominated is the one that crowds fewest pieces into a
+    single room, since the arena has to hold the worst room's copies.
+    """
+    worst = collections.defaultdict(int)
+    contested = set()
+    for attr, body in table.values():
+        scenery, objects = split_body(body)
+        pieces = room_pieces(bg, fg, scenery, objects)
+        ways = collections.defaultdict(set)
+        seen = collections.Counter()
+        for g, f in pieces:
+            ways[g].add(f)
+            seen[(g, f)] += 1
+        for g, s in ways.items():
+            if len(s) > 1:
+                contested.add(g)
+        for key, n in seen.items():
+            worst[key] = max(worst[key], n)
+    return {g: (0 if worst[(g, 0)] <= worst[(g, 1)] else 1) for g in contested}
+
+
 def count_objects(bg, fg, scenery, objects):
     """How many objects a room expands to -- what the object pool has to hold."""
     n = sum(len(bg[i]) for i in scenery if i < len(bg))
@@ -127,6 +201,21 @@ def count_objects(bg, fg, scenery, objects):
             n += count * len(fg[typ])
         i += 1 + count
     return n
+
+
+def our_flags(entry, gfx_at, flags_at, cached, label=""):
+    """The template entry with our two flag bits set where they belong."""
+    g, flags = entry[gfx_at], entry[flags_at]
+    add = 0
+    if cached.get(g) == (1 if flags & 0x40 else 0):
+        add |= CACHE_FLAG
+    if label.startswith(SHARED_SHIFT_TEMPLATES):
+        add |= SHARED_SHIFT_FLAG
+    if not add:
+        return entry
+    entry = list(entry)
+    entry[flags_at] = flags | add
+    return tuple(entry)
 
 
 def emit(out):
@@ -147,6 +236,10 @@ def emit(out):
     out.append("")
     out.append("")
 
+    cached = cache_way(rooms(),
+                       pieces_by_index(BG_TYPE_TBL, BG_TYPE_COUNT, 8),
+                       pieces_by_index(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, 6))
+
     line("", ";", "", "")
     out.pop()
     out.append("; --- room shapes -----------------------------------------------------------")
@@ -166,13 +259,24 @@ def emit(out):
     out.append("; A piece is: sprite, U, V, Z, size U, size V, size Z, flags -- which is our")
     out.append("; object record almost field for field. Flags bit 6 mirrors the piece.")
     out.append("; Each template ends in a zero sprite.")
+    out.append(";")
+    out.append("; Bits 0 and 3 of the flags are ours, not the game's -- it only ever writes")
+    out.append("; $10, $12, $14 and $50, so those two are free. Bit 0 marks a piece that has")
+    out.append("; to be drawn from a private copy of its graphic, because some room holds")
+    out.append("; another piece wanting that graphic the other way round. Bit 3 marks one")
+    out.append("; that rotates into the shared buffer at draw time rather than holding a")
+    out.append("; buffer of its own for the life of the room.")
     out.append("")
     bg, bg_refs = templates(BG_TYPE_TBL, BG_TYPE_COUNT, 8, BG_NAMES, "bg")
     for addr, label, pieces in bg:
         line(label + ":", "", "", "%d piece%s" % (len(pieces), "" if len(pieces) == 1 else "s"))
         for p in pieces:
-            line("", "DB", "%3d, %3d, %3d, %3d, %3d, %3d, %3d, $%02X" % p,
-                 "mirrored" if p[7] & 0x40 else "")
+            p = our_flags(p, 0, 7, cached, label)
+            note = ", ".join(x for x in ("mirrored" if p[7] & 0x40 else "",
+                                         "cached" if p[7] & CACHE_FLAG else "",
+                                         "shared shift" if p[7] & SHARED_SHIFT_FLAG
+                                         else "") if x)
+            line("", "DB", "%3d, %3d, %3d, %3d, %3d, %3d, %3d, $%02X" % p, note)
         line("", "DB", "0")
         out.append("")
     line("background_type_tbl:", "", "")
@@ -196,7 +300,9 @@ def emit(out):
     for addr, label, entries in fg:
         line(label + ":", "", "", "%d sprite%s" % (len(entries), "" if len(entries) == 1 else "s"))
         for e in entries:
-            line("", "DB", "%3d, %3d, %3d, %3d, $%02X, $%02X" % e)
+            e = our_flags(e, 0, 4, cached)
+            line("", "DB", "%3d, %3d, %3d, %3d, $%02X, $%02X" % e,
+                 "cached" if e[4] & CACHE_FLAG else "")
         line("", "DB", "0")
         out.append("")
     line("block_type_tbl:", "", "")
@@ -214,9 +320,9 @@ def emit(out):
     out.append(";")
     out.append("; Each room is:")
     out.append(";")
+    out.append(";     room number           which is what the walk matches on")
     out.append(";     attribute and size    colour in bits 0-2, room shape in bits 3 up")
-    out.append(";     scenery count")
-    out.append(";     object byte count")
+    out.append(";     counts                scenery in bits 5-7, object bytes in 0-4")
     out.append(";     scenery type indices")
     out.append(";     object groups         a type-and-count byte, then that many")
     out.append(";                           packed positions: U cell in bits 0-2,")
@@ -224,20 +330,30 @@ def emit(out):
     out.append(";")
     out.append("; The game bounds the record with a length and ends the scenery list with")
     out.append("; $FF; two counts say the same thing and are cheaper to walk.")
+    out.append(";")
+    out.append("; The records carry their own number and are walked, rather than being")
+    out.append("; reached through an index. An index over 256 numbers is 512 bytes to hold")
+    out.append("; 128 rooms and half of it is nothing, where a number on each record is 128")
+    out.append("; bytes that pack into the header for free -- the two counts needed a byte")
+    out.append("; each and fit in one. Knight Lore walks for the same reason: find_screen")
+    out.append("; at $D3CF compares each record's own number and steps over its body.")
     out.append("")
     bg_sizes = pieces_by_index(BG_TYPE_TBL, BG_TYPE_COUNT, 8)
     fg_sizes = pieces_by_index(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, 6)
     biggest = 0
     most_objects = 0
+    line("room_list:", "", "")
     for rid in sorted(table):
         attr, body = table[rid]
         scenery, objects = split_body(body)
         biggest = max(biggest, len(scenery) + len(objects))
         most_objects = max(most_objects,
                            count_objects(bg_sizes, fg_sizes, scenery, objects))
-        line("room_%02X:" % rid, "DB", "$%02X, %d, %d"
-             % (attr, len(scenery), len(objects)),
-             "attr %d, shape %d" % (attr & 7, attr >> 3))
+        assert len(scenery) < 8 and len(objects) < 32, rid
+        line("room_%02X:" % rid, "DB", "$%02X, $%02X, $%02X"
+             % (rid, attr, len(scenery) << 5 | len(objects)),
+             "attr %d, shape %d, %d scenery, %d object bytes"
+             % (attr & 7, attr >> 3, len(scenery), len(objects)))
         if scenery:
             line("", "DB", ", ".join("BG_" + BG_NAMES[s].upper() for s in scenery))
         i = 0
@@ -251,12 +367,12 @@ def emit(out):
         out.append("")
     out.append("")
 
-    out.append("; Indexed by room number; zero where there is no such room.")
-    line("room_tbl:", "", "")
-    for lo in range(0, 256, 8):
-        row = ["room_%02X" % r if r in table else "0" for r in range(lo, lo + 8)]
-        line("", "DW", ", ".join(row), "$%02X" % lo)
+    out.append("; The walk runs from the first record to here. Ascending by number,")
+    out.append("; which is what lets the 1 and 2 keys step from one room to the next.")
+    line("room_list_end:", "", "")
     out.append("")
+    line("ROOM_SCN_SHIFT", "EQU", "5", "the scenery count sits in the top three bits")
+    line("ROOM_OBJ_MASK", "EQU", "$1F", "...and the object byte count in the low five")
     line("ROOM_COUNT", "EQU", "%d" % len(table))
     line("ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")
     line("ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,

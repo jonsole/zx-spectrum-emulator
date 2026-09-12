@@ -56,7 +56,7 @@ STACK_TOP			EQU		0xFF00
                     INCLUDE "room_data.s"
                     INCLUDE "sprite_adj.s"
 room_data_end:
-                    DISPLAY "room data ends at ", room_data_end
+                    DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
 
                     ORG     $8000
 
@@ -91,7 +91,7 @@ start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
 
         ; Nothing goes into a room that was not built. room_build leaves the
-        ; old room up when it is handed a number with no entry in room_tbl,
+        ; old room up when it is handed a number no record carries,
         ; and the old room's objects are still in the list -- so adding the
         ; characters again would insert records that are already there, and
         ; an object compared against itself ties, which makes the scan take
@@ -101,6 +101,8 @@ start:              di
                     jr      c,.entered
                     ld      a,(room_shown)      ; stay where we are
                     ld      (room_number),a
+                    ld      a,$FF
+                    ld      (enter_dir),a       ; and nobody walking in
                     jr      .loop
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
@@ -138,8 +140,11 @@ start:              di
 ;
 ; Most numbers between one room and the next have no room against them, so
 ; this steps over them rather than making you press the key twenty times: it
-; walks room_tbl until it finds an entry. A room always finds itself again if
+; asks room_find for each number in turn. A room always finds itself again if
 ; there is nothing else, so the walk cannot run away.
+;
+; room_find is itself a walk now, so an unlucky press can cost a few thousand
+; T-states. It is a key press, and it only ever happens between rooms.
 ;
 ; One room a press, not one a frame -- the whole row is compared against what
 ; it read last time, so holding the key down does nothing after the first.
@@ -161,19 +166,14 @@ room_keys:          ld      bc,KEY_ROOMS
                     ld      e,1                 ; 2: on to the next
 .step:              ld      a,(room_number)
 .try:               add     a,e
-                    ld      l,a
-                    ld      h,0
-                    add     hl,hl
-                    ld      bc,room_tbl
-                    add     hl,bc
-                    ld      c,(hl)
-                    inc     hl
-                    ld      b,(hl)
-                    ld      d,a                 ; the number we are trying
-                    ld      a,b
-                    or      c
-                    ld      a,d
-                    jr      z,.try              ; no room there: keep going
+                    ld      c,a
+                    push    de
+                    push    bc
+                    call    room_find
+                    pop     bc
+                    pop     de
+                    ld      a,c                 ; the number we tried
+                    jr      nc,.try             ; no room there: keep going
                     ld      (room_number),a
                     ret
 
@@ -183,6 +183,10 @@ room_key_held:      DB      0
 ; Which room to build. $88 is the cauldron room; $B3 is where the game begins.
 room_number:        DB      $88
 room_shown:         DB      $88
+
+; Which side of the room being built the player is walking in through, or $FF
+; for a room he did not walk into. player_entry spends it and puts it back.
+enter_dir:          DB      $FF
 
 
 ; --- the soldier -------------------------------------------------------------
@@ -228,9 +232,10 @@ wolf:               standing_character WOLF_LEGS_GFX, WOLF_BODY_GFX, WOLF_FACING
 
 ; Put the soldier into the room that has just been built.
 wolf_add:           ld      ix,wolf
-                    ld      (ix+OBJ.FACING),WOLF_FACING
+                    ld      (ix+CHARACTER_FACING),WOLF_FACING
                     ld      b,WOLF_HI
                     ld      c,WOLF_LO
+                    ld      a,CHARACTER_Z
                     jp      character_add
 
 
@@ -238,27 +243,43 @@ wolf_add:           ld      ix,wolf
 ; a square do, which is not a coincidence -- character_steps is laid out so
 ; that they do.
 wolf_step:          ld      ix,wolf
-                    ld      a,(ix+OBJ.FACING)
+                    ld      hl,player
+                    ld      (collide_other),hl
+                    xor     a
+                    ld      (character_jump_held),a     ; it never jumps
+                    ld      a,(ix+CHARACTER_FACING)
                     call    character_walk
                     ld      ix,wolf                 ; the repaint took IX
+
+                    ; ...or when something stops it. It walks a fixed square
+                    ; and the square runs through whatever the room happens to
+                    ; stand in it, so without this it wedges against the first
+                    ; block it meets and stays there for the life of the room.
+                    ; Turning is the whole of its intelligence.
+                    ld      a,(collide_hit)
+                    and     COLLIDE_U | COLLIDE_V
+                    jr      nz,.turn
 
                     ; A side ends when the coordinate IT moves reaches the far
                     ; wall. Testing both would turn twice in the corner it
                     ; starts in, where U and V are both against a bound. Even
                     ; facings walk along U and odd ones along V.
-                    ld      a,(ix+OBJ.FACING)
+                    ld      a,(ix+CHARACTER_FACING)
                     bit     0,a
                     ld      a,(ix+OBJ.U)
                     jr      z,.at_edge
                     ld      a,(ix+OBJ.V)
+                    ; Reached or passed, not landed on exactly. A step is
+                    ; three units now and the square is 88 across, so it steps
+                    ; over the corner rather than onto it.
 .at_edge:           cp      WOLF_HI
-                    jr      z,.turn
-                    cp      WOLF_LO
-                    ret     nz
-.turn:              ld      a,(ix+OBJ.FACING)
+                    jr      nc,.turn
+                    cp      WOLF_LO + 1
+                    ret     nc
+.turn:              ld      a,(ix+CHARACTER_FACING)
                     inc     a
                     and     3
-                    ld      (ix+OBJ.FACING),a
+                    ld      (ix+CHARACTER_FACING),a
                     ret
 
 
@@ -280,7 +301,62 @@ player:             walking_character PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_F
 player_add:         ld      ix,player
                     ld      b,PLAYER_U
                     ld      c,PLAYER_V
-                    jp      character_add
+                    ld      a,CHARACTER_Z
+                    ld      hl,enter_dir
+                    bit     7,(hl)              ; $FF: he did not walk in
+                    jr      nz,.place
+                    call    player_entry
+.place:             jp      character_add
+
+
+; Where the player stands when he walks into a room: two units inside the far
+; wall, plus his own half, so his leading edge is already through the arch and
+; he is standing in the opening. The axis he did not cross keeps its value,
+; which is the middle of the room or near enough -- he had to be in the
+; doorway to get out of the last one.
+;
+; His height comes from the arch itself, not from the floor. That is what
+; carries him along the raised walkway of a tall room instead of dropping him
+; into it, and it is what Knight Lore does too: adjust_plyr_Z_for_arch hunts
+; down the arch he is entering by and takes its Z.
+;
+;   IX -> the player's legs
+; Out: B - U, C - V, A - the Z to stand at. (enter_dir) is spent.
+player_entry:       ld      a,(enter_dir)
+                    ld      e,a
+                    ld      c,a
+                    ld      b,0
+                    ld      hl,room_door_z
+                    add     hl,bc
+                    ld      a,(hl)
+                    or      a
+                    jr      nz,.height
+                    ld      a,CHARACTER_Z       ; no arch that side: the floor
+.height:            push    af
+
+                    ld      b,(ix+OBJ.U)
+                    ld      c,(ix+OBJ.V)
+                    ld      hl,room_half_v      ; north and south cross V
+                    bit     0,e
+                    jr      z,.axis
+                    ld      hl,room_half_u      ; east and west cross U
+.axis:              ld      a,(hl)
+                    sub     2
+                    bit     1,e                 ; south and west are the near
+                    jr      nz,.near            ; walls, north and east the far
+                    add     a,128 + CHARACTER_HALF_U
+                    jr      .store
+.near:              neg
+                    add     a,128 - CHARACTER_HALF_U
+.store:             bit     0,e
+                    jr      nz,.u
+                    ld      c,a
+                    jr      .done
+.u:                 ld      b,a
+.done:              ld      a,$FF
+                    ld      (enter_dir),a
+                    pop     af
+                    ret
 
 
 ; Read the keys and walk the player.
@@ -291,10 +367,33 @@ player_add:         ld      ix,player
 KEY_UPLEFT          EQU     $FBFE       ; Q, bit 0
 KEY_DOWNRIGHT       EQU     $FDFE       ; A, bit 0
 KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
+KEY_JUMP            EQU     $7FFE       ; SPACE, bit 0
 
-player_step:        ld      bc,KEY_UPLEFT
+player_step:        ld      ix,player
+                    ld      hl,wolf                 ; the one other thing that
+                    ld      (collide_other),hl      ; is not in the room's pool
+
+                    ; Whether he is standing in a doorway, worked out before
+                    ; he moves and read twice after: character_collide lifts
+                    ; the room's edge while it is set, and player_exit asks
+                    ; whether the step took him right out.
+                    call    character_door_find
+
+                    ; The jump key first, because gravity asks about it in the
+                    ; same turn: holding it is what makes the difference
+                    ; between a hop and a full jump.
+                    ld      bc,KEY_JUMP
                     in      a,(c)
                     rra                         ; a key reads 0 while it is held
+                    ld      a,0
+                    jr      c,.no_jump
+                    inc     a
+                    call    character_jump
+.no_jump:           ld      (character_jump_held),a
+
+                    ld      bc,KEY_UPLEFT
+                    in      a,(c)
+                    rra
                     jr      nc,.up_left
                     ld      bc,KEY_DOWNRIGHT
                     in      a,(c)
@@ -306,8 +405,12 @@ player_step:        ld      bc,KEY_UPLEFT
                     jr      nc,.up_right
                     rra
                     jr      nc,.down_left
-                    ret                         ; nothing held: nothing moved,
-                    ; and so nothing to repaint
+
+                    ; Nothing held. He still has to fall, so this cannot just
+                    ; return the way it used to -- but standing on the floor
+                    ; with nothing to do costs no repaint, because
+                    ; character_stand gives up when every axis came to zero.
+                    jp      character_stand
 
 .up_left:           ld      a,0
                     jr      .walk
@@ -316,8 +419,86 @@ player_step:        ld      bc,KEY_UPLEFT
 .down_left:         ld      a,3
                     jr      .walk
 .down_right:        ld      a,2
-.walk:              ld      ix,player
-                    jp      character_walk
+.walk:              call    character_walk
+                    ld      ix,player               ; the repaint took IX
+
+                    ;; NB: fall through into player_exit
+
+
+; Has the step taken him right out through the doorway he was in? The test is
+; Knight Lore's, at screen_west and its three neighbours ($CA9A): out when the
+; whole of him has passed the wall, not when he touches it.
+;
+; The castle is sixteen rooms by sixteen, and the number is a row and a column
+; in it: north is a row on, east a column, and east and west wrap inside the
+; row rather than carrying into it. Every one of the 260 doorways in the data
+; has a matching one in the room that arithmetic lands on, which is as good a
+; proof of it as measuring the game would be.
+;
+;   IX -> the player's legs
+player_exit:        ld      a,(ix+CHARACTER_DOOR)
+                    inc     a
+                    ret     z                       ; not in a doorway
+                    dec     a
+                    ld      c,a
+
+                    ld      a,(ix+OBJ.V)            ; north and south cross V
+                    ld      hl,room_half_v
+                    bit     0,c
+                    jr      z,.axis
+                    ld      a,(ix+OBJ.U)            ; east and west cross U
+                    ld      hl,room_half_u
+.axis:              ld      b,(hl)
+                    bit     1,c
+                    jr      nz,.near
+
+                    ; North and east: his trailing edge has to be past the
+                    ; far wall.
+                    sub     CHARACTER_HALF_U
+                    ld      e,a
+                    ld      a,b
+                    add     a,127                   ; one below the bound, so
+                    cp      e                       ; carry means he is past it
+                    ret     nc
+                    jr      .out
+
+                    ; South and west: his leading edge below the near wall.
+.near:              add     a,CHARACTER_HALF_U
+                    ld      e,a
+                    ld      a,128
+                    sub     b                       ; the near bound
+                    ld      d,a
+                    ld      a,e
+                    cp      d
+                    ret     nc                      ; not below it yet
+
+.out:               ld      a,(room_number)
+                    bit     0,c
+                    jr      nz,.column
+                    bit     1,c
+                    jr      nz,.south
+                    add     a,$10                   ; north, a row on
+                    jr      .go
+.south:             sub     $10
+                    jr      .go
+.column:            ld      e,a
+                    inc     a                       ; east
+                    bit     1,c
+                    jr      z,.wrap
+                    dec     a
+                    dec     a                       ; west
+.wrap:              and     $0F
+                    ld      d,a
+                    ld      a,e
+                    and     $F0
+                    or      d
+.go:                ld      (room_number),a
+
+                    ; He comes in by the opposite wall of the new room.
+                    ld      a,c
+                    xor     2
+                    ld      (enter_dir),a
+                    ret
 
 
 ; --- redrawing ------------------------------------------------------
@@ -337,10 +518,6 @@ player_step:        ld      bc,KEY_UPLEFT
 region_rows:		DB		0
 region_width:		DB		0
 
-prev_min_y:			DB		0
-prev_max_y:			DB		0
-prev_min_x:			DB		0
-prev_max_x:			DB		0
 
 ; ...and where it was in the world, which is what depth_relink gates on.
 prev_u:				DB		0
@@ -392,57 +569,18 @@ region_add:         ld      hl,view_y_extent
                     ret
 
 
-; Remember an object's extent, before it moves.
+; Remember where an object was, before it moves. Only depth_relink reads this,
+; and only the world coordinates: the screen extents were saved here too, for a
+; redraw that took in the old position as well as the new, and region_reset and
+; region_add replaced that with an accumulated region.
 ;   IX -> the object
-extent_save:		ld		a,(ix+OBJ.MIN_Y)
-					ld		(prev_min_y),a
-					ld		a,(ix+OBJ.MAX_Y)
-					ld		(prev_max_y),a
-					ld		a,(ix+OBJ.MIN_X)
-					ld		(prev_min_x),a
-					ld		a,(ix+OBJ.MAX_X)
-					ld		(prev_max_x),a
-					ld		a,(ix+OBJ.U)
+extent_save:		ld		a,(ix+OBJ.U)
 					ld		(prev_u),a
 					ld		a,(ix+OBJ.V)
 					ld		(prev_v),a
 					ld		a,(ix+OBJ.Z)
 					ld		(prev_z),a
 					ret		
-
-
-; Repaint the area a just-moved object affected: the union of the extent
-; extent_save recorded and the one it has now. The old half erases its
-; previous image, the new half draws it where it is.
-;   IX -> the object, already moved
-redraw_moved:		ld		hl,prev_min_y
-					ld		a,(ix+OBJ.MIN_Y)
-					cp		(hl)
-					jr		c,.min_y		; keep whichever is smaller
-					ld		a,(hl)
-.min_y:				ld		(view_y_extent),a
-
-					ld		hl,prev_max_y
-					ld		a,(ix+OBJ.MAX_Y)
-					cp		(hl)
-					jr		nc,.max_y		; keep whichever is larger
-					ld		a,(hl)
-.max_y:				ld		(view_y_extent+1),a
-
-					ld		hl,prev_min_x
-					ld		a,(ix+OBJ.MIN_X)
-					cp		(hl)
-					jr		c,.min_x
-					ld		a,(hl)
-.min_x:				ld		(view_x_extent),a
-
-					ld		hl,prev_max_x
-					ld		a,(ix+OBJ.MAX_X)
-					cp		(hl)
-					jr		nc,.max_x
-					ld		a,(hl)
-.max_x:				ld		(view_x_extent+1),a
-					jr		redraw_view
 
 
 ; Repaint one object's own area, with no previous position to take in --
@@ -559,24 +697,6 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 
 
 
-;; Takes a B = Y, C = X 8-pixel coordinate. Real Spectrum screen
-;; coords - top left is (0,0).
-;;
-;; Returns a pointer to corresponding bitmap address in DE.
-screen_address: 
-					ld 		h,high screen_hi_address_table
-					ld 		l,b
-					ld		a,(hl)
-					inc		h
-					ld		h,(hl)
-					or		c
-					ld		l,a
-					ret
-
-
-
-
-
 ; This is the final optimized code. It takes the X coordinate in the C register,
 ; and the Y coordinate in the B register. The screen address is returned in the HL register pair.
 ; BC and DE are unchanged, so there is no need for expensive push and pop operations.
@@ -608,21 +728,11 @@ pixelAddress:   ld      a, b
 
 
 
-					align	256
-screen_hi_address_table:
-					REPT	192, y
-					DW		high ((y & 0x07) * 256) + ((y & 0x38) * 4) + ((y >> 6) * 2048)
-					ENDR
-					align	256
-screen_lo_address_table:
-					REPT	192, y
-					DW		low ((y & 0x07) * 256) + ((y & 0x38) * 4) + ((y >> 6) * 2048)
-					ENDR
-
-
 ; The stack grows down from STACK_TOP, so the image has to stop below it. This
 ; is the check that was missing when the player pushed the top past $FF00.
+image_end:
                     ASSERT  $ <= STACK_TOP
+                    DISPLAY "code and data   $8000..", /H, image_end, "   free below the stack: ", /D, STACK_TOP - image_end
 
 ; ---------------------------------------------------------------------------
 ; Two reservations, put where there is room for them.
@@ -649,6 +759,8 @@ room_objects:
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
+pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
+                    DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
 
                     SAVESNA "output/filmation.sna", start
