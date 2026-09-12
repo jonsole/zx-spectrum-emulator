@@ -23,6 +23,30 @@ MOVE_FIRE_V		EQU		5
 MOVE_GUARD_U		EQU		6
 MOVE_GUARD_SQ	EQU		7
 MOVE_GATE			EQU		8
+MOVE_GHOST		EQU		9
+
+; Everything from here up is loose: it can be carried by whatever it is
+; standing on and shoved by whatever runs into it. The game says the same
+; thing with one flag, bit 2 of an object's own byte, which sits on the
+; moveable block, the chest, the table and the knight alike. The three
+; differ only in WHEN they let go of the step they were given:
+;
+;   MOVE_CARRIED   clears it before moving, so it only ever goes where
+;                  something took it this turn -- upd_62
+;   MOVE_PUSHED    clears it after, so a shove moves it once -- upd_84
+;   MOVE_SLIDING   never clears it, so a shove sends it on until
+;                  something stops it -- upd_85
+MOVE_BOUNCE		EQU		10
+
+; MOVE_LOOSE has to stay the LAST of these and everything loose above it,
+; because that is the whole test -- object_carry and object_shove both ask
+; whether a behaviour is at or past it. Putting the hunting ball above it by
+; accident made the ball itself carriable and shoveable, and it spent its
+; time being flung about by whatever it touched.
+MOVE_LOOSE		EQU		11
+MOVE_CARRIED		EQU		11
+MOVE_PUSHED		EQU		12
+MOVE_SLIDING		EQU		13
 
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
@@ -53,6 +77,11 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_GUARD_SQUARE, MOVE_GUARD_SQ
 					DB		FG_GATE_UD_1, MOVE_GATE
 					DB		FG_GATE_UD_2, MOVE_GATE
+					DB		FG_MOVEABLE_BLOCK, MOVE_CARRIED
+					DB		FG_GHOST, MOVE_GHOST
+					DB		FG_TABLE, MOVE_PUSHED
+					DB		FG_CHEST, MOVE_SLIDING
+					DB		FG_BALL_BOUNCE, MOVE_BOUNCE
 					DB		$FF
 
 mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
@@ -63,6 +92,11 @@ mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_guard_u		; MOVE_GUARD_U
 					DW		mover_guard_sq	; MOVE_GUARD_SQ
 					DW		mover_gate			; MOVE_GATE
+					DW		mover_ghost		; MOVE_GHOST
+					DW		mover_bounce		; MOVE_BOUNCE
+					DW		mover_carried		; MOVE_CARRIED
+					DW		mover_pushed		; MOVE_PUSHED
+					DW		mover_sliding	; MOVE_SLIDING
 
 
 ; How many turns have gone by. Every mover in the castle is driven from this
@@ -139,9 +173,38 @@ movers_step:		ld		hl,move_tick
 .done:				ld		ix,(mover_ix)
 					pop		bc
 
-.still:				ld		de,ROOM_STRIDE
+					; Stir the refresh register into the seed after every record, which is
+					; where Knight Lore does it -- ret_from_tbl_jp at $B27C, on the way
+					; round its own object walk. Doing it only where a random number is
+					; ASKED for is not the same thing and is not enough: the path between
+					; two asks is the same code every time, so R advances by the same
+					; amount and the seed walks in a fixed stride. Two bits of that stride
+					; away, and a ghost drew -3 and -4 for ever -- pressed against the west
+					; wall of room $58 with no draw left that could free it. Here the
+					; stride is however much work the last object happened to do, which is
+					; a different number for one that moved and one that did not.
+.still:				ld		a,r
+					ld		hl,mover_seed
+					add		a,(hl)
+					ld		(hl),a
+
+					ld		de,ROOM_STRIDE
 					add		ix,de
 					djnz	.next
+
+					; And the turn counter on top of it, once round. Knight Lore folds
+					; the frame counter in at the end of its own walk, at loc_B000, and
+					; the reason is the one above taken one step further: with a room
+					; standing still, every turn runs the same instructions, so R lands
+					; on the same number and the seed still walks in a fixed stride --
+					; and a fixed stride is a short cycle in the low bits. Adding a
+					; counter makes the stride itself change every turn, which is what
+					; lets a ghost pressed against a wall eventually draw the step that
+					; frees it.
+					ld		a,(move_tick)
+					ld		hl,mover_seed
+					add		a,(hl)
+					ld		(hl),a
 					ret		
 
 
@@ -265,7 +328,10 @@ mover_paint:		call	region_reset
 ; it. Nothing may be clamped against itself, and a mover IS in the pool the
 ; clamp walks -- so it is made passable for the length of its own test. A
 ; character never needed this: neither of them is in the room's pool.
-mover_clamp:		dec		(ix+OBJ.DZ)
+mover_clamp:		ld		hl,player		; the knight is not in the room's
+					ld		(collide_other),hl	; pool, so a mover would sweep
+									; straight through him without this
+					dec		(ix+OBJ.DZ)
 					ld		a,(ix+OBJ.FLAGS)
 					push	af
 					or		OBJ_PASSABLE
@@ -657,11 +723,16 @@ mover_seed:			DB		0
 ; a seed on every object it updates -- ret_from_tbl_jp at $B27C -- and then
 ; looks at five bits of it; this stirs it where it is asked instead.
 ; Out: zf set when the dice come up.
-mover_dice:			ld		a,r
+mover_dice:			call	mover_rand
+					and		$1F
+					ret		
+
+
+; The seed itself, stirred wherever it is asked for.
+mover_rand:			ld		a,r
 					ld		hl,mover_seed
 					add		a,(hl)
 					ld		(hl),a
-					and		$1F
 					ret		
 
 
@@ -724,4 +795,158 @@ mover_gate:			xor		a		; it only ever moves in Z
 .stop:				xor		a
 					ld		(mover_gate_busy),a
 					res		0,(ix+OBJ.GFX)
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A block that goes wherever whatever it is standing on goes.
+;
+; upd_62, and it is barely anything: clear the step, then fall. Everything else
+; happens inside the clamp, where object_carry hands it the step of whatever
+; stopped its fall. Clearing DU and DV every turn is what makes that safe --
+; the ride is the only thing that ever writes them, so it can never accumulate.
+;
+; It is worth noticing that this needs no notion of "standing on" at all. The
+; block is always falling a little and always landing, and landing is where the
+; question gets asked.
+;   IX -> the record
+mover_carried:		xor		a
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+					jp		mover_move		; DZ is left to gravity
+
+
+; ---------------------------------------------------------------------------
+; A ghost, which drifts until something stops it and then picks a new way to
+; go -- upd_80_to_83.
+;
+; It keeps whatever step it has until it is blocked or has come to nothing, so
+; it crosses a room in a straight line and then turns at random. The speeds are
+; the game's: it indexes delta_tbl at (random & 3) + 4, and entries 4 to 7 of
+; that table are -3, +3, -4 and +4.
+;
+; It takes its step first and decides afterwards, which is the order upd_80_to_83
+; uses -- the clamp has to have had its say before there is anything to decide.
+;   IX -> the record
+ghost_deltas:		DB		-3, 3, -4, 4
+
+mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
+					; then picks, because the clamp has to have had its say -- but
+					; anything riding on this ghost reads its step out of the record,
+					; and if what is in there is the step it is ABOUT to take rather
+					; than the one it just took, the passenger moves a turn early and
+					; every turn the ghost is blocked leaves it further behind. This
+					; way round the record holds the step actually achieved, clamped
+					; and all, which is what object_carry wants to copy.
+					;
+					; What the move would have told us is carried over in MOVE_STATE
+					; instead: it got nowhere last turn, so draw again.
+					ld		a,(ix+OBJ.MOVE_STATE)
+					or		a
+					jr		nz,.turn
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					jr		nz,.go
+
+					; A new way to go, and the two axes are drawn separately -- the
+					; game takes one from its seed and the other from the frame
+					; counter, so they are not the same number twice.
+.turn:				call	mover_rand
+					call	.pick
+					ld		(ix+OBJ.DU),a
+					ld		a,(move_tick)
+					call	.pick
+					ld		(ix+OBJ.DV),a
+
+					ld		a,(ix+OBJ.GFX)		; and it flickers as it goes
+					xor		1
+					ld		(ix+OBJ.GFX),a
+
+.go:				call	mover_move_always
+					ld		ix,(mover_ix)
+					ld		a,(collide_hit)	; whether something stopped it, kept
+					and		COLLIDE_U | COLLIDE_V	; for next turn to read -- which is
+					ld		(ix+OBJ.MOVE_STATE),a	; the game's own test on (IX+$0C),
+					ret				; a turn later than it asks it
+
+
+.pick:				and		3
+					ld		c,a
+					ld		b,0
+					ld		hl,ghost_deltas
+					add		hl,bc
+					ld		a,(hl)
+					ret		
+
+
+; ---------------------------------------------------------------------------
+; A table, which goes where it is shoved and then stops -- upd_84. It clears
+; its step AFTER moving, where a carried block clears before: the difference is
+; that this one keeps what it was given long enough to spend it.
+mover_pushed:		call	mover_move
+					ld		(ix+OBJ.DU),0
+					ld		(ix+OBJ.DV),0
+					ret		
+
+
+; A chest, which never lets go of its step at all -- upd_85. Shove one and it
+; slides on by itself until the clamp takes the step away.
+mover_sliding:		jp		mover_move
+
+
+; ---------------------------------------------------------------------------
+; The ball that hunts -- upd_182_183. It bounces, and every time it lands it
+; takes a new upward push and a new direction along ONE axis, chosen by which
+; side of it the knight is on. Which axis is a coin toss.
+;
+; It keeps its horizontal step across the move: the routine saves dX and dY,
+; lets dec_dZ_and_update_XYZ clamp them, and then puts the originals straight
+; back. So touching something does not cost it its direction -- only landing
+; changes that.
+;
+; The game varies the bounce height by room and chases or flees depending on
+; what the knight currently is. Neither is here: it always bounces the same
+; and always comes for him.
+;   IX -> the record
+BOUNCE_RISE			EQU		4
+BOUNCE_STEP			EQU		2
+
+mover_bounce:		ld		c,(ix+OBJ.DU)
+					ld		b,(ix+OBJ.DV)
+					push	bc
+					call	mover_move_always
+					ld		ix,(mover_ix)
+					pop		bc
+					ld		(ix+OBJ.DU),c		; whatever the clamp made of them,
+					ld		(ix+OBJ.DV),b		; it still wants to go that way
+
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still in the air
+
+					ld		(ix+OBJ.DZ),BOUNCE_RISE
+					ld		a,(ix+OBJ.GFX)
+					xor		1
+					ld		(ix+OBJ.GFX),a
+
+					call	mover_rand
+					and		1
+					jr		z,.along_u
+
+					ld		a,(player + OBJ.V)
+					cp		(ix+OBJ.V)
+					ld		a,BOUNCE_STEP
+					jr		nc,.go_v
+					neg
+.go_v:				ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DU),0
+					ret		
+
+.along_u:			ld		a,(player + OBJ.U)
+					cp		(ix+OBJ.U)
+					ld		a,BOUNCE_STEP
+					jr		nc,.go_u
+					neg
+.go_u:				ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),0
 					ret		

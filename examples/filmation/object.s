@@ -103,6 +103,9 @@ BEHAVIOUR:			DS		1
 ; serves both the direction a thing is going and the test for whether it just
 ; ran into something.
 MOVE_STATE:		DS		1
+
+; How many rows of this sprite are above the top of the screen.
+CLIP_TOP:			DS		1
 					ENDS
 
 
@@ -475,8 +478,21 @@ collide_box:		ld		a,(collide_eff_u)
 					ld		a,(collide_eff_z)
 					add		a,(ix+OBJ.Z)		; Z is the base, so no halving
 					ld		(collide_z_min),a
+
+					; And the same exception object_overlaps makes at the other end. A
+					; character is one figure in two records and the whole of it is
+					; COLLIDE_HEIGHT; anything else is exactly as tall as it says it is.
+					; This used to hand COLLIDE_HEIGHT to whatever was moving, which was
+					; true while only the knight ever moved -- and then a ghost twelve
+					; units tall got a box of twenty-three, reached up into the block
+					; standing on it, and was stopped in every direction by its own
+					; passenger.
+					bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE
+					jr		z,.own_height
 					add		a,COLLIDE_HEIGHT
-					ld		(collide_z_max),a
+					jr		.top
+.own_height:		add		a,(ix+OBJ.SIZE_Z)
+.top:				ld		(collide_z_max),a
 					ret
 
 
@@ -507,6 +523,18 @@ object_clamp:		ld		a,(hl)
 .object:			call	object_overlaps
 					jr		nc,.next
 
+					; Something is in the way. If this is the Z pass then we have
+					; just landed on it, and if we are the sort of thing that rides
+					; on other things we go where it goes -- see object_carry.
+					ld		a,(collide_mask)
+					cp		COLLIDE_Z
+					jr		nz,.shove
+					call	object_carry
+					jr		.contact
+.shove:			call	object_shove
+.contact:
+
+
 					; In the way. Give a unit back and look again -- at the
 					; same object, because one unit may not be enough.
 					ld		a,(hl)
@@ -536,6 +564,69 @@ object_clamp:		ld		a,(hl)
 					add		iy,de
 					djnz	.object
 					ret
+
+
+; The U and V passes: we have run into IY. If it is the sort of thing that can
+; be shoved, it takes the step we wanted -- read before the walk-back below, so
+; it gets the whole of it and not what is left after we have given way.
+;
+; We still walk our own step back either way, so the shove costs us the turn
+; and IY moves on its own next one. That is the game's, at loc_CBAF, and it is
+; why a block meeting the knight both stops and moves him.
+;
+; Whether the shove comes off is not decided here. IY's own clamp has the say
+; when its turn comes, and if it cannot go anywhere it simply does not.
+;   IX -> us, IY -> what we ran into, (collide_mask) says which axis
+; Corrupts AF.
+object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
+					jr		nz,.shoveable		; other way round: one flag in the game
+					ld		a,(iy+OBJ.BEHAVIOUR)	; means both carried and pushed, and it
+					cp		MOVE_LOOSE		; is on the block, the chest, the table
+					ret		c			; and the knight alike
+.shoveable:			ld		a,(collide_mask)
+					cp		COLLIDE_U
+					jr		nz,.along_v
+					ld		a,(ix+OBJ.DU)
+					ld		(iy+OBJ.DU),a
+					ret		
+.along_v:			ld		a,(ix+OBJ.DV)
+					ld		(iy+OBJ.DV),a
+					ret		
+
+
+; We have just been stopped in Z by IY, which means we are standing on it. If
+; we are the sort of thing that rides, and we are not already going somewhere
+; under our own steam, we take its step for our own.
+;
+; That is the whole of how a block rides on a ghost, and Knight Lore puts it in
+; exactly this place -- loc_CC4D, inside the Z half of the object clamp. It
+; costs nothing anywhere else because a carried thing clears its own DU and DV
+; at the top of every turn and has nothing else to say; the ride is the only
+; thing that ever fills them in.
+;
+; The Z pass runs before U and V, so what is written here is what those two
+; passes then clamp and apply, in the same turn.
+;   IX -> us, IY -> what stopped us
+; Corrupts AF.
+object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
+					jr		nz,.rides		; the knight rides in the game too --
+					ld		a,(ix+OBJ.BEHAVIOUR)	; plyr_spr_init_data gives his record
+					cp		MOVE_LOOSE		; flags $1C, which has the same bit 2
+					ret		c			; a moveable block, a table and a
+										; chest all have
+.rides:
+
+					ld		a,(ix+OBJ.DU)
+					or		a
+					jr		nz,.own_v
+					ld		a,(iy+OBJ.DU)
+					ld		(ix+OBJ.DU),a
+.own_v:				ld		a,(ix+OBJ.DV)
+					or		a
+					ret		nz
+					ld		a,(iy+OBJ.DV)
+					ld		(ix+OBJ.DV),a
+					ret		
 
 
 ; Cut a whole step down to what fits, Z first and then U and then V.
@@ -697,21 +788,17 @@ object_update:
 					sub		(hl)
 					jr		nc,.on_screen
 
-					; It runs off the top of the screen. Nothing here clips a
-					; sprite against row 0: the extents are single bytes, so a
-					; negative MIN_Y wraps to something near 255, the region
-					; that implies is hundreds of rows tall, and the Y offset
-					; into the view buffer overflows the one carry the row
-					; address can take -- which puts the blit outside the
-					; buffer altogether. Give it an empty extent instead, so
-					; every cull drops it, and leave it undrawn until there is
-					; something here that can clip properly.
+					; It runs off the top. MIN_Y is clamped to row 0 and what it
+					; lost is kept, for the blit to start that far in.
+					neg			; height - base, the rows above row 0
+					ld		(ix+OBJ.CLIP_TOP),a
 					xor		a
 					ld		(ix+OBJ.MIN_Y),a
-					ld		(ix+OBJ.MAX_Y),a
+					ld		(ix+OBJ.MAX_Y),b	; the base
 					jr		.y_done
 
 .on_screen:			ld		(ix+OBJ.MIN_Y),a		; top = base - height
+					ld		(ix+OBJ.CLIP_TOP),0	; and nothing lost off the top
 
 					; ...and the other end. A room can stand something below
 					; the bottom of the screen -- a wall base in a room whose
@@ -1125,7 +1212,11 @@ objects_draw_all:
 					; Save stack pointer as we going to use stack pointer to read object data					
 					ld		(.set_stack + 1),sp
 					
-					; Walk though objects filtering out those outside the view extent
+					; Walk though objects filtering out those outside the view extent.
+					; The four rejects below are JPs rather than JRs: they used to be
+					; JRs and the loop had to stay inside a byte's reach of them,
+					; which it no longer does. It costs nothing -- a reject is the
+					; common case, and a taken JR is 12T against a JP's 10.
 					ld		iy,(object_list)					
 					jp		.next_object		; the same test also covers an empty list
 					; JP, not JR: the loop below no longer fits in a byte's reach
@@ -1136,19 +1227,19 @@ objects_draw_all:
 					pop		bc					; bc = object y excent
 					ld		a,c					; a = obj_min_y
 					cp		d					; obj_min_y - view_max_y
-					jr		nc,.next_object		; if obj_min_y - view_max_y >= 0, return					
+					jp		nc,.next_object		; if obj_min_y - view_max_y >= 0, return					
 					ld		a,e					; a = view_min_y
 					cp		b					; view min_y - obj_max_y
-					jr		nc,.next_object   	; if view_min_y - obj_max_y >= 0, return
+					jp		nc,.next_object   	; if view_min_y - obj_max_y >= 0, return
 					exx
 .set_x_extent:		ld		de,0				; de = view x extent
 					pop		bc					; bc = object x excent
 					ld		a,c					; a = obj_min_x
 					cp		d					; obj_min_x - view_max_x
-					jr		nc,.next_object		; if obj_min_x - view_max_x >= 0, return					
+					jp		nc,.next_object		; if obj_min_x - view_max_x >= 0, return					
 					ld		a,e					; a = view_min_x
 					cp		b					; view min_x - obj_max_x
-					jr		nc,.next_object   	; if view_min_x - obj_max_x >= 0, return
+					jp		nc,.next_object   	; if view_min_x - obj_max_x >= 0, return
 
 					; Calculate x overlap, DE = view_x_extent, BC = object x extent
 					extent_intersect			; HL, BC, DE, AF all changed
@@ -1201,8 +1292,23 @@ objects_draw_all:
 
 					; Adjust sprite data address
 					pop		de					; get index into jump table in D (E not used)
-					xor		a					; A = 0
-					sub		l					; A = -sprite_y_adjustment
+
+					; Rows to skip before the first one that shows: what the redraw
+					; region cuts off the top, plus what the SCREEN cuts off above
+					; that. The second is CLIP_TOP, and it is reached through SP,
+					; which is eight bytes into this record with two pops to go.
+					;
+					; Ultimate did not need any of this. Their artwork is stored
+					; bottom row first -- sprites.py turns it the right way up on the
+					; way in -- and an object hung on its base draws upward from a
+					; known address, so running off the top of the screen just means
+					; drawing fewer rows and stopping. Top-down data has to find the
+					; first visible row instead, and that is a multiply.
+					ld		b,l				; what the region skips, negated
+					ld		hl,OBJ.CLIP_TOP - 8
+					add		hl,sp
+					ld		a,(hl)			; and what the screen took
+					sub		b					; A = both, as a positive row count
 					ld		h,high sprite_jump_table
 					ld		l,d
 					jp		(hl)				; jump to Y adjustment multiply routine
@@ -1234,8 +1340,6 @@ objects_draw_all:
 					; Out of line, and AF saved inside it: the carry out of the
 					; doubling above is read three instructions further down, and
 					; this is the one thing between them that could disturb it.
-					; Out of line because the four filter tests above are JRs and
-					; nine more bytes here puts .next_object out of their reach.
 					call	shift_if_deferred		; HL -> the shared buffer
 
 					; That doubling is the one step here that can leave eight

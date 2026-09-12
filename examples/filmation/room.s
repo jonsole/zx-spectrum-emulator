@@ -573,6 +573,15 @@ room_add:			ld		a,(room_object_count)
 					ld		(ix+OBJ.BEHAVIOUR),a
 					ld		(ix+OBJ.MOVE_STATE),0
 
+					; And no step left over from whatever this record was in the last
+					; room. The pool is reused and nothing else clears these -- which
+					; mattered the moment object_carry started reading them off
+					; whatever a thing is standing on: a plain block that had been a
+					; ghost would have shoved the knight sideways.
+					ld		(ix+OBJ.DU),0
+					ld		(ix+OBJ.DV),0
+					ld		(ix+OBJ.DZ),0
+
 					ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
 

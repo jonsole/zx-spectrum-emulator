@@ -353,8 +353,22 @@ character_stand:	ld		d,0
 ; is settled against what had to give.
 ;   IX -> the legs record
 ;   D  - the step it would like in U, E the step in V
-character_settle:	call	character_gravity
+character_settle:	; Anything that ran into us since our last turn left its step
+					; in our record, and it ADDS to what we meant to do rather than
+					; replacing it -- calc_plyr_dXY combines them the same way, and
+					; so a knight walking east while a block shoves him north goes
+					; north-east. It is good for this one turn.
+					ld		a,(ix+OBJ.DU)
+					add		a,d
+					ld		d,a
+					ld		a,(ix+OBJ.DV)
+					add		a,e
+					ld		e,a
+
+					call	character_gravity
 					call	character_collide
+					ld		(ix+OBJ.DU),0	; spent, so the next turn starts clean
+					ld		(ix+OBJ.DV),0
 					jp		character_land
 
 
@@ -585,7 +599,27 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 ;   D  - the step it would like in U, E the step in V
 object_collide_room:	xor		a
 					ld		(collide_bound),a
+					call	object_bound_uv
+					call	object_collide_free
 
+					; And the edges again, on what came back. The clamp can ADD a step
+					; that the first pass never saw: object_carry hands a passenger the
+					; step of whatever it is standing on, during the Z pass, which is
+					; after the edges have had their say. Knight Lore does not need this
+					; because it checks each axis's edge after the Z pass rather than all
+					; of them up front -- but it needs checking somewhere, or a ghost six
+					; units wide carries a block eight units wide clean through the wall.
+					ld		d,(ix+OBJ.DU)
+					ld		e,(ix+OBJ.DV)
+					call	object_bound_uv
+					ld		(ix+OBJ.DU),d
+					ld		(ix+OBJ.DV),e
+					ret		
+
+
+; Cut a step down to what the room's own edges allow.
+;   IX -> the record, D the step in U, E the step in V
+object_bound_uv:
 .u_bound:			ld		a,(ix+OBJ.U)
 					add		a,d
 					sub		128		; distance from the room's centre
@@ -630,9 +664,11 @@ object_collide_room:	xor		a
 					jr		.v_bound
 .v_back:			inc		e
 					jr		.v_bound
-.keep_v:
+.keep_v:			ret		
 
-; And with the room's edges already settled, or deliberately not applied.
+
+; The floor and everything standing in the room, with the edges already
+; settled or deliberately not applied.
 object_collide_free:
 					; And the floor, which is not an object -- nothing in a room
 					; stands for the ground, so a fall has to be stopped here or
