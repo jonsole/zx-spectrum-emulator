@@ -26,6 +26,13 @@ It writes three small files next to itself, and those are what the build uses
                    sprites.py uses this to number sprite_table the way the
                    game numbers its graphics, so the room templates can name
                    sprites directly.
+
+  specials.bin     142 bytes: where each of the 32 collectables starts --
+                   U, V, Z and room, four bytes each, from the second to
+                   fifth bytes of every nine-byte row of special_objs_tbl at
+                   $6FF2 -- and then the fourteen-long order the wizard asks
+                   for them in, objects_required at $C27D, before the game
+                   shuffles it.
 """
 import sys
 from pathlib import Path
@@ -37,6 +44,10 @@ FONT_END = 0x6248               # exclusive, and the room data starts here
 ROOM_DATA_START = 0x6248
 ROOM_DATA_END = 0x6FF2          # exclusive
 SPRITE_TBL = 0x7112
+SPECIALS_TBL = 0x6FF2           # 32 rows of 9, ending where SPRITE_TBL starts
+SPECIALS_ROWS = 32
+OBJECTS_REQUIRED = 0xC27D
+OBJECTS_REQUIRED_COUNT = 14
 GRAPHIC_COUNT = 256
 NO_SPRITE = 255
 
@@ -98,6 +109,16 @@ def main():
     (HERE / "room_data.bin").write_bytes(rooms)
     print("room_data.bin    %d bytes ($%04X-$%04X)"
           % (len(rooms), ROOM_DATA_START, ROOM_DATA_END - 1))
+
+    specials = bytearray()
+    for row in range(SPECIALS_ROWS):
+        at = SPECIALS_TBL + row * 9 - 0x4000
+        specials += ram[at + 1:at + 5]
+    at = OBJECTS_REQUIRED - 0x4000
+    specials += ram[at:at + OBJECTS_REQUIRED_COUNT]
+    (HERE / "specials.bin").write_bytes(specials)
+    print("specials.bin     %d bytes, %d collectables and the order they are wanted in"
+          % (len(specials), SPECIALS_ROWS))
 
     gmap, resolved = graphic_map(ram)
     (HERE / "graphic_map.bin").write_bytes(gmap)

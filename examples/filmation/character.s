@@ -335,16 +335,14 @@ character_walk_on:	call	character_settle
 					jp		character_move
 
 
-; And one that is only standing there repaints only if something moved it --
-; gravity, or being shoved. The whole engine rests on not repainting what did
-; not change, and this is the case that would repaint every turn for nothing.
+; And one that is only standing there repaints every turn all the same. It
+; used to give up when nothing had moved it, which is what the rest of the
+; engine does -- but a turn with no knight to draw is a turn that costs next
+; to nothing, so the game ran at one speed walking and at a sprint standing
+; still, and everything else in the room with it.
 character_stand:	ld		d,0
 					ld		e,0
 					call	character_settle
-					ld		a,d
-					or		e
-					or		(ix+OBJ.DZ)
-					ret		z
 					jp		character_move
 
 

@@ -65,6 +65,13 @@ STACK_TOP			EQU		0xFF00
 ; table for the same reason.
 font:               INCBIN  "font.bin"
 
+; The collectables: where each of the thirty-two starts, the order the wizard
+; wants them in, and which graphic each row has been dealt -- see special.s.
+; kl_extract.py pulls the first two out of the game, as it does the font.
+special_where:      INCBIN  "specials.bin", 0, 32 * 4
+special_wanted:     INCBIN  "specials.bin", 32 * 4, 14
+special_gfx:        DS      32
+
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
 shift_shared:       DS      SHIFT_SHARED_SIZE
@@ -78,6 +85,7 @@ room_data_end:
 					INCLUDE "shift.s"
 					INCLUDE "character.s"
 					INCLUDE "mover.s"
+					INCLUDE "special.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -102,6 +110,7 @@ ROOM_STRIDE         EQU     32
 ; address into whatever SP was aimed at.
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
+                    call    special_init
 
         ; Nothing goes into a room that was not built. room_build leaves the
         ; old room up when it is handed a number no record carries,
@@ -109,7 +118,8 @@ start:              di
         ; characters again would insert records that are already there, and
         ; an object compared against itself ties, which makes the scan take
         ; itself as its own insertion point and link its NEXT to itself.
-.enter:             ld      a,(room_number)
+.enter:             call    special_room_leave
+                    ld      a,(room_number)
                     call    room_build
                     jr      c,.entered
                     ld      a,(room_shown)      ; stay where we are
@@ -119,6 +129,7 @@ start:              di
                     jr      .loop
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
+                    call    special_room_enter
                     call    player_add
 
                     ; Poke room_number from the debugger and the castle turns
@@ -142,6 +153,7 @@ start:              di
                     ; sprite. Nothing needs them -- the keyboard is read
                     ; directly, in player_step, rather than through the ROM's
                     ; scan.
+                    call    special_step
                     call    movers_step
                     call    player_step
                     call    print_room
@@ -302,6 +314,24 @@ player_step:        ld      ix,player
                     ; whether the step took him right out.
                     call    character_door_find
 
+                    ; While something he dropped is on its way into the pot he
+                    ; hangs where he is and nothing he presses counts. The game
+                    ; gives him a dZ of two, which its gravity takes back to
+                    ; nothing -- and ours takes two a turn off a knight who is
+                    ; not holding jump, so the same number does the same.
+                    ld      a,(special_busy)
+                    or      a
+                    jr      z,.keys
+                    ld      (ix+CHARACTER_DZ),2
+                    xor     a
+                    ld      (character_jump_held),a
+                    jp      character_stand
+
+                    ; Picking up and putting down come first, as the game
+                    ; has them.
+.keys:              call    special_keys
+                    ld      ix,player
+
                     ; The jump key first, because gravity asks about it in the
                     ; same turn: holding it is what makes the difference
                     ; between a hop and a full jump.
@@ -329,10 +359,9 @@ player_step:        ld      ix,player
                     rra
                     jr      nc,.down_left
 
-                    ; Nothing held. He still has to fall, so this cannot just
-                    ; return the way it used to -- but standing on the floor
-                    ; with nothing to do costs no repaint, because
-                    ; character_stand gives up when every axis came to zero.
+                    ; Nothing held. He still has to fall, and he is still
+                    ; drawn, so that a turn costs about the same whether he
+                    ; walks or not.
                     jp      character_stand
 
 .up_left:           ld      a,0
@@ -612,7 +641,20 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; routine's own -- it resets it per row so
 					; that LDI's countdown can never borrow
 					; into B and lose a row.
-					jp		vid_buff_copy	; the last thing it does, so tail-jump
+					call	vid_buff_copy
+
+					; The carried objects live in the bottom-left corner, straight on
+					; the screen, and a region that reached them has just wiped them.
+					ld		a,(view_y_extent+1)		; max, exclusive
+					cp		SCREEN_ROWS - 24 + 1
+					ret		c
+					ld		a,(view_x_extent)
+					cp		11		; their last column, plus one
+					ret		nc
+					ld		a,(view_x_extent+1)
+					cp		3		; their first, plus one
+					ret		c
+					jp		special_show
 
 
 
@@ -698,7 +740,7 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; the castle, which rooms.py works out while generating room_data.s.
                     ALIGN   32
 room_objects:
-                REPT    ROOM_MAX_OBJECTS
+                REPT    ROOM_MAX_OBJECTS + SPECIAL_SLOTS
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR

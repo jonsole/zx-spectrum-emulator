@@ -37,16 +37,19 @@ MOVE_GHOST		EQU		9
 ;   MOVE_SLIDING   never clears it, so a shove sends it on until
 ;                  something stops it -- upd_85
 MOVE_BOUNCE		EQU		10
+MOVE_SPELL		EQU		11
+MOVE_CAULDRON	EQU		12		; what rises out of the pot -- see special.s
 
 ; MOVE_LOOSE has to stay the LAST of these and everything loose above it,
 ; because that is the whole test -- object_carry and object_shove both ask
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		11
-MOVE_CARRIED		EQU		11
-MOVE_PUSHED		EQU		12
-MOVE_SLIDING		EQU		13
+MOVE_LOOSE		EQU		13
+MOVE_CARRIED		EQU		13
+MOVE_PUSHED		EQU		14
+MOVE_SLIDING		EQU		15
+MOVE_SPECIAL		EQU		16		; a collectable -- see special.s
 
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
@@ -57,6 +60,8 @@ MOVE_RISING		EQU		4		; bit 2, as in the game's byte $0D
 FIRE_STEP			EQU		2
 BALL_RISE			EQU		3		; before gravity takes one back
 BALL_RISE_TO		EQU		32
+SPELL_STEP		EQU		4
+SPELL_CREEP		EQU		1		; while the knight is in an arch
 
 
 ; Which templates move, and how. Room-build time only, so a walk will do.
@@ -82,6 +87,7 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_TABLE, MOVE_PUSHED
 					DB		FG_CHEST, MOVE_SLIDING
 					DB		FG_BALL_BOUNCE, MOVE_BOUNCE
+					DB		FG_REPEL_SPELL, MOVE_SPELL
 					DB		$FF
 
 mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
@@ -94,9 +100,12 @@ mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_gate			; MOVE_GATE
 					DW		mover_ghost		; MOVE_GHOST
 					DW		mover_bounce		; MOVE_BOUNCE
+					DW		mover_spell		; MOVE_SPELL
+					DW		mover_cauldron	; MOVE_CAULDRON
 					DW		mover_carried		; MOVE_CARRIED
 					DW		mover_pushed		; MOVE_PUSHED
 					DW		mover_sliding	; MOVE_SLIDING
+					DW		mover_special	; MOVE_SPECIAL
 
 
 ; How many turns have gone by. Every mover in the castle is driven from this
@@ -904,9 +913,11 @@ mover_sliding:		jp		mover_move
 ; back. So touching something does not cost it its direction -- only landing
 ; changes that.
 ;
-; The game varies the bounce height by room and chases or flees depending on
-; what the knight currently is. Neither is here: it always bounces the same
-; and always comes for him.
+; And it runs FROM the knight and comes FOR the werewolf. upd_182_183 decides
+; which by patching the opcode of the branch that picks the sign -- $38, JR C,
+; if the player's graphic is 16 to 47, which is the knight; $30, JR NC, for
+; anything else, which is the werewolf -- and so does this. The game also
+; varies the bounce height by room number, which is not here.
 ;   IX -> the record
 BOUNCE_RISE			EQU		4
 BOUNCE_STEP			EQU		2
@@ -929,6 +940,16 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 					xor		1
 					ld		(ix+OBJ.GFX),a
 
+					; Knight or werewolf. The game asks $5C08, the legs' graphic.
+					ld		a,(player + OBJ.GFX)
+					sub		16
+					cp		32
+					ld		a,$38		; JR C: away from the knight
+					jr		c,.form
+					ld		a,$30		; JR NC: towards the werewolf
+.form:				ld		(.v_dir),a
+					ld		(.u_dir),a
+
 					call	mover_rand
 					and		1
 					jr		z,.along_u
@@ -936,7 +957,7 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 					ld		a,(player + OBJ.V)
 					cp		(ix+OBJ.V)
 					ld		a,BOUNCE_STEP
-					jr		nc,.go_v
+.v_dir:				jr		nc,.go_v		; opcode patched above
 					neg
 .go_v:				ld		(ix+OBJ.DV),a
 					ld		(ix+OBJ.DU),0
@@ -945,8 +966,57 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 .along_u:			ld		a,(player + OBJ.U)
 					cp		(ix+OBJ.U)
 					ld		a,BOUNCE_STEP
-					jr		nc,.go_u
+.u_dir:				jr		nc,.go_u		; opcode patched above
 					neg
 .go_u:				ld		(ix+OBJ.DU),a
 					ld		(ix+OBJ.DV),0
 					ret		
+
+
+; ---------------------------------------------------------------------------
+; The repel spell: a sparkle that homes in on the knight, four units a turn on
+; each axis at once, and creeps at one while he stands in an arch -- which is
+; what gives him the chance to get out of the room ahead of it.
+;
+; Knight Lore's, from upd_164_to_167 and move_towards_plyr. The game's "in an
+; arch" is bit 0 of the knight's own byte, set by whichever arch finds him
+; near it (chk_plyr_spec_near_arch); ours is CHARACTER_DOOR, which player_step
+; works out from the same kind of box. In room $88 it never slows.
+;
+; The way to go is the SIGN of the difference, not its carry, as the game has
+; it: level with him counts as past him, so it jitters about his position
+; rather than settling on it. It does not set DZ, so it falls like anything
+; else, and it runs through its four frames every turn.
+;   IX -> the record
+mover_spell:		ld		c,SPELL_STEP
+					ld		a,(room_shown)
+					cp		$88
+					jr		z,.speed
+					ld		a,(player + CHARACTER_DOOR)
+					inc		a		; $FF: in no doorway
+					jr		z,.speed
+					ld		c,SPELL_CREEP
+
+.speed:				ld		hl,player + OBJ.U
+					ld		a,(ix+OBJ.U)
+					sub		(hl)
+					ld		a,c
+					jp		m,.u		; short of him: towards
+					neg
+.u:					ld		(ix+OBJ.DU),a
+
+					ld		hl,player + OBJ.V
+					ld		a,(ix+OBJ.V)
+					sub		(hl)
+					ld		a,c
+					jp		m,.v
+					neg
+.v:					ld		(ix+OBJ.DV),a
+
+					ld		a,(ix+OBJ.GFX)		; next of its four frames
+					inc		a
+					xor		(ix+OBJ.GFX)
+					and		3
+					xor		(ix+OBJ.GFX)
+					ld		(ix+OBJ.GFX),a
+					jp		mover_move_always
