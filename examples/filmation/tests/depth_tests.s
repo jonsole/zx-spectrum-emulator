@@ -1,9 +1,7 @@
 ; Unit tests for depth.s, in Z80, run on the C++ core by run_tests.py.
 ;
-; This assembles depth.s on its own, with nothing else of the engine, into a
-; CP/M-style .com that cpp-core's z80_com_runner loads at $0100. Failures are
-; printed through BDOS and counted, and the count goes back in A when the suite
-; jumps to $0000 -- which is the runner's exit status.
+; This assembles depth.s on its own, with nothing else of the engine. The
+; checking and printing are harness.s, which every suite shares.
 ;
 ; Records live at REC_1 onwards, one ROOM_STRIDE apart as in the real pool, and
 ; the run from REC_2 to REC_3 crosses a page. Lists are built by make_list and
@@ -12,9 +10,9 @@
 ; round.
 
 					ORG		$0100
+					INCLUDE	"harness.s"
 
 ROOM_STRIDE			EQU		32		; what filmation.s gives the pool
-BDOS				EQU		5
 
 REC_1				EQU		$C0C0
 REC_2				EQU		$C0E0
@@ -37,13 +35,7 @@ TALL				EQU		10		; SIZE_Z is a height
 
 
 ; ---------------------------------------------------------------------------
-; The checks.
-
-; Name the test that the checks after this belong to.
-					MACRO	TEST name
-					call	test_begin
-					DB		name, 0
-					ENDM
+; Depth's own fixtures.
 
 ; A record's position and extent, with NEXT and PREV cleared.
 					MACRO	BOX rec, u, v, z, su, sv, sz
@@ -55,33 +47,6 @@ TALL				EQU		10		; SIZE_Z is a height
 ; The simple box: U alone varies.
 					MACRO	BOX_U rec, u
 					BOX		rec, u, V0, Z0, HALF, HALF, TALL
-					ENDM
-
-					MACRO	EXPECT_WORD addr, value, what
-					ld		hl,(addr)
-					ld		de,value
-					call	expect_hl_de
-					DB		what, 0
-					ENDM
-
-					MACRO	EXPECT_BYTE addr, value, what
-					ld		a,(addr)
-					ld		l,a
-					ld		h,0
-					ld		de,value
-					call	expect_hl_de
-					DB		what, 0
-					ENDM
-
-; Out of the flags snap took.
-					MACRO	EXPECT_CARRY value, what
-					ld		a,(s_af)
-					and		1
-					ld		l,a
-					ld		h,0
-					ld		de,value
-					call	expect_hl_de
-					DB		what, 0
 					ENDM
 
 ; Step IX by a signed step in U, V and Z, through depth_step.
@@ -97,12 +62,6 @@ TALL				EQU		10		; SIZE_Z is a height
 					ld		a,(dz) & $FF
 					call	depth_step_upper
 					ENDM
-
-; Snap A out of what snap took.
-					MACRO	EXPECT_A value, what
-					EXPECT_BYTE	s_af + 1, value, what
-					ENDM
-
 
 start:				ld		sp,$FE00
 
@@ -448,18 +407,8 @@ start:				ld		sp,$FE00
 
 ; --- done --------------------------------------------------------------------
 
-					ld		hl,s_summary
-					call	print0
-					ld		a,(tests)
-					call	dec8
-					ld		hl,s_tests
-					call	print0
-					ld		a,(failures)
-					call	dec8
-					ld		hl,s_failures
-					call	print0
-					ld		a,(failures)
-					jp		0
+					call	finish
+					DB		"depth_tests", 0
 
 
 ; ---------------------------------------------------------------------------
@@ -495,37 +444,7 @@ check_order:		call	depth_cmp_setup
 					jp		snap
 
 ; ---------------------------------------------------------------------------
-; The harness.
-
-tests:				DB		0
-failures:			DB		0
-test_name:			DW		0
-
-s_af:				DW		0		; F low, A high
-s_bc:				DW		0
-s_de:				DW		0
-s_hl:				DW		0
-e_got:				DW		0
-e_want:				DW		0
-
-; Every register as it came back from the call before, into s_*. Changes none.
-snap:				ld		(s_hl),hl
-					ld		(s_de),de
-					ld		(s_bc),bc
-					push	af
-					pop		hl
-					ld		(s_af),hl
-					ld		hl,(s_hl)
-					ret
-
-test_begin:			ex		(sp),hl
-					ld		(test_name),hl
-					call	skip0
-					ex		(sp),hl
-					ld		a,(tests)
-					inc		a
-					ld		(tests),a
-					ret
+; Building and checking lists.
 
 ;   IX -> the record; followed by U, V, Z, SIZE_U, SIZE_V, SIZE_Z
 box:				pop		hl
@@ -644,117 +563,10 @@ expect_list:		pop		hl
 					push	de
 					pop		hl
 					call	hex16
-					jr		got_want
+					jp		got_want
 
-; HL = what came back, DE = what should have; followed by what it is.
-expect_hl_de:		ld		(e_got),hl
-					ld		(e_want),de
-					and		a
-					sbc		hl,de
-					pop		hl
-					jr		nz,.wrong
-					call	skip0
-					jp		(hl)
-.wrong:				call	fail_begin
-					call	print0
-					push	hl
-					call	got_want
-					pop		hl
-					jp		(hl)
-
-got_want:			ld		hl,s_got
-					call	print0
-					ld		hl,(e_got)
-					call	hex16
-					ld		hl,s_want
-					call	print0
-					ld		hl,(e_want)
-					call	hex16
-					ld		hl,s_crlf
-					jp		print0
-
-; "FAIL name: ", and one more failure.
-fail_begin:			ld		a,(failures)
-					inc		a
-					ld		(failures),a
-					push	hl
-					ld		hl,s_fail
-					call	print0
-					ld		hl,(test_name)
-					call	print0
-					ld		hl,s_colon
-					call	print0
-					pop		hl
-					ret
-
-;   HL -> a zero-terminated string; out HL past it
-print0:				ld		a,(hl)
-					inc		hl
-					or		a
-					ret		z
-					call	putc
-					jr		print0
-
-skip0:				ld		a,(hl)
-					inc		hl
-					or		a
-					jr		nz,skip0
-					ret
-
-; Keeps HL, BC is not touched but C, and D.
-putc:				push	bc
-					push	de
-					ld		e,a
-					ld		c,2
-					call	BDOS
-					pop		de
-					pop		bc
-					ret
-
-hex16:				ld		a,h
-					call	hex8
-					ld		a,l
-hex8:				push	af
-					rrca
-					rrca
-					rrca
-					rrca
-					call	.digit
-					pop		af
-.digit:				and		15
-					add		a,'0'
-					cp		'9' + 1
-					jr		c,.out
-					add		a,'A' - '9' - 1
-.out:				jp		putc
-
-dec8:				ld		c,100
-					call	.digit
-					ld		c,10
-					call	.digit
-					add		a,'0'
-					jp		putc
-.digit:				ld		b,'0' - 1
-.count:				inc		b
-					sub		c
-					jr		nc,.count
-					add		a,c
-					push	af
-					ld		a,b
-					call	putc
-					pop		af
-					ret
-
-s_fail:				DB		"FAIL ", 0
-s_colon:			DB		": ", 0
-s_got:				DB		" got ", 0
-s_want:				DB		", want ", 0
-s_crlf:				DB		13, 10, 0
 s_record:			DB		"list at field ", 0
 s_prev:				DB		"PREV named by field ", 0
-s_summary:			DB		"depth_tests: ", 0
-s_tests:			DB		" tests, ", 0
-s_failures:			DB		" failed", 13, 10, 0
 
 
 ; ---------------------------------------------------------------------------

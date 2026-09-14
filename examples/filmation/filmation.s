@@ -1228,9 +1228,8 @@ room_objects:
 ; Every byte with its bits the other way round, for mirroring a sprite. Knight
 ; Lore keeps the same table at $F100 and reaches it exactly this way, with the
 ; page in B and the byte in C.
-bit_reverse_table:  REPT    256,x
-                    DB      ((x & 0x01) << 7) | ((x & 0x02) << 5) | ((x & 0x04) << 3) | ((x & 0x08) << 1) | ((x & 0x10) >> 1) | ((x & 0x20) >> 3) | ((x & 0x40) >> 5) | ((x & 0x80) >> 7)
-                ENDR
+bit_reverse_table:
+                    bit_reverse_bytes
 
                     ALIGN   512
                     INCLUDE "sprite_table.s"
