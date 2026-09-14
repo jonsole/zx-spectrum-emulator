@@ -71,7 +71,8 @@ font:               INCBIN  "font.bin"
 ; The collectables: where each of the thirty-two starts, the order the wizard
 ; wants them in, and which graphic each row has been dealt -- see special.s.
 ; kl_extract.py pulls the first two out of the game, as it does the font.
-special_where:      INCBIN  "specials.bin", 0, 32 * 4
+special_where_start: INCBIN "specials.bin", 0, 32 * 4
+special_where:      DS      32 * 4              ; where they are now: special_init copies
 special_wanted:     INCBIN  "specials.bin", 32 * 4, 14
 special_gfx:        DS      32
 
@@ -85,6 +86,7 @@ room_data_end:
 
 					INCLUDE "sprite.s"
 					INCLUDE "object.s"
+					INCLUDE "depth.s"
 					INCLUDE "shift.s"
 					INCLUDE "character.s"
 					INCLUDE "mover.s"
@@ -113,6 +115,33 @@ ROOM_STRIDE         EQU     32
 ; address into whatever SP was aimed at.
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
+
+                    ; A game from the beginning -- which is also where losing the
+                    ; last life comes back to.
+                    ld      a,r                 ; init_start_location: one of four
+                    and     3
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,start_rooms
+                    add     hl,de
+                    ld      a,(hl)
+                    ld      (room_number),a
+                    ld      a,$FF
+                    ld      (enter_dir),a
+                    ld      (entered_by),a
+                    ld      a,PLAYER_LIVES
+                    ld      (player_lives),a
+                    ld      a,PLAYER_APPEARING
+                    ld      (player_state),a
+                    xor     a
+                    ld      (player_touched),a
+                    ld      (days),a
+                    ld      (night),a
+                    ld      (player_change),a
+                    ld      a,SUN_RISE
+                    ld      (sun_x),a
+                    ld      a,PLAYER_LEGS_GFX
+                    call    player_form
                     call    special_init
 
         ; Nothing goes into a room that was not built. room_build leaves the
@@ -132,6 +161,8 @@ start:              di
                     jr      .loop
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
+                    ld      a,(enter_dir)       ; kept for starting the room over
+                    ld      (entered_by),a
                     call    special_room_enter
                     call    player_add
 
@@ -159,10 +190,81 @@ start:              di
                     call    special_step
                     call    movers_step
                     call    player_step
+                    call    day_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
                     call    room_keys
+                    call    turn_pace
                     jr      .loop
+
+
+; ---------------------------------------------------------------------------
+; Keep the nearly empty rooms from racing.
+;
+; A turn takes as long as its work, and a room with nothing moving in it has
+; almost none: a hundred turns a second, against twenty or thirty in a busy
+; one. Knight Lore holds every frame to a fixed budget, counting interrupts in
+; game_delay; we cannot count interrupts, because every part of the drawing
+; path borrows SP and a single interrupt taken there would write into a sprite.
+;
+; So the turn counts its own work instead, as it goes, in units of about
+; TURN_UNIT_T T-states, and whatever is left of TURN_BUDGET_T at the end is
+; spent in a delay loop. A turn already over the budget pays nothing, so the
+; busy rooms go exactly as fast as they did.
+;
+; The counts come from measuring: 258 turns across 43 rooms, timed by the
+; emulator and fitted against what each did. A turn costs about 5,400 T to
+; begin with, 172 for every row a blit composites and 1,300 for the blit itself,
+; 3,900 for every region drawn, 15,000 for every collision gather, and 620 for
+; every row rotated. Rounded into units, that predicts a turn to within 4,000 T
+; for half of them and 10,000 T for nine in ten -- near enough, when the only
+; question is how much of the gap to fill.
+;
+; It errs a little low, though -- a real turn runs some thousands of T past its
+; count -- so the budget is set below the pace it is meant to give. Measured
+; turn by turn across all 128 rooms: the 60 that ran faster than 45 turns a
+; second now run at 33 to 38, median 35; a room already slower than about 30 is
+; untouched; and a turn over the budget is never padded. What it costs is a
+; little in the rooms just under the cap whose turns vary, where the light ones
+; are padded and the heavy ones are not -- $09 and $12 lose about four and
+; seven turns a second.
+TURN_BUDGET_T       EQU     86000               ; about 35 turns a second
+TURN_UNIT_T         EQU     172
+TURN_BASE_T         EQU     5400
+TURN_PER_BLIT       EQU     8                   ; plus a unit a row
+TURN_PER_REGION     EQU     23
+TURN_PER_GATHER     EQU     87
+TURN_SPIN           EQU     11                  ; DJNZs making up one unit
+
+turn_work:          DW      0
+
+; Add A units to the turn's work. Corrupts AF and HL.
+turn_add:           ld      hl,turn_work
+                    add     a,(hl)
+                    ld      (hl),a
+                    ret     nc
+                    inc     hl
+                    inc     (hl)
+                    ret
+
+
+; Spend what is left of the budget, and start the next turn's count.
+; One pass of .wait is 7 + (TURN_SPIN * 13 - 5) + 26 = 171 T, which is the unit.
+turn_pace:          ld      hl,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
+                    ld      de,(turn_work)
+                    or      a
+                    sbc     hl,de
+                    ld      de,0
+                    ld      (turn_work),de
+                    ret     c                   ; over the budget already
+                    ret     z
+.wait:              ld      b,TURN_SPIN
+.spin:              djnz    .spin
+                    dec     hl
+                    ld      a,h
+                    or      l
+                    jr      nz,.wait
+                    ret
 
 
 ; 1 goes back a room, 2 on to the next.
@@ -209,9 +311,11 @@ room_keys:          ld      bc,KEY_ROOMS
 room_key_held:      DB      0
 
 
-; Which room to build. $88 is the cauldron room; $B3 is where the game begins.
-room_number:        DB      $88
-room_shown:         DB      $88
+; Which room to build, and the one on the screen. A game begins in one of four,
+; chosen at random -- Knight Lore's start_locations at $D1E2.
+start_rooms:        DB      $2F, $44, $B3, $8F
+room_number:        DB      $B3
+room_shown:         DB      $B3
 
 ; Which side of the room being built the player is walking in through, or $FF
 ; for a room he did not walk into. player_entry spends it and puts it back.
@@ -225,23 +329,102 @@ enter_dir:          DB      $FF
 ; viewer and up the screen.
 PLAYER_LEGS_GFX     EQU     16
 PLAYER_BODY_GFX     EQU     32
-PLAYER_U            EQU     128
-PLAYER_V            EQU     104         ; clear of the cauldron at 128,128
+PLAYER_U            EQU     128         ; the middle of the room, where the game
+PLAYER_V            EQU     128         ; starts him (plyr_spr_init_data)
 PLAYER_FACING       EQU     0           ; -U, up and left
 
 player:             walking_character PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
 
+; How many times he can die and carry on. Knight Lore sets five and the start
+; of the game takes one, through the same lose_life every death goes through,
+; so the panel reads four; the game is over when a death would take the count
+; below nothing. The potion that is not wanted gives one back.
+PLAYER_LIVES        EQU     4
+player_lives:       DB      PLAYER_LIVES
+
+; What he is doing: walking about, dying, or coming back. The two sparkling
+; states are his graphics running through Knight Lore's own frames -- 112 to
+; 119 on the way out, a frame a turn, and 120 to 127 on the way back, a frame
+; every other turn -- during which nothing he presses counts.
+PLAYER_ALIVE        EQU     0
+PLAYER_DYING        EQU     1
+PLAYER_APPEARING    EQU     2
+PLAYER_CHANGING     EQU     3                   ; between man and wolf -- see day_step
+PLAYER_DEATH_GFX    EQU     112
+PLAYER_APPEAR_GFX   EQU     120
+player_state:       DB      PLAYER_APPEARING
+
+; Set when he touches something deadly -- see object_touched -- and read at the
+; top of his next turn, as the game reads its bit 6 in upd_player_bottom.
+player_touched:     DB      0
+
+; --- day and night -----------------------------------------------------------
+;
+; Knight Lore's clock is the sun, or the moon, crossing the window in the panel:
+; a pixel every eighth turn from x = $B0, and at $E1 the one gives way to the
+; other and starts back at $B0 -- print_sun_moon and toggle_day_night, at $C397
+; and $C3FF. Forty-nine pixels at eight turns each is 392 turns to a day and as
+; many again to a night. Every change of light asks the knight to change too, and
+; every dawn is a day gone; the fortieth is the end of the game.
+;
+; The clock counts turns, as the game's does, so a day is as many steps long as
+; it was -- which at our pace is about eleven seconds, where Knight Lore's
+; slower turns made it nearer thirty. SUN_TURNS is the knob.
+;
+; There is no window to watch it in yet; the day number is printed in the top
+; corner beside the lives, and the werewolf says the rest.
+SUN_TURNS           EQU     8                   ; a power of two
+SUN_RISE            EQU     $B0
+SUN_SET             EQU     $E1
+DAYS_ALLOWED        EQU     $40                 ; in BCD, as the game counts
+PLAYER_WOLF         EQU     $20                 ; what the wolf adds to the knight's
+                                                ; graphics: legs 48, body 64
+PLAYER_CHANGE_GFX   EQU     92                  ; 92 to 95, the twinkle between
+PLAYER_CHANGE_TURNS EQU     8                   ; ...shown this many times,
+PLAYER_HIDDEN_GFX   EQU     1                   ; with nothing on top of it
+
+sun_x:              DB      SUN_RISE
+night:              DB      0                   ; PLAYER_WOLF by night
+days:               DB      0                   ; BCD
+
+; Non-zero when the light has changed and the knight has not changed with it,
+; and while he is changing, the twinkles still to come. transform_flag_graphic,
+; less the graphic: the game keeps his legs' graphic there to XOR the wolf into
+; at the end, and ours changes the bases the frames are worked out from instead.
+player_change:      DB      0
+
+
+; The side he came into this room by, or $FF, and where he stood once he was
+; in, so that dying puts him back in the doorway he entered by. Knight Lore does
+; the same with a copy of his whole record taken on the way in
+; (plyr_spr_1_scratchpad). Both floor axes are wanted: player_entry only sets
+; the one he crossed, and the other is wherever he died.
+entered_by:         DB      $FF
+entered_at:         DW      0                   ; V, then U
+
 
 ; Put the player in the room that has just been built.
 player_add:         ld      ix,player
-                    ld      b,PLAYER_U
-                    ld      c,PLAYER_V
+                    ld      bc,PLAYER_U << 8 | PLAYER_V
                     ld      a,CHARACTER_Z
                     ld      hl,enter_dir
                     bit     7,(hl)              ; $FF: he did not walk in
                     jr      nz,.place
                     call    player_entry
-.place:             jp      character_add
+.place:             ld      (entered_at),bc
+                    call    character_add
+
+                    ; Starting the room over, or the game: he comes in as a
+                    ; sparkle. Drawn now rather than at the end of the turn, so
+                    ; that the knight character_add has just drawn is not left
+                    ; standing there for a turn first.
+                    ld      a,(player_state)
+                    cp      PLAYER_APPEARING
+                    ret     nz
+                    ld      ix,player
+                    ld      a,PLAYER_APPEAR_GFX
+                    call    player_sparkle
+                    jp      redraw_flush
 
 
 ; Where the player stands when he walks into a room: two units inside the far
@@ -305,6 +488,12 @@ KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
 KEY_JUMP            EQU     $7FFE       ; SPACE, bit 0
 
 player_step:        ld      ix,player
+                    ld      a,(player_state)
+                    or      a
+                    jp      nz,player_phase
+                    ld      a,(player_touched)
+                    or      a
+                    jp      nz,player_die
 
                     ; Nobody else is walking about. object_collide tests this
                     ; on top of the room's pool, for the characters that are
@@ -318,15 +507,26 @@ player_step:        ld      ix,player
                     ; whether the step took him right out.
                     call    character_door_find
 
+                    ; The light has changed. He changes with it as soon as he
+                    ; is standing on something -- chk_and_init_transform will not
+                    ; start it in the air -- and is not waiting on the pot.
+                    ld      a,(special_busy)
+                    or      a
+                    jr      nz,.busy
+                    ld      a,(player_change)
+                    or      a
+                    jr      z,.keys
+                    ld      a,(ix+CHARACTER_STATE)
+                    or      (ix+CHARACTER_DZ)
+                    jp      z,player_changing
+                    jr      .keys
+
                     ; While something he dropped is on its way into the pot he
                     ; hangs where he is and nothing he presses counts. The game
                     ; gives him a dZ of two, which its gravity takes back to
                     ; nothing -- and ours takes two a turn off a knight who is
                     ; not holding jump, so the same number does the same.
-                    ld      a,(special_busy)
-                    or      a
-                    jr      z,.keys
-                    ld      (ix+CHARACTER_DZ),2
+.busy:              ld      (ix+CHARACTER_DZ),2
                     xor     a
                     ld      (character_jump_held),a
                     jp      character_stand
@@ -457,6 +657,179 @@ player_exit:        ld      a,(ix+CHARACTER_DOOR)
                     ret
 
 
+; He has touched something that kills. upd_player_bottom at $C82B turns both
+; halves to the first sparkle, and init_death_sparkles makes him something
+; nothing collides with, so that whatever killed him walks on through.
+;   IX -> the player's legs
+player_die:         ld      a,PLAYER_DYING
+                    ld      (player_state),a
+                    set     2,(ix+OBJ.FLAGS)    ; OBJ_PASSABLE
+                    ld      a,PLAYER_DEATH_GFX
+                    jr      player_sparkle
+
+
+; A turn of dying or of coming back.
+;   A  - player_state, IX -> the player's legs
+player_phase:       cp      PLAYER_CHANGING
+                    jr      z,player_change_turn
+                    cp      PLAYER_DYING
+                    jr      nz,.appearing
+                    ld      a,(ix+OBJ.GFX)
+                    cp      PLAYER_DEATH_GFX + 7
+                    jr      z,.gone
+                    inc     a                   ; upd_112_to_118_184: a frame a turn
+                    jr      player_sparkle
+
+                    ; The last sparkle has had its turn. lose_life: a life, and
+                    ; the room built again around him in the doorway he came in
+                    ; by -- or, with none left, a new game.
+.gone:              ld      hl,player_lives
+                    dec     (hl)
+                    jp      m,start
+                    ld      a,PLAYER_APPEARING
+                    ld      (player_state),a
+                    ld      a,(entered_by)      ; the arch, for his height
+                    ld      (enter_dir),a
+                    ld      bc,(entered_at)
+                    ld      (ix+OBJ.U),b
+                    ld      (ix+OBJ.V),c
+                    xor     a                   ; and in the shape the light says,
+                    ld      (player_change),a   ; with no change still owing
+                    ld      a,(night)
+                    add     a,PLAYER_LEGS_GFX
+                    call    player_form
+                    ld      a,(room_number)
+                    cpl                         ; anything but the room it is
+                    ld      (room_shown),a
+                    ret
+
+.appearing:         ld      a,(ix+OBJ.GFX)
+                    cp      PLAYER_APPEAR_GFX + 7
+                    jr      z,.back
+                    ld      a,(move_tick)       ; upd_120_to_126: every other turn
+                    rra
+                    ret     c
+                    ld      a,(ix+OBJ.GFX)
+                    inc     a
+                    jr      player_sparkle
+
+                    ; upd_127: himself again, and whatever touched him while he
+                    ; was arriving forgotten.
+.back:              xor     a
+                    ld      (player_state),a
+                    ld      (player_touched),a
+                    ld      (ix+OBJ.DU),a       ; nor anything that shoved him
+                    ld      (ix+OBJ.DV),a
+                    call    character_frame
+                    jr      player_repaint
+
+; Both halves to one graphic, repainted where they stand.
+;   A  - the graphic, IX -> the player's legs
+player_sparkle:     ld      (ix+OBJ.GFX),a
+                    ld      (ix+CHARACTER_BODY+OBJ.GFX),a
+player_repaint:     ld      de,0
+                    ld      (ix+OBJ.DZ),0
+                    jp      character_move
+
+
+; A turn of changing, upd_92_to_95: something deadly still kills him, and every
+; fourth turn he twinkles on, until the last twinkle turns him into the other one.
+;   IX -> the player's legs
+player_change_turn: ld      a,(player_touched)
+                    or      a
+                    jp      nz,player_die
+                    ld      a,(move_tick)
+                    and     3
+                    ret     nz
+                    ld      hl,player_change
+                    dec     (hl)
+                    jr      nz,player_twinkle
+                    ld      a,(ix+CHARACTER_LEGS)
+                    xor     PLAYER_WOLF
+                    call    player_form
+                    ld      a,(ix+OBJ.BUF_H)    ; his own rotation buffer back, if
+                    or      a                   ; he was ever given one
+                    jp      z,player_phase.back
+                    res     3,(ix+OBJ.FLAGS)    ; OBJ_SHARED_SHIFT
+                    jp      player_phase.back
+
+
+; He starts to change: nothing on top, and the legs twinkling. The twinkles are
+; up to 38 rows tall, taller than the buffer his legs rotate into, so they
+; rotate at draw time for the few turns they are up.
+;   IX -> the player's legs
+player_changing:    ld      a,PLAYER_CHANGING
+                    ld      (player_state),a
+                    ld      a,PLAYER_CHANGE_TURNS
+                    ld      (player_change),a
+                    set     3,(ix+OBJ.FLAGS)    ; OBJ_SHARED_SHIFT
+                    ld      (ix+CHARACTER_BODY+OBJ.GFX),PLAYER_HIDDEN_GFX
+
+                    ;; NB: fall through into player_twinkle
+
+
+; One of the four twinkles at random, never the one he already shows, turned
+; the other way round each time -- rand_legs_sprite, at $C357.
+;   IX -> the player's legs
+player_twinkle:     call    mover_rand
+                    and     3
+                    add     a,PLAYER_CHANGE_GFX
+                    cp      (ix+OBJ.GFX)
+                    jr      nz,.other
+                    xor     1
+.other:             ld      (ix+OBJ.GFX),a
+                    ld      a,(ix+OBJ.FLAGS)
+                    xor     OBJ_FLIP_H
+                    ld      (ix+OBJ.FLAGS),a
+                    jr      player_repaint
+
+
+; The clock's turn. It stops once the wizard has everything, as the game's does.
+day_step:           ld      a,(move_tick)
+                    and     SUN_TURNS - 1
+                    ret     nz
+                    ld      a,(special_count)
+                    cp      SPECIAL_WANTED
+                    ret     nc
+                    ld      hl,sun_x
+                    inc     (hl)
+                    ld      a,(hl)
+                    cp      SUN_SET
+                    ret     nz
+
+                    ; The light changes, and so should he.
+                    ld      (hl),SUN_RISE
+                    ld      a,1
+                    ld      (player_change),a
+                    ld      hl,night
+                    ld      a,(hl)
+                    xor     PLAYER_WOLF
+                    ld      (hl),a
+                    ret     nz                  ; nightfall
+
+                    ; Dawn: inc_days, and at forty the end. There is no screen
+                    ; for that yet, so it is the same new game losing the last
+                    ; life is.
+                    ld      hl,days
+                    ld      a,(hl)
+                    add     a,1                 ; INC leaves the half-carry DAA wants
+                    daa
+                    ld      (hl),a
+                    cp      DAYS_ALLOWED
+                    ret     nz
+                    jp      start
+
+
+; The knight's two graphic bases, for man or wolf. character_frame works each
+; frame out from them, so the wolf walks and turns with the knight's own code.
+;   A - the legs' base: PLAYER_LEGS_GFX, plus PLAYER_WOLF for the wolf
+player_form:        ld      (player + CHARACTER_LEGS),a
+                    add     a,PLAYER_BODY_GFX - PLAYER_LEGS_GFX
+                    ld      (player + CHARACTER_BODY_G),a
+                    ret
+
+
+
 ; --- redrawing ------------------------------------------------------
 ;
 ; Nothing draws the whole screen. Each moving object repaints only the
@@ -474,11 +847,6 @@ player_exit:        ld      a,(ix+CHARACTER_DOOR)
 region_rows:		DB		0
 region_width:		DB		0
 
-
-; ...and where it was in the world, which is what depth_relink gates on.
-prev_u:				DB		0
-prev_v:				DB		0
-prev_z:				DB		0
 
 ; redraw_orient used to live here: one pass per region, settling every
 ; shared graphic before objects_draw_all ran. That is one decision too few
@@ -523,20 +891,6 @@ region_add:         ld      hl,view_y_extent
                     ret     c
                     ld      (hl),a
                     ret
-
-
-; Remember where an object was, before it moves. Only depth_relink reads this,
-; and only the world coordinates: the screen extents were saved here too, for a
-; redraw that took in the old position as well as the new, and region_reset and
-; region_add replaced that with an accumulated region.
-;   IX -> the object
-extent_save:		ld		a,(ix+OBJ.U)
-					ld		(prev_u),a
-					ld		a,(ix+OBJ.V)
-					ld		(prev_v),a
-					ld		a,(ix+OBJ.Z)
-					ld		(prev_z),a
-					ret		
 
 
 ; A region that is waiting to be drawn, or a max of zero for none.
@@ -687,6 +1041,8 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					jr		c,.width_ok		; no routine to copy it, so clamp
 					ld		a,VIEW_BUF_WIDTH		; rather than index off the end of
 .width_ok:			ld		(region_width),a		; copy_routines
+					ld		a,TURN_PER_REGION
+					call	turn_add
 
 					; Clear the rows this region uses, by pushing zeroes down through
 					; them. PUSH writes two bytes for 11T against LDIR's 21T per byte,

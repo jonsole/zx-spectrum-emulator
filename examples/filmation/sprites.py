@@ -77,6 +77,16 @@ while f_data:
 
     f_data = f_data[num_bytes:]
 
+# Graphic 1 is Knight Lore's way of drawing nothing: it is what the knight's
+# top half wears while he changes between man and wolf, and the game's own table
+# has no bitmap for it. Ours cannot point at nothing -- the draw would read its
+# sprite out of the ROM -- so it points at a sprite that covers nothing instead:
+# two bytes by one row, every mask bit clear of the screen.
+print("\t\t\tALIGN 4")
+print("sprite_blank:")
+print("\t\t\tDB\t0,1")
+print("\t\t\tDB\t0b11111111,0b00000000,0b11111111,0b00000000 ;" + "  " * 16)
+
 # The table is indexed by KNIGHT LORE's graphic number, not by our sprite
 # number. Its own table at $7112 is 256 pointers into sprite memory and
 # several graphic numbers share a bitmap -- 186 valid graphics across 103
@@ -99,5 +109,5 @@ for row in range(0, 256, 4):
     cells = []
     for g in range(row, row + 4):
         n = gmap[g]
-        cells.append(spr_list[n] if n < len(spr_list) else '0')
+        cells.append('sprite_blank' if g == 1 else spr_list[n] if n < len(spr_list) else '0')
     print('\t\t\tDW\t' + ', '.join(cells) + '\t; $%02X' % row)

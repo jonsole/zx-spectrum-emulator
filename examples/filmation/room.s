@@ -666,7 +666,6 @@ room_show:			ld		a,(room_object_count)
 					ld		b,a
 					ld		ix,room_objects
 .place:				push	bc
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					ld		bc,ROOM_STRIDE
 					add		ix,bc
@@ -715,17 +714,33 @@ room_show:			ld		a,(room_object_count)
 ; whatever it lands on is meant to be covered.
 DEBUG_AT			EQU		$4000		; the top-left character cell
 
-print_room:			ld		a,(room_shown)
-					rrca
-					rrca
-					rrca
-					rrca
-					and		$0F
-					ld		hl,DEBUG_AT
-					call	print_char
+print_room:			ld		a,(days)		; the day, top right
+					ld		hl,DEBUG_AT + 27
+					call	print_hex
+					ld		a,(player_lives)		; and the lives beside it
+					ld		hl,DEBUG_AT + 30
+					call	print_hex
 					ld		a,(room_shown)
+					ld		hl,DEBUG_AT
+
+					;; NB: fall through into print_hex
+
+
+; A byte as two digits.
+;   A  - the byte, HL -> the top row of the first cell
+; Corrupts AF, BC, DE, HL.
+print_hex:			push	af
+					push	hl
+					rrca
+					rrca
+					rrca
+					rrca
 					and		$0F
-					ld		hl,DEBUG_AT + 1
+					call	print_char
+					pop		hl
+					inc		hl
+					pop		af
+					and		$0F
 
 					;; NB: fall through into print_char
 
@@ -757,11 +772,28 @@ print_char:			push	hl
 ; The collectables, at the moments the room changes -- see special.s for the
 ; rest of them.
 
-; Deal the collectables out, once, at the start. init_special_objects gives
+; Deal the collectables out, at the start of every game. init_special_objects gives
 ; each row a graphic by counting on from a random number, so the kinds come
 ; round in turn and every game puts them in different places; and
 ; shuffle_objects_required turns the wizard's list round four to seven places.
-special_init:		ld		a,r
+special_init:		ld		hl,special_where_start		; every collectable back where it
+					ld		de,special_where		; began, nothing carried and
+					ld		bc,SPECIAL_ROWS * 4		; nothing delivered
+					ldir
+					xor		a
+					ld		(special_count),a
+					ld		(special_busy),a
+					ld		(special_key_held),a
+					ld		h,a
+					ld		l,a
+					ld		(special_slots),hl
+					ld		hl,special_carried
+					ld		b,8
+.empty:				ld		(hl),a
+					inc		hl
+					djnz	.empty
+
+					ld		a,r
 					ld		e,a
 					ld		hl,special_gfx
 					ld		b,SPECIAL_ROWS
@@ -953,7 +985,6 @@ special_fill:		ld		(ix+OBJ.GFX),a
 					jr		nz,.buffered
 					ld		(ix+OBJ.FLAGS),OBJ_SHARED_SHIFT
 .buffered:			call	room_adjust
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					call	depth_insert
 					jp		redraw_object

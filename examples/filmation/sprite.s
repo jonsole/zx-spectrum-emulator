@@ -128,6 +128,20 @@ sprite_jump_table:
 ; bank -- and A is finished with by the time it jumps.
 sprite_blit_setup:
 					ld		c,a					; c = columns to composite
+
+					; Count it towards the turn -- see turn_pace. The rows are in
+					; the other bank, and H and L are dead here.
+					exx
+					ld		a,b
+					exx
+					add		a,TURN_PER_BLIT
+					ld		hl,turn_work
+					add		a,(hl)
+					ld		(hl),a
+					jr		nc,.counted
+					inc		hl
+					inc		(hl)
+.counted:
 					ld		a,d					; blit index back to a width
 					sprite_width_class
 					add		a,2
@@ -291,8 +305,9 @@ SPRITE_ROTATE_BASE	EQU		sprite_rotate_table - 512
 ; rows are stored, which is why nothing here has to know that sprites.py
 ; already turned Ultimate's bottom-up rows the right way round.
 ;
-; Clobbers AF, BC, DE, HL.
-sprite_flip_h:		ld		a,(hl)
+; HL comes back pointing at the record; AF, BC and DE are clobbered.
+sprite_flip_h:		push	hl
+					ld		a,(hl)
 					xor		SPRITE_FLIPPED
 					ld		(hl),a		; the header now says which way round it is
 					sprite_width_class
@@ -364,6 +379,7 @@ sprite_flip_h:		ld		a,(hl)
 					dec		a
 					ld		(.rows),a
 					jr		nz,.next_row
+					pop		hl
 					ret
 
 .columns:			DB		0

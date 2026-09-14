@@ -6,7 +6,7 @@
 ; dropped into his pot, one at a time and in an order of his choosing. Graphics
 ; 96 to 102 are the seven kinds he asks for; 103 is the eighth kind in the
 ; table, which is not wanted and is not picked up but taken the moment the
-; knight touches it.
+; knight touches it, and gives him a life.
 ;
 ; The table is the castle's memory of them. A room does not hold its
 ; collectables in its own data: when a room is built the table is searched for
@@ -80,8 +80,8 @@ special_colours:	DB		$42, $43, $44, $45, $46, $47, $42, $47
 ; 96 to 102 lie where they are put and can be carried about by anything they
 ; stand on or shoved by anything that walks into them: upd_96_to_102 is
 ; upd_84's move-and-let-go with a different nudge. 103 goes the moment the
-; knight is next to it (upd_103, which also gives him a life -- there are no
-; lives yet). And one with SPECIAL_FLIGHT added is on its way into the pot.
+; knight is next to it and gives him a life (upd_103). And one with
+; SPECIAL_FLIGHT added is on its way into the pot.
 ;   IX -> the record
 mover_special:		ld		a,(ix+OBJ.GFX)
 					cp		SPECIAL_LIFE
@@ -91,6 +91,8 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 					ld		de,$0001		; next to him, reaching no further down
 					call	special_near
 					jp		nc,mover_pushed
+					ld		hl,player_lives		; and a life with it
+					inc		(hl)
 					call	special_row_gone
 					jp		special_hide
 

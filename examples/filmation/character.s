@@ -42,8 +42,11 @@ CHARACTER_TICKS		EQU		1		; turns each frame of the cycle is held
 					; twelve Knight Lore uses -- see walking_character. They
 					; meet because the game nudges the two by different amounts
 					; as well: sprite_adj has -6 for the legs and -8 for the
-					; body and calc_screen_xy subtracts that, so the body lands
+					; body and object_place subtracts that, so the body lands
 					; two pixels lower than its Z alone would put it.
+CHARACTER_LARGEST	EQU		sprite_048		; 3x25: the biggest frame either half shows
+CHARACTER_TALLEST	EQU		sprite_092		; 3x30: the werewolf's body, which only a
+					; walking character's top half ever wears
 CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; the same twelve Knight Lore gives the
 					; knight. Z is what the depth sort reads, so
@@ -153,7 +156,7 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 				; top half. Their body sits at the legs' own Z and is lifted
 				; by its pixel nudge instead of by Z, which is why it rides
 				; nothing: the game gives graphic 30 a nudge of +3 against the
-				; legs' -6, and calc_screen_xy subtracts both.
+				; legs' -6, and object_place subtracts both.
 				MACRO	standing_character legs_base, body_base, facing
 					character_record legs_base, body_base, 1, $00, -CHARACTER_BODY_UP, facing
 				ENDM
@@ -228,13 +231,26 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
 					; Bit 0 of the facing is the mirror, in both halves.
-					bit		0,(ix+CHARACTER_FACING)
-					jr		nz,.mirrored
-					res		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
-					res		OBJ_FLIP_BIT,(ix+CHARACTER_BODY+OBJ.FLAGS)
-					ret
-.mirrored:			set		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
-					set		OBJ_FLIP_BIT,(ix+CHARACTER_BODY+OBJ.FLAGS)
+					ld		a,(ix+CHARACTER_FACING)
+					rrca			; carry: mirrored, and fall into...
+
+
+; Turn a pair of records -- IX and the one ROOM_STRIDE above it -- to face
+; the way the carry says: set for mirrored, clear for not. Every other flag
+; bit is kept: RRA parks the carry in bit 7 and RLCA brings it round into bit
+; 0, which is where the flip bit lives, and leaves it in the carry again for
+; the second record. mover_guard_face jumps in here too.
+;   IX -> the first record, carry = the flip wanted
+; Corrupts AF.
+					ASSERT	OBJ_FLIP_BIT == 0 && CHARACTER_BODY == ROOM_STRIDE
+obj_pair_flip:		ld		a,(ix+OBJ.FLAGS)
+					rra
+					rlca
+					ld		(ix+OBJ.FLAGS),a
+					ld		a,(ix+ROOM_STRIDE+OBJ.FLAGS)
+					rra
+					rlca
+					ld		(ix+ROOM_STRIDE+OBJ.FLAGS),a
 					ret
 
 
@@ -260,10 +276,15 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 					ld		(ix+CHARACTER_BODY+OBJ.FLAGS),OBJ_MOVABLE
 					call	character_frame		; which puts the mirror bit back
 
+					ld		hl,CHARACTER_LARGEST
 					call	.half
+					ld		a,(ix+CHARACTER_BLOCK_A)		; still the legs' record
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
-					call	.half
+					cp		CHARACTER_BLOCK		; a body that walks: the knight,
+					jr		nz,.body		; who may be a wolf by the time
+					ld		hl,CHARACTER_TALLEST		; this buffer is wanted
+.body:				call	.half
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 
@@ -283,11 +304,22 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 					add		ix,bc
 					jp		redraw_view
 
+					; Each half's rotation buffer, sized for the largest thing it will
+					; ever show rather than whatever it shows first. The legs walk in
+					; 3x16 frames but die and come back as sparkles of up to 3x24, and
+					; the body is 3x24 facing away and 3x25 facing us -- a buffer
+					; sized on the way in would be overrun by the other. If the arena
+					; cannot spare one, rotate at draw time instead of risking it.
+					;   HL -> the sprite record to size it for
 .half:				ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
-					call	room_adjust
+					call	shift_alloc
+					ld		a,(ix+OBJ.BUF_H)
+					or		a
+					jr		nz,.buffered
+					set		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT
+.buffered:			call	room_adjust
 					call	character_lift
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					jp		depth_insert
 
@@ -341,8 +373,7 @@ character_walk_on:	call	character_settle
 ; engine does -- but a turn with no knight to draw is a turn that costs next
 ; to nothing, so the game ran at one speed walking and at a sprint standing
 ; still, and everything else in the room with it.
-character_stand:	ld		d,0
-					ld		e,0
+character_stand:	ld		de,0
 					call	character_settle
 					jp		character_move
 
@@ -400,25 +431,26 @@ character_move_go:	call	region_reset
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 
-					; The lower half is re-sorted against the whole run. The upper
-					; one starts from wherever the lower ended up, which Head Over
-					; Heels does too, in EnlistAux, and for the same reason: the two
-					; share U and V and the upper is the nearer, so it can never
-					; belong in front of the lower. Everything the scan would compare
-					; on its way down to the lower half it answers the same way for
-					; the upper -- so this is not a shortcut past the walk, it is the
-					; rest of it.
+					; Both halves take the same step. It is already everything it is
+					; allowed to be -- the room's walls and everything standing in it
+					; were taken out of it by character_collide -- and it is D and E,
+					; not the records' DU and DV, which character_settle has spent.
+					; The body shares the legs' DZ: character_move copies it across.
+					;
+					; The legs are re-sorted against the whole run, and the body after
+					; them, which depth_step_upper explains.
 					push	de
-					ld		hl,0
-					ld		(relink_from),hl
-					call	character_half
+					ld		a,(ix+OBJ.DZ)
+					call	depth_step
+					call	character_place
 					push	ix
-					pop		hl		; the lower half is its own NEXT field
-					ld		(relink_from),hl
+					pop		hl		; the legs
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
 					pop		de
-					call	character_half
+					ld		a,(ix+OBJ.DZ)
+					call	depth_step_upper
+					call	character_place
 
 					call	region_add		; and where he is now
 					ld		bc,-CHARACTER_BODY
@@ -784,33 +816,16 @@ object_collide_free:
 					ret
 
 
-; One half: step it, work out where that puts it on the screen, and re-thread
-; it in the sorted list. The caller repaints.
+; One half, moved: work out where it now lands on the screen. The caller
+; repaints.
+;
+; The graphic changed with the phase, so the nudge that lines its artwork up may
+; have changed with it -- and it certainly has if the character has just turned
+; round.
 ;   IX -> the record
-;   D  - the step in U, E the step in V
-character_half:		push	de
-					call	extent_save
-					pop		de
-		; The step is already everything it is allowed to be -- the room's
-		; walls and everything standing in it were taken out of it by
-		; character_collide, before either half was touched.
-					ld		a,(ix+OBJ.U)
-					add		a,d
-					ld		(ix+OBJ.U),a
-					ld		a,(ix+OBJ.V)
-					add		a,e
-					ld		(ix+OBJ.V),a
-					ld		a,(ix+OBJ.DZ)
-					add		a,(ix+OBJ.Z)
-					ld		(ix+OBJ.Z),a
-		; The graphic changed with the phase, so the nudge that lines its
-		; artwork up may have changed with it -- and it certainly has if the
-		; character has just turned round.
-					call	room_adjust
+character_place:	call	room_adjust
 					call	character_lift
-					ld		a,(ix+OBJ.GFX)
-					call	object_place
-					jp		depth_relink
+					jp		object_place
 
 
 ; Take the height back out of the nudge, for a body whose graphic was drawn

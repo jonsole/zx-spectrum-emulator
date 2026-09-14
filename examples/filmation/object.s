@@ -1,112 +1,4 @@
-; Head of the depth-sorted list. Empty until start: inserts everything --
-; draw order is derived from U/V/Z, never authored. See depth_cmp below.
-object_list			DW		0
-
-; Where the SORTED part of the list begins. Everything before it is
-; background scenery: drawn first, so always behind, and never compared
-; or moved. Like PREV, this is not a pointer to an object -- it is the
-; address of the NEXT field that names the first sorted object, which is
-; the last background object itself, or object_list when there is no
-; background at all.
-;
-; objects_draw_all does not know about any of this: it walks the one
-; chain from object_list and the background simply comes out first.
-; Head Over Heels does the same thing with a separate "far" list that
-; DrawCore blits before the sorted one.
-sort_head			DW		object_list
-
-
-					STRUCT 	OBJ
-NEXT:				DS		2
-MIN_Y:				DS		1	; byte position
-MAX_Y:				DS		1	; byte position
-MIN_X:				DS		1
-MAX_X:				DS		1
-FLAGS:				DS		1	; bit 7 - object is movable
-BLIT_IDX:			DS		1	; blit_index
-SPRITE_L:			DS		1	; sprite data address: the sprite's own bitmap for an unshifted
-							; object, or this object's BUF_L/BUF_H when it was shifted
-SPRITE_H:			DS		1
-
-BUF_L:				DS		1	; shift buffer, for a MOVABLE object only -- see
-BUF_H:				DS		1	; the object_record macro below
-
-U:					DS		1
-V:					DS		1
-Z:					DS		1
-
-; PREV does NOT point at the previous object. It points at the NEXT
-; FIELD that points at us -- which is that object's own address, since
-; NEXT is at offset 0, or object_list itself when we are the head. That
-; is what lets depth_unlink and depth_insert skip the "am I the head?"
-; branch. Never dereference it as a record.
-PREV:				DS		2
-
-; The solid box, half-open: [U, U+SIZE_U) and so on. This is the world
-; footprint, not the sprite box -- a sprite w bytes wide sits on a base
-; diamond SIZE_U + SIZE_V pixels across and half that in rows.
-SIZE_U:				DS		1
-SIZE_V:				DS		1
-SIZE_Z:				DS		1
-
-; Knight Lore's per-sprite nudges, straight out of its own object table.
-; Its set_pixel_adj ($C72B) gives every sprite a small signed offset that
-; lines the artwork up with the logical point, and without them a room
-; reproduced from its data sits up to 20 pixels out.
-;
-; ADJ_X is added to the screen x; ADJ_Y is SUBTRACTED from the base row,
-; because their pixel Y counts up from the bottom and ours counts down.
-ADJ_X:				DS		1
-ADJ_Y:				DS		1
-
-; The Knight Lore graphic number this object is drawn from. object_update
-; takes it in A and does not keep it, but room building needs it after the
-; fact to look the pixel adjustments up, and animation will need it to step
-; from one frame to the next.
-GFX:				DS		1
-
-; --- and these belong to a character, and to nothing else ------------------
-;
-; A character is two records that move as one -- legs on the floor, body a
-; dozen units above -- and the state that steers them lives in the tail of the
-; legs record. A record is OBJ bytes inside a ROOM_STRIDE slot, so this space
-; is already there: the room's own objects simply never look at it.
-; What Knight Lore calls dX, dY and dZ, at +$09, +$0A and +$0B of its own
-; records: what this object would like to do this turn, before anything has
-; been allowed to stop it. object_collide cuts them down and whoever asked
-; for them applies what is left.
-;
-; Every object carries them, as in the game, and the room's pool can afford
-; it because the seven fields that used to sit here were only ever a
-; character's -- facing, walk phase and the graphic bases -- and no piece of
-; scenery has a walk cycle. They live past the character's two slots now.
-DU:				DS		1		; signed, along U
-DV:				DS		1
-DZ:				DS		1
-
-ADJ_LIFT:			DS		1
-
-; Pixels of sub-byte X, for an object that rotates at DRAW time rather than at
-; placement -- see OBJ_SHARED_SHIFT. Zero for everything else, which is what
-; objects_draw_all tests. This is the last byte of a ROOM_STRIDE slot.
-SHIFT:				DS		1
-					
-; Which mover routine drives this object, or MOVE_NONE. Knight Lore asks the
-; graphic instead -- jump_to_upd_object at $B25C indexes a 256-entry table of
-; addresses with byte 0 of the record -- but our rooms are built from templates
-; and the template is what says whether a thing moves.
-BEHAVIOUR:			DS		1
-
-; Whatever that routine needs to remember between turns. Knight Lore keeps the
-; same thing in byte $0D of its records, and numbers the bits by axis: bit 0 for
-; U and bit 1 for V, which is also how collide_hit numbers them, so one mask
-; serves both the direction a thing is going and the test for whether it just
-; ran into something.
-MOVE_STATE:		DS		1
-
-; How many rows of this sprite are above the top of the screen.
-CLIP_TOP:			DS		1
-					ENDS
+					INCLUDE	"object_struct.s"
 
 
 ; An object is drawn at a sub-byte X offset by rotating its sprite into a
@@ -234,34 +126,10 @@ SCREEN_ROWS			EQU		192		; the last row an object may be drawn on
 ; The two origins are Knight Lore's $80 and $68 in spirit: they say
 ; where the world's origin lands on screen, and are ours to choose.
 ; These put a floor (Z = 0) across the lower half with U, V in 0..120.
+; object_place is where the projection is done.
 WORLD_X_ORIGIN		EQU		128
 WORLD_Y_ORIGIN		EQU		40		; 296 mod 256 -- the origin Knight Lore itself uses
 
-; Screen position of an object, from the U, V and Z in its record.
-;   IX -> the object
-; Returns C = screen x (pixels), B = screen y of the sprite's base.
-; Corrupts A and the flags; everything else is left alone.
-calc_screen_xy:		ld		a,(ix+OBJ.U)
-					add		a,(ix+OBJ.V)
-					sub		WORLD_X_ORIGIN
-					add		a,(ix+OBJ.ADJ_X)
-					ld		c,a		; screen x
-
-					ld		a,(ix+OBJ.V)
-					sub		(ix+OBJ.U)
-					add		a,128		; bias, so the SRL below is safe
-					srl		a		; (V - U) / 2 + 64
-					add		a,(ix+OBJ.Z)
-					neg				; up on screen is -Y, so negate...
-					add		a,WORLD_Y_ORIGIN		; ...and hang it off the origin
-					sub		(ix+OBJ.ADJ_Y)		; their pixel Y is bottom-up, ours is not
-					ld		b,a		; screen y of the base
-					ret		
-
-
-; Place an object from its world coordinates and update it.
-;   IX -> the object, with U, V and Z set
-;   A  = sprite index
 ; ---------------------------------------------------------------------------
 ; Collision.
 ;
@@ -558,7 +426,7 @@ object_clamp:		ld		a,(hl)
 					call	object_carry
 					jr		.contact
 .shove:			call	object_shove
-.contact:
+.contact:			call	object_touched
 
 
 					; In the way. Give a unit back and look again -- at the
@@ -597,7 +465,9 @@ object_clamp:		ld		a,(hl)
 ; The one thing that can grow a step is a ride -- see CARRY_REACH.
 ;   IX -> the record, DU/DV/DZ its step
 ; Corrupts AF, BC, DE, HL, IY.
-collide_gather:		ld		e,0
+collide_gather:		ld		a,TURN_PER_GATHER
+					call	turn_add
+					ld		e,0
 					ld		a,(ix+OBJ.DZ)
 					or		a
 					jr		z,.no_ride		; only the Z pass can hand over a ride
@@ -758,6 +628,28 @@ object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 					ret		
 
 
+; We are touching IY, on whichever axis. If one of us is the knight and the
+; other kills, he is dead. Knight Lore spreads the same thing through the same
+; place: every contact in all three passes of its clamp -- $CBAF, $CBFE and
+; $CC4D -- copies each side's deadly bit into the other's "touched" bit, so it
+; does not matter whether he walks into a spike or a guard walks into him.
+;   IX -> us, IY -> what we touched
+; Corrupts AF.
+object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
+					jr		nz,.he_is_us
+					bit		7,(iy+OBJ.FLAGS)
+					ret		z		; neither of us is
+					ld		a,(ix+OBJ.BEHAVIOUR)
+					jr		.deadly
+.he_is_us:			ld		a,(iy+OBJ.BEHAVIOUR)
+.deadly:			sub		MOVE_STILL
+					cp		MOVE_HARMLESS - MOVE_STILL
+					ret		nc
+					ld		a,1
+					ld		(player_touched),a
+					ret
+
+
 ; We have just come down on IY. A block that gives way under a weight wants to
 ; know: the game marks everything landed on, SET 3,(IY+$0D) at $CC6C, and the
 ; dropping and collapsing blocks look for the mark on their next turn. Ours goes
@@ -850,10 +742,28 @@ object_collide:		xor		a
 					ret
 
 
-object_place:		push	af
-					call	calc_screen_xy
-					pop		af
-					jr		object_update
+; Place an object from its world coordinates, and update it: the screen position
+; from U, V and Z, projected as WORLD_X_ORIGIN's comment describes, then
+; object_update with it. The only place the projection is done, so it is here
+; rather than in a routine of its own.
+;   IX -> the object, with U, V, Z and GFX set
+object_place:		ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.V)
+					sub		WORLD_X_ORIGIN
+					add		a,(ix+OBJ.ADJ_X)
+					ld		c,a		; screen x
+
+					ld		a,(ix+OBJ.V)
+					sub		(ix+OBJ.U)
+					add		a,128		; bias, so the SRL below is safe
+					srl		a		; (V - U) / 2 + 64
+					add		a,(ix+OBJ.Z)
+					neg				; up on screen is -Y, so negate...
+					add		a,WORLD_Y_ORIGIN		; ...and hang it off the origin
+					sub		(ix+OBJ.ADJ_Y)		; their pixel Y is bottom-up, ours is not
+					ld		b,a		; screen y of the base
+					ld		a,(ix+OBJ.GFX)		; and the graphic to draw it with
+					; NB: fall through
 
 
 object_update:
@@ -883,14 +793,13 @@ object_update:
 					;
 					; BC is the screen position and is wanted below; DE is not live
 					; yet, so sprite_flip_h is free to use it.
+					ASSERT	SPRITE_FLIPPED == 1
 					ld		a,(hl)
 					xor		(ix+OBJ.FLAGS)
-					and		SPRITE_FLIPPED
-					jr		z,.oriented
+					rrca			; the two flip bits differ: carry
+					jr		nc,.oriented
 					push	bc
-					push	hl
-					call	sprite_flip_h
-					pop		hl
+					call	sprite_flip_h		; which keeps HL
 					pop		bc
 .oriented:
 
@@ -1188,6 +1097,14 @@ object_update:
 
                     ex      af,af'      ; stash shift amount before it's overwritten below
                     ld      a,(hl)      ; get height
+					push	af		; and count it towards the turn: three
+					push	hl		; units a row
+					ld		h,a
+					add		a,a
+					add		a,h
+					call	turn_add
+					pop		hl
+					pop		af
                     exx
                     ld      b,a         ; B - height
                     ld 		(.restore_sp+1),sp	; save the real SP, before it gets repurposed below
@@ -1373,8 +1290,8 @@ sprite_orient:		push	af
 					ld		a,e
 					exx
 					xor		(hl)
-					and		SPRITE_FLIPPED
-					call	nz,sprite_flip_h	; HL -> the record, which is what it wants
+					rrca						; the two flip bits differ: carry
+					call	c,sprite_flip_h		; HL -> the record, which is what it wants
 .done:				pop		hl
 					pop		de
 					pop		bc
@@ -1569,400 +1486,3 @@ objects_draw_all:
 					jp		nz,.filter_loop		; loop back if not
 .set_stack			ld		sp,000				; restore stack pointer
 					ret
-
-
-
-
-
-; --- depth sorting --------------------------------------------------
-;
-; Draw order is a property of U, V and Z, held as a permanent invariant
-; of the list. Nothing ever sorts: when an object moves it is unlinked
-; and re-inserted in one pass, and an object that has not moved costs
-; nothing at all. That is Head Over Heels' design. Knight Lore instead
-; re-derives the whole order every frame by repeatedly scanning for an
-; object nothing occludes and restarting -- O(n^2) at best.
-
-
-; Take an object out of the list.
-;   IX -> the object
-; Corrupts A, BC, DE, HL.
-depth_unlink:		ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)		; hl -> the NEXT field aimed at us
-					ld		c,(ix+OBJ.NEXT)
-					ld		b,(ix+OBJ.NEXT+1)		; bc = whoever follows us
-					ld		(hl),c
-					inc		hl
-					ld		(hl),b		; *prev = next
-					dec		hl
-					ld		a,b
-					and		a
-					ret		z		; we were last: nothing behind to fix
-					ex		de,hl		; de -> the field we just wrote
-					ld		hl,OBJ.PREV
-					add		hl,bc
-					ld		(hl),e
-					inc		hl
-					ld		(hl),d		; next->PREV = that field
-					ret		
-
-
-; Compare the object being placed -- whose bounds depth_cmp_setup has
-; hoisted into the immediates below -- against the candidate in IY.
-;
-; On any axis where the two boxes do NOT overlap, that axis's coordinate
-; is part of the key; where they DO overlap the axis says nothing and
-; contributes nothing. Summed, that is exactly Head Over Heels' seven-
-; case dispatch table -- their key is always the sum over the non-
-; overlapping axes -- with no dispatch at all. Three axes overlapping is
-; interpenetration and gives the empty sum, which is the right
-; degenerate answer for free.
-;
-; The SIGNS are ours, not theirs. calc_screen_xy sends +U down the screen
-; and +V up it, so the projection's null direction -- which for an
-; orthographic projection IS the depth axis -- is (1,-1,1), and depth is
-; U - V + Z. Head Over Heels' U + V + Z comes from a projection where
-; both floor axes descend. Change calc_screen_xy and this must follow.
-;
-; Out: cf = 1  the placed object is FURTHER than the candidate
-;      a  = 0  every axis that separates them agrees, so that is certain;
-;              any other value and the ordering is only a guess
-; Corrupts A, BC, DE, HL. IX, IY and the shadow set are untouched.
-depth_cmp:			ld		hl,0		; running difference, signed
-					ld		b,l		; which of us the separating axes name
-
-					; U -- nearer as U grows
-					ld		c,(iy+OBJ.U)		; c = their centre
-					ld		a,c
-					add		a,(iy+OBJ.SIZE_U)		; a = their max
-.u_min:				cp		0		; imm = our min + 1
-					jr		c,.u_near		; their max <= our min: we are nearer
-					ld		a,c
-					sub		(iy+OBJ.SIZE_U)		; a = their min
-.u_max:				cp		0		; imm = our max
-					jr		c,.u_over		; their min < our max: they overlap
-					set		1,b		; their min >= our max: they are nearer
-					jr		.u_sep
-.u_near:			set		0,b
-.u_sep:
-.u_ours:			ld		a,0		; imm = our U
-					sub		c
-					ld		e,a
-					sbc		a,a		; sign-extend the borrow
-					ld		d,a
-					add		hl,de
-.u_over:			
-
-					; V -- FURTHER as V grows, so the operands swap, the term
-					; negates, and so does which of us a separation names
-					ld		c,(iy+OBJ.V)
-					ld		a,c
-					add		a,(iy+OBJ.SIZE_V)
-.v_min:				cp		0
-					jr		c,.v_far		; their V is the lower: they are nearer
-					ld		a,c
-					sub		(iy+OBJ.SIZE_V)
-.v_max:				cp		0
-					jr		c,.v_over
-					set		0,b
-					jr		.v_sep
-.v_far:				set		1,b
-.v_sep:				ld		a,c		; a = their V
-.v_ours:			sub		0		; imm = our V, so theirV - ourV
-					ld		e,a
-					sbc		a,a
-					ld		d,a
-					add		hl,de
-.v_over:			
-
-					; Z -- nearer as Z grows, the same shape as U
-					ld		a,(iy+OBJ.Z)
-					ld		c,a
-					add		a,(iy+OBJ.SIZE_Z)
-.z_min:				cp		0
-					jr		c,.z_near
-					ld		a,c
-.z_max:				cp		0
-					jr		c,.z_over
-					set		1,b
-					jr		.z_sep
-.z_near:			set		0,b
-.z_sep:
-.z_ours:			ld		a,0
-					sub		c
-					ld		e,a
-					sbc		a,a
-					ld		d,a
-					add		hl,de
-.z_over:			
-
-					; What decides it is not how MANY axes separate the two but
-					; whether they agree. Two axes that both say the same object
-					; is in front are more certain than one, not less -- this
-					; used to count them and call anything but a single axis a
-					; guess, and a guess does not stop the scan, so a guard with
-					; a spike to its east and below it walked straight past the
-					; spike in the list and drew in front of it.
-					;
-					; Only b = 3 is genuinely ambiguous: one axis saying we are
-					; in front while another says they are, which is the
-					; non-transitive case the lagging insertion point exists for.
-					; b = 0 is interpenetration, and just as unanswerable.
-					;
-					; The direction comes from b and not from the sum, because a
-					; separating axis can still give a zero term: a box of no
-					; height sits at the same Z as the one standing on it, and
-					; the two are disjoint all the same.
-					ld		a,b
-					cp		1
-					jr		z,.we_are_nearer
-					cp		2
-					jr		z,.they_are_nearer
-					sla		h		; cf = sign of the difference, which is
-					ld		a,1		; the best guess there is
-					ret		
-.we_are_nearer:		xor		a		; certain, and cf clear says nearer
-					ret		
-.they_are_nearer:	xor		a
-					scf				; certain, and further
-					ret		
-
-
-; Hoist the placed object's bounds into depth_cmp's immediates. Nine
-; stores once per insert, against six (ix+d) reads per candidate if they
-; stayed in the record -- it pays for itself after about three of them.
-;   IX -> the object
-depth_cmp_setup:	ld		a,(ix+OBJ.U)
-					ld		(depth_cmp.u_ours+1),a
-					sub		(ix+OBJ.SIZE_U)
-					inc		a
-					ld		(depth_cmp.u_min+1),a
-					ld		a,(ix+OBJ.U)
-					add		a,(ix+OBJ.SIZE_U)
-					ld		(depth_cmp.u_max+1),a
-
-					ld		a,(ix+OBJ.V)
-					ld		(depth_cmp.v_ours+1),a
-					sub		(ix+OBJ.SIZE_V)
-					inc		a
-					ld		(depth_cmp.v_min+1),a
-					ld		a,(ix+OBJ.V)
-					add		a,(ix+OBJ.SIZE_V)
-					ld		(depth_cmp.v_max+1),a
-
-					ld		a,(ix+OBJ.Z)
-					ld		(depth_cmp.z_ours+1),a
-					inc		a
-					ld		(depth_cmp.z_min+1),a
-					ld		a,(ix+OBJ.Z)
-					add		a,(ix+OBJ.SIZE_Z)
-					ld		(depth_cmp.z_max+1),a
-					ret		
-
-
-insert_at:			DW		0		; the NEXT field we will write
-
-; Where a re-insert starts looking, or zero for the front of the sorted run.
-; Only the upper half of a two-part object sets it -- see character_move.
-relink_from:		DW		0
-
-; Put an object into the list in depth order. It must not already be in
-; the list -- NEXT and PREV are written, not read.
-;   IX -> the object
-; Corrupts A, BC, DE, HL, IY.
-;
-; The insertion point LAGS the scan cursor: an ordering we are only
-; guessing at moves the cursor on but is not trusted enough to commit to.
-; Isometric depth is genuinely non-transitive -- A in front of B in front
-; of C in front of A is constructible -- so there is no total order to
-; sort by, and this is why the scan needs the authoritative flag to know
-; when it may stop.
-depth_insert:		call	depth_cmp_setup
-					; NB: depth_insert_placed assumes depth_cmp_setup has already run for
-					; this object -- depth_relink calls it once and then uses both.
-depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
-					; NB: fall through
-
-; ...and the same, starting at the NEXT field HL names instead of at the front.
-;   IX -> the object, HL -> where to start looking
-depth_insert_from:	ld		(insert_at),hl
-					ld		a,(hl)
-					inc		hl
-					ld		h,(hl)
-					ld		l,a
-					push	hl
-					pop		iy		; the first sorted object, or none
-.scan:				ld		a,iyh
-					and		a
-					jr		z,.link		; ran off the end: commit
-					call	depth_cmp
-					jr		c,.further
-					ld		(insert_at),iy		; we are nearer: we go after this one
-.advance:			ld		e,(iy+OBJ.NEXT)
-					ld		d,(iy+OBJ.NEXT+1)
-					push	de
-					pop		iy
-					jr		.scan
-.further:			and		a
-					jr		nz,.advance		; only a guess: keep looking
-
-.link:				ld		hl,(insert_at)	; hl -> the NEXT field naming us
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					dec		hl		; de = whoever follows us
-					ld		(ix+OBJ.NEXT),e
-					ld		(ix+OBJ.NEXT+1),d
-					ld		(ix+OBJ.PREV),l
-					ld		(ix+OBJ.PREV+1),h
-					push	ix
-					pop		bc		; bc = our own address
-					ld		(hl),c
-					inc		hl
-					ld		(hl),b		; *insert_at = us
-					ld		a,d
-					and		a
-					ret		z		; nothing follows us
-					ld		hl,OBJ.PREV
-					add		hl,de
-					ld		(hl),c
-					inc		hl
-					ld		(hl),b		; follower->PREV = us
-					ret		
-
-
-; Move an object that may have changed position back into depth order.
-;   IX -> the object, with extent_save's snapshot still holding where it
-;        was
-;
-; An object that has not actually moved costs the three compares below
-; and nothing else -- which is the whole point of the design. The gate is
-; on the WORLD coordinates, not the screen extents: the null direction is
-; (1,-1,1), so U+1, V-1, Z+1 changes depth with no screen movement at all.
-; Is the object still correctly placed relative to the two objects it
-; sits between? The list is furthest-first, so it is: not further than
-; its predecessor, and not nearer than its successor.
-;   IX -> the object, still linked, with its bounds already hoisted into
-;         depth_cmp's immediates
-; Out: cf = 1  still in the right place, leave it alone
-;      cf = 0  it has crossed a neighbour and must be re-inserted
-; Corrupts A, BC, DE, HL, IY.
-depth_in_order:		ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)
-					ld		de,(sort_head)		; the front of the sorted run
-					ld		a,l
-					cp		e
-					jr		nz,.have_prev
-					ld		a,h
-					cp		d
-					jr		z,.check_next		; nothing sorted ahead of us
-.have_prev:			push	hl
-					pop		iy		; PREV is the predecessor itself here
-					call	depth_cmp
-					jr		c,.out_of_order_back	; further than it: we must move back
-
-.check_next:		ld		l,(ix+OBJ.NEXT)
-					ld		h,(ix+OBJ.NEXT+1)
-					ld		a,h
-					and		a
-					jr		z,.in_order		; we are the tail: no successor
-					push	hl
-					pop		iy
-					call	depth_cmp
-					jr		nc,.out_of_order_on	; nearer than it: we must move on
-.in_order:			scf		
-					ret		
-					; Which side failed decides where the search can start, so say so.
-					; XOR clears the carry as well, which is what says out of order.
-.out_of_order_back:	xor		a		; 0: it belongs earlier than it is
-					ret		
-.out_of_order_on:	xor		a
-					inc		a		; 1: later. INC leaves the carry alone
-					ret		
-; Put an object into the background run: drawn before everything else and
-; never sorted, so it is permanently behind. Splices in at sort_head --
-; the same splice depth_insert uses -- and then moves sort_head past us,
-; so the sorted run now starts after this object.
-;   IX -> the object, not currently in any list
-; Corrupts A, BC, DE, HL.
-background_insert:	ld		hl,(sort_head)
-					ld		(insert_at),hl
-					call	depth_insert_from.link
-					push	ix
-					pop		hl
-					ld		(sort_head),hl		; our NEXT field is the new boundary
-					ret		
-
-
-
-
-; Move an object that may have changed position back into depth order.
-;   IX -> the object, with extent_save's snapshot still holding where it
-;        was
-;
-; Two gates, because the expensive part is the scan. An object that has
-; not moved at all costs three compares. One that has moved but has not
-; crossed either of its neighbours costs two depth_cmp calls instead of a
-; scan down the whole list -- and that is the common case: an object
-; creeping a unit per frame changes its place in the order only every
-; several frames.
-;
-; The world coordinates are what the first gate tests, not the screen
-; extents: the projection's null direction is (1,-1,1), so U+1, V-1, Z+1
-; changes an object's depth with no screen movement at all.
-depth_relink:		ld		hl,prev_u
-					ld		a,(ix+OBJ.U)
-					cp		(hl)
-					jr		nz,.moved
-					inc		hl
-					ld		a,(ix+OBJ.V)
-					cp		(hl)
-					jr		nz,.moved
-					inc		hl
-					ld		a,(ix+OBJ.Z)
-					cp		(hl)
-					ret		z		; stayed put: nothing to do
-
-.moved:				call	depth_cmp_setup
-					call	depth_in_order
-					ret		c		; moved, but not past anyone
-
-					; It has to be put back, and the list is in order apart from it, so
-					; the search need not always start at the front of the run.
-					;
-					; The scan only ever advances, and where it may start depends on which
-					; way the object has gone. depth_in_order has just said: A is 1 if it
-					; belongs later than it sits, 0 if earlier.
-					;
-					; Later, and starting where it already is gives the same answer as
-					; starting from the front: everything ahead of it was not-further last
-					; time it was placed, and moving nearer cannot have changed that.
-					;
-					; Earlier is not the mirror of that, and it took a measurement to
-					; believe it. Backing up to a point and scanning forward from there
-					; loses what the scan learns on the way down -- insert_at, the last
-					; object it was NEARER than -- so it can settle in front of where a
-					; scan from the front would put it. It differed on 22 frames of 180.
-					; So that half goes the long way round, and only the cheap half is
-					; taken cheaply.
-					push	af		; depth_unlink wants A
-					ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)
-					ld		(insert_at),hl		; where it came out of
-					call	depth_unlink
-					pop		af
-
-					; The upper half of a two-part object overrides this: it starts
-					; from the lower half, which cannot be behind it.
-					ld		hl,(relink_from)
-					ld		c,a
-					ld		a,h
-					or		l
-					jr		nz,.from
-					ld		a,c
-					and		a
-					jr		z,.from_front		; belongs earlier: start over
-					ld		hl,(insert_at)		; belongs later: on from where it was
-					jr		.from
-.from_front:		ld		hl,(sort_head)
-.from:				jp		depth_insert_from		; the setup above still stands

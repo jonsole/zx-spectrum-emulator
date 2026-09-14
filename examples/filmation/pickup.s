@@ -185,7 +185,6 @@ special_pickup:		xor		a		; and a room's spiked balls may drop now,
 					call	region_reset
 					call	region_add
 					call	room_adjust
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
 					call	region_add
 					call	redraw_view
@@ -214,8 +213,7 @@ special_shift:		ld		hl,special_carried + 5
 ; Straight to the screen, as the room number is. A region reaching the corner
 ; wipes them, so redraw_view calls back in here when one does.
 special_show:		ld		hl,special_carried + 2
-					ld		c,2		; the character column
-					ld		b,3
+					ld		bc,3 << 8 | 2	; three slots, and the character column
 .slot:				push	bc
 					push	hl
 					ld		a,(hl)
@@ -293,9 +291,7 @@ special_show_one:	push	af
 					ld		l,a
 					bit		0,(hl)		; SPRITE_FLIPPED
 					jr		z,.oriented
-					push	hl
-					call	sprite_flip_h
-					pop		hl
+					call	sprite_flip_h		; which keeps HL
 .oriented:			pop		bc
 					ld		a,(hl)
 					sprite_width_class

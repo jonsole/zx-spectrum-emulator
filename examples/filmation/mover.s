@@ -15,15 +15,33 @@
 ; ---------------------------------------------------------------------------
 
 MOVE_NONE			EQU		0
-MOVE_SLIDE_U		EQU		1
-MOVE_SLIDE_V		EQU		2
-MOVE_BALL			EQU		3
-MOVE_FIRE_U		EQU		4
-MOVE_FIRE_V		EQU		5
-MOVE_GUARD_U		EQU		6
-MOVE_GUARD_SQ	EQU		7
-MOVE_GATE			EQU		8
-MOVE_GHOST		EQU		9
+
+; The ones that kill, first, so that one compare says whether a thing is
+; deadly -- see object_touched. Knight Lore marks them with a flag it sets from
+; each object's own update routine, set_both_deadly_flags at $B85C: gargoyles,
+; spikes, spiked balls, bouncing balls of both kinds, fires, guards, the wizard
+; and the ghost. Not the repel spell, the gates or the cauldron's bubbles.
+;
+; MOVE_STILL is deadly and does nothing else. Spikes and gargoyles have no
+; update of their own beyond the flag, and movers_step steps straight over it.
+MOVE_STILL		EQU		1
+MOVE_BALL			EQU		2		; the first that has a turn -- movers_step
+MOVE_FIRE_U		EQU		3
+MOVE_FIRE_V		EQU		4
+MOVE_GUARD_U		EQU		5
+MOVE_GUARD_SQ	EQU		6
+MOVE_GHOST		EQU		7
+MOVE_BOUNCE		EQU		8
+MOVE_SPIKE_BALL	EQU		9
+
+MOVE_HARMLESS	EQU		10		; and from here on, nothing kills
+MOVE_SLIDE_U		EQU		10
+MOVE_SLIDE_V		EQU		11
+MOVE_GATE			EQU		12
+MOVE_SPELL		EQU		13
+MOVE_CAULDRON	EQU		14		; what rises out of the pot -- see special.s
+MOVE_DROPPING	EQU		15		; these two give way under a weight: see
+MOVE_COLLAPSING	EQU		16		; object_landed_on, which relies on the order
 
 ; Everything from here up is loose: it can be carried by whatever it is
 ; standing on and shoved by whatever runs into it. The game says the same
@@ -36,23 +54,17 @@ MOVE_GHOST		EQU		9
 ;   MOVE_PUSHED    clears it after, so a shove moves it once -- upd_84
 ;   MOVE_SLIDING   never clears it, so a shove sends it on until
 ;                  something stops it -- upd_85
-MOVE_BOUNCE		EQU		10
-MOVE_SPELL		EQU		11
-MOVE_CAULDRON	EQU		12		; what rises out of the pot -- see special.s
-MOVE_SPIKE_BALL	EQU		13
-MOVE_DROPPING	EQU		14		; these two give way under a weight: see
-MOVE_COLLAPSING	EQU		15		; object_landed_on, which relies on the order
-
+;
 ; MOVE_LOOSE has to stay the LAST of these and everything loose above it,
 ; because that is the whole test -- object_carry and object_shove both ask
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		16
-MOVE_CARRIED		EQU		16
-MOVE_PUSHED		EQU		17
-MOVE_SLIDING		EQU		18
-MOVE_SPECIAL		EQU		19		; a collectable -- see special.s
+MOVE_LOOSE		EQU		17
+MOVE_CARRIED		EQU		17
+MOVE_PUSHED		EQU		18
+MOVE_SLIDING		EQU		19
+MOVE_SPECIAL		EQU		20		; a collectable -- see special.s
 
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
@@ -95,27 +107,31 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_SPIKE_BALL_FALLING, MOVE_SPIKE_BALL
 					DB		FG_DROPPING_BLOCK, MOVE_DROPPING
 					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
+					DB		FG_GARGOYLE, MOVE_STILL
+					DB		FG_SPIKE, MOVE_STILL
+					DB		FG_SPIKE_HIGH, MOVE_STILL
 					DB		$FF
 
-mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
-					DW		mover_slide_v		; MOVE_SLIDE_V
-					DW		mover_ball			; MOVE_BALL
+mover_tbl:			DW		mover_ball			; MOVE_BALL
 					DW		mover_fire_u		; MOVE_FIRE_U
 					DW		mover_fire_v		; MOVE_FIRE_V
 					DW		mover_guard_u		; MOVE_GUARD_U
 					DW		mover_guard_sq	; MOVE_GUARD_SQ
-					DW		mover_gate			; MOVE_GATE
 					DW		mover_ghost		; MOVE_GHOST
 					DW		mover_bounce		; MOVE_BOUNCE
+					DW		mover_spike_ball	; MOVE_SPIKE_BALL
+					DW		mover_slide_u		; MOVE_SLIDE_U
+					DW		mover_slide_v		; MOVE_SLIDE_V
+					DW		mover_gate			; MOVE_GATE
 					DW		mover_spell		; MOVE_SPELL
 					DW		mover_cauldron	; MOVE_CAULDRON
-					DW		mover_spike_ball	; MOVE_SPIKE_BALL
 					DW		mover_dropping	; MOVE_DROPPING
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_carried		; MOVE_CARRIED
 					DW		mover_pushed		; MOVE_PUSHED
 					DW		mover_sliding	; MOVE_SLIDING
 					DW		mover_special	; MOVE_SPECIAL
+					ASSERT	($ - mover_tbl) / 2 == MOVE_SPECIAL - MOVE_BALL + 1
 
 
 ; How many turns have gone by. Every mover in the castle is driven from this
@@ -179,12 +195,11 @@ movers_step:		ld		hl,move_tick
 					ld		ix,room_objects
 
 .next:				ld		a,(ix+OBJ.BEHAVIOUR)
-					or		a
-					jr		z,.still
+					sub		MOVE_BALL		; MOVE_NONE and MOVE_STILL have no turn,
+					jr		c,.still		; and are not in the table
 
 					push	bc
 					ld		(mover_ix),ix
-					dec		a		; MOVE_NONE is not in the table
 					add		a,a
 					ld		l,a
 					ld		h,0
@@ -325,24 +340,13 @@ mover_move_always:	call	mover_clamp
 
 mover_paint:		call	region_reset
 					call	region_add		; where it was
-					call	extent_save
 
-					ld		a,(ix+OBJ.U)
-					add		a,(ix+OBJ.DU)
-					ld		(ix+OBJ.U),a
-					ld		a,(ix+OBJ.V)
-					add		a,(ix+OBJ.DV)
-					ld		(ix+OBJ.V),a
-					ld		a,(ix+OBJ.Z)
-					add		a,(ix+OBJ.DZ)
-					ld		(ix+OBJ.Z),a
-
-					ld		hl,0		; re-sorted against the whole run
-					ld		(relink_from),hl
+					ld		d,(ix+OBJ.DU)
+					ld		e,(ix+OBJ.DV)
+					ld		a,(ix+OBJ.DZ)
+					call	depth_step
 					call	room_adjust
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
-					call	depth_relink
 
 					ld		ix,(mover_ix)
 					call	region_add		; and where it is now
@@ -549,13 +553,9 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 					or		d
 					ld		(ix+GUARD_LEGS+OBJ.GFX),a
 
-					res		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
-					res		OBJ_FLIP_BIT,(ix+GUARD_LEGS+OBJ.FLAGS)
-					bit		0,c
-					ret		z
-					set		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
-					set		OBJ_FLIP_BIT,(ix+GUARD_LEGS+OBJ.FLAGS)
-					ret		
+					ASSERT	GUARD_LEGS == ROOM_STRIDE
+					rrc		c		; carry: mirrored
+					jp		obj_pair_flip	; and turn both records that way
 
 
 ; ---------------------------------------------------------------------------
@@ -597,38 +597,31 @@ mover_move_pair:	call	mover_clamp
 					ld		bc,GUARD_LEGS
 					add		ix,bc
 					pop		bc
-					call	extent_save
-					ld		(ix+OBJ.U),c
-					ld		(ix+OBJ.V),b
-					ld		hl,0		; against the whole run
-					ld		(relink_from),hl
-					call	room_adjust
-					ld		a,(ix+OBJ.GFX)
-					call	object_place
-					call	depth_relink
-
-					ld		ix,(mover_ix)
-					ld		bc,GUARD_LEGS
-					add		ix,bc
-					push	ix
-					pop		hl		; the legs are their own NEXT field
-					ld		(relink_from),hl
-					ld		ix,(mover_ix)
-
-					call	extent_save
+					; The legs have no step of their own to hand depth_step, and
+					; are not always where the torso is -- the wizard's two
+					; pieces start eight apart -- so whether they moved is where
+					; they go against where they are.
 					ld		a,(ix+OBJ.U)
-					add		a,(ix+OBJ.DU)
-					ld		(ix+OBJ.U),a
+					cp		c
+					jr		nz,.legs_moved
 					ld		a,(ix+OBJ.V)
-					add		a,(ix+OBJ.DV)
-					ld		(ix+OBJ.V),a
-					ld		a,(ix+OBJ.Z)
-					add		a,(ix+OBJ.DZ)
-					ld		(ix+OBJ.Z),a
+					cp		b
+.legs_moved:		ld		(ix+OBJ.U),c		; nothing from here to the call
+					ld		(ix+OBJ.V),b		; touches the flags
+					call	nz,depth_relink		; against the whole run
 					call	room_adjust
-					ld		a,(ix+OBJ.GFX)
 					call	object_place
-					call	depth_relink
+
+					ld		hl,(mover_ix)		; the legs, which the torso
+					ld		bc,GUARD_LEGS		; sorts after
+					add		hl,bc
+					ld		ix,(mover_ix)
+					ld		d,(ix+OBJ.DU)
+					ld		e,(ix+OBJ.DV)
+					ld		a,(ix+OBJ.DZ)
+					call	depth_step_upper
+					call	room_adjust
+					call	object_place
 
 					ld		ix,(mover_ix)
 					ld		bc,GUARD_LEGS

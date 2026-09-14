@@ -115,9 +115,12 @@ across the call — getting that wrong sends the Z80 into screen memory.
 
 ## Depth sorting
 
+[depth.md](depth.md) walks through `depth.s` routine by routine, with worked
+examples; this section is the summary.
+
 Draw order is a permanent invariant of the list, not something recomputed. When
-an object moves it is unlinked and re-inserted in one pass; an object that has
-not moved costs three compares and nothing else. There is no sort.
+an object moves it is unlinked and re-inserted in one pass; an object whose
+step is zero costs one `OR` and nothing else. There is no sort.
 
 This is Head Over Heels' design. Knight Lore instead rebuilds a list of dirty
 objects every frame and repeatedly scans for one that nothing occludes, draws it
@@ -132,7 +135,7 @@ exactly Head Over Heels' seven-case dispatch table — their key is always the s
 over the non-overlapping axes — with no dispatch at all, and the eighth case
 (all three overlapping, i.e. interpenetration) falls out as the empty sum.
 
-The *signs* are ours, not theirs. `calc_screen_xy` sends `+U` down the screen and
+The *signs* are ours, not theirs. `object_place` sends `+U` down the screen and
 `+V` up it, so the projection's null direction — which for an orthographic
 projection is the depth axis — is `(1,-1,1)`, and depth is **`U - V + Z`**. Head
 Over Heels' `U + V + Z` comes from a projection where both floor axes descend.
@@ -152,10 +155,13 @@ at the `NEXT` *field* that points at us, which is that object's own address
 "am I the head?" branch from both unlink and insert. Never dereference it as a
 record.
 
-**The dirty gate** is a compare against the `U`/`V`/`Z` that `extent_save`
-snapshots, not a flag — a flag can fall out of sync, a compare cannot. It must
-gate on the *world* position: the null direction is `(1,-1,1)`, so `U+1, V-1,
-Z+1` changes an object's depth with no screen movement at all.
+**The dirty gate** is the step itself. `depth_step` adds a step to `U`, `V`
+and `Z` and re-sorts only if the step was not zero, so the question is asked at
+the one moment the answer is known. It must be the step really applied, which
+for a character is the clamped `D`/`E` rather than the record's spent `DU`/`DV`
+— see [depth.md](depth.md). It gates on the *world* position: the null
+direction is `(1,-1,1)`, so `U+1, V-1, Z+1` changes an object's depth with no
+screen movement at all.
 
 **No extra repainting is needed.** A relink is a single-element permutation, so
 it preserves the relative order of every other pair — two objects that did not
@@ -165,7 +171,7 @@ repaints, is exactly sufficient.
 
 ## Isometric world coordinates
 
-`calc_screen_xy` projects an object's `U`, `V`, `Z` to the screen, after Knight
+`object_place` projects an object's `U`, `V`, `Z` to the screen, after Knight
 Lore's `calc_pixel_XY` at `$D6C9`:
 
 ```

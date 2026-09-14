@@ -207,6 +207,12 @@ target_compile_options(screenshot PRIVATE ${ZX_WARNINGS})
 target_compile_definitions(screenshot
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+# Not a test on its own: runs a Z80 .com, exiting with A, for the unit tests
+# the examples write in Z80 -- see examples/filmation/tests/run_tests.py.
+add_executable(z80_com_runner tests/z80_com_runner.cpp)
+target_link_libraries(z80_com_runner PRIVATE zx_core)
+target_compile_options(z80_com_runner PRIVATE ${ZX_WARNINGS})
+
 # ---- ZEXALL / ZEXDOC --------------------------------------------------------
 # One executable, run twice with different arguments. Labelled "slow" and
 # excluded from the default ctest run (build.ps1 -Test): a full pass is well
