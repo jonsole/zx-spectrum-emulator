@@ -39,17 +39,20 @@ MOVE_GHOST		EQU		9
 MOVE_BOUNCE		EQU		10
 MOVE_SPELL		EQU		11
 MOVE_CAULDRON	EQU		12		; what rises out of the pot -- see special.s
+MOVE_SPIKE_BALL	EQU		13
+MOVE_DROPPING	EQU		14		; these two give way under a weight: see
+MOVE_COLLAPSING	EQU		15		; object_landed_on, which relies on the order
 
 ; MOVE_LOOSE has to stay the LAST of these and everything loose above it,
 ; because that is the whole test -- object_carry and object_shove both ask
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		13
-MOVE_CARRIED		EQU		13
-MOVE_PUSHED		EQU		14
-MOVE_SLIDING		EQU		15
-MOVE_SPECIAL		EQU		16		; a collectable -- see special.s
+MOVE_LOOSE		EQU		16
+MOVE_CARRIED		EQU		16
+MOVE_PUSHED		EQU		17
+MOVE_SLIDING		EQU		18
+MOVE_SPECIAL		EQU		19		; a collectable -- see special.s
 
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
@@ -88,6 +91,10 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_CHEST, MOVE_SLIDING
 					DB		FG_BALL_BOUNCE, MOVE_BOUNCE
 					DB		FG_REPEL_SPELL, MOVE_SPELL
+					DB		FG_SPIKE_BALL, MOVE_SPIKE_BALL
+					DB		FG_SPIKE_BALL_FALLING, MOVE_SPIKE_BALL
+					DB		FG_DROPPING_BLOCK, MOVE_DROPPING
+					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
 					DB		$FF
 
 mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
@@ -102,6 +109,9 @@ mover_tbl:			DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_bounce		; MOVE_BOUNCE
 					DW		mover_spell		; MOVE_SPELL
 					DW		mover_cauldron	; MOVE_CAULDRON
+					DW		mover_spike_ball	; MOVE_SPIKE_BALL
+					DW		mover_dropping	; MOVE_DROPPING
+					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_carried		; MOVE_CARRIED
 					DW		mover_pushed		; MOVE_PUSHED
 					DW		mover_sliding	; MOVE_SLIDING
@@ -119,6 +129,14 @@ move_tick:			DB		0
 ; far up or down the others are. That is the game's, at $5BBD: one variable,
 ; zeroed when the room is built and claimed by whichever ball runs first.
 mover_ball_top:	DB		0
+
+; Whether a spiked ball in this room is on its way down, so that no other may
+; start -- the game's $5BBF. And whether the room holds its balls up at all,
+; which the game's $5BC0 says: bit 0 of the room number, taken when the room is
+; built, so that only even rooms drop them -- until the knight picks something
+; up there, which clears it.
+spike_ball_falling:	DB		0
+spike_ball_held:	DB		0
 
 ; The record being updated, kept because object_place and depth_relink are
 ; both free to corrupt IX.
@@ -328,7 +346,7 @@ mover_paint:		call	region_reset
 
 					ld		ix,(mover_ix)
 					call	region_add		; and where it is now
-					call	redraw_view
+					call	redraw_defer
 					ld		ix,(mover_ix)		; the draw is free to corrupt it
 					ret		
 
@@ -618,7 +636,7 @@ mover_move_pair:	call	mover_clamp
 					call	region_add		; the legs, where they are now
 					ld		ix,(mover_ix)
 					call	region_add		; and the torso
-					call	redraw_view
+					call	redraw_defer
 					ld		ix,(mover_ix)
 					ret		
 
@@ -1020,3 +1038,67 @@ mover_spell:		ld		c,SPELL_STEP
 					xor		(ix+OBJ.GFX)
 					ld		(ix+OBJ.GFX),a
 					jp		mover_move_always
+
+
+; ---------------------------------------------------------------------------
+; A spiked ball, which hangs where the room put it until, one turn in sixteen,
+; it lets go and drops until it lands -- upd_63. One at a time: while one is
+; falling no other may start. The test is the game's own, the random seed below
+; sixteen.
+;   IX -> the record
+mover_spike_ball:	ld		a,(spike_ball_held)
+					or		a
+					ret		nz
+					bit		2,(ix+OBJ.MOVE_STATE)
+					jr		nz,.drop
+					ld		a,(spike_ball_falling)
+					or		a
+					ret		nz
+					call	mover_rand
+					cp		16
+					ret		nc
+					set		2,(ix+OBJ.MOVE_STATE)
+					ld		a,1
+					ld		(spike_ball_falling),a
+					ret
+
+					; Falling: gravity has DZ, which it has been taking one off a turn
+					; since the ball let go, so it gathers speed as it goes.
+.drop:				call	mover_move
+					ld		ix,(mover_ix)
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z
+					res		2,(ix+OBJ.MOVE_STATE)
+					xor		a
+					ld		(spike_ball_falling),a
+					ret
+
+
+; ---------------------------------------------------------------------------
+; A block that sinks a unit every turn something is standing on it -- upd_91.
+; object_landed_on leaves the mark, when whatever is on top comes down on it in
+; its own clamp; the game does the same at $CC6C.
+;   IX -> the record
+mover_dropping:		bit		3,(ix+OBJ.MOVE_STATE)
+					ret		z
+					res		3,(ix+OBJ.MOVE_STATE)
+					ld		(ix+OBJ.DZ),0		; one unit, not a fall
+					jp		mover_move
+
+
+; A block that crumbles away when something lands on it -- upd_143. The game
+; turns it into graphic 184 and steps it straight on to 185, draws that for a
+; turn, and then takes it out of the room.
+;   IX -> the record
+mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
+					jp		nz,special_hide		; crumbled last turn: gone
+					bit		3,(ix+OBJ.MOVE_STATE)
+					ret		z
+					ld		(ix+OBJ.MOVE_STATE),$10
+					ld		(ix+OBJ.GFX),185
+					xor		a
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DZ),a
+					jp		mover_paint

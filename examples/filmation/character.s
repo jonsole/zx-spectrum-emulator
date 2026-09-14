@@ -321,6 +321,7 @@ character_walk:		ld		(ix+CHARACTER_FACING),a
 					ld		d,(hl)
 					inc		hl
 					ld		e,(hl)
+					call	character_steer
 
 					;; NB: fall through into character_walk_on
 
@@ -423,7 +424,7 @@ character_move_go:	call	region_reset
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 					call	region_add
-					jp		redraw_view
+					jp		redraw_defer
 
 
 ; Whether the jump key is down this turn. Gravity asks, because how long it is
@@ -550,6 +551,80 @@ character_door_find:
 					ret		p
 					neg		
 					ret		
+
+
+; Walking near an arch lines him up with it. Every arch in Knight Lore looks for
+; the knight inside a box fifteen units either way of its centre and four in
+; height, and nudges him one unit a turn across the way he is walking: towards
+; its centre V when he walks along U, and towards its centre U when he walks
+; along V -- adj_ew and adj_ns at $C7A6, chosen by his facing through
+; adj_arch_tbl. calc_plyr_dXY adds it to his step, which is why it only happens
+; while he walks.
+;
+; An arch's centre is the room's doorway table all over again: the wall it
+; stands in on its own axis, and the middle of the room on the other.
+;   IX -> the legs record
+;   D, E - the step for his facing, which this may add a unit to
+; Corrupts AF, BC, HL.
+character_steer:	ld		c,0
+.side:				ld		b,0
+					ld		hl,room_door_z
+					add		hl,bc
+					ld		a,(hl)
+					or		a
+					jr		z,.next		; no arch this side
+					sub		(ix+OBJ.Z)
+					call	character_door_find.abs
+					cp		DOOR_LEVEL
+					jr		nc,.next
+
+					ld		hl,room_door_at
+					add		hl,bc
+					ld		l,(hl)
+					ld		h,128		; H = its centre U, L = its centre V, for
+					bit		0,c		; north and south, which stand in a wall
+					jr		z,.centred		; across V
+					ld		a,h
+					ld		h,l
+					ld		l,a		; ...and the other way round for east and west
+
+.centred:			ld		a,(ix+OBJ.U)
+					sub		h
+					call	character_door_find.abs
+					cp		DOOR_ALONG
+					jr		nc,.next
+					ld		a,(ix+OBJ.V)
+					sub		l
+					call	character_door_find.abs
+					cp		DOOR_ALONG
+					jr		nc,.next
+
+					bit		0,(ix+CHARACTER_FACING)
+					jr		nz,.along_v
+					ld		a,l		; walking along U: V towards its centre
+					cp		(ix+OBJ.V)
+					ret		z
+					ld		a,1
+					jr		nc,.v
+					neg
+.v:					add		a,e
+					ld		e,a
+					ret
+.along_v:			ld		a,h		; walking along V: U towards its centre
+					cp		(ix+OBJ.U)
+					ret		z
+					ld		a,1
+					jr		nc,.u
+					neg
+.u:					add		a,d
+					ld		d,a
+					ret
+
+.next:				inc		c
+					ld		a,c
+					cp		4
+					jr		c,.side
+					ret
 
 
 ; Cut a character's step down to what the room allows.

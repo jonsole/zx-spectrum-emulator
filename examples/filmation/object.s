@@ -314,13 +314,28 @@ collide_eff_v:		DB		0
 collide_eff_z:		DB		0
 
 
-; The list object_clamp is to walk. Knight Lore has one table and walks all
-; forty slots; ours are in two places, the room's pool and the characters,
-; which are not in it. Every axis has to see both before the next axis is
-; looked at, so the scan takes its list rather than knowing one.
-clamp_base:			DW		0
-clamp_count:		DB		0
-clamp_stride:		DB		0
+; What object_clamp walks: the records this step could touch at all, gathered
+; once per move by collide_gather. Knight Lore walks all forty slots of its
+; table on every axis; ours are in two places, the room's pool and the other
+; character, and walking both three times over was most of what a mover cost
+; -- 21,000 T for each block riding on the ghost in room $BB, which is itself
+; three axes of twenty-odd records every turn. Almost all of them are nowhere
+; near, and one look at the whole step says so for all three axes at once.
+collide_list:		DS		2 * (ROOM_MAX_OBJECTS + SPECIAL_SLOTS + 1)
+collide_list_count:	DB		0
+collide_list_at:	DW		0
+
+; How far the gathered box reaches along U and V from where the object stands,
+; so that object_collide can tell whether a ride has handed it a step the
+; gather did not allow for.
+collide_reach_u:	DB		0
+collide_reach_v:	DB		0
+
+; A ride fills in a step the object did not have when the list was gathered:
+; object_carry copies whatever it is standing on. So an axis with nothing on it
+; is gathered this much wider either way, which covers anything in the castle
+; walking or being walked, and a bigger one makes object_collide gather again.
+CARRY_REACH			EQU		8
 
 ; The character to test against as well as the room, or zero. There are only
 ; ever two of them and each needs the other, so a single pointer does.
@@ -513,12 +528,22 @@ object_clamp:		ld		a,(hl)
 					or		a
 					ret		z		; not moving along this axis
 
-					ld		a,(clamp_count)
+					ld		a,(collide_list_count)
 					or		a
 					ret		z
 					ld		b,a
-					ld		iy,(clamp_base)
+					ld		de,collide_list
+					ld		(collide_list_at),de
 					call	collide_box
+
+.load:				ld		de,(collide_list_at)
+					ld		a,(de)
+					ld		iyl,a
+					inc		de
+					ld		a,(de)
+					ld		iyh,a
+					inc		de
+					ld		(collide_list_at),de
 
 .object:			call	object_overlaps
 					jr		nc,.next
@@ -529,6 +554,7 @@ object_clamp:		ld		a,(hl)
 					ld		a,(collide_mask)
 					cp		COLLIDE_Z
 					jr		nz,.shove
+					call	object_landed_on
 					call	object_carry
 					jr		.contact
 .shove:			call	object_shove
@@ -558,11 +584,114 @@ object_clamp:		ld		a,(hl)
 					; cannot make a zero step smaller
 					jr		.object
 
-.next:				ld		a,(clamp_stride)
-					ld		e,a
-					ld		d,0
+.next:				djnz	.load
+					ret
+
+
+; Gather the records this object's step could touch: everything whose box
+; meets the box swept by the whole of DU, DV and DZ. The clamp only ever cuts a
+; step back towards nothing, so every box it tries lies inside this one, and
+; anything outside it cannot be in the way on any axis. Touching counts as
+; apart here exactly as it does in object_overlaps, which does the testing.
+;
+; The one thing that can grow a step is a ride -- see CARRY_REACH.
+;   IX -> the record, DU/DV/DZ its step
+; Corrupts AF, BC, DE, HL, IY.
+collide_gather:		ld		e,0
+					ld		a,(ix+OBJ.DZ)
+					or		a
+					jr		z,.no_ride		; only the Z pass can hand over a ride
+					ld		e,CARRY_REACH
+
+.no_ride:			ld		a,(ix+OBJ.DU)
+					call	.span
+					ld		(collide_reach_u),a
+					ld		a,(ix+OBJ.U)
+					sub		(ix+OBJ.SIZE_U)
+					sub		d
+					ld		(collide_u_min),a
+					ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.SIZE_U)
+					add		a,c
+					ld		(collide_u_max),a
+
+					ld		a,(ix+OBJ.DV)
+					call	.span
+					ld		(collide_reach_v),a
+					ld		a,(ix+OBJ.V)
+					sub		(ix+OBJ.SIZE_V)
+					sub		d
+					ld		(collide_v_min),a
+					ld		a,(ix+OBJ.V)
+					add		a,(ix+OBJ.SIZE_V)
+					add		a,c
+					ld		(collide_v_max),a
+
+					ld		e,0
+					ld		a,(ix+OBJ.DZ)
+					call	.span
+					ld		a,(ix+OBJ.Z)
+					sub		d
+					ld		(collide_z_min),a
+					ld		a,(ix+OBJ.Z)
+					bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: a character's whole
+					jr		z,.own_height		; figure, as collide_box has it
+					add		a,COLLIDE_HEIGHT
+					jr		.top
+.own_height:		add		a,(ix+OBJ.SIZE_Z)
+.top:				add		a,c
+					ld		(collide_z_max),a
+
+					ld		hl,collide_list
+					ld		c,0
+					ld		a,(room_object_count)
+					or		a
+					jr		z,.other
+					ld		b,a
+					ld		iy,room_objects
+.each:				call	object_overlaps		; preserves BC and HL
+					call	c,.keep
+					ld		de,ROOM_STRIDE
 					add		iy,de
-					djnz	.object
+					djnz	.each
+
+.other:				ld		de,(collide_other)
+					ld		a,d
+					or		e
+					jr		z,.done
+					push	de
+					pop		iy
+					call	object_overlaps
+					call	c,.keep
+.done:				ld		a,c
+					ld		(collide_list_count),a
+					ret
+
+.keep:				ld		a,iyl
+					ld		(hl),a
+					inc		hl
+					ld		a,iyh
+					ld		(hl),a
+					inc		hl
+					inc		c
+					ret
+
+					; A step in A: how far the box reaches below the object (D) and
+					; above it (C), and the further of the two back in A. A step of
+					; nothing reaches E either way.
+.span:				or		a
+					jr		nz,.moving
+					ld		d,e
+					ld		c,e
+					ld		a,e
+					ret
+.moving:			jp		m,.down
+					ld		d,0
+					ld		c,a
+					ret
+.down:				neg
+					ld		d,a
+					ld		c,0
 					ret
 
 
@@ -629,6 +758,22 @@ object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 					ret		
 
 
+; We have just come down on IY. A block that gives way under a weight wants to
+; know: the game marks everything landed on, SET 3,(IY+$0D) at $CC6C, and the
+; dropping and collapsing blocks look for the mark on their next turn. Ours goes
+; in MOVE_STATE, which every other mover uses for something else, so only those
+; two are marked.
+;   IY -> what stopped us
+; Corrupts AF.
+object_landed_on:	ld		a,(iy+OBJ.BEHAVIOUR)
+					cp		MOVE_DROPPING
+					ret		c
+					cp		MOVE_COLLAPSING + 1
+					ret		nc
+					set		3,(iy+OBJ.MOVE_STATE)
+					ret
+
+
 ; Cut a whole step down to what fits, Z first and then U and then V.
 ;
 ;   IX -> the character's legs record
@@ -642,6 +787,12 @@ object_collide:		xor		a
 					ld		(collide_eff_v),a		; far as any test can see
 					ld		(collide_eff_z),a
 
+					; Not moving at all, and nothing to gather for.
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					or		(ix+OBJ.DZ)
+					ret		z
+
 					; Z, then U, then V. Each takes what the object asked for on
 					; its own axis, has it cut down against everything, and hands
 					; the answer back to the record -- where the axes after it
@@ -650,17 +801,35 @@ object_collide:		xor		a
 					ld		(collide_mask),a
 					ld		a,(ix+OBJ.DZ)
 					ld		(collide_eff_z),a
+					call	collide_gather
 					ld		hl,collide_eff_z
-					call	.axis
+					call	object_clamp
 					ld		a,(collide_eff_z)
 					ld		(ix+OBJ.DZ),a
+
+					; Did a ride hand over more than the gather allowed for? Then
+					; gather again, around the step as it now stands.
+					ld		a,(ix+OBJ.DU)
+					call	.abs
+					ld		hl,collide_reach_u
+					cp		(hl)
+					jr		z,.u_fits
+					jr		nc,.again
+.u_fits:			ld		a,(ix+OBJ.DV)
+					call	.abs
+					ld		hl,collide_reach_v
+					cp		(hl)
+					jr		z,.passes
+					jr		c,.passes
+.again:				call	collide_gather
+.passes:
 
 					ld		a,COLLIDE_U
 					ld		(collide_mask),a
 					ld		a,(ix+OBJ.DU)
 					ld		(collide_eff_u),a
 					ld		hl,collide_eff_u
-					call	.axis
+					call	object_clamp
 					ld		a,(collide_eff_u)
 					ld		(ix+OBJ.DU),a
 
@@ -669,34 +838,16 @@ object_collide:		xor		a
 					ld		a,(ix+OBJ.DV)
 					ld		(collide_eff_v),a
 					ld		hl,collide_eff_v
-					call	.axis
+					call	object_clamp
 					ld		a,(collide_eff_v)
 					ld		(ix+OBJ.DV),a
 					ret
 
 
-.axis:				push	hl
-					ld		hl,room_objects
-					ld		(clamp_base),hl
-					ld		a,(room_object_count)
-					ld		(clamp_count),a
-					ld		a,ROOM_STRIDE
-					ld		(clamp_stride),a
-					pop		hl
-					push	hl
-					call	object_clamp
-					pop		hl
-
-					ld		de,(collide_other)
-					ld		a,d
-					or		e
-					ret		z		; nobody else about
-					push	hl
-					ld		(clamp_base),de
-					ld		a,1
-					ld		(clamp_count),a
-					pop		hl
-					jp		object_clamp
+.abs:				or		a
+					ret		p
+					neg
+					ret
 
 
 object_place:		push	af
@@ -973,7 +1124,38 @@ object_update:
 					; that is true only of a private copy is settled out here.
 .shift_sprite:		ld		e,(ix+OBJ.BUF_L)
 					ld		d,(ix+OBJ.BUF_H)
+
+					; Already in there? The same graphic, the same shift and the same
+					; way round as last time leave nothing to do -- see the two bytes
+					; shift_alloc keeps in front of every buffer.
+					ld		c,a		; the shift
+					ld		a,(ix+OBJ.FLAGS)
+					and		OBJ_FLIP_H
+					add		a,a
+					add		a,a
+					add		a,a
+					or		c
+					or		$80
+					ld		b,a		; what the buffer has to say
+					dec		de		; -> the shift and way round
+					ld		a,(de)
+					cp		b
+					jr		nz,.stale
+					dec		de		; -> the graphic
+					ld		a,(de)
+					cp		(ix+OBJ.GFX)
+					jr		z,.rotated
+					inc		de
+.stale:				ld		a,b
+					ld		(de),a
+					dec		de
+					ld		a,(ix+OBJ.GFX)
+					ld		(de),a
+					inc		de
+					inc		de		; -> the buffer again
+					ld		a,c
 					call	.rotate
+.rotated:
 
 					ld		a,(ix+OBJ.BUF_L)
 					ld		(ix+OBJ.SPRITE_L),a

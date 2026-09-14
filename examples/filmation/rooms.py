@@ -118,12 +118,29 @@ def pieces_by_index(table, count, stride):
     return [block(w(table + i * 2), stride) for i in range(count)]
 
 
-# Our own bits in a piece's flags byte, which is otherwise the game's. The
-# game only ever writes $10, $12, $14 and $50, so bits 0, 3, 5 and 7 are free;
-# room_add tests these two directly rather than rotating them into place with
-# the mirror flag.
-CACHE_FLAG = 0x01           # draw from a private copy of the graphic
-SHARED_SHIFT_FLAG = 0x08    # rotate into the shared buffer, at draw time
+# The flags byte is written in OUR layout -- OBJ.FLAGS, bit for bit -- so that
+# room_add copies it into the record as it stands. The game's byte means
+# something else: bit 6 mirrors the piece, bit 1 says nothing collides with it,
+# and bits 2 and 4 are its own business (carriable, and a flag it never tests
+# for scenery), which our engine keeps elsewhere and so drops here.
+#
+# These have to agree with the EQUs in object.s; room.s ASSERTs that they do,
+# against the ROOM_FLAG_ copies emitted at the foot of room_data.s.
+GAME_MIRROR = 0x40
+GAME_PASSABLE = 0x02
+
+FLIP_FLAG = 0x01            # OBJ_FLIP_H: drawn the other way round
+PASSABLE_FLAG = 0x04        # OBJ_PASSABLE: nothing collides with it
+SHARED_SHIFT_FLAG = 0x08    # OBJ_SHARED_SHIFT: rotate into the shared buffer
+CACHE_FLAG = 0x10           # OBJ_CACHE: draw from a private copy of the graphic
+BACKGROUND_FLAG = 0x40      # OBJ_BACKGROUND: drawn first and never sorted
+
+# Walls and trees are scenery: solid, never walked through, and so never worth
+# sorting against anything. Arches and gates are doorways the knight passes
+# behind, and the wizard and the pot are objects in their own right -- all of
+# those keep their place in the sort. The room builder used to work this out
+# from the template's index every time it built a room.
+BACKGROUND_TEMPLATES = ("bg_walls_", "bg_trees_")
 
 # Templates whose pieces rotate at draw time instead of holding a buffer for
 # the life of the room. Walls and trees line the edges of a room and a
@@ -208,18 +225,31 @@ def count_objects(bg, fg, scenery, objects):
 
 
 def our_flags(entry, gfx_at, flags_at, cached, label=""):
-    """The template entry with our two flag bits set where they belong."""
+    """The template entry with its flags byte rewritten in our layout."""
     g, flags = entry[gfx_at], entry[flags_at]
-    add = 0
-    if cached.get(g) == (1 if flags & 0x40 else 0):
-        add |= CACHE_FLAG
-    if label.startswith(SHARED_SHIFT_TEMPLATES):
-        add |= SHARED_SHIFT_FLAG
-    if not add:
-        return entry
+    ours = 0
+    if flags & GAME_MIRROR:
+        ours |= FLIP_FLAG
+    if flags & GAME_PASSABLE:
+        ours |= PASSABLE_FLAG
+    if cached.get(g) == (1 if flags & GAME_MIRROR else 0):
+        ours |= CACHE_FLAG
+    if SHARED_SHIFT_TEMPLATES and label.startswith(SHARED_SHIFT_TEMPLATES):
+        ours |= SHARED_SHIFT_FLAG
+    if label.startswith(BACKGROUND_TEMPLATES):
+        ours |= BACKGROUND_FLAG
     entry = list(entry)
-    entry[flags_at] = flags | add
+    entry[flags_at] = ours
     return tuple(entry)
+
+
+def flag_note(flags):
+    return ", ".join(name for bit, name in ((FLIP_FLAG, "mirrored"),
+                                            (PASSABLE_FLAG, "passable"),
+                                            (CACHE_FLAG, "cached"),
+                                            (SHARED_SHIFT_FLAG, "shared shift"),
+                                            (BACKGROUND_FLAG, "background"))
+                     if flags & bit)
 
 
 def emit(out):
@@ -261,26 +291,24 @@ def emit(out):
     out.append("; --- scenery ---------------------------------------------------------------")
     out.append(";")
     out.append("; A piece is: sprite, U, V, Z, size U, size V, size Z, flags -- which is our")
-    out.append("; object record almost field for field. Flags bit 6 mirrors the piece.")
-    out.append("; Each template ends in a zero sprite.")
+    out.append("; object record almost field for field. Each template ends in a zero sprite.")
     out.append(";")
-    out.append("; Bits 0 and 3 of the flags are ours, not the game's -- it only ever writes")
-    out.append("; $10, $12, $14 and $50, so those two are free. Bit 0 marks a piece that has")
-    out.append("; to be drawn from a private copy of its graphic, because some room holds")
-    out.append("; another piece wanting that graphic the other way round. Bit 3 marks one")
-    out.append("; that rotates into the shared buffer at draw time rather than holding a")
-    out.append("; buffer of its own for the life of the room.")
+    out.append("; The flags byte is already OBJ.FLAGS, not the game's: bit 0 mirrors the")
+    out.append("; piece, bit 2 lets things through it, bit 3 rotates it into the shared buffer")
+    out.append("; at draw time, bit 4 draws it from a private copy of its graphic because some")
+    out.append("; room holds another piece wanting that graphic the other way round, and bit 6")
+    out.append("; puts it in the unsorted background run. room_add copies it as it stands.")
     out.append("")
     bg, bg_refs = templates(BG_TYPE_TBL, BG_TYPE_COUNT, 8, BG_NAMES, "bg")
+    # A shared template carries one flags byte for every index that reaches it,
+    # so background has to be all or nothing across them.
+    for i, ref in enumerate(bg_refs):
+        assert ref.startswith(BACKGROUND_TEMPLATES) ==             ("bg_" + BG_NAMES[i]).startswith(BACKGROUND_TEMPLATES), BG_NAMES[i]
     for addr, label, pieces in bg:
         line(label + ":", "", "", "%d piece%s" % (len(pieces), "" if len(pieces) == 1 else "s"))
         for p in pieces:
             p = our_flags(p, 0, 7, cached, label)
-            note = ", ".join(x for x in ("mirrored" if p[7] & 0x40 else "",
-                                         "cached" if p[7] & CACHE_FLAG else "",
-                                         "shared shift" if p[7] & SHARED_SHIFT_FLAG
-                                         else "") if x)
-            line("", "DB", "%3d, %3d, %3d, %3d, %3d, %3d, %3d, $%02X" % p, note)
+            line("", "DB", "%3d, %3d, %3d, %3d, %3d, %3d, %3d, $%02X" % p, flag_note(p[7]))
         line("", "DB", "0")
         out.append("")
     line("background_type_tbl:", "", "")
@@ -295,7 +323,8 @@ def emit(out):
     # --- objects -----------------------------------------------------------
     out.append("; --- objects ---------------------------------------------------------------")
     out.append(";")
-    out.append("; An entry is: sprite, size U, size V, size Z, flags, offsets. There is no")
+    out.append("; An entry is: sprite, size U, size V, size Z, flags, offsets. The flags byte")
+    out.append("; is OBJ.FLAGS, as for scenery. There is no")
     out.append("; position -- that comes from the room, one packed byte per object -- so the")
     out.append("; same template serves every block in the castle. A template with more than")
     out.append("; one entry is an object drawn from several sprites, like a guard.")
@@ -305,8 +334,7 @@ def emit(out):
         line(label + ":", "", "", "%d sprite%s" % (len(entries), "" if len(entries) == 1 else "s"))
         for e in entries:
             e = our_flags(e, 0, 4, cached)
-            line("", "DB", "%3d, %3d, %3d, %3d, $%02X, $%02X" % e,
-                 "cached" if e[4] & CACHE_FLAG else "")
+            line("", "DB", "%3d, %3d, %3d, %3d, $%02X, $%02X" % e, flag_note(e[4]))
         line("", "DB", "0")
         out.append("")
     line("block_type_tbl:", "", "")
@@ -381,6 +409,13 @@ def emit(out):
     line("ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")
     line("ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,
          "the fullest room, so the object pool")
+    out.append("")
+    out.append("; The flag bits the templates above were written with, for room.s to check")
+    out.append("; against object.s.")
+    for name, bit in (("FLIP", FLIP_FLAG), ("PASSABLE", PASSABLE_FLAG),
+                      ("SHARED_SHIFT", SHARED_SHIFT_FLAG), ("CACHE", CACHE_FLAG),
+                      ("BACKGROUND", BACKGROUND_FLAG)):
+        line("ROOM_FLAG_" + name, "EQU", "$%02X" % bit)
     out.append("")
     return table
 

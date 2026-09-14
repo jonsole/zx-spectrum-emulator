@@ -61,6 +61,14 @@
 
 SHIFT_ARENA_SIZE	EQU		6144
 
+; Every buffer carries two bytes in front of it saying what is in it: the
+; graphic, and then the shift and the way round with bit 7 set, or zero for
+; nothing yet. object_update rotates into a buffer only when those have
+; changed. A mover used to re-rotate on every step, and most steps do not
+; change what is rotated at all: a ghost going diagonally moves U and V
+; together, so the screen x moves in whole bytes and the shift never changes.
+; That was 14,000 T a step for a block.
+
 shift_arena:		DS		SHIFT_ARENA_SIZE
 shift_arena_next:	DW		shift_arena
 
@@ -195,6 +203,8 @@ shift_alloc:		push	hl
 					ld		hl,0
 .size:				add		hl,de
 					djnz	.size		; hl = bytes wanted
+					inc		hl
+					inc		hl		; and two in front -- see ROTATED_GFX
 
 
 					ld		de,(shift_arena_next)
@@ -208,6 +218,11 @@ shift_alloc:		push	hl
 					jr		c,.full		; less than nothing: no room
 
 					ld		de,(shift_arena_next)
+					xor		a
+					ld		(de),a		; nothing rotated into it yet
+					inc		de
+					ld		(de),a
+					inc		de
 					ld		(ix+OBJ.BUF_L),e
 					ld		(ix+OBJ.BUF_H),d
 					ld		(shift_arena_next),hl
@@ -253,6 +268,10 @@ sprite_copy:		ld		b,(hl)		; rows
 					inc		l		; -> the bitmap
 					ld		e,(ix+OBJ.BUF_L)
 					ld		d,(ix+OBJ.BUF_H)
+					dec		de
+					xor		a
+					ld		(de),a		; a copy, not a rotation: nothing to reuse
+					inc		de
 					push	de		; where it lands, for SPRITE below
 .row:				push	bc
 					ld		b,0		; LDIR wants the count in BC, and the row

@@ -58,9 +58,13 @@ room_packed:		DB		0
 ; How many objects the room has produced so far.
 room_object_count:	DB		0
 
-; Whether the scenery template being expanded is background -- OBJ_BACKGROUND
-; or zero. room_add ors it into each piece's FLAGS.
-room_bg_flag:		DB		0
+; rooms.py writes every template's flags byte in OBJ.FLAGS' own layout, so
+; room_add copies it straight in. These are what it wrote them with.
+					ASSERT	ROOM_FLAG_FLIP == OBJ_FLIP_H
+					ASSERT	ROOM_FLAG_PASSABLE == OBJ_PASSABLE
+					ASSERT	ROOM_FLAG_SHARED_SHIFT == OBJ_SHARED_SHIFT
+					ASSERT	ROOM_FLAG_CACHE == OBJ_CACHE
+					ASSERT	ROOM_FLAG_BACKGROUND == OBJ_BACKGROUND
 
 ; An object on its way into a record: sprite, U, V, Z, size U, size V, size Z,
 ; flags -- the same eight bytes a scenery piece already is, which is why both
@@ -154,6 +158,10 @@ room_build:			ld		c,a
 					ld		(mover_ball_top),a
 					ld		(mover_gate_busy),a
 					ld		(mover_gate_drops),a
+					ld		(spike_ball_falling),a
+					ld		a,(room_number)
+					and		1
+					ld		(spike_ball_held),a
 
 					pop		de
 					inc		de		; past its own number
@@ -180,9 +188,7 @@ room_build:			ld		c,a
 
 					ld		ix,room_objects
 					call	room_scenery
-					xor		a
-					ld		(room_bg_flag),a		; nothing past the scenery is
-					call	room_objects_of		; background
+					call	room_objects_of
 
 					call	room_show
 					scf				; built
@@ -255,20 +261,8 @@ room_scenery:		ld		a,(room_scenery_left)
 
 					ld		l,a
 					ld		h,0
-
-					; Walls and trees are scenery: solid, never walked through,
-					; and so never worth sorting against anything. Arches and
-					; gates are doorways the player passes behind, and the
-					; wizard and the pot are objects in their own right -- all
-					; of those keep their place in the sort.
-					cp		BG_WALLS_0
-					jr		c,.sorted
-					cp		BG_TREES_2 + 1
-					jr		nc,.sorted
-					ld		a,OBJ_BACKGROUND
-					jr		.classified
-.sorted:			xor		a
-.classified:		ld		(room_bg_flag),a
+					; Which pieces are background -- walls and trees -- is in their
+					; flags already: see rooms.py.
 
 					add		hl,hl
 					ld		de,background_type_tbl
@@ -294,7 +288,11 @@ room_scenery:		ld		a,(room_scenery_left)
 
 ; Does this piece of scenery move?
 ;
-; One does. The wizard walks the same square circuit a guard does -- graphics
+; Two kinds do. The portcullis that hangs in an arch in rooms $09, $CF and $F1
+; is graphic 8, which dispatches to upd_8 exactly as the gate objects do, so it
+; rises and falls on the same rules and shares their one-at-a-time count.
+;
+; And the wizard walks the same square circuit a guard does -- graphics
 ; 30, 31, 158 and 159 all dispatch to upd_30_31_158_159, and the routine it
 ; turns on is called move_guard_wizard_NSEW, which says as much. He is scenery
 ; rather than an object only because that is where the room data puts him.
@@ -307,10 +305,15 @@ room_scenery:		ld		a,(room_scenery_left)
 room_scenery_move:	xor		a
 					ld		(room_behaviour),a
 					ld		a,c
+					sub		BG_GATE_0
+					cp		BG_GATE_3 - BG_GATE_0 + 1
+					ld		a,MOVE_GATE
+					jr		c,.moves
+					ld		a,c
 					cp		BG_WIZARD
 					ret		nz
 					ld		a,MOVE_GUARD_SQ
-					ld		(room_behaviour),a
+.moves:				ld		(room_behaviour),a
 					ret		
 
 
@@ -565,31 +568,7 @@ room_add:			ld		a,(room_object_count)
 					ld		a,(hl)
 					inc		hl
 
-					; Their mirror flag is bit 6; ours is bit 0, next to the
-					; sprite header's so that comparing them is one XOR.
-					;
-					; Bits 0 and 3 of that byte are rooms.py's own additions, and
-					; they are tested here rather than rotated into place with the
-					; mirror bit. The game's own flags use bits 1, 2, 4 and 6 --
-					; $10, $12, $14 and $50 are the four values it ever writes --
-					; so those two are the free ones, and they are not two places
-					; below where they have to end up.
-					ld		c,a		; the raw byte; BC is free until the stride below
-					rlca
-					rlca
-					and		OBJ_FLIP_H
-					bit		0,c		; draw from a private copy of the graphic
-					jr		z,.not_cached
-					or		OBJ_CACHE
-.not_cached:		bit		3,c		; rotate into the shared buffer, at draw time
-					jr		z,.not_shared
-					or		OBJ_SHARED_SHIFT
-.not_shared:		bit		1,c		; the game's own: nothing collides with it
-					jr		z,.not_passable
-					or		OBJ_PASSABLE
-.not_passable:		ld		(ix+OBJ.FLAGS),a
-					ld		a,(room_bg_flag)		; and whether this template is
-					or		(ix+OBJ.FLAGS)		; scenery rather than an object
+					; Already in our layout: rooms.py wrote it that way.
 					ld		(ix+OBJ.FLAGS),a
 
 					; A rotation buffer belongs to the room, not the object;

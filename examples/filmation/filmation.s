@@ -37,10 +37,13 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ; lives above 0x8000: the sprite data, the rotate table, the view buffer, the
 ; object records and the code. The stack was the one thing left behind.
 ;
-; It grows down from here into the space above the program, which ends around
-; 0xE080 -- getting on for 8K of headroom, against the handful of frames deep
-; this ever nests.
-STACK_TOP			EQU		0xFF00
+; It starts at the very top of memory -- SP = 0, so the first push lands at
+; $FFFE -- and STACK_RESERVE is kept clear below it. The deepest it has been
+; measured is 26 bytes: every room in the castle entered, walked, jumped in and
+; picked up in, with the untouched bytes counted afterwards. It used to start
+; at $FF00 with the 256 bytes above it standing empty, and those went to code.
+STACK_TOP			EQU		0x0000
+STACK_RESERVE		EQU		64
 
 ; ---------------------------------------------------------------------------
 ; The castle, in contended memory.
@@ -156,6 +159,7 @@ start:              di
                     call    special_step
                     call    movers_step
                     call    player_step
+                    call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
                     call    room_keys
                     jr      .loop
@@ -535,6 +539,116 @@ extent_save:		ld		a,(ix+OBJ.U)
 					ret		
 
 
+; A region that is waiting to be drawn, or a max of zero for none.
+pend_y_extent:		dw		0
+pend_x_extent:		dw		0
+
+
+; Repaint a region -- but not yet, if it overlaps one already waiting.
+;
+; A ghost carrying two blocks is three movers, and each repainted its own area
+; in turn: the ghost drew the stack, then each block drew very nearly the same
+; patch again, walls behind it and all. Room $BB spent more than half its turn
+; on the two repaints that changed nothing the first had not already drawn.
+; Knight Lore never has the problem because it composes everything that moved
+; into one frame.
+;
+; So a region joins the one waiting when the two overlap and the union still
+; fits the view buffer, and otherwise the waiting one is drawn and this one
+; waits in its place. Nothing is drawn wrong by waiting: a draw composites the
+; objects as they are when it happens, never as they were when the region was
+; made -- so a region drawn late shows the same thing a region drawn at once
+; would, plus whatever has moved since. It is only ever a question of how many
+; times the same pixels are drawn. redraw_flush draws what is left at the end
+; of the turn.
+;
+; Regions that do not overlap are not merged even when they would fit: the
+; rows between them would be composited for nothing.
+;   view_y_extent, view_x_extent - the region
+; Corrupts AF, BC, DE, HL; and IX, when it draws.
+redraw_defer:		ld		a,(pend_y_extent+1)
+					or		a
+					jr		z,.adopt		; nothing waiting
+
+					ld		hl,(view_y_extent)		; l = min, h = max
+					ld		de,(pend_y_extent)		; e = min, d = max
+					ld		a,l
+					cp		d
+					jr		nc,.apart		; starts below the waiting one's end
+					ld		a,e
+					cp		h
+					jr		nc,.apart		; ...or ends above its start
+					ld		a,e
+					cp		l
+					jr		c,.y_min
+					ld		e,l
+.y_min:				ld		a,d
+					cp		h
+					jr		nc,.y_max
+					ld		d,h
+.y_max:				ld		a,d
+					sub		e
+					cp		VIEW_BUF_ROWS + 1
+					jr		nc,.apart		; together too tall for the buffer
+					ld		b,d
+					ld		c,e		; the union in Y, for if X agrees
+
+					ld		hl,(view_x_extent)
+					ld		de,(pend_x_extent)
+					ld		a,l
+					cp		d
+					jr		nc,.apart
+					ld		a,e
+					cp		h
+					jr		nc,.apart
+					ld		a,e
+					cp		l
+					jr		c,.x_min
+					ld		e,l
+.x_min:				ld		a,d
+					cp		h
+					jr		nc,.x_max
+					ld		d,h
+.x_max:				ld		a,d
+					sub		e
+					cp		VIEW_BUF_WIDTH + 1
+					jr		nc,.apart		; together too wide
+					ld		(pend_x_extent),de
+					ld		(pend_y_extent),bc
+					ret
+
+					; Draw the one waiting, and this one waits instead.
+.apart:				ld		hl,(view_y_extent)
+					ld		de,(pend_y_extent)
+					ld		(pend_y_extent),hl
+					ld		(view_y_extent),de
+					ld		hl,(view_x_extent)
+					ld		de,(pend_x_extent)
+					ld		(pend_x_extent),hl
+					ld		(view_x_extent),de
+					jp		redraw_view
+
+.adopt:				ld		hl,(view_y_extent)
+					ld		(pend_y_extent),hl
+					ld		hl,(view_x_extent)
+					ld		(pend_x_extent),hl
+					ret
+
+
+; Draw the region still waiting, if there is one.
+; Corrupts everything.
+redraw_flush:		ld		a,(pend_y_extent+1)
+					or		a
+					ret		z
+					ld		hl,(pend_y_extent)
+					ld		(view_y_extent),hl
+					ld		hl,(pend_x_extent)
+					ld		(view_x_extent),hl
+					ld		hl,0
+					ld		(pend_y_extent),hl
+					jp		redraw_view
+
+
 ; Repaint one object's own area, with no previous position to take in --
 ; what the opening screen is built from.
 ;   IX -> the object
@@ -692,11 +806,12 @@ pixelAddress:   ld      a, b
 
 
 
-; The stack grows down from STACK_TOP, so the image has to stop below it. This
-; is the check that was missing when the player pushed the top past $FF00.
+; The stack grows down from the top of memory, so the image has to stop short of
+; what it reserves there. This is the check that was missing when the player
+; pushed the top of the image into the stack.
 image_end:
-                    ASSERT  $ <= STACK_TOP
-                    DISPLAY "code and data   $8000..", /H, image_end, "   free below the stack: ", /D, STACK_TOP - image_end
+                    ASSERT  $ <= $10000 - STACK_RESERVE
+                    DISPLAY "code and data   $8000..", /H, image_end, "   free below the stack: ", /D, $10000 - STACK_RESERVE - image_end
 
 ; ---------------------------------------------------------------------------
 ; Building a room, down where the ROM keeps its system variables.
@@ -763,6 +878,9 @@ bit_reverse_table:  REPT    256,x
 
                     ALIGN   512
                     INCLUDE "sprite_table.s"
+
+; And code that only runs when a key is pressed, in what is left.
+                    INCLUDE "pickup.s"
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
