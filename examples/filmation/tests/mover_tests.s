@@ -1050,5 +1050,17 @@ special_hide:		ld		(hide_ix),ix
 mover_cauldron:		ret
 mover_special:		ret
 
+; Silent: what the sounds play is not what these tests are about.
+sound_u:
+sound_v:
+sound_z:
+sound_uvz:
+sound_chirp:
+sound_step:
+sound_bounce:
+sound_gate:
+sound_take:
+sound_sparkle:		ret
+
 
 					INCLUDE	"../mover.s"

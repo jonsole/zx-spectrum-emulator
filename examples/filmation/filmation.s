@@ -79,6 +79,9 @@ special_gfx:        DS      32
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
 shift_shared:       DS      SHIFT_SHARED_SIZE
+
+; The sound effects, which only choose what to play -- see sound.s.
+                    INCLUDE "sound_fx.s"
 room_data_end:
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
 
@@ -91,6 +94,7 @@ room_data_end:
 					INCLUDE "character.s"
 					INCLUDE "mover.s"
 					INCLUDE "special.s"
+					INCLUDE "sound.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -115,6 +119,8 @@ ROOM_STRIDE         EQU     32
 ; address into whatever SP was aimed at.
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
+                    xor     a                   ; the border black and the speaker
+                    out     ($FE),a             ; still, as clear_scrn leaves them
 
                     ; A game from the beginning -- which is also where losing the
                     ; last life comes back to.
@@ -255,6 +261,29 @@ turn_pace:          ld      hl,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
                     ld      de,(turn_work)
                     or      a
                     sbc     hl,de
+                    push    af                  ; carry: over the budget
+                    push    hl
+
+                    ; How long the turn will have taken -- its work, or the
+                    ; budget if that is longer -- onto the sound clock, and a
+                    ; new Knight Lore frame for the sounds when that passes
+                    ; SOUND_FRAME_T. See sound.s.
+                    jr      c,.long
+                    ld      de,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
+.long:              ld      hl,(sound_clock)
+                    add     hl,de
+                    ld      de,TURN_BASE_T / TURN_UNIT_T - SOUND_FRAME_T / TURN_UNIT_T
+                    add     hl,de               ; its start, less a frame: carry if
+                                                ; a frame has gone by
+                    sbc     a,a
+                    jr      c,.frame
+                    ld      de,SOUND_FRAME_T / TURN_UNIT_T
+                    add     hl,de               ; not yet: put the frame back
+.frame:             ld      (sound_clock),hl
+                    ld      (sound_now),a
+                    pop     hl
+                    pop     af
+
                     ld      de,0
                     ld      (turn_work),de
                     ret     c                   ; over the budget already
@@ -576,7 +605,13 @@ player_step:        ld      ix,player
 .down_left:         ld      a,3
                     jr      .walk
 .down_right:        ld      a,2
-.walk:              call    character_walk
+.walk:              push    af
+                    bit     0,(ix+OBJ.GFX)          ; a footstep every other frame
+                    ld      a,(move_tick)           ; of the walk, audio_B4BB
+                    ld      b,$60
+                    call    z,sound_step
+                    pop     af
+                    call    character_walk
                     ld      ix,player               ; the repaint took IX
 
                     ;; NB: fall through into player_exit
@@ -666,7 +701,7 @@ player_die:         ld      a,PLAYER_DYING
                     ld      (player_state),a
                     set     2,(ix+OBJ.FLAGS)    ; OBJ_PASSABLE
                     ld      a,PLAYER_DEATH_GFX
-                    jr      player_sparkle
+                    jr      player_phase.death
 
 
 ; A turn of dying or of coming back.
@@ -679,6 +714,9 @@ player_phase:       cp      PLAYER_CHANGING
                     cp      PLAYER_DEATH_GFX + 7
                     jr      z,.gone
                     inc     a                   ; upd_112_to_118_184: a frame a turn
+.death:             push    af                  ; and a noise each, audio_B403
+                    call    sound_sparkle
+                    pop     af
                     jr      player_sparkle
 
                     ; The last sparkle has had its turn. lose_life: a life, and
@@ -712,6 +750,9 @@ player_phase:       cp      PLAYER_CHANGING
                     ret     c
                     ld      a,(ix+OBJ.GFX)
                     inc     a
+                    push    af                  ; audio_B419
+                    call    sound_appear
+                    pop     af
                     jr      player_sparkle
 
                     ; upd_127: himself again, and whatever touched him while he
@@ -742,6 +783,8 @@ player_change_turn: ld      a,(player_touched)
                     ld      a,(move_tick)
                     and     3
                     ret     nz
+                    ld      a,(ix+OBJ.GFX)      ; audio_B472
+                    call    sound_change
                     ld      hl,player_change
                     dec     (hl)
                     jr      nz,player_twinkle

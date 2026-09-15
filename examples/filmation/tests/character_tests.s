@@ -714,5 +714,9 @@ redraw_view:		ld		hl,view_calls
 					ld		ix,$BEEF
 					ret
 
+; Silent: what the sounds play is not what these tests are about.
+sound_jump:
+sound_z:			ret
+
 
 					INCLUDE	"../character.s"

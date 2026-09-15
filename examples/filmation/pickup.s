@@ -79,6 +79,7 @@ special_keys:		ld		bc,KEY_PICKUP
 
 .pressed:			ld		a,1
 					ld		(special_key_held),a
+					call	sound_pickup		; toggle_audio_hw_x16, at pickup or drop
 
 					; Next to one? He reaches four further than he walks, and four
 					; lower.

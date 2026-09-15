@@ -98,6 +98,7 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 					jp		nc,mover_pushed
 					ld		hl,player_lives		; and a life with it
 					inc		(hl)
+					call	sound_pickup
 					call	special_row_gone
 					jp		special_hide
 
@@ -122,6 +123,7 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 					jr		c,.rise
 					dec		a		; at it: stay there
 .rise:				ld		(ix+OBJ.DZ),a
+					call	sound_uvz
 					jp		mover_move_always
 
 .over:				ld		a,SPECIAL_POT_FLOOR
@@ -378,6 +380,10 @@ special_flash:		ld		d,16
 					ld		a,b
 					or		c
 					jr		nz,.attr
+					push	de
+					ld		a,(ix+OBJ.GFX)
+					call	sound_sparkle
+					pop		de
 					ld		bc,$2000
 .wait:				dec		bc
 					ld		a,b

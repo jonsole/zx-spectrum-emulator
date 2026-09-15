@@ -265,9 +265,11 @@ movers_step:		ld		hl,move_tick
 ; middle of its cell is in the middle of its travel and swings eight either
 ; way.
 ;   IX -> the record
-mover_slide_u:		ld		hl,OBJ.DU * 256 + OBJ.U
+mover_slide_u:		call	sound_u		; upd_54's hum, every frame
+					ld		hl,OBJ.DU * 256 + OBJ.U
 					jr		mover_slide
-mover_slide_v:		ld		hl,OBJ.DV * 256 + OBJ.V
+mover_slide_v:		call	sound_v
+					ld		hl,OBJ.DV * 256 + OBJ.V
 
 mover_slide:		ld		a,l
 					ld		(.here + 2),a		; LD A,(IX+d) is DD 7E d
@@ -414,9 +416,11 @@ mover_cycle4:		ld		a,(ix+OBJ.GFX)
 ; template names the taller of the two -- 181 of 180/181, 87 of 86/87 -- so
 ; the rotation buffer the first frame takes from the arena fits the second.
 ;   IX -> the record
-mover_fire_u:		ld		hl,OBJ.DU * 256 + COLLIDE_U
+mover_fire_u:		call	sound_u		; and a fire's, the same
+					ld		hl,OBJ.DU * 256 + COLLIDE_U
 					jr		mover_fire
-mover_fire_v:		ld		hl,OBJ.DV * 256 + COLLIDE_V
+mover_fire_v:		call	sound_v
+					ld		hl,OBJ.DV * 256 + COLLIDE_V
 
 mover_fire:			ld		a,h
 					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
@@ -452,7 +456,12 @@ mover_turn_if_hit:	ld		c,a
 					ld		a,(ix+OBJ.MOVE_STATE)
 					xor		c
 					ld		(ix+OBJ.MOVE_STATE),a
-					ret
+					ld		a,c		; a fire turning on V bounces off
+					cp		COLLIDE_V		; it, as upd_180_181 has it; nothing
+					ret		nz		; else here turns on V. Fires jammed
+					call	sound_take		; against each other turn every turn,
+					ret		z		; so it is a continuous sound here
+					jp		sound_bounce
 
 
 ; ---------------------------------------------------------------------------
@@ -476,6 +485,7 @@ mover_ball:			ld		a,(mover_ball_top)
 					add		a,BALL_RISE_TO
 					ld		(mover_ball_top),a
 .have_top:			call	mover_flicker		; and it bounces where it stands
+					call	sound_z		; humming as it goes, upd_178_179
 
 					ASSERT	MOVE_RISING == 1 << 2
 					bit		2,(ix+OBJ.MOVE_STATE)
@@ -486,7 +496,7 @@ mover_ball:			ld		a,(mover_ball_top)
 					and		COLLIDE_Z
 					ret		z		; still in the air
 					set		2,(ix+OBJ.MOVE_STATE)		; it has landed: up again
-					ret
+					jp		sound_bounce
 
 .rising:			ld		(ix+OBJ.DZ),BALL_RISE
 					call	mover_move_always
@@ -528,6 +538,14 @@ GUARD_STEP			EQU		2
 mover_guard_face:	ld		a,(ix+OBJ.DU)
 					or		(ix+OBJ.DV)
 					ret		z		; going nowhere: leave it as it stands
+
+					; A footstep on every other frame of the walk -- audio_guard_wizard,
+					; which takes its count the other way up from the knight's.
+					bit		0,(ix+GUARD_LEGS+OBJ.GFX)
+					ld		a,(move_tick)
+					cpl				; CPL and LD leave Z alone
+					ld		b,$80
+					call	z,sound_step
 
 					; +U and -V face away, and show the far frame; -U and +V the
 					; near one. Along V it is drawn mirrored. So the far frame is
@@ -804,9 +822,11 @@ mover_gate:			call	mover_halt		; it only ever moves in Z
 					ld		a,(collide_hit)
 					and		COLLIDE_Z
 					ret		z		; still on its way down
+					call	sound_gate		; and down with a crash, upd_9
 					jr		.stop
 
 .rising:			ld		(ix+OBJ.DZ),2		; a unit a turn, after the DEC
+					call	sound_uvz		; move_portcullis_up
 					call	mover_move_always
 					ld		a,(room_floor_z)
 					add		a,GATE_RISE
@@ -831,7 +851,8 @@ mover_gate:			call	mover_halt		; it only ever moves in Z
 ; block is always falling a little and always landing, and landing is where the
 ; question gets asked.
 ;   IX -> the record
-mover_carried:		call	mover_halt
+mover_carried:		call	sound_chirp		; and chirps, every frame, as upd_62 does
+					call	mover_halt
 					jp		mover_move		; DZ is left to gravity
 
 
@@ -860,6 +881,7 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 					;
 					; What the move would have told us is carried over in MOVE_STATE
 					; instead: it got nowhere last turn, so draw again.
+					call	sound_uvz		; and it moans as it goes
 					ld		a,(ix+OBJ.MOVE_STATE)
 					or		a
 					jr		nz,.turn
@@ -898,14 +920,21 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 ; A table, which goes where it is shoved and then stops -- upd_84. It clears
 ; its step AFTER moving, where a carried block clears before: the difference is
 ; that this one keeps what it was given long enough to spend it.
-mover_pushed:		call	mover_move
+mover_pushed:		call	mover_sliding
 					jp		mover_halt
 
 
 ; A chest, which never lets go of its step at all -- upd_85. Shove one and it
-; slides on by itself until the clamp takes the step away, which is all
-; mover_move does: mover_tbl points straight at it.
-mover_sliding		EQU		mover_move
+; slides on by itself until the clamp takes the step away.
+;
+; Either makes a noise while it is actually going somewhere: the game asks
+; whether it moved (at $C1A1) and sounds audio_B467 if it did. What the clamp
+; left of the step is what it moved.
+mover_sliding:		call	mover_move
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					jp		nz,sound_uvz
+					ret
 
 
 ; ---------------------------------------------------------------------------
@@ -939,6 +968,7 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 					and		COLLIDE_Z
 					ret		z		; still in the air
 
+					call	sound_bounce
 					ld		(ix+OBJ.DZ),BOUNCE_RISE
 					call	mover_flicker		; and neither axis, until one is picked
 
@@ -1014,6 +1044,7 @@ mover_spell:		ld		c,SPELL_STEP
 .v:					ld		(ix+OBJ.DV),a
 
 					call	mover_cycle4
+					call	sound_uvz
 					jp		mover_move_always
 
 
@@ -1044,7 +1075,7 @@ mover_spike_ball:	ld		a,(spike_ball_held)
 .drop:				call	mover_move		; which leaves IX -> the record
 					ld		a,(collide_hit)
 					and		COLLIDE_Z
-					ret		z
+					jp		z,sound_z		; whistling down, spiked_ball_drop
 					res		2,(ix+OBJ.MOVE_STATE)
 					xor		a
 					ld		(spike_ball_falling),a
@@ -1060,7 +1091,11 @@ mover_dropping:		bit		3,(ix+OBJ.MOVE_STATE)
 					ret		z
 					res		3,(ix+OBJ.MOVE_STATE)
 					ld		(ix+OBJ.DZ),0		; one unit, not a fall
-					jp		mover_move
+					call	mover_move
+					ld		a,(collide_hit)		; sounding if it went down
+					and		COLLIDE_Z
+					jp		z,sound_z
+					ret
 
 
 ; A block that crumbles away when something lands on it -- upd_143. The game
@@ -1072,7 +1107,9 @@ mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
 					bit		3,(ix+OBJ.MOVE_STATE)
 					ret		z
 					ld		(ix+OBJ.MOVE_STATE),$10
-					ld		(ix+OBJ.GFX),185
+					ld		a,185		; crumbling with the sparkles' noise
+					ld		(ix+OBJ.GFX),a
+					call	sound_sparkle
 					call	mover_halt
 					ld		(ix+OBJ.DZ),a
 					jp		mover_paint

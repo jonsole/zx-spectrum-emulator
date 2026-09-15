@@ -464,6 +464,9 @@ character_jump:		bit		0,(ix+CHARACTER_STATE)
 					; makes the same test at $C956.
 					set		0,(ix+CHARACTER_STATE)
 					ld		(ix+CHARACTER_DZ),CHARACTER_JUMP_DZ
+					push	af		; player_step reads A back as the key
+					call	sound_jump		; handle_jump's audio_B441
+					pop		af
 					ret
 
 
@@ -488,7 +491,9 @@ character_gravity:	ld		a,(character_jump_held)
 					ld		a,CHARACTER_FALL_MAX
 .store:				ld		(ix+CHARACTER_DZ),a
 					ld		(ix+OBJ.DZ),a		; what it would like to do; the
-					ret		; clamp says what it may
+					add		a,2		; clamp says what it may -- and falling
+					ret		p		; faster than two a turn whistles, as
+					jp		sound_z		; it does at $C9D6
 
 
 ; Settle the vertical state against what the clamp had to do.
