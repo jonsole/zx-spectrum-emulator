@@ -29,15 +29,14 @@
 CHARACTER_BODY		EQU		ROOM_STRIDE		; the body is the slot above the legs
 CHARACTER_BLOCK		EQU		8		; graphics per facing block
 CHARACTER_PHASES	EQU		6		; ...of which this many are the walk
-CHARACTER_TICKS		EQU		1		; turns each frame of the cycle is held
-					; for. One, because Knight Lore animates the
-					; legs every turn it is walking -- $C969
-					; falls into animate_human_legs whenever the
-					; forward key is down. Three units a turn
-					; over six frames of cycle is the same ground
-					; per frame as one unit over three ticks; what
-					; changes is that he covers it in six turns
-					; instead of eighteen.
+					; A frame of the cycle every step, because Knight
+					; Lore animates the legs every turn it is walking
+					; -- $C969 falls into animate_human_legs whenever
+					; the forward key is down. Three units a turn over
+					; six frames of cycle is the same ground per frame
+					; as one unit over three turns; what changes is
+					; that he covers it in six turns instead of
+					; eighteen.
 					; A walking body rides twelve above the legs, the same
 					; twelve Knight Lore uses -- see walking_character. They
 					; meet because the game nudges the two by different amounts
@@ -51,7 +50,7 @@ CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; the same twelve Knight Lore gives the
 					; knight. Z is what the depth sort reads, so
 					; the height belongs here and not in the
-					; pixel nudge -- see ADJ_LIFT.
+					; pixel nudge.
 CHARACTER_Z			EQU		128		; the floor
 
 ; How wide a character is, as a half-extent about U and V -- see COLLIDE_HEIGHT
@@ -71,15 +70,14 @@ CHARACTER_STATE		EQU		ROOM_STRIDE * 2 + 1
 ; every one of the room's thirty-six slots was carrying them unused.
 CHARACTER_FACING	EQU		ROOM_STRIDE * 2 + 2	; 0 to 3, see character_walk
 CHARACTER_PHASE		EQU		ROOM_STRIDE * 2 + 3	; where in the six-frame cycle
-CHARACTER_TICK		EQU		ROOM_STRIDE * 2 + 4	; turns left on this frame
-CHARACTER_LEGS		EQU		ROOM_STRIDE * 2 + 5	; first graphic of the legs
-CHARACTER_BODY_G	EQU		ROOM_STRIDE * 2 + 6	; ...and of the body
+CHARACTER_LEGS		EQU		ROOM_STRIDE * 2 + 4	; first graphic of the legs
+CHARACTER_BODY_G	EQU		ROOM_STRIDE * 2 + 5	; ...and of the body
 ; Which of the room's doorways this character is standing in, or $FF. Only
 ; the player ever has it set: it is what lifts the room's edge so he can walk
 ; out, and nothing else in the castle is allowed through. Knight Lore draws
 ; the same line with bit 3 of an object's flags, which says whether an arch
 ; should bother looking at it -- see chk_plyr_spec_near_arch at $C7DB.
-CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 7
+CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 6
 
 ; How close to an arch counts as standing in it: six units across the opening,
 ; fifteen along it, and in height from just below the arch's floor to one
@@ -138,17 +136,15 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 ; as a macro call takes the address BEFORE the macro's first line, so an ALIGN
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
-				MACRO	character_record legs_base, body_base, body_lift, facing
+				MACRO	character_record legs_base, body_base, facing
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
 					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; the rest of the legs' slot
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
-					DS		OBJ.ADJ_LIFT - OBJ.ADJ_X, 0
-					DB		body_lift		; the body's nudge may want the height back
-					DS		ROOM_STRIDE - OBJ.ADJ_LIFT - 1, 0
+					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; ...and of the body's
 
 					; ...and then the character's own, in the order the EQUs give
 					DB		0, 0			; CHARACTER_DZ, CHARACTER_STATE
-					DB		facing, 0, CHARACTER_TICKS
+					DB		facing, 0		; CHARACTER_FACING, CHARACTER_PHASE
 					DB		legs_base, body_base
 					DB		$FF		; CHARACTER_DOOR: in no doorway
 				ENDM
@@ -160,7 +156,7 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 				; The castle's soldiers and its wizard are not characters but
 				; movers -- see mover_move_pair -- so this is the only kind.
 				MACRO	walking_character legs_base, body_base, facing
-					character_record legs_base, body_base, 0, facing
+					character_record legs_base, body_base, facing
 				ENDM
 
 					; A character's state has to fit in the slack of a slot,
@@ -248,18 +244,19 @@ obj_pair_flip:		ld		a,(ix+OBJ.FLAGS)
 ; Put a character in the room that has just been built.
 ;   IX -> its legs record
 ;   B  - U, C - V, A - the Z its legs stand at
-character_add:		ld		(ix+CHARACTER_PHASE),0
-					ld		(ix+CHARACTER_TICK),CHARACTER_TICKS
-					ld		(ix+OBJ.U),b
+character_add:		ld		(ix+OBJ.U),b
 					ld		(ix+OBJ.V),c
 					ld		(ix+OBJ.Z),a
 					ld		(ix+CHARACTER_BODY+OBJ.U),b
 					ld		(ix+CHARACTER_BODY+OBJ.V),c
 					add		a,CHARACTER_BODY_UP
 					ld		(ix+CHARACTER_BODY+OBJ.Z),a
-					ld		(ix+CHARACTER_DZ),0		; on the floor, and staying
-					ld		(ix+CHARACTER_STATE),0		; there until asked
-					ld		(ix+CHARACTER_DOOR),$FF	; and in no doorway
+					xor		a
+					ld		(ix+CHARACTER_PHASE),a
+					ld		(ix+CHARACTER_DZ),a		; on the floor, and staying
+					ld		(ix+CHARACTER_STATE),a		; there until asked
+					dec		a
+					ld		(ix+CHARACTER_DOOR),a		; and in no doorway
 
 					; A fresh start: the rotation buffers went back with the
 					; old room's arena, and OBJ_SHIFTED with them.
@@ -284,12 +281,7 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 					; own first step, or anything else moving past and dragging
 					; a region across half of him.
 					call	region_reset
-					call	region_add
-					ld		bc,CHARACTER_BODY
-					add		ix,bc
-					call	region_add
-					ld		bc,-CHARACTER_BODY
-					add		ix,bc
+					call	pair_region_add
 					jp		redraw_view
 
 					; Each half's rotation buffer, sized for the largest thing it will
@@ -302,9 +294,7 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 .half:				ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
 					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
-					call	room_adjust
-					call	character_lift
-					call	object_place
+					call	character_place
 					jp		depth_insert
 
 
@@ -313,27 +303,26 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 ;   A  - the facing, 0 to 3
 character_walk:		ld		(ix+CHARACTER_FACING),a
 
-					; The walk cycle, a frame every CHARACTER_TICKS. Tying it
-					; to steps rather than to the clock is what keeps the feet
-					; on the ground: the knight covers the same distance per
-					; frame of the cycle however often he is asked to move.
-					dec		(ix+CHARACTER_TICK)
-					jr		nz,.same_frame
-					ld		(ix+CHARACTER_TICK),CHARACTER_TICKS
-					inc		(ix+CHARACTER_PHASE)
-					ld		a,(ix+CHARACTER_PHASE)
-					cp		CHARACTER_PHASES
-					jr		c,.same_frame
-					ld		(ix+CHARACTER_PHASE),0
-.same_frame:		call	character_frame
-
-					; The step for this facing.
-					ld		a,(ix+CHARACTER_FACING)
+					; The step for this facing, found while A still holds it:
+					; nothing from here to the load touches HL.
 					add		a		; two bytes an entry
 					ld		c,a
 					ld		b,0
 					ld		hl,character_steps
 					add		hl,bc
+
+					; The walk cycle, a frame a step. Tying it to steps rather
+					; than to the clock is what keeps the feet on the ground: the
+					; knight covers the same distance per frame of the cycle
+					; however often he is asked to move.
+					ld		a,(ix+CHARACTER_PHASE)
+					inc		a
+					cp		CHARACTER_PHASES
+					jr		c,.phase
+					xor		a
+.phase:				ld		(ix+CHARACTER_PHASE),a
+					call	character_frame		; which keeps HL
+
 					ld		d,(hl)
 					inc		hl
 					ld		e,(hl)
@@ -408,12 +397,7 @@ character_move:		ld		a,(ix+OBJ.DZ)		; the body rides with the legs, and
 					ld		(ix+CHARACTER_BODY+OBJ.DZ),a		; reads its own copy
 
 character_move_go:	call	region_reset
-					call	region_add		; where he was
-					ld		bc,CHARACTER_BODY
-					add		ix,bc
-					call	region_add
-					ld		bc,-CHARACTER_BODY
-					add		ix,bc
+					call	pair_region_add		; where he was
 
 					; Both halves take the same step. It is already everything it is
 					; allowed to be -- the room's walls and everything standing in it
@@ -436,11 +420,25 @@ character_move_go:	call	region_reset
 					call	depth_step_upper
 					call	character_place
 
-					call	region_add		; and where he is now
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
-					call	region_add
+					call	pair_region_add		; and where he is now
 					jp		redraw_defer
+
+
+; Add both records of a pair -- IX and the one ROOM_STRIDE above it -- to the
+; region, and come back with IX where it was. A character's legs and body are a
+; pair, and so are a guard's torso and legs.
+;   IX -> the first record
+; Corrupts AF, BC, HL.
+					ASSERT	CHARACTER_BODY == ROOM_STRIDE
+pair_region_add:	call	region_add
+					ld		bc,ROOM_STRIDE
+					add		ix,bc
+					call	region_add
+					ld		bc,-ROOM_STRIDE
+					add		ix,bc
+					ret
 
 
 ; Whether the jump key is down this turn. Gravity asks, because how long it is
@@ -716,52 +714,49 @@ object_collide_room:	xor		a
 
 ; Cut a step down to what the room's own edges allow.
 ;   IX -> the record, D the step in U, E the step in V
-object_bound_uv:
-.u_bound:			ld		a,(ix+OBJ.U)
+;
+; Both axes go through one piece of code: IY on the record for U and one byte
+; along for V, where the U fields name the V ones, HL on room_half_u and then
+; room_half_v, C the bit, and the step in D -- E is swapped into D for V and back.
+; Corrupts AF, C, HL, IY.
+					ASSERT	OBJ.V == OBJ.U + 1 && OBJ.SIZE_V == OBJ.SIZE_U + 1
+					ASSERT	room_half_v == room_half_u + 1 && COLLIDE_V == COLLIDE_U << 1
+object_bound_uv:	push	ix
+					pop		iy
+					ld		hl,room_half_u
+					ld		c,COLLIDE_U
+					call	.axis		; U, in D
+					inc		iy
+					inc		hl
+					sla		c
+					ld		a,d
+					ld		d,e
+					ld		e,a
+					call	.axis		; V, in D for now
+					ld		a,d
+					ld		d,e
+					ld		e,a
+					ret
+
+.axis:				ld		a,(iy+OBJ.U)
 					add		a,d
 					sub		128		; distance from the room's centre
-					jp		p,.u_abs
+					jp		p,.abs
 					neg
-.u_abs:				add		a,(ix+OBJ.SIZE_U)
-					ld		hl,room_half_u
+.abs:				add		a,(iy+OBJ.SIZE_U)
 					cp		(hl)
-					jr		c,.keep_u		; still inside
-					ld		hl,collide_bound	; the wall is in the way, and whatever
-					ld		a,COLLIDE_U		; walked into it may want to know
-					or		(hl)
-					ld		(hl),a
+					ret		c		; still inside
+					ld		a,(collide_bound)		; the wall is in the way, and whatever
+					or		c		; walked into it may want to know
+					ld		(collide_bound),a
 					ld		a,d
 					or		a
-					jr		z,.keep_u		; nothing left to give
-					jp		m,.u_back
+					ret		z		; nothing left to give
+					jp		m,.back
 					dec		d
-					jr		.u_bound
-.u_back:			inc		d
-					jr		.u_bound
-
-.keep_u:
-.v_bound:			ld		a,(ix+OBJ.V)
-					add		a,e
-					sub		128
-					jp		p,.v_abs
-					neg
-.v_abs:				add		a,(ix+OBJ.SIZE_V)
-					ld		hl,room_half_v
-					cp		(hl)
-					jr		c,.keep_v
-					ld		hl,collide_bound	; the wall is in the way, and whatever
-					ld		a,COLLIDE_V		; walked into it may want to know
-					or		(hl)
-					ld		(hl),a
-					ld		a,e
-					or		a
-					jr		z,.keep_v
-					jp		m,.v_back
-					dec		e
-					jr		.v_bound
-.v_back:			inc		e
-					jr		.v_bound
-.keep_v:			ret		
+					jr		.axis
+.back:				inc		d
+					jr		.axis
 
 
 ; The floor and everything standing in the room, with the edges already
@@ -773,12 +768,10 @@ object_collide_free:
 					; against the room's own floor at $5BAE -- which is what
 					; room_shape has been working out into room_floor_z all
 					; along and nothing was reading.
-					ld		a,(ix+OBJ.DZ)
-					add		a,(ix+OBJ.Z)
-					ld		c,a
 					ld		a,(room_floor_z)
 					ld		b,a
-					ld		a,c
+					ld		a,(ix+OBJ.DZ)
+					add		a,(ix+OBJ.Z)
 					cp		b
 					jr		nc,.above_floor
 					ld		a,b
@@ -816,16 +809,4 @@ object_collide_free:
 ; round.
 ;   IX -> the record
 character_place:	call	room_adjust
-					call	character_lift
 					jp		object_place
-
-
-; Take the height back out of the nudge, for a body whose graphic was drawn
-; assuming it sits at its legs' Z. See ADJ_LIFT.
-;   IX -> the record, its nudge fresh from room_adjust
-character_lift:		ld		a,(ix+OBJ.ADJ_LIFT)
-					and		a
-					ret		z
-					add		a,(ix+OBJ.ADJ_Y)
-					ld		(ix+OBJ.ADJ_Y),a
-					ret

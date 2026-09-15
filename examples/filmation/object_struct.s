@@ -69,8 +69,6 @@ DU:				DS		1		; signed, along U
 DV:				DS		1
 DZ:				DS		1
 
-ADJ_LIFT:			DS		1
-
 ; Pixels of sub-byte X, for an object that rotates at DRAW time rather than at
 ; placement -- see OBJ_SHARED_SHIFT. Zero for everything else, which is what
 ; objects_draw_all tests. This is the last byte of a ROOM_STRIDE slot.

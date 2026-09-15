@@ -121,7 +121,6 @@ start:				ld		sp,$FE00
 					call	fresh
 					SET		CHARACTER_FACING, 2
 					SET		CHARACTER_PHASE, 4
-					SET		CHARACTER_TICK, 0
 					SET		CHARACTER_DZ, 5
 					SET		CHARACTER_STATE, 1
 					SET		CHARACTER_DOOR, 2
@@ -143,7 +142,6 @@ start:				ld		sp,$FE00
 					EXPECT_TAIL	CHARACTER_STATE, 0, "the state"
 					EXPECT_TAIL	CHARACTER_DOOR, $FF, "the doorway"
 					EXPECT_TAIL	CHARACTER_PHASE, 0, "the phase"
-					EXPECT_TAIL	CHARACTER_TICK, CHARACTER_TICKS, "the tick"
 					EXPECT_LEGS	OBJ.FLAGS, OBJ_MOVABLE, "the legs' flags"
 					EXPECT_BODY	OBJ.FLAGS, OBJ_MOVABLE, "the body's flags"
 					EXPECT_LEGS	OBJ.GFX, LEGS_BASE + 8, "the legs' graphic"
@@ -452,6 +450,16 @@ start:				ld		sp,$FE00
 					EXPECT_WORD	s_de, $00FF, "the step"
 					EXPECT_BYTE	collide_bound, COLLIDE_V, "collide_bound"
 
+					TEST	"bound: a room narrow along V has its own V edge"
+					call	fresh
+					ld		a,32
+					ld		(room_half_v),a		; 154 is the last V inside
+					SET		OBJ.V, 153
+					STEP	3, 3
+					RUN		object_bound_uv
+					EXPECT_WORD	s_de, $0301, "the step"
+					EXPECT_BYTE	collide_bound, COLLIDE_V, "collide_bound"
+
 					TEST	"bound: inside, untouched"
 					call	fresh
 					STEP	3, -3
@@ -511,21 +519,6 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	coll_dv, -1 & $FF, "the clamp's DV"
 					EXPECT_BYTE	collide_hit, COLLIDE_V, "collide_hit, with the edge in it"
 
-; --- character_lift ------------------------------------------------------------
-
-					TEST	"lift: nothing to take back"
-					call	fresh
-					SET		OBJ.ADJ_Y, 5
-					RUN		character_lift
-					EXPECT_LEGS	OBJ.ADJ_Y, 5, "ADJ_Y"
-
-					TEST	"lift: the height taken back out of the nudge"
-					call	fresh
-					SET		OBJ.ADJ_Y, 3
-					SET		OBJ.ADJ_LIFT, -CHARACTER_BODY_UP
-					RUN		character_lift
-					EXPECT_LEGS	OBJ.ADJ_Y, (3 - CHARACTER_BODY_UP) & $FF, "ADJ_Y"
-
 					call	finish
 					DB		"character_tests", 0
 
@@ -548,7 +541,6 @@ fresh:				ld		hl,REC
 					ld		ix,REC
 					ld		(ix+CHARACTER_LEGS),LEGS_BASE
 					ld		(ix+CHARACTER_BODY_G),BODY_BASE
-					ld		(ix+CHARACTER_TICK),CHARACTER_TICKS
 					ld		(ix+CHARACTER_DOOR),$FF
 					ld		a,64
 					ld		(room_half_u),a

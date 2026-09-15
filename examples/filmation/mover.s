@@ -597,12 +597,9 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 ;   IX -> the torso record, with DU, DV and DZ set
 mover_move_pair:	call	mover_clamp
 
+					ASSERT	GUARD_LEGS == ROOM_STRIDE
 					call	region_reset
-					call	region_add		; the torso, where it was
-					ld		bc,GUARD_LEGS
-					add		ix,bc
-					call	region_add		; and the legs
-					ld		ix,(mover_ix)
+					call	pair_region_add		; the torso and the legs, where they were
 
 					ld		a,(ix+OBJ.U)
 					add		a,(ix+OBJ.DU)
@@ -640,11 +637,7 @@ mover_move_pair:	call	mover_clamp
 					call	object_place
 
 					ld		ix,(mover_ix)
-					ld		bc,GUARD_LEGS
-					add		ix,bc
-					call	region_add		; the legs, where they are now
-					ld		ix,(mover_ix)
-					call	region_add		; and the torso
+					call	pair_region_add		; and where they are now
 					call	redraw_defer
 					ld		ix,(mover_ix)
 					ret		

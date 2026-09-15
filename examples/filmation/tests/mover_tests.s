@@ -1014,6 +1014,15 @@ region_add:			ld		hl,add_calls
 
 room_adjust:		ret
 
+; As character.s has it: both records of a pair, IX kept.
+pair_region_add:	call	region_add
+					ld		bc,ROOM_STRIDE
+					add		ix,bc
+					call	region_add
+					ld		bc,-ROOM_STRIDE
+					add		ix,bc
+					ret
+
 ; These two are free to leave IX anywhere, and so they do.
 object_place:		ld		hl,place_calls
 					inc		(hl)
