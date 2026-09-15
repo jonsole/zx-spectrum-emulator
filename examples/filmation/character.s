@@ -66,7 +66,7 @@ CHARACTER_HALF_V	EQU		5
 CHARACTER_DZ		EQU		ROOM_STRIDE * 2		; velocity, signed
 CHARACTER_STATE		EQU		ROOM_STRIDE * 2 + 1
 
-; And the seven that used to be fields of the object record. They are a
+; And the ones that used to be fields of the object record. They are a
 ; character's business only -- a wall has no facing and no walk cycle -- and
 ; every one of the room's thirty-six slots was carrying them unused.
 CHARACTER_FACING	EQU		ROOM_STRIDE * 2 + 2	; 0 to 3, see character_walk
@@ -74,14 +74,12 @@ CHARACTER_PHASE		EQU		ROOM_STRIDE * 2 + 3	; where in the six-frame cycle
 CHARACTER_TICK		EQU		ROOM_STRIDE * 2 + 4	; turns left on this frame
 CHARACTER_LEGS		EQU		ROOM_STRIDE * 2 + 5	; first graphic of the legs
 CHARACTER_BODY_G	EQU		ROOM_STRIDE * 2 + 6	; ...and of the body
-CHARACTER_BLOCK_A	EQU		ROOM_STRIDE * 2 + 7	; what the facing block adds
-CHARACTER_PHASE_M	EQU		ROOM_STRIDE * 2 + 8	; mask on the walk phase
 ; Which of the room's doorways this character is standing in, or $FF. Only
 ; the player ever has it set: it is what lifts the room's edge so he can walk
 ; out, and nothing else in the castle is allowed through. Knight Lore draws
 ; the same line with bit 3 of an object's flags, which says whether an arch
 ; should bother looking at it -- see chk_plyr_spec_near_arch at $C7DB.
-CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 9
+CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 7
 
 ; How close to an arch counts as standing in it: six units across the opening,
 ; fifteen along it, and in height from just below the arch's floor to one
@@ -140,7 +138,7 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 ; as a macro call takes the address BEFORE the macro's first line, so an ALIGN
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
-				MACRO	character_record legs_base, body_base, body_block, body_phase, body_lift, facing
+				MACRO	character_record legs_base, body_base, body_lift, facing
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
 					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; the rest of the legs' slot
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
@@ -152,7 +150,6 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 					DB		0, 0			; CHARACTER_DZ, CHARACTER_STATE
 					DB		facing, 0, CHARACTER_TICKS
 					DB		legs_base, body_base
-					DB		body_block, body_phase
 					DB		$FF		; CHARACTER_DOOR: in no doorway
 				ENDM
 
@@ -160,25 +157,16 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 				; One whose body walks with its legs: the knight, and the
 				; werewolf he turns into at night. Six body graphics to a
 				; facing, the two blocks eight apart, riding twelve above.
+				; The castle's soldiers and its wizard are not characters but
+				; movers -- see mover_move_pair -- so this is the only kind.
 				MACRO	walking_character legs_base, body_base, facing
-					character_record legs_base, body_base, CHARACTER_BLOCK, $FF, 0, facing
-				ENDM
-
-				; And one whose body is a single frame each way round, held
-				; still over the same walking legs -- the castle's soldier and
-				; its wizard, who share the knight's boots and bring their own
-				; top half. Their body sits at the legs' own Z and is lifted
-				; by its pixel nudge instead of by Z, which is why it rides
-				; nothing: the game gives graphic 30 a nudge of +3 against the
-				; legs' -6, and object_place subtracts both.
-				MACRO	standing_character legs_base, body_base, facing
-					character_record legs_base, body_base, 1, $00, -CHARACTER_BODY_UP, facing
+					character_record legs_base, body_base, 0, facing
 				ENDM
 
 					; A character's state has to fit in the slack of a slot,
-					; and the record itself in a slot. Moving the seven
+					; and the record itself in a slot. Moving the
 					; character-only fields out left room for the three deltas
-					; the game gives every object, with four bytes still spare.
+					; the game gives every object, with bytes still spare.
 					ASSERT	OBJ <= ROOM_STRIDE
 					DISPLAY "object record: ", /D, OBJ, " of ", /D, ROOM_STRIDE
 
@@ -216,31 +204,20 @@ character_steps:	DB		-CHARACTER_STEP, 0		; 0  -U  away, up and left
 
 ; Give both halves the graphics this character's facing and phase call for,
 ; and turn them the way it is facing.
+;
+; Both halves are eight graphics a block, so the block and the phase are the
+; same number for each, from its own base.
 ;   IX -> the legs record
-; Corrupts AF, B and C.
+; Corrupts AF and C.
 character_frame:	ld		a,(ix+CHARACTER_FACING)
 					and		2		; the block: away from the viewer, or
-					rrca			; towards it, as 0 or 1
-					ld		b,a
-
-					add		a		; legs are always eight graphics a block
-					add		a
-					add		a		; * CHARACTER_BLOCK
+					add		a		; towards it, as 0 or 2...
+					add		a		; ...* 4, as 0 or CHARACTER_BLOCK
 					add		a,(ix+CHARACTER_PHASE)
+					ld		c,a
 					add		a,(ix+CHARACTER_LEGS)
 					ld		(ix+OBJ.GFX),a
-
-					; The body's block is its own -- eight for a body that
-					; walks, one for a body that is a single frame each way
-					; round -- and the phase reaches it through a mask, so a
-					; still body simply never moves off its first frame.
-					ld		c,0
-					bit		0,b
-					jr		z,.first_block
-					ld		c,(ix+CHARACTER_BLOCK_A)
-.first_block:		ld		a,(ix+CHARACTER_PHASE)
-					and		(ix+CHARACTER_PHASE_M)
-					add		a,c
+					ld		a,c
 					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
@@ -292,13 +269,10 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 
 					ld		hl,CHARACTER_LARGEST
 					call	.half
-					ld		a,(ix+CHARACTER_BLOCK_A)		; still the legs' record
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
-					cp		CHARACTER_BLOCK		; a body that walks: the knight,
-					jr		nz,.body		; who may be a wolf by the time
-					ld		hl,CHARACTER_TALLEST		; this buffer is wanted
-.body:				call	.half
+					ld		hl,CHARACTER_TALLEST		; the knight may be a wolf by the
+					call	.half		; time this buffer is wanted
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 
