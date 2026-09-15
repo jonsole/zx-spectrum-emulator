@@ -209,12 +209,7 @@ mover_cauldron:		ld		a,(ix+OBJ.GFX)
 					add		a,(ix+OBJ.Z)
 					ld		c,a		; where it is about to be
 
-					ld		a,(ix+OBJ.GFX)		; the next of its four frames
-					inc		a
-					xor		(ix+OBJ.GFX)
-					and		3
-					xor		(ix+OBJ.GFX)
-					ld		(ix+OBJ.GFX),a
+					call	mover_cycle4		; the next of its four frames
 
 					ld		b,2		; below the top: rise
 					ld		a,c

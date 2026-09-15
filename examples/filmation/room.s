@@ -188,7 +188,7 @@ room_wipe:			ld		hl,16384
 					ld		de,16385
 					ld		bc,6143
 					ld		(hl),0
-r					ldir
+					ldir
 					ret
 
 

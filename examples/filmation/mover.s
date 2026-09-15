@@ -129,7 +129,7 @@ mover_tbl:			DW		mover_ball			; MOVE_BALL
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_carried		; MOVE_CARRIED
 					DW		mover_pushed		; MOVE_PUSHED
-					DW		mover_sliding	; MOVE_SLIDING
+					DW		mover_move		; MOVE_SLIDING: see mover_sliding
 					DW		mover_special	; MOVE_SPECIAL
 					ASSERT	($ - mover_tbl) / 2 == MOVE_SPECIAL - MOVE_BALL + 1
 
@@ -225,10 +225,7 @@ movers_step:		ld		hl,move_tick
 					; wall of room $58 with no draw left that could free it. Here the
 					; stride is however much work the last object happened to do, which is
 					; a different number for one that moved and one that did not.
-.still:				ld		a,r
-					ld		hl,mover_seed
-					add		a,(hl)
-					ld		(hl),a
+.still:				call	mover_rand
 
 					ld		de,ROOM_STRIDE
 					add		ix,de
@@ -244,10 +241,7 @@ movers_step:		ld		hl,move_tick
 					; lets a ghost pressed against a wall eventually draw the step that
 					; frees it.
 					ld		a,(move_tick)
-					ld		hl,mover_seed
-					add		a,(hl)
-					ld		(hl),a
-					ret		
+					jp		mover_stir
 
 
 ; ---------------------------------------------------------------------------
@@ -280,17 +274,11 @@ mover_slide:		ld		a,l
 					ld		a,h
 					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
 
-					xor		a		; it moves along one axis and no other
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
-					ld		(ix+OBJ.DZ),1	; ...and does not fall: mover_move's own
-									; DEC takes this back to nothing, which
-									; is how upd_54 does it too
+					call	mover_hover		; it moves along one axis and no other,
+									; and does not fall
 
 					; Where the wave says it should be.
-					push	ix
-					pop		bc
-					ld		a,c
+					ld		a,ixl
 					rrca
 					and		$10		; half a cycle for every other record
 					ld		c,a
@@ -376,6 +364,43 @@ mover_clamp:		ld		hl,player		; the knight is not in the room's
 
 
 ; ---------------------------------------------------------------------------
+; Most movers set their own step from nothing each turn, and these are the
+; nothing.
+;
+; mover_hover holds the object up for the turn as well: mover_clamp's DEC takes
+; a DZ of one back to nothing, which is how upd_54 stops a sliding block
+; falling. mover_flicker turns it to the other of its two frames first -- bit 0
+; of the graphic. Both go on through mover_halt, which takes the step along the
+; floor away.
+;   IX -> the record
+; Out: A = 0.
+mover_hover:		ld		(ix+OBJ.DZ),1
+					jr		mover_halt
+
+mover_flicker:		ld		a,(ix+OBJ.GFX)
+					xor		1
+					ld		(ix+OBJ.GFX),a
+
+mover_halt:			xor		a
+					ld		(ix+OBJ.DU),a
+					ld		(ix+OBJ.DV),a
+					ret
+
+
+; The next of an object's four frames: the bottom two bits of its graphic count
+; round and the rest stay put. The repel spell and the cauldron's bubbles.
+;   IX -> the record
+; Corrupts AF.
+mover_cycle4:		ld		a,(ix+OBJ.GFX)
+					inc		a
+					xor		(ix+OBJ.GFX)
+					and		3
+					xor		(ix+OBJ.GFX)
+					ld		(ix+OBJ.GFX),a
+					ret
+
+
+; ---------------------------------------------------------------------------
 ; A fire that paces to and fro along one axis, two units a turn, turning round
 ; whenever something stops it.
 ;
@@ -397,17 +422,9 @@ mover_fire:			ld		a,h
 					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
 					ld		a,l
 					ld		(.which + 1),a		; the axis, as a mask
-					ld		(.turn + 1),a
-					ld		(.flip + 1),a
 
-					ld		a,(ix+OBJ.GFX)
-					xor		1
-					ld		(ix+OBJ.GFX),a
-
-					xor		a
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
-					ld		(ix+OBJ.DZ),1		; it does not fall
+					call	mover_hover		; it does not fall
+					call	mover_flicker
 
 					ld		a,(ix+OBJ.MOVE_STATE)
 .which:				and		0		; patched: the axis bit
@@ -418,14 +435,24 @@ mover_fire:			ld		a,h
 .step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
 
 					call	mover_move_always
-					ld		a,(collide_hit)
-.turn:				and		0		; patched: the same bit again
-					ret		z		; nothing in the way
+					ld		a,(.which + 1)		; the same bit again
 
+					;; NB: fall through into mover_turn_if_hit
+
+
+; Turn round if the move just made was stopped along the axis in A: flip that
+; bit of MOVE_STATE, which is numbered by axis the same way collide_hit is.
+;   A  - the axis's bit
+;   IX -> the record
+; Corrupts AF, C.
+mover_turn_if_hit:	ld		c,a
+					ld		a,(collide_hit)
+					and		c
+					ret		z		; nothing in the way
 					ld		a,(ix+OBJ.MOVE_STATE)
-.flip:				xor		0		; patched below, from .turn's operand
+					xor		c
 					ld		(ix+OBJ.MOVE_STATE),a
-					ret		
+					ret
 
 
 ; ---------------------------------------------------------------------------
@@ -448,15 +475,9 @@ mover_ball:			ld		a,(mover_ball_top)
 					ld		a,(ix+OBJ.Z)
 					add		a,BALL_RISE_TO
 					ld		(mover_ball_top),a
-.have_top:
-					ld		a,(ix+OBJ.GFX)
-					xor		1
-					ld		(ix+OBJ.GFX),a
+.have_top:			call	mover_flicker		; and it bounces where it stands
 
-					xor		a		; it bounces where it stands
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
-
+					ASSERT	MOVE_RISING == 1 << 2
 					bit		2,(ix+OBJ.MOVE_STATE)
 					jr		nz,.rising
 
@@ -464,20 +485,16 @@ mover_ball:			ld		a,(mover_ball_top)
 					ld		a,(collide_hit)
 					and		COLLIDE_Z
 					ret		z		; still in the air
-					ld		a,(ix+OBJ.MOVE_STATE)
-					or		MOVE_RISING		; it has landed: up again
-					ld		(ix+OBJ.MOVE_STATE),a
-					ret		
+					set		2,(ix+OBJ.MOVE_STATE)		; it has landed: up again
+					ret
 
 .rising:			ld		(ix+OBJ.DZ),BALL_RISE
 					call	mover_move_always
 					ld		a,(mover_ball_top)
 					cp		(ix+OBJ.Z)
 					ret		nc		; not up to it yet
-					ld		a,(ix+OBJ.MOVE_STATE)
-					and		~MOVE_RISING & $FF
-					ld		(ix+OBJ.MOVE_STATE),a
-					ret		
+					res		2,(ix+OBJ.MOVE_STATE)
+					ret
 
 
 ; ---------------------------------------------------------------------------
@@ -512,26 +529,27 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 					or		(ix+OBJ.DV)
 					ret		z		; going nowhere: leave it as it stands
 
+					; +U and -V face away, and show the far frame; -U and +V the
+					; near one. Along V it is drawn mirrored. So the far frame is
+					; the sign bit of the step along V, and the sign bit of the
+					; step along U turned over.
+					ld		c,0		; along U: not mirrored
 					ld		a,(ix+OBJ.DU)
 					cp		(ix+OBJ.DV)
-					jr		c,.along_v
-					bit		7,a
-					jr		nz,.minus_u
-					ld		bc,$0100		; +U: the far frame, not mirrored
-					jr		.apply
-.minus_u:			ld		bc,$0000		; -U: the near frame, not mirrored
-					jr		.apply
-.along_v:			bit		7,(ix+OBJ.DV)
-					jr		z,.plus_v
-					ld		bc,$0101		; -V: the far frame, mirrored
-					jr		.apply
-.plus_v:			ld		bc,$0001		; +V: the near frame, mirrored
+					jr		nc,.along_u
+					inc		c		; along V: mirrored
+					ld		a,(ix+OBJ.DV)
+					cpl				; ...and undone below
+.along_u:			cpl
+					rlca
+					and		1
+					ld		b,a		; 1: the far frame
 
 					; B says which way the figure faces, C whether it is drawn
 					; mirrored. The torso shows the first in bit 0 of its
 					; graphic and the legs in bit 3, which is their facing
 					; block -- 144 one way and 152 the other.
-.apply:				ld		a,(ix+OBJ.GFX)
+					ld		a,(ix+OBJ.GFX)
 					and		~1 & $FF
 					or		b
 					ld		(ix+OBJ.GFX),a
@@ -593,10 +611,8 @@ mover_move_pair:	call	mover_clamp
 					add		a,(ix+OBJ.DV)
 					ld		b,a
 
-					push	bc
-					ld		bc,GUARD_LEGS
-					add		ix,bc
-					pop		bc
+					ld		de,GUARD_LEGS
+					add		ix,de
 					; The legs have no step of their own to hand depth_step, and
 					; are not always where the torso is -- the wizard's two
 					; pieces start eight apart -- so whether they moved is where
@@ -652,14 +668,8 @@ mover_guard_u:		xor		a
 
 					call	mover_guard_face
 					call	mover_move_pair
-
-					ld		a,(collide_hit)
-					and		COLLIDE_U
-					ret		z
-					ld		a,(ix+OBJ.MOVE_STATE)
-					xor		1
-					ld		(ix+OBJ.MOVE_STATE),a
-					ret		
+					ld		a,COLLIDE_U		; which is bit 0 of MOVE_STATE too
+					jp		mover_turn_if_hit
 
 
 ; ---------------------------------------------------------------------------
@@ -750,15 +760,13 @@ mover_dice:			call	mover_rand
 
 ; The seed itself, stirred wherever it is asked for.
 mover_rand:			ld		a,r
-					ld		hl,mover_seed
+mover_stir:			ld		hl,mover_seed		; A into the seed
 					add		a,(hl)
 					ld		(hl),a
 					ret		
 
 
-mover_gate:			xor		a		; it only ever moves in Z
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
+mover_gate:			call	mover_halt		; it only ever moves in Z
 
 					bit		0,(ix+OBJ.GFX)
 					jr		nz,.moving
@@ -830,9 +838,7 @@ mover_gate:			xor		a		; it only ever moves in Z
 ; block is always falling a little and always landing, and landing is where the
 ; question gets asked.
 ;   IX -> the record
-mover_carried:		xor		a
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
+mover_carried:		call	mover_halt
 					jp		mover_move		; DZ is left to gravity
 
 
@@ -871,19 +877,15 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 					; A new way to go, and the two axes are drawn separately -- the
 					; game takes one from its seed and the other from the frame
 					; counter, so they are not the same number twice.
-.turn:				call	mover_rand
+.turn:				call	mover_flicker		; it flickers as it goes
+					call	mover_rand
 					call	.pick
 					ld		(ix+OBJ.DU),a
 					ld		a,(move_tick)
 					call	.pick
 					ld		(ix+OBJ.DV),a
 
-					ld		a,(ix+OBJ.GFX)		; and it flickers as it goes
-					xor		1
-					ld		(ix+OBJ.GFX),a
-
-.go:				call	mover_move_always
-					ld		ix,(mover_ix)
+.go:				call	mover_move_always		; which leaves IX -> the record
 					ld		a,(collide_hit)	; whether something stopped it, kept
 					and		COLLIDE_U | COLLIDE_V	; for next turn to read -- which is
 					ld		(ix+OBJ.MOVE_STATE),a	; the game's own test on (IX+$0C),
@@ -904,14 +906,13 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 ; its step AFTER moving, where a carried block clears before: the difference is
 ; that this one keeps what it was given long enough to spend it.
 mover_pushed:		call	mover_move
-					ld		(ix+OBJ.DU),0
-					ld		(ix+OBJ.DV),0
-					ret		
+					jp		mover_halt
 
 
 ; A chest, which never lets go of its step at all -- upd_85. Shove one and it
-; slides on by itself until the clamp takes the step away.
-mover_sliding:		jp		mover_move
+; slides on by itself until the clamp takes the step away, which is all
+; mover_move does: mover_tbl points straight at it.
+mover_sliding		EQU		mover_move
 
 
 ; ---------------------------------------------------------------------------
@@ -936,8 +937,7 @@ BOUNCE_STEP			EQU		2
 mover_bounce:		ld		c,(ix+OBJ.DU)
 					ld		b,(ix+OBJ.DV)
 					push	bc
-					call	mover_move_always
-					ld		ix,(mover_ix)
+					call	mover_move_always		; which leaves IX -> the record
 					pop		bc
 					ld		(ix+OBJ.DU),c		; whatever the clamp made of them,
 					ld		(ix+OBJ.DV),b		; it still wants to go that way
@@ -947,9 +947,7 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 					ret		z		; still in the air
 
 					ld		(ix+OBJ.DZ),BOUNCE_RISE
-					ld		a,(ix+OBJ.GFX)
-					xor		1
-					ld		(ix+OBJ.GFX),a
+					call	mover_flicker		; and neither axis, until one is picked
 
 					; Knight or werewolf. The game asks $5C08, the legs' graphic.
 					ld		a,(player + OBJ.GFX)
@@ -971,8 +969,7 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 .v_dir:				jr		nc,.go_v		; opcode patched above
 					neg
 .go_v:				ld		(ix+OBJ.DV),a
-					ld		(ix+OBJ.DU),0
-					ret		
+					ret
 
 .along_u:			ld		a,(player + OBJ.U)
 					cp		(ix+OBJ.U)
@@ -980,8 +977,7 @@ mover_bounce:		ld		c,(ix+OBJ.DU)
 .u_dir:				jr		nc,.go_u		; opcode patched above
 					neg
 .go_u:				ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),0
-					ret		
+					ret
 
 
 ; ---------------------------------------------------------------------------
@@ -1016,7 +1012,7 @@ mover_spell:		ld		c,SPELL_STEP
 					neg
 .u:					ld		(ix+OBJ.DU),a
 
-					ld		hl,player + OBJ.V
+					inc		hl		; player + OBJ.V
 					ld		a,(ix+OBJ.V)
 					sub		(hl)
 					ld		a,c
@@ -1024,12 +1020,7 @@ mover_spell:		ld		c,SPELL_STEP
 					neg
 .v:					ld		(ix+OBJ.DV),a
 
-					ld		a,(ix+OBJ.GFX)		; next of its four frames
-					inc		a
-					xor		(ix+OBJ.GFX)
-					and		3
-					xor		(ix+OBJ.GFX)
-					ld		(ix+OBJ.GFX),a
+					call	mover_cycle4
 					jp		mover_move_always
 
 
@@ -1057,8 +1048,7 @@ mover_spike_ball:	ld		a,(spike_ball_held)
 
 					; Falling: gravity has DZ, which it has been taking one off a turn
 					; since the ball let go, so it gathers speed as it goes.
-.drop:				call	mover_move
-					ld		ix,(mover_ix)
+.drop:				call	mover_move		; which leaves IX -> the record
 					ld		a,(collide_hit)
 					and		COLLIDE_Z
 					ret		z
@@ -1090,8 +1080,6 @@ mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
 					ret		z
 					ld		(ix+OBJ.MOVE_STATE),$10
 					ld		(ix+OBJ.GFX),185
-					xor		a
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
+					call	mover_halt
 					ld		(ix+OBJ.DZ),a
 					jp		mover_paint
