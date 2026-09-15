@@ -227,7 +227,7 @@ special_show:		ld		hl,special_carried + 2
 					add		a,3
 					ld		c,a
 					djnz	.slot
-					ret
+					jp		panel_show		; and the panel in front, as the game has it
 
 ;   A - the graphic, or 0 for none
 ;   C - the character column
@@ -282,24 +282,40 @@ special_show_one:	push	af
 					ret		z
 
 					; The graphic, the right way round and standing on the bottom row.
-					push	bc
-					ld		l,a
+					ld		de,SCREEN_ROWS		; D = 0: not mirrored
+
+					;; NB: fall through into screen_sprite
+
+
+; A graphic straight onto the screen, masked and byte-aligned: the carried
+; objects, and the status panel's pieces -- print_sprite as the panel uses it.
+;   A - the graphic, C - x in pixels, a multiple of 8
+;   D - 1 to draw it mirrored, E - the row below its bottom one
+; Corrupts everything but IX and IY.
+screen_sprite:		ld		l,a
 					ld		h,(high sprite_table) / 2
 					add		hl,hl
 					ld		a,(hl)
 					inc		l
 					ld		h,(hl)
 					ld		l,a
-					bit		0,(hl)		; SPRITE_FLIPPED
-					jr		z,.oriented
+					ld		a,(hl)
+					xor		d
+					rra				; SPRITE_FLIPPED: carry if it is the
+					jr		nc,.oriented		; other way round from the one wanted
+					push	bc
+					push	de
 					call	sprite_flip_h		; which keeps HL
-.oriented:			pop		bc
+					pop		de
+					pop		bc
+.oriented:			ld		a,e
+					ld		(.bottom+1),a
 					ld		a,(hl)
 					sprite_width_class
 					add		a,2
 					ld		(.columns+1),a
 					inc		hl
-					ld		a,SCREEN_ROWS
+					ld		a,e
 					sub		(hl)		; its top row
 					ld		b,a
 					inc		hl
@@ -322,6 +338,6 @@ special_show_one:	push	af
 					ex		de,hl
 					inc		b
 					ld		a,b
-					cp		SCREEN_ROWS
+.bottom:			cp		0		; patched: the row below the bottom
 					jr		c,.rows
 					ret

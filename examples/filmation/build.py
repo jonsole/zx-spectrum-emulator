@@ -14,8 +14,12 @@ is committed and never rebuilt here.
 
 Run it directly, or via the "filmation.build" VS Code task that
 .vscode/launch.json's "ZX Spectrum: Filmation" configuration depends on.
+
+    python build.py                 the game
+    python build.py --debug-room    with the room number printed top-left
 """
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -92,7 +96,7 @@ def generate_sprite_data() -> None:
         out.write_text(result.stdout, encoding="utf-8")
 
 
-def assemble(sjasmplus: str) -> None:
+def assemble(sjasmplus: str, defines: list[str]) -> None:
     OUT_DIR.mkdir(exist_ok=True)
     # --fullpath so the SLD's records carry a file the debugger can match a
     # source path against; filmation.s INCLUDEs four other files, and a line
@@ -103,6 +107,7 @@ def assemble(sjasmplus: str) -> None:
             "--sld=output/filmation.sld",
             "--fullpath",
             "--lst=output/filmation.lst",
+            *[f"-D{name}" for name in defines],
             "filmation.s",
         ],
         cwd=HERE,
@@ -135,10 +140,16 @@ def generate_room_data() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Assemble the Filmation engine.")
+    parser.add_argument("--debug-room", action="store_true",
+                        help="print the room number in the top-left corner (DEBUG_ROOM)")
+    args = parser.parse_args()
+    defines = ["DEBUG_ROOM"] if args.debug_room else []
+
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
     generate_room_data()
-    assemble(sjasmplus)
+    assemble(sjasmplus, defines)
 
 
 if __name__ == "__main__":

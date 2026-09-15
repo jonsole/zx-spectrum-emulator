@@ -95,6 +95,7 @@ room_data_end:
 					INCLUDE "mover.s"
 					INCLUDE "special.s"
 					INCLUDE "sound.s"
+					INCLUDE "panel.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -1525,31 +1526,37 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; into B and lose a row.
 					call	vid_buff_copy
 
-					; The carried objects live in the bottom-left corner and the sun
-					; in the bottom-right, straight on the screen, and a region that
-					; reached either has just wiped it. No region is wide enough to
-					; reach both.
+					; The status panel, the carried objects in the bottom-left corner
+					; and the sun in the bottom-right are straight on the screen, and
+					; a region that reached any of them has just wiped it. The
+					; carried objects draw the whole panel after them, as the game
+					; does; otherwise the panel puts back the pieces the region
+					; touched. The sun goes on top of both.
 					ld		a,(view_y_extent+1)		; max, exclusive
+					cp		PANEL_ROW + 1
+					ret		c
+					ld		hl,panel_redraw
+					cp		SCREEN_ROWS - 24 + 1
+					jr		c,.panel
+					ld		a,(view_x_extent)
+					cp		11		; their last column, plus one
+					jr		nc,.panel
+					ld		a,(view_x_extent+1)
+					cp		3		; their first, plus one
+					jr		c,.panel
+					ld		hl,special_show
+.panel:				call	.hl
+					ld		a,(view_y_extent+1)
 					cp		SUN_ROW + 1
 					ret		c
 					ld		a,(view_x_extent+1)
 					cp		SUN_COLUMN + 1
-					jr		c,.inventory
+					ret		c
 					ld		a,(view_x_extent)
 					cp		SUN_COLUMN + SUN_COLUMNS
 					ret		nc
 					jp		sun_show_all
-
-.inventory:			ld		a,(view_y_extent+1)
-					cp		SCREEN_ROWS - 24 + 1
-					ret		c
-					ld		a,(view_x_extent)
-					cp		11		; their last column, plus one
-					ret		nc
-					ld		a,(view_x_extent+1)
-					cp		3		; their first, plus one
-					ret		c
-					jp		special_show
+.hl:				jp		(hl)
 
 
 

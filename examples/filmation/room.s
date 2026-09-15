@@ -684,24 +684,58 @@ room_insert_one:	ld		a,(ix+OBJ.FLAGS)
 
 
 ; ---------------------------------------------------------------------------
-; The room number in the top-left corner, for finding your way about.
+; The status panel's pieces -- panel_data at $D27E, and print_lives_gfx's head:
+; the graphic, x plus one if it is drawn mirrored, and the row below its bottom
+; one. The game's Y counts up from the bottom of the screen, so that row is
+; 192 - Y. Two runs of five links, a step of 16 across and 8 up or down, then a
+; bar at the edge and a piece by the day; the same again mirrored.
+panel_pieces:		DB		134,  16, 140
+					DB		134,  32, 148
+					DB		134,  48, 156
+					DB		134,  64, 164
+					DB		134,  80, 172
+					DB		135, 240, 192
+					DB		136, 144, 188
+					DB		134, 160 + 1, 172
+					DB		134, 176 + 1, 164
+					DB		134, 192 + 1, 156
+					DB		134, 208 + 1, 148
+					DB		134, 224 + 1, 140
+					DB		135,   0 + 1, 192
+					DB		136,  96 + 1, 188
+					DB		140,  16, 160		; the knight's head, by the lives
+PANEL_PIECES		EQU		($ - panel_pieces) / 3
+
+; The word over the day: four characters of the game's own, day_font at $BCEC.
+panel_word:			DB		$06, $07, $06, $06, $06, $06, $06, $0F
+					DB		$00, $01, $82, $C6, $64, $6C, $6D, $C6
+					DB		$C8, $C6, $E1, $60, $60, $E0, $64, $63
+					DB		$60, $60, $60, $E0, $60, $40, $C0, $80
+
+
+; ---------------------------------------------------------------------------
+; The day and the lives in their places on the panel, and -- in a build with
+; DEBUG_ROOM defined, `build.py --debug-room` -- the room number in the top-left
+; corner, for finding your way about.
 ;
 ; Printed every turn rather than once when the room is built, because a redraw
-; region that reaches the corner would otherwise wipe it and it would not come
-; back until the next room.
+; region that reaches them would otherwise wipe them, and it keeps the numbers
+; right without anything else having to ask.
 ;
-; Straight to the screen, byte-aligned, no mask: it is a debug read-out and
-; whatever it lands on is meant to be covered.
-DEBUG_AT			EQU		$4000		; the top-left character cell
+; Straight to the screen, byte-aligned, no mask.
+DAYS_AT				EQU		$4000 + 2 * 2048 + 7 * 32 + 15	; row 23, print_days
+LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives
 
-print_room:			ld		a,(days)		; the day, top right
-					ld		hl,DEBUG_AT + 27
+print_room:			ld		a,(days)
+					ld		hl,DAYS_AT
 					call	print_hex
-					ld		a,(player_lives)		; and the lives beside it
-					ld		hl,DEBUG_AT + 30
+					ld		a,(player_lives)
+					ld		hl,LIVES_AT
+				IFDEF	DEBUG_ROOM
 					call	print_hex
 					ld		a,(room_shown)
-					ld		hl,DEBUG_AT
+					ld		hl,$4000		; the top-left character cell
+				ENDIF
 
 					;; NB: fall through into print_hex
 
@@ -739,7 +773,13 @@ print_char:			push	hl
 					ex		de,hl		; de -> the glyph
 					pop		hl		; hl -> the screen
 
-					ld		b,8
+					;; NB: fall through into print_glyph
+
+
+; Eight rows of a glyph.
+;   DE -> the glyph, HL -> the top row of its cell
+; Returns DE past it. Corrupts AF, B, H.
+print_glyph:		ld		b,8
 .row:				ld		a,(de)
 					ld		(hl),a
 					inc		de

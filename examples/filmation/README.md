@@ -21,6 +21,9 @@ runs what you just wrote. To build it by hand:
 .\.venv-win\Scripts\python.exe examples\filmation\build.py
 ```
 
+Add `--debug-room` to print the room number in the top-left corner, for
+finding your way about; the ordinary build leaves it out.
+
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
 It writes `output/filmation.sna` (from the `SAVESNA` at the bottom of
 `filmation.s`), plus the `.sld` the debugger maps source lines with and a
@@ -645,3 +648,32 @@ filter in front of the exact test, never a replacement.
 Deliberately not built yet: there is no consumer, so the upkeep would be pure
 loss, and broad-phase filtering only starts paying once there are enough
 pairwise tests to filter.
+
+
+## Space — possibilities not yet taken
+
+Every region is close to full. These are savings that have been looked at and
+priced but not made, each with what it would cost.
+
+### `pixelAddress` through the ROM's PIXEL-ADD
+
+The 48K ROM's PIXEL-ADD at `$22AA` computes the same screen address as
+`pixelAddress`, but its first three instructions (`LD A,$AF / SUB B / JP C,$24F9`)
+turn BASIC's PLOT coordinates round — Y counted up from the bottom, only the top
+176 rows, anything else "Integer out of range". Entered at **`$22B0`**, past
+that, it takes the row counted from the top in A and gives the same address for
+all 192 rows: H = `010 y7y6 y2y1y0`, L = `y5y4y3 x7x6x5x4x3`.
+
+```
+pixelAddress:   ld      a,b
+                jp      $22B0       ; PIXEL-ADD, past BASIC's range check
+```
+
+- **Saves** about 18 bytes of the code region.
+- **Same contract** as far as the callers go: C, DE and HL as before, B comes
+  back as it went in (it copies A into it). It returns A = x AND 7 where ours
+  leaves A = L; none of the four callers reads A afterwards.
+- **Speed** is the same to within the extra jump: a similar number of
+  instructions, and the ROM is never contended.
+- **Cost:** the game depends on the 48K ROM's layout. The 128K's 48 BASIC ROM
+  has the routine at the same address; any other ROM would break it silently.
