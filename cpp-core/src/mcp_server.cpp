@@ -841,7 +841,9 @@ json tools_list() {
         "T-states per frame -- what decides whether a game holds its frame rate. Interrupt "
         "acknowledges are counted separately rather than charged to whichever line they "
         "interrupted; a HALT's waiting shows on the HALT. Code with no source is grouped by "
-        "256-byte page. `call_tree` nests the calls by path, so a routine's children say what "
+        "256-byte page. `periods` has every frame's (or turn's) busy time as a strip, and the "
+        "busiest ones with their own lines and routines -- where averages hide a spike. "
+        "`call_tree` nests the calls by path, so a routine's children say what "
         "calling them cost it rather than what they cost the whole program. Use it before and after an optimisation to measure the change "
         "instead of estimating it.",
         schema(json{{"action", json{{"type", "string"},
@@ -857,7 +859,20 @@ json tools_list() {
                                           "by call path -- is cut to the calls holding at least "
                                           "this percentage of all profiled time. Default 2; "
                                           "time in the calls cut is reported per node as "
-                                          "other_calls_tstates."}}}},
+                                          "other_calls_tstates."}}},
+                    {"idle", json{{"type", "array"},
+                                  {"items", json{{"type", "string"}}},
+                                  {"description", "Routines whose time is waiting, not work -- a "
+                                                  "busy-wait that paces the game, say. Their time "
+                                                  "is reported as idle_tstates and left out of "
+                                                  "busy time, and a period's busy time is what "
+                                                  "ranks it among the worst. A HALT waiting is "
+                                                  "always idle. Replaces the list; kept across "
+                                                  "calls and starts. Applies from now on."}}},
+                    {"period", string_prop("What the program's work repeats in: \"frame\" (the "
+                                           "default) or a routine name whose arrival starts "
+                                           "each period -- a game loop that takes more than a "
+                                           "frame a turn. Changing it restarts the periods.")}},
                {"action"}));
     add("set_speed",
         "Set emulation speed. \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
@@ -1525,6 +1540,23 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "profile") {
+        const json& idle_arg = arg(args, "idle");
+        const json& period_arg = arg(args, "period");
+        if (idle_arg.is_array() || period_arg.is_string()) {
+            ProfileSettings settings = current_profile_settings();
+            if (idle_arg.is_array()) {
+                settings.idle.clear();
+                for (const json& idle_name : idle_arg) {
+                    if (idle_name.is_string()) {
+                        settings.idle.push_back(idle_name.get<std::string>());
+                    }
+                }
+            }
+            if (period_arg.is_string()) {
+                settings.period = period_arg.get<std::string>();
+            }
+            apply_profile_settings(engine, sources, settings);
+        }
         const json& action_arg = arg(args, "action");
         const std::string action = action_arg.is_string() ? action_arg.get<std::string>() : "";
         if (action == "start") {
@@ -1550,7 +1582,7 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             min_percent = min_arg.get<double>();
         }
         const ProfileReport report = build_profile_report(engine.profile_snapshot(), sources);
-        json out = profile_report_json(report, lines, routines);
+        json out = profile_report_json(report, lines, routines, false);
         out["call_tree"] = profile_call_tree_json(report, min_percent / 100.0, 12);
         return json_result(out);
     }

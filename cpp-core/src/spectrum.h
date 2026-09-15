@@ -135,9 +135,10 @@ private:
     /// A minute of Cobra left 4412 of them.
     std::vector<uint16_t> call_stack_sp_;
 
-    /// Drops entries the stack pointer has already risen past, i.e. whose
-    /// return address is no longer on the stack at all.
-    void prune_call_stack(uint16_t sp);
+    /// Drops the frames whose return address an instruction moving SP from
+    /// `sp_before` to `sp_after` read off or wrote over, and every frame after
+    /// them -- the rule profile.h sets out.
+    void drop_reached_frames(uint16_t sp_before, uint16_t sp_after);
 
     /// step_instruction's clock loop when a profile is attached: the same
     /// loop, timed, with an interrupt's acknowledge sequence split off, and

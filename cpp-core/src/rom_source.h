@@ -28,6 +28,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -70,6 +71,11 @@ public:
     std::vector<SourceFile> files;
     std::unordered_map<uint16_t, SourceLoc> addr_to_loc;
     std::map<std::string, uint16_t> symbols;
+    /// The symbols that came from D records -- EQU'd constants, not places in
+    /// the code -- so a label lookup can pass over one whose value merely
+    /// happens to equal an instruction's address (filmation's KEY_ROOMS is
+    /// 63486, seven bytes into turn_pace).
+    std::set<std::string> equates;
 
     /// How far below a requested line to look for a real instruction. A
     /// clicked line often has no code of its own -- a label ("START:"), a
@@ -105,9 +111,15 @@ public:
     /// The nearest label at or before `addr` that sits on a line of code --
     /// what a profile names a routine by. symbol_at alone would as readily
     /// return an EQU whose value happens to fall just below `addr`
-    /// (VIEW_BUF_ROWS EQU 64 is "a label" at 0x0040 as far as it knows).
+    /// (VIEW_BUF_ROWS EQU 64 is "a label" at 0x0040 as far as it knows), so
+    /// equates are passed over, and so is anything not on a T record's address.
     /// Unbounded, since a routine can be longer than SYMBOL_MAX_OFFSET.
     bool code_label_at(uint16_t addr, std::string& name, uint16_t& offset) const;
+
+    /// The addresses routine `name` covers: from its label up to the next
+    /// label on a line of code that is not one of its own .locals, or to the
+    /// source's last instruction. False if `name` is not a code label here.
+    bool routine_range(const std::string& name, uint16_t& first, uint16_t& last) const;
 
     /// Rebuilds the address-sorted index. Call after filling the maps.
     void index();
@@ -175,6 +187,9 @@ public:
     /// caller typing `key_scan` for `KEY_SCAN` has not made an interesting
     /// mistake, and no source here defines two labels differing only in case.
     bool symbol_value(const std::string& name, uint16_t& addr) const;
+
+    /// RomSource::routine_range, from the loaded program's source first.
+    bool routine_range(const std::string& name, uint16_t& first, uint16_t& last) const;
 
     /// An address written the way a person says one, rather than as a number:
     ///

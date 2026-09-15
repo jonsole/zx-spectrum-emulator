@@ -258,6 +258,84 @@ TEST(a_stack_at_the_top_of_memory_unwinds_across_the_wrap) {
     CHECK_EQ(profile.call_nodes()[Profile::ROOT].self_half_clocks, uint64_t((17 + 4) * 2));
 }
 
+TEST(a_stack_pointer_borrowed_for_data_does_not_end_the_call) {
+    // CALL A. A saves SP, points it at data far away (below the stack, the
+    // way a sprite blit walks its bitmap), POPs twice, puts SP back, calls B
+    // and returns. None of that is a return: A stays open throughout, and B
+    // nests under it.
+    Spectrum machine;
+    setup(machine, {0xCD, 0x00, 0x81, 0x00});
+    put(machine, ROUTINE_A, {
+        0xED, 0x73, 0x00, 0x90, // LD (0x9000),SP
+        0x31, 0x00, 0x60,       // LD SP,0x6000
+        0xD1,                   // POP DE
+        0xD1,                   // POP DE
+        0xED, 0x7B, 0x00, 0x90, // LD SP,(0x9000)
+        0xCD, 0x00, 0x82,       // CALL B
+        0xC9,                   // RET
+    });
+    put(machine, ROUTINE_B, {0x00, 0xC9});
+    Profile profile;
+    machine.profile = &profile;
+
+    machine.step_instruction(); // CALL A
+    for (int i = 0; i < 4; i++) {
+        machine.step_instruction(); // the save, the borrow, two POPs
+        CHECK_EQ(profile.depth(), size_t(1));
+    }
+    run_to(machine, PROGRAM + 3);
+    CHECK_EQ(profile.depth(), size_t(0));
+
+    const uint32_t a = child(profile, Profile::ROOT, ROUTINE_A);
+    CHECK(a != 0);
+    CHECK(child(profile, a, ROUTINE_B) != 0);
+    // Everything A did is A's: two 20T loads, a 10T load, two 10T POPs, the
+    // CALL (17T) and the RET (10T). The root has only its own CALL.
+    CHECK_EQ(profile.call_nodes()[a].self_half_clocks, uint64_t((20 + 10 + 10 + 10 + 20 + 17 + 10) * 2));
+    CHECK_EQ(profile.call_nodes()[Profile::ROOT].self_half_clocks, uint64_t(17 * 2));
+}
+
+TEST(a_stack_abandoned_by_hand_ends_when_its_slot_is_used_again) {
+    // CALL A; A CALLs B; B throws the whole chain away with LD SP back to
+    // where it was before A was called, pushes a return address to after the
+    // first CALL, and RETs through it. The LD SP alone ends nothing -- it is
+    // what borrowing SP looks like too -- but the PUSH writes over the slot
+    // A's call used, so A and B both end there.
+    Spectrum machine;
+    setup(machine, {0xCD, 0x00, 0x81, 0x00, 0x00});
+    put(machine, ROUTINE_A, {0xCD, 0x00, 0x82});
+    put(machine, ROUTINE_B, {
+        0x31, 0x00, 0xFF,       // LD SP,STACK_TOP
+        0x21, 0x03, 0x80,       // LD HL,PROGRAM+3
+        0xE5,                   // PUSH HL
+        0xC9,                   // RET
+    });
+    Profile profile;
+    machine.profile = &profile;
+    run_to(machine, ROUTINE_B + 6);
+    CHECK_EQ(profile.depth(), size_t(2));
+    machine.step_instruction(); // PUSH HL, over A's old slot
+    CHECK_EQ(profile.depth(), size_t(0));
+    machine.step_instruction(); // RET, at the root
+    CHECK_EQ(profile.depth(), size_t(0));
+    CHECK_EQ(int(machine.registers().pc), int(PROGRAM + 3));
+}
+
+TEST(a_loop_that_resets_the_stack_and_calls_again_stays_one_deep) {
+    // loop: LD SP,0xFF00 / CALL A, and A pushes a word and jumps back to loop. No
+    // return ever consumes a slot; each CALL overwrites the one before.
+    Spectrum machine;
+    setup(machine, {0x31, 0x00, 0xFF, 0xCD, 0x00, 0x81});
+    put(machine, ROUTINE_A, {0xE5, 0xC3, 0x00, 0x80}); // PUSH HL / JP loop
+    Profile profile;
+    machine.profile = &profile;
+    for (int i = 0; i < 300; i++) {
+        machine.step_instruction();
+        CHECK(profile.depth() <= 1);
+    }
+    CHECK_EQ(profile.call_nodes().size(), size_t(2));
+}
+
 TEST(an_interrupt_handler_is_a_node_of_its_own) {
     Spectrum machine;
     load_handler_rom(machine);
@@ -285,6 +363,113 @@ TEST(an_interrupt_handler_is_a_node_of_its_own) {
     CHECK_EQ(node.self_half_clocks, uint64_t((13 + 4 + 10) * 2) * interrupts);
     CHECK_EQ(sum_self(profile), profile.total_half_clocks());
     CHECK_EQ(profile.depth(), size_t(0));
+}
+
+TEST(an_address_marked_idle_counts_as_idle_everywhere) {
+    // LD B,3 / DJNZ $ / NOP, with the DJNZ marked idle -- a pacing loop.
+    Spectrum machine;
+    setup(machine, {0x06, 0x03, 0x10, 0xFE, 0x00});
+    Profile profile;
+    std::vector<uint8_t> idle(Profile::ADDRESSES, 0);
+    idle[PROGRAM + 2] = 1;
+    profile.set_idle_map(idle);
+    machine.profile = &profile;
+    for (int i = 0; i < 5; i++) {
+        machine.step_instruction();
+    }
+    const uint64_t djnz = uint64_t((13 + 13 + 8) * 2);
+    CHECK_EQ(profile.idle_half_clocks(PROGRAM + 2), djnz);
+    CHECK_EQ(profile.idle_half_clocks(PROGRAM), uint64_t(0));
+    CHECK_EQ(profile.idle_total_half_clocks(), djnz);
+    CHECK_EQ(profile.call_nodes()[Profile::ROOT].idle_half_clocks, djnz);
+}
+
+TEST(a_halt_waiting_is_idle_without_being_marked) {
+    Spectrum machine;
+    load_handler_rom(machine);
+    setup(machine, {0xFB, 0x76, 0x18, 0xFD});
+    Profile profile;
+    machine.profile = &profile;
+    const uint64_t interrupts_before = machine.cpu.interrupt_count;
+    while (machine.cpu.interrupt_count - interrupts_before < 2) {
+        machine.step_instruction();
+    }
+    // Every pass but the ones that halt is waiting: what is left over is a
+    // whole number of 4T HALTs, one per time the CPU arrived at it.
+    CHECK(profile.idle_half_clocks(PROGRAM + 1) > 10000);
+    const uint64_t halting = profile.half_clocks(PROGRAM + 1) - profile.idle_half_clocks(PROGRAM + 1);
+    CHECK_EQ(halting % uint64_t(4 * 2), uint64_t(0));
+    CHECK(halting >= uint64_t(4 * 2) && halting <= uint64_t(4 * 2) * 3);
+    CHECK_EQ(profile.idle_half_clocks(PROGRAM + 2), uint64_t(0));
+    CHECK_EQ(profile.idle_total_half_clocks(), profile.idle_half_clocks(PROGRAM + 1));
+}
+
+TEST(periods_are_frames_by_default_and_the_first_is_not_ranked) {
+    Spectrum machine;
+    load_handler_rom(machine);
+    setup(machine, {0xFB, 0x76, 0x18, 0xFD});
+    Profile profile;
+    machine.profile = &profile;
+    const uint64_t first = machine.ula.frame_count();
+    while (machine.ula.frame_count() < first + 6) {
+        machine.step_instruction();
+    }
+    machine.step_instruction(); // the first instruction of frame +6 closes frame +5
+
+    const Profile::PeriodSummary s = profile.summarize(400);
+    // Frames +1 .. +5 are complete; the frame counting began in is not a period.
+    CHECK_EQ(s.count, uint64_t(5));
+    CHECK_EQ(s.strip.size(), size_t(5));
+    CHECK_EQ(s.worst.size(), size_t(5));
+    const uint64_t frame_hc = machine.ula.timing().hc_per_frame();
+    for (const Profile::PeriodCost& p : profile.periods()) {
+        // An instruction belongs to the frame it began in, so a period is a
+        // frame give or take the instructions straddling its edges.
+        CHECK(p.half_clocks + 40 >= frame_hc && p.half_clocks <= frame_hc + 40);
+        // Almost all of it waiting on the HALT.
+        CHECK(p.idle_half_clocks * 10 > p.half_clocks * 9);
+    }
+    CHECK(s.worst[0].cost.busy() >= s.worst[4].cost.busy());
+    CHECK(!s.worst[0].nodes.empty());
+}
+
+TEST(a_marker_makes_each_turn_of_a_loop_a_period_and_the_busiest_keep_their_detail) {
+    // loop: INC A / LD B,A / DJNZ $ / JP loop -- each turn spins once more
+    // than the last.
+    Spectrum machine;
+    setup(machine, {0x3C, 0x47, 0x10, 0xFE, 0xC3, 0x00, 0x80});
+    Profile profile;
+    profile.set_period_marker(PROGRAM);
+    machine.profile = &profile;
+    for (int turn = 0; turn < 30; turn++) {
+        run_to(machine, PROGRAM + 4);
+        run_to(machine, PROGRAM);
+    }
+
+    const Profile::PeriodSummary s = profile.summarize(10);
+    // Thirty arrivals at the marker. The first opens the period counting began
+    // in, which the second closes unranked; the last turn is still open. So
+    // turns 1..28 are the periods, turn k spinning with A = k+1.
+    CHECK_EQ(s.count, uint64_t(28));
+    CHECK_EQ(s.strip.size(), size_t(10));
+    CHECK_EQ(s.bucket, uint64_t(3));
+    CHECK_EQ(s.worst.size(), Profile::WORST_PERIODS);
+    // A turn with A = n is INC (4T), LD (4T), n-1 taken DJNZs, one not, JP.
+    const Profile::WorstPeriod& busiest = s.worst[0];
+    const uint64_t n = 29;
+    CHECK_EQ(busiest.cost.half_clocks, uint64_t((4 + 4 + (n - 1) * 13 + 8 + 10) * 2));
+    CHECK_EQ(busiest.index, uint64_t(27));
+    bool found_djnz = false;
+    for (const Profile::WorstPeriod::Share& a : busiest.addresses) {
+        if (a.id == PROGRAM + 2) {
+            found_djnz = true;
+            CHECK_EQ(a.half_clocks, uint64_t(((n - 1) * 13 + 8) * 2));
+        }
+    }
+    CHECK(found_djnz);
+    // Changing what a period is starts the periods again.
+    profile.set_period_marker(Profile::FRAME_PERIODS);
+    CHECK_EQ(profile.summarize(10).count, uint64_t(0));
 }
 
 TEST(clearing_starts_again_from_nothing) {

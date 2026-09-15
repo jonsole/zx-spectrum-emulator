@@ -65,6 +65,10 @@ constexpr auto AUDIO_PACING_TIMEOUT = std::chrono::milliseconds(120);
 /// row means nothing is draining and never will be.
 constexpr int MAX_PACING_TIMEOUTS = 3;
 
+/// How many entries a profile snapshot's strip of periods is reduced to:
+/// enough to see a spike, few enough to send every second.
+constexpr size_t PROFILE_STRIP_ENTRIES = 400;
+
 } // namespace
 
 const char* stop_reason_name(StopReason r) {
@@ -988,6 +992,8 @@ ProfileSnapshot Engine::profile_snapshot() {
         s.interrupts = profile_.interrupts();
         s.interrupt_half_clocks = profile_.interrupt_half_clocks();
         s.total_half_clocks = profile_.total_half_clocks();
+        s.idle_half_clocks = profile_.idle_total_half_clocks();
+        s.frame_half_clocks = m.ula.timing().hc_per_frame();
         for (size_t i = 0; i < Profile::ADDRESSES; i++) {
             const uint16_t addr = uint16_t(i);
             if (profile_.hits(addr) == 0) {
@@ -997,10 +1003,20 @@ ProfileSnapshot Engine::profile_snapshot() {
             e.addr = addr;
             e.hits = profile_.hits(addr);
             e.half_clocks = profile_.half_clocks(addr);
+            e.idle_half_clocks = profile_.idle_half_clocks(addr);
             s.entries.push_back(e);
         }
         s.call_nodes = profile_.call_nodes();
+        s.periods = profile_.summarize(PROFILE_STRIP_ENTRIES);
         return s;
+    });
+}
+
+void Engine::set_profile_options(ProfileOptions options) {
+    submit_void([this, options = std::move(options)](Spectrum& m) {
+        (void)m;
+        profile_.set_idle_map(options.idle_map);
+        profile_.set_period_marker(options.period_marker);
     });
 }
 

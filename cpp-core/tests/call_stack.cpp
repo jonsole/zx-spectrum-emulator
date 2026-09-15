@@ -8,8 +8,9 @@
 //
 // It is not a hypothetical. A minute of Cobra left 4412 stranded frames, and
 // because VS Code repaints its call stack on every stop, clicking Pause then
-// took over four seconds to come back. Hence prune_call_stack, and hence
-// these tests.
+// took over four seconds to come back. Hence drop_reached_frames, and hence
+// these tests -- which also hold it to not emptying the stack when a routine
+// merely borrows SP as a data pointer, as sprite and buffer code does.
 
 #include "spectrum.h"
 #include "test_main.h"
@@ -95,22 +96,55 @@ TEST(a_discarded_return_address_drops_its_frame) {
     CHECK_EQ(int(machine.call_stack.size()), 0);
 }
 
-TEST(abandoning_the_stack_wholesale_drops_every_frame) {
-    // LD SP,nn above the frames: an interrupt handler or a loader resetting
-    // the stack, which abandons everything on it at once.
+TEST(abandoning_the_stack_wholesale_drops_the_frames_it_reuses) {
+    // LD SP,nn back above the frames, as a loader or an error handler resets
+    // the stack -- then the next CALL writes its return address over the slot
+    // the outer frame's was in. The LD SP alone cannot be told from a routine
+    // borrowing SP for data (see below), so the frames stay until that write
+    // proves them gone.
     // 0x8000: CALL 0x8100.  0x8100: CALL 0x8110 -- a DIFFERENT address, or the
     // subroutine calls itself for ever and never reaches the LD SP at all.
-    // 0x8110: LD SP,0xFF00 / JR $.
+    // 0x8110: LD SP,0xFF00 / CALL 0x8120.  0x8120: JR $.
     Spectrum machine;
     setup(machine, {0xCD, 0x00, 0x81, 0x00}, {0xCD, 0x10, 0x81, 0x18, 0xFE});
-    const uint8_t deeper[] = {0x31, 0x00, 0xFF, 0x18, 0xFE};
+    const uint8_t deeper[] = {0x31, 0x00, 0xFF, 0xCD, 0x20, 0x81};
     machine.write_memory(0x8110, deeper, sizeof deeper);
+    const uint8_t spin[] = {0x18, 0xFE};
+    machine.write_memory(0x8120, spin, sizeof spin);
 
     step(machine, 2); // the outer CALL, then the nested one
     CHECK_EQ(int(machine.call_stack.size()), 2);
 
-    step(machine, 1); // LD SP,0xFF00 -- abandons both frames at once
-    CHECK_EQ(int(machine.call_stack.size()), 0);
+    step(machine, 1); // LD SP,0xFF00
+    CHECK_EQ(int(machine.call_stack.size()), 2);
+
+    step(machine, 1); // CALL 0x8120, over the outer frame's slot
+    CHECK_EQ(int(machine.call_stack.size()), 1);
+    CHECK_EQ(int(machine.call_stack[0]), 0x8116);
+}
+
+TEST(a_stack_pointer_borrowed_for_data_keeps_the_frames) {
+    // A routine pointing SP at data -- here above the stack, the case that
+    // used to empty the call stack -- and POPping it. Nothing has returned.
+    Spectrum machine;
+    setup(machine, {0xCD, 0x00, 0x81, 0x00},
+                               {0x31, 0xF0, 0xFF, 0xD1, 0xD1, 0x18, 0xFE}); // LD SP,0xFFF0 / POP DE x2 / JR $
+    step(machine, 1);
+    CHECK_EQ(int(machine.call_stack.size()), 1);
+    step(machine, 3);
+    CHECK_EQ(int(machine.call_stack.size()), 1);
+    CHECK_EQ(int(machine.call_stack[0]), int(PROGRAM + 3));
+}
+
+TEST(a_loop_that_resets_the_stack_and_calls_again_does_not_accumulate) {
+    // loop: LD SP,0xFF00 / CALL 0x8100, and 0x8100 pushes a word and jumps back to
+    // loop. No return ever consumes a slot; each CALL overwrites the last.
+    Spectrum machine;
+    setup(machine, {0x31, 0x00, 0xFF, 0xCD, 0x00, 0x81}, {0xE5, 0xC3, 0x00, 0x80}); // PUSH HL / JP loop
+    for (int i = 0; i < 300; i++) {
+        machine.step_instruction();
+        CHECK(machine.call_stack.size() <= 1);
+    }
 }
 
 TEST(nesting_is_tracked_innermost_last) {

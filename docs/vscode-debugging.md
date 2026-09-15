@@ -497,12 +497,64 @@ interrupted; **(outside any call)** is code that ran with no call open, which
 for most games is the main loop.
 
 How a call is followed: a `CALL` or `RST` that pushes a return address starts
-one, and it ends when the stack pointer rises past that address -- by `RET`,
-`RETI`, or a `POP` or `LD SP` that throws it away, so a program that unwinds
-by hand still balances. Code reached by `JP` is not a call, so it counts as
+one, and it ends when that address is consumed -- by `RET` or `RETI`, or by a
+`POP` or `INC SP` that throws it away, so a program that unwinds by hand still
+balances. SP merely moving does not end anything: code that borrows SP as a
+data pointer (`LD SP,HL` and a run of `PUSH`es to fill a buffer, or `POP`s to
+walk a bitmap) stays inside the call it is in, and a chain abandoned with
+`LD SP` ends when the stack is used again over its slots. The debugger's Call
+Stack follows the same rule, so it no longer empties while a routine has SP
+borrowed. Code reached by
+`JP` is not a call, so it counts as
 the routine that jumped to it: a dispatcher that ends in `JP (HL)` owns the
 time of whatever it dispatched to. The heat map, which is by address, still
 puts that time on the right lines.
+
+### Idle time
+
+A game that paces itself spends much of every frame waiting -- filmation's
+`turn_pace` busy-waits out whatever is left of each turn's budget, and a
+profile that counts that as work reads as 58% pacer and a squeezed few percent
+of everything worth optimising. So waiting is counted apart:
+
+- a `HALT` waiting for its interrupt is always idle;
+- any routine can be marked idle: right-click it in the profile view (**Mark
+  as Idle**), or **Set Idle Routines...** from the view's `...` menu. From
+  then on its time is counted as idle.
+
+Every share -- on the source, in the tree, in the hot spots list -- is then of
+*busy* time. Idle lines are tinted grey and labelled `idle · N T/frame`, idle
+routines show a clock and sort below the work, and the status bar says how
+much of the time was idle. The list is kept per workspace and sent with every
+start; a routine is matched by its label in the loaded debug info (up to the
+next routine's label), and a name that matches nothing is reported.
+
+### Worst frames
+
+Averages hide the frames that actually drop: a room being built, a burst of
+redraws. So the emulator also keeps every frame's busy time, and the ten
+busiest frames in full -- their own time per line and per call path.
+
+**Worst frames** heads the profile view. Its row carries a strip of busy time
+across the whole run, one block per frame (or the busiest of several), where a
+full block is a frame with no time left over; its tooltip says how many frames
+had no idle time at all. Expanded, it lists the worst ten, busiest first, each
+expanding into *that frame's* routines exactly as the whole profile expands.
+Click one, or its eye button, to paint just that frame onto the source; the
+status bar then names it, and clicking that (or the view's closed-eye button)
+goes back to the whole profile.
+
+A frame is the default unit, but not every game's work fits in one: when a turn
+of the game loop takes one and a half frames, "the worst frame" cuts turns in
+half. **Set Profile Period...** (the view's `...` menu) makes a period a turn
+instead -- from one arrival at a chosen routine to the next -- and the list
+becomes **Worst turns of** that routine, each saying how many frames long it
+was. Changing the period starts the periods again; the rest of the profile is
+kept.
+
+Nothing about a frame's cost is meaningful without idle time counted: every
+48K frame is exactly 69,888 T-states long. Mark the pacing loop idle (or rely
+on a `HALT`) before reading the worst frames.
 
 **Stop Profiling** freezes the counts: the map stays up, and is re-read
 whenever the machine stops. **Start** again counts from zero; **Clear Profile**
@@ -539,8 +591,10 @@ and nothing measurable while off.
 
 MCP clients get the same numbers from the `profile` tool -- see
 [Connecting an MCP client](mcp.md), whose report nests the call tree as
-`call_tree`, cut to the calls above `tree_min_percent` -- which is how a
-change can be measured before and after rather than estimated.
+`call_tree`, cut to the calls above `tree_min_percent`, and takes `idle` and
+`period` the same way, reporting the strip and the worst periods under
+`periods` -- which is how a change can be measured before and after rather
+than estimated.
 
 ## Call stack
 
@@ -558,7 +612,8 @@ handler entry/exit (`RETI`/`RETN`) is invisible to it on purpose, so it
 can't desync the frames it *does* track; and code that unwinds the stack by
 resetting SP directly instead of matching `RET`s one-for-one (an idiom the
 ROM itself uses for error handling) can leave stale frames until the next
-real `CALL`/`RET` resyncs things. Cleared automatically on reset, a new
+real `CALL`/`RET` resyncs things. Only reading or writing a frame's return
+address ends it: moving SP (a routine borrowing it to walk data) does not. Cleared automatically on reset, a new
 snapshot, or any direct PC/register write, since a stale call chain would
 be actively misleading rather than just incomplete.
 

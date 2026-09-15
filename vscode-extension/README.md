@@ -160,7 +160,10 @@ each line is, the hottest get `share · T/frame · runs/frame` written after
 them, and **Show Profile Hot Spots** lists the worst routines and lines to jump
 to. The **ZX Spectrum Profile** view in the debug sidebar has every routine,
 most expensive first, each expanding into the routines it called and what
-those calls cost it (`profile_tree.js`). The editor re-reads it every second
+those calls cost it (`profile_tree.js`), headed by the worst frames (or turns
+of a chosen routine) with a strip of busy time; any of them can be painted on
+the source on its own. A routine marked idle -- a pacing loop -- is counted as
+waiting, so every share is of busy time. The editor re-reads it every second
 while counting and on every stop once stopped. See [docs/vscode-debugging.md](../docs/vscode-debugging.md#execution-profile)
 for what is counted and how; `profile_model.js` (tested by
 `node tests/profile_model_test.js`) turns the server's report into the map,

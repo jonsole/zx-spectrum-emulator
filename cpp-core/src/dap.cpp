@@ -1493,6 +1493,27 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         // since the editor shades each one it has open. All three are queued
         // jobs the run loop services at its yields, so a profile starts and
         // stops on a running game without pausing it.
+        //
+        // `idle` (routine names) and `period` (a routine, or "frame") may come
+        // with any action, and are applied first -- so a start counts against
+        // them from its very first instruction.
+        const json& idle_arg = arg(arguments, "idle");
+        const json& period_arg = arg(arguments, "period");
+        if (idle_arg.is_array() || period_arg.is_string()) {
+            ProfileSettings settings = current_profile_settings();
+            if (idle_arg.is_array()) {
+                settings.idle.clear();
+                for (const json& name : idle_arg) {
+                    if (name.is_string()) {
+                        settings.idle.push_back(name.get<std::string>());
+                    }
+                }
+            }
+            if (period_arg.is_string()) {
+                settings.period = period_arg.get<std::string>();
+            }
+            apply_profile_settings(engine, sources, settings);
+        }
         const std::string action = arg_str(arguments, "action");
         if (action == "start") {
             engine.start_profile();
@@ -1505,7 +1526,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         }
         const int64_t max_routines = arg_int(arguments, "maxRoutines", 100);
         const ProfileReport report = build_profile_report(engine.profile_snapshot(), sources);
-        body = profile_report_json(report, 0, max_routines > 0 ? size_t(max_routines) : 0);
+        body = profile_report_json(report, 0, max_routines > 0 ? size_t(max_routines) : 0, true);
         // The whole call tree, flat: the profile view groups it by routine
         // itself, in whichever order it is showing.
         body["call_nodes"] = profile_call_nodes_json(report);

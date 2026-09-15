@@ -113,16 +113,34 @@ struct ProfileSnapshot {
     uint64_t interrupt_half_clocks = 0;
     uint64_t total_half_clocks = 0;
 
+    uint64_t idle_half_clocks = 0;
+    /// How long a video frame is on this machine -- the budget a frame's busy
+    /// time is measured against.
+    uint64_t frame_half_clocks = 0;
+
     struct Entry {
         uint16_t addr = 0;
         uint64_t hits = 0;
         uint64_t half_clocks = 0;
+        uint64_t idle_half_clocks = 0;
     };
     /// In address order.
     std::vector<Entry> entries;
     /// The calling-context tree, root first, each node after its parent --
     /// see Profile::CallNode.
     std::vector<Profile::CallNode> call_nodes;
+    /// Frames (or marked periods) and the busiest of them -- see profile.h.
+    Profile::PeriodSummary periods;
+};
+
+/// What a profile counts as idle, and what it counts in periods of. Idle
+/// addresses are resolved by whoever knows the names (the protocol layer);
+/// the Engine only takes the map.
+struct ProfileOptions {
+    /// Profile::ADDRESSES bytes, nonzero for idle. Empty for none.
+    std::vector<uint8_t> idle_map;
+    /// Profile::FRAME_PERIODS, or the address that starts each period.
+    int32_t period_marker = Profile::FRAME_PERIODS;
 };
 
 /// One completed frame picked out of a run -- see Engine::capture_frames.
@@ -366,6 +384,9 @@ public:
     /// What has been counted, running or stopped. Empty (and inactive) if
     /// profiling has never been started.
     ProfileSnapshot profile_snapshot();
+    /// Sets what is idle and what a period is. Kept across starts; queued
+    /// like the rest, so it can be changed while a profile counts.
+    void set_profile_options(ProfileOptions options);
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }

@@ -155,6 +155,11 @@ void parse_sld(const std::string& text, const std::string& base_dir, RomSource& 
                 continue;
             }
             out.symbols[data] = addr;
+            if (rec_type == "D") {
+                out.equates.insert(data);
+            } else {
+                out.equates.erase(data);
+            }
         }
     }
 }
@@ -363,16 +368,44 @@ bool RomSource::code_label_at(uint16_t addr, std::string& name, uint16_t& offset
     while (it != sorted_addrs_.begin()) {
         --it;
         const size_t idx = size_t(it - sorted_addrs_.begin());
-        // A label on a line of code has that line's address in the T records;
-        // an EQU's value is just a number and, unless it happens to equal an
-        // instruction's address, does not.
-        if (addr_to_loc.count(sorted_addrs_[idx]) != 0) {
+        // A label on a line of code has that line's address in the T records.
+        // An EQU's value is just a number -- and is passed over by name, since
+        // now and then that number is an instruction's address too.
+        if (addr_to_loc.count(sorted_addrs_[idx]) != 0 && equates.count(sorted_names_[idx]) == 0) {
             name = sorted_names_[idx];
             offset = uint16_t(addr - sorted_addrs_[idx]);
             return true;
         }
     }
     return false;
+}
+
+bool RomSource::routine_range(const std::string& name, uint16_t& first, uint16_t& last) const {
+    auto sym = symbols.find(name);
+    if (sym == symbols.end() || addr_to_loc.count(sym->second) == 0 || equates.count(name) != 0) {
+        return false;
+    }
+    first = sym->second;
+    const std::string own_locals = name + ".";
+    auto it = std::upper_bound(sorted_addrs_.begin(), sorted_addrs_.end(), first);
+    for (; it != sorted_addrs_.end(); ++it) {
+        const size_t idx = size_t(it - sorted_addrs_.begin());
+        // Its own .locals are inside it; an EQU is not a place in the code.
+        if (sorted_names_[idx].compare(0, own_locals.size(), own_locals) == 0
+            || addr_to_loc.count(sorted_addrs_[idx]) == 0 || equates.count(sorted_names_[idx]) != 0) {
+            continue;
+        }
+        last = uint16_t(sorted_addrs_[idx] - 1);
+        return true;
+    }
+    // The last routine in the source: it runs to the last instruction.
+    last = first;
+    for (const auto& entry : addr_to_loc) {
+        if (entry.first > last) {
+            last = entry.first;
+        }
+    }
+    return true;
 }
 
 RomSourcePtr load_source(const std::string& sld_path, const std::string& asm_path,
@@ -498,6 +531,16 @@ bool Sources::symbol_value(const std::string& name, uint16_t& addr) const {
                 addr = it->second;
                 return true;
             }
+        }
+    }
+    return false;
+}
+
+bool Sources::routine_range(const std::string& name, uint16_t& first, uint16_t& last) const {
+    const std::vector<RomSourcePtr> sources = active();
+    for (size_t i = 0; i < sources.size(); i++) {
+        if (sources[i]->routine_range(name, first, last)) {
+            return true;
         }
     }
     return false;

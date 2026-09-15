@@ -194,6 +194,33 @@
         "command": "zxspectrum.profileSortByTotal",
         "title": "ZX Spectrum: Sort Profile Tree by Total",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "zxspectrum.profileMarkIdle",
+        "title": "Mark as Idle",
+        "icon": "$(watch)"
+      },
+      {
+        "command": "zxspectrum.profileUnmarkIdle",
+        "title": "Unmark Idle"
+      },
+      {
+        "command": "zxspectrum.profileSetIdle",
+        "title": "ZX Spectrum: Set Idle Routines..."
+      },
+      {
+        "command": "zxspectrum.profileSetPeriod",
+        "title": "ZX Spectrum: Set Profile Period..."
+      },
+      {
+        "command": "zxspectrum.profileShowPeriod",
+        "title": "Show on Source",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "zxspectrum.profileShowAll",
+        "title": "ZX Spectrum: Show Whole Profile on Source",
+        "icon": "$(eye-closed)"
       }
     ],
     "views": {
@@ -217,7 +244,7 @@
       },
       {
         "view": "zxspectrumProfile",
-        "contents": "Nothing profiled yet. Start profiling, then let the program run: every routine it calls shows here, most expensive first, and expands into the routines it called.\n[Start profiling](command:zxspectrum.profileStart)"
+        "contents": "Nothing profiled yet. Start profiling, then let the program run: every routine it calls shows here, most expensive first, and expands into the routines it called. The worst frames come first once there are some.\n[Start profiling](command:zxspectrum.profileStart)\nIf the program waits in a loop of its own each frame, mark that routine idle so it does not count as work.\n[Set idle routines...](command:zxspectrum.profileSetIdle)"
       }
     ],
     "menus": {
@@ -300,12 +327,48 @@
         {
           "command": "zxspectrum.profileRefresh",
           "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.profileMarkIdle",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.profileUnmarkIdle",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.profileShowPeriod",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.profileShowAll",
+          "when": "zxspectrum.profileShowingPeriod"
         }
       ],
       "view/item/context": [
         {
           "command": "zxspectrum.tapeSeek",
           "when": "view == zxspectrumTape && viewItem == zxspectrumTapeBlock",
+          "group": "inline"
+        },
+        {
+          "command": "zxspectrum.profileMarkIdle",
+          "when": "view == zxspectrumProfile && viewItem == zxProfileRoutine",
+          "group": "profile@1"
+        },
+        {
+          "command": "zxspectrum.profileUnmarkIdle",
+          "when": "view == zxspectrumProfile && viewItem == zxProfileIdleRoutine",
+          "group": "profile@1"
+        },
+        {
+          "command": "zxspectrum.profileShowPeriod",
+          "when": "view == zxspectrumProfile && viewItem == zxProfilePeriod",
+          "group": "inline"
+        },
+        {
+          "command": "zxspectrum.profileShowAll",
+          "when": "view == zxspectrumProfile && viewItem == zxProfilePeriods && zxspectrum.profileShowingPeriod",
           "group": "inline"
         }
       ],
@@ -374,6 +437,21 @@
           "command": "zxspectrum.tapeEject",
           "when": "view == zxspectrumTape",
           "group": "navigation@6"
+        },
+        {
+          "command": "zxspectrum.profileShowAll",
+          "when": "view == zxspectrumProfile && zxspectrum.profileShowingPeriod",
+          "group": "navigation@0"
+        },
+        {
+          "command": "zxspectrum.profileSetIdle",
+          "when": "view == zxspectrumProfile",
+          "group": "profile@1"
+        },
+        {
+          "command": "zxspectrum.profileSetPeriod",
+          "when": "view == zxspectrumProfile",
+          "group": "profile@2"
         }
       ],
       "debug/toolBar": [

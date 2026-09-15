@@ -187,6 +187,115 @@ test('a group reads as share, cost and calls', () => {
   assert.strictEqual(groupDescription(model, draw, 'self'), 'own 20% · 20.0 T/frame · total 60% · 2.50 calls/frame');
 });
 
+// ---- idle time and periods ----
+
+const { periodReport, periodName, periodDescription, sparkline, periodsScale, periodsTitle, groupIdle } = require('../profile_model');
+
+// A game whose pacer, turn_pace, waits out most of every frame.
+const PACED = {
+  frames: 10,
+  tstates: 698880,
+  idle_tstates: 400000,
+  frame_tstates: 69888,
+  idle: ['turn_pace'],
+  lines: [
+    { path: SPRITE, line: 262, hits: 30000, tstates: 400000, idle_tstates: 400000, symbol: 'turn_pace.spin' },
+    { path: SPRITE, line: 212, hits: 4000, tstates: 149440, idle_tstates: 0, symbol: 'sprite_blit.row+3' },
+  ],
+  routines: [
+    { name: 'turn_pace', path: SPRITE, line: 253, hits: 30000, tstates: 400000, idle_tstates: 400000 },
+    { name: 'sprite_blit', path: SPRITE, line: 164, hits: 4000, tstates: 149440, idle_tstates: 0 },
+  ],
+  call_nodes: [
+    node(0, null, '(outside any call)', 0, 149440, 698880),
+    node(1, 0, 'turn_pace', 10, 400000, 400000, { idle_tstates: 400000 }),
+    node(2, 0, 'sprite_blit', 10, 149440, 149440),
+  ],
+  periods: {
+    by: 'frame',
+    count: 9,
+    busiest_tstates: 69888,
+    strip: [20000, 30000, 69888, 25000],
+    worst: [
+      {
+        index: 2,
+        start_frame: 1204,
+        tstates: 69888,
+        idle_tstates: 0,
+        busy_tstates: 69888,
+        unmapped_tstates: 0,
+        lines: [{ path: SPRITE, line: 212, tstates: 60000, idle_tstates: 0, symbol: 'sprite_blit.row+3' }],
+        routines: [{ name: 'sprite_blit', path: SPRITE, line: 164, tstates: 60000, idle_tstates: 0 }],
+        nodes: [[0, 9888, 0], [2, 60000, 0]],
+      },
+    ],
+  },
+};
+
+test('shares are of busy time, and idle lines say idle instead', () => {
+  const model = indexReport(PACED);
+  assert.strictEqual(model.busy, 298880);
+  const key = reportKeyFor(model, SPRITE);
+  const blit = model.byFile.get(key).get(212);
+  assert.strictEqual(blit.share, 0.5);
+  assert.strictEqual(lineLabel(model, blit, undefined), '50% · 14,944 T/frame · 400×/frame');
+  const spin = model.byFile.get(key).get(262);
+  assert.strictEqual(spin.idle, true);
+  assert.strictEqual(heatLevel(spin.share), 0);
+  assert.strictEqual(lineLabel(model, spin, undefined), 'idle · 40,000 T/frame · 3,000×/frame');
+  assert.ok(lineHover(model, spin, undefined).includes('idle'));
+});
+
+test('an idle routine sorts below the work and reads as idle', () => {
+  const model = indexReport(PACED);
+  const roots = rootGroups(model.callTree, 'total');
+  assert.deepStrictEqual(roots.map((g) => g.name), ['(outside any call)', 'sprite_blit', 'turn_pace']);
+  const pace = roots[2];
+  assert.ok(groupIdle(pace));
+  assert.strictEqual(groupDescription(model, pace, 'total'), 'idle · 40,000 T/frame · 1.00 calls/frame');
+  assert.strictEqual(groupDescription(model, roots[1], 'total'), '50% · 14,944 T/frame · 1.00 calls/frame');
+});
+
+test('a worst period becomes a report of its own', () => {
+  const model = indexReport(PACED);
+  const worst = model.periods.worst[0];
+  assert.strictEqual(periodName(model, worst), 'Frame 1,204');
+  assert.strictEqual(periodsTitle(model), 'Worst frames');
+  assert.strictEqual(periodDescription(model, worst), '69,888 T busy · 100% of the frame');
+
+  const frame = indexReport(periodReport(PACED, worst));
+  assert.strictEqual(frame.frames, 0);
+  assert.strictEqual(frame.busy, 69888);
+  const roots = rootGroups(frame.callTree, 'total', 'worst:2/');
+  // turn_pace never ran in that frame, so it is not in its tree at all.
+  assert.deepStrictEqual(roots.map((g) => `${g.name}=${g.total}`), ['sprite_blit=60000', '(outside any call)=9888']);
+  assert.strictEqual(roots[0].id, 'worst:2/call:sprite_blit');
+  // No call counts are kept per period, so none are claimed.
+  assert.strictEqual(groupDescription(frame, roots[0], 'total'), '86% · 60,000 T');
+  const key = reportKeyFor(frame, SPRITE);
+  assert.strictEqual(lineLabel(frame, frame.byFile.get(key).get(212), undefined), '86% · 60,000 T');
+  assert.ok(lineHover(frame, frame.byFile.get(key).get(212), undefined).startsWith('**Frame 1,204**'));
+});
+
+test('turns of a marker routine are named and measured in frames', () => {
+  const report = JSON.parse(JSON.stringify(PACED));
+  report.periods.by = 'marker';
+  report.periods.name = 'turn_pace';
+  report.periods.worst[0].tstates = 104832;
+  const model = indexReport(report);
+  assert.strictEqual(periodName(model, model.periods.worst[0]), 'Turn 3 of turn_pace');
+  assert.strictEqual(periodsTitle(model), 'Worst turns of turn_pace');
+  assert.strictEqual(periodDescription(model, model.periods.worst[0]), '69,888 T busy · 1.50 frames long');
+  assert.strictEqual(periodsScale(model), 69888);
+});
+
+test('the sparkline scales busy time to blocks', () => {
+  assert.strictEqual(sparkline([0, 34944, 69888], 10, 69888), '▁▅█');
+  // Wider than the width: each block is the busiest of the ones it covers.
+  assert.strictEqual(sparkline([0, 69888, 0, 0], 2, 69888), '█▁');
+  assert.strictEqual(sparkline([], 10, 1), '');
+});
+
 if (failures > 0) {
   console.log(failures + ' failed');
   process.exit(1);

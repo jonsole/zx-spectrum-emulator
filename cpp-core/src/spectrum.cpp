@@ -420,6 +420,11 @@ void Spectrum::step_instruction() {
     // assembles a whole Registers struct: this now runs after EVERY
     // instruction, run() included, and not only after calls and returns.
     const uint16_t sp_after = cpu.regs.sp;
+    // For every instruction, not just calls and returns: what strands a frame
+    // is usually neither -- a POP that throws a return address away, a stack
+    // reset by LD SP and then used again. Before the push, since a CALL's own
+    // push can be what overwrites an abandoned frame's slot.
+    drop_reached_frames(sp_before, sp_after);
     if (kind == StepKind::Call && sp_after == uint16_t(sp_before - 2)) {
         // Confirmed by the SP delta, so a conditional CALL that was not taken
         // leaves the stack alone.
@@ -427,19 +432,7 @@ void Spectrum::step_instruction() {
         uint16_t hi = memory.read(uint16_t(sp_after + 1));
         call_stack.push_back(uint16_t(lo | (hi << 8)));
         call_stack_sp_.push_back(sp_after);
-    } else if (kind == StepKind::Ret && sp_after == uint16_t(sp_before + 2)
-               && !call_stack.empty()) {
-        call_stack.pop_back();
-        call_stack_sp_.pop_back();
     }
-    // After the push and the pop, never before: pruning first would drop the
-    // very frame a RET is returning through, and the pop below it would then
-    // take the caller's frame too.
-    //
-    // And for every instruction, not just calls and returns -- what strands
-    // an entry is usually neither: a POP that throws a return address away,
-    // an LD SP that abandons a whole frame, a handler that unwinds by hand.
-    prune_call_stack(sp_after);
 }
 
 void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_call) {
@@ -447,7 +440,11 @@ void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_ca
     // but each pass is the HALT executing again, and that is where the time
     // belongs. The first pass, the one that halts, is not yet halted and
     // reports the HALT's own address.
-    const uint16_t pc = cpu.halted ? uint16_t(pc_before - 1) : pc_before;
+    const bool halted = cpu.halted;
+    const uint16_t pc = halted ? uint16_t(pc_before - 1) : pc_before;
+    // The frame the instruction began in, which is the period it belongs to
+    // when periods are frames.
+    const uint64_t frame = ula.frame_count();
     const uint64_t interrupts_before = cpu.interrupt_count;
     const uint64_t start = global_hc();
 
@@ -482,19 +479,20 @@ void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_ca
     // (a RET to the routine it returns from, a CALL to its caller), then the
     // path moves.
     if (interrupted) {
-        profile->record(pc, split - start);
+        profile->record(pc, split - start, frame, halted);
         // The stack as the instruction left it, before the acknowledge pushed
         // its own return address -- so a RET the interrupt landed straight
         // after still ends its call.
-        profile->unwind(uint16_t(sp_after + 2));
+        profile->stack_moved(sp_before, uint16_t(sp_after + 2));
+        profile->stack_moved(uint16_t(sp_after + 2), sp_after);
         // A CALL the interrupt landed straight after is not followed into:
         // its target is no longer anywhere to be read. Its time goes to the
         // caller until its RET, which is rare enough to live with.
         profile->enter_interrupt(pc_after, sp_after);
         profile->record_interrupt(end - split);
     } else {
-        profile->record(pc, end - start);
-        profile->unwind(sp_after);
+        profile->record(pc, end - start, frame, halted);
+        profile->stack_moved(sp_before, sp_after);
         // Confirmed by the SP delta, as the call stack is: a conditional CALL
         // not taken went nowhere.
         if (is_call && sp_after == uint16_t(sp_before - 2)) {
@@ -503,18 +501,16 @@ void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_ca
     }
 }
 
-void Spectrum::prune_call_stack(uint16_t sp) {
-    // An entry is live while the stack pointer is at or below the slot its
-    // return address sits in. Once SP has risen ABOVE that slot the address
-    // has been popped or abandoned, however that happened, and the frame is
-    // gone whether or not a RET was involved.
-    //
-    // Compared as unsigned 16-bit, which is what SP is: a stack that wraps
-    // past 0x0000 is a program that has already lost control of itself.
-    while (!call_stack.empty() && sp > call_stack_sp_.back()) {
-        call_stack.pop_back();
-        call_stack_sp_.pop_back();
-    }
+void Spectrum::drop_reached_frames(uint16_t sp_before, uint16_t sp_after) {
+    // The profile's rule, for the same reasons: see profile.h. A frame is gone
+    // once its return address has been read off the stack or written over --
+    // not merely because SP has moved past it, which is also what a routine
+    // borrowing SP as a data pointer does, and which used to empty the call
+    // stack the moment one did.
+    const size_t keep = Profile::first_frame_reached(
+        call_stack_sp_, [](uint16_t sp) { return sp; }, sp_before, sp_after);
+    call_stack.resize(keep);
+    call_stack_sp_.resize(keep);
 }
 
 void Spectrum::run_frame() {

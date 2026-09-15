@@ -7,6 +7,11 @@
 // through the loaded SLD debug info (the program's own, then the ROM's), the
 // same way a stack frame is given its source line.
 //
+// It also owns the profile's settings as names -- which routines are idle,
+// and which routine's arrival starts a period -- and resolves them into the
+// addresses the Engine counts with. The names are kept server-wide, so a
+// report says what it was measured against whichever client set them.
+//
 // Shared by the DAP `profile` request and the MCP `profile` tool, so both
 // report one shape.
 
@@ -21,6 +26,26 @@
 
 namespace zx {
 
+/// What a profile treats as idle and counts in periods of, by name.
+struct ProfileSettings {
+    /// Routine names ("turn_pace"), or a page of unsourced code as the
+    /// report names one ("$9000-$90FF").
+    std::vector<std::string> idle;
+    /// A routine name or address expression whose arrival starts each period,
+    /// or empty for video frames.
+    std::string period;
+};
+
+/// Resolves `settings` against the loaded debug info, hands the result to the
+/// Engine, and remembers the names. Returns the names that resolved to
+/// nothing, which are left out (an unresolvable period means frames).
+std::vector<std::string> apply_profile_settings(Engine& engine, const Sources& sources,
+                                                const ProfileSettings& settings);
+
+/// The settings last applied, and what of them did not resolve.
+ProfileSettings current_profile_settings();
+std::vector<std::string> unresolved_profile_settings();
+
 struct ProfileReport {
     /// One source line with code on it that ran.
     struct Line {
@@ -29,6 +54,7 @@ struct ProfileReport {
         uint32_t line = 0;
         uint64_t hits = 0;
         uint64_t half_clocks = 0;
+        uint64_t idle_half_clocks = 0;
         /// The routine and offset of the line's first address, "sprite_blit+12".
         std::string symbol;
     };
@@ -44,6 +70,7 @@ struct ProfileReport {
         uint32_t line = 0;
         uint64_t hits = 0;
         uint64_t half_clocks = 0;
+        uint64_t idle_half_clocks = 0;
     };
 
     /// One node of the calling-context tree (see profile.h), named.
@@ -59,11 +86,26 @@ struct ProfileReport {
         uint32_t line = 0;
         uint64_t calls = 0;
         uint64_t self_half_clocks = 0;
+        uint64_t idle_half_clocks = 0;
         /// Its own time and all of its children's.
         uint64_t total_half_clocks = 0;
     };
 
-    ProfileSnapshot totals; // entries and nodes emptied: the lists below replace them
+    /// One of the busiest periods, told the same way as the whole profile:
+    /// its lines and routines (with no hit counts -- a period keeps only
+    /// time), and its own time on each call node.
+    struct Period {
+        uint64_t index = 0;
+        uint64_t start_frame = 0;
+        uint64_t half_clocks = 0;
+        uint64_t idle_half_clocks = 0;
+        uint64_t unmapped_half_clocks = 0;
+        std::vector<Line> lines;
+        std::vector<Routine> routines;
+        std::vector<Profile::WorstPeriod::Share> nodes;
+    };
+
+    ProfileSnapshot totals; // entries, nodes and worst emptied: the lists below replace them
     /// Time spent at addresses no loaded source maps to a line.
     uint64_t unmapped_half_clocks = 0;
     /// Both sorted by half_clocks, most expensive first.
@@ -71,20 +113,26 @@ struct ProfileReport {
     std::vector<Routine> routines;
     /// Root first, each node after its parent, as the profile keeps them.
     std::vector<CallNode> call_nodes;
+    /// Busiest first.
+    std::vector<Period> worst;
+    ProfileSettings settings;
+    std::vector<std::string> unresolved;
 };
 
 ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Sources& sources);
 
 /// The report as JSON, cut to the `max_lines` and `max_routines` most
-/// expensive (0 for all). T-states are halved half-clocks and so can end in
-/// .5. `lines_total` and `routines_total` say how many there were before the
-/// cut, so a truncated list does not pass for a complete one.
+/// expensive (0 for all) -- the whole profile's and each worst period's
+/// alike. T-states are halved half-clocks and so can end in .5. `lines_total`
+/// and `routines_total` say how many there were before the cut, so a truncated
+/// list does not pass for a complete one. `worst_nodes` adds each worst
+/// period's time per call node, as [id, tstates, idle_tstates] triples.
 nlohmann::json profile_report_json(const ProfileReport& report, size_t max_lines,
-                                   size_t max_routines);
+                                   size_t max_routines, bool worst_nodes);
 
 /// The call tree as a flat array, root first: { id, parent, name, addr,
-/// interrupt, path, line, calls, self_tstates, tstates }. Every node -- what
-/// the editor's tree view builds its own groupings from.
+/// interrupt, path, line, calls, self_tstates, idle_tstates, tstates }. Every
+/// node -- what the editor's tree view builds its own groupings from.
 nlohmann::json profile_call_nodes_json(const ProfileReport& report);
 
 /// The call tree nested, children most expensive first, cut to the nodes

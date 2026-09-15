@@ -8,6 +8,11 @@
 // every PROFILE_POLL_MS, so the map warms up as the game runs -- the request
 // is serviced at the run loop's yields and never pauses it. Once stopped it is
 // re-read whenever the machine stops, and otherwise left as it is.
+//
+// Two settings shape what is counted, both kept per workspace and sent with
+// every start: the routines that are idle (a pacing loop), and what a period
+// is (a video frame, or a turn of a chosen routine). The map can show the
+// whole profile or any one of the worst periods.
 
 const vscode = require('vscode');
 const {
@@ -20,20 +25,28 @@ const {
   formatShare,
   formatCount,
   perFrame,
+  periodName,
 } = require('./profile_model');
 const { ProfileTreeProvider } = require('./profile_tree');
 
 const PROFILE_POLL_MS = 1000;
 const HOT_LINES_SHOWN = 40;
 const HOT_ROUTINES_SHOWN = 15;
+const PERIOD_ROUTINES_OFFERED = 60;
 // One tint per heat level, coolest first. Translucent over the editor's own
 // background, so the same values read on a dark theme and a light one.
 const HEAT_ALPHAS = [0.05, 0.09, 0.14, 0.2, 0.28, 0.38];
 const HEAT_RGB = '255, 96, 32';
+const IDLE_TINT = 'rgba(128, 128, 128, 0.12)';
+const IDLE_KEY = 'zxspectrum.profile.idle';
+const PERIOD_KEY = 'zxspectrum.profile.period';
 
 let getSession;       // () => the active zxspectrum session, or undefined
+let workspaceState;   // where the idle list and the period are kept
 let model;            // the last report, indexed; undefined before the first
+let shownPeriod;      // the worst period painted on the source, or undefined
 let heatDecorations;  // one decoration type per level
+let idleDecoration;   // idle lines, which have time but no heat
 let labelDecoration;  // the numbers after a hot line
 let statusItem;
 let treeProvider;     // the call tree view's data
@@ -44,6 +57,7 @@ let refreshTimer;
 
 function activateProfile(context, sessionGetter) {
   getSession = sessionGetter;
+  workspaceState = context.workspaceState;
 
   heatDecorations = [];
   for (let i = 0; i < HEAT_LEVELS; i++) {
@@ -56,6 +70,11 @@ function activateProfile(context, sessionGetter) {
     heatDecorations.push(type);
     context.subscriptions.push(type);
   }
+  idleDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: IDLE_TINT,
+  });
+  context.subscriptions.push(idleDecoration);
   labelDecoration = vscode.window.createTextEditorDecorationType({
     after: {
       color: new vscode.ThemeColor('editorCodeLens.foreground'),
@@ -74,19 +93,26 @@ function activateProfile(context, sessionGetter) {
     showCollapseAll: true,
   });
   context.subscriptions.push(treeView);
-  context.subscriptions.push(
-    vscode.commands.registerCommand('zxspectrum.profileSortBySelf', () => setTreeSort('self'))
-  );
-  context.subscriptions.push(
-    vscode.commands.registerCommand('zxspectrum.profileSortByTotal', () => setTreeSort('total'))
-  );
-  setTreeSort('total');
 
-  context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.profileStart', startProfile));
-  context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.profileStop', stopProfile));
-  context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.profileRefresh', () => refresh(true)));
-  context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.profileClear', clearProfile));
-  context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.profileHotSpots', showHotSpots));
+  const commands = [
+    ['zxspectrum.profileSortBySelf', () => setTreeSort('self')],
+    ['zxspectrum.profileSortByTotal', () => setTreeSort('total')],
+    ['zxspectrum.profileStart', startProfile],
+    ['zxspectrum.profileStop', stopProfile],
+    ['zxspectrum.profileRefresh', () => refresh(true)],
+    ['zxspectrum.profileClear', clearProfile],
+    ['zxspectrum.profileHotSpots', showHotSpots],
+    ['zxspectrum.profileMarkIdle', (element) => changeIdle(element, true)],
+    ['zxspectrum.profileUnmarkIdle', (element) => changeIdle(element, false)],
+    ['zxspectrum.profileSetIdle', pickIdle],
+    ['zxspectrum.profileSetPeriod', pickPeriod],
+    ['zxspectrum.profileShowPeriod', showPeriod],
+    ['zxspectrum.profileShowAll', () => showPeriod(undefined)],
+  ];
+  for (const [name, fn] of commands) {
+    context.subscriptions.push(vscode.commands.registerCommand(name, fn));
+  }
+  setTreeSort('total');
 
   context.subscriptions.push(
     vscode.languages.registerHoverProvider({ scheme: 'file' }, { provideHover })
@@ -134,14 +160,132 @@ function activateProfile(context, sessionGetter) {
   setProfilingContext(false);
 }
 
+// ---- settings -----------------------------------------------------------------
+
+function settings() {
+  return {
+    idle: workspaceState.get(IDLE_KEY, []),
+    period: workspaceState.get(PERIOD_KEY, 'frame'),
+  };
+}
+
+/// Stores new settings and, with a session, sends them -- they take effect
+/// from now on, so a profile already counting carries on under them.
+async function applySettings(idle, period) {
+  await workspaceState.update(IDLE_KEY, idle);
+  await workspaceState.update(PERIOD_KEY, period);
+  if (getSession() === undefined) {
+    updateStatus();
+    return;
+  }
+  const body = await request('get', false, { idle, period });
+  if (body !== undefined) {
+    adopt(body);
+    warnUnresolved(body);
+  }
+}
+
+function warnUnresolved(body) {
+  if (body.unresolved && body.unresolved.length > 0) {
+    vscode.window.showWarningMessage(
+      `Profile: no routine called ${body.unresolved.join(', ')} in the loaded debug info.`
+    );
+  }
+}
+
+async function changeIdle(element, idle) {
+  const name = element && element.group ? element.group.name : undefined;
+  if (name === undefined) {
+    return;
+  }
+  const current = settings();
+  const names = current.idle.filter((n) => n !== name);
+  if (idle) {
+    names.push(name);
+  }
+  await applySettings(names, current.period);
+}
+
+async function pickIdle() {
+  const current = settings();
+  const names = new Set(current.idle);
+  if (model !== undefined) {
+    for (const routine of model.routines) {
+      names.add(routine.name);
+    }
+  }
+  const items = [];
+  for (const name of names) {
+    items.push({ label: name, picked: current.idle.includes(name) });
+  }
+  const picked = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    title: 'Idle routines: time spent waiting, not working',
+    placeHolder: 'A pacing loop, say. A HALT is always idle.',
+  });
+  if (picked === undefined) {
+    return;
+  }
+  await applySettings(picked.map((item) => item.label), current.period);
+}
+
+async function pickPeriod() {
+  const current = settings();
+  const items = [
+    {
+      label: '$(clock) Video frame',
+      description: current.period === 'frame' ? 'current' : '',
+      detail: 'Each 50th of a second -- for a game that keeps to the frame rate.',
+      value: 'frame',
+    },
+  ];
+  if (model !== undefined) {
+    const routines = model.routines
+      .filter((r) => r.path)
+      .sort((a, b) => (b.hits || 0) - (a.hits || 0))
+      .slice(0, PERIOD_ROUTINES_OFFERED);
+    for (const routine of routines) {
+      items.push({
+        label: `$(symbol-function) ${routine.name}`,
+        description: current.period === routine.name ? 'current' : '',
+        value: routine.name,
+      });
+    }
+  }
+  items.push({ label: '$(edit) Another routine or address...', value: undefined });
+  const picked = await vscode.window.showQuickPick(items, {
+    title: 'Profile periods: what the program\'s work repeats in',
+    placeHolder: 'A routine starts a period each time it is reached -- one turn of the game loop.',
+    matchOnDetail: true,
+  });
+  if (picked === undefined) {
+    return;
+  }
+  let period = picked.value;
+  if (period === undefined) {
+    period = await vscode.window.showInputBox({
+      title: 'Profile periods',
+      prompt: 'A routine name or address that starts each period',
+      value: current.period === 'frame' ? '' : current.period,
+    });
+    if (!period) {
+      return;
+    }
+  }
+  shownPeriod = undefined;
+  await applySettings(current.idle, period);
+}
+
 // ---- commands ---------------------------------------------------------------
 
 async function startProfile() {
-  const body = await request('start');
+  const body = await request('start', false, settings());
   if (body === undefined) {
     return;
   }
+  shownPeriod = undefined;
   adopt(body);
+  warnUnresolved(body);
   startPolling();
 }
 
@@ -157,8 +301,17 @@ async function stopProfile() {
 function clearProfile() {
   stopPolling();
   model = undefined;
+  shownPeriod = undefined;
   paintAll();
   treeProvider.setModel(undefined);
+  updateStatus();
+}
+
+/// Paints one worst period on the source, or with none the whole profile.
+function showPeriod(element) {
+  shownPeriod = element && element.period ? element.period : undefined;
+  vscode.commands.executeCommand('setContext', 'zxspectrum.profileShowingPeriod', shownPeriod !== undefined);
+  paintAll();
   updateStatus();
 }
 
@@ -199,34 +352,43 @@ async function showHotSpots() {
     vscode.window.showInformationMessage('Nothing profiled yet -- start profiling and let the program run.');
     return;
   }
-  const unit = model.frames > 0 ? '/frame' : '';
+  const shown = shownModel();
+  const unit = shown.frames > 0 ? '/frame' : '';
+  const share = (entry) => (isIdleEntry(entry) ? 'idle' : formatShare(shown.busy > 0 ? (entry.tstates - (entry.idle_tstates || 0)) / shown.busy : 0));
   const items = [];
   items.push({ label: 'Routines', kind: vscode.QuickPickItemKind.Separator });
-  for (let i = 0; i < model.routines.length && i < HOT_ROUTINES_SHOWN; i++) {
-    const r = model.routines[i];
+  for (let i = 0; i < shown.routines.length && i < HOT_ROUTINES_SHOWN; i++) {
+    const r = shown.routines[i];
+    let detail = `${formatCount(perFrame(shown, r.tstates))} T${unit}`;
+    if (r.hits !== undefined) {
+      detail += ` · ${formatCount(perFrame(shown, r.hits))} instructions${unit}`;
+    }
     items.push({
-      label: `$(symbol-function) ${formatShare(r.tstates / model.total)}  ${r.name}`,
+      label: `$(symbol-function) ${share(r)}  ${r.name}`,
       description: r.path ? `${vscode.workspace.asRelativePath(r.path)}:${r.line}` : 'no source',
-      detail: `${formatCount(perFrame(model, r.tstates))} T${unit} · ${formatCount(perFrame(model, r.hits))} instructions${unit}`,
+      detail,
       target: r.path ? { path: r.path, line: r.line } : undefined,
     });
   }
   items.push({ label: 'Lines', kind: vscode.QuickPickItemKind.Separator });
-  for (let i = 0; i < model.lines.length && i < HOT_LINES_SHOWN; i++) {
-    const l = model.lines[i];
+  for (let i = 0; i < shown.lines.length && i < HOT_LINES_SHOWN; i++) {
+    const l = shown.lines[i];
+    let detail = `${formatCount(perFrame(shown, l.tstates))} T${unit}`;
+    if (l.hits !== undefined) {
+      detail += ` · ${formatCount(perFrame(shown, l.hits))}×${unit} · ${(l.hits > 0 ? l.tstates / l.hits : 0).toFixed(1)} T a run`;
+    }
     items.push({
-      label: `$(flame) ${formatShare(l.tstates / model.total)}  ${l.symbol || '(no label)'}`,
+      label: `$(flame) ${share(l)}  ${l.symbol || '(no label)'}`,
       description: `${vscode.workspace.asRelativePath(l.path)}:${l.line}`,
-      detail: `${formatCount(perFrame(model, l.tstates))} T${unit} · ${formatCount(perFrame(model, l.hits))}×${unit} · ${(l.hits > 0 ? l.tstates / l.hits : 0).toFixed(1)} T a run`,
+      detail,
       target: { path: l.path, line: l.line },
     });
   }
-  const picked = await vscode.window.showQuickPick(items, {
-    title: `Profile: ${formatCount(perFrame(model, model.total))} T${unit}` +
-      (model.frames > 0 ? ` over ${model.frames.toLocaleString('en-GB')} frames` : ''),
-    matchOnDescription: true,
-    matchOnDetail: true,
-  });
+  const title = shownPeriod !== undefined
+    ? `${periodName(model, shownPeriod)}: ${formatCount(shown.busy)} T busy`
+    : `Profile: ${formatCount(perFrame(model, model.busy))} T${unit} busy` +
+      (model.frames > 0 ? ` over ${model.frames.toLocaleString('en-GB')} frames` : '');
+  const picked = await vscode.window.showQuickPick(items, { title, matchOnDescription: true, matchOnDetail: true });
   if (picked === undefined || picked.target === undefined) {
     return;
   }
@@ -240,9 +402,13 @@ async function showHotSpots() {
   }
 }
 
+function isIdleEntry(entry) {
+  return entry.tstates > 0 && (entry.idle_tstates || 0) >= entry.tstates * 0.9;
+}
+
 // ---- talking to the emulator --------------------------------------------------
 
-async function request(action, quiet) {
+async function request(action, quiet, extra) {
   const session = getSession();
   if (session === undefined) {
     if (!quiet) {
@@ -252,7 +418,7 @@ async function request(action, quiet) {
   }
   requestInFlight = true;
   try {
-    return await session.customRequest('profile', { action });
+    return await session.customRequest('profile', Object.assign({ action }, extra || {}));
   } catch (err) {
     if (!quiet) {
       vscode.window.showErrorMessage(`Profile: ${err && err.message ? err.message : err}`);
@@ -268,8 +434,16 @@ function adopt(body) {
   if (!model.active) {
     stopPolling();
   }
-  paintAll();
+  // The period being shown stays shown while the profile still ranks it;
+  // once a busier set has pushed it out, the map goes back to the whole.
+  if (shownPeriod !== undefined) {
+    const worst = (model.periods && model.periods.worst) || [];
+    const still = worst.find((p) => p.index === shownPeriod.index);
+    shownPeriod = still;
+    vscode.commands.executeCommand('setContext', 'zxspectrum.profileShowingPeriod', still !== undefined);
+  }
   treeProvider.setModel(model);
+  paintAll();
   updateStatus();
 }
 
@@ -293,6 +467,17 @@ function stopPolling() {
 
 // ---- painting -------------------------------------------------------------------
 
+/// The model the source is painted from: the whole profile, or one period.
+function shownModel() {
+  if (model === undefined) {
+    return undefined;
+  }
+  if (shownPeriod !== undefined) {
+    return treeProvider.periodModel(shownPeriod);
+  }
+  return model;
+}
+
 function paintAll() {
   for (const editor of vscode.window.visibleTextEditors) {
     paint(editor);
@@ -304,29 +489,35 @@ function paint(editor) {
   for (let i = 0; i < HEAT_LEVELS; i++) {
     levels.push([]);
   }
+  const idle = [];
   const labels = [];
-  const key = model !== undefined ? reportKeyFor(model, editor.document.uri.fsPath) : undefined;
+  const shown = shownModel();
+  const key = shown !== undefined ? reportKeyFor(shown, editor.document.uri.fsPath) : undefined;
 
   if (key !== undefined) {
     const document = editor.document;
-    const lines = model.byFile.get(key) || new Map();
-    const routines = model.routinesByFile.get(key) || new Map();
+    const lines = shown.byFile.get(key) || new Map();
+    const routines = shown.routinesByFile.get(key) || new Map();
     const seen = new Set();
     for (const [line, stats] of lines) {
       seen.add(line);
       if (line < 1 || line > document.lineCount) {
         continue;
       }
-      const level = heatLevel(stats.share);
-      if (level > 0) {
-        levels[level - 1].push(document.lineAt(line - 1).range);
+      if (stats.idle) {
+        idle.push(document.lineAt(line - 1).range);
+      } else {
+        const level = heatLevel(stats.share);
+        if (level > 0) {
+          levels[level - 1].push(document.lineAt(line - 1).range);
+        }
       }
-      pushLabel(labels, document, line, lineLabel(model, stats, routines.get(line)));
+      pushLabel(labels, document, line, lineLabel(shown, stats, routines.get(line)));
     }
     // A routine whose label line has no code of its own still gets its total.
     for (const [line, routine] of routines) {
       if (!seen.has(line) && line >= 1 && line <= document.lineCount) {
-        pushLabel(labels, document, line, lineLabel(model, undefined, routine));
+        pushLabel(labels, document, line, lineLabel(shown, undefined, routine));
       }
     }
   }
@@ -334,6 +525,7 @@ function paint(editor) {
   for (let i = 0; i < HEAT_LEVELS; i++) {
     editor.setDecorations(heatDecorations[i], levels[i]);
   }
+  editor.setDecorations(idleDecoration, idle);
   editor.setDecorations(labelDecoration, labels);
 }
 
@@ -349,20 +541,21 @@ function pushLabel(labels, document, line, text) {
 }
 
 function provideHover(document, position) {
-  if (model === undefined) {
+  const shown = shownModel();
+  if (shown === undefined) {
     return undefined;
   }
-  const key = reportKeyFor(model, document.uri.fsPath);
+  const key = reportKeyFor(shown, document.uri.fsPath);
   if (key === undefined) {
     return undefined;
   }
   const line = position.line + 1;
-  const stats = (model.byFile.get(key) || new Map()).get(line);
-  const routine = (model.routinesByFile.get(key) || new Map()).get(line);
+  const stats = (shown.byFile.get(key) || new Map()).get(line);
+  const routine = (shown.routinesByFile.get(key) || new Map()).get(line);
   if (stats === undefined && routine === undefined) {
     return undefined;
   }
-  return new vscode.Hover(new vscode.MarkdownString(lineHover(model, stats, routine)));
+  return new vscode.Hover(new vscode.MarkdownString(lineHover(shown, stats, routine)));
 }
 
 function updateStatus() {
@@ -374,20 +567,46 @@ function updateStatus() {
     treeView.message = undefined;
     return;
   }
+  const current = settings();
   const frames = model.frames > 0 ? `${model.frames.toLocaleString('en-GB')} frames` : 'stepped';
-  treeView.message = `${profiling ? 'Counting' : 'Stopped'} · ${frames} · by ${treeProvider.sortBy === 'self' ? 'own code' : 'total'}`;
+  const parts = [`${profiling ? 'Counting' : 'Stopped'} · ${frames}`];
+  if (current.idle.length > 0) {
+    parts.push(`idle: ${current.idle.join(', ')}`);
+  }
+  if (current.period && current.period !== 'frame') {
+    parts.push(`turns of ${current.period}`);
+  }
+  parts.push(`by ${treeProvider.sortBy === 'self' ? 'own code' : 'total'}`);
+  if (shownPeriod !== undefined) {
+    parts.push(`source shows ${periodName(model, shownPeriod)}`);
+  }
+  treeView.message = parts.join(' · ');
+
   const unit = model.frames > 0 ? '/frame' : '';
-  const top = model.routines.length > 0 && model.total > 0 ? model.routines[0] : undefined;
   if (profiling) {
     statusItem.text = `$(flame) Profiling · ${model.frames.toLocaleString('en-GB')} frames`;
     statusItem.command = 'zxspectrum.profileStop';
+  } else if (shownPeriod !== undefined) {
+    statusItem.text = `$(flame) ${periodName(model, shownPeriod)}`;
+    statusItem.command = 'zxspectrum.profileShowAll';
   } else {
     statusItem.text = '$(flame) Profile';
     statusItem.command = 'zxspectrum.profileHotSpots';
   }
-  let tooltip = profiling ? 'Counting -- click to stop.' : 'Click for the hottest lines and routines.';
-  if (top !== undefined) {
-    tooltip += `\nHottest routine: ${top.name}, ${formatShare(top.tstates / model.total)} ` +
+  let tooltip = profiling
+    ? 'Counting -- click to stop.'
+    : shownPeriod !== undefined
+      ? 'The source shows one period -- click to show the whole profile.'
+      : 'Click for the hottest lines and routines.';
+  if (model.total > 0) {
+    tooltip += `\nBusy: ${formatCount(perFrame(model, model.busy))} T${unit}`;
+    if (model.idle > 0) {
+      tooltip += `, idle ${formatShare(model.idle / model.total)} of the time`;
+    }
+  }
+  const top = model.routines.find((r) => !isIdleEntry(r));
+  if (top !== undefined && model.busy > 0) {
+    tooltip += `\nHottest routine: ${top.name}, ${formatShare((top.tstates - (top.idle_tstates || 0)) / model.busy)} ` +
       `(${formatCount(perFrame(model, top.tstates))} T${unit})`;
   }
   if (model.total > 0 && model.interruptTstates > 0) {

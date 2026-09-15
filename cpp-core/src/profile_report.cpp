@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <mutex>
 #include <utility>
 
 namespace zx {
@@ -43,31 +45,57 @@ double tstates(uint64_t half_clocks) {
     return double(half_clocks) / 2.0;
 }
 
-} // namespace
+/// A page of unsourced code as the report names it, "$9000-$90FF".
+bool parse_page_range(const std::string& text, uint16_t& first, uint16_t& last) {
+    if (text.size() != 11 || text[0] != '$' || text[5] != '-' || text[6] != '$') {
+        return false;
+    }
+    char* end = nullptr;
+    const unsigned long a = std::strtoul(text.substr(1, 4).c_str(), &end, 16);
+    if (end == nullptr || *end != '\0') {
+        return false;
+    }
+    const unsigned long b = std::strtoul(text.substr(7, 4).c_str(), &end, 16);
+    if (end == nullptr || *end != '\0' || b < a || b > 0xFFFF) {
+        return false;
+    }
+    first = uint16_t(a);
+    last = uint16_t(b);
+    return true;
+}
 
-ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Sources& sources) {
-    ProfileReport report;
-    report.totals = snapshot;
-    report.totals.entries.clear();
-    report.totals.call_nodes.clear();
+std::mutex settings_mutex;
+ProfileSettings settings_applied;
+std::vector<std::string> settings_unresolved;
 
-    const std::vector<RomSourcePtr> active = sources.active();
+/// Time at one address, however it was counted.
+struct AddressCost {
+    uint16_t addr = 0;
+    uint64_t hits = 0;
+    uint64_t half_clocks = 0;
+    uint64_t idle_half_clocks = 0;
+};
 
+/// Folds address costs into source lines and routines, most expensive first.
+/// Shared by the whole profile and each of its worst periods.
+void fold_addresses(const std::vector<AddressCost>& costs, const std::vector<RomSourcePtr>& active,
+                    std::map<std::string, std::string>& paths,
+                    std::vector<ProfileReport::Line>& lines,
+                    std::vector<ProfileReport::Routine>& routines, uint64_t& unmapped) {
     // Keyed by (source, file, line): two programs' line 40s are different
     // lines, and so are two files' within one program.
     std::map<std::pair<const RomSource*, std::pair<size_t, uint32_t>>, size_t> line_index;
     // Keyed by source too: the ROM and a program can both have a START.
     std::map<std::pair<const RomSource*, std::string>, size_t> routine_index;
-    std::map<std::string, std::string> paths;
 
-    for (const ProfileSnapshot::Entry& entry : snapshot.entries) {
+    for (const AddressCost& cost : costs) {
         // The first source with an EXACT mapping for the address owns it --
         // the rule build_frame uses, for the same reason: a nearest-label
         // match alone would hand ROM code to the program's last label.
         const RomSource* owner = nullptr;
         SourceLoc loc;
         for (const RomSourcePtr& source : active) {
-            auto it = source->addr_to_loc.find(entry.addr);
+            auto it = source->addr_to_loc.find(cost.addr);
             if (it != source->addr_to_loc.end() && it->second.file < source->files.size()) {
                 owner = source.get();
                 loc = it->second;
@@ -82,7 +110,7 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         if (owner != nullptr) {
             std::string label;
             uint16_t offset = 0;
-            if (owner->code_label_at(entry.addr, label, offset)) {
+            if (owner->code_label_at(cost.addr, label, offset)) {
                 symbol = offset == 0 ? label : label + "+" + std::to_string(offset);
                 routine = routine_of(label);
                 auto sym = owner->symbols.find(routine);
@@ -103,19 +131,20 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
                 line.path = absolute_path(owner->files[loc.file].path, paths);
                 line.line = loc.line;
                 line.symbol = symbol;
-                line_index.emplace(key, report.lines.size());
-                report.lines.push_back(line);
+                line_index.emplace(key, lines.size());
+                lines.push_back(line);
                 found = line_index.find(key);
             }
-            ProfileReport::Line& line = report.lines[found->second];
-            line.hits += entry.hits;
-            line.half_clocks += entry.half_clocks;
+            ProfileReport::Line& line = lines[found->second];
+            line.hits += cost.hits;
+            line.half_clocks += cost.half_clocks;
+            line.idle_half_clocks += cost.idle_half_clocks;
         } else {
-            report.unmapped_half_clocks += entry.half_clocks;
+            unmapped += cost.half_clocks;
         }
 
         if (routine.empty()) {
-            const uint16_t page = uint16_t(entry.addr & 0xFF00);
+            const uint16_t page = uint16_t(cost.addr & 0xFF00);
             routine = hex4_dollar(page) + "-" + hex4_dollar(uint16_t(page | 0x00FF));
         }
         const auto routine_key = std::make_pair(owner, routine);
@@ -125,14 +154,149 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
             r.name = routine;
             r.path = routine_path;
             r.line = routine_line;
-            routine_index.emplace(routine_key, report.routines.size());
-            report.routines.push_back(r);
+            routine_index.emplace(routine_key, routines.size());
+            routines.push_back(r);
             found = routine_index.find(routine_key);
         }
-        ProfileReport::Routine& r = report.routines[found->second];
-        r.hits += entry.hits;
-        r.half_clocks += entry.half_clocks;
+        ProfileReport::Routine& r = routines[found->second];
+        r.hits += cost.hits;
+        r.half_clocks += cost.half_clocks;
+        r.idle_half_clocks += cost.idle_half_clocks;
     }
+
+    // Most expensive first; ties by where they are, so the order is stable
+    // from one refresh to the next.
+    std::sort(lines.begin(), lines.end(),
+              [](const ProfileReport::Line& a, const ProfileReport::Line& b) {
+                  if (a.half_clocks != b.half_clocks) {
+                      return a.half_clocks > b.half_clocks;
+                  }
+                  if (a.path != b.path) {
+                      return a.path < b.path;
+                  }
+                  return a.line < b.line;
+              });
+    std::sort(routines.begin(), routines.end(),
+              [](const ProfileReport::Routine& a, const ProfileReport::Routine& b) {
+                  if (a.half_clocks != b.half_clocks) {
+                      return a.half_clocks > b.half_clocks;
+                  }
+                  return a.name < b.name;
+              });
+}
+
+nlohmann::json lines_json(const std::vector<ProfileReport::Line>& lines, size_t max_lines,
+                          bool with_hits) {
+    using json = nlohmann::json;
+    json out = json::array();
+    for (size_t i = 0; i < lines.size(); i++) {
+        if (max_lines != 0 && i >= max_lines) {
+            break;
+        }
+        const ProfileReport::Line& l = lines[i];
+        json item{{"path", l.path},
+                  {"line", l.line},
+                  {"tstates", tstates(l.half_clocks)},
+                  {"idle_tstates", tstates(l.idle_half_clocks)},
+                  {"symbol", l.symbol}};
+        if (with_hits) {
+            item["hits"] = l.hits;
+        }
+        out.push_back(item);
+    }
+    return out;
+}
+
+nlohmann::json routines_json(const std::vector<ProfileReport::Routine>& routines,
+                             size_t max_routines, bool with_hits) {
+    using json = nlohmann::json;
+    json out = json::array();
+    for (size_t i = 0; i < routines.size(); i++) {
+        if (max_routines != 0 && i >= max_routines) {
+            break;
+        }
+        const ProfileReport::Routine& r = routines[i];
+        json item{{"name", r.name},
+                  {"tstates", tstates(r.half_clocks)},
+                  {"idle_tstates", tstates(r.idle_half_clocks)}};
+        if (with_hits) {
+            item["hits"] = r.hits;
+        }
+        if (!r.path.empty()) {
+            item["path"] = r.path;
+            item["line"] = r.line;
+        }
+        out.push_back(item);
+    }
+    return out;
+}
+
+} // namespace
+
+std::vector<std::string> apply_profile_settings(Engine& engine, const Sources& sources,
+                                                const ProfileSettings& settings) {
+    std::vector<std::string> unresolved;
+    ProfileOptions options;
+    options.idle_map.assign(Profile::ADDRESSES, 0);
+    for (const std::string& name : settings.idle) {
+        uint16_t first = 0;
+        uint16_t last = 0;
+        if (!sources.routine_range(name, first, last) && !parse_page_range(name, first, last)) {
+            unresolved.push_back(name);
+            continue;
+        }
+        for (uint32_t a = first; a <= last; a++) {
+            options.idle_map[a] = 1;
+        }
+    }
+
+    options.period_marker = Profile::FRAME_PERIODS;
+    if (!settings.period.empty() && settings.period != "frame") {
+        uint16_t addr = 0;
+        std::string error;
+        if (sources.symbol_value(settings.period, addr)
+            || sources.parse_address(settings.period, addr, error)) {
+            options.period_marker = int32_t(addr);
+        } else {
+            unresolved.push_back(settings.period);
+        }
+    }
+
+    engine.set_profile_options(std::move(options));
+    std::lock_guard<std::mutex> lock(settings_mutex);
+    settings_applied = settings;
+    settings_unresolved = unresolved;
+    return unresolved;
+}
+
+ProfileSettings current_profile_settings() {
+    std::lock_guard<std::mutex> lock(settings_mutex);
+    return settings_applied;
+}
+
+std::vector<std::string> unresolved_profile_settings() {
+    std::lock_guard<std::mutex> lock(settings_mutex);
+    return settings_unresolved;
+}
+
+ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Sources& sources) {
+    ProfileReport report;
+    report.totals = snapshot;
+    report.totals.entries.clear();
+    report.totals.call_nodes.clear();
+    report.totals.periods.worst.clear();
+    report.settings = current_profile_settings();
+    report.unresolved = unresolved_profile_settings();
+
+    const std::vector<RomSourcePtr> active = sources.active();
+    std::map<std::string, std::string> paths;
+
+    std::vector<AddressCost> costs;
+    costs.reserve(snapshot.entries.size());
+    for (const ProfileSnapshot::Entry& entry : snapshot.entries) {
+        costs.push_back(AddressCost{entry.addr, entry.hits, entry.half_clocks, entry.idle_half_clocks});
+    }
+    fold_addresses(costs, active, paths, report.lines, report.routines, report.unmapped_half_clocks);
 
     // The call tree: each node named by the routine its call went to, and its
     // total added up from the leaves. A child always follows its parent, so
@@ -146,6 +310,7 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         node.interrupt = from.interrupt;
         node.calls = from.calls;
         node.self_half_clocks = from.self_half_clocks;
+        node.idle_half_clocks = from.idle_half_clocks;
         node.total_half_clocks = from.self_half_clocks;
         if (i == Profile::ROOT) {
             node.name = "(outside any call)";
@@ -185,30 +350,29 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         }
     }
 
-    // Most expensive first; ties by where they are, so the order is stable
-    // from one refresh to the next.
-    std::sort(report.lines.begin(), report.lines.end(),
-              [](const ProfileReport::Line& a, const ProfileReport::Line& b) {
-                  if (a.half_clocks != b.half_clocks) {
-                      return a.half_clocks > b.half_clocks;
-                  }
-                  if (a.path != b.path) {
-                      return a.path < b.path;
-                  }
-                  return a.line < b.line;
-              });
-    std::sort(report.routines.begin(), report.routines.end(),
-              [](const ProfileReport::Routine& a, const ProfileReport::Routine& b) {
-                  if (a.half_clocks != b.half_clocks) {
-                      return a.half_clocks > b.half_clocks;
-                  }
-                  return a.name < b.name;
-              });
+    // The busiest periods, each folded the same way.
+    for (const Profile::WorstPeriod& w : snapshot.periods.worst) {
+        ProfileReport::Period period;
+        period.index = w.index;
+        period.start_frame = w.cost.start_frame;
+        period.half_clocks = w.cost.half_clocks;
+        period.idle_half_clocks = w.cost.idle_half_clocks;
+        std::vector<AddressCost> period_costs;
+        period_costs.reserve(w.addresses.size());
+        for (const Profile::WorstPeriod::Share& share : w.addresses) {
+            period_costs.push_back(
+                AddressCost{uint16_t(share.id), 0, share.half_clocks, share.idle_half_clocks});
+        }
+        fold_addresses(period_costs, active, paths, period.lines, period.routines,
+                       period.unmapped_half_clocks);
+        period.nodes = w.nodes;
+        report.worst.push_back(std::move(period));
+    }
     return report;
 }
 
 nlohmann::json profile_report_json(const ProfileReport& report, size_t max_lines,
-                                   size_t max_routines) {
+                                   size_t max_routines, bool worst_nodes) {
     using json = nlohmann::json;
     const ProfileSnapshot& t = report.totals;
 
@@ -217,42 +381,70 @@ nlohmann::json profile_report_json(const ProfileReport& report, size_t max_lines
              {"instructions", t.instructions},
              {"interrupts", t.interrupts},
              {"tstates", tstates(t.total_half_clocks)},
+             {"idle_tstates", tstates(t.idle_half_clocks)},
+             {"busy_tstates", tstates(t.total_half_clocks - t.idle_half_clocks)},
              {"interrupt_tstates", tstates(t.interrupt_half_clocks)},
              {"unmapped_tstates", tstates(report.unmapped_half_clocks)},
+             {"frame_tstates", tstates(t.frame_half_clocks)},
              {"lines_total", report.lines.size()},
-             {"routines_total", report.routines.size()}};
+             {"routines_total", report.routines.size()},
+             {"idle", report.settings.idle},
+             {"unresolved", report.unresolved}};
     if (t.frames != 0) {
         out["tstates_per_frame"] = tstates(t.total_half_clocks) / double(t.frames);
+        out["busy_tstates_per_frame"] =
+            tstates(t.total_half_clocks - t.idle_half_clocks) / double(t.frames);
+    }
+    out["lines"] = lines_json(report.lines, max_lines, true);
+    out["routines"] = routines_json(report.routines, max_routines, true);
+
+    const Profile::PeriodSummary& p = t.periods;
+    json strip = json::array();
+    for (uint64_t busy : p.strip) {
+        strip.push_back(tstates(busy));
+    }
+    json periods{{"by", p.marker == Profile::FRAME_PERIODS ? "frame" : "marker"},
+                 {"count", p.count},
+                 {"tstates", tstates(p.half_clocks)},
+                 {"idle_tstates", tstates(p.idle_half_clocks)},
+                 {"busiest_tstates", tstates(p.busiest)},
+                 {"without_idle", p.without_idle},
+                 {"bucket", p.bucket},
+                 {"strip", strip}};
+    if (p.marker != Profile::FRAME_PERIODS) {
+        periods["marker"] = p.marker;
+        periods["name"] = report.settings.period;
+    }
+    if (p.count != 0) {
+        periods["busy_tstates_average"] = tstates(p.half_clocks - p.idle_half_clocks) / double(p.count);
     }
 
-    json lines = json::array();
-    for (size_t i = 0; i < report.lines.size(); i++) {
-        if (max_lines != 0 && i >= max_lines) {
-            break;
+    json worst = json::array();
+    for (const ProfileReport::Period& period : report.worst) {
+        json item{{"index", period.index},
+                  {"start_frame", period.start_frame},
+                  {"tstates", tstates(period.half_clocks)},
+                  {"idle_tstates", tstates(period.idle_half_clocks)},
+                  {"busy_tstates", tstates(period.half_clocks - period.idle_half_clocks)},
+                  {"unmapped_tstates", tstates(period.unmapped_half_clocks)},
+                  {"lines_total", period.lines.size()},
+                  {"lines", lines_json(period.lines, max_lines, false)},
+                  {"routines", routines_json(period.routines, max_routines, false)}};
+        if (t.frame_half_clocks != 0) {
+            item["frames"] = double(period.half_clocks) / double(t.frame_half_clocks);
         }
-        const ProfileReport::Line& l = report.lines[i];
-        lines.push_back(json{{"path", l.path},
-                             {"line", l.line},
-                             {"hits", l.hits},
-                             {"tstates", tstates(l.half_clocks)},
-                             {"symbol", l.symbol}});
+        if (worst_nodes) {
+            json nodes = json::array();
+            for (const Profile::WorstPeriod::Share& share : period.nodes) {
+                nodes.push_back(json::array(
+                    {share.id, tstates(share.half_clocks), tstates(share.idle_half_clocks)}));
+            }
+            item["nodes"] = nodes;
+        }
+        worst.push_back(item);
     }
-    out["lines"] = lines;
-
-    json routines = json::array();
-    for (size_t i = 0; i < report.routines.size(); i++) {
-        if (max_routines != 0 && i >= max_routines) {
-            break;
-        }
-        const ProfileReport::Routine& r = report.routines[i];
-        json item{{"name", r.name}, {"hits", r.hits}, {"tstates", tstates(r.half_clocks)}};
-        if (!r.path.empty()) {
-            item["path"] = r.path;
-            item["line"] = r.line;
-        }
-        routines.push_back(item);
-    }
-    out["routines"] = routines;
+    periods["worst"] = worst;
+    out["periods"] = periods;
     return out;
 }
 
@@ -267,6 +459,7 @@ nlohmann::json profile_call_nodes_json(const ProfileReport& report) {
                   {"interrupt", n.interrupt},
                   {"calls", n.calls},
                   {"self_tstates", tstates(n.self_half_clocks)},
+                  {"idle_tstates", tstates(n.idle_half_clocks)},
                   {"tstates", tstates(n.total_half_clocks)}};
         item["parent"] = n.parent == Profile::NO_PARENT ? json(nullptr) : json(n.parent);
         if (!n.path.empty()) {
@@ -289,6 +482,9 @@ nlohmann::json call_subtree_json(const ProfileReport& report,
               {"calls", n.calls},
               {"tstates", tstates(n.total_half_clocks)},
               {"self_tstates", tstates(n.self_half_clocks)}};
+    if (n.idle_half_clocks != 0) {
+        item["idle_tstates"] = tstates(n.idle_half_clocks);
+    }
     if (n.interrupt) {
         item["interrupt"] = true;
     }

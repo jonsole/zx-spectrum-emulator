@@ -63,7 +63,7 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border |
 | `resolve_symbol(name)` | Symbol name → address (loaded program's own debug info first, then the ROM's) |
 | `resolve_address(addr)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |
-| `profile(action, lines, routines)` | Measure where execution time goes: `start` counts from zero, `stop` freezes, `get` reports the most expensive source lines and routines with T-states per frame, and the call tree by call path -- on a running machine, without pausing it (see [execution profile](vscode-debugging.md#execution-profile)) |
+| `profile(action, lines, routines, idle, period)` | Measure where execution time goes: `start` counts from zero, `stop` freezes, `get` reports the most expensive source lines and routines with T-states per frame, the call tree by call path, and every frame's (or turn's) busy time with the worst ones in detail -- `idle` names routines that wait rather than work, `period` a routine whose arrival starts each turn. On a running machine, without pausing it (see [execution profile](vscode-debugging.md#execution-profile)) |
 
 ## Video
 
