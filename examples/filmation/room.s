@@ -850,7 +850,7 @@ special_room_leave:	ld		ix,(special_slots)
 					ld		a,(ix+OBJ.Z)
 					ld		(hl),a
 					inc		hl
-					ld		a,(room_shown)
+					ld		a,(special_room)
 					ld		(hl),a
 .next:				ld		de,ROOM_STRIDE
 					add		ix,de
@@ -863,6 +863,8 @@ special_room_leave:	ld		ix,(special_slots)
 ; Runs after room_show, so each one is placed, sorted and drawn here.
 special_room_enter:	xor		a
 					ld		(special_busy),a
+					ld		a,(room_shown)
+					ld		(special_room),a
 					ld		a,(room_object_count)
 					ld		l,a
 					ld		h,0

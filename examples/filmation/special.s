@@ -49,6 +49,11 @@ KEY_PICKUP			EQU		$EFFE
 ; The two slots in the current room, or zero before the first room is built.
 special_slots:		DW		0
 
+; The room they were filled for, which is where they are written back to.
+; Not room_shown: dying starts the room over by making that anything but the
+; room it is, and a collectable written back under that would be in no room.
+special_room:		DB		0
+
 ; How many the wizard has had, which is also which one he wants next.
 special_count:		DB		0
 

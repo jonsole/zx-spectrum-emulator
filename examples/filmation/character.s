@@ -84,11 +84,25 @@ CHARACTER_PHASE_M	EQU		ROOM_STRIDE * 2 + 8	; mask on the walk phase
 CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 9
 
 ; How close to an arch counts as standing in it: six units across the opening,
-; fifteen along it and four in height. Knight Lore's own numbers, from the
-; box its arches test against ($06/$0F either way round, and $04 in Z).
+; fifteen along it, and in height from just below the arch's floor to one
+; object's height above it. Across and along are Knight Lore's own numbers,
+; from the box its arches test against ($06/$0F either way round). Its height
+; is four either way ($04 in Z), and steering still uses that; standing in the
+; doorway does not. A room's edge is behind the knight once he is in the arch,
+; and with only four units of height, standing on something there -- a spell,
+; a collectable, a block, all twelve tall -- turned the edge back on with him
+; already past it, and every step he took was cut to nothing.
+;
+; No higher than that, though: the doorway lifting the edge is also what would
+; let a jump that started in the room carry him into the arch through its top.
+; He cannot jump in a doorway (character_jump), and above this height the edge
+; holds him back. On something twelve tall his head is at 164, under the
+; pillars' 168. A walkway's arch is 48 above the floor's and no side of any
+; room has more than one arch, so neither storey reaches the other.
 DOOR_ACROSS		EQU		6
 DOOR_ALONG		EQU		15
 DOOR_LEVEL		EQU		4
+DOOR_HEIGHT		EQU		13		; Z up to twelve above the arch's floor
 CHARACTER_JUMPING	EQU		1		; bit 0 of the above
 
 ; Knight Lore gives the knight an impulse of eight and then takes one a turn
@@ -464,11 +478,17 @@ character_move_go:	call	region_reset
 character_jump_held:	DB		0
 
 
-; Start a jump, if this is a moment one may be started.
+; Start a jump, if this is a moment one may be started. Not in a doorway: the
+; arch's top is only a little above his head, and a jump carried him up through
+; it. CHARACTER_DOOR is 0 to 3 for a doorway and $FF for none, so bit 7 is the
+; test, which leaves A alone. Only the knight ever has one set, so this costs
+; nobody else anything; player_step finds it before it reads the keys.
 ;   IX -> the legs record
 ; Corrupts AF.
 character_jump:		bit		0,(ix+CHARACTER_STATE)
 					ret		nz		; already in the air
+					bit		7,(ix+CHARACTER_DOOR)
+					ret		z		; standing in a doorway
 					ld		a,(ix+CHARACTER_DZ)
 					inc		a
 					ret		m		; falling faster than a unit a turn: too
@@ -529,9 +549,10 @@ character_land:		ld		a,(collide_hit)
 ; Corrupts AF, BC, DE, HL.
 ;
 ; An arch's opening is a box around a point on the wall: six units either side
-; of the room's middle, fifteen either side of the arch, and four in height.
-; The height is what keeps a knight on the floor of a tall room out of the
-; high arch on its walkway, and a knight on the walkway out of the floor.
+; of the room's middle, fifteen either side of the arch, and from three below
+; its floor to twelve above it. The height is what keeps a knight on the
+; floor of a tall room out of the high arch on its walkway, and a knight on the
+; walkway out of the floor.
 character_door_find:
 					ld		(ix+CHARACTER_DOOR),$FF
 					ld		c,0
@@ -543,10 +564,11 @@ character_door_find:
 					or		a
 					jr		z,.next		; no door on this side
 
-					sub		(ix+OBJ.Z)
-					call	.abs
-					cp		DOOR_LEVEL
-					jr		nc,.next		; the wrong storey
+					ld		a,(ix+OBJ.Z)
+					sub		(hl)
+					add		a,DOOR_LEVEL - 1
+					cp		DOOR_LEVEL - 1 + DOOR_HEIGHT
+					jr		nc,.next		; below it or above it: the wrong storey
 
 					; North and south face along V, east and west along U; the
 					; other axis is the one across the opening.

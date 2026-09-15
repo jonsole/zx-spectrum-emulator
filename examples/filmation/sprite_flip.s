@@ -30,6 +30,11 @@
 ; rows are stored, which is why nothing here has to know that sprites.py
 ; already turned Ultimate's bottom-up rows the right way round.
 ;
+; Records are ALIGN 4, so every row starts on an even address: masks are even
+; and data bytes odd. A step from even to odd cannot carry out of the low byte,
+; nor one from odd to even borrow, so those move L or E alone; only the steps
+; that could cross a page move the whole pair.
+;
 ; HL comes back pointing at the record, and AF' and IY as they were; AF, BC and
 ; DE are clobbered.
 sprite_flip_h:		push	hl
@@ -43,7 +48,7 @@ sprite_flip_h:		push	hl
 					add		a,2		; width, in columns
 					add		a		; and in bytes -- a mask and a data byte each
 					ld		(.stride+1),a		; into E below
-					inc		hl
+					inc		l		; even to odd, so no carry
 					ld		a,(hl)
 					ld		iyl,a		; height, and the rows left to do
 					inc		hl		; -> the first row
@@ -55,8 +60,8 @@ sprite_flip_h:		push	hl
 					add		hl,de		; -> the next row
 					push	hl		; kept for the end of the row
 					ex		de,hl		; HL = the row's start, DE = the next row
-					dec		de
-					dec		de		; DE -> this row's last column
+					dec		de		; even to odd, which can borrow
+					dec		e		; DE -> this row's last column
 
 .column:			ld		c,(hl)		; the near mask, reversed...
 					ld		a,(bc)
@@ -67,8 +72,8 @@ sprite_flip_h:		push	hl
 					ld		(hl),a		; ...and each into the other's place
 					ex		af,af'
 					ld		(de),a
-					inc		hl
-					inc		de
+					inc		l		; mask to data: even to odd, so no carry
+					inc		e
 					ld		c,(hl)		; and the same for the data bytes
 					ld		a,(bc)
 					ex		af,af'
@@ -79,9 +84,9 @@ sprite_flip_h:		push	hl
 					ex		af,af'
 					ld		(de),a
 					inc		hl		; the next column in
-					dec		de
-					dec		de
-					dec		de		; and the one before it at the far end
+					dec		e		; data to mask: odd to even
+					dec		de		; even to odd, which can borrow
+					dec		e		; and the one before it at the far end
 					ld		a,e
 					sub		l
 					ld		a,d
