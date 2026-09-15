@@ -146,10 +146,6 @@ WORLD_Y_ORIGIN		EQU		40		; 296 mod 256 -- the origin Knight Lore itself uses
 ; the boxes are four fixed shapes, as its are. Ours are real sizes already,
 ; because the depth sort needs them, so the clamp is the cheaper fit.
 
-; Which axes had to give, one bit each. The caller reads it to know it has hit
-; something -- landing on a floor is the Z bit and a step into a wall is the U
-; or V one.
-collide_hit:		DB		0
 COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
 COLLIDE_Z			EQU		4
@@ -163,7 +159,13 @@ COLLIDE_Z			EQU		4
 ; pacing fire to turn at the wall rather than stand pressed against it.
 collide_bound:		DB		0
 
-; The bit object_clamp sets when it has to cut the axis it was given.
+; Which axes had to give, one bit each. The caller reads it to know it has hit
+; something -- landing on a floor is the Z bit and a step into a wall is the U
+; or V one.
+collide_hit:		DB		0
+
+; The bit object_clamp sets when it has to cut the axis it was given. Straight
+; after collide_hit, so that object_clamp loads the pair in one.
 collide_mask:		DB		0
 
 ; The step as the tests may see it, which is not the whole of what the object
@@ -278,12 +280,10 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					ld		a,(collide_u_min)
 					cp		e
 					jr		nc,.apart		; our min >= their max
-					ld		a,d
-					sub		(iy+OBJ.SIZE_U)		; their min
-					ld		d,a
 					ld		a,(collide_u_max)
 					ld		e,a
 					ld		a,d
+					sub		(iy+OBJ.SIZE_U)		; their min
 					cp		e
 					jr		nc,.apart		; their min >= our max
 
@@ -294,12 +294,10 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					ld		a,(collide_v_min)
 					cp		e
 					jr		nc,.apart
-					ld		a,d
-					sub		(iy+OBJ.SIZE_V)
-					ld		d,a
 					ld		a,(collide_v_max)
 					ld		e,a
 					ld		a,d
+					sub		(iy+OBJ.SIZE_V)
 					cp		e
 					jr		nc,.apart
 
@@ -429,27 +427,26 @@ object_clamp:		ld		a,(hl)
 .contact:			call	object_touched
 
 
-					; In the way. Give a unit back and look again -- at the
-					; same object, because one unit may not be enough.
-					ld		a,(hl)
-					or		a		; LD does not touch the flags, and the sign
-					jp		m,.negative		; of the step is what picks the way back
-					dec		a
-					jr		.gave
-.negative:			inc		a
-.gave:				ld		(hl),a
-					push	af
-					ld		a,(collide_mask)
-					ld		c,a
-					ld		a,(collide_hit)
-					or		c
+					; In the way, so this axis has had to give.
+					ASSERT	collide_mask == collide_hit + 1
+					ld		de,(collide_hit)		; E - what has given, D - this axis
+					ld		a,d
+					or		e
 					ld		(collide_hit),a
-					call	collide_box
-					pop		af
-					or		a
-					ret		z		; nothing left to give, and nothing else
+
+					; Give a unit back and look again -- at the same object,
+					; because one unit may not be enough. The sign of the step
+					; picks the way back, and INC and DEC say whether it is
+					; now nothing.
+					bit		7,(hl)
+					jr		nz,.negative
+					dec		(hl)
+					jr		.gave
+.negative:			inc		(hl)
+.gave:				ret		z		; nothing left to give, and nothing else
 					; can take any: the rest of the room
 					; cannot make a zero step smaller
+					call	collide_box
 					jr		.object
 
 .next:				djnz	.load
@@ -525,12 +522,10 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					add		iy,de
 					djnz	.each
 
-.other:				ld		de,(collide_other)
-					ld		a,d
-					or		e
+.other:				ld		iy,(collide_other)
+					ld		a,iyh		; zero for none: no record lives
+					or		a		; in the bottom page
 					jr		z,.done
-					push	de
-					pop		iy
 					call	object_overlaps
 					call	c,.keep
 .done:				ld		a,c
@@ -688,54 +683,64 @@ object_collide:		xor		a
 					; Z, then U, then V. Each takes what the object asked for on
 					; its own axis, has it cut down against everything, and hands
 					; the answer back to the record -- where the axes after it
-					; will see it, and the axes before it already have.
-					ld		a,COLLIDE_Z
-					ld		(collide_mask),a
-					ld		a,(ix+OBJ.DZ)
-					ld		(collide_eff_z),a
+					; will see it, and the axes before it already have. The
+					; gather reads the record's own deltas, not collide_eff, so it
+					; can go first.
 					call	collide_gather
+					ld		a,COLLIDE_Z
 					ld		hl,collide_eff_z
-					call	object_clamp
-					ld		a,(collide_eff_z)
-					ld		(ix+OBJ.DZ),a
+					call	object_pass
 
 					; Did a ride hand over more than the gather allowed for? Then
 					; gather again, around the step as it now stands.
 					ld		a,(ix+OBJ.DU)
-					call	.abs
+					call	object_pass.abs
 					ld		hl,collide_reach_u
 					cp		(hl)
 					jr		z,.u_fits
 					jr		nc,.again
 .u_fits:			ld		a,(ix+OBJ.DV)
-					call	.abs
+					call	object_pass.abs
 					ld		hl,collide_reach_v
 					cp		(hl)
 					jr		z,.passes
 					jr		c,.passes
 .again:				call	collide_gather
 .passes:
-
 					ld		a,COLLIDE_U
-					ld		(collide_mask),a
-					ld		a,(ix+OBJ.DU)
-					ld		(collide_eff_u),a
 					ld		hl,collide_eff_u
-					call	object_clamp
-					ld		a,(collide_eff_u)
-					ld		(ix+OBJ.DU),a
-
+					call	object_pass
 					ld		a,COLLIDE_V
-					ld		(collide_mask),a
-					ld		a,(ix+OBJ.DV)
-					ld		(collide_eff_v),a
 					ld		hl,collide_eff_v
+
+					;; NB: fall through into object_pass
+
+
+; One axis of object_collide: the record's delta into collide_eff for the tests
+; to see, cut down by object_clamp, and back into the record. The three
+; collide_eff bytes and the record's three deltas run in the same order, U, V
+; then Z, so where HL is among the first says which of the second to use, and
+; that offset is written into the two indexed loads.
+;   A  - the axis's bit, for collide_hit
+;   HL -> its collide_eff byte
+;   IX -> the record
+; Corrupts AF, BC, DE, IY. Preserves HL and IX.
+					ASSERT	collide_eff_v == collide_eff_u + 1 && collide_eff_z == collide_eff_u + 2
+					ASSERT	OBJ.DV == OBJ.DU + 1 && OBJ.DZ == OBJ.DU + 2
+object_pass:		ld		(collide_mask),a
+					ld		a,l
+					sub		low collide_eff_u - OBJ.DU
+					ld		(.get+2),a
+					ld		(.put+2),a
+.get:				ld		a,(ix+0)		; imm: the delta's offset
+					ld		(hl),a
 					call	object_clamp
-					ld		a,(collide_eff_v)
-					ld		(ix+OBJ.DV),a
+					ld		a,(hl)
+.put:				ld		(ix+0),a		; imm: the same
 					ret
 
 
+; An absolute value, for object_collide's reach checks.
 .abs:				or		a
 					ret		p
 					neg
@@ -952,9 +957,10 @@ object_update:
 					ld		a,(ix+OBJ.FLAGS)
 					and		OBJ_FLIP_H
 					or		OBJ_COPIED
-					ld		e,a		; what a twin's flags must look like
+					ld		h,a		; what a twin's flags must look like; HL is saved
 					ld		c,(ix+OBJ.GFX)
 					ld		iy,room_objects
+					ld		de,ROOM_STRIDE
 					ld		a,(room_object_count)
 					ld		b,a
 					or		a
@@ -962,15 +968,12 @@ object_update:
 
 .twin:				ld		a,(iy+OBJ.FLAGS)
 					and		OBJ_COPIED | OBJ_FLIP_H
-					cp		e
+					cp		h
 					jr		nz,.next_twin
 					ld		a,(iy+OBJ.GFX)
 					cp		c
 					jr		z,.twinned
-.next_twin:			push	bc
-					ld		bc,ROOM_STRIDE
-					add		iy,bc
-					pop		bc
+.next_twin:			add		iy,de
 					djnz	.twin
 
 .no_twin:			pop		iy
@@ -1008,11 +1011,11 @@ object_update:
 					; bytes really are shared: sprite_orient must go on keeping them
 					; the way round this object wants them.
 .defer_shift:		ld		(ix+OBJ.SHIFT),a
-					inc		l
-					ld		(ix+OBJ.SPRITE_L),l
-					ld		(ix+OBJ.SPRITE_H),h
-					res		5,(ix+OBJ.FLAGS)
-					ld		a,(ix+OBJ.BLIT_IDX)
+					call	.share		; SPRITE -> the shared graphic
+
+					; A rotated form carries one overflow column the artwork does
+					; not, and the blit index and the extent widen with it.
+.widen:				ld		a,(ix+OBJ.BLIT_IDX)
 					add		a,JUMP_GROUP
 					ld		(ix+OBJ.BLIT_IDX),a
 					inc		(ix+OBJ.MAX_X)
@@ -1073,11 +1076,7 @@ object_update:
 					set		5,(ix+OBJ.FLAGS)		; this copy is private and already
 					; the right way round: sprite_orient
 					; leaves it alone
-					ld		a,(ix+OBJ.BLIT_IDX)
-					add		a,JUMP_GROUP		; the rotated copy carries one overflow
-					ld		(ix+OBJ.BLIT_IDX),a		; column the artwork does not
-					inc		(ix+OBJ.MAX_X)		; ...so the extent widens with it
-					ret
+					jr		.widen
 
 
 					; Rotate a sprite. A local label, because the rest of
@@ -1198,8 +1197,6 @@ object_update:
 .restore_sp:		ld		sp,0				; restore SP, value set before loop
 					ret
 
-                    ret
-
 
 
 
@@ -1278,17 +1275,15 @@ sprite_orient:		push	af
 					push	bc
 					push	de
 					push	hl
+					ASSERT	OBJ_SHIFTED == 1 << 5
 					exx
-					ld		a,e					; FLAGS
+					bit		5,e					; OBJ_SHIFTED
+					ld		a,e					; FLAGS, for the XOR below
 					exx
-					and		OBJ_SHIFTED
 					jr		nz,.done			; its own private copy, and SPRITE - 2
 					; is not a sprite header at all
 					dec		l					; SPRITE is the record + 2, and records
 					dec		l					; are ALIGN 4, so this cannot borrow
-					exx
-					ld		a,e
-					exx
 					xor		(hl)
 					rrca						; the two flip bits differ: carry
 					call	c,sprite_flip_h		; HL -> the record, which is what it wants

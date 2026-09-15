@@ -87,42 +87,26 @@ room_group_move:	DB		0
 ; bytes to hold 128 rooms, and half of it is zero. The walk is a few hundred
 ; T-states and it happens once, when the room changes.
 ;
+; Each record says how far it is to the next, so a step is one add. And it
+; never has to ask whether the list has ended: the records are in ascending
+; order and the last one is room $FF -- rooms.py asserts both -- so the walk
+; always reaches a number at least the one it wants, and stops there.
+;
 ;   C  - the room wanted
 ; Out: cf set and HL -> its record; cf clear if there is no such room.
 ; Corrupts AF, DE, HL.
 room_find:			ld		hl,room_list
+					ld		d,0
 .next:				ld		a,(hl)
 					cp		c
-					scf
-					ret		z
-
-					; Step over the header and then the body, whose length is
-					; the two counts added together.
+					jr		nc,.here		; this room, or already past it
 					inc		hl
-					inc		hl		; -> the counts
-					ld		a,(hl)
-					inc		hl		; -> the body
-					ld		e,a
-					and		ROOM_OBJ_MASK
-					ld		d,a
-					ld		a,e
-					rlca
-					rlca
-					rlca
-					and		7
-					add		a,d
-					ld		e,a
-					ld		d,0
+					ld		e,(hl)		; the skip, counted from its own byte
 					add		hl,de
-
-					ld		de,room_list_end
-					push	hl
-					and		a
-					sbc		hl,de
-					pop		hl		; POP leaves the flags alone
-					jr		c,.next
-					and		a		; off the end: no such room
-					ret		
+					jr		.next
+.here:				ret		nz		; past it: no such room, and cf is clear
+					scf
+					ret
 
 
 ; Build a room and draw it.
@@ -166,19 +150,21 @@ room_build:			ld		c,a
 					pop		de
 					inc		de		; past its own number
 					ld		a,(de)
-					ld		(room_attr),a
+					sub		2		; the skip, less the rest of the header:
+					ld		c,a		; the body
 					inc		de
-					ld		a,(de)		; both counts in the one byte
+					ld		a,(de)
+					ld		(room_attr),a
 					inc		de		; -> the scenery indices
-					ld		c,a
-					and		ROOM_OBJ_MASK
-					ld		(room_bytes_left),a
-					ld		a,c
+					ASSERT	ROOM_SCN_SHIFT == 5
 					rlca
 					rlca
 					rlca		; three left is five right
 					and		7
 					ld		(room_scenery_left),a
+					neg
+					add		a,c		; and the rest of the body is objects
+					ld		(room_bytes_left),a
 
 					push	de
 					call	room_wipe
@@ -218,13 +204,13 @@ room_paper:			ld		a,(room_attr)
 					ret
 
 
-; The room's shape. Bits 3 and up of the attribute byte index room_size_tbl,
-; three bytes an entry; only the floor height is wanted here.
+; The room's shape. Bits 3 and 4 of the attribute byte index room_size_tbl,
+; three bytes an entry; above them is the scenery count.
 room_shape:			ld		a,(room_attr)
 					rrca
 					rrca
 					rrca
-					and		$1F
+					and		3
 					ld		l,a
 					add		a,a
 					add		a,l		; index * 3
@@ -660,47 +646,41 @@ room_adjust:		push	hl
 ; Placement has to finish before any insertion, so that every depth comparison
 ; sees real coordinates; and everything is placed before anything is drawn, so
 ; that the first object painted already has the rest behind it.
-room_show:			ld		a,(room_object_count)
+room_show:			ld		hl,object_place
+					call	room_each
+					ld		hl,room_insert_one
+					call	room_each
+					ld		hl,redraw_object
+					;; NB: fall through into room_each
+
+
+; Call a routine once for every object in the room. One walk for the three
+; passes of room_show, with the routine written into the CALL.
+;   HL -> the routine, which gets IX -> the record and may corrupt anything
+room_each:			ld		(.call+1),hl
+					ld		a,(room_object_count)
 					or		a
-					ret		z
+					ret		z		; DJNZ would take a zero as 256
 					ld		b,a
 					ld		ix,room_objects
-.place:				push	bc
-					call	object_place
-					ld		bc,ROOM_STRIDE
-					add		ix,bc
-					pop		bc
-					djnz	.place
-
-					ld		a,(room_object_count)
-					ld		b,a
-					ld		ix,room_objects
-.insert:			push	bc
+.next:				push	bc
 					push	ix
-					ld		a,(ix+OBJ.FLAGS)
-					and		OBJ_BACKGROUND
-					jr		z,.sort_it
-					call	background_insert		; straight to the front, never
-					jr		.inserted		; compared with anything
-.sort_it:			call	depth_insert
-.inserted:			pop		ix
-					ld		bc,ROOM_STRIDE
-					add		ix,bc
-					pop		bc
-					djnz	.insert
-
-					ld		a,(room_object_count)
-					ld		b,a
-					ld		ix,room_objects
-.draw:				push	bc
-					push	ix
-					call	redraw_object
+.call:				call	0		; imm: the routine
 					pop		ix
 					ld		bc,ROOM_STRIDE
 					add		ix,bc
 					pop		bc
-					djnz	.draw
+					djnz	.next
 					ret
+
+
+; Into the depth list: the background straight to the front, never compared
+; with anything, and everything else sorted.
+;   IX -> the record
+room_insert_one:	ld		a,(ix+OBJ.FLAGS)
+					and		OBJ_BACKGROUND
+					jp		nz,background_insert
+					jp		depth_insert
 
 
 ; ---------------------------------------------------------------------------

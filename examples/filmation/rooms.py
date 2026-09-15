@@ -53,6 +53,7 @@ FG_NAMES = [
 ]
 
 TAB = chr(9)
+ROOM_SCN_SHIFT = 5          # where a room header keeps its scenery count
 data = None
 
 
@@ -353,27 +354,32 @@ def emit(out):
     out.append("; Each room is:")
     out.append(";")
     out.append(";     room number           which is what the walk matches on")
-    out.append(";     attribute and size    colour in bits 0-2, room shape in bits 3 up")
-    out.append(";     counts                scenery in bits 5-7, object bytes in 0-4")
+    out.append(";     skip                  bytes from here to the next record")
+    out.append(";     attribute             colour in bits 0-2, room shape in bits 3-4,")
+    out.append(";                           and how many scenery indices in bits 5-7")
     out.append(";     scenery type indices")
     out.append(";     object groups         a type-and-count byte, then that many")
     out.append(";                           packed positions: U cell in bits 0-2,")
     out.append(";                           V cell in bits 3-5, Z level in bits 6-7")
     out.append(";")
     out.append("; The game bounds the record with a length and ends the scenery list with")
-    out.append("; $FF; two counts say the same thing and are cheaper to walk.")
+    out.append("; $FF. The skip is that length, and the scenery count says where the")
+    out.append("; scenery stops; what is left of the body is object bytes.")
     out.append(";")
     out.append("; The records carry their own number and are walked, rather than being")
     out.append("; reached through an index. An index over 256 numbers is 512 bytes to hold")
     out.append("; 128 rooms and half of it is nothing, where a number on each record is 128")
-    out.append("; bytes that pack into the header for free -- the two counts needed a byte")
-    out.append("; each and fit in one. Knight Lore walks for the same reason: find_screen")
-    out.append("; at $D3CF compares each record's own number and steps over its body.")
+    out.append("; bytes. Knight Lore walks for the same reason: find_screen at $D3CF")
+    out.append("; compares each record's own number and steps over its body.")
+    out.append(";")
+    out.append("; The walk needs no end: the records are in ascending order and the last is")
+    out.append("; room $FF, so it always meets a number at least the one it wants.")
     out.append("")
     bg_sizes = pieces_by_index(BG_TYPE_TBL, BG_TYPE_COUNT, 8)
     fg_sizes = pieces_by_index(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, 6)
     biggest = 0
     most_objects = 0
+    assert max(table) == 0xFF, "room_find stops at the first number >= its own"
     line("room_list:", "", "")
     for rid in sorted(table):
         attr, body = table[rid]
@@ -381,9 +387,10 @@ def emit(out):
         biggest = max(biggest, len(scenery) + len(objects))
         most_objects = max(most_objects,
                            count_objects(bg_sizes, fg_sizes, scenery, objects))
-        assert len(scenery) < 8 and len(objects) < 32, rid
-        line("room_%02X:" % rid, "DB", "$%02X, $%02X, $%02X"
-             % (rid, attr, len(scenery) << 5 | len(objects)),
+        skip = 2 + len(scenery) + len(objects)
+        assert len(scenery) < 8 and attr < 0x20 and skip < 256, rid
+        line("room_%02X:" % rid, "DB", "$%02X, %d, $%02X"
+             % (rid, skip, len(scenery) << ROOM_SCN_SHIFT | attr),
              "attr %d, shape %d, %d scenery, %d object bytes"
              % (attr & 7, attr >> 3, len(scenery), len(objects)))
         if scenery:
@@ -399,12 +406,7 @@ def emit(out):
         out.append("")
     out.append("")
 
-    out.append("; The walk runs from the first record to here. Ascending by number,")
-    out.append("; which is what lets the 1 and 2 keys step from one room to the next.")
-    line("room_list_end:", "", "")
-    out.append("")
-    line("ROOM_SCN_SHIFT", "EQU", "5", "the scenery count sits in the top three bits")
-    line("ROOM_OBJ_MASK", "EQU", "$1F", "...and the object byte count in the low five")
+    line("ROOM_SCN_SHIFT", "EQU", "%d" % ROOM_SCN_SHIFT, "the scenery count, above the attribute")
     line("ROOM_COUNT", "EQU", "%d" % len(table))
     line("ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")
     line("ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,
