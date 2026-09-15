@@ -13,6 +13,10 @@
 //
 // SLD is sjasmplus's pipe-delimited format, one record per line:
 //   file|line|definition_file|definition_line|page|address|type|data
+// The leading `file` field is load-bearing for anything built from more than
+// one file: sjasmplus numbers lines PER FILE, so a program assembled from an
+// entry source plus four INCLUDEs has four other line 40s, and a line number
+// on its own names none of them.
 // `type` is a single letter: T (an instruction -- address<->line, unnamed),
 // F (a global label, with `data` as the name), D (an EQU'd constant or
 // system-variable address), L (display/scope flags for the preceding D/F),
@@ -36,12 +40,35 @@ namespace zx {
 /// still match that source's very last label with a huge, meaningless offset.
 constexpr uint16_t SYMBOL_MAX_OFFSET = 0xFF;
 
-/// One parsed SLD file, plus the .asm it describes.
+/// One source file an SLD names, with the line->address mapping for that
+/// file alone. Kept per-file rather than merged because SLD line numbers are
+/// only meaningful paired with the file they came from.
+struct SourceFile {
+    /// The file exactly as the SLD spells it -- the key records are matched
+    /// on, and usually a bare name ("sprite.s") rather than a path.
+    std::string sld_name;
+    /// Where that file actually is, for a client to open and for the `source`
+    /// request to read. Resolved beside the entry .asm; see load_source.
+    std::string path;
+    std::unordered_map<uint32_t, uint16_t> line_to_addr;
+};
+
+/// Where an address came from: which of RomSource::files, and the line in it.
+struct SourceLoc {
+    size_t file = 0;
+    uint32_t line = 0;
+};
+
+/// One parsed SLD file, plus the .asm files it describes.
 class RomSource {
 public:
+    /// The entry source, as the caller named it. Always files[0] as well;
+    /// kept here too because it is the path a caller passed in, and the one
+    /// an error message should quote back.
     std::string asm_path;
-    std::unordered_map<uint32_t, uint16_t> line_to_addr;
-    std::unordered_map<uint16_t, uint32_t> addr_to_line;
+    /// Every file the SLD names, entry source first.
+    std::vector<SourceFile> files;
+    std::unordered_map<uint16_t, SourceLoc> addr_to_loc;
     std::map<std::string, uint16_t> symbols;
 
     /// How far below a requested line to look for a real instruction. A
@@ -52,11 +79,21 @@ public:
     /// unrelated; past this the line is simply reported unverified.
     static constexpr uint32_t MAX_BREAKPOINT_NUDGE = 50;
 
-    /// Address for a source line, nudging forward past lines with no
-    /// instruction of their own. `actual_line` comes back as the line the
-    /// address really belongs to, which DAP expects a client to move its
-    /// marker to. False if nothing within MAX_BREAKPOINT_NUDGE has code.
-    bool addr_for_line(uint32_t line, uint16_t& addr, uint32_t& actual_line) const;
+    /// Address for a line of `file` (an index into `files`), nudging forward
+    /// past lines with no instruction of their own. `actual_line` comes back
+    /// as the line the address really belongs to, which DAP expects a client
+    /// to move its marker to. False if nothing within MAX_BREAKPOINT_NUDGE
+    /// has code, or if `file` is not an index this source holds.
+    bool addr_for_line(size_t file, uint32_t line, uint16_t& addr, uint32_t& actual_line) const;
+
+    /// Index of the file this path names, matched on the full path or just
+    /// the file name (DAP clients are inconsistent about which they send).
+    /// False if this source does not describe that file at all.
+    bool file_for_path(const std::string& path, size_t& index) const;
+
+    /// How many addresses this SLD maps to a source line -- what a caller
+    /// reports as "instructions" after attaching debug info.
+    size_t instruction_count() const { return addr_to_loc.size(); }
 
     /// The nearest label at or before `addr`, with its offset -- three bytes
     /// into routine FOO gives ("FOO", 3). False if `addr` precedes every
@@ -171,9 +208,11 @@ public:
     std::vector<SymbolMatch> match_symbols(const std::string& prefix, size_t limit,
                                            bool& more) const;
 
-    /// The source describing `path`, matched on the full path or just the
-    /// file name (DAP clients are inconsistent about which they send).
-    RomSourcePtr source_for_path(const std::string& path) const;
+    /// The source describing `path`, with `file_index` set to the file
+    /// within it that the path names -- a program's SLD covers several, and
+    /// the line numbers only mean something against one of them. Null if no
+    /// loaded source describes that path.
+    RomSourcePtr source_for_path(const std::string& path, size_t& file_index) const;
 
 private:
     std::string rom_dir_;

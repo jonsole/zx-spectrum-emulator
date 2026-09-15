@@ -49,6 +49,7 @@ from mcp.server.stdio import stdio_server
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_EXE = REPO_ROOT / "cpp-core" / "build" / "RelWithDebInfo" / "zx_server.exe"
 DEFAULT_ROM = REPO_ROOT / "roms" / "48.rom"
+DEFAULT_ROM_128 = REPO_ROOT / "roms" / "128.rom"
 DEFAULT_PORT = 8000
 DEFAULT_HOST = "127.0.0.1"
 # Generous: a cold start has to load the ROM and its disassembly before it
@@ -328,6 +329,11 @@ def main(argv: list[str]) -> int:
     extra: list[str] = []
     if args.rom:
         extra += ["--rom", args.rom]
+    # The 128K's ROM pair too, when it is there, so a 128K snapshot or a
+    # `reset(machine="128")` finds it loaded. Its absence is not an error:
+    # the emulator is then a 48K only, which is all it was before.
+    if args.rom and DEFAULT_ROM_128.exists():
+        extra += ["--rom", str(DEFAULT_ROM_128)]
     extra += shlex.split(args.server_args)
 
     upstream = Upstream(

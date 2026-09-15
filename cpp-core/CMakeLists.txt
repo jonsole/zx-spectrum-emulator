@@ -33,6 +33,7 @@ endif()
 # ---- zx_core: the emulator itself (no server/protocol code) -----------------
 add_library(zx_core STATIC
   src/alu.cpp
+  src/ay.cpp
   src/beeper.cpp
   src/disassembler.cpp
   src/engine.cpp
@@ -45,6 +46,7 @@ add_library(zx_core STATIC
   src/tape_audio.cpp
   src/tracelog.cpp
   src/ula.cpp
+  src/video_recorder.cpp
   src/z80.cpp
 )
 find_package(Threads REQUIRED)
@@ -131,10 +133,16 @@ zx_add_test(pin_level)
 zx_add_test(int_timing)
 zx_add_test(differential USES_REFERENCE)
 zx_add_test(spectrum_tests)
+zx_add_test(spectrum128_tests)
+zx_add_test(ay_tests)
 zx_add_test(floating_bus)
+zx_add_test(call_stack)
+zx_add_test(graphics_view)
 zx_add_test(tape_tests)
 zx_add_test(tape_audio_tests)
 zx_add_test(tracelog_tests)
+zx_add_test(video_recorder_tests)
+zx_add_test(frame_capture_tests)
 
 # Not a zx_add_test: the symbol/address-expression parsing it covers lives in
 # rom_source.cpp, which belongs to zx_server rather than zx_core (debug data is
@@ -151,6 +159,9 @@ target_compile_definitions(tracelog_tests
 # Needs the real ROM, which is copyrighted and gitignored -- the test skips
 # gracefully if it is absent.
 target_compile_definitions(spectrum_tests
+  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+# The same for the 128K's ROM pair (roms/128.rom).
+target_compile_definitions(spectrum128_tests
   PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 # The fast-load trap and the auto-typed LOAD "" only mean anything against the
 # real ROM; those tests skip gracefully without it, the parser ones do not need

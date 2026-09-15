@@ -1,0 +1,200 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Z80 Assembly",
+  "scopeName": "source.z80-asm",
+  "comment": "Z80 assembly as sjasmplus reads it: the dialect every .s and .asm in this repo is written in. Keywords are matched case-insensitively and never inside an identifier, so a local label such as .end or a struct field such as OBJ.SET stays a name.",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#label-definitions" },
+    { "include": "#definitions" },
+    { "include": "#strings" },
+    { "include": "#conditional-flow" },
+    { "include": "#mnemonics" },
+    { "include": "#registers" },
+    { "include": "#directives" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.z80-asm",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.semicolon.z80-asm",
+          "match": ";.*$"
+        },
+        {
+          "name": "comment.line.double-slash.z80-asm",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "label-definitions": {
+      "patterns": [
+        {
+          "comment": "NAME EQU value, NAME DEFL value, NAME = value -- a constant, indented or not.",
+          "match": "^\\s*([.@]?[A-Za-z_][\\w.?!#@]*)\\s*:?\\s*(?:((?i:equ|defl))(?![\\w.?!#@])|(=)(?!=))",
+          "captures": {
+            "1": { "name": "entity.name.constant.z80-asm" },
+            "2": { "name": "keyword.control.directive.z80-asm" },
+            "3": { "name": "keyword.operator.assignment.z80-asm" }
+          }
+        },
+        {
+          "comment": "NAME MACRO params -- the label form of a macro definition.",
+          "match": "^([A-Za-z_][\\w.?!#@]*):?\\s+((?i:macro))(?![\\w.?!#@])",
+          "captures": {
+            "1": { "name": "entity.name.function.macro.z80-asm" },
+            "2": { "name": "storage.type.macro.z80-asm" }
+          }
+        },
+        {
+          "comment": "Anything in the first column is a label, with or without its colon.",
+          "match": "^([.@]?[A-Za-z_][\\w.?!#@]*)(:?)",
+          "captures": {
+            "1": { "name": "entity.name.function.label.z80-asm" },
+            "2": { "name": "punctuation.separator.label.z80-asm" }
+          }
+        },
+        {
+          "comment": "An indented label has to carry its colon to be one.",
+          "match": "^\\s+([.@]?[A-Za-z_][\\w.?!#@]*)(:)(?=\\s|$|;)",
+          "captures": {
+            "1": { "name": "entity.name.function.label.z80-asm" },
+            "2": { "name": "punctuation.separator.label.z80-asm" }
+          }
+        }
+      ]
+    },
+    "definitions": {
+      "patterns": [
+        {
+          "match": "(?<![\\w.?!#@$])((?i:macro))\\s+([A-Za-z_][\\w.?!#@]*)",
+          "captures": {
+            "1": { "name": "storage.type.macro.z80-asm" },
+            "2": { "name": "entity.name.function.macro.z80-asm" }
+          }
+        },
+        {
+          "match": "(?<![\\w.?!#@$])((?i:struct))\\s+([A-Za-z_][\\w.?!#@]*)",
+          "captures": {
+            "1": { "name": "storage.type.struct.z80-asm" },
+            "2": { "name": "entity.name.type.struct.z80-asm" }
+          }
+        },
+        {
+          "match": "(?<![\\w.?!#@$])((?i:module))\\s+([A-Za-z_][\\w.?!#@]*)",
+          "captures": {
+            "1": { "name": "storage.type.module.z80-asm" },
+            "2": { "name": "entity.name.namespace.z80-asm" }
+          }
+        },
+        {
+          "match": "(?<![\\w.?!#@$])((?i:define\\+?|undefine))\\s+([A-Za-z_][\\w.?!#@]*)",
+          "captures": {
+            "1": { "name": "keyword.control.directive.define.z80-asm" },
+            "2": { "name": "entity.name.constant.define.z80-asm" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.z80-asm",
+          "begin": "\"",
+          "end": "\"|$",
+          "patterns": [
+            { "name": "constant.character.escape.z80-asm", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.single.z80-asm",
+          "match": "'(?:[^'\\\\]|\\\\.)+'"
+        }
+      ]
+    },
+    "conditional-flow": {
+      "comment": "The condition after a jump, call or return, so the c in jr c,.loop reads as carry rather than as the register.",
+      "match": "(?<![\\w.?!#@$])((?i:jp|jr|call|ret))\\s+((?i:nz|z|nc|c|po|pe|p|m))(?![\\w.?!#@])",
+      "captures": {
+        "1": { "name": "keyword.control.flow.z80-asm" },
+        "2": { "name": "support.constant.condition.z80-asm" }
+      }
+    },
+    "mnemonics": {
+      "patterns": [
+        {
+          "name": "keyword.control.flow.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:jp|jr|call|ret|reti|retn|djnz|rst|halt)(?![\\w.?!#@])"
+        },
+        {
+          "name": "keyword.other.mnemonic.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:adc|add|and|bit|ccf|cp|cpd|cpdr|cpi|cpir|cpl|daa|dec|di|ei|ex|exx|im|in|inc|ind|indr|ini|inir|ld|ldd|lddr|ldi|ldir|neg|nop|or|otdr|otir|out|outd|outi|pop|push|res|rl|rla|rlc|rlca|rld|rr|rra|rrc|rrca|rrd|sbc|scf|set|sla|sli|sll|sra|srl|sub|xor|ldix|ldws|lddx|ldirx|lddrx|lprx|ldpirx|outinb|mul|swapnib|mirror|nextreg|pixeldn|pixelad|setae|test|bsla|bsra|bsrl|bsrf|brlc)(?![\\w.?!#@])"
+        }
+      ]
+    },
+    "registers": {
+      "name": "variable.language.register.z80-asm",
+      "match": "(?<![\\w.?!#@$])(?:(?i:af')|(?i:af|bc|de|hl|sp|ixh|ixl|iyh|iyl|ix|iy|xh|xl|yh|yl|hx|lx|hy|ly|a|b|c|d|e|h|l|i|r)(?![\\w.?!#@']))"
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.conditional.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:if|ifn|ifdef|ifndef|ifused|ifnused|elseif|else|endif|while|endw|dup|rept|edup|endr)(?![\\w.?!#@])"
+        },
+        {
+          "name": "storage.type.data.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:db|defb|dw|defw|dd|defd|ds|defs|dm|defm|dz|dc|d24|dg|defg|dh|defh|hex|block|byte|word|dword|abyte|abytec|abytez|align)(?![\\w.?!#@])"
+        },
+        {
+          "name": "storage.type.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:macro|endm|struct|ends|module|endmodule)(?![\\w.?!#@])"
+        },
+        {
+          "name": "keyword.control.directive.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?i:org|disp|phase|ent|dephase|unphase|textarea|end|equ|defl|define\\+?|undefine|include|incbin|binary|insert|inchob|inctrd|includelua|output|outend|tapout|tapend|savesna|savebin|savetap|savetrd|savenex|savedev|savecdt|save3dos|saveamsdos|emptytap|emptytrd|device|slot|page|mmu|labelslist|cspectmap|bplist|setbp|setbreakpoint|sldopt|display|assert|fpos|shellexec|lua|endlua|opt|relocate_start|relocate_end|encoding|charset|export|memorymap|fieldsize)(?![\\w.?!#@])"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?:[$#][0-9A-Fa-f][0-9A-Fa-f_']*|0[xX][0-9A-Fa-f][0-9A-Fa-f_']*|[0-9][0-9A-Fa-f_']*[hH])(?![\\w.?!#@])"
+        },
+        {
+          "name": "constant.numeric.binary.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?:%[01][01_']*|0[bB][01][01_']*|[01][01_']*[bB])(?![\\w.?!#@])"
+        },
+        {
+          "name": "constant.numeric.octal.z80-asm",
+          "match": "(?<![\\w.?!#@$])(?:0[qQ][0-7][0-7_']*|[0-7][0-7_']*[qQoO])(?![\\w.?!#@])"
+        },
+        {
+          "name": "constant.numeric.decimal.z80-asm",
+          "match": "(?<![\\w.?!#@$])[0-9][0-9_']*[dD]?(?![\\w.?!#@])"
+        },
+        {
+          "comment": "$ and $$ on their own: the current address and the current page.",
+          "name": "variable.language.location.z80-asm",
+          "match": "(?<![\\w.?!#@$])\\${1,2}(?![0-9A-Fa-f\\w$])"
+        }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.z80-asm",
+      "match": "<<|>>>|>>|<=|>=|==|!=|&&|\\|\\||[-+*/%&|^~!<>=?:]"
+    },
+    "identifiers": {
+      "name": "variable.other.label.z80-asm",
+      "match": "[.@]?[A-Za-z_][\\w.?!#@]*"
+    }
+  }
+}

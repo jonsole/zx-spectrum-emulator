@@ -12,7 +12,7 @@
 using namespace zx;
 
 TEST(rom_is_write_protected) {
-    Spectrum48KMemory mem;
+    SpectrumMemory mem;
     std::vector<uint8_t> rom(ROM_SIZE, 0xAA);
     CHECK_EQ(mem.load_rom(rom.data(), rom.size()), std::string());
 
@@ -21,13 +21,13 @@ TEST(rom_is_write_protected) {
 }
 
 TEST(ram_is_writable) {
-    Spectrum48KMemory mem;
+    SpectrumMemory mem;
     mem.write(0x8000, 0x42);
     CHECK_EQ(mem.read(0x8000), uint8_t(0x42));
 }
 
 TEST(load_rom_rejects_a_wrong_sized_image) {
-    Spectrum48KMemory mem;
+    SpectrumMemory mem;
     std::vector<uint8_t> too_short(100, 0);
     CHECK(mem.load_rom(too_short.data(), too_short.size()) != std::string());
 }

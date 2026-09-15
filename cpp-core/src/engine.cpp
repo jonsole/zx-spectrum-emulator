@@ -3,6 +3,9 @@
 #include "snapshot.h"
 #include "ula.h"
 
+#include <cstdio>
+#include <cstring>
+
 #ifdef _WIN32
 // Pacing sleeps for a few milliseconds at a time. Windows' default timer
 // granularity is ~15.6ms, which would overshoot every one of them and pace the
@@ -24,8 +27,25 @@ namespace {
 /// -- fine enough that the picture does not visibly lurch.
 constexpr uint64_t RUN_YIELD_EVERY = 2000;
 
-/// A real 48K issues 7,000,000 half-T-states per second (3.5MHz, 2 halves).
-constexpr double REALTIME_HC_PER_SEC = 7'000'000.0;
+/// The fewest instructions between yields, at any speed. Only a guard
+/// against zero: the interval is otherwise scaled strictly in proportion to
+/// the speed, which keeps the number of yields PER WALL SECOND the same
+/// however slowly the machine is running -- so the housekeeping costs the
+/// same per second at 1/1000 as at 1x, and the beam is sampled just as often.
+///
+/// A larger floor is what made slow motion jerky: at 1/1000 a floor of 100
+/// instructions worked out at nine yields a second, against the fifty frames
+/// a second the viewer sends, so the picture stood still for five frames and
+/// then jumped a couple of scanlines.
+constexpr uint64_t MIN_RUN_YIELD_EVERY = 1;
+
+/// How often the RGB snapshot is rebuilt while running.
+///
+/// Matches screen_stream's own send interval: rebuilding faster than the
+/// viewer transmits is pure copying (330KB a time), and no eye can see it
+/// either. Frequent yields decide how finely the beam is sampled; this
+/// decides how often that sampling turns into a picture.
+constexpr auto SCREEN_PUBLISH_INTERVAL = std::chrono::milliseconds(20);
 
 /// How far behind real time the emulator may fall before pacing gives up on
 /// catching up and simply restarts its baseline. Without this, any stall (a
@@ -87,10 +107,35 @@ Engine::~Engine() {
 
 void Engine::on_stopped(StoppedHandler h) { on_stopped_ = std::move(h); }
 void Engine::on_continued(ContinuedHandler h) { on_continued_ = std::move(h); }
+void Engine::on_graphics_view(GraphicsViewHandler h) { on_graphics_view_ = std::move(h); }
+
+void Engine::set_graphics_view(const GraphicsView& v) {
+    GraphicsViewHandler handler;
+    uint64_t version = 0;
+    {
+        std::lock_guard<std::mutex> lock(graphics_mutex_);
+        graphics_view_ = v;
+        version = ++graphics_version_;
+        handler = on_graphics_view_;
+    }
+    // Outside the lock: the handler writes to every open DAP socket, and a
+    // slow client must not hold up the next caller of this.
+    if (handler) {
+        handler(v, version);
+    }
+}
+
+GraphicsView Engine::graphics_view(uint64_t* version) const {
+    std::lock_guard<std::mutex> lock(graphics_mutex_);
+    if (version != nullptr) {
+        *version = graphics_version_;
+    }
+    return graphics_view_;
+}
 
 void Engine::actor_loop() {
     for (;;) {
-        std::function<void(Spectrum48K&)> job;
+        std::function<void(Spectrum&)> job;
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             queue_cv_.wait(lock, [this] { return shutting_down_ || !queue_.empty(); });
@@ -114,12 +159,12 @@ void Engine::actor_loop() {
     }
 }
 
-void Engine::submit_void(std::function<void(Spectrum48K&)> fn, bool during_run) {
+void Engine::submit_void(std::function<void(Spectrum&)> fn, bool during_run) {
     std::promise<void> done;
     std::future<void> fut = done.get_future();
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
-        queue_.push_back(Job{[fn = std::move(fn), &done](Spectrum48K& m) {
+        queue_.push_back(Job{[fn = std::move(fn), &done](Spectrum& m) {
                                  fn(m);
                                  done.set_value();
                              },
@@ -129,7 +174,7 @@ void Engine::submit_void(std::function<void(Spectrum48K&)> fn, bool during_run) 
     fut.wait();
 }
 
-void Engine::post(std::function<void(Spectrum48K&)> fn) {
+void Engine::post(std::function<void(Spectrum&)> fn) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         queue_.push_back(Job{std::move(fn), true});
@@ -138,32 +183,276 @@ void Engine::post(std::function<void(Spectrum48K&)> fn) {
 }
 
 template <typename R>
-R Engine::submit(std::function<R(Spectrum48K&)> fn, bool during_run) {
+R Engine::submit(std::function<R(Spectrum&)> fn, bool during_run) {
     std::promise<R> result;
     std::future<R> fut = result.get_future();
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         queue_.push_back(
-            Job{[fn = std::move(fn), &result](Spectrum48K& m) { result.set_value(fn(m)); },
+            Job{[fn = std::move(fn), &result](Spectrum& m) { result.set_value(fn(m)); },
                 during_run});
     }
     queue_cv_.notify_one();
     return fut.get();
 }
 
+void Engine::set_raster_view(const RasterView& v) {
+    raster_marker_.store(v.marker);
+    raster_in_progress_.store(v.in_progress);
+    raster_pending_.store(v.pending);
+    // A stopped machine is not about to publish anything by itself, and none
+    // of the above moves the beam -- so without these two the picture would go
+    // on showing the old view until some unrelated command arrived, which is
+    // no use at all to someone toggling one of these to see what it looks
+    // like. The flag says "republish even though nothing moved".
+    //
+    // The publish is done INSIDE the job rather than left to the one
+    // actor_loop does after it. submit_void hands back the moment the job body
+    // ends, which is before that -- so a caller who sets a view and reads the
+    // screen straight afterwards would otherwise race the republish and get
+    // the old view back, and win that race often enough to be baffling.
+    screen_dirty_.store(true);
+    submit_void([this](Spectrum&) { publish_screen(); }, /*during_run=*/true);
+}
+
+RasterView Engine::raster_view() const {
+    RasterView v;
+    v.marker = raster_marker_.load();
+    v.in_progress = raster_in_progress_.load();
+    v.pending = raster_pending_.load();
+    return v;
+}
+
 void Engine::publish_screen() {
+    // The annotations answer where-is-the-beam, and for a machine running at
+    // full speed there is no useful answer: the beam crosses the screen in
+    // 20ms, far faster than frames are published, so a marker would be a
+    // smear at an arbitrary position. Hence the original rule -- annotate
+    // only while stopped.
+    //
+    // Slow motion breaks that assumption in the useful direction. At a tenth
+    // speed a frame lasts 200ms and the beam sweeps down the screen slowly
+    // enough to follow, which is exactly what someone debugging a raster
+    // effect wants to see happening rather than reconstruct from stills. The
+    // flags still decide WHETHER to draw; this only decides whether drawing
+    // them could mean anything.
+    const bool watchable = !running_.load() || slow_motion();
+    const bool marker = watchable && raster_marker_.load();
+    const bool in_progress = watchable && raster_in_progress_.load();
+    const bool pending = watchable && raster_pending_.load();
+    const bool annotated = marker || in_progress || pending;
     // machine_.screen() is the last COMPLETED frame, so it only changes at a
     // frame boundary. A run yields roughly twice per frame, so without this
     // check about half the 330KB copies re-published a frame the viewer
     // already had. Measured as a wash on bench_machine -- kept because it is
     // strictly less work, not because it showed up as a win.
+    //
+    // The marker's position is part of what was published, though, and it
+    // moves WITHIN a frame: a single stepped instruction changes the picture
+    // without touching the frame counter. So the check is against both, and
+    // NO_RASTER stands for "published without a marker" -- which is also what
+    // makes the marker disappear on the first publish after a run starts.
+    constexpr uint32_t NO_RASTER = ~uint32_t(0);
     const uint64_t frame = machine_.ula.frame_count();
-    if (frame == published_frame_) {
-        return;
+    const uint32_t raster = annotated ? machine_.ula.frame_hc() : NO_RASTER;
+    // exchange, not load: the request to republish is consumed by doing it.
+    const bool requested = screen_dirty_.exchange(false);
+    if (!requested) {
+        if (frame == published_frame_ && raster == published_raster_) {
+            return;
+        }
+        // Something changed, but perhaps sooner than anyone can look at it.
+        // Only while RUNNING: a stopped machine publishes whenever its
+        // picture changes, because there every change is a deliberate step
+        // somebody is waiting to see.
+        if (running_.load()) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_screen_publish_ < SCREEN_PUBLISH_INTERVAL) {
+                return;
+            }
+            last_screen_publish_ = now;
+        }
     }
     published_frame_ = frame;
+    published_raster_ = raster;
+    std::vector<uint8_t> rgb =
+        in_progress ? machine_.ula.screen_in_progress() : machine_.screen();
+    // Pending first, the marker over it: the beam's own line is the thing you
+    // are reading the pending tint against, so it must not be tinted away.
+    if (pending) {
+        machine_.ula.draw_pending_writes(rgb);
+    }
+    if (marker) {
+        machine_.ula.draw_raster_marker(rgb);
+    }
     std::lock_guard<std::mutex> lock(screen_mutex_);
-    screen_snapshot_ = machine_.screen();
+    screen_snapshot_ = std::move(rgb);
+}
+
+void Engine::note_frame(const Spectrum& m) {
+    const uint64_t frame = m.ula.frame_count();
+    if (frame == last_frame_seen_) {
+        return;
+    }
+    last_frame_seen_ = frame;
+    if (video_.active()) {
+        video_.push(m.screen());
+    }
+    if (!capture_active_.load(std::memory_order_relaxed)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (!capture_active_.load(std::memory_order_relaxed) || frame < capture_next_frame_) {
+        return;
+    }
+    CapturedFrame captured;
+    captured.frame_number = frame;
+    captured.rgb = m.screen();
+    capture_frames_.push_back(std::move(captured));
+    capture_next_frame_ = frame + capture_every_;
+    if (capture_frames_.size() >= capture_wanted_) {
+        capture_active_.store(false, std::memory_order_relaxed);
+        capture_cv_.notify_all();
+    }
+}
+
+void Engine::arm_capture(uint32_t count, uint32_t every) {
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    capture_frames_.clear();
+    capture_wanted_ = count;
+    capture_every_ = every == 0 ? 1 : every;
+    capture_next_frame_ = 0;
+    capture_active_.store(count != 0, std::memory_order_relaxed);
+}
+
+std::vector<CapturedFrame> Engine::capture_frames(uint32_t count, uint32_t every,
+                                                  std::chrono::milliseconds timeout) {
+    arm_capture(count, every);
+    if (!running_.load()) {
+        // Nothing is turning the frames over, so turn them over here: a
+        // queued job, like a step, that runs the machine a frame at a time
+        // until the capture is full. Should a run have started in between,
+        // the job waits behind it and finds the capture already filled by
+        // the run's own tap -- and then has nothing to do.
+        //
+        // Bounded by the frames the capture can possibly want, so a capture
+        // that is somehow never satisfied cannot run the machine forever.
+        const uint64_t at_most = uint64_t(count) * (every == 0 ? 1 : every) + 1;
+        Registers r = submit<Registers>([this, at_most](Spectrum& m) {
+            sync_keys();
+            for (uint64_t i = 0; i < at_most && capture_active_.load(std::memory_order_relaxed);
+                 i++) {
+                m.run_frame();
+                note_frame(m);
+            }
+            return m.registers();
+        }, /*during_run=*/false);
+        if (on_stopped_) {
+            on_stopped_(StopReason::Step, r.pc);
+        }
+    }
+    std::unique_lock<std::mutex> lock(capture_mutex_);
+    capture_cv_.wait_for(lock, timeout, [this] {
+        return !capture_active_.load(std::memory_order_relaxed);
+    });
+    // Whatever was collected, complete or not; and disarmed either way, so a
+    // frame boundary after a timeout does not push into a vector nobody is
+    // waiting on.
+    capture_active_.store(false, std::memory_order_relaxed);
+    std::vector<CapturedFrame> out;
+    out.swap(capture_frames_);
+    return out;
+}
+
+namespace {
+
+/// popen/pclose under their portable names. On Windows the whole command is
+/// wrapped in one more pair of quotes: cmd.exe strips the first and last
+/// quote of a command that begins with one, which is exactly what a quoted
+/// executable path followed by a quoted output path looks like.
+std::FILE* open_pipe(const std::string& command, const char* mode) {
+#ifdef _WIN32
+    return _popen(("\"" + command + "\"").c_str(), mode);
+#else
+    return popen(command.c_str(), mode);
+#endif
+}
+
+int close_pipe(std::FILE* pipe) {
+#ifdef _WIN32
+    return _pclose(pipe);
+#else
+    return pclose(pipe);
+#endif
+}
+
+/// Whether `ffmpeg` runs at all. popen cannot say -- a missing executable is
+/// a shell error on a pipe that then simply closes -- so it is asked for its
+/// version and expected to answer.
+bool ffmpeg_runs(const std::string& ffmpeg) {
+    std::FILE* pipe = open_pipe("\"" + ffmpeg + "\" -version", "r");
+    if (pipe == nullptr) {
+        return false;
+    }
+    char buffer[256];
+    bool answered = false;
+    while (std::fgets(buffer, sizeof buffer, pipe) != nullptr) {
+        answered = true;
+    }
+    return close_pipe(pipe) == 0 && answered;
+}
+
+bool ends_with(const std::string& s, const char* suffix) {
+    const size_t n = std::strlen(suffix);
+    return s.size() >= n && s.compare(s.size() - n, n, suffix) == 0;
+}
+
+} // namespace
+
+std::string Engine::start_video(const VideoOptions& options) {
+    if (options.path.empty()) {
+        return "a path is needed";
+    }
+    if (options.scale < 1 || options.scale > 4) {
+        return "scale must be between 1 and 4";
+    }
+    if (!ffmpeg_runs(ffmpeg_)) {
+        return "couldn't run '" + ffmpeg_
+               + "': install ffmpeg (winget install Gyan.FFmpeg on Windows) or start "
+                 "zx_server with --ffmpeg <path>";
+    }
+    // Raw RGB frames in on stdin at the Spectrum's own rate, scaled up
+    // with nearest-neighbour so pixels stay square-edged, and the encoder
+    // chosen by ffmpeg from the extension. yuv420p is what every player
+    // decodes; ffmpeg would otherwise pick 4:4:4 for RGB input and produce
+    // an .mp4 that several of them refuse. A .gif has its own palette
+    // machinery and wants no pixel format forced on it.
+    std::string command = "\"" + ffmpeg_ + "\" -hide_banner -loglevel error -nostats -y"
+                          " -f rawvideo -pix_fmt rgb24 -s " + std::to_string(FULL_WIDTH) + "x"
+                          + std::to_string(FULL_HEIGHT) + " -r 50 -i -";
+    if (options.scale > 1) {
+        command += " -vf scale=iw*" + std::to_string(options.scale) + ":ih*"
+                   + std::to_string(options.scale) + ":flags=neighbor";
+    }
+    if (!ends_with(options.path, ".gif")) {
+        command += " -pix_fmt yuv420p";
+    }
+    command += " \"" + options.path + "\"";
+    std::FILE* pipe = open_pipe(command, "wb");
+    if (pipe == nullptr) {
+        return "couldn't start ffmpeg";
+    }
+    video_.start(pipe, close_pipe, options.path, size_t(FULL_WIDTH) * FULL_HEIGHT * 3,
+                 options.frames);
+    return "";
+}
+
+VideoStatus Engine::stop_video() {
+    return video_.stop();
+}
+
+VideoStatus Engine::video_status() {
+    return video_.status();
 }
 
 void Engine::publish_audio() {
@@ -176,7 +465,12 @@ void Engine::publish_audio() {
     // fast, so there is nothing sensible to play there either.
     std::lock_guard<std::mutex> lock(audio_mutex_);
     const uint64_t now_hc = machine_.global_hc();
-    const bool wanted = !audio_sinks_.empty() && speed_.load() != Speed::Uncapped;
+    // A speed multiplier silences the beeper for the same reason uncapped
+    // does: samples are produced at a rate no sound device consumes them at,
+    // so what comes out is not a slower or faster tune but a broken one. Half
+    // speed and double speed are therefore silent, and 1x is not.
+    const bool wanted = !audio_sinks_.empty() && speed_.load() != Speed::Uncapped
+                        && speed_multiplier_.load() == 1.0;
     machine_.beeper.set_enabled(wanted, now_hc);
     if (!wanted) {
         machine_.beeper.discard();
@@ -216,7 +510,7 @@ void Engine::set_audio_sample_rate(uint32_t rate) {
     audio_sample_rate_.store(rate);
     // Queued, because the Beeper belongs to the machine and only the actor
     // thread may touch it.
-    submit_void([rate](Spectrum48K& m) { m.beeper.set_sample_rate(rate); });
+    submit_void([rate](Spectrum& m) { m.beeper.set_sample_rate(rate); });
 }
 
 void Engine::clear_pacing_clock() {
@@ -235,6 +529,14 @@ void Engine::remove_audio_sink(const std::shared_ptr<AudioRing>& ring) {
     }
 }
 
+uint64_t Engine::yield_interval() const {
+    if (!slow_motion()) {
+        return RUN_YIELD_EVERY;
+    }
+    const double scaled = double(RUN_YIELD_EVERY) * speed_multiplier_.load();
+    return scaled < double(MIN_RUN_YIELD_EVERY) ? MIN_RUN_YIELD_EVERY : uint64_t(scaled);
+}
+
 void Engine::pace_reset() {
     pace_origin_ = std::chrono::steady_clock::now();
     pace_origin_hc_ = machine_.global_hc();
@@ -245,9 +547,16 @@ void Engine::pace_wait() {
         return;
     }
 
+    // At 1x the sound device is the better clock -- emulated time then
+    // advances at exactly the rate samples are actually consumed. At any
+    // other multiplier it is the wrong clock entirely: it paces to real time
+    // by construction, and this branch returns without consulting the wall
+    // clock at all, so leaving it in charge would silently ignore the
+    // multiplier.
+    const double multiplier = speed_multiplier_.load();
     PacingClock clock;
     size_t target_samples = 0;
-    {
+    if (multiplier == 1.0) {
         std::lock_guard<std::mutex> lock(audio_mutex_);
         clock = pacing_clock_;
         target_samples = pacing_target_;
@@ -282,8 +591,18 @@ void Engine::pace_wait() {
         return;
     }
 
+    if (pace_dirty_.exchange(false)) {
+        // The multiplier changed since the last wait. Rebase first, so the
+        // new rate governs from here rather than being applied retroactively
+        // to time already elapsed.
+        pace_reset();
+    }
+
     const uint64_t hc = machine_.global_hc();
-    const double emulated_seconds = double(hc - pace_origin_hc_) / REALTIME_HC_PER_SEC;
+    // Divided by the multiplier: at 2x the same emulated time is allowed half
+    // the wall-clock seconds, at 0.5x twice as many.
+    const double emulated_seconds = double(hc - pace_origin_hc_)
+                                    / (double(machine_.ula.timing().hc_per_sec) * multiplier);
     const auto target =
         pace_origin_ + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                            std::chrono::duration<double>(emulated_seconds));
@@ -330,6 +649,8 @@ MachineState Engine::snapshot(bool running) const {
     s.pc = s.registers.pc;
     s.halted = machine_.cpu.halted;
     s.running = running;
+    s.model = machine_.model();
+    s.paging = machine_.memory.paging();
     s.border = machine_.ula.border;
     s.tstate = machine_.ula.tstate();
     s.frame_count = machine_.ula.frame_count();
@@ -344,14 +665,31 @@ MachineState Engine::snapshot(bool running) const {
 // ---- queued operations -----------------------------------------------------
 
 std::string Engine::load_rom(std::vector<uint8_t> data) {
-    return submit<std::string>([data = std::move(data)](Spectrum48K& m) {
+    return submit<std::string>([data = std::move(data)](Spectrum& m) {
         return m.load_rom(data.data(), data.size());
     });
 }
 
+bool Engine::has_rom(Model model) {
+    return submit<bool>([model](Spectrum& m) { return m.memory.has_rom(model); });
+}
+
+void Engine::set_model(Model model) {
+    submit_void([model](Spectrum& m) { m.set_model(model); });
+    // A model switch is a reset, and announced as one so a debugger refreshes
+    // -- unless a run is in flight, which simply carries on in the new model.
+    if (!running_.load() && on_stopped_) {
+        on_stopped_(StopReason::Entry, registers().pc);
+    }
+}
+
+Model Engine::model() {
+    return submit<Model>([](Spectrum& m) { return m.model(); });
+}
+
 std::string Engine::load_snapshot(std::vector<uint8_t> data) {
-    std::string err = submit<std::string>([data = std::move(data)](Spectrum48K& m) {
-        return load_sna(m, data.data(), data.size());
+    std::string err = submit<std::string>([data = std::move(data)](Spectrum& m) {
+        return zx::load_snapshot(m, data.data(), data.size());
     });
     if (err.empty() && on_stopped_) {
         on_stopped_(StopReason::Entry, registers().pc);
@@ -359,13 +697,33 @@ std::string Engine::load_snapshot(std::vector<uint8_t> data) {
     return err;
 }
 
-std::string Engine::save_snapshot(std::vector<uint8_t>& out) {
-    return submit<std::string>([&out](Spectrum48K& m) { return save_sna(m, out); });
+std::string Engine::save_snapshot(std::vector<uint8_t>& out, SnapshotFormat format) {
+    return submit<std::string>([&out, format](Spectrum& m) {
+        if (format == SnapshotFormat::Z80) {
+            save_z80(m, out);
+            return std::string();
+        }
+        return save_sna(m, out);
+    });
+}
+
+std::vector<uint8_t> Engine::read_bank(uint8_t bank, uint16_t offset, size_t length) {
+    return submit<std::vector<uint8_t>>([bank, offset, length](Spectrum& m) {
+        std::vector<uint8_t> out;
+        if (bank >= RAM_BANKS) {
+            return out;
+        }
+        out.reserve(length);
+        for (size_t i = 0; i < length; i++) {
+            out.push_back(m.memory.bank[bank][(offset + i) % BANK_SIZE]);
+        }
+        return out;
+    });
 }
 
 std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool auto_start) {
     std::string err = submit<std::string>(
-        [this, data = std::move(data), name = std::move(name), auto_start](Spectrum48K& m) {
+        [this, data = std::move(data), name = std::move(name), auto_start](Spectrum& m) {
             std::string error = m.tape.insert(data.data(), data.size(), name);
             if (!error.empty()) {
                 return error;
@@ -400,7 +758,7 @@ std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool 
 
 std::string Engine::wait_for_tape() {
     std::string err =
-        submit<std::string>([](Spectrum48K& m) { return type_load_command(m); });
+        submit<std::string>([](Spectrum& m) { return type_load_command(m); });
     // Only when the machine was not already running: serviced at a run's
     // yield the run simply carries on, and announcing a stop it never made
     // would leave a debugger showing a stopped machine that is still going.
@@ -411,7 +769,7 @@ std::string Engine::wait_for_tape() {
 }
 
 Registers Engine::reset() {
-    Registers r = submit<Registers>([](Spectrum48K& m) {
+    Registers r = submit<Registers>([](Spectrum& m) {
         m.reset();
         return m.registers();
     });
@@ -422,9 +780,10 @@ Registers Engine::reset() {
 }
 
 Registers Engine::step(uint32_t instructions) {
-    Registers r = submit<Registers>([instructions](Spectrum48K& m) {
+    Registers r = submit<Registers>([this, instructions](Spectrum& m) {
         for (uint32_t i = 0; i < instructions; i++) {
             m.step_instruction();
+            note_frame(m);
         }
         return m.registers();
     }, /*during_run=*/false);
@@ -435,9 +794,10 @@ Registers Engine::step(uint32_t instructions) {
 }
 
 Registers Engine::step_tstates(uint32_t tstates) {
-    Registers r = submit<Registers>([tstates](Spectrum48K& m) {
+    Registers r = submit<Registers>([this, tstates](Spectrum& m) {
         for (uint32_t i = 0; i < tstates; i++) {
             m.tick();
+            note_frame(m);
         }
         return m.registers();
     }, /*during_run=*/false);
@@ -449,13 +809,15 @@ Registers Engine::step_tstates(uint32_t tstates) {
 
 Registers Engine::step_over_halt(uint16_t target_pc) {
     pause_requested_.store(false);
-    Registers r = submit<Registers>([this, target_pc](Spectrum48K& m) {
+    Registers r = submit<Registers>([this, target_pc](Spectrum& m) {
+        const uint64_t yield_every = yield_interval();
         uint64_t count = 0;
         for (;;) {
             if (pause_requested_.load()) {
                 break;
             }
             m.step_instruction();
+            note_frame(m);
             // NOT just pc == target_pc. That is also exactly what a HALT
             // still waiting displays, and what a `HALT; ...; JP` loop shows
             // every time it comes back round -- so an address-only check
@@ -464,7 +826,7 @@ Registers Engine::step_over_halt(uint16_t target_pc) {
             if (!m.cpu.halted && m.registers().pc == target_pc) {
                 break;
             }
-            if (++count % RUN_YIELD_EVERY == 0) {
+            if (++count % yield_every == 0) {
                 sync_keys();
                 publish_screen();
                 publish_audio();
@@ -493,8 +855,9 @@ MachineState Engine::run() {
         on_continued_();
     }
     StopReason reason = StopReason::Breakpoint;
-    MachineState s = submit<MachineState>([this, &reason](Spectrum48K& m) {
+    MachineState s = submit<MachineState>([this, &reason](Spectrum& m) {
         pace_reset();
+        const uint64_t yield_every = yield_interval();
         uint64_t count = 0;
         for (;;) {
             if (pause_requested_.load()) {
@@ -503,6 +866,7 @@ MachineState Engine::run() {
             }
             const uint64_t interrupts_before = m.cpu.interrupt_count;
             m.step_instruction();
+            note_frame(m);
             if (break_on_interrupt_.load() && m.cpu.interrupt_count != interrupts_before) {
                 // PC is now the handler's first instruction, which is
                 // where someone asking to break on an interrupt wants to
@@ -514,7 +878,7 @@ MachineState Engine::run() {
                 reason = StopReason::Breakpoint;
                 break;
             }
-            if (++count % RUN_YIELD_EVERY == 0) {
+            if (++count % yield_every == 0) {
                 sync_keys();
                 publish_screen();
                 publish_audio();
@@ -529,6 +893,13 @@ MachineState Engine::run() {
                 pace_wait();
             }
         }
+        // Cleared here, inside the job, rather than only on the calling thread
+        // once submit() returns: the publish that actor_loop does at the end of
+        // this job is the one the screen viewer sees when a breakpoint is hit,
+        // and it has to know the machine has stopped or it will draw the frame
+        // without the raster marker and leave it that way until the next
+        // command arrives.
+        running_.store(false);
         return snapshot(false);
     }, /*during_run=*/false);
     running_.store(false);
@@ -539,30 +910,40 @@ MachineState Engine::run() {
 }
 
 void Engine::set_breakpoint(uint16_t addr) {
-    submit_void([addr](Spectrum48K& m) { m.breakpoints.insert(addr); });
+    submit_void([addr](Spectrum& m) { m.breakpoints.insert(addr); });
 }
 
 void Engine::clear_breakpoint(uint16_t addr) {
-    submit_void([addr](Spectrum48K& m) { m.breakpoints.erase(addr); });
+    submit_void([addr](Spectrum& m) { m.breakpoints.erase(addr); });
 }
 
 std::vector<uint8_t> Engine::read_memory(uint16_t addr, size_t length) {
     return submit<std::vector<uint8_t>>(
-        [addr, length](Spectrum48K& m) { return m.read_memory(addr, length); });
+        [addr, length](Spectrum& m) { return m.read_memory(addr, length); });
 }
 
 void Engine::write_memory(uint16_t addr, std::vector<uint8_t> data) {
-    submit_void([addr, data = std::move(data)](Spectrum48K& m) {
+    // A poke into the display file changes the picture without moving the
+    // beam, and on a stopped machine nothing else is going to move it either
+    // -- so without the flag the publish would decide nothing had changed and
+    // leave the old frame out there. Set before the write, since the publish
+    // that shows it is part of the same job.
+    screen_dirty_.store(true);
+    submit_void([this, addr, data = std::move(data)](Spectrum& m) {
         m.write_memory(addr, data.data(), data.size());
+        // In the job, so that a caller who pokes and then reads the screen is
+        // guaranteed to see the poke -- see set_raster_view for why the
+        // publish actor_loop does after the job is not enough.
+        publish_screen();
     });
 }
 
 Registers Engine::registers() {
-    return submit<Registers>([](Spectrum48K& m) { return m.registers(); });
+    return submit<Registers>([](Spectrum& m) { return m.registers(); });
 }
 
 Registers Engine::set_registers(Registers r) {
-    Registers out = submit<Registers>([r](Spectrum48K& m) {
+    Registers out = submit<Registers>([r](Spectrum& m) {
         m.set_registers(r);
         return m.registers();
     });
@@ -573,7 +954,7 @@ Registers Engine::set_registers(Registers r) {
 }
 
 MachineState Engine::state() {
-    return submit<MachineState>([this](Spectrum48K& m) {
+    return submit<MachineState>([this](Spectrum& m) {
         (void)m;
         return snapshot(false);
     });
@@ -664,7 +1045,7 @@ void Engine::request_trace(std::unique_ptr<TraceLog> log) {
     // A run reaches service_trace() at its own yields, but a machine sitting
     // at a breakpoint never will: an empty command wakes the actor thread so
     // it services the request between jobs like any other.
-    post([](Spectrum48K&) {});
+    post([](Spectrum&) {});
     std::unique_lock<std::mutex> lock(trace_mutex_);
     trace_cv_.wait(lock, [this, wanted] { return trace_applied_ >= wanted; });
 }
@@ -712,14 +1093,14 @@ void Engine::request_tape(TapeCommand what, size_t block) {
     // A run reaches service_tape() at its own yields, but a machine sitting at
     // a breakpoint never will, so an empty command wakes the actor thread to
     // service this between jobs.
-    post([](Spectrum48K&) {});
+    post([](Spectrum&) {});
     std::unique_lock<std::mutex> lock(tape_mutex_);
     tape_cv_.wait(lock, [this, wanted] { return tape_applied_ >= wanted; });
 }
 
 void Engine::service_queue() {
     for (;;) {
-        std::function<void(Spectrum48K&)> job;
+        std::function<void(Spectrum&)> job;
         {
             std::lock_guard<std::mutex> lock(queue_mutex_);
             // Oldest servicable command first, stepping over any that must

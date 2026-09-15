@@ -215,7 +215,7 @@ constexpr uint32_t HOLD_FRAMES = 4;   // the ROM's debounce wants ~2 stable scan
 constexpr uint32_t GAP_FRAMES = 4;    // and as long again to see the release
 constexpr uint16_t SYSVAR_E_LINE = 0x5C59;
 
-void run_frames(Spectrum48K& m, uint32_t n) {
+void run_frames(Spectrum& m, uint32_t n) {
     for (uint32_t i = 0; i < n; i++) {
         m.run_frame();
     }
@@ -230,9 +230,9 @@ void run_frames(Spectrum48K& m, uint32_t n) {
 /// hands the machine back from INSIDE LD-BYTES, by which point the trap has
 /// missed its one chance and a block that could have been instant gets
 /// pulse-loaded instead.
-void step_frames(Spectrum48K& m, uint32_t n) {
+void step_frames(Spectrum& m, uint32_t n) {
     for (uint32_t i = 0; i < n; i++) {
-        const uint64_t until = m.global_hc() + HC_PER_FRAME;
+        const uint64_t until = m.global_hc() + m.ula.timing().hc_per_frame();
         while (m.global_hc() < until) {
             m.step_instruction();
         }
@@ -241,7 +241,7 @@ void step_frames(Spectrum48K& m, uint32_t n) {
 
 /// Holds `key` (with `shift`, or null for none) long enough for the ROM's
 /// interrupt-driven scan to see it, then releases it and waits again.
-void press(Spectrum48K& m, const char* key, const char* shift) {
+void press(Spectrum& m, const char* key, const char* shift) {
     if (shift != nullptr) {
         m.keyboard.key_down(shift);
     }
@@ -1073,7 +1073,7 @@ bool Tape::ear_at(uint64_t hc) {
         // frame counter, so global_hc() restarts at 0 and every absolute
         // timestamp the cursor holds is now in the future. Stop rather than
         // guess -- a real deck does not rewind itself when you hit reset
-        // either. Spectrum48K::reset() calls stop() so this is a backstop.
+        // either. Spectrum::reset() calls stop() so this is a backstop.
         stop();
         return TAPE_IDLE_EAR;
     }
@@ -1160,9 +1160,30 @@ TapeStatus Tape::status(uint64_t now_hc) const {
 
 // ---- auto-start ------------------------------------------------------------
 
-std::string type_load_command(Spectrum48K& m) {
+std::string type_load_command(Spectrum& m) {
     m.reset();
     run_frames(m, BOOT_FRAMES);
+
+    if (m.model() == Model::Spectrum128) {
+        // A 128K boots to a menu whose first entry is "Tape Loader", which
+        // does the LOAD "" itself -- through ROM 1's LD-BYTES, so the
+        // fast-load trap applies just as it does on a 48K. ENTER is all it
+        // takes; the menu needs no typing.
+        //
+        // Nothing here can check the menu accepted it the way the 48K path
+        // checks its edit line: the loader's screen is the only evidence,
+        // and it appears a frame or two after ENTER is released. So the
+        // press is not verified, and a wrong ROM shows up as a tape that
+        // never starts loading.
+        if (m.tape.inserted()) {
+            m.tape.play(m.global_hc());
+        }
+        m.keyboard.key_down("ENTER");
+        step_frames(m, HOLD_FRAMES);
+        m.keyboard.key_up("ENTER");
+        step_frames(m, GAP_FRAMES);
+        return {};
+    }
 
     // In K mode the ROM expands J to the LOAD keyword, and SYM SHIFT + P is
     // the quote character. SYM SHIFT (half-row 7) and P (half-row 5) are on

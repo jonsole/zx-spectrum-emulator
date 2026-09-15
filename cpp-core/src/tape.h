@@ -6,7 +6,7 @@
 // A tape is a function from time to a one-bit level, so `ear_at(hc)` resolves
 // that level only when the CPU actually reads the port -- which a loader does
 // a few tens of thousands of times a second, against the seven million
-// half-clocks that pass in the same second. `Spectrum48K::clock()` is
+// half-clocks that pass in the same second. `Spectrum::clock()` is
 // untouched, exactly as it is by the Beeper (the mirror image of this: a
 // latched WRITE integrated lazily, where this is a lazily-resolved READ).
 //
@@ -17,7 +17,7 @@
 //
 // TAPE SAVING IS NOT IMPLEMENTED. It would attach as a `record_edge(bool mic,
 // uint64_t now_hc)` fed from the port 0xFE WRITE branch in
-// Spectrum48K::service_bus(), plus a decoder turning recorded edges back into
+// Spectrum::service_bus(), plus a decoder turning recorded edges back into
 // blocks -- a second subsystem larger than this one, for something .sna
 // already covers. Note that the latch-not-an-edge rule below would apply there
 // too: a single OUT calls that branch five times over.
@@ -29,7 +29,7 @@
 
 namespace zx {
 
-class Spectrum48K;
+class Spectrum;
 
 /// Standard-speed timings, in T-states, as the 48K ROM's LD-EDGE loop expects
 /// them. .tap has no timing information at all, so these ARE the format; .tzx
@@ -276,6 +276,6 @@ private:
 ///
 /// Starts the motor itself, if a tape is inserted, just before it commits the
 /// line -- see the comment at that point for why the order matters.
-std::string type_load_command(Spectrum48K& m);
+std::string type_load_command(Spectrum& m);
 
 } // namespace zx

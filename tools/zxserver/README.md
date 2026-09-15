@@ -50,7 +50,7 @@ in Claude Code picks it up. Everything has a flag and an environment variable:
 | Flag | Variable | Default |
 |---|---|---|
 | `--exe` | `ZX_SERVER_EXE` | `cpp-core/build/RelWithDebInfo/zx_server.exe` |
-| `--rom` | `ZX_SERVER_ROM` | `roms/48.rom` (empty string for none) |
+| `--rom` | `ZX_SERVER_ROM` | `roms/48.rom` (empty string for none). `roms/128.rom`, the 128K pair, is passed alongside whenever it exists |
 | `--mcp-port` | `ZX_SERVER_MCP_PORT` | 8000 |
 | `--host` | `ZX_SERVER_HOST` | 127.0.0.1 |
 | `--server-args` | `ZX_SERVER_ARGS` | — extra `zx_server` arguments, one shell-quoted string |

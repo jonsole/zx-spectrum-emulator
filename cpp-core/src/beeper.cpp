@@ -37,6 +37,16 @@ void Beeper::set_sample_rate(uint32_t rate) {
     acc_ = 0;
 }
 
+void Beeper::set_clock(uint64_t hc_per_sec) {
+    if (hc_per_sec == 0 || hc_per_sec == hc_per_sec_) {
+        return;
+    }
+    hc_per_sec_ = hc_per_sec;
+    sum_ = 0;
+    count_ = 0;
+    acc_ = 0;
+}
+
 void Beeper::write_port_fe(uint8_t value, uint64_t now_hc) {
     // Integrate the OLD level right up to this instant before adopting the new
     // one, so an edge lands on the exact half-clock the OUT happened rather
@@ -62,30 +72,37 @@ void Beeper::advance_to(uint64_t now_hc) {
     uint64_t remaining = now_hc - last_hc_;
     last_hc_ = now_hc;
 
-    // The level is constant across this whole span, so walk it one SAMPLE at a
-    // time rather than one half-clock at a time.
+    // The beeper's level is constant across this whole span, so walk it one
+    // SAMPLE at a time rather than one half-clock at a time -- or, with an AY
+    // attached, one AY step at a time where those come sooner, since the
+    // chip's output can change at each of them.
     while (remaining > 0) {
         // Half-clocks still needed for the sample clock to cross, i.e.
-        // ceil((HC_PER_SEC - acc_) / AUDIO_SAMPLE_RATE). Always >= 1, since
-        // acc_ is kept below HC_PER_SEC.
-        const uint32_t deficit = uint32_t(HC_PER_SEC) - acc_;
+        // ceil((hc_per_sec_ - acc_) / rate_). Always >= 1, since acc_ is
+        // kept below hc_per_sec_.
+        const uint32_t deficit = uint32_t(hc_per_sec_) - acc_;
         const uint32_t need = (deficit + rate_ - 1) / rate_;
 
-        if (uint64_t(need) > remaining) {
-            // Not enough left to finish this sample. `remaining` is below
-            // `need` here and `need` is at most 159, so neither the multiply
-            // below nor `acc_` can overflow.
-            const uint32_t n = uint32_t(remaining);
-            sum_ += mixed_level() * int32_t(n);
-            count_ += n;
-            acc_ += rate_ * n;
-            return;
+        uint32_t chunk = need;
+        if (uint64_t(chunk) > remaining) {
+            chunk = uint32_t(remaining);
         }
-        sum_ += mixed_level() * int32_t(need);
-        count_ += need;
-        acc_ += rate_ * need - uint32_t(HC_PER_SEC);
-        remaining -= need;
-        emit();
+        if (ay_ != nullptr && chunk > ay_->hc_until_step()) {
+            chunk = ay_->hc_until_step();
+        }
+        // `chunk` is at most `need`, which is at most a couple of hundred
+        // half-clocks, so neither the multiply nor `acc_` can overflow.
+        sum_ += mixed_level() * int32_t(chunk);
+        count_ += chunk;
+        acc_ += rate_ * chunk;
+        remaining -= chunk;
+        if (ay_ != nullptr) {
+            ay_->advance(chunk);
+        }
+        if (acc_ >= uint32_t(hc_per_sec_)) {
+            acc_ -= uint32_t(hc_per_sec_);
+            emit();
+        }
     }
 }
 
@@ -126,7 +143,7 @@ void Beeper::drain(std::vector<int16_t>& out) {
 
 void Beeper::reset() {
     // level_ deliberately survives, like Ula::border does. ear_level_ does
-    // NOT: a reset stops the tape (Spectrum48K::reset), so nothing would ever
+    // NOT: a reset stops the tape (Spectrum::reset), so nothing would ever
     // drive it low again, and a stuck EAR level would sit under everything
     // that followed as a DC offset eating headroom.
     ear_level_ = 0;

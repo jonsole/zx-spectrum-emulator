@@ -20,6 +20,18 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
+      // The 128K: the 32K ROM pair (roms/128.rom, ROM 0 then ROM 1) and the
+      // machine to go with it. Boots to the 128 menu; "Tape Loader" is the
+      // first entry, so a tape given here auto-starts through it.
+      "name": "ZX Spectrum 128: Step through ROM",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/128.rom",
+      "machine": "128",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
       "name": "ZX Spectrum: hello_rom_call example",
       "type": "zxspectrum",
       "request": "launch",
@@ -58,14 +70,39 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
+      // Your own Filmation engine (examples/filmation) -- the masked-sprite
+      // blitter, stepped in its own source. Assembled on every launch by the
+      // preLaunchTask, so editing any of the .s files and relaunching runs
+      // what you just wrote.
+      //
+      // `asm` names the ENTRY source only. filmation.s INCLUDEs sprite.s,
+      // object.s, vid_buff.s and the generated sprite_data.s, and the SLD
+      // names all of them -- they are resolved beside filmation.s, so
+      // stepping lands in whichever file the code is actually in.
+      "name": "ZX Spectrum: Filmation",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/filmation/output/filmation.sna",
+      "sld": "${workspaceFolder}/examples/filmation/output/filmation.sld",
+      "asm": "${workspaceFolder}/examples/filmation/filmation.s",
+      "preLaunchTask": "filmation.build-and-start-server"
+    },
+    {
+      // The three Manic Miner configurations below read what
+      // game-disassemblies/scripts/build_manicminer.py writes. That script
+      // moved into the submodule, and so did its output directory, so run it
+      // once after a fresh clone -- there is no preLaunchTask here because it
+      // fetches its skool source from the network.
       "name": "ZX Spectrum: Manic Miner",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm.asm",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.asm",
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
@@ -77,9 +114,9 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-fast.asm",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.asm",
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
@@ -90,9 +127,9 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sna",
-      "sld": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.sld",
-      "asm": "${workspaceFolder}/game_disassembly/manicminer/mm-sync.asm",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.asm",
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
@@ -101,10 +138,56 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sna",
-      "sld": "${workspaceFolder}/game_disassembly/fairlight/fairlight.sld",
-      "asm": "${workspaceFolder}/game_disassembly/fairlight/fairlight.asm",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.asm",
       "preLaunchTask": "fairlight.build-and-start-server"
+    },
+    {
+      // Atic Atac. Unlike the two below there is no preLaunchTask: the build
+      // has to defeat the tape's own decryptor by running it, and then map
+      // which bytes are code by playing the game in a simulator, which is far
+      // too slow to sit through on every launch. Run it once, against a tape
+      // you own:
+      //
+      //   python game-disassemblies/scripts/build_aticatac.py --tape "Atic Atac.tap"
+      //
+      // The disassembly covers $6000-$D5FF, which is the whole game -- 100% of
+      // it, named. Everything below $6000 is the loader's leavings and the
+      // system variables.
+      "name": "ZX Spectrum: Atic Atac",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.asm",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      // Knight Lore, rebuilt on every launch by the preLaunchTask -- so
+      // editing game-disassemblies/scripts/knightlore_annotations.ctl and
+      // relaunching steps through the commentary you just wrote.
+      //
+      // The disassembly starts at $6108 and runs to the top of memory. Below
+      // that is the game's own RAM, which is deliberately not disassembled:
+      // $5C08 upwards is forty object records of thirty-two bytes, laid
+      // straight over the ROM's system variables. Watch $5C08 to follow
+      // object zero.
+      //
+      // The snapshot is taken mid-game, so this comes up already playing
+      // rather than at a menu. Break on $AFBD to stop once per frame at the
+      // top of the object loop, or on $B5F7 to catch every keyboard read.
+      "name": "ZX Spectrum: Knight Lore",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.asm",
+      "preLaunchTask": "knightlore.build-and-start-server"
     },
     {
       "name": "ZX Spectrum: Aquaplane",
@@ -225,6 +308,27 @@
       "snapshot": "${workspaceFolder}/snapshots/zexccfb.sna",
       "uncapped": true,
       "preLaunchTask": "zxspectrum-cpp.start-server"
+    },
+    {
+      // Joins a machine that is ALREADY RUNNING instead of starting one: the
+      // server an MCP client auto-started (see tools/zxserver), or one left
+      // behind by an earlier session. Nothing is reset, no ROM or snapshot is
+      // loaded, and whatever the machine is doing keeps doing it -- so this
+      // is the configuration for "something is running, let me look at it".
+      //
+      // Note the different preLaunchTask. The launch configurations above use
+      // zxspectrum-cpp.start-server, whose first step kills every running
+      // zx_server and whose second rebuilds the executable -- both fatal to
+      // an attach. This one only starts a server if none is listening.
+      //
+      // Add "sld" and "asm" to step a program's source rather than raw
+      // disassembly; they are the only settings attach accepts, because
+      // everything else in a launch config resets the machine.
+      "name": "ZX Spectrum: Attach to running emulator",
+      "type": "zxspectrum",
+      "request": "attach",
+      "debugServer": 4711,
+      "preLaunchTask": "zxspectrum-cpp.start-server-if-absent"
     }
   ]
 }

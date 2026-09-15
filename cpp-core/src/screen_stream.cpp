@@ -9,6 +9,7 @@
 
 #include "screen_stream.h"
 
+#include "log.h"
 #include "net.h"
 #include "ula.h"
 
@@ -76,8 +77,11 @@ void serve_screen_stream(Engine& engine, const std::string& host, uint16_t port)
         if (!sock.valid()) {
             continue;
         }
-        std::thread([s = std::move(sock), &engine]() mutable { handle_connection(std::move(s), engine); })
-            .detach();
+        std::thread([s = std::move(sock), &engine]() mutable {
+            log("Screen viewer connected");
+            handle_connection(std::move(s), engine);
+            log("Screen viewer disconnected");
+        }).detach();
     }
 }
 

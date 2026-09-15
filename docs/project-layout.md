@@ -11,16 +11,18 @@ zx-spectrum-emulator/
     src/
       z80.cpp                 # the Z80: cycle-stepped, pin-level
       alu.cpp                  # flags and arithmetic
-      memory.cpp                # 48K map (16K ROM + 48K RAM)
+      memory.cpp                # 48K map (16K ROM + 48K RAM), and the 128K's paging over 8 banks
+      ay.cpp                    # the 128K's AY-3-8912 sound chip
       ula.cpp                    # screen decode, border, frame interrupt
       keyboard.cpp                # 8x5 matrix, port 0xFE
       beeper.cpp                   # port 0xFE bits 4/3 -> samples
       tape.cpp                      # .tap/.tzx, pulse level + fast-load trap
-      snapshot.cpp                   # .sna loader + writer
+      snapshot.cpp                   # .sna (48K/128K) and .z80 loader + writer
       disassembler.cpp                # full documented Z80 disassembler
       tracelog.cpp                     # cycle-by-cycle bus capture
+      video_recorder.cpp               # frames -> ffmpeg pipe (MCP start_video)
       rom_source.cpp                    # SLD parser (source-level debug)
-      spectrum.cpp                       # Spectrum48K: wires it all together
+      spectrum.cpp                       # Spectrum: wires it all together
       engine.cpp                # the shared live instance + command queue
       dap.cpp                    # DAP TCP server
       mcp_server.cpp              # MCP tools (streamable HTTP)
@@ -34,10 +36,12 @@ zx-spectrum-emulator/
     make_test_tape.py             # generates tapes/
   examples/
     hello_rom_call/              # tiny original demo, committed
+    filmation/                    # isometric masked-sprite engine; multi-file,
+                                  #   assembled by its own build.py
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
-  vscode-extension/            # debugger type registration + screen/trace/tape panels
-  roms/                        # gitignored; drop your 48K ROM here
+  vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels
+  roms/                        # gitignored; drop your 48K ROM (and the 128K pair) here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
   game-disassemblies/          # submodule: github.com/jonsole/zx-spectrum-disassemblies
   game_disassembly/            # gitignored; left over from before that split

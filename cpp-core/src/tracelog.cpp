@@ -257,7 +257,7 @@ void TraceLog::close() {
     waiting_.store(false, std::memory_order_relaxed);
 }
 
-void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
+void TraceLog::record(Spectrum& machine, uint64_t pins) {
     if (!out_.is_open()) {
         return;
     }
@@ -277,7 +277,7 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
             // instruction, which is the entire point of asking for it.
             //
             // The ULA's counter still describes THIS half-clock (it is
-            // advanced at the end of Spectrum48K::clock(), below us), so this
+            // advanced at the end of Spectrum::clock(), below us), so this
             // fires on the first half-clock of the T-state asked for. The
             // same counter fills the TState column, so the first row carries
             // the number that was requested and means it.
@@ -356,7 +356,7 @@ void TraceLog::record(Spectrum48K& machine, uint64_t pins) {
         // The opening row of a capture, with no fetch yet to anchor to. Fall
         // back to the ULA's counter, which now agrees with the CPU's phase:
         // the priming half-clock is charged to the ULA as well (see
-        // Spectrum48K::prime_cpu), so an EVEN frame_hc_ -- the first half of a
+        // Spectrum::prime_cpu), so an EVEN frame_hc_ -- the first half of a
         // T-state -- is the CPU's H phase.
         h_phase = (machine.ula.frame_hc() % HC_PER_TSTATE) == 0;
     }

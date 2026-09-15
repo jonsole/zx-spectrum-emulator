@@ -79,6 +79,11 @@ Obtain a `48.rom` image and put it at `roms/48.rom`.
 first byte produces a machine that appears to run but never reaches BASIC —
 diagnose it here, not later.
 
+Optionally, for the 128K: its two 16K ROMs concatenated (ROM 0, the 128
+editor/menu, then ROM 1, 48K BASIC) at `roms/128.rom`, exactly 32768 bytes
+and again starting `F3`. Without it the emulator is a 48K only; 128K snapshots
+and the `--machine 128` / `"machine": "128"` options need it.
+
 Do not download a ROM from an arbitrary source without asking the user; that is
 their call, not the installer's.
 
@@ -349,6 +354,7 @@ deprecated — see step 7.
 - [ ] `cpp-core\build\RelWithDebInfo\zx_server.exe` exists and `build.ps1 -Release -Test` passes
 - [ ] `code --list-extensions` lists `jonsole.zxspectrum-debug`
 - [ ] **"ZX Spectrum: Step through ROM"** launches, stops at the ROM's first instruction, and after Continue the screen panel shows the 1982 Sinclair copyright line
+- [ ] **"ZX Spectrum: Show Graphics"** opens a panel; picking **Font** and typing `$3D00` into the address box shows the ROM character set
 - [ ] The MCP endpoint at `http://127.0.0.1:8000/mcp` answers `initialize`
 
 Report the install as complete only when every box is ticked — and say which

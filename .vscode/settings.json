@@ -1,3 +1,8 @@
 {
-  "debug.allowBreakpointsEverywhere": true
+  "debug.allowBreakpointsEverywhere": true,
+  "cmake.ignoreCMakeListsMissing": true,
+  "files.associations": {
+    "*.asm": "z80-asm",
+    "*.s": "z80-asm"
+  }
 }

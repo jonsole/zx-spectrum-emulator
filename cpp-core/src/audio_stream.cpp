@@ -18,6 +18,7 @@
 #include "audio_stream.h"
 
 #include "beeper.h"
+#include "log.h"
 #include "net.h"
 
 #include <chrono>
@@ -97,7 +98,9 @@ void serve_audio_stream(Engine& engine, const std::string& host, uint16_t port,
             continue;
         }
         std::thread([s = std::move(sock), &engine, latency_ms]() mutable {
+            log("Audio listener connected");
             handle_connection(std::move(s), engine, latency_ms);
+            log("Audio listener disconnected");
         }).detach();
     }
 }

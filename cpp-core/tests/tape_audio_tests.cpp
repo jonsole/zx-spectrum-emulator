@@ -27,7 +27,7 @@ using namespace zx;
 
 namespace {
 
-bool load_rom(Spectrum48K& m) {
+bool load_rom(Spectrum& m) {
     std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
     if (!f) {
         return false;
@@ -791,7 +791,7 @@ TEST(a_recording_is_audible_as_it_loads) {
     CHECK_EQ(source.insert(tap.data(), tap.size(), "src.tap"), std::string());
     const std::vector<uint8_t> wav = make_wav(render(source, 44100), 44100, 16, 1);
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -830,7 +830,7 @@ TEST(the_real_rom_loads_a_wav_recording) {
     const std::vector<float> clean = render(source, 44100);
     const std::vector<uint8_t> wav = make_wav(dirty(clean, 0.2f, 0.35f, 0.05f), 44100, 16, 1);
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }

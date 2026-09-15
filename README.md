@@ -14,7 +14,7 @@ LLM agent inspects and drives the *same running emulator* over
    VS Code  ───DAP──▶│                              │
   (breakpoints,      │   Engine (command queue +    │◀──MCP─── Claude / any
    stepping,         │   emulation thread) owns the  │           MCP client
-   registers)        │   ONE live Spectrum48K        │
+   registers)        │   ONE live Spectrum        │
                      └─────────────────────────────┘
                                    │
                      command queue + event fan-out
@@ -41,12 +41,19 @@ LLM agent inspects and drives the *same running emulator* over
   (`cpp-core/src/z80.cpp`) and diffed instruction-for-instruction against the
   vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` reference,
   plus a full ZEXALL/ZEXDOC pass.
-- **Memory**: the standard 48K map — 16K ROM (write-protected) + 48K RAM.
+- **Memory**: the standard 48K map — 16K ROM (write-protected) + 48K RAM —
+  or the 128K's: two ROMs and eight 16K banks paged through port `0x7FFD`,
+  shadow screen and paging lock included. Which machine it is (`--machine`,
+  or `machine` in a launch config) is a runtime choice; a snapshot switches
+  it to whatever model the snapshot was taken on.
 - **Display**: the ULA's screen decode (the classic interleaved-thirds bitmap +
   attribute layout), border color, and the ~50Hz frame interrupt.
 - **Keyboard**: the full 8×5 matrix on port `0xFE`.
-- **Snapshots**: `.sna` loading (registers + memory + border, including the
-  format's PC-on-the-stack quirk).
+- **Sound**: the beeper, and on a 128K the AY-3-8912 (three tone channels,
+  noise and envelope) on ports `0xFFFD`/`0xBFFD`, mixed into the same stream.
+- **Snapshots**: `.sna` (48K and 128K) and `.z80` (versions 1-3, 48K and
+  128K) loading and saving — registers, memory, border, and a 128K's paging
+  and AY state.
 - **Tape**: `.tap`, `.tzx`, `.wav` and `.csw` loading in the C++ core, at pulse
   level through the EAR line, with an optional fast-load trap on the ROM's
   LD-BYTES. The two audio formats are recordings, decoded back into pulses by a
@@ -65,7 +72,7 @@ Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
 ## Why this architecture
 
 - **One process, one live emulator, four front-ends.** `cpp-core/src/engine.h`
-  owns the single `Spectrum48K` instance and is the *only* thing allowed to
+  owns the single `Spectrum` instance and is the *only* thing allowed to
   touch it. The MCP and DAP servers never call the core directly — they queue
   a command and wait on a future for the reply; the
   [screen stream](docs/vscode-debugging.md#live-screen-viewer) and the
@@ -98,8 +105,8 @@ Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
   that workload; `cpp-core/build.ps1` locates them and imports the MSVC
   environment itself, so no developer prompt is needed.
 - **VS Code 1.85+**, for the debugging front end.
-- A real 48K ZX Spectrum ROM image, 16384 bytes (16K) exactly. Not included —
-  see [ROM](#rom).
+- A real 48K ZX Spectrum ROM image, 16384 bytes (16K) exactly, and for the
+  128K its 32K ROM pair. Not included — see [ROM](#rom).
 - **Python 3.10+ — optional**, and only for the helpers in `scripts/` (ROM and
   game disassemblies, tape generation). The emulator itself needs no Python.
 
@@ -132,6 +139,14 @@ included (it's Sinclair/Amstrad-copyrighted). Drop a 16384-byte ROM image at
 so it never gets committed). You can verify a candidate file is the real
 thing by checking its first byte is `0xF3` (`DI`, the first instruction of
 every genuine Spectrum ROM).
+
+For the 128K, put its two 16K ROMs concatenated — ROM 0 (the 128 editor and
+menu) followed by ROM 1 (48K BASIC), the layout emulators call `128.rom` — at
+`roms/128.rom`, 32768 bytes. Start the server with `--rom roms/128.rom
+--machine 128`, or use the "ZX Spectrum 128" launch configuration. Amstrad,
+who own the Spectrum ROMs, permit their distribution for emulation, so the
+pair is easy to find (the Fuse emulator ships them as `128-0.rom` and
+`128-1.rom`).
 
 ## Running
 

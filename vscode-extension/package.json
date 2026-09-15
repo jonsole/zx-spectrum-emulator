@@ -8,17 +8,35 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Debuggers"
+    "Debuggers",
+    "Programming Languages"
   ],
   "main": "./extension.js",
   "activationEvents": [
     "onCommand:zxspectrum.showScreen",
     "onCommand:zxspectrum.showTrace",
+    "onCommand:zxspectrum.showGraphics",
+    "onCommand:zxspectrum.showSelectionAsGraphics",
     "onCommand:zxspectrum.loadTape",
     "onView:zxspectrumTape",
     "onDebug:zxspectrum"
   ],
   "contributes": {
+    "languages": [
+      {
+        "id": "z80-asm",
+        "aliases": ["Z80 Assembly", "z80-asm"],
+        "extensions": [".asm", ".s", ".a80"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "z80-asm",
+        "scopeName": "source.z80-asm",
+        "path": "./syntaxes/z80-asm.tmLanguage.json"
+      }
+    ],
     "commands": [
       {
         "command": "zxspectrum.showScreen",
@@ -27,6 +45,16 @@
       {
         "command": "zxspectrum.showTrace",
         "title": "ZX Spectrum: Show Trace"
+      },
+      {
+        "command": "zxspectrum.showGraphics",
+        "title": "ZX Spectrum: Show Graphics",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "zxspectrum.showSelectionAsGraphics",
+        "title": "Show Selection as ZX Spectrum Graphics",
+        "icon": "$(symbol-color)"
       },
       {
         "command": "zxspectrum.loadTape",
@@ -71,10 +99,67 @@
         "icon": "$(watch)"
       },
       {
+        "command": "zxspectrum.writeOverlayOn",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Show Display Writes",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "zxspectrum.writeOverlayOff",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Hide Display Writes",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "zxspectrum.writeOverlayFade",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Set Display Write Fade..."
+      },
+      {
+        "command": "zxspectrum.writeOverlayOpacity",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Set Display Write Opacity..."
+      },
+      {
+        "command": "zxspectrum.rasterMarkerOn",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Show Raster Position"
+      },
+      {
+        "command": "zxspectrum.rasterMarkerOff",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Hide Raster Position"
+      },
+      {
+        "command": "zxspectrum.rasterInProgressOn",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Show Frame In Progress"
+      },
+      {
+        "command": "zxspectrum.rasterInProgressOff",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Show Last Completed Frame"
+      },
+      {
+        "command": "zxspectrum.rasterPendingOn",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Show Pending Display Writes"
+      },
+      {
+        "command": "zxspectrum.rasterPendingOff",
+        "enablement": "zxspectrum.tapeSession",
+        "title": "ZX Spectrum: Hide Pending Display Writes"
+      },
+      {
         "command": "zxspectrum.tapeSeek",
         "enablement": "zxspectrum.tapeSession",
         "title": "Seek Tape To This Block",
         "icon": "$(target)"
+      },
+      {
+        "command": "zxspectrum.setSpeed",
+        "title": "ZX Spectrum: Set Emulation Speed...",
+        "icon": "$(dashboard)"
       }
     ],
     "views": {
@@ -93,10 +178,61 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "zxspectrum.showSelectionAsGraphics",
+          "when": "editorHasSelection && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
+          "group": "zxspectrum@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "zxspectrum.writeOverlayOn",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen' && !zxspectrum.writeOverlay",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.writeOverlayOff",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen' && zxspectrum.writeOverlay",
+          "group": "navigation@1"
+        }
+      ],
       "commandPalette": [
         {
           "command": "zxspectrum.tapeSeek",
           "when": "false"
+        },
+        {
+          "command": "zxspectrum.writeOverlayFade",
+          "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.writeOverlayOpacity",
+          "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.rasterMarkerOn",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterMarker"
+        },
+        {
+          "command": "zxspectrum.rasterMarkerOff",
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterMarker"
+        },
+        {
+          "command": "zxspectrum.rasterInProgressOn",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterInProgress"
+        },
+        {
+          "command": "zxspectrum.rasterInProgressOff",
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterInProgress"
+        },
+        {
+          "command": "zxspectrum.rasterPendingOn",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterPending"
+        },
+        {
+          "command": "zxspectrum.rasterPendingOff",
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterPending"
         },
         {
           "command": "zxspectrum.tapeFastLoadOn",
@@ -104,6 +240,10 @@
         },
         {
           "command": "zxspectrum.tapeFastLoadOff",
+          "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.setSpeed",
           "when": "debugType == 'zxspectrum'"
         }
       ],
@@ -150,6 +290,13 @@
           "when": "view == zxspectrumTape",
           "group": "navigation@6"
         }
+      ],
+      "debug/toolBar": [
+        {
+          "command": "zxspectrum.setSpeed",
+          "when": "debugType == 'zxspectrum'",
+          "group": "navigation@1"
+        }
       ]
     },
     "debuggers": [
@@ -161,11 +308,17 @@
             "properties": {
               "rom": {
                 "type": "string",
-                "description": "Path to a 16K ROM image to load."
+                "description": "Path to a ROM image to load: 16K for the 48K, or 32K (ROM 0 then ROM 1, the usual 128.rom) for the 128K. Either can be loaded whatever machine is selected."
+              },
+              "machine": {
+                "type": "string",
+                "enum": ["48", "128"],
+                "default": "48",
+                "description": "Which Spectrum to be: \"48\" (the default) or \"128\", with paging, the shadow screen and the AY sound chip. A 128K needs a 32K rom. A snapshot switches the machine to whichever model it was taken on regardless."
               },
               "snapshot": {
                 "type": "string",
-                "description": "Path to a .sna snapshot to load. Falls back to reset() if omitted."
+                "description": "Path to a .sna or .z80 snapshot to load (48K or 128K; the machine becomes the model the snapshot needs). Falls back to reset() if omitted."
               },
               "sld": {
                 "type": "string",
@@ -195,8 +348,32 @@
                 "description": "Satisfy standard-speed tape blocks instantly by trapping the ROM's LD-BYTES routine. Turbo and custom loaders always fall back to real pulse playback."
               }
             }
+          },
+          "attach": {
+            "properties": {
+              "sld": {
+                "type": "string",
+                "description": "Path to an sjasmplus SLD file, for source-level debugging of the program already running on the attached machine. Requires asm."
+              },
+              "asm": {
+                "type": "string",
+                "description": "Path to the source the sld file was assembled from. Requires sld."
+              }
+            }
           }
-        }
+        },
+        "configurationSnippets": [
+          {
+            "label": "ZX Spectrum: Attach to a running emulator",
+            "description": "Connect to a zx_server that is already running, without resetting it.",
+            "body": {
+              "name": "ZX Spectrum: Attach",
+              "type": "zxspectrum",
+              "request": "attach",
+              "debugServer": 4711
+            }
+          }
+        ]
       }
     ]
   }

@@ -8,7 +8,7 @@
 // whole, but the two can legitimately interleave -- a client must tolerate
 // that.
 //
-// Stack traces come from `Spectrum48K::call_stack` (frame 0 is PC, frames 1+
+// Stack traces come from `Spectrum::call_stack` (frame 0 is PC, frames 1+
 // are its tracked return addresses innermost-first), each labelled with the
 // disassembled instruction at that address. Where SLD debug info covers an
 // address -- the loaded program's own, attached via launch's sld/asm args or
@@ -23,6 +23,7 @@
 #include "base64.h"
 #include "disassembler.h"
 #include "file_io.h"
+#include "log.h"
 #include "net.h"
 #include "register_names.h"
 #include "rom_source.h"
@@ -485,15 +486,28 @@ json flag_variables(const Registers& r) {
 }
 
 json debug_variables(const MachineState& state) {
-    return json::array({json{{"name", "T-states"},
-                             {"value", std::to_string(state.tstate)},
-                             {"variablesReference", 0}},
-                        json{{"name", "Frame"},
-                             {"value", std::to_string(state.frame_count)},
-                             {"variablesReference", 0}},
-                        json{{"name", "Interrupts"},
-                             {"value", std::to_string(state.interrupt_count)},
-                             {"variablesReference", 0}}});
+    json out = json::array({json{{"name", "Model"},
+                                 {"value", model_name(state.model)},
+                                 {"variablesReference", 0}},
+                            json{{"name", "T-states"},
+                                 {"value", std::to_string(state.tstate)},
+                                 {"variablesReference", 0}},
+                            json{{"name", "Frame"},
+                                 {"value", std::to_string(state.frame_count)},
+                                 {"variablesReference", 0}},
+                            json{{"name", "Interrupts"},
+                                 {"value", std::to_string(state.interrupt_count)},
+                                 {"variablesReference", 0}}});
+    if (state.model == Model::Spectrum128) {
+        // The paging register, decoded: which ROM and bank are in, which
+        // screen is showing, and whether a program has locked it.
+        char port[8];
+        std::snprintf(port, sizeof port, "$%02X", unsigned(state.paging));
+        out.push_back(json{{"name", "Paging"},
+                           {"value", std::string(port) + " (" + describe_paging(state.paging) + ")"},
+                           {"variablesReference", 0}});
+    }
+    return out;
 }
 
 // ---- memory-backed disassembly --------------------------------------------
@@ -555,10 +569,15 @@ json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, u
     // entries all sit far below PC -- and mislabel the frame rather than
     // simply showing no source for it.
     for (const RomSourcePtr& source : sources.active()) {
-        auto it = source->addr_to_line.find(addr);
-        if (it == source->addr_to_line.end()) {
+        auto it = source->addr_to_loc.find(addr);
+        if (it == source->addr_to_loc.end()) {
             continue;
         }
+        const SourceLoc& loc = it->second;
+        if (loc.file >= source->files.size()) {
+            continue;
+        }
+        const std::string& file_path = source->files[loc.file].path;
         std::string label;
         uint16_t offset = 0;
         if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, label, offset)) {
@@ -567,9 +586,9 @@ json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, u
             }
             frame["name"] = label + "  " + name;
         }
-        frame["source"] = json{{"name", file_name_of(source->asm_path)},
-                               {"path", absolute_source_path(source->asm_path)}};
-        frame["line"] = it->second;
+        frame["source"] = json{{"name", file_name_of(file_path)},
+                               {"path", absolute_source_path(file_path)}};
+        frame["line"] = loc.line;
         frame["column"] = 1;
         break;
     }
@@ -667,7 +686,80 @@ bool is_step_over_as_run(const std::string& text) {
     return false;
 }
 
+/// A GraphicsView as the extension wants it. Field names are the server's own
+/// (snake_case, as the MCP tool takes them); the extension maps the two that
+/// its webview spells differently, which is the right place for that since the
+/// webview's vocabulary is its business and not this file's.
+json graphics_view_json(const GraphicsView& v, uint64_t version) {
+    return json{{"version", version},
+                {"source", v.source},
+                {"address", v.address},
+                {"file", v.file},
+                {"offset", v.offset},
+                {"format", v.format},
+                {"width", v.width},
+                {"height", v.height},
+                {"count", v.count},
+                {"columns", v.columns},
+                {"header", v.header},
+                {"first", v.first},
+                {"interleave", v.interleave},
+                {"invert_mask", v.invert_mask},
+                {"flip", v.flip},
+                {"ink", v.ink},
+                {"paper", v.paper},
+                {"zoom", v.zoom},
+                {"grid", v.grid},
+                {"labels", v.labels},
+                {"pin", v.pin}};
+}
+
 // ---- request dispatch ------------------------------------------------------
+
+/// A one-line summary of a request worth logging, or "" for the rest.
+///
+/// Stepping a program produces a constant stream of stackTrace, scopes,
+/// variables, readMemory and disassemble requests -- VS Code refreshing its
+/// panels after every stop -- and logging those would bury the few lines that
+/// say what a person actually did. What is left is the deliberate acts: the
+/// session lifecycle, run control, breakpoints and the tape.
+std::string describe_request(const std::string& command, const json& arguments) {
+    if (command == "launch" || command == "attach") {
+        std::string summary = command;
+        for (const char* key : {"rom", "snapshot", "tape", "sld"}) {
+            const std::string value = arg_str(arguments, key);
+            if (!value.empty()) {
+                summary += " " + std::string(key) + "="
+                           + std::filesystem::path(value).filename().string();
+            }
+        }
+        return summary;
+    }
+    if (command == "continue" || command == "pause" || command == "next"
+        || command == "stepIn" || command == "stepOut" || command == "disconnect"
+        || command == "terminate" || command == "restart") {
+        return command;
+    }
+    if (command == "setBreakpoints" || command == "setInstructionBreakpoints") {
+        const json& list = arg(arguments, "breakpoints");
+        const size_t count = list.is_array() ? list.size() : 0;
+        return command + ": " + std::to_string(count)
+               + (count == 1 ? " breakpoint" : " breakpoints");
+    }
+    if (command == "loadTape") {
+        return "loadTape " + std::filesystem::path(arg_str(arguments, "path")).filename().string();
+    }
+    if (command == "tapeControl") {
+        const std::string action = arg_str(arguments, "action");
+        return "tapeControl" + (action.empty() ? "" : " " + action);
+    }
+    if (command == "startTrace" || command == "stopTrace") {
+        return command;
+    }
+
+    return "";
+}
+
 
 json handle_request(const json& req, Engine& engine, Sources& sources, Connection& conn) {
     const std::string command = req.value("command", std::string());
@@ -676,6 +768,11 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
     const json& arguments = req.contains("arguments") && req["arguments"].is_object()
                                 ? req["arguments"]
                                 : empty_args;
+
+    const std::string summary = describe_request(command, arguments);
+    if (!summary.empty()) {
+        log("DAP  %s", summary.c_str());
+    }
 
     bool success = true;
     json body = json::object();
@@ -720,6 +817,33 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                 return envelope_response(conn, request_seq, command, false,
                                          json{{"message", load_error}});
             }
+        }
+        // Which Spectrum to be. After the ROM, so a 32K image is in place
+        // before the 128K it belongs to is asked for; before the snapshot,
+        // which may switch model again to whatever it was taken on.
+        const json& machine = arg(arguments, "machine");
+        if (!machine.is_null()) {
+            const std::string name = machine.is_number_integer()
+                                         ? std::to_string(machine.get<int64_t>())
+                                         : arg_str(arguments, "machine");
+            Model model = Model::Spectrum48;
+            if (name == "128" || name == "128k" || name == "128K") {
+                model = Model::Spectrum128;
+            } else if (name != "48" && name != "48k" && name != "48K") {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", "'machine' must be \"48\" or \"128\""}});
+            }
+            if (!engine.has_rom(model)) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", std::string("no ") + model_name(model)
+                                         + " ROM is loaded: point \"rom\" at a "
+                                         + (model == Model::Spectrum128 ? "32K" : "16K")
+                                         + " image (roms/"
+                                         + (model == Model::Spectrum128 ? "128" : "48")
+                                         + ".rom)"}});
+            }
+            engine.set_model(model);
         }
         const std::string snapshot_path = arg_str(arguments, "snapshot");
         if (!snapshot_path.empty()) {
@@ -803,7 +927,28 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         engine.set_break_on_interrupt(on_interrupt);
         body = json{{"breakpoints", json::array({json{{"verified", true}}})}};
 
-    } else if (command == "attach" || command == "configurationDone") {
+    } else if (command == "attach") {
+        // Attaching means joining a machine that is already running -- one
+        // started by an MCP client, or left behind by an earlier session --
+        // so unlike `launch` this deliberately touches no machine state at
+        // all: no reset, no ROM, no snapshot, no tape. Doing any of those
+        // would destroy the very thing being attached to.
+        //
+        // Debug info is the exception, because it is not machine state: it
+        // says how to read the machine, and without it an attach session can
+        // only step raw disassembly. Same pairing rule as launch -- acted on
+        // only when both halves are present.
+        const std::string sld_path = arg_str(arguments, "sld");
+        const std::string asm_path = arg_str(arguments, "asm");
+        if (!sld_path.empty() && !asm_path.empty()) {
+            std::string load_error;
+            if (!sources.load_debug_info(sld_path, asm_path, load_error)) {
+                return envelope_response(conn, request_seq, command, false,
+                                         json{{"message", load_error}});
+            }
+        }
+
+    } else if (command == "configurationDone") {
         // Nothing to do; acknowledged so the client handshake completes.
 
     } else if (command == "disconnect" || command == "terminate") {
@@ -847,7 +992,8 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         const json& source = arg(arguments, "source");
         const std::string source_path =
             source.is_object() ? source.value("path", std::string()) : "";
-        const RomSourcePtr rom_source = sources.source_for_path(source_path);
+        size_t source_file = 0;
+        const RomSourcePtr rom_source = sources.source_for_path(source_path, source_file);
 
         std::set<uint16_t> addrs;
         json results = json::array();
@@ -866,7 +1012,8 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                 }
                 uint16_t addr = 0;
                 uint32_t actual_line = 0;
-                if (!rom_source->addr_for_line(uint32_t(line), addr, actual_line)) {
+                if (!rom_source->addr_for_line(source_file, uint32_t(line), addr,
+                                               actual_line)) {
                     results.push_back(json{{"verified", false},
                                            {"line", line},
                                            {"message", "no instruction at this line"}});
@@ -894,17 +1041,19 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         const json& source = arg(arguments, "source");
         const std::string source_path =
             source.is_object() ? source.value("path", std::string()) : "";
-        const RomSourcePtr rom_source = sources.source_for_path(source_path);
+        size_t source_file = 0;
+        const RomSourcePtr rom_source = sources.source_for_path(source_path, source_file);
         if (rom_source == nullptr) {
             return envelope_response(
                 conn, request_seq, command, false,
                 json{{"message", "no debug info loaded for " + source_path}});
         }
+        const std::string& file_path = rom_source->files[source_file].path;
         std::vector<uint8_t> bytes;
-        if (!read_file(rom_source->asm_path, bytes)) {
+        if (!read_file(file_path, bytes)) {
             return envelope_response(
                 conn, request_seq, command, false,
-                json{{"message", "couldn't read " + rom_source->asm_path}});
+                json{{"message", "couldn't read " + file_path}});
         }
         body = json{{"content", std::string(bytes.begin(), bytes.end())},
                     {"mimeType", "text/x-asm"}};
@@ -973,7 +1122,22 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         engine.step(1);
 
     } else if (command == "pause") {
+        // Engine::pause fires on_stopped only when it actually interrupts a
+        // run. Asking a machine that is ALREADY stopped to pause therefore
+        // announces nothing -- and since a DAP client's entire idea of
+        // running-or-stopped comes from these events, that silence leaves the
+        // UI showing a Pause button that appears to do nothing, for ever.
+        //
+        // running() is an atomic read rather than a queued state() one, which
+        // matters precisely here: state() would queue behind the very run this
+        // is trying to interrupt, so the check would hang whenever it mattered.
+        const bool was_running = engine.running();
         engine.pause();
+        if (!was_running) {
+            broadcast_event("stopped", json{{"reason", "pause"},
+                                            {"threadId", THREAD_ID},
+                                            {"allThreadsStopped", true}});
+        }
 
     } else if (command == "threads") {
         body = json{{"threads", json::array({json{{"id", THREAD_ID}, {"name", "Z80"}}})}};
@@ -985,13 +1149,39 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         const MachineState state = engine.state();
         MemorySnapshot snapshot(engine);
         const ReadFn read = snapshot.reader();
-        json frames = json::array();
-        frames.push_back(build_frame(read, sources, 0, state.pc));
-        for (size_t i = state.call_stack.size(); i > 0; i--) {
-            frames.push_back(
-                build_frame(read, sources, int64_t(frames.size()), state.call_stack[i - 1]));
+
+        // stackTrace asks for a WINDOW -- `startFrame` and `levels` -- and
+        // VS Code asks for about twenty at a time, paging as you scroll.
+        // Building the whole stack regardless is what made clicking Pause
+        // take seconds: each frame costs a disassembly, a symbol lookup and a
+        // source-line match, and the UI does not redraw until this request
+        // comes back. `totalFrames` is what tells the client there is more.
+        const size_t total = state.call_stack.size() + 1;
+        const int64_t requested_start = arg_int(arguments, "startFrame", 0);
+        const int64_t requested_levels = arg_int(arguments, "levels", 0);
+        size_t first = requested_start > 0 ? size_t(requested_start) : 0;
+        if (first > total) {
+            first = total;
         }
-        body = json{{"stackFrames", frames}, {"totalFrames", frames.size()}};
+        // levels 0 (or absent) means "all of them from startFrame", per spec.
+        size_t wanted = requested_levels > 0 ? size_t(requested_levels) : total - first;
+        if (first + wanted > total) {
+            wanted = total - first;
+        }
+
+        json frames = json::array();
+        for (size_t i = 0; i < wanted; i++) {
+            // Frame 0 is the current PC; 1.. are the tracked return
+            // addresses, innermost first -- call_stack is oldest-first, so it
+            // is indexed from the end. Ids are absolute positions in the
+            // whole stack, not positions within this window, so they stay
+            // meaningful across paged requests.
+            const size_t index = first + i;
+            const uint16_t addr =
+                index == 0 ? state.pc : state.call_stack[state.call_stack.size() - index];
+            frames.push_back(build_frame(read, sources, int64_t(index), addr));
+        }
+        body = json{{"stackFrames", frames}, {"totalFrames", total}};
 
     } else if (command == "scopes") {
         body = json{{"scopes",
@@ -1113,6 +1303,93 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         const std::string key = arg_str(arguments, "key");
         engine.key_up(key);
         body = json{{"key", key}};
+
+    } else if (command == "setWriteOverlay") {
+        // Not standard DAP -- the screen panel's own toggle. Dims the frame
+        // and shows every bitmap byte written during it at full brightness,
+        // which turns "what is this frame drawing" from something you infer
+        // off a trace into something you can just look at. `opacityPercent`
+        // is how far out of the dim a written byte is lifted (100, the
+        // default, is full brightness) and `fadePercent` how much of that a
+        // frame boundary takes off (100, the default, leaves only the frame
+        // just drawn). Both are left as they were when not given, so the
+        // panel's on/off button does not undo a setting made elsewhere.
+        const json& enabled = arg(arguments, "enabled");
+        const int64_t opacity = arg_int(arguments, "opacityPercent", -1);
+        if (opacity >= 0) {
+            engine.set_write_overlay_opacity(uint32_t(opacity));
+        }
+        const int64_t fade = arg_int(arguments, "fadePercent", -1);
+        if (fade >= 0) {
+            engine.set_write_overlay_fade(uint32_t(fade));
+        }
+        engine.set_write_overlay(enabled.is_boolean() ? enabled.get<bool>()
+                                                      : !engine.write_overlay());
+        body = json{{"enabled", engine.write_overlay()},
+                    {"opacityPercent", engine.write_overlay_opacity()},
+                    {"fadePercent", engine.write_overlay_fade()}};
+
+    } else if (command == "setSpeed") {
+        // The speed control in the debug toolbar. Kept as one request taking
+        // either form, because "uncapped" and "a multiple of realtime" are the
+        // same choice to whoever is picking from the list.
+        const json& uncapped = arg(arguments, "uncapped");
+        const json& multiplier = arg(arguments, "multiplier");
+        if (multiplier.is_number()) {
+            engine.set_speed(Speed::Realtime);
+            engine.set_speed_multiplier(multiplier.get<double>());
+        }
+        if (uncapped.is_boolean()) {
+            engine.set_speed(uncapped.get<bool>() ? Speed::Uncapped : Speed::Realtime);
+        }
+        const bool now_uncapped = engine.speed() == Speed::Uncapped;
+        // Logged here rather than with the other requests, because what is
+        // worth recording is the speed that took effect: the multiplier is
+        // clamped, so the number asked for is not always the number running.
+        if (now_uncapped) {
+            log("DAP  setSpeed uncapped");
+        } else {
+            log("DAP  setSpeed %.4gx", engine.speed_multiplier());
+        }
+        body = json{{"uncapped", now_uncapped}, {"multiplier", engine.speed_multiplier()}};
+
+    } else if (command == "setRasterView") {
+        // Also not standard DAP. How a STOPPED machine's screen is drawn: the
+        // beam's position marked, the picture composed as the beam has
+        // actually drawn it, and the writes it has not reached yet picked out
+        // of a dimmed screen.
+        // Each field is left as it was when not given, so one of them can be
+        // changed without knowing the other two.
+        RasterView view = engine.raster_view();
+        const json& marker = arg(arguments, "marker");
+        if (marker.is_boolean()) {
+            view.marker = marker.get<bool>();
+        }
+        const json& in_progress = arg(arguments, "inProgress");
+        if (in_progress.is_boolean()) {
+            view.in_progress = in_progress.get<bool>();
+        }
+        const json& pending = arg(arguments, "pending");
+        if (pending.is_boolean()) {
+            view.pending = pending.get<bool>();
+        }
+        engine.set_raster_view(view);
+        body = json{{"marker", view.marker},
+                    {"inProgress", view.in_progress},
+                    {"pending", view.pending}};
+
+    } else if (command == "graphicsView") {
+        // Not standard DAP. Where the graphics panel is pointed, which an MCP
+        // client sets and this hands on -- see GraphicsView in engine.h.
+        //
+        // Read-only here on purpose. Changes arrive as `zxGraphicsView` events
+        // rather than by being asked for, and the panel needs this only when
+        // it opens, to catch up on what was asked for before it existed. A
+        // version of 0 means nothing ever was, and the panel then keeps its
+        // own last state instead of being dragged to the defaults.
+        uint64_t version = 0;
+        const GraphicsView view = engine.graphics_view(&version);
+        body = graphics_view_json(view, version);
 
     } else if (command == "startTrace") {
         // Not standard DAP either -- the trace viewer's Record button, so a
@@ -1309,6 +1586,26 @@ void handle_connection(std::shared_ptr<Connection> conn, Engine& engine, Sources
             // so `continue` runs straight past them.
             send_message(*conn, envelope_event(*conn, "initialized", json::object()));
         }
+        if (command == "configurationDone" && response.value("success", false)
+            && !engine.running()) {
+            // A client that has never heard a `stopped` event assumes the
+            // program is running. That assumption is right after a launch
+            // that continues, and wrong for every attach to a machine sitting
+            // paused -- which is the normal case, since a freshly started
+            // server is stopped and so is one left at a breakpoint. The
+            // symptom is a session that looks live but is not: a Pause button
+            // instead of Continue, no call stack, no registers, and every
+            // step control disabled.
+            //
+            // Nothing in the engine will announce a state it has held since
+            // before this client connected, so the handshake ends by saying
+            // where the machine actually is. Sent only to the connection that
+            // just completed its handshake: other clients already know.
+            send_message(*conn, envelope_event(*conn, "stopped",
+                                               json{{"reason", "entry"},
+                                                    {"threadId", THREAD_ID},
+                                                    {"allThreadsStopped", true}}));
+        }
     }
     // Leave the machine in a usable state for the next client rather than
     // leaving this connection's breakpoints armed forever.
@@ -1330,15 +1627,36 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
     std::printf("DAP server listening on %s:%u\n", host.c_str(), unsigned(port));
     std::fflush(stdout);
 
-    engine.on_stopped([](StopReason reason, uint16_t pc) {
+    engine.on_stopped([&sources](StopReason reason, uint16_t pc) {
         broadcast_event("stopped", json{{"reason", stop_reason_name(reason)},
                                         {"threadId", THREAD_ID},
                                         {"allThreadsStopped", true},
                                         {"description", hex4(pc)}});
+        // Named where possible: "stopped at 0x9607" says far less than
+        // "stopped at 0x9607 (WAIT_RASTER+9)" when you are trying to work out
+        // what the machine was doing.
+        std::string where = hex4(pc); // hex4 already carries the 0x
+        std::string name;
+        uint16_t offset = 0;
+        if (sources.resolve_symbol(pc, name, offset)) {
+            where += " (" + name + (offset > 0 ? "+" + std::to_string(offset) : "") + ")";
+        }
+        log("Stopped: %s at %s", stop_reason_name(reason), where.c_str());
     });
     engine.on_continued([] {
         broadcast_event("continued",
                         json{{"threadId", THREAD_ID}, {"allThreadsContinued", true}});
+        log("Running");
+    });
+    // The one place an MCP client can move something in VS Code. MCP and DAP
+    // are separate front-ends onto one Engine with no channel between them, so
+    // "point the graphics panel at sprite_017" becomes a set on the Engine
+    // here and an unsolicited event out to every open DAP connection, which is
+    // the only route from one to the other.
+    engine.on_graphics_view([](const GraphicsView& v, uint64_t version) {
+        broadcast_event("zxGraphicsView", graphics_view_json(v, version));
+        log("Graphics view: %s %s as %s", v.source.c_str(),
+            (v.source == "file" ? v.file : v.address).c_str(), v.format.c_str());
     });
 
     for (;;) {
@@ -1348,10 +1666,13 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
         }
         auto conn = std::make_shared<Connection>();
         conn->sock = std::move(sock);
+        size_t open_now = 0;
         {
             std::lock_guard<std::mutex> lock(g_connections_mutex);
             g_connections.push_back(conn);
+            open_now = g_connections.size();
         }
+        log("DAP  client connected (%zu open)", open_now);
         std::thread([conn, &engine, &sources, exit_on_disconnect] {
             handle_connection(conn, engine, sources);
             size_t remaining = 0;
@@ -1365,14 +1686,14 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
                 }
                 remaining = g_connections.size();
             }
+            log("DAP  client disconnected (%zu open)", remaining);
             // Counts currently-open connections, not "has anyone ever
             // connected" -- a short-lived diagnostic script can connect and
             // disconnect while VS Code's own session is still open, and that
             // must not kill the server out from under it. Only the
             // transition to zero counts as "debugging stopped".
             if (remaining == 0 && exit_on_disconnect) {
-                std::printf("Last DAP connection closed, exiting (--exit-on-disconnect)\n");
-                std::fflush(stdout);
+                log("Last DAP connection closed, exiting (--exit-on-disconnect)");
                 std::exit(0);
             }
         }).detach();

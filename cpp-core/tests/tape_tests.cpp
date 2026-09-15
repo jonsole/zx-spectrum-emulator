@@ -25,7 +25,7 @@ namespace {
 
 /// The real ROM is copyrighted and gitignored, so tests that need it skip
 /// gracefully when it is absent rather than failing.
-bool load_rom(Spectrum48K& m) {
+bool load_rom(Spectrum& m) {
     std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
     if (!f) {
         return false;
@@ -819,7 +819,7 @@ namespace {
 /// A = expected flag byte, carry set to load (clear to verify), DE = length,
 /// IX = destination. The return address is pushed by hand, since a real caller
 /// would have got there with a CALL.
-void arm_ld_bytes(Spectrum48K& m, uint8_t flag, uint16_t dest, uint16_t len, bool loading,
+void arm_ld_bytes(Spectrum& m, uint8_t flag, uint16_t dest, uint16_t len, bool loading,
                   uint16_t return_to) {
     Registers r = m.registers();
     r.sp = 0xFF00;
@@ -835,7 +835,7 @@ void arm_ld_bytes(Spectrum48K& m, uint8_t flag, uint16_t dest, uint16_t len, boo
 
 /// A machine with the real ROM and a tape inserted and playing. Returns false
 /// if the ROM is missing, so the caller can skip.
-bool armed_machine(Spectrum48K& m, const std::vector<uint8_t>& image) {
+bool armed_machine(Spectrum& m, const std::vector<uint8_t>& image) {
     if (!load_rom(m)) {
         return false;
     }
@@ -852,7 +852,7 @@ TEST(fast_load_satisfies_a_standard_block) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, code));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -871,7 +871,7 @@ TEST(fast_load_satisfies_a_standard_block) {
     CHECK_EQ(r.ix, uint16_t(0x8000 + code.size()));
     // One half-clock, not zero: the RET out of LD-BYTES re-primes the CPU, and
     // that priming clock is charged to the ULA as well so the two stay in step
-    // (see Spectrum48K::prime_cpu). Set against the ~5 seconds of tape a real
+    // (see Spectrum::prime_cpu). Set against the ~5 seconds of tape a real
     // load of this block would take, 0.14 microseconds leaves the point of
     // fast loading entirely intact -- and buys a machine whose CPU phase does
     // not slide half a T-state further from its ULA with every block loaded.
@@ -889,7 +889,7 @@ TEST(fast_load_reports_a_flag_mismatch) {
     append_tap_block(image, tape_block(0xFF, {0x01, 0x02}));
     append_tap_block(image, tape_block(0x00, code_header("x", 0x8000, 2)));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -908,7 +908,7 @@ TEST(fast_load_detects_a_bad_checksum) {
     std::vector<uint8_t> image;
     append_tap_block(image, block);
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -923,7 +923,7 @@ TEST(fast_load_verify_does_not_write_memory) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, code));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -942,7 +942,7 @@ TEST(fast_load_declines_a_turbo_block) {
     std::vector<uint8_t> tzx = tzx_header();
     append_tzx_turbo(tzx, tape_block(0xFF, {0x01, 0x02}), 1000, 50, 400, 800);
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -964,7 +964,7 @@ TEST(fast_load_declines_when_the_tape_is_stopped) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, {0x01, 0x02}));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -978,7 +978,7 @@ TEST(fast_load_ignores_a_non_stock_rom) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, {0x01, 0x02}));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -996,7 +996,7 @@ TEST(fast_load_pops_exactly_one_call_stack_frame) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, {0x01, 0x02}));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!armed_machine(m, image)) {
         return;
     }
@@ -1027,7 +1027,7 @@ TEST(a_pulse_load_is_audible_at_the_pilot_frequency) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, {0x00}));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -1085,7 +1085,7 @@ TEST(a_pulse_load_is_audible_at_the_pilot_frequency) {
 TEST(no_tape_means_no_ear_contribution) {
     // The EAR term must not leave a DC offset sitting under everything when
     // there is no tape -- silence has to stay silent.
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -1104,7 +1104,7 @@ TEST(no_tape_means_no_ear_contribution) {
 // ---- end to end ------------------------------------------------------------
 
 TEST(auto_typed_load_reaches_the_edit_line) {
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -1124,7 +1124,7 @@ TEST(the_real_rom_loads_a_block_through_pulses) {
     std::vector<uint8_t> image;
     append_tap_block(image, tape_block(0xFF, code));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }
@@ -1169,7 +1169,7 @@ TEST(auto_typed_load_reads_a_whole_tape_through_pulses) {
     append_tap_block(image, tape_block(0x00, header));
     append_tap_block(image, tape_block(0xFF, program));
 
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         return;
     }

@@ -58,7 +58,57 @@ bool parse_line_field(const std::string& s, uint32_t& out) {
     return true;
 }
 
-void parse_sld(const std::string& text, RomSource& out) {
+std::string file_name_of(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+/// The directory part of a path, with no trailing separator. Empty when the
+/// path names a file with no directory at all.
+std::string directory_of(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? std::string() : path.substr(0, slash);
+}
+
+/// Enough of an absolute-path test for deciding whether an SLD's file field
+/// needs resolving against anything. Covers the POSIX form and both Windows
+/// ones ("C:\..." and a UNC "\\server\...").
+bool is_absolute_path(const std::string& path) {
+    if (path.empty()) {
+        return false;
+    }
+    if (path[0] == '/' || path[0] == '\\') {
+        return true;
+    }
+    return path.size() > 2 && path[1] == ':';
+}
+
+/// Index of the file an SLD record names, registering it the first time it is
+/// seen. Every record carries the field, so this runs per record; the linear
+/// scan is over a handful of entries (five, for a program built from four
+/// INCLUDEs) and is not worth a map.
+size_t file_index(RomSource& out, const std::string& base_dir, const std::string& name) {
+    for (size_t i = 0; i < out.files.size(); i++) {
+        if (out.files[i].sld_name == name) {
+            return i;
+        }
+    }
+    SourceFile file;
+    file.sld_name = name;
+    // sjasmplus writes the file as it was written in the INCLUDE -- normally a
+    // bare name, relative to the directory being assembled in. The entry .asm
+    // the caller named is the only anchor available for that, and INCLUDEs sit
+    // beside it in every layout this has to handle.
+    if (is_absolute_path(name) || base_dir.empty()) {
+        file.path = name;
+    } else {
+        file.path = base_dir + "/" + name;
+    }
+    out.files.push_back(file);
+    return out.files.size() - 1;
+}
+
+void parse_sld(const std::string& text, const std::string& base_dir, RomSource& out) {
     size_t pos = 0;
     while (pos < text.size()) {
         size_t end = text.find('\n', pos);
@@ -78,6 +128,7 @@ void parse_sld(const std::string& text, RomSource& out) {
         if (fields.size() < 8) {
             continue;
         }
+        const std::string& file_s = fields[0];
         const std::string& line_s = fields[1];
         const std::string& addr_s = fields[5];
         const std::string& rec_type = fields[6];
@@ -89,11 +140,15 @@ void parse_sld(const std::string& text, RomSource& out) {
             if (!parse_line_field(line_s, line_no) || !parse_addr_field(addr_s, addr)) {
                 continue;
             }
-            // First mapping wins if a line or address ever repeats. That
-            // should not happen for real T records, but first-wins is a safer
-            // default than silently overwriting.
-            out.line_to_addr.emplace(line_no, addr);
-            out.addr_to_line.emplace(addr, line_no);
+            // First mapping wins if a file's line, or an address, ever
+            // repeats. That should not happen for real T records, but
+            // first-wins is a safer default than silently overwriting.
+            const size_t index = file_index(out, base_dir, file_s);
+            out.files[index].line_to_addr.emplace(line_no, addr);
+            SourceLoc loc;
+            loc.file = index;
+            loc.line = line_no;
+            out.addr_to_loc.emplace(addr, loc);
         } else if ((rec_type == "F" || rec_type == "D") && !data.empty()) {
             uint16_t addr = 0;
             if (!parse_addr_field(addr_s, addr)) {
@@ -222,11 +277,6 @@ bool term_value(const Sources& sources, const std::string& token, bool is_base, 
     return false;
 }
 
-std::string file_name_of(const std::string& path) {
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
 bool is_hex_digit(char c) {
     return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
 }
@@ -259,14 +309,30 @@ void RomSource::index() {
     }
 }
 
-bool RomSource::addr_for_line(uint32_t line, uint16_t& addr, uint32_t& actual_line) const {
+bool RomSource::file_for_path(const std::string& path, size_t& index) const {
+    const std::string target = file_name_of(path);
+    for (size_t i = 0; i < files.size(); i++) {
+        if (files[i].path == path || file_name_of(files[i].path) == target) {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool RomSource::addr_for_line(size_t file, uint32_t line, uint16_t& addr,
+                              uint32_t& actual_line) const {
+    if (file >= files.size()) {
+        return false;
+    }
+    const std::unordered_map<uint32_t, uint16_t>& lines = files[file].line_to_addr;
     // A plain forward probe rather than a sorted index: the search is bounded
     // to a handful of lines, and only ever runs when a user clicks the gutter.
     // Forward only -- nudging UP would move the breakpoint above the line the
     // user actually clicked, which is a surprise rather than a convenience.
     for (uint32_t offset = 0; offset <= MAX_BREAKPOINT_NUDGE; offset++) {
-        auto it = line_to_addr.find(line + offset);
-        if (it != line_to_addr.end()) {
+        auto it = lines.find(line + offset);
+        if (it != lines.end()) {
             addr = it->second;
             actual_line = line + offset;
             return true;
@@ -301,7 +367,17 @@ RomSourcePtr load_source(const std::string& sld_path, const std::string& asm_pat
     }
     auto source = std::make_shared<RomSource>();
     source->asm_path = asm_path;
-    parse_sld(std::string(bytes.begin(), bytes.end()), *source);
+
+    // Registered before parsing so the entry source is always files[0],
+    // whichever file the SLD's first T record happens to name -- an INCLUDEd
+    // file's instructions commonly come first. Its path is the one the caller
+    // gave, verbatim, rather than one reassembled from a directory and a name.
+    SourceFile entry;
+    entry.sld_name = file_name_of(asm_path);
+    entry.path = asm_path;
+    source->files.push_back(entry);
+
+    parse_sld(std::string(bytes.begin(), bytes.end()), directory_of(asm_path), *source);
     source->index();
     return source;
 }
@@ -484,10 +560,9 @@ bool Sources::parse_address(const std::string& text, uint16_t& addr, std::string
     return true;
 }
 
-RomSourcePtr Sources::source_for_path(const std::string& path) const {
-    const std::string target = file_name_of(path);
+RomSourcePtr Sources::source_for_path(const std::string& path, size_t& file_index) const {
     for (const RomSourcePtr& source : active()) {
-        if (source->asm_path == path || file_name_of(source->asm_path) == target) {
+        if (source->file_for_path(path, file_index)) {
             return source;
         }
     }

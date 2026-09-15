@@ -65,7 +65,7 @@ void fill_first_cells(Memory& mem) {
 /// Runs a bare ULA up to (line, dot) and returns what it is driving there.
 ///
 /// clock() then floating_bus() then advance(), which is the order
-/// Spectrum48K::clock() uses -- the fetch for a group happens inside the
+/// Spectrum::clock() uses -- the fetch for a group happens inside the
 /// clock() of its first dot, so a value read before that call would be the
 /// previous group's.
 uint8_t bus_at(uint32_t line, uint32_t dot) {
@@ -74,7 +74,7 @@ uint8_t bus_at(uint32_t line, uint32_t dot) {
     Ula ula;
     uint64_t pins = 0;
     for (;;) {
-        ula.clock(pins, mem);
+        ula.clock(pins, mem.bytes.data() + BITMAP_BASE);
         if (beam_at(ula, line, dot)) {
             return ula.floating_bus();
         }
@@ -119,7 +119,7 @@ namespace {
 /// this can assert is which KIND of byte came back -- a display byte or the
 /// idle 0xFF -- and that is exactly what the effect is about.
 uint8_t in_at(uint32_t dot) {
-    Spectrum48K machine;
+    Spectrum machine;
     for (uint16_t addr = BITMAP_BASE; addr < ATTR_BASE; addr++) {
         machine.memory.write(addr, BITMAP_0);
     }
@@ -174,7 +174,7 @@ TEST(in_from_an_even_port_still_reads_the_keyboard) {
     // The floating bus must not have swallowed the ULA's own port: an even
     // port is decoded, so it answers with the keyboard (no keys down, EAR
     // high) rather than with a display byte.
-    Spectrum48K machine;
+    Spectrum machine;
     for (uint16_t addr = BITMAP_BASE; addr < DISPLAY_FILE_END; addr++) {
         machine.memory.write(addr, BITMAP_0);
     }
@@ -201,7 +201,7 @@ TEST(a_cobra_style_wait_loop_terminates) {
     // drops below a threshold. With a constant 0xFF this never leaves the
     // loop; with a floating bus it leaves as soon as the beam reaches a cell
     // whose bytes are low enough.
-    Spectrum48K machine;
+    Spectrum machine;
     // Attributes of 0x38 (white paper, black ink) all over, which is below
     // the 0x3F Cobra tests against, and a blank bitmap.
     for (uint16_t addr = ATTR_BASE; addr < DISPLAY_FILE_END; addr++) {

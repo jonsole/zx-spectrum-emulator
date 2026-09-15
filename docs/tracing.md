@@ -167,7 +167,7 @@ Two things to know before reading one closely:
   `TState` is the ULA's position in the frame. They step together because the
   CPU's priming half-clock — T1H of the first fetch, performed by
   `Z80::set_registers()` before machine clocking begins — is charged to the ULA
-  as well (`Spectrum48K::prime_cpu`). Without that the CPU would run half a
+  as well (`Spectrum::prime_cpu`). Without that the CPU would run half a
   T-state ahead of the ULA for the machine's whole life, and drift another half
   with every re-prime: a snapshot load, a debugger register write, or a
   fast-loaded tape block. A contended access placed half a T-state from where

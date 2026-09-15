@@ -2,6 +2,29 @@
   "version": "2.0.0",
   "tasks": [
     {
+      // The attach counterpart to zxspectrum-cpp.start-server: starts a
+      // server ONLY if nothing is already listening on the DAP port, and
+      // never stops one that is. Attaching to a machine and resetting it in
+      // the same breath would defeat the point -- so unlike the launch task
+      // this neither kills a stale server nor builds (a build would replace
+      // the executable of the very process being attached to).
+      //
+      // "process" rather than "shell": a shell task is re-quoted through the
+      // default shell, which mangles anything containing its own quotes. The
+      // logic lives in cpp-core/start-server-if-absent.ps1 rather than in an
+      // argument here, for the same reason.
+      "label": "zxspectrum-cpp.start-server-if-absent",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}/cpp-core/start-server-if-absent.ps1"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
       // A previous server still holding zx_server.exe open makes the link
       // fail with LNK1168, which takes the whole launch down. Stopping it
       // first is what lets a server outlive its debug session (so MCP clients
@@ -73,6 +96,37 @@
       }
     },
     {
+      // The Filmation engine (examples/filmation) -- assembled from source
+      // rather than committed as a snapshot, so editing a .s file and
+      // relaunching picks the change up. ~0.1s of sjasmplus.
+      //
+      // The problem matcher is sjasmplus's own error format, so a bad line
+      // lands in the Problems panel at the file and line it came from.
+      "label": "filmation.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["examples/filmation/build.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["relative", "${workspaceFolder}/examples/filmation"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
+      "label": "filmation.build-and-start-server",
+      "dependsOrder": "sequence",
+      "dependsOn": ["filmation.build", "zxspectrum-cpp.start-server"],
+      "problemMatcher": []
+    },
+    {
       // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
       // fetched and assembled rather than committed -- see
       // game-disassemblies/scripts/build_fairlight.py. Cheap enough (~0.2s of
@@ -90,6 +144,33 @@
       "label": "fairlight.build-and-start-server",
       "dependsOrder": "sequence",
       "dependsOn": ["fairlight.build", "zxspectrum-cpp.start-server"],
+      "problemMatcher": []
+    },
+    {
+      // Knight Lore, disassembled from a snapshot on every launch (~1.7s).
+      // Rebuilding rather than using whatever is on disk is the point: the
+      // commentary lives in game-disassemblies/scripts/knightlore_annotations.ctl,
+      // so editing that and relaunching means you step through the notes you
+      // just wrote.
+      //
+      // The snapshot is yours and is gitignored, like every other game image
+      // here. Change the path below if you keep it somewhere else; the build
+      // fails with "no snapshot at ..." rather than producing anything wrong.
+      "label": "knightlore.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": [
+        "game-disassemblies/scripts/build_knightlore.py",
+        "--snapshot", "snapshots/Knight Lore (1984)(Ultimate).sna"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "knightlore.build-and-start-server",
+      "dependsOrder": "sequence",
+      "dependsOn": ["knightlore.build", "zxspectrum-cpp.start-server"],
       "problemMatcher": []
     }
   ]

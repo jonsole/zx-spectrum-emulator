@@ -17,6 +17,7 @@
 
 #include "base64.h"
 #include "file_io.h"
+#include "log.h"
 #include "beeper.h"
 #include "http.h"
 #include "net.h"
@@ -26,6 +27,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -109,11 +111,36 @@ json registers_json(const Registers& r) {
                 {"im", r.im}, {"wz", r.wz}};
 }
 
+/// "1x", "0.5x", "10x" -- trailing zeros trimmed, because a speed picker
+/// showing "0.50x" reads like a precision that is not there.
+std::string describe_multiplier(double multiplier) {
+    char buffer[32];
+    std::snprintf(buffer, sizeof buffer, "%.4g", multiplier);
+    return std::string(buffer) + "x realtime";
+}
+
+/// The current speed, as both protocols report it.
+json speed_json(const Engine& engine) {
+    const bool uncapped = engine.speed() == Speed::Uncapped;
+    return json{{"uncapped", uncapped},
+                {"multiplier", engine.speed_multiplier()},
+                {"description", uncapped
+                                    ? std::string("uncapped -- as fast as the host manages")
+                                    : describe_multiplier(engine.speed_multiplier())}};
+}
+
 json state_json(const MachineState& s) {
+    json paging = json{{"port_7ffd", s.paging},
+                       {"rom", (s.paging & PAGING_ROM1) != 0 ? 1 : 0},
+                       {"bank_at_c000", s.paging & PAGING_BANK_MASK},
+                       {"screen_bank", (s.paging & PAGING_SHADOW_SCREEN) != 0 ? 7 : 5},
+                       {"locked", (s.paging & PAGING_LOCK) != 0}};
     return json{{"pc", s.pc},
                 {"registers", registers_json(s.registers)},
                 {"halted", s.halted},
                 {"running", s.running},
+                {"model", model_name(s.model)},
+                {"paging", s.model == Model::Spectrum128 ? paging : json(nullptr)},
                 {"border", s.border},
                 {"tstate", s.tstate},
                 {"frame_count", s.frame_count},
@@ -256,6 +283,37 @@ json trace_status_json(const TraceStatus& status) {
     return out;
 }
 
+/// Recording state, reported identically by start_video, stop_video and
+/// video_status so a caller only has to learn one shape.
+json video_status_json(const VideoStatus& status) {
+    json out{{"active", status.active},
+             {"path", status.path},
+             {"frames", status.frames},
+             {"duration_ms", status.frames * 20},
+             {"dropped", status.dropped}};
+    if (status.limit != 0) {
+        out["limit"] = status.limit;
+    }
+    // Only once there is one: a recording still going has not exited.
+    if (!status.active) {
+        out["exit_code"] = status.exit_code;
+    }
+    if (!status.error.empty()) {
+        out["error"] = status.error;
+    }
+    return out;
+}
+
+/// The most frames one get_screen_sequence may return. Each is a separate
+/// image for the model to look at, and sixteen 352x312 pictures is already
+/// a lot of looking; a longer span is better taken as fewer frames further
+/// apart, or as a video.
+constexpr int64_t MAX_SEQUENCE_FRAMES = 16;
+/// ...and the furthest apart they may be: 250 frames is five seconds.
+constexpr int64_t MAX_SEQUENCE_EVERY = 250;
+/// The longest a recording may be asked to stop itself at, in seconds.
+constexpr double MAX_VIDEO_SECONDS = 600.0;
+
 /// What is on the tape, block by block -- the answer to "what does this image
 /// contain", which otherwise means reading the file by hand. Sent with every
 /// tape reply, so `tape_control {}` on its own is a full contents listing.
@@ -345,6 +403,10 @@ json bool_prop(const char* description) {
     return json{{"type", "boolean"}, {"description", description}};
 }
 
+json number_prop(const char* description) {
+    return json{{"type", "number"}, {"description", description}};
+}
+
 json tools_list() {
     json tools = json::array();
     auto add = [&tools](const char* name, const char* description, const json& input_schema) {
@@ -352,24 +414,38 @@ json tools_list() {
             json{{"name", name}, {"description", description}, {"inputSchema", input_schema}});
     };
 
-    add("load_rom", "Load a 48K ROM image (base64-encoded, exactly 16384 bytes)",
-        schema(json{{"rom_base64", string_prop("Base64-encoded 16384-byte 48K ROM image.")}},
+    add("load_rom",
+        "Load a ROM image (base64-encoded): exactly 16384 bytes for the 48K ROM, or 32768 for "
+        "the 128K pair (ROM 0, the editor/menu, then ROM 1, 48K BASIC). Either can be loaded "
+        "whatever model the machine currently is, ready for a switch to the other.",
+        schema(json{{"rom_base64", string_prop("Base64-encoded 16K (48K) or 32K (128K) ROM image.")}},
                {"rom_base64"}));
     add("load_snapshot",
-        "Load a .sna snapshot (base64-encoded) -- restores RAM, registers, and border",
-        schema(json{{"sna_base64", string_prop("Base64-encoded 49179-byte .sna snapshot.")}},
+        "Load a .sna or .z80 snapshot (base64-encoded) -- restores RAM, registers, border and, "
+        "for a 128K snapshot, paging and the AY registers. The machine becomes whichever model "
+        "the snapshot was taken on (48K or 128K), so the matching ROM must already be loaded.",
+        schema(json{{"sna_base64", string_prop("Base64-encoded snapshot: a .sna (49179 bytes "
+                                               "for 48K, 131103 or 147487 for 128K) or a .z80 "
+                                               "of version 1, 2 or 3.")}},
                {"sna_base64"}));
     add("save_snapshot",
-        "Save the machine as a 48K .sna file -- RAM, registers and border, taken between two "
-        "instructions so it is consistent even mid-run. Reload it later with load_snapshot to "
-        "return to exactly this point: past a long tape load, at the start of a level, or just "
-        "before the thing being debugged goes wrong.",
-        schema(json{{"path", string_prop("File to write, .sna extension included. Relative "
+        "Save the machine as a .sna or .z80 file (by the path's extension; .sna unless it ends "
+        "in .z80) -- RAM, registers, border and on a 128K the paging and AY state, taken "
+        "between two instructions so it is consistent even mid-run. Reload it later with "
+        "load_snapshot to return to exactly this point: past a long tape load, at the start of "
+        "a level, or just before the thing being debugged goes wrong.",
+        schema(json{{"path", string_prop("File to write, .sna or .z80 extension included. Relative "
                                          "paths resolve against the server's working directory "
                                          "(the workspace folder). Overwrites an existing file.")}},
                {"path"}));
-    add("reset", "Reset the machine (registers only -- RAM/ROM contents are unaffected)",
-        no_params());
+    add("reset",
+        "Reset the machine (registers and paging only -- RAM/ROM contents are unaffected). "
+        "Optionally switch it to the other model first: a 128K boots to the 128 menu, a 48K to "
+        "48K BASIC.",
+        schema(json{{"machine", string_prop("\"48\" or \"128\": make the machine this model "
+                                            "before resetting. Omit to keep the current one. "
+                                            "The model's ROM must already be loaded.")}},
+               {}));
     add("step", "Step one or more whole instructions, or a given number of T-states",
         schema(json{{"instructions", integer_prop("Whole instructions to step (default 1).")},
                     {"ticks", integer_prop("If set, step this many T-states instead of whole "
@@ -381,9 +457,15 @@ json tools_list() {
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
     add("clear_breakpoint", "Clear a breakpoint at an address",
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
-    add("read_memory", "Read memory starting at an address",
-        schema(json{{"addr", integer_prop("16-bit address.")},
-                    {"length", integer_prop("Bytes to read (default 1).")}},
+    add("read_memory",
+        "Read memory starting at an address, as the CPU sees it -- or, with bank, straight out "
+        "of one of a 128K's eight 16K RAM banks whether or not it is paged in",
+        schema(json{{"addr", integer_prop("16-bit address; with bank, an offset 0..16383 "
+                                          "within that bank.")},
+                    {"length", integer_prop("Bytes to read (default 1).")},
+                    {"bank", integer_prop("RAM bank 0-7 to read directly, ignoring paging. "
+                                          "Bank 5 is the screen (0x4000 on both models), 2 "
+                                          "is 0x8000, 7 the 128K's shadow screen.")}},
                {"addr"}));
     add("write_memory", "Write hex-encoded bytes to memory starting at an address",
         schema(json{{"addr", integer_prop("16-bit address.")},
@@ -445,6 +527,192 @@ json tools_list() {
                                         "\"SYM SHIFT\", \"SPACE\".")}},
                {"key"}));
     add("get_screen", "Get the current screen as a PNG image", no_params());
+    add("get_screen_sequence",
+        "Get a SEQUENCE of screens: several consecutive frames, one image each, in the order "
+        "the machine drew them -- as close to watching the display as still pictures get. For "
+        "anything that only shows up as change over time: whether a sprite moves and which "
+        "way, whether something flickers, what a loading screen or an animation does frame by "
+        "frame. Each frame is exactly as the ULA completed it, tagged with its frame number "
+        "and its offset in emulated milliseconds from the first. On a running machine the "
+        "frames are picked out of the run without disturbing it; on a stopped one the machine "
+        "is stepped forward the needed number of frames and left stopped there. For a longer "
+        "or smoother record use start_video instead.",
+        schema(json{{"frames", integer_prop("How many frames to return, 1-16. Default 8.")},
+                    {"every", integer_prop("Take one frame in this many, 1-250. 1 (the "
+                                           "default) is consecutive frames, 20ms apart; 5 is a "
+                                           "frame every 100ms; 50 is one a second.")}},
+               {}));
+    add("start_video",
+        "Start recording the display to a video file: every completed frame, at the "
+        "Spectrum's own 50 frames a second, encoded by ffmpeg into whatever the extension "
+        "asks for (.mp4 plays everywhere; .webm and .gif also work). Records a RUNNING machine "
+        "as it runs and a stepped one step by step, mid-run included, and keeps going until "
+        "stop_video or its own `seconds`/`frames` limit -- so the shape is start, drive the "
+        "machine (run, keys, steps), stop. The file is for a person to watch: to see what it "
+        "recorded yourself, use get_screen_sequence. Needs ffmpeg on PATH, or zx_server "
+        "started with --ffmpeg <path>.",
+        schema(json{{"path", string_prop("File to write, its extension choosing the format. "
+                                         "Relative paths resolve against the server's working "
+                                         "directory (the workspace folder). Default "
+                                         "\"screen.mp4\".")},
+                    {"seconds", number_prop("Stop by itself after this much emulated time, "
+                                            "up to 600. Omit to record until stop_video.")},
+                    {"frames", integer_prop("Stop by itself after this many frames -- the "
+                                            "same limit as `seconds`, in frames (50 a "
+                                            "second). Omit to record until stop_video.")},
+                    {"scale", integer_prop("Integer pixel scaling, 1-4. Default 2, which "
+                                           "makes the 352x312 canvas a 704x624 video that "
+                                           "plays crisply.")}},
+               {}));
+    add("stop_video",
+        "Stop the recording and finalise the file, reporting its path and how many frames it "
+        "holds. Takes effect immediately, mid-run included -- no need to pause first",
+        no_params());
+    add("video_status",
+        "Report whether a recording is in progress, its file, and its frame count so far. "
+        "Safe to poll during a run. A recording that reached its own limit is finalised "
+        "here if stop_video has not been called",
+        no_params());
+    add("set_write_overlay",
+        "Turn the display-write overlay on or off. With it on, the picture is dimmed to half "
+        "brightness and every BYTE the program writes to the screen bitmap -- all eight of its "
+        "pixels, in their own colours -- is shown at full brightness on the frame it was "
+        "written, so a get_screen shows WHAT THE PROGRAM IS ACTUALLY DRAWING: which sprites "
+        "move, how much of the screen a redraw touches, which parts are static. Every write "
+        "counts, erases and rewrites of the same value included; attributes are not tracked "
+        "at all. It dims the picture while it is on, so turn it off to read the screen "
+        "normally again",
+        schema(json{{"enabled", bool_prop("True to show the overlay, false to hide it. "
+                                          "Toggles when omitted.")},
+                    {"opacity_percent",
+                     integer_prop("How far a freshly written byte is lifted out of the dimmed "
+                                  "picture, 0-100. 100 (the default) is full brightness; 50 "
+                                  "stops half-way, so a write stands out less. Left as it was "
+                                  "when omitted.")},
+                    {"fade_percent",
+                     integer_prop("How much of the overlay each frame boundary removes, 0-100. "
+                                  "100 (the default) clears it completely, so each frame shows "
+                                  "only its own drawing. Lower values leave a fading trail "
+                                  "across the frames that follow -- 10 fades over about a "
+                                  "second -- and 0 never fades, accumulating everything the "
+                                  "program has drawn since. Note it only bites where drawing "
+                                  "STOPS: a game repainting its playfield every frame refreshes "
+                                  "those bytes to full brightness before any fade can dim them. "
+                                  "Left as it was when omitted.")}},
+               {}));
+    add("set_raster_view",
+        "Control how the screen is drawn while the machine is STOPPED -- stepping, or sitting "
+        "on a breakpoint -- or running in SLOW MOTION (a set_speed multiplier below 1). At full "
+        "speed none of it applies, and one whole completed frame is shown instead: the beam "
+        "crosses the screen in 20ms there, far faster than frames are published, so a marker "
+        "would be a smear. Slowed down it sweeps visibly instead, which is the point. Between "
+        "them these answer where the beam is and what it has left to do, which "
+        "is what any frame-synchronised effect -- border stripes, a mid-screen colour change, a "
+        "sprite racing the raster -- has to be reasoned about and is otherwise invisible in a "
+        "picture of the last completed frame. Every field is left as it was when omitted",
+        schema(json{{"marker",
+                     bool_prop("Mark the beam: a dashed line across the raster line it is on "
+                               "and a solid tick at the exact dot. On by default.")},
+                    {"in_progress",
+                     bool_prop("Compose the picture the way a CRT has it at this instant -- "
+                               "this frame's drawing down to the beam, the previous frame "
+                               "beyond it -- instead of the last completed frame. On by "
+                               "default. This is what makes a raster effect visible while "
+                               "stepping: a border stripe appears at the line the OUT happened "
+                               "on rather than only in the next completed frame.")},
+                    {"pending",
+                     bool_prop("Pick out every display byte -- bitmap or attribute -- written "
+                               "since the beam last passed it: the changes that are in memory "
+                               "but NOT YET ON THE PICTURE, because the beam has not reached "
+                               "them. Those bytes keep their own colours and the rest of the "
+                               "screen is dimmed to half brightness around them -- and the dim "
+                               "goes on whether or not anything turns out to be pending, so a "
+                               "screen with nothing at full brightness means the beam has "
+                               "displayed everything written so far. Off by default")}},
+               {}));
+    add("set_graphics_view",
+        "Point VS Code's ZX Spectrum Graphics panel at some bytes and say how to draw them: a "
+        "sprite sheet, a character set, or a screen dump. This is the one tool that moves "
+        "something in the editor rather than in the machine -- it changes NOTHING the emulator "
+        "does, and returns no picture. Use it to put a sprite in front of the person you are "
+        "working with (\"here is what is actually at sprite_017\"), not to look at one yourself. "
+        "It needs an open VS Code debug session to reach; with none, the view is remembered and "
+        "the panel picks it up when one starts. The panel opens itself if it is closed. Every "
+        "field is left as it was when omitted, so a width can be corrected without restating the "
+        "address. Traffic is one-way: what the person then does with the panel's own controls is "
+        "not reported back here",
+        schema(json{{"source",
+                     string_prop("Where the bytes come from: \"memory\" (the default) reads the "
+                                 "running machine, \"file\" reads `file`, \"selection\" uses "
+                                 "whatever is selected in their editor.")},
+                    {"address",
+                     string_prop("For source=memory. A number in any usual form or a SYMBOL "
+                                 "NAME, optionally displaced: \"16384\", \"$4000\", \"0x4000\", "
+                                 "\"4000h\", \"sprite_000\", \"sprite_000+4\". Resolved in the "
+                                 "editor against the same symbol table resolve_symbol uses, so "
+                                 "a name is usually the clearer thing to send.")},
+                    {"file", string_prop("For source=file. Path to a .scr or a raw binary.")},
+                    {"offset",
+                     integer_prop("For source=file or source=selection: bytes to skip at the "
+                                  "start. How a byte range inside a bigger file is addressed, "
+                                  "since only source=memory has an `address` -- a sprite at "
+                                  "$8B0A in a .sna is offset 27 + $8B0A - $4000, the 27 being "
+                                  "the snapshot header.")},
+                    {"format",
+                     string_prop("\"sprite\" for a grid of items laid out by the width/height/"
+                                 "count fields; \"font\" for the same with a character set's "
+                                 "shape (1 byte wide, 8 rows, 96 items) filled in and each glyph "
+                                 "labelled with its code; \"screen\" for the display file's "
+                                 "scrambled layout, coloured from the attributes when 6912 bytes "
+                                 "are available rather than 6144.")},
+                    {"width", integer_prop("Bytes across per item, BEFORE any mask interleaving "
+                                           "-- so 3 means 24 pixels wide however `interleave` is "
+                                           "set. Ignored by format=screen.")},
+                    {"height", integer_prop("Pixel rows per item.")},
+                    {"count", integer_prop("How many items to draw. Items past the end of the "
+                                           "data are reported rather than drawn as rubbish, so "
+                                           "guessing high is a way to find out how many there "
+                                           "are.")},
+                    {"columns", integer_prop("Items per row of the sheet.")},
+                    {"header",
+                     integer_prop("Bytes to skip before EACH item, for data that carries a "
+                                  "per-sprite width/height pair ahead of its bitmap.")},
+                    {"first",
+                     integer_prop("The character code of the first item, in format=font "
+                                  "(default 32, which is where the ROM's set at $3D00 starts).")},
+                    {"interleave",
+                     string_prop("How a mask is stored alongside the bitmap, interleaved PER "
+                                 "BYTE across a row: \"none\" (default), \"md\" for mask then "
+                                 "data, \"dm\" for data then mask. Masked pixels are drawn "
+                                 "transparent over a checkerboard, so the wrong choice here is "
+                                 "obvious rather than merely wrong-looking.")},
+                    {"invert_mask",
+                     bool_prop("Read a CLEAR mask bit as transparent rather than a set one.")},
+                    {"flip",
+                     bool_prop("Row 0 of the data is the BOTTOM row of the picture -- how "
+                               "Ultimate stored theirs, and so how anything descended from that "
+                               "code stores them.")},
+                    {"ink", integer_prop("0-15, the ULA's palette with bright as the top bit "
+                                         "(so 15 is bright white). What a set bit is drawn as. "
+                                         "Ignored by format=screen when the data carries its "
+                                         "own attributes.")},
+                    {"paper", integer_prop("0-15, as `ink`. What a clear bit is drawn as.")},
+                    {"zoom", integer_prop("1-16 (default 3).")},
+                    {"grid", bool_prop("Draw byte-column and 8-row boundaries over each item. "
+                                       "On by default; suppressed below 3x zoom, where the "
+                                       "lines would be most of the picture.")},
+                    {"labels", bool_prop("Caption each item with its index, or in format=font "
+                                         "its character code and character. On by default.")},
+                    {"pin",
+                     bool_prop("ADD this sprite to the panel's sheet instead of replacing the "
+                               "one being dialled in. How you show several sprites of DIFFERENT "
+                               "sizes at once: one call each, every one with pin=true, and each "
+                               "keeps its own width, height, format and mask arrangement. Every "
+                               "other field merges over the previous call, so a run of sprites "
+                               "in the same format only has to restate what actually differs. "
+                               "Unlike every other field this one does not persist -- it is off "
+                               "again on the next call.")}},
+               {}));
     add("get_audio",
         "Measure what the beeper has been playing: sample count, RMS and peak level, and the "
         "pitch in Hz estimated from zero crossings. For checking that a BEEP, a sound effect or "
@@ -461,7 +729,8 @@ json tools_list() {
                                           "and the summary is usually the answer."}}}},
                {}));
     add("get_state",
-        "Get a full state snapshot: pc, registers, breakpoints, running, border, call stack",
+        "Get a full state snapshot: pc, registers, breakpoints, running, border, call stack, "
+        "which model the machine is (48K or 128K) and, on a 128K, the paging register",
         no_params());
     add("load_debug_info",
         "Attach source-level debug info (a sjasmplus SLD file + its matching .asm) for the "
@@ -469,7 +738,7 @@ json tools_list() {
         "debugging for this program's addresses, alongside the ROM's own (always available "
         "separately, so calls into the ROM still resolve)",
         schema(json{{"sld_path", string_prop("Path to the program's sjasmplus SLD file.")},
-                    {"asm_path", string_prop("Path to the matching .asm source.")}},
+                    {"asm_path", string_prop("Path to the matching .asm source. The ENTRY source only -- any files it INCLUDEs are named by the SLD and resolved beside it.")}},
                {"sld_path", "asm_path"}));
     add("resolve_symbol",
         "Look up a routine/label's address by name, checking the currently-loaded program's debug "
@@ -562,9 +831,18 @@ json tools_list() {
         "run, so it can be watched filling up",
         no_params());
     add("set_speed",
-        "Set emulation speed: \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
-        "as the host allows (what the ZEXALL-style exercisers want)",
-        schema(json{{"speed", string_prop("\"realtime\" or \"uncapped\".")}}, {"speed"}));
+        "Set emulation speed. \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
+        "as the host allows (what the ZEXALL-style exercisers want), and a `multiplier` scales "
+        "realtime -- 0.1 for a tenth speed, 2 for double. Slow speeds are how you watch a raster "
+        "effect happen; note that anything other than 1x is silent, since samples produced at the "
+        "wrong rate are noise rather than slower music.",
+        schema(json{{"speed", string_prop("\"realtime\" or \"uncapped\". Optional when a "
+                                          "multiplier is given, which implies realtime.")},
+                    {"multiplier", number_prop("Realtime multiplier, 0.001 to 20. 1 is a real "
+                                               "48K; 0.001 (1/1000) creeps slowly enough to "
+                                               "watch a single write land ahead of the "
+                                               "beam.")}},
+               {}));
     add("load_tape",
         "Insert a .tap, .tzx, .wav or .csw tape image and, by default, start loading it: resets "
         "the machine, types LOAD \"\" for you, and starts the tape, so all that is left is to "
@@ -623,8 +901,19 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (!arg_string(args, "sna_base64", b64, error)) {
             return error_result(error);
         }
-        const std::string message = engine.load_snapshot(base64_decode(b64));
-        return message.empty() ? text_result("snapshot loaded") : error_result(message);
+        const std::vector<uint8_t> data = base64_decode(b64);
+        SnapshotInfo info;
+        const std::string what = inspect_snapshot(data.data(), data.size(), info);
+        if (!what.empty()) {
+            return error_result(what);
+        }
+        const std::string message = engine.load_snapshot(data);
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        return json_result(json{{"loaded", info.format == SnapshotFormat::Z80 ? "z80" : "sna"},
+                                {"model", model_name(info.model)},
+                                {"pc", info.pc}});
     }
 
     if (name == "save_snapshot") {
@@ -632,26 +921,56 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (!arg_string(args, "path", path, error)) {
             return error_result(error);
         }
-        std::vector<uint8_t> sna;
-        const std::string message = engine.save_snapshot(sna);
+        // The extension picks the format; anything but .z80 is a .sna.
+        std::string tail = path.size() >= 4 ? path.substr(path.size() - 4) : std::string();
+        for (size_t i = 0; i < tail.size(); i++) {
+            tail[i] = char(std::tolower(static_cast<unsigned char>(tail[i])));
+        }
+        const SnapshotFormat format = tail == ".z80" ? SnapshotFormat::Z80 : SnapshotFormat::Sna;
+        std::vector<uint8_t> data;
+        const std::string message = engine.save_snapshot(data, format);
         if (!message.empty()) {
             return error_result(message);
         }
-        if (!write_file(path, sna)) {
+        if (!write_file(path, data)) {
             return error_result("couldn't write " + path);
         }
-        // PC as the file holds it -- on top of the saved stack -- rather than
-        // a fresh registers() read, which mid-run is already somewhere else.
-        const uint8_t* h = sna.data();
-        const size_t sp = size_t(h[23] | (h[24] << 8)) - ROM_SIZE;
-        const uint8_t* ram = h + SNA_HEADER_SIZE;
-        const uint16_t pc = uint16_t(ram[sp] | (ram[sp + 1] << 8));
-        return json_result(json{{"path", path}, {"bytes", sna.size()}, {"pc", pc}});
+        // PC as the file holds it rather than a fresh registers() read, which
+        // mid-run is already somewhere else.
+        SnapshotInfo info;
+        inspect_snapshot(data.data(), data.size(), info);
+        return json_result(json{{"path", path},
+                                {"bytes", data.size()},
+                                {"format", format == SnapshotFormat::Z80 ? "z80" : "sna"},
+                                {"model", model_name(info.model)},
+                                {"pc", info.pc}});
     }
 
     if (name == "reset") {
+        const json& machine = arg(args, "machine");
+        if (!machine.is_null()) {
+            const std::string wanted = machine.is_number_integer()
+                                           ? std::to_string(machine.get<int64_t>())
+                                           : (machine.is_string() ? machine.get<std::string>()
+                                                                  : std::string());
+            Model model = Model::Spectrum48;
+            if (wanted == "128" || wanted == "128k" || wanted == "128K") {
+                model = Model::Spectrum128;
+            } else if (wanted != "48" && wanted != "48k" && wanted != "48K") {
+                return error_result("'machine' must be \"48\" or \"128\"");
+            }
+            if (!engine.has_rom(model)) {
+                return error_result(std::string("no ") + model_name(model)
+                                    + " ROM is loaded -- load_rom a "
+                                    + (model == Model::Spectrum128 ? "32K" : "16K")
+                                    + " image first, or start the server with --rom");
+            }
+            // set_model resets itself; the plain reset below would be a second.
+            engine.set_model(model);
+            return json_result(json{{"pc", engine.registers().pc}, {"model", model_name(model)}});
+        }
         const Registers r = engine.reset();
-        return json_result(json{{"pc", r.pc}});
+        return json_result(json{{"pc", r.pc}, {"model", model_name(engine.model())}});
     }
 
     if (name == "step") {
@@ -701,6 +1020,20 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         const int64_t length = len.is_number_integer() ? len.get<int64_t>() : 1;
         if (length < 0 || length > 0x10000) {
             return error_result("'length' must be between 0 and 65536");
+        }
+        const json& bank = arg(args, "bank");
+        if (!bank.is_null()) {
+            if (!bank.is_number_integer() || bank.get<int64_t>() < 0
+                || bank.get<int64_t>() >= int64_t(RAM_BANKS)) {
+                return error_result("'bank' must be a RAM bank number 0..7");
+            }
+            if (addr >= BANK_SIZE) {
+                return error_result("with 'bank', 'addr' is an offset within the 16K bank (0..16383)");
+            }
+            const std::vector<uint8_t> data =
+                engine.read_bank(uint8_t(bank.get<int64_t>()), addr, size_t(length));
+            return json_result(json{{"bank", bank.get<int64_t>()}, {"addr", addr},
+                                    {"hex", hex_encode(data)}});
         }
         const std::vector<uint8_t> data = engine.read_memory(addr, size_t(length));
         return json_result(json{{"addr", addr}, {"hex", hex_encode(data)}});
@@ -783,6 +1116,271 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "get_screen") {
         return image_result(encode_png(engine.screen()));
+    }
+
+    if (name == "get_screen_sequence") {
+        int64_t frames = 8;
+        int64_t every = 1;
+        const json& frames_arg = arg(args, "frames");
+        if (frames_arg.is_number_integer()) {
+            frames = frames_arg.get<int64_t>();
+        }
+        const json& every_arg = arg(args, "every");
+        if (every_arg.is_number_integer()) {
+            every = every_arg.get<int64_t>();
+        }
+        if (frames < 1 || frames > MAX_SEQUENCE_FRAMES) {
+            return error_result("'frames' must be between 1 and "
+                                + std::to_string(MAX_SEQUENCE_FRAMES));
+        }
+        if (every < 1 || every > MAX_SEQUENCE_EVERY) {
+            return error_result("'every' must be between 1 and "
+                                + std::to_string(MAX_SEQUENCE_EVERY));
+        }
+        // How long the span takes to happen: 20ms a frame at real speed,
+        // longer in slow motion, and however long the host takes uncapped
+        // (less, in practice). Plus a margin for the first boundary to come
+        // round and for a run yielding late.
+        double span_ms = double(frames * every) * 20.0;
+        if (engine.speed() == Speed::Realtime) {
+            span_ms /= engine.speed_multiplier();
+        }
+        int64_t timeout_ms = int64_t(span_ms) + 2000;
+        if (timeout_ms > 60000) {
+            timeout_ms = 60000;
+        }
+        const bool was_running = engine.running();
+        const std::vector<CapturedFrame> captured = engine.capture_frames(
+            uint32_t(frames), uint32_t(every), std::chrono::milliseconds(timeout_ms));
+        if (captured.empty()) {
+            return error_result(was_running ? "no frame completed within " + std::to_string(timeout_ms)
+                                                  + "ms -- is the run stuck, or the machine very slow?"
+                                            : "no frame was completed");
+        }
+        std::string summary = std::to_string(captured.size()) + " frame"
+                              + (captured.size() == 1 ? "" : "s") + ", "
+                              + std::to_string(every * 20) + "ms of emulated time apart";
+        if (int64_t(captured.size()) < frames) {
+            summary += " -- fewer than asked for: the run stopped, or the time ran out";
+        }
+        json content = json::array();
+        content.push_back(json{{"type", "text"}, {"text", summary}});
+        const uint64_t first = captured[0].frame_number;
+        for (size_t i = 0; i < captured.size(); i++) {
+            const CapturedFrame& f = captured[i];
+            content.push_back(json{{"type", "text"},
+                                   {"text", "frame " + std::to_string(i + 1) + "/"
+                                                + std::to_string(captured.size()) + ": emulated frame #"
+                                                + std::to_string(f.frame_number) + ", +"
+                                                + std::to_string((f.frame_number - first) * 20)
+                                                + "ms"}});
+            content.push_back(json{{"type", "image"},
+                                   {"data", base64_encode(encode_png(f.rgb))},
+                                   {"mimeType", "image/png"}});
+        }
+        return json{{"content", content}};
+    }
+
+    if (name == "start_video") {
+        VideoOptions options;
+        const json& path = arg(args, "path");
+        if (path.is_string()) {
+            options.path = path.get<std::string>();
+        }
+        const json& seconds = arg(args, "seconds");
+        if (seconds.is_number()) {
+            const double s = seconds.get<double>();
+            if (s <= 0.0 || s > MAX_VIDEO_SECONDS) {
+                return error_result("'seconds' must be between 0 and 600");
+            }
+            options.frames = uint64_t(s * 50.0 + 0.5);
+        }
+        const json& frames = arg(args, "frames");
+        if (frames.is_number_integer()) {
+            const int64_t n = frames.get<int64_t>();
+            if (n <= 0 || double(n) > MAX_VIDEO_SECONDS * 50.0) {
+                return error_result("'frames' must be between 1 and 30000");
+            }
+            options.frames = uint64_t(n);
+        }
+        const json& scale = arg(args, "scale");
+        if (scale.is_number_integer()) {
+            const int64_t n = scale.get<int64_t>();
+            if (n < 1 || n > 4) {
+                return error_result("'scale' must be between 1 and 4");
+            }
+            options.scale = uint32_t(n);
+        }
+        const std::string message = engine.start_video(options);
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        return json_result(video_status_json(engine.video_status()));
+    }
+
+    if (name == "stop_video") {
+        return json_result(video_status_json(engine.stop_video()));
+    }
+
+    if (name == "video_status") {
+        return json_result(video_status_json(engine.video_status()));
+    }
+
+    if (name == "set_write_overlay") {
+        const json& opacity = arg(args, "opacity_percent");
+        if (opacity.is_number_integer()) {
+            const int64_t percent = opacity.get<int64_t>();
+            if (percent < 0 || percent > int64_t(PERCENT_MAX)) {
+                return error_result("'opacity_percent' must be between 0 and 100");
+            }
+            engine.set_write_overlay_opacity(uint32_t(percent));
+        }
+        const json& fade = arg(args, "fade_percent");
+        if (fade.is_number_integer()) {
+            const int64_t percent = fade.get<int64_t>();
+            if (percent < 0 || percent > int64_t(PERCENT_MAX)) {
+                return error_result("'fade_percent' must be between 0 and 100");
+            }
+            engine.set_write_overlay_fade(uint32_t(percent));
+        }
+        const json& enabled = arg(args, "enabled");
+        engine.set_write_overlay(enabled.is_boolean() ? enabled.get<bool>()
+                                                      : !engine.write_overlay());
+        if (!engine.write_overlay()) {
+            return text_result("write overlay: off");
+        }
+        std::string message = "write overlay: on (picture dimmed, bytes written lifted "
+                              + std::to_string(engine.write_overlay_opacity())
+                              + "% of the way to full brightness, ";
+        const uint32_t fade_percent = engine.write_overlay_fade();
+        if (fade_percent >= PERCENT_MAX) {
+            message += "cleared every frame)";
+        } else if (fade_percent == 0) {
+            message += "never faded)";
+        } else {
+            message += "fading " + std::to_string(fade_percent) + "% a frame)";
+        }
+        return text_result(message);
+    }
+
+    if (name == "set_raster_view") {
+        RasterView view = engine.raster_view();
+        const json& marker = arg(args, "marker");
+        if (marker.is_boolean()) {
+            view.marker = marker.get<bool>();
+        }
+        const json& in_progress = arg(args, "in_progress");
+        if (in_progress.is_boolean()) {
+            view.in_progress = in_progress.get<bool>();
+        }
+        const json& pending = arg(args, "pending");
+        if (pending.is_boolean()) {
+            view.pending = pending.get<bool>();
+        }
+        engine.set_raster_view(view);
+        std::string message = "raster view (while stopped): beam marker ";
+        message += view.marker ? "on" : "off";
+        message += ", in-progress frame ";
+        message += view.in_progress ? "on" : "off";
+        message += ", pending writes ";
+        message += view.pending ? "on" : "off";
+        return text_result(message);
+    }
+
+    if (name == "set_graphics_view") {
+        GraphicsView view = engine.graphics_view();
+        // The one field that does not merge. It says "do this", not "be this",
+        // and a pin left set would turn the next correction into a new tile.
+        view.pin = false;
+        // Every field optional and merged over what is already there, exactly
+        // as set_raster_view does: a client correcting one guess should not
+        // have to restate the fifteen it got right.
+        const auto take_string = [&args](const char* key, std::string& out) {
+            const json& v = arg(args, key);
+            if (v.is_string()) {
+                out = v.get<std::string>();
+            }
+        };
+        const auto take_uint = [&args](const char* key, uint32_t& out, uint32_t low,
+                                       uint32_t high) {
+            const json& v = arg(args, key);
+            if (v.is_number_integer()) {
+                // Clamped rather than rejected, like the speed multiplier: these
+                // land in a UI, and the nearest sensible value beats an error.
+                const int64_t raw = v.get<int64_t>();
+                out = uint32_t(raw < int64_t(low) ? low : raw > int64_t(high) ? high : raw);
+            }
+        };
+        const auto take_bool = [&args](const char* key, bool& out) {
+            const json& v = arg(args, key);
+            if (v.is_boolean()) {
+                out = v.get<bool>();
+            }
+        };
+
+        take_string("source", view.source);
+        take_string("address", view.address);
+        take_string("file", view.file);
+        take_string("format", view.format);
+        take_string("interleave", view.interleave);
+        take_uint("width", view.width, 1, 64);
+        take_uint("height", view.height, 1, 256);
+        take_uint("count", view.count, 1, 1024);
+        take_uint("columns", view.columns, 1, 64);
+        take_uint("header", view.header, 0, 64);
+        take_uint("offset", view.offset, 0, 0xFFFFFFFFu);
+        take_uint("first", view.first, 0, 255);
+        take_uint("ink", view.ink, 0, 15);
+        take_uint("paper", view.paper, 0, 15);
+        take_uint("zoom", view.zoom, 1, 16);
+        take_bool("invert_mask", view.invert_mask);
+        take_bool("flip", view.flip);
+        take_bool("grid", view.grid);
+        take_bool("labels", view.labels);
+        take_bool("pin", view.pin);
+
+        // Named sets only. A typo here would otherwise reach the panel and
+        // leave it drawing nothing, with the mistake three processes away from
+        // whoever has to find it.
+        if (view.source != "memory" && view.source != "file" && view.source != "selection") {
+            return error_result("source must be \"memory\", \"file\" or \"selection\", not \""
+                                + view.source + "\"");
+        }
+        if (view.format != "sprite" && view.format != "font" && view.format != "screen") {
+            return error_result("format must be \"sprite\", \"font\" or \"screen\", not \""
+                                + view.format + "\"");
+        }
+        if (view.interleave != "none" && view.interleave != "md" && view.interleave != "dm") {
+            return error_result("interleave must be \"none\", \"md\" or \"dm\", not \""
+                                + view.interleave + "\"");
+        }
+
+        engine.set_graphics_view(view);
+
+        std::string message = "graphics panel: " + view.format + " from ";
+        if (view.source == "memory") {
+            message += "memory at " + view.address;
+        } else if (view.source == "file") {
+            message += view.file.empty() ? "a file (none given)" : view.file;
+            message += " at +" + std::to_string(view.offset);
+        } else {
+            message += "the editor selection";
+        }
+        if (view.format != "screen") {
+            message += ", " + std::to_string(view.width) + " bytes x "
+                       + std::to_string(view.height) + " rows, " + std::to_string(view.count)
+                       + " of them";
+            if (view.interleave != "none") {
+                message += ", mask interleaved (" + view.interleave + ")";
+            }
+            if (view.flip) {
+                message += ", bottom-up";
+            }
+        }
+        message += view.pin ? ". Added to the sheet." : ".";
+        message += " This changes nothing in the machine -- it moves a panel in VS Code, and "
+                   "only reaches one that is open in a debug session.";
+        return text_result(message);
     }
 
     if (name == "get_audio") {
@@ -898,19 +1496,28 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "set_speed") {
-        std::string speed;
-        if (!arg_string(args, "speed", speed, error)) {
-            return error_result(error);
+        const json& multiplier = arg(args, "multiplier");
+        const json& speed_arg = arg(args, "speed");
+        if (!multiplier.is_number() && !speed_arg.is_string()) {
+            return error_result("give 'speed' (\"realtime\" or \"uncapped\") or a 'multiplier'");
         }
-        if (speed == "realtime") {
+        if (multiplier.is_number()) {
+            // A multiplier is meaningless without a rate to scale, so it
+            // implies realtime rather than erroring when both are given.
             engine.set_speed(Speed::Realtime);
-            return text_result("speed: realtime (paced to 50Hz)");
+            engine.set_speed_multiplier(multiplier.get<double>());
         }
-        if (speed == "uncapped") {
-            engine.set_speed(Speed::Uncapped);
-            return text_result("speed: uncapped");
+        if (speed_arg.is_string()) {
+            const std::string speed = speed_arg.get<std::string>();
+            if (speed == "realtime") {
+                engine.set_speed(Speed::Realtime);
+            } else if (speed == "uncapped") {
+                engine.set_speed(Speed::Uncapped);
+            } else {
+                return error_result("'speed' must be \"realtime\" or \"uncapped\"");
+            }
         }
-        return error_result("'speed' must be \"realtime\" or \"uncapped\"");
+        return json_result(speed_json(engine));
     }
 
     if (name == "load_debug_info") {
@@ -926,7 +1533,7 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         }
         const RomSourcePtr loaded = sources.debug_info();
         return json_result(json{{"symbols", loaded->symbols.size()},
-                                {"instructions", loaded->line_to_addr.size()}});
+                                {"instructions", loaded->instruction_count()}});
     }
 
     if (name == "resolve_symbol") {
@@ -1052,6 +1659,7 @@ json handle_rpc(Engine& engine, Sources& sources, const json& message, bool& han
         message.contains("params") && message["params"].is_object() ? message["params"] : empty;
 
     if (method == "initialize") {
+        log("MCP  client connected");
         return rpc_result(
             id, json{{"protocolVersion", PROTOCOL_VERSION},
                      {"capabilities", json{{"tools", json{{"listChanged", false}}}}},
@@ -1071,7 +1679,24 @@ json handle_rpc(Engine& engine, Sources& sources, const json& message, bool& han
         const json& arguments =
             params.contains("arguments") && params["arguments"].is_object() ? params["arguments"]
                                                                             : empty;
-        return rpc_result(id, call_tool(engine, sources, name.get<std::string>(), arguments));
+        // Every tool call, with the argument that identifies it. This is
+        // the only record of what an agent did to the machine -- unlike a
+        // person driving VS Code, nobody watched it happen.
+        const std::string tool = name.get<std::string>();
+        std::string detail;
+        for (const char* key : {"path", "addr", "speed", "action", "key", "symbol"}) {
+            const json& value = arg(arguments, key);
+            if (value.is_string()) {
+                detail = " " + value.get<std::string>();
+                break;
+            }
+            if (value.is_number_unsigned()) {
+                detail = " " + hex4(uint16_t(value.get<uint32_t>()));
+                break;
+            }
+        }
+        log("MCP  %s%s", tool.c_str(), detail.c_str());
+        return rpc_result(id, call_tool(engine, sources, tool, arguments));
     }
     // resources/* and prompts/* are deliberately unimplemented: this server
     // exposes tools only, and says so in its initialize capabilities.
@@ -1133,6 +1758,7 @@ void handle_connection(net::Socket sock, Engine& engine, Sources& sources) {
         } else if (request.method == "DELETE") {
             // Session teardown. Nothing is kept per-session (there is one
             // machine, shared), so this is just an acknowledgement.
+            log("MCP  client disconnected");
             response.status = 202;
         } else {
             // Including GET: this server never initiates messages, so it has

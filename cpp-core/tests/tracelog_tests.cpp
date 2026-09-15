@@ -227,7 +227,7 @@ bool is_known_difference(const std::string& cycle, const std::string& column) {
 } // namespace
 
 TEST(matches_visualz80_reference) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -296,7 +296,7 @@ TEST(matches_visualz80_reference) {
 }
 
 TEST(stops_itself_at_the_row_limit) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -322,7 +322,7 @@ TEST(stops_itself_at_the_row_limit) {
 }
 
 TEST(extra_columns_add_the_48k_signals) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -358,7 +358,7 @@ TEST(extra_columns_add_the_48k_signals) {
 }
 
 TEST(symbols_name_the_instruction_and_annotate_operands) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -411,7 +411,7 @@ TEST(symbols_name_the_instruction_and_annotate_operands) {
 }
 
 TEST(no_resolver_leaves_the_reference_layout_alone) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -505,7 +505,7 @@ TEST(a_capture_starts_and_stops_across_a_running_machine) {
 // over: what is being checked is that the FIRST arrival at each is the one
 // that counts.
 TEST(address_gates_capture_exactly_the_window_between_them) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -605,7 +605,7 @@ TEST(a_stop_address_can_be_aimed_at_a_running_capture) {
 // usually mid-instruction -- which is exactly why an address gate cannot
 // answer questions about raster position.
 TEST(a_t_state_gate_starts_at_that_point_in_the_frame) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -655,7 +655,7 @@ TEST(a_t_state_gate_starts_at_that_point_in_the_frame) {
 // instruction to start as soon as possible -- "T-state 100" has to mean the
 // same half-clock however late the capture was set up.
 TEST(a_t_state_gate_already_passed_waits_for_the_next_frame) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -731,7 +731,7 @@ TEST(a_t_state_gate_that_cannot_mean_anything_is_refused) {
 // Gated on a T-state inside the display area, because that is the only place
 // the ULA reads anything at all.
 TEST(ula_columns_show_the_display_fetch) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
     // Something recognisable in the first screen cell, so the byte in the
@@ -809,7 +809,7 @@ TEST(ula_columns_show_the_display_fetch) {
 // reason `extra` is, so that a capture can still be diffed byte-for-byte
 // against visualz80remix's own export.
 TEST(ula_columns_are_absent_unless_asked_for) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 
@@ -838,7 +838,7 @@ TEST(ula_columns_are_absent_unless_asked_for) {
 // of which was true while the columns read a counter that clock() had already
 // advanced.
 TEST(frame_and_tstate_columns_label_the_half_clock_they_are_on) {
-    Spectrum48K machine;
+    Spectrum machine;
     const std::vector<uint8_t> rom = reference_program();
     CHECK_EQ(machine.load_rom(rom.data(), rom.size()), std::string());
 

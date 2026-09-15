@@ -20,7 +20,7 @@ namespace {
 
 /// The real ROM is copyrighted and gitignored, so tests that need it skip
 /// gracefully when it is absent rather than failing.
-bool load_rom(Spectrum48K& m) {
+bool load_rom(Spectrum& m) {
     std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
     if (!f) {
         return false;
@@ -41,12 +41,12 @@ Px pixel_at(const std::vector<uint8_t>& screen, uint32_t x, uint32_t y) {
     return Px{screen[i], screen[i + 1], screen[i + 2]};
 }
 
-void poke(Spectrum48K& m, uint16_t addr, std::initializer_list<uint8_t> bytes) {
+void poke(Spectrum& m, uint16_t addr, std::initializer_list<uint8_t> bytes) {
     std::vector<uint8_t> v(bytes);
     m.write_memory(addr, v.data(), v.size());
 }
 
-void run_at(Spectrum48K& m, uint16_t pc, int instructions) {
+void run_at(Spectrum& m, uint16_t pc, int instructions) {
     Registers r = m.registers();
     r.pc = pc;
     m.set_registers(r);
@@ -64,14 +64,14 @@ TEST(frame_timing_matches_the_spectrum) {
     CHECK_EQ(FULL_WIDTH, 352u);
     CHECK_EQ(FULL_HEIGHT, 312u);
 
-    Spectrum48K m;
+    Spectrum m;
     uint64_t before = m.ula.frame_count();
     m.run_frame();
     CHECK_EQ(m.ula.frame_count(), before + 1);
 }
 
 TEST(interrupt_fires_once_per_frame_and_is_not_queued) {
-    Spectrum48K m;
+    Spectrum m;
     poke(m, 0x8000, {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); // NOP sled
     Registers r;
     r.pc = 0x8000;
@@ -98,7 +98,7 @@ TEST(interrupt_fires_once_per_frame_and_is_not_queued) {
 }
 
 TEST(border_writes_show_up_in_the_rendered_border) {
-    Spectrum48K m;
+    Spectrum m;
     // LD A,2 (red) ; OUT (0xFE),A ; then spin.
     poke(m, 0x8000, {0x3E, 0x02, 0xD3, 0xFE, 0x18, 0xFE}); // ...; JR -2
     run_at(m, 0x8000, 2);
@@ -115,7 +115,7 @@ TEST(border_writes_show_up_in_the_rendered_border) {
 }
 
 TEST(screen_memory_is_rendered_with_the_right_layout) {
-    Spectrum48K m;
+    Spectrum m;
     // Fill the bitmap with all-ink and set every attribute to bright white
     // ink on black paper, then check a paper pixel really is white.
     for (uint16_t y = 0; y < 192; y++) {
@@ -151,7 +151,7 @@ TEST(screen_memory_is_rendered_with_the_right_layout) {
 }
 
 TEST(keyboard_reads_combine_selected_half_rows) {
-    Spectrum48K m;
+    Spectrum m;
     m.keyboard.key_down("Z"); // row 0 (addr bit 0), bit 1
     m.keyboard.key_down("A"); // row 1 (addr bit 1), bit 0
 
@@ -166,7 +166,7 @@ TEST(keyboard_reads_combine_selected_half_rows) {
 }
 
 TEST(keyboard_is_readable_through_a_real_in_instruction) {
-    Spectrum48K m;
+    Spectrum m;
     m.keyboard.key_down("SPACE"); // row 7 (addr bit 7), bit 0
     // LD A,0x7F ; IN A,(0xFE) ; HALT  -- 0x7F selects row 7 only.
     poke(m, 0x8000, {0x3E, 0x7F, 0xDB, 0xFE, 0x76});
@@ -175,7 +175,7 @@ TEST(keyboard_is_readable_through_a_real_in_instruction) {
 }
 
 TEST(rom_is_write_protected_on_the_real_bus) {
-    Spectrum48K m;
+    Spectrum m;
     std::vector<uint8_t> rom(ROM_SIZE, 0xAA);
     CHECK_EQ(m.load_rom(rom.data(), rom.size()), std::string());
     // LD A,0xFF ; LD (0x1234),A ; HALT -- a real store through the bus.
@@ -186,8 +186,360 @@ TEST(rom_is_write_protected_on_the_real_bus) {
 
 // ---- the real thing --------------------------------------------------------
 
+/// A screen of bright-white paper, so a dimmed pixel and a full-brightness one
+/// are told apart by their value alone. Run a frame after this and the beam
+/// clears the pending flags it set, leaving a clean slate.
+void fill_white_paper(Spectrum& m) {
+    for (uint16_t y = 0; y < 192; y += 8) {
+        for (uint16_t x = 0; x < 256; x += 8) {
+            uint8_t attr = 0x78; // bright, black ink on white paper
+            m.write_memory(attr_addr(x, y), &attr, 1);
+        }
+    }
+}
+
+TEST(write_overlay_lights_a_written_byte_whole_and_dims_the_rest) {
+    Spectrum m;
+    // HALT, so nothing but the pokes below ever touches the display file.
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    m.ula.set_write_overlay(true);
+    uint8_t bits = 0x81; // outer two pixels set, middle six clear
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+
+    m.run_frame();
+
+    // All EIGHT pixels of the byte in their own colours at full brightness,
+    // clear bits included -- the byte is the unit the program wrote, so it is
+    // the unit that lights up. Black ink on the set bits, white paper on the
+    // rest.
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{0, 0, 0}));
+    for (uint32_t x = 1; x < 7; x++) {
+        CHECK(pixel_at(m.screen(), x0 + x, y0) == (Px{255, 255, 255}));
+    }
+    CHECK(pixel_at(m.screen(), x0 + 7, y0) == (Px{0, 0, 0}));
+    // ...and everything beyond it is dimmed to half, border included.
+    CHECK(pixel_at(m.screen(), x0 + 8, y0) == (Px{127, 127, 127}));
+    CHECK(pixel_at(m.screen(), x0, y0 + 1) == (Px{127, 127, 127}));
+    CHECK(pixel_at(m.screen(), 4, 4) == (Px{0, 0, 0})); // black border, dimmed to black
+
+    // Nothing written since, and the default fade is the whole lot: back
+    // into the dim with everything else.
+    m.run_frame();
+    CHECK(pixel_at(m.screen(), x0, y0 + 1) == (Px{127, 127, 127}));
+}
+
+TEST(write_overlay_opacity_lifts_part_way_out_of_the_dim) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    m.ula.set_write_overlay(true);
+    m.ula.set_write_overlay_opacity(50);
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+
+    m.run_frame();
+
+    // Half-way between the dimmed white (127) and the full one (255).
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{190, 190, 190}));
+
+    // And the fade works down from THAT, not from full brightness.
+    m.ula.set_write_overlay_fade(50);
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+    m.run_frame();
+    CHECK_EQ(pixel_at(m.screen(), x0, y0).r, uint8_t(190));
+    m.run_frame();
+    CHECK_EQ(pixel_at(m.screen(), x0, y0).r, uint8_t(158));
+}
+
+TEST(write_overlay_fade_leaves_a_trail) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    m.ula.set_write_overlay(true);
+    m.ula.set_write_overlay_fade(10); // 10% off a frame, at the default full opacity
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    m.run_frame();
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{255, 255, 255}));
+    m.run_frame();
+    CHECK_EQ(pixel_at(m.screen(), x0, y0).r, uint8_t(241));
+    m.run_frame();
+    CHECK_EQ(pixel_at(m.screen(), x0, y0).r, uint8_t(230));
+
+    // ...and eventually back into the dim with everything else.
+    for (int i = 0; i < 60; i++) {
+        m.run_frame();
+    }
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{127, 127, 127}));
+
+    // A fade of 0 never clears, so what is drawn stays lit.
+    m.ula.set_write_overlay_fade(0);
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+    for (int i = 0; i < 10; i++) {
+        m.run_frame();
+    }
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{255, 255, 255}));
+}
+
+TEST(write_overlay_shows_erases_and_ignores_attributes) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+    m.ula.set_write_overlay(true);
+
+    // A byte written as all zeros is a write like any other: the routine
+    // touched it, so it lights.
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+    // An attribute byte covers 64 pixels, so it is not tracked at all --
+    // even one that changes nothing.
+    uint8_t attr = 0x78;
+    m.write_memory(attr_addr(64, 8), &attr, 1);
+
+    m.run_frame();
+
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    for (uint32_t x = 0; x < 8; x++) {
+        CHECK(pixel_at(m.screen(), x0 + x, y0) == (Px{255, 255, 255}));
+    }
+    // The attribute's cell is dimmed along with everything else.
+    CHECK(pixel_at(m.screen(), x0 + 64, y0 + 8) == (Px{127, 127, 127}));
+}
+
+TEST(write_overlay_off_wipes_what_it_had) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    // A fade of 0 never decays, so nothing but switching off can clear this.
+    m.ula.set_write_overlay(true);
+    m.ula.set_write_overlay_fade(0);
+    uint8_t bits = 0xFF;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    m.run_frame();
+    // Black ink at full brightness is black; the byte's neighbours tell the
+    // dim from the lit.
+    CHECK(pixel_at(m.screen(), x0 + 8, y0) == (Px{127, 127, 127}));
+    bits = 0x00;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+    m.run_frame();
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{255, 255, 255}));
+
+    m.ula.set_write_overlay(false);
+    m.run_frame();
+    // Off: the picture as it is, nothing dimmed.
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{255, 255, 255}));
+    CHECK(pixel_at(m.screen(), x0 + 8, y0) == (Px{255, 255, 255}));
+    m.ula.set_write_overlay(true);
+    m.run_frame();
+
+    // Nothing drawn since it came back on, so nothing lit.
+    CHECK(pixel_at(m.screen(), x0, y0) == (Px{127, 127, 127}));
+}
+
+TEST(write_overlay_is_off_unless_asked_for) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 0), &bits, 1);
+    m.run_frame();
+
+    // White paper, undimmed: the overlay is not there to touch it.
+    CHECK(pixel_at(m.screen(), BORDER_LEFT_PX, PAPER_LINE_BEGIN) == (Px{255, 255, 255}));
+    CHECK(pixel_at(m.screen(), BORDER_LEFT_PX + 8, PAPER_LINE_BEGIN) == (Px{255, 255, 255}));
+}
+
+TEST(raster_marker_marks_the_beam_position) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    m.run_frame();
+
+    // Park the beam somewhere unambiguous: part-way along a paper line.
+    const uint32_t target_line = PAPER_LINE_BEGIN + 40;
+    while (m.ula.raster_line() != target_line || m.ula.raster_dot() != 100) {
+        m.clock();
+    }
+
+    std::vector<uint8_t> rgb = m.screen();
+    const Px before = pixel_at(rgb, 100, target_line);
+    m.ula.draw_raster_marker(rgb);
+
+    // The beam's own pixel, and the tick standing out of the line above and
+    // below it, are the inverse of what was underneath.
+    const Px beam = pixel_at(rgb, 100, target_line);
+    CHECK_EQ(beam.r, uint8_t(255 - before.r));
+    CHECK_EQ(beam.g, uint8_t(255 - before.g));
+    CHECK_EQ(beam.b, uint8_t(255 - before.b));
+    CHECK_EQ(pixel_at(rgb, 100, target_line - RASTER_TICK_REACH).r, uint8_t(255 - before.r));
+    CHECK_EQ(pixel_at(rgb, 100, target_line + RASTER_TICK_REACH).r, uint8_t(255 - before.r));
+    // ...but not one pixel further out than the tick reaches.
+    CHECK(pixel_at(rgb, 100, target_line - RASTER_TICK_REACH - 1) == before);
+
+    // The line itself is dashed: half of each period inverted, half left.
+    CHECK_EQ(pixel_at(rgb, 0, target_line).r, uint8_t(255 - before.r));
+    CHECK(pixel_at(rgb, RASTER_DASH / 2, target_line) == before);
+    // Neighbouring lines are untouched.
+    CHECK(pixel_at(rgb, 0, target_line + 1) == before);
+
+    // And none of it reached the ULA's own frame -- it annotates a copy.
+    CHECK(pixel_at(m.screen(), 100, target_line) == before);
+}
+
+TEST(in_progress_frame_splits_at_the_beam) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+
+    // A frame of red border, so the completed frame is entirely red...
+    m.ula.border = 2;
+    m.run_frame();
+    CHECK(pixel_at(m.screen(), 4, 4) == (Px{0xCD, 0, 0}));
+
+    // ...then part of another in blue. What the beam has drawn of THIS frame
+    // is blue; what it has not reached is still the red frame behind it.
+    m.ula.border = 1;
+    // Split part-way along the RIGHT border of the line, so the pixels either
+    // side of the beam are both border and both show the colour under test --
+    // the paper between them renders from screen memory, not from `border`.
+    const uint32_t split_line = 120;
+    const uint32_t split_dot = PAPER_DOT_END + 16;
+    while (m.ula.raster_line() != split_line || m.ula.raster_dot() != split_dot) {
+        m.clock();
+    }
+
+    const std::vector<uint8_t> live = m.ula.screen_in_progress();
+    CHECK(pixel_at(live, 4, split_line - 1) == (Px{0, 0, 0xCD}));       // drawn
+    CHECK(pixel_at(live, 4, split_line) == (Px{0, 0, 0xCD}));           // drawn
+    CHECK(pixel_at(live, split_dot - 1, split_line) == (Px{0, 0, 0xCD})); // drawn
+    CHECK(pixel_at(live, split_dot, split_line) == (Px{0xCD, 0, 0}));   // not yet
+    CHECK(pixel_at(live, 4, split_line + 1) == (Px{0xCD, 0, 0}));       // not yet
+
+    // The completed frame is untouched by any of it: still wholly red.
+    CHECK(pixel_at(m.screen(), 4, split_line + 1) == (Px{0xCD, 0, 0}));
+}
+
+TEST(pending_writes_keep_their_colour_and_the_rest_is_dimmed) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    const uint32_t x0 = BORDER_LEFT_PX;
+    const uint32_t y0 = PAPER_LINE_BEGIN;
+    CHECK(pixel_at(m.screen(), x0, y0 + 150) == (Px{255, 255, 255}));
+
+    // Park the beam half-way down the paper.
+    const uint32_t beam_line = PAPER_LINE_BEGIN + 96;
+    while (m.ula.raster_line() != beam_line || m.ula.raster_dot() != PAPER_DOT_BEGIN) {
+        m.clock();
+    }
+
+    // One byte above the beam and one below it, written now.
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 8), &bits, 1);    // paper row 8 -- already drawn
+    m.write_memory(pixel_addr(0, 150), &bits, 1);  // paper row 150 -- still to come
+
+    std::vector<uint8_t> rgb = m.screen();
+    m.ula.draw_pending_writes(rgb);
+
+    // Both are pending -- the beam has not passed EITHER since they were
+    // written -- so both keep the paper's own full-brightness white...
+    for (uint32_t x = 0; x < 8; x++) {
+        CHECK(pixel_at(rgb, x0 + x, y0 + 150) == (Px{255, 255, 255}));
+        CHECK(pixel_at(rgb, x0 + x, y0 + 8) == (Px{255, 255, 255}));
+    }
+    // ...and everything else is at half brightness, border included.
+    CHECK(pixel_at(rgb, x0 + 8, y0 + 150) == (Px{127, 127, 127}));
+    CHECK(pixel_at(rgb, x0, y0 + 151) == (Px{127, 127, 127}));
+    CHECK(pixel_at(rgb, 4, 4) == (Px{0, 0, 0})); // black border, dimmed to black
+
+    // Run on: the beam passes the lower byte and displays it, which is what
+    // clears it. The upper one is still waiting for the next frame.
+    while (m.ula.raster_line() <= PAPER_LINE_BEGIN + 150) {
+        m.clock();
+    }
+    rgb = m.screen();
+    m.ula.draw_pending_writes(rgb);
+    CHECK(pixel_at(rgb, x0, y0 + 150) == (Px{127, 127, 127}));
+    CHECK(pixel_at(rgb, x0, y0 + 8) == (Px{255, 255, 255}));
+}
+
+TEST(pending_writes_dim_even_when_nothing_is_pending) {
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    // One write, then run far enough for the beam to display it: nothing is
+    // pending any more.
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 150), &bits, 1);
+    m.run_frame();
+    m.run_frame();
+
+    // Still dimmed, all of it. "Nothing is waiting" has to look different from
+    // the view being switched off, or it reads as the feature not working.
+    std::vector<uint8_t> rgb = m.screen();
+    m.ula.draw_pending_writes(rgb);
+    CHECK(pixel_at(rgb, BORDER_LEFT_PX, PAPER_LINE_BEGIN + 150) == (Px{127, 127, 127}));
+    CHECK(pixel_at(rgb, BORDER_LEFT_PX + 8, PAPER_LINE_BEGIN + 150) == (Px{127, 127, 127}));
+}
+
+TEST(pending_writes_are_tracked_without_being_asked_for) {
+    // The map is kept whether or not anyone is drawing it, so switching the
+    // view on shows what is ALREADY waiting instead of an empty screen.
+    Spectrum m;
+    poke(m, 0x0000, {0x76});
+    run_at(m, 0x0000, 1);
+    fill_white_paper(m);
+    m.run_frame();
+
+    uint8_t bits = 0x00;
+    m.write_memory(pixel_addr(0, 150), &bits, 1);
+
+    // Nothing was switched on before the write, and it is still picked out.
+    std::vector<uint8_t> rgb = m.screen();
+    m.ula.draw_pending_writes(rgb);
+    for (uint32_t x = 0; x < 8; x++) {
+        CHECK(pixel_at(rgb, BORDER_LEFT_PX + x, PAPER_LINE_BEGIN + 150) == (Px{255, 255, 255}));
+    }
+    CHECK(pixel_at(rgb, BORDER_LEFT_PX + 8, PAPER_LINE_BEGIN + 150) == (Px{127, 127, 127}));
+}
+
 TEST(real_rom_boots_to_the_copyright_screen) {
-    Spectrum48K m;
+    Spectrum m;
     if (!load_rom(m)) {
         std::printf("    (skipped: roms/48.rom not present)\n");
         return;
@@ -246,7 +598,7 @@ TEST(real_rom_boots_to_the_copyright_screen) {
 // ---- snapshots -------------------------------------------------------------
 
 TEST(sna_round_trip_restores_registers_ram_and_border) {
-    Spectrum48K m;
+    Spectrum m;
     Registers r;
     r.set_af(0x1234);  r.set_bc(0x5678);  r.set_de(0x9ABC);  r.set_hl(0xDEF0);
     r.a_ = 0x11;  r.f_ = 0x22;  r.b_ = 0x33;  r.c_ = 0x44;
@@ -256,7 +608,7 @@ TEST(sna_round_trip_restores_registers_ram_and_border) {
     m.set_registers(r);
     m.ula.border = 5;
     for (size_t i = 0; i < RAM_SIZE; i++) {
-        m.memory.ram[i] = uint8_t(i * 7 + 3);
+        m.memory.ram48(i) = uint8_t(i * 7 + 3);
     }
 
     std::vector<uint8_t> sna;
@@ -267,10 +619,10 @@ TEST(sna_round_trip_restores_registers_ram_and_border) {
     CHECK_EQ(int(sna[SNA_HEADER_SIZE + 0xFEFE - ROM_SIZE]), 0x23);
     CHECK_EQ(int(sna[SNA_HEADER_SIZE + 0xFEFF - ROM_SIZE]), 0x81);
     // ...and the machine itself was not touched by that push.
-    CHECK_EQ(int(m.memory.ram[0xFEFE - ROM_SIZE]), int(((0xFEFE - ROM_SIZE) * 7 + 3) & 0xFF));
+    CHECK_EQ(int(m.memory.ram48(0xFEFE - ROM_SIZE)), int(((0xFEFE - ROM_SIZE) * 7 + 3) & 0xFF));
     CHECK_EQ(int(m.registers().sp), 0xFF00);
 
-    Spectrum48K back;
+    Spectrum back;
     CHECK_EQ(load_sna(back, sna.data(), sna.size()), std::string());
     const Registers b = back.registers();
     CHECK_EQ(int(b.af()), 0x1234);
@@ -293,7 +645,7 @@ TEST(sna_round_trip_restores_registers_ram_and_border) {
     CHECK_EQ(int(back.ula.border), 5);
     size_t differing = 0;
     for (size_t i = 0; i < RAM_SIZE; i++) {
-        if (back.memory.ram[i] != m.memory.ram[i]) {
+        if (back.memory.ram48(i) != m.memory.ram48(i)) {
             differing++;
         }
     }
@@ -302,7 +654,7 @@ TEST(sna_round_trip_restores_registers_ram_and_border) {
 }
 
 TEST(sna_cannot_be_saved_with_sp_in_rom) {
-    Spectrum48K m;
+    Spectrum m;
     Registers r;
     r.sp = 0x4001; // one byte of RAM below SP: not enough for PC
     m.set_registers(r);

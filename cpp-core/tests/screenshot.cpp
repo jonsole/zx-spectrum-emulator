@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     std::string out_path = argc > 1 ? argv[1] : "screen.rgb";
     int frames = argc > 2 ? std::atoi(argv[2]) : 12;
 
-    Spectrum48K m;
+    Spectrum m;
     std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
     if (!f) {
         std::fprintf(stderr, "roms/48.rom not found\n");

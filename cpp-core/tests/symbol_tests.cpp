@@ -45,6 +45,25 @@ void load_symbols(Sources& sources) {
     CHECK(sources.load_debug_info(write_sld(), "test.asm", error));
 }
 
+/// A program built the way a real one is: an entry source that INCLUDEs
+/// others, so the same line numbers recur in every file. T records this time
+/// -- they are what carries address<->line, and what a single flat line map
+/// gets wrong. Line 40 exists in all three files at three different
+/// addresses; line 50 only in two of them.
+const char* const MULTI_SLD_TEXT =
+    "main.s|40|main.s|40|0|32768|T|\n"
+    "sprite.s|40|sprite.s|40|0|40000|T|\n"
+    "sprite.s|50|sprite.s|50|0|40010|T|\n"
+    "object.s|40|object.s|40|0|50000|T|\n"
+    "object.s|50|object.s|50|0|50010|T|\n";
+
+std::string write_multi_sld() {
+    const std::string path = "zx_test_multifile.sld";
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out << MULTI_SLD_TEXT;
+    return path;
+}
+
 /// The parse, or 0xFFFF plus a printed reason on failure -- so a case can be
 /// written as one CHECK_EQ.
 uint16_t parsed(const Sources& sources, const char* text) {
@@ -208,6 +227,68 @@ TEST(matching_with_no_debug_info_offers_nothing_rather_than_failing) {
     bool more = true;
     CHECK_EQ(sources.match_symbols("", 10, more).size(), size_t(0));
     CHECK(!more);
+}
+
+TEST(a_line_number_resolves_against_the_file_it_was_clicked_in) {
+    Sources sources("no_such_directory");
+    std::string error;
+    CHECK(sources.load_debug_info(write_multi_sld(), "src/main.s", error));
+
+    // Three files each have a line 40. Before per-file line maps these all
+    // collapsed into one entry and every one of them answered 0x8000.
+    const struct {
+        const char* path;
+        uint16_t addr;
+    } cases[] = {
+        {"src/main.s", 32768},
+        {"src/sprite.s", 40000},
+        {"src/object.s", 50000},
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        size_t file = 0;
+        RomSourcePtr source = sources.source_for_path(cases[i].path, file);
+        CHECK(source != nullptr);
+        uint16_t addr = 0;
+        uint32_t actual_line = 0;
+        CHECK(source->addr_for_line(file, 40, addr, actual_line));
+        CHECK_EQ(addr, cases[i].addr);
+        CHECK_EQ(actual_line, uint32_t(40));
+    }
+}
+
+TEST(an_address_reports_the_file_it_came_from) {
+    Sources sources("no_such_directory");
+    std::string error;
+    CHECK(sources.load_debug_info(write_multi_sld(), "src/main.s", error));
+    RomSourcePtr source = sources.debug_info();
+    CHECK(source != nullptr);
+
+    // What a stack frame is built from: an INCLUDEd file's address has to name
+    // that file, not the entry source it was assembled through.
+    auto it = source->addr_to_loc.find(uint16_t(50010));
+    CHECK(it != source->addr_to_loc.end());
+    CHECK_EQ(it->second.line, uint32_t(50));
+    CHECK_EQ(source->files[it->second.file].sld_name, std::string("object.s"));
+
+    // INCLUDEs are resolved beside the entry .asm, which is the only anchor
+    // the SLD's bare file names have.
+    CHECK_EQ(source->files[it->second.file].path, std::string("src/object.s"));
+
+    // The entry source is files[0] even though sprite.s and object.s also
+    // appear, and its path is exactly what the caller passed in.
+    CHECK_EQ(source->files[0].path, std::string("src/main.s"));
+    CHECK_EQ(source->instruction_count(), size_t(5));
+}
+
+TEST(a_file_the_program_does_not_include_resolves_to_nothing) {
+    Sources sources("no_such_directory");
+    std::string error;
+    CHECK(sources.load_debug_info(write_multi_sld(), "src/main.s", error));
+
+    // A breakpoint set in some other open file must come back unverified
+    // rather than landing on whatever line 40 happened to map to.
+    size_t file = 0;
+    CHECK(sources.source_for_path("src/unrelated.s", file) == nullptr);
 }
 
 RUN_TESTS()

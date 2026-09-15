@@ -1,6 +1,6 @@
 # ZX Spectrum Debug (VS Code extension)
 
-Two things, in one small extension:
+A handful of things, in one small extension:
 
 1. **Registers the `zxspectrum` debugger type** so `launch.json`'s `debugServer` field can connect
    directly to `zx-spectrum-emulator`'s DAP server -- purely declarative for this part, no adapter
@@ -20,8 +20,60 @@ Two things, in one small extension:
    running, and the finished file loads into the panel by itself. Its **start** and **stop**
    triggers capture a window of code (an address or symbol name, which the server resolves) or a
    window of the video frame (a T-state) rather than only a window of time.
-4. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
+4. **A graphics viewer.** The "ZX Spectrum: Show Graphics" command opens a panel that draws bytes
+   the way the ULA would -- as a sprite sheet, a character set, or a screen dump. The bytes come
+   from the running machine's memory (by address or symbol, live while it runs), from a file, or
+   from a `DEFB` selection in an editor. **+ Add** keeps the sprite being dialled in and frees the
+   controls for the next, so one sheet can hold sprites of different sizes, from different files,
+   in different formats; a bin button on each removes it. Hovering a pixel names the byte and bit
+   holding it. The
+   page is `graphics_view.html`, beside `extension.js` rather than in `tools/` like the trace
+   viewer: every byte it draws arrives from the extension host, so unlike that one it is no use
+   standalone, and it goes where the install already carries it. See
+   [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
+5. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
+
+## Raster position
+
+While the machine is stopped — stepping, or on a breakpoint — the screen panel
+shows where the ULA's beam has got to and what it has left to do. Three
+Command Palette pairs, all `setRasterView` custom requests, and none of it
+ever appears while running:
+
+- **Show / Hide Raster Position** — a dashed line across the raster line, full
+  canvas width so the border is included, and a tick at the exact dot. On by
+  default; step and it walks down the frame.
+- **Show Frame In Progress / Show Last Completed Frame** — compose the picture
+  the way a CRT has it at that instant: this frame's drawing down to the beam,
+  the previous frame beyond it. On by default, and what makes a border stripe
+  appear at the line the `OUT` happened on as you step onto it.
+- **Show / Hide Pending Display Writes** — every display byte written since
+  the beam last passed it keeps its own colours while the rest of the screen
+  is dimmed to half brightness: in memory, but not yet on the picture. The dim
+  goes on whether or not anything is pending, so a wholly dimmed screen means
+  the beam has already shown everything written. Off by default.
+
+See [docs/vscode-debugging.md](../docs/vscode-debugging.md#raster-position).
+
+## Display writes
+
+The eye button in the screen panel's title bar turns on the display-write
+overlay: the picture is dimmed to half brightness, and every byte the program
+(or a debugger poke) writes to the screen bitmap is shown at full brightness,
+all eight of its pixels in their own colours, on the frame it was written. So
+the panel shows what is being *drawn* rather than only what the picture ended
+up as. Every write counts, erases and rewrites of an unchanged value included;
+attributes are not tracked.
+
+Two palette commands tune it. **"ZX Spectrum: Set Display Write Opacity…"**
+trades the default full brightness for a smaller lift out of the dim, and
+**"…Set Display Write Fade…"** trades the default clear-every-
+frame for a trail of a fifth of a second, of a second, or one that never
+fades. Both are `setWriteOverlay` custom requests, and each leaves the other
+alone; the state lives in the emulator, so the same overlay shows in
+`get_screen` over MCP and in anything else reading the screen stream. Off at
+every launch.
 
 ## Load Tape
 
@@ -62,6 +114,44 @@ session to send it to.
 The pane polls for its position, and only while it is actually visible —
 collapse the section and it stops asking.
 
+## Z80 assembly
+
+`.asm`, `.s` and `.a80` files open as **Z80 Assembly** (language id `z80-asm`),
+coloured for sjasmplus -- the assembler everything in this repo is built with.
+The workspace's `.vscode/settings.json` maps `*.asm` and `*.s` to it as well, so
+another installed assembly extension claiming those extensions doesn't win.
+
+On top of the colouring:
+
+- **Go to Definition** (F12 / Ctrl+click) on any label, constant, macro,
+  macro parameter, struct, struct field or `DEFINE`. A local label resolves
+  under its own parent (`.loop` in `sprite_blit` is `sprite_blit.loop`), and a
+  dotted name goes to the part clicked: `OBJ` in `OBJ.FLAGS` is the struct,
+  `FLAGS` is the field. On an `INCLUDE`/`INCBIN` path it opens the file.
+- **Find All References** (Shift+F12) and **Peek References**.
+- **Rename Symbol** (F2) changes the last part of a name wherever that part is
+  written: renaming `.loop` rewrites `.loop` inside its routine and
+  `sprite_blit.loop` elsewhere; renaming `sprite_blit` rewrites
+  `sprite_blit.loop` but leaves the `.loop`s alone, since they don't spell it
+  out. A name already taken, a reserved word, or a name defined in more
+  than one program is refused. Comments are not touched.
+- **Show Call Hierarchy** (Shift+Alt+H) on a routine, or anywhere inside one:
+  who `CALL`s, `JP`s, `JR`s or `DJNZ`s to it, grouped by the routine each call
+  sits in, and what it calls in turn. Macro invocations count as calls. Jumps
+  to a routine's own locals are control flow, not calls, and are left out.
+- **Hover** shows the definition line and the comment block above it -- the
+  ROM disassembly's routine descriptions, for instance.
+- **Outline**, breadcrumbs and **Go to Symbol** (Ctrl+Shift+O), with local
+  labels nested under their routine; **Go to Symbol in Workspace** (Ctrl+T).
+
+Every `.asm`/`.s`/`.a80` in the workspace is indexed the first time one of
+these is used (about a second for this repo), then kept current from the editor
+and from disk. Several programs here share label names, so a name resolves
+within the files the current one is `INCLUDE`d together with first, and only
+across the whole workspace when it isn't defined there. `MODULE` prefixes are
+not modelled. The parser has its own tests, no vscode needed:
+`node tests/asm_index_test.js`.
+
 ## Install
 
 Copy (or symlink) this directory into your VS Code extensions folder as
@@ -88,6 +178,23 @@ edits show up without re-copying) after changing anything here, then reload agai
   or open it manually via the Command Palette.
 - If the emulator server restarts (a normal part of picking up code changes during development),
   the panel reconnects on its own within about a second rather than needing to be reopened.
+- Each sprite on the graphics sheet is read under its own id, and every reply carries that id
+  back -- without it a sheet reading from several places could not tell whose bytes had arrived.
+  A sprite pinned from a file carries that file's path in its own read, so it keeps reading the
+  file it came from rather than following the picker.
+- The graphics panel is the one thing in the editor an MCP client can move: the emulator's
+  `set_graphics_view` tool sets a `GraphicsView` on the shared `Engine`, the DAP server broadcasts
+  it as a `zxGraphicsView` event, and `onDidReceiveDebugSessionCustomEvent` picks it up here. VS
+  Code hands extensions unknown DAP events for exactly this purpose. One-way: the panel's own
+  controls are not written back.
+- The graphics panel's memory reads go through DAP `readMemory`, which the engine services at a
+  running machine's own yields -- so its **Live** box re-reads about four times a second without
+  pausing anything. It also refreshes on every `stopped` event, which the extension hears by
+  registering a debug adapter tracker (VS Code surfaces stack frames to extensions, not DAP
+  events).
+- "Grab selection" uses the last non-empty selection seen in a text editor, remembered as it
+  changes rather than read when the button is pressed: `activeTextEditor` is undefined while a
+  webview has focus, which is exactly when that button gets clicked.
 - "Show Trace" looks for `trace_viewer.html` beside `extension.js` first, then at
   `../tools/trace_viewer.html` (the symlink-install case), then in `tools/` of any open workspace
   folder. If none of those exist it says so rather than opening an empty panel.

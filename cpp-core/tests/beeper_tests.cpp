@@ -12,7 +12,7 @@ using namespace zx;
 
 namespace {
 
-void poke(Spectrum48K& m, uint16_t addr, std::initializer_list<uint8_t> bytes) {
+void poke(Spectrum& m, uint16_t addr, std::initializer_list<uint8_t> bytes) {
     std::vector<uint8_t> v(bytes);
     m.write_memory(addr, v.data(), v.size());
 }
@@ -117,7 +117,7 @@ TEST(out_to_port_fe_drives_the_beeper_at_the_right_pitch) {
     //
     // Half a cycle is 1748T, so a full one is 3496T = 6992 half-clocks:
     // 7000000/6992 = 1001.1Hz.
-    Spectrum48K m;
+    Spectrum m;
     m.beeper.set_enabled(true, m.global_hc());
     poke(m, 0x8000,
          {0xF3, 0x3E, 0x10, 0xD3, 0xFE, 0x06, 0x84, 0x10, 0xFE, 0xEE, 0x10, 0x18, 0xF6});

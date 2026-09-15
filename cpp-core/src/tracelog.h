@@ -19,7 +19,7 @@
 //
 // WHERE THE SAMPLE IS TAKEN, and why it matters:
 //
-// record() must be called from Spectrum48K::clock() AFTER the CPU has been
+// record() must be called from Spectrum::clock() AFTER the CPU has been
 // clocked but BEFORE the bus is serviced. That is not an arbitrary spot. Our
 // memory responds instantly -- service_bus() puts the byte on D0-7 in the same
 // half-clock that MREQ|RD asserts -- whereas real hardware takes until T2/T3,
@@ -43,7 +43,7 @@
 
 namespace zx {
 
-class Spectrum48K;
+class Spectrum;
 
 /// `TraceOptions::watch` when no address is being watched. Not a uint16_t, so
 /// that "no watch" is representable without stealing a real address.
@@ -166,7 +166,7 @@ public:
 
     /// Records one half-clock. A no-op once the capture has finished, so the
     /// caller's hot loop needs no second check beyond the null test.
-    void record(Spectrum48K& machine, uint64_t pins);
+    void record(Spectrum& machine, uint64_t pins);
 
 private:
     /// One output column. `width` is the inner width, excluding the single

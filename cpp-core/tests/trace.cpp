@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
         argc > 2 ? uint16_t(std::strtoul(argv[2], nullptr, 16)) : uint16_t(0x0000);
     const uint64_t max_frames = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 2000;
 
-    Spectrum48K m;
+    Spectrum m;
     std::vector<uint8_t> rom;
     if (!load(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", rom)) {
         std::fprintf(stderr, "roms/48.rom not found\n");

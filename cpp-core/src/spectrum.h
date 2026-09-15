@@ -1,8 +1,10 @@
 #pragma once
-// Spectrum48K: the whole machine -- Z80, ULA, memory and keyboard on one bus.
+// Spectrum: the whole machine -- Z80, ULA, memory, keyboard and (on a 128K)
+// the AY sound chip on one bus. Which machine it is -- a 48K or a 128K -- is
+// a runtime choice, see set_model.
 //
-// clock() advances one HALF-T-STATE (7MHz). Within it the order is the same
-// as the hardware's:
+// clock() advances one HALF-T-STATE (7MHz on a 48K). Within it the order is
+// the same as the hardware's:
 //
 //   1. the ULA is clocked first -- it drives INT and (later) decides whether
 //      the CPU may proceed at all;
@@ -13,6 +15,7 @@
 // works and what lets the ULA see a real address on a real clock edge, which
 // is the entire point of the half-T-state model.
 
+#include "ay.h"
 #include "beeper.h"
 #include "keyboard.h"
 #include "memory.h"
@@ -28,12 +31,16 @@
 
 namespace zx {
 
-class Spectrum48K {
+class Spectrum {
 public:
     Z80 cpu;
-    Spectrum48KMemory memory;
+    SpectrumMemory memory;
     Ula ula;
     Beeper beeper;
+    /// Only wired to the bus on a 128K; a 48K's is never selected, written
+    /// or mixed. Kept in the machine whatever the model so a model switch
+    /// need not allocate anything.
+    Ay ay;
     Keyboard keyboard;
     Tape tape;
 
@@ -51,7 +58,16 @@ public:
     /// chain is worse than none.
     std::vector<uint16_t> call_stack;
 
-    Spectrum48K();
+    /// A 48K. See set_model for the 128K.
+    Spectrum();
+
+    /// Which Spectrum this is.
+    Model model() const { return memory.model(); }
+    /// Makes the machine the other model and resets it: the memory map, the
+    /// ULA's frame timing, the beeper's clock and whether the AY answers the
+    /// bus all follow. RAM and the loaded ROMs are kept, so a 128K's ROM pair
+    /// loaded on a 48K is there the moment a 128K snapshot asks for it.
+    void set_model(Model m);
 
     /// Advances one half-T-state.
     void clock();
@@ -70,7 +86,7 @@ public:
     /// position combined into the one monotonic clock that anything outside
     /// the machine (pacing, progress reporting, audio timestamps) reasons in.
     uint64_t global_hc() const {
-        return ula.frame_count() * uint64_t(HC_PER_FRAME) + ula.frame_hc();
+        return ula.frame_count() * uint64_t(ula.timing().hc_per_frame()) + ula.frame_hc();
     }
 
     Registers registers() const { return cpu.registers(); }
@@ -80,11 +96,18 @@ public:
     /// ULA that same half-clock so the two stay in step. See the definition.
     void prime_cpu(const Registers& r);
 
-    /// Empty string on success, else the error message.
+    /// Empty string on success, else the error message. A 16K image is the
+    /// 48K's ROM, a 32K one the 128K's pair; see SpectrumMemory::load_rom.
     std::string load_rom(const uint8_t* data, size_t len);
 
     std::vector<uint8_t> read_memory(uint16_t addr, size_t length);
     void write_memory(uint16_t addr, const uint8_t* data, size_t length);
+
+    /// Writes port 0x7FFD as a program would, paging included -- and tells
+    /// the ULA which bank it is now displaying. What a snapshot loader and a
+    /// debugger use rather than poking the memory map directly, so the two
+    /// cannot disagree. Ignored on a 48K, as the port is.
+    void write_paging(uint8_t value);
 
     /// Last completed frame, RGB, border included.
     const std::vector<uint8_t>& screen() const { return ula.screen(); }
@@ -93,6 +116,20 @@ public:
 
 private:
     uint64_t pins_ = PINS_IDLE;
+
+    /// Where each call_stack entry's return address was pushed -- SP just
+    /// after the CALL. Parallel to call_stack, and private because it is
+    /// bookkeeping rather than something a debugger asks for.
+    ///
+    /// Without it the chain only ever shrinks on a matching RET, and a
+    /// program that discards a return address any other way (POP, LD SP, an
+    /// interrupt handler that never returns) strands the entry for ever.
+    /// A minute of Cobra left 4412 of them.
+    std::vector<uint16_t> call_stack_sp_;
+
+    /// Drops entries the stack pointer has already risen past, i.e. whose
+    /// return address is no longer on the stack at all.
+    void prune_call_stack(uint16_t sp);
 
     /// Decodes MREQ/IORQ and services memory or I/O.
     void service_bus();

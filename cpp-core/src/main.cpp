@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -44,11 +45,18 @@ struct Args {
     /// symbol lookups simply find nothing.
     std::string rom_disassembly_dir = "rom_disassembly";
     /// Loaded at startup so the machine is usable the moment a client
-    /// connects, rather than only after a `launch` request supplies one.
-    std::string rom;
+    /// connects, rather than only after a `launch` request supplies one. A
+    /// 16K image is the 48K ROM, a 32K one the 128K pair; both may be given
+    /// (--rom twice) so either model is ready for a snapshot that needs it.
+    std::vector<std::string> roms;
+    /// Which Spectrum to be at startup: "48" (the default) or "128".
+    std::string machine;
     /// A .tap or .tzx to insert at startup. Loaded after the ROM, since
     /// auto-start needs a ROM to type LOAD "" into.
     std::string tape;
+    /// The ffmpeg the MCP start_video tool records through. Empty means
+    /// "ffmpeg", found on PATH.
+    std::string ffmpeg;
     bool tape_autostart = true;
     bool tape_fast_load = true;
     /// Type LOAD "" at startup even with no tape, so the machine sits in
@@ -140,9 +148,14 @@ bool parse_args(int argc, char** argv, Args& args) {
         } else if (flag == "--rom-disassembly-dir") {
             if (!next(args.rom_disassembly_dir)) return false;
         } else if (flag == "--rom") {
-            if (!next(args.rom)) return false;
+            if (!next(value)) return false;
+            args.roms.push_back(value);
+        } else if (flag == "--machine") {
+            if (!next(args.machine)) return false;
         } else if (flag == "--tape") {
             if (!next(args.tape)) return false;
+        } else if (flag == "--ffmpeg") {
+            if (!next(args.ffmpeg)) return false;
         } else if (flag == "--no-tape-autostart") {
             args.tape_autostart = false;
         } else if (flag == "--no-tape-fast-load") {
@@ -217,23 +230,49 @@ int main(int argc, char** argv) {
     }
 
     zx::Engine engine;
+    if (!args.ffmpeg.empty()) {
+        engine.set_ffmpeg(args.ffmpeg);
+    }
     if (args.uncapped) {
         engine.set_speed(zx::Speed::Uncapped);
         std::printf("Speed: uncapped (--uncapped)\n");
     }
 
-    if (!args.rom.empty()) {
+    for (const std::string& rom : args.roms) {
         std::vector<uint8_t> data;
-        if (!zx::read_file(args.rom, data)) {
-            std::fprintf(stderr, "couldn't read ROM %s\n", args.rom.c_str());
+        if (!zx::read_file(rom, data)) {
+            std::fprintf(stderr, "couldn't read ROM %s\n", rom.c_str());
             return 1;
         }
+        const size_t size = data.size();
         const std::string error = engine.load_rom(std::move(data));
         if (!error.empty()) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
-        std::printf("Loaded ROM %s\n", args.rom.c_str());
+        std::printf("Loaded %s ROM %s\n", size == zx::ROM_128K_SIZE ? "128K" : "48K",
+                    rom.c_str());
+    }
+
+    // After the ROMs, so the model asked for has its ROM in place. A 128K
+    // without one would boot into 16K of NOPs, which is an error worth
+    // stopping for rather than a machine worth serving.
+    if (!args.machine.empty()) {
+        zx::Model model = zx::Model::Spectrum48;
+        if (args.machine == "128" || args.machine == "128k" || args.machine == "128K") {
+            model = zx::Model::Spectrum128;
+        } else if (args.machine != "48" && args.machine != "48k" && args.machine != "48K") {
+            std::fprintf(stderr, "--machine must be 48 or 128, not %s\n", args.machine.c_str());
+            return 2;
+        }
+        if (!engine.has_rom(model)) {
+            std::fprintf(stderr, "--machine %s needs a %s ROM: pass --rom roms/%s.rom\n",
+                         args.machine.c_str(), zx::model_name(model),
+                         model == zx::Model::Spectrum128 ? "128" : "48");
+            return 1;
+        }
+        engine.set_model(model);
+        std::printf("Machine: Spectrum %s\n", zx::model_name(model));
     }
 
     // After the ROM on purpose: auto-start types LOAD "" through the ROM's own
@@ -275,7 +314,7 @@ int main(int argc, char** argv) {
     zx::Sources sources(args.rom_disassembly_dir);
     if (zx::RomSourcePtr rom = zx::get_rom_source(args.rom_disassembly_dir)) {
         std::printf("ROM disassembly: %zu symbols, %zu mapped instructions\n",
-                    rom->symbols.size(), rom->line_to_addr.size());
+                    rom->symbols.size(), rom->instruction_count());
     } else {
         std::printf("No ROM disassembly in %s -- symbols unavailable "
                     "(build it with scripts/build_rom_source.py)\n",

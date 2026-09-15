@@ -1,5 +1,5 @@
 #pragma once
-// Engine: owns the one live Spectrum48K and serialises access to it.
+// Engine: owns the one live Spectrum and serialises access to it.
 //
 // The machine runs on its own thread. Everything that touches it goes through
 // a command queue, so DAP and MCP clients can share one machine without
@@ -28,7 +28,9 @@
 // the only moment Play is ever wanted. Those five use atomics and a mutexed
 // snapshot instead.
 
+#include "snapshot.h"
 #include "spectrum.h"
+#include "video_recorder.h"
 
 #include <atomic>
 #include <chrono>
@@ -55,6 +57,10 @@ struct MachineState {
     /// -- which is what a correct step-over of a HALT turns on.
     bool halted = false;
     bool running = false;
+    /// Which Spectrum the machine is being.
+    Model model = Model::Spectrum48;
+    /// The 128K's paging register (the last OUT to 0x7FFD); 0 on a 48K.
+    uint8_t paging = 0;
     uint8_t border = 0;
     uint32_t tstate = 0;
     uint64_t frame_count = 0;
@@ -94,6 +100,118 @@ struct TraceStatus {
     bool ula = false;
 };
 
+/// One completed frame picked out of a run -- see Engine::capture_frames.
+struct CapturedFrame {
+    /// The ULA's frame counter when this frame was completed, so a caller
+    /// can tell how far apart two captures are in emulated time.
+    uint64_t frame_number = 0;
+    /// RGB, FULL_WIDTH x FULL_HEIGHT, border included -- what screen() gives.
+    std::vector<uint8_t> rgb;
+};
+
+/// How a video is to be recorded -- see Engine::start_video.
+struct VideoOptions {
+    std::string path = "screen.mp4";
+    /// Emulated frames to record before the recording stops itself, or 0 to
+    /// record until stop_video.
+    uint64_t frames = 0;
+    /// Integer pixel scaling. 2 (the default) doubles the 352x312 canvas to
+    /// 704x624, which plays crisply where a 352-wide video would be smeared
+    /// by every player's own upscaler.
+    uint32_t scale = 2;
+};
+
+/// How a STOPPED machine's screen is drawn. None of it applies while running:
+/// a run moves the beam faster than anything can look at it, and what a viewer
+/// wants there is one whole stable frame.
+///
+/// The three are one view of the same thing -- where the beam is and what it
+/// has left to do -- which is why they are set together rather than through
+/// three unrelated switches.
+struct RasterView {
+    /// A dashed line across the raster line the beam is on, and a tick at the
+    /// dot itself.
+    bool marker = true;
+    /// Compose the picture the way a CRT has it at this instant: this frame's
+    /// drawing down to the beam, the previous frame beyond it. Off means the
+    /// last COMPLETED frame, which is what a running machine always shows.
+    bool in_progress = true;
+    /// Pick out the display bytes written since the beam last passed them --
+    /// the changes that are in memory but not yet on the picture -- by dimming
+    /// everything else. Off by default, being a specialised view rather than a
+    /// costly one: the map behind it is kept whether or not this is on.
+    bool pending = false;
+};
+
+/// What the VS Code graphics panel is pointed at -- see docs/vscode-debugging.md.
+///
+/// Unlike RasterView, none of this changes anything the emulator draws. The
+/// Engine holds it purely as the one place an MCP client and a DAP client can
+/// both see: MCP sets it, the DAP server turns each change into an event, and
+/// the extension moves its panel. It lives here rather than in the extension
+/// because MCP and DAP are separate front-ends onto this object and have no
+/// other way to reach each other.
+///
+/// The traffic is one-way. The panel's own controls are not reflected back
+/// here, so after a hand edit this holds what was last ASKED for rather than
+/// what is on screen. That is deliberate: a panel that wrote back would turn
+/// every drag of the width box into a round trip, and there is nothing on this
+/// side that wants to know.
+///
+/// `address` is passed through as text rather than resolved here. The panel
+/// resolves what it is given the same way it resolves what is typed into it,
+/// so "sprite_000+4" reaches the symbol table by the route that already
+/// exists.
+struct GraphicsView {
+    /// memory | file | selection.
+    std::string source = "memory";
+    /// A number in any of the usual forms, or a symbol name, optionally
+    /// displaced: "16384", "$4000", "0x4000", "4000h", "sprite_000+4".
+    std::string address = "$4000";
+    /// Read instead of memory when `source` is "file".
+    std::string file;
+    /// Bytes to skip at the start of a file or a parsed selection -- how a
+    /// byte range inside a larger file is addressed, since only the memory
+    /// source has an `address`. Ignored by source == "memory".
+    uint32_t offset = 0;
+    /// sprite | font | screen.
+    std::string format = "screen";
+    /// Bytes across, before any mask interleaving.
+    uint32_t width = 2;
+    /// Pixel rows per item.
+    uint32_t height = 16;
+    uint32_t count = 16;
+    /// Items per row of the sheet.
+    uint32_t columns = 8;
+    /// Bytes to skip before EACH item, for data carrying a per-sprite
+    /// width/height pair ahead of its bitmap.
+    uint32_t header = 0;
+    /// The character code of the first item, in "font" format.
+    uint32_t first = 32;
+    /// none | md (mask then data) | dm (data then mask), interleaved per byte
+    /// across a row.
+    std::string interleave = "none";
+    /// Read a CLEAR mask bit as transparent rather than a set one.
+    bool invert_mask = false;
+    /// Row 0 of the data is the BOTTOM row of the picture.
+    bool flip = false;
+    /// 0-15, the ULA's palette with bright as the top bit. Ignored in "screen"
+    /// format when the data carries its own attributes.
+    uint32_t ink = 0;
+    uint32_t paper = 15;
+    uint32_t zoom = 3;
+    bool grid = true;
+    bool labels = true;
+    /// Add this to the panel's sheet instead of replacing the sprite being
+    /// dialled in -- how a set whose members are different sizes is shown, one
+    /// call per sprite.
+    ///
+    /// An action rather than a setting, and the one field that does NOT merge:
+    /// it is cleared on every set, so a pin cannot leak into the next call and
+    /// silently turn a correction into another tile.
+    bool pin = false;
+};
+
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
 enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt };
 
@@ -107,6 +225,21 @@ enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt };
 /// no visual output to get wrong.
 enum class Speed { Realtime, Uncapped };
 
+/// Slowest and fastest the realtime multiplier may be set to.
+///
+/// The bottom end is a thousandth of real speed: one frame takes twenty
+/// seconds and the beam creeps down about fifteen scanlines a second, which
+/// is slow enough to watch an individual write land ahead of it. That is the
+/// whole reason for going below 1x, and there is no point stopping at a
+/// speed that is merely slow when the question is which of two things
+/// happened first.
+///
+/// The top is where the host cannot keep up anyway and Uncapped is the honest
+/// answer. Clamped rather than rejected: these come off a wire from a UI, and
+/// the nearest sensible speed beats an error nobody sees.
+constexpr double MIN_SPEED_MULTIPLIER = 0.001;
+constexpr double MAX_SPEED_MULTIPLIER = 20.0;
+
 const char* stop_reason_name(StopReason r);
 
 class Engine {
@@ -119,6 +252,9 @@ public:
     /// must not call back into the Engine's queue (they would deadlock).
     using StoppedHandler = std::function<void(StopReason, uint16_t pc)>;
     using ContinuedHandler = std::function<void()>;
+    /// Called from whichever thread set the view -- an MCP request thread, in
+    /// practice. Same rule as the two above: do not call back into the queue.
+    using GraphicsViewHandler = std::function<void(const GraphicsView&, uint64_t version)>;
 
     Engine();
     ~Engine();
@@ -128,14 +264,27 @@ public:
 
     void on_stopped(StoppedHandler h);
     void on_continued(ContinuedHandler h);
+    void on_graphics_view(GraphicsViewHandler h);
 
     // ---- queued: these wait for the actor thread ---------------------------
+    /// A 16K image is the 48K ROM, a 32K one the 128K pair. Either can be
+    /// loaded whatever the model, ready for a switch to the other.
     std::string load_rom(std::vector<uint8_t> data);
+    /// Whether a ROM for `m` has been loaded. What a launch checks before
+    /// switching to a model that would otherwise boot into 16K of NOPs.
+    bool has_rom(Model m);
+    /// Makes the machine a 48K or a 128K, resetting it. RAM and ROMs stay.
+    void set_model(Model m);
+    Model model();
+    /// Loads a .sna or .z80, told apart by the .sna's fixed sizes, and makes
+    /// the machine whichever model the file was taken on.
     std::string load_snapshot(std::vector<uint8_t> data);
-    /// Captures the machine as a 48K .sna into `out`. Runs on the emulator
-    /// thread between instructions, so registers and RAM are from the same
-    /// instant even mid-run. Returns "" on success, else why it could not.
-    std::string save_snapshot(std::vector<uint8_t>& out);
+    /// Captures the machine into `out` as a .sna or .z80 of its current
+    /// model. Runs on the emulator thread between instructions, so registers
+    /// and RAM are from the same instant even mid-run. Returns "" on success,
+    /// else why it could not.
+    std::string save_snapshot(std::vector<uint8_t>& out,
+                              SnapshotFormat format = SnapshotFormat::Sna);
     /// Inserts a .tap or .tzx image. With `auto_start`, also resets, types
     /// LOAD "" and starts the tape, so the caller's next `run` is already
     /// loading. Returns "" on success, else why it could not be loaded.
@@ -173,6 +322,11 @@ public:
     void clear_breakpoint(uint16_t addr);
     std::vector<uint8_t> read_memory(uint16_t addr, size_t length);
     void write_memory(uint16_t addr, std::vector<uint8_t> data);
+    /// Reads a RAM bank directly, whatever is paged: `offset` is within the
+    /// bank's 16K, and the read wraps at its end. How a 128K's other seven
+    /// banks are reached from outside without paging them in, which would
+    /// change the machine being looked at.
+    std::vector<uint8_t> read_bank(uint8_t bank, uint16_t offset, size_t length);
     Registers registers();
     Registers set_registers(Registers r);
     MachineState state();
@@ -220,6 +374,50 @@ public:
     /// Takes effect at the next yield, so it can be changed mid-run.
     void set_speed(Speed s) { speed_.store(s); }
     Speed speed() const { return speed_.load(); }
+
+    /// How fast realtime runs, as a multiple of a real 48K: 0.5 is half
+    /// speed, 2.0 is twice. Ignored while the speed is Uncapped, which is
+    /// "as fast as the host manages" and has no rate to scale.
+    ///
+    /// Not folded into Speed as more enum values because the useful set is
+    /// open-ended -- somebody debugging a raster effect wants a tenth, and
+    /// somebody skipping a loading screen wants five times -- and because
+    /// what pacing needs is the number itself.
+    void set_speed_multiplier(double multiplier) {
+        if (multiplier < MIN_SPEED_MULTIPLIER) {
+            multiplier = MIN_SPEED_MULTIPLIER;
+        } else if (multiplier > MAX_SPEED_MULTIPLIER) {
+            multiplier = MAX_SPEED_MULTIPLIER;
+        }
+        speed_multiplier_.store(multiplier);
+        // Pacing measures from an origin; leaving it alone would make the new
+        // rate apply to time already spent and jump the machine forwards or
+        // stall it while the debt is paid off.
+        pace_dirty_.store(true);
+    }
+    double speed_multiplier() const { return speed_multiplier_.load(); }
+
+    /// Running slowly enough that the beam can be watched sweeping the
+    /// screen, rather than crossing it faster than a picture can be sent.
+    ///
+    /// This is what makes the raster annotations worth drawing on a RUNNING
+    /// machine: at 1x the beam crosses the whole screen in 20ms and any
+    /// picture of it is a smear, but at a tenth of that it sweeps visibly
+    /// down the screen and answers the question the annotations exist for --
+    /// where is the beam when this happens?
+    bool slow_motion() const {
+        return speed_.load() == Speed::Realtime && speed_multiplier_.load() < 1.0;
+    }
+
+    /// Instructions between the run loops' housekeeping yields -- the pause
+    /// check, the key sync and the screen publish.
+    ///
+    /// Scaled by the speed so the picture is published at roughly the same
+    /// WALL-clock rate whatever the machine runs at, which is what makes the
+    /// raster marker sweep at a tenth speed instead of jumping between two
+    /// positions a frame. Never scaled UP for fast speeds: yielding less
+    /// often than the default would make the UI feel less live.
+    uint64_t yield_interval() const;
     /// Stops a run as soon as an interrupt is accepted, at the first
     /// instruction of the handler. Checked per instruction, so it can be
     /// armed or cleared mid-run.
@@ -249,8 +447,76 @@ public:
     std::vector<TapeBlockInfo> tape_blocks() const;
     void key_down(const std::string& key);
     void key_up(const std::string& key);
+    /// Dims the frame and lights each bitmap byte as it is written -- see
+    /// Ula::set_write_overlay.
+    /// Takes effect on the next completed frame, mid-run included; the flag is
+    /// an atomic on the ULA itself, so this needs neither the queue nor a
+    /// yield.
+    void set_write_overlay(bool on) { machine_.ula.set_write_overlay(on); }
+    bool write_overlay() const { return machine_.ula.write_overlay(); }
+    /// How far a freshly written byte is lifted out of the dim, 0-100. 100
+    /// (the default) is full brightness; lower values stand out less.
+    void set_write_overlay_opacity(uint32_t percent) {
+        machine_.ula.set_write_overlay_opacity(percent);
+    }
+    uint32_t write_overlay_opacity() const { return machine_.ula.write_overlay_opacity(); }
+    /// How much of the overlay a frame boundary takes off, 0-100. 100 (the
+    /// default) leaves only the frame just drawn; lower values trail.
+    void set_write_overlay_fade(uint32_t percent) {
+        machine_.ula.set_write_overlay_fade(percent);
+    }
+    uint32_t write_overlay_fade() const { return machine_.ula.write_overlay_fade(); }
+    /// Where the VS Code graphics panel is pointed -- see GraphicsView. Sets
+    /// nothing in the machine, so unlike every other setter here it neither
+    /// queues nor waits: it stores the view and hands it straight to whoever
+    /// is listening, which works mid-run as readily as at a breakpoint.
+    ///
+    /// `version` counts changes and starts at 0, so a panel opening later can
+    /// tell "nobody has asked for anything" from "asked for the defaults" --
+    /// without which every panel would open onto $4000 whatever its own last
+    /// state was.
+    void set_graphics_view(const GraphicsView& v);
+    GraphicsView graphics_view(uint64_t* version = nullptr) const;
+
+    /// How a stopped machine's screen is drawn -- see RasterView. Applies from
+    /// the next publish, mid-session included; these are atomics, so it needs
+    /// neither the queue nor a yield.
+    void set_raster_view(const RasterView& v);
+    RasterView raster_view() const;
     /// Latest rendered frame (RGB, border included). Never blocks on the CPU.
     std::vector<uint8_t> screen();
+
+    // ---- frames: one completed picture per frame boundary ------------------
+    /// Collects `count` completed frames, one every `every` frame boundaries,
+    /// each exactly as the ULA finished it -- with the write overlay baked in
+    /// if that is on, and without the stopped-machine annotations, which
+    /// describe a beam position a completed frame does not have.
+    ///
+    /// On a RUNNING machine the frames are picked out of the run as it goes,
+    /// which neither pauses nor disturbs it; the call returns once the last
+    /// has been taken or `timeout` has passed, whichever is first, with
+    /// whatever was collected. On a STOPPED one the machine is driven forward
+    /// itself, frame by frame and as fast as the host manages, and left
+    /// stopped where the last capture landed -- the same as stepping, and
+    /// announced as a step so a debugger refreshes.
+    std::vector<CapturedFrame> capture_frames(uint32_t count, uint32_t every,
+                                              std::chrono::milliseconds timeout);
+    /// Starts recording every completed frame to `options.path` through an
+    /// ffmpeg process (see set_ffmpeg), replacing any recording in progress.
+    /// Returns "" or why it could not start. Takes effect from the next
+    /// frame boundary, mid-run included: the recorder's own flag is what the
+    /// emulator thread checks, so this neither queues nor waits.
+    std::string start_video(const VideoOptions& options);
+    /// Finishes the recording -- drains what is queued and closes the pipe,
+    /// which is what makes ffmpeg finalise the file -- and reports on it.
+    /// Harmless when nothing is recording.
+    VideoStatus stop_video();
+    /// What the recording is doing, live. A recording that reached its own
+    /// frame limit is finalised here if it has not been already.
+    VideoStatus video_status();
+    /// The ffmpeg to run: a bare name found on PATH (the default) or a full
+    /// path. Only consulted by start_video.
+    void set_ffmpeg(std::string command) { ffmpeg_ = std::move(command); }
     /// Registers a sink to receive beeper samples as they are generated, and
     /// hands back the ring it will be fed through. Callable from any thread.
     ///
@@ -289,7 +555,7 @@ public:
     uint32_t audio_sample_rate() const { return audio_sample_rate_.load(); }
 
 private:
-    Spectrum48K machine_;
+    Spectrum machine_;
     std::thread thread_;
 
     /// A queued command, and whether the run loop may execute it at one of its
@@ -302,7 +568,7 @@ private:
     /// since servicing one of those from inside the run loop would nest a
     /// second emulation loop inside the first.
     struct Job {
-        std::function<void(Spectrum48K&)> fn;
+        std::function<void(Spectrum&)> fn;
         bool during_run = true;
     };
 
@@ -315,6 +581,10 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<uint64_t> emulated_hc_{0};
     std::atomic<Speed> speed_{Speed::Realtime};
+    std::atomic<double> speed_multiplier_{1.0};
+    /// Set when the multiplier changes, so the pacing origin is rebased on
+    /// the emulator thread rather than from whichever thread turned the knob.
+    std::atomic<bool> pace_dirty_{false};
     std::atomic<bool> break_on_interrupt_{false};
 
     /// Wall-clock instant, and the emulated half-clock count, that the current
@@ -330,9 +600,25 @@ private:
 
     std::mutex screen_mutex_;
     std::vector<uint8_t> screen_snapshot_;
+    /// Set when something OTHER than emulation has changed what a publish
+    /// would produce -- switching a raster-view option while stopped. Without
+    /// it the frame-and-beam check below would see nothing moved and skip the
+    /// republish that shows the change.
+    std::atomic<bool> screen_dirty_{false};
+    std::atomic<bool> raster_marker_{true};
+    std::atomic<bool> raster_in_progress_{true};
+    std::atomic<bool> raster_pending_{false};
+    /// Where the raster marker in screen_snapshot_ was drawn, or ~0 for a
+    /// snapshot published without one. Paired with published_frame_ below:
+    /// between them they say whether what a re-publish would produce differs
+    /// from what is already out there.
+    uint32_t published_raster_ = ~uint32_t(0);
     /// Frame number currently in screen_snapshot_, so a re-publish of the same
     /// completed frame can be skipped. Touched only by the actor thread.
     uint64_t published_frame_ = ~uint64_t(0);
+    /// When the RGB snapshot was last rebuilt, for the throttle in
+    /// publish_screen. Emulator thread only, like the two above.
+    std::chrono::steady_clock::time_point last_screen_publish_{};
 
     std::mutex audio_mutex_;
     /// How much audio is buffered ahead of the speaker, or empty for
@@ -347,6 +633,26 @@ private:
     std::vector<std::shared_ptr<AudioRing>> audio_sinks_;
     /// Reused across publishes so the audio path does not allocate per block.
     std::vector<int16_t> audio_scratch_;
+
+    /// Frame counter as of the last note_frame, so a boundary is seen once.
+    /// Emulator thread only.
+    uint64_t last_frame_seen_ = 0;
+    VideoRecorder video_;
+    std::string ffmpeg_ = "ffmpeg";
+    /// The frame-capture handover: capture_frames arms a request under the
+    /// mutex, the emulator thread fills it at frame boundaries and clears
+    /// the flag when it is complete, and the caller waits on the cv for that.
+    /// `capture_active_` is checked per frame boundary without the lock, so
+    /// an idle machine pays one relaxed load a frame.
+    std::mutex capture_mutex_;
+    std::condition_variable capture_cv_;
+    std::atomic<bool> capture_active_{false};
+    uint32_t capture_every_ = 1;
+    uint32_t capture_wanted_ = 0;
+    /// The earliest frame number the next capture may be taken at, so
+    /// `every` is a spacing in frames rather than in boundaries seen.
+    uint64_t capture_next_frame_ = 0;
+    std::vector<CapturedFrame> capture_frames_;
 
     /// The current capture, or null if tracing has never been started. Owned
     /// here rather than by the machine because it holds a file handle that has
@@ -395,19 +701,33 @@ private:
 
     StoppedHandler on_stopped_;
     ContinuedHandler on_continued_;
+    GraphicsViewHandler on_graphics_view_;
+    /// Guards graphics_view_ and its version. A mutex rather than atomics
+    /// because the view is mostly strings, and it changes when a person asks
+    /// for something rather than at emulation rates.
+    mutable std::mutex graphics_mutex_;
+    GraphicsView graphics_view_;
+    uint64_t graphics_version_ = 0;
 
     void actor_loop();
     /// Runs `fn` on the actor thread and waits for it. `during_run` says
     /// whether the run loop may pick it up at a yield -- see Job.
     template <typename R>
-    R submit(std::function<R(Spectrum48K&)> fn, bool during_run = true);
-    void submit_void(std::function<void(Spectrum48K&)> fn, bool during_run = true);
+    R submit(std::function<R(Spectrum&)> fn, bool during_run = true);
+    void submit_void(std::function<void(Spectrum&)> fn, bool during_run = true);
     /// Queues `fn` without waiting for it -- used only to wake an idle actor
     /// thread, since a request that bypasses the queue still needs SOMETHING
     /// to reach a servicing point.
-    void post(std::function<void(Spectrum48K&)> fn);
+    void post(std::function<void(Spectrum&)> fn);
 
     void publish_screen();
+    /// Called after every instruction (and T-state step) on the emulator
+    /// thread: notices a frame boundary having passed and hands the completed
+    /// frame to the video recorder and the frame capture, if either wants
+    /// one. One load and a compare when nothing does.
+    void note_frame(const Spectrum& m);
+    /// Arms a frame capture for note_frame to fill. Any thread.
+    void arm_capture(uint32_t count, uint32_t every);
     /// Moves the beeper output into every registered sink, and keeps the
     /// beeper switched off while nothing is listening. Actor thread only.
     void publish_audio();

@@ -31,7 +31,7 @@ namespace {
 /// Half-clocks a real 48K Spectrum issues per second (3.5MHz Z80, 2 halves).
 constexpr double REALTIME_HC_PER_SEC = 7'000'000.0;
 
-bool load_rom_into(Spectrum48K& m) {
+bool load_rom_into(Spectrum& m) {
     std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
     if (!f) {
         return false;
@@ -49,7 +49,7 @@ void report(const char* name, double half_clocks, double seconds) {
 
 /// The bare machine: CPU + ULA + bus decode, clocked directly, no engine.
 void bench_machine(bool have_rom) {
-    Spectrum48K m;
+    Spectrum m;
     if (have_rom) {
         load_rom_into(m);
     }
@@ -100,7 +100,7 @@ void bench_engine(bool have_rom, Speed speed, const char* label) {
 } // namespace
 
 int main() {
-    Spectrum48K probe;
+    Spectrum probe;
     const bool have_rom = load_rom_into(probe);
     std::printf("Machine + engine throughput (1.00x realtime == keeps up with a real 48K)\n");
     if (!have_rom) {

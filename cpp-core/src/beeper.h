@@ -8,7 +8,7 @@
 // `write_port_fe` records each change against the half-clock it happened on,
 // and `advance_to` integrates the piecewise-constant level forward whenever
 // somebody asks for the audio. The cost lands per SAMPLE (44100/s) instead of
-// per half-clock (7,000,000/s), and `Spectrum48K::clock()` is untouched.
+// per half-clock (7,000,000/s), and `Spectrum::clock()` is untouched.
 //
 // Decimation is a BOX FILTER, not a point sample. A beeper tone's edges land
 // on arbitrary T-states, so picking one level every ~159 half-clocks would
@@ -21,6 +21,8 @@
 // crosses 7000000. That fires every 158 or 159 half-clocks and, crucially,
 // never drifts -- over an hour it is still sample-exact, which a repeated
 // `hc * 44100.0 / 7000000.0` would not be.
+
+#include "ay.h"
 
 #include <cstdint>
 #include <mutex>
@@ -38,6 +40,9 @@ namespace zx {
 constexpr uint32_t AUDIO_SAMPLE_RATE = 44100;
 
 /// A real 48K issues 7,000,000 half-T-states per second (3.5MHz, 2 halves).
+/// The 128K runs a little faster (see TIMING_128K in ula.h); this is the
+/// default rate, what the tape formats' T-state timings are quoted at, and
+/// what a Beeper generates against until set_clock says otherwise.
 constexpr uint64_t HC_PER_SEC = 7'000'000;
 
 /// Relative weights of the two output bits. The speaker (bit 4) does nearly
@@ -95,6 +100,17 @@ public:
     void set_sample_rate(uint32_t rate);
     uint32_t sample_rate() const { return rate_; }
 
+    /// How many half-clocks the machine issues per second of real time --
+    /// the pitch reference for everything generated. Set alongside the
+    /// machine model; like the sample rate, it resets the sample clock.
+    void set_clock(uint64_t hc_per_sec);
+    uint64_t clock() const { return hc_per_sec_; }
+
+    /// Mixes in an AY sound chip (a 128K's), or none. The Beeper then steps
+    /// the chip as it integrates, so the chip's output is weighted for
+    /// exactly the half-clocks each level was live -- see ay.h.
+    void attach_ay(Ay* ay) { ay_ = ay; }
+
     /// Latches a port 0xFE write at half-clock `now_hc`: bit 4 is the speaker,
     /// bit 3 the MIC.
     ///
@@ -109,7 +125,7 @@ public:
     /// Latches the EAR input level at half-clock `now_hc`.
     ///
     /// A latch on exactly the same terms as write_port_fe, and for the same
-    /// reason: it is driven from the READ branch of Spectrum48K::service_bus,
+    /// reason: it is driven from the READ branch of Spectrum::service_bus,
     /// where one IN asserts IORQ/RD on five consecutive half-clocks and calls
     /// this five times with the same instant and the same value.
     ///
@@ -143,14 +159,18 @@ private:
     /// independently -- they are driven by different bus cycles.
     int32_t ear_level_ = 0;
     /// What the integrator actually sums: everything driving the speaker.
-    int32_t mixed_level() const { return level_ + ear_level_; }
+    int32_t mixed_level() const {
+        return level_ + ear_level_ + (ay_ != nullptr ? ay_->level() : 0);
+    }
     /// Half-clock the integration has reached.
     uint64_t last_hc_ = 0;
+    uint64_t hc_per_sec_ = HC_PER_SEC;
+    Ay* ay_ = nullptr;
 
     // Box-filter accumulator over the sample period in progress.
     int32_t sum_ = 0;
     uint32_t count_ = 0;
-    // Sample clock: += AUDIO_SAMPLE_RATE per half-clock, crossing HC_PER_SEC.
+    // Sample clock: += rate_ per half-clock, crossing hc_per_sec_.
     uint32_t acc_ = 0;
     // DC blocker state.
     float dc_in_ = 0.0f;

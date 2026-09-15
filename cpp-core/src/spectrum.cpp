@@ -9,6 +9,14 @@ namespace {
 /// decodes as RST 38h) and why IM2 vectors through 0xNNFF.
 constexpr uint8_t INT_ACK_BYTE = 0xFF;
 
+/// The 128K's paging port, 0x7FFD, is decoded on A15 low and A1 low only.
+constexpr uint16_t PAGING_PORT_MASK = 0x8002;
+/// The AY's two ports, 0xFFFD (select / read) and 0xBFFD (write), on A15,
+/// A14 and A1: A15 high and A1 low reach the chip, A14 picks which.
+constexpr uint16_t AY_PORT_MASK = 0xC002;
+constexpr uint16_t AY_SELECT_PORT = 0xC000;
+constexpr uint16_t AY_DATA_PORT = 0x8000;
+
 // Opcodes that push a return address: CALL nn, CALL cc,nn, and every RST.
 constexpr uint8_t CALL_OPCODES[] = {0xCD, 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC};
 constexpr uint8_t RST_OPCODES[] = {0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF};
@@ -35,7 +43,7 @@ bool contains(const uint8_t* set, size_t n, uint8_t v) {
 /// opcode level this looks at). Treating both ends as untracked keeps the
 /// stack correct for the CALL/RET pairs it does see, rather than popping a
 /// frame that was never pushed.
-StepKind classify_step(Spectrum48KMemory& mem, uint16_t addr) {
+StepKind classify_step(SpectrumMemory& mem, uint16_t addr) {
     uint16_t a = addr;
     uint8_t op = mem.read(a);
     while (op == 0xDD || op == 0xFD) { // skip redundant index prefixes
@@ -57,7 +65,7 @@ StepKind classify_step(Spectrum48KMemory& mem, uint16_t addr) {
 
 } // namespace
 
-Spectrum48K::Spectrum48K() {
+Spectrum::Spectrum() {
     reset();
 }
 
@@ -73,22 +81,42 @@ Spectrum48K::Spectrum48K() {
 // (a snapshot load, a debugger register write, a fast-loaded tape block) shifts
 // it again, so the error drifts rather than staying somewhere it could be
 // corrected for.
-void Spectrum48K::prime_cpu(const Registers& r) {
+void Spectrum::prime_cpu(const Registers& r) {
     cpu.set_registers(r, memory);
     pins_ = cpu.pins();
     // The ULA's own half-clock for the same instant. Given after the CPU's
     // rather than before it only because the priming clock starts from
     // PINS_IDLE and would discard anything the ULA drove -- and T1H samples
     // neither INT nor WAIT, so nothing observable turns on the order.
-    ula.clock(pins_, memory);
+    ula.clock(pins_, memory.screen_bytes());
     ula.advance();
 }
 
-void Spectrum48K::reset() {
+void Spectrum::set_model(Model m) {
+    memory.set_model(m);
+    const bool is128 = m == Model::Spectrum128;
+    ula.set_timing(is128 ? TIMING_128K : TIMING_48K);
+    beeper.set_clock(ula.timing().hc_per_sec);
+    // A 48K has no AY: nothing answers its ports and nothing is mixed in.
+    beeper.attach_ay(is128 ? &ay : nullptr);
+    reset();
+}
+
+void Spectrum::write_paging(uint8_t value) {
+    memory.write_paging(value);
+    ula.set_screen_bank(memory.screen_bank());
+}
+
+void Spectrum::reset() {
     Registers regs;
     // Before priming, not after: reset() zeroes the ULA's counters, which
     // would otherwise throw away the half-clock just accounted for.
     ula.reset();
+    // Paging goes back to ROM 0 / bank 0 / screen 5 -- the lock included,
+    // which nothing but a reset clears. On a 48K this changes nothing.
+    memory.reset_paging();
+    ula.set_screen_bank(memory.screen_bank());
+    ay.reset();
     prime_cpu(regs);
     beeper.reset();
     keyboard.clear();
@@ -98,21 +126,23 @@ void Spectrum48K::reset() {
     // at 0 and every pulse timestamp the tape holds is now in the future.
     tape.stop();
     call_stack.clear();
+    call_stack_sp_.clear();
 }
 
-void Spectrum48K::set_registers(const Registers& r) {
+void Spectrum::set_registers(const Registers& r) {
     prime_cpu(r);
     // Any wholesale register write can leave normal call/return flow, so a
     // tracked chain is no longer meaningful. Cleared unconditionally rather
     // than trying to detect whether PC specifically moved.
     call_stack.clear();
+    call_stack_sp_.clear();
 }
 
-std::string Spectrum48K::load_rom(const uint8_t* data, size_t len) {
+std::string Spectrum::load_rom(const uint8_t* data, size_t len) {
     return memory.load_rom(data, len);
 }
 
-std::vector<uint8_t> Spectrum48K::read_memory(uint16_t addr, size_t length) {
+std::vector<uint8_t> Spectrum::read_memory(uint16_t addr, size_t length) {
     std::vector<uint8_t> out;
     out.reserve(length);
     for (size_t i = 0; i < length; i++) {
@@ -121,19 +151,24 @@ std::vector<uint8_t> Spectrum48K::read_memory(uint16_t addr, size_t length) {
     return out;
 }
 
-void Spectrum48K::write_memory(uint16_t addr, const uint8_t* data, size_t length) {
+void Spectrum::write_memory(uint16_t addr, const uint8_t* data, size_t length) {
+    // Noted for the write overlay as well: a debugger poking the display file
+    // has changed the screen just as much as a program doing it, and an
+    // overlay that only showed one of the two would be lying about the other.
     for (size_t i = 0; i < length; i++) {
-        memory.write(uint16_t(addr + i), data[i]);
+        const uint16_t a = uint16_t(addr + i);
+        memory.write(a, data[i]);
+        ula.note_write(memory.bank_of(a), uint16_t(a & (BANK_SIZE - 1)));
     }
 }
 
-void Spectrum48K::clock() {
+void Spectrum::clock() {
     // The ULA goes first. It drives INT, does its own screen fetch, and --
     // once contention lands -- decides whether the CPU's clock is allowed
     // through at all this half-cycle. It does not move its counters on here;
     // ula.advance() at the bottom does, once everything below has had this
     // half-clock with the counters still describing it.
-    ula.clock(pins_, memory);
+    ula.clock(pins_, memory.screen_bytes());
 
     pins_ = cpu.clock(pins_);
 
@@ -153,14 +188,20 @@ void Spectrum48K::clock() {
     ula.advance();
 }
 
-void Spectrum48K::service_bus() {
+void Spectrum::service_bus() {
     uint16_t addr = get_addr(pins_);
 
     if (asserted(pins_, MREQ)) {
         if (asserted(pins_, RD)) {
             pins_ = set_data(pins_, memory.read(addr));
         } else if (asserted(pins_, WR)) {
-            memory.write(addr, get_data(pins_));
+            const uint8_t value = get_data(pins_);
+            memory.write(addr, value);
+            // Every write the CPU makes passes here, which is the one place
+            // that sees them all -- so it is where the ULA is told about the
+            // ones that landed on the screen. As bank and offset, since on a
+            // 128K the screen is a bank rather than an address range.
+            ula.note_write(memory.bank_of(addr), uint16_t(addr & (BANK_SIZE - 1)));
         }
         // A bare MREQ with neither RD nor WR is the refresh cycle. Nothing to
         // service -- but note the address IS live on the bus, which is what
@@ -211,25 +252,53 @@ void Spectrum48K::service_bus() {
             // the level is already being resolved, and because a loader polls
             // this port far more finely than the tone it is listening to.
             beeper.set_ear(tape.playing() && ear, global_hc());
+        } else if (model() == Model::Spectrum128 && (addr & AY_PORT_MASK) == AY_SELECT_PORT) {
+            // The AY answers reads of its select port with the selected
+            // register. Like everything else on this bus it is decoded by
+            // address line, not by the full port number: A15 and A14 high,
+            // A1 low.
+            value = ay.read();
         }
         pins_ = set_data(pins_, value);
-    } else if (asserted(pins_, WR) && (addr & 1) == 0) {
+    } else if (asserted(pins_, WR)) {
         const uint8_t value = get_data(pins_);
-        ula.border = uint8_t(value & 0x07);
-        // Bits 3 (MIC) and 4 (speaker) drive the beeper. See
-        // Beeper::write_port_fe for why this is a latch and not an edge.
-        beeper.write_port_fe(value, global_hc());
+        if ((addr & 1) == 0) {
+            ula.border = uint8_t(value & 0x07);
+            // Bits 3 (MIC) and 4 (speaker) drive the beeper. See
+            // Beeper::write_port_fe for why this is a latch and not an edge.
+            beeper.write_port_fe(value, global_hc());
+        }
+        if (model() != Model::Spectrum128) {
+            return;
+        }
+        // The 128K's ports, each as loosely decoded as the hardware does it.
+        // Not an else-chain on the ULA's branch above: a port with A0 low
+        // AND A15 low reaches both the ULA and the paging latch, exactly as
+        // it does on the machine. Every one of these is a latch, for the
+        // reason Beeper::write_port_fe gives -- the same OUT calls this on
+        // five consecutive half-clocks -- and the AY data write integrates
+        // the audio up to this instant first, so a register change lands on
+        // the half-clock it happened.
+        if ((addr & PAGING_PORT_MASK) == 0) {
+            write_paging(value);
+        }
+        if ((addr & AY_PORT_MASK) == AY_SELECT_PORT) {
+            ay.select(value);
+        } else if ((addr & AY_PORT_MASK) == AY_DATA_PORT) {
+            beeper.advance_to(global_hc());
+            ay.write(value);
+        }
     }
 }
 
-bool Spectrum48K::stock_ld_bytes() {
+bool Spectrum::stock_ld_bytes() {
     // INC D / EX AF,AF' / DEC D / DI -- the first four bytes of the 48K ROM's
     // LD-BYTES.
     return memory.read(LD_BYTES) == 0x14 && memory.read(LD_BYTES + 1) == 0x08
            && memory.read(LD_BYTES + 2) == 0x15 && memory.read(LD_BYTES + 3) == 0xF3;
 }
 
-bool Spectrum48K::fast_load_block() {
+bool Spectrum::fast_load_block() {
     const TapeBlock* b = tape.peek_standard_block();
     if (b == nullptr) {
         return false;
@@ -319,7 +388,7 @@ bool Spectrum48K::fast_load_block() {
     return true;
 }
 
-void Spectrum48K::step_instruction() {
+void Spectrum::step_instruction() {
     // The tape fast-load trap. Here rather than in clock(), which runs seven
     // million times a second and must not pay for this; and here rather than
     // in the Engine's run loop, because a plain step and a step-over should
@@ -343,23 +412,47 @@ void Spectrum48K::step_instruction() {
         clock();
     }
 
-    if (kind == StepKind::Other) {
-        return;
-    }
-    const uint16_t sp_after = registers().sp;
+    // Read straight off the CPU rather than through registers(), which
+    // assembles a whole Registers struct: this now runs after EVERY
+    // instruction, run() included, and not only after calls and returns.
+    const uint16_t sp_after = cpu.regs.sp;
     if (kind == StepKind::Call && sp_after == uint16_t(sp_before - 2)) {
         // Confirmed by the SP delta, so a conditional CALL that was not taken
         // leaves the stack alone.
         uint16_t lo = memory.read(sp_after);
         uint16_t hi = memory.read(uint16_t(sp_after + 1));
         call_stack.push_back(uint16_t(lo | (hi << 8)));
+        call_stack_sp_.push_back(sp_after);
     } else if (kind == StepKind::Ret && sp_after == uint16_t(sp_before + 2)
                && !call_stack.empty()) {
         call_stack.pop_back();
+        call_stack_sp_.pop_back();
+    }
+    // After the push and the pop, never before: pruning first would drop the
+    // very frame a RET is returning through, and the pop below it would then
+    // take the caller's frame too.
+    //
+    // And for every instruction, not just calls and returns -- what strands
+    // an entry is usually neither: a POP that throws a return address away,
+    // an LD SP that abandons a whole frame, a handler that unwinds by hand.
+    prune_call_stack(sp_after);
+}
+
+void Spectrum::prune_call_stack(uint16_t sp) {
+    // An entry is live while the stack pointer is at or below the slot its
+    // return address sits in. Once SP has risen ABOVE that slot the address
+    // has been popped or abandoned, however that happened, and the frame is
+    // gone whether or not a RET was involved.
+    //
+    // Compared as unsigned 16-bit, which is what SP is: a stack that wraps
+    // past 0x0000 is a program that has already lost control of itself.
+    while (!call_stack.empty() && sp > call_stack_sp_.back()) {
+        call_stack.pop_back();
+        call_stack_sp_.pop_back();
     }
 }
 
-void Spectrum48K::run_frame() {
+void Spectrum::run_frame() {
     uint64_t target = ula.frame_count() + 1;
     while (ula.frame_count() < target) {
         clock();
