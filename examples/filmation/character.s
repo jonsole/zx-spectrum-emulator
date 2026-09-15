@@ -582,11 +582,17 @@ character_door_find:
 
 ; Walking near an arch lines him up with it. Every arch in Knight Lore looks for
 ; the knight inside a box fifteen units either way of its centre and four in
-; height, and nudges him one unit a turn across the way he is walking: towards
-; its centre V when he walks along U, and towards its centre U when he walks
-; along V -- adj_ew and adj_ns at $C7A6, chosen by his facing through
-; adj_arch_tbl. calc_plyr_dXY adds it to his step, which is why it only happens
-; while he walks.
+; height, and nudges him one unit a turn along its wall, towards the middle of
+; the opening: along U for an arch in the north or south wall, along V for one
+; in the east or west. adj_ew and adj_ns at $C7A6, and the choice between them
+; goes through adj_arch_tbl by the ARCH's graphic and mirror bit -- IX is still
+; the arch when get_sprite_dir reads them -- which is what a north or south
+; arch's mirroring selects. It is never across the wall, whichever way he
+; faces: walking along the north wall past its arch, the game only lengthens
+; his step towards the middle and shortens it after, and he walks straight on.
+; Taking the axis from his facing instead pulled him into the doorway.
+; calc_plyr_dXY adds the nudge to his step, which is why it only happens while
+; he walks.
 ;
 ; An arch's centre is the room's doorway table all over again: the wall it
 ; stands in on its own axis, and the middle of the room on the other.
@@ -626,9 +632,9 @@ character_steer:	ld		c,0
 					cp		DOOR_ALONG
 					jr		nc,.next
 
-					bit		0,(ix+CHARACTER_FACING)
-					jr		nz,.along_v
-					ld		a,l		; walking along U: V towards its centre
+					bit		0,c
+					jr		z,.along_u
+					ld		a,l		; east or west: V towards its centre
 					cp		(ix+OBJ.V)
 					ret		z
 					ld		a,1
@@ -637,7 +643,7 @@ character_steer:	ld		c,0
 .v:					add		a,e
 					ld		e,a
 					ret
-.along_v:			ld		a,h		; walking along V: U towards its centre
+.along_u:			ld		a,h		; north or south: U towards its centre
 					cp		(ix+OBJ.U)
 					ret		z
 					ld		a,1

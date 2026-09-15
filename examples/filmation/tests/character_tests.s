@@ -386,25 +386,29 @@ start:				ld		sp,$FE00
 					RUN		character_steer
 					EXPECT_WORD	s_de, $FD00, "the step"
 
-					TEST	"steer: along U, towards the arch's V"
+					; A north arch nudges him along U towards the middle of its
+					; opening, whichever way he walks -- the game chooses by the
+					; arch's own mirroring. Along the wall that only lengthens or
+					; shortens his step; it never takes him across into the arch.
+					TEST	"steer: along the north wall, never across it"
 					call	fresh
 					call	north_arch
 					SET		OBJ.U, 130
 					SET		OBJ.V, 185
 					STEP	-3, 0
 					RUN		character_steer
-					EXPECT_WORD	s_de, $FD01, "the step"
+					EXPECT_WORD	s_de, $FC00, "the step"
 
-					TEST	"steer: along U, back from past the arch's V"
+					TEST	"steer: along the north wall, past the middle"
 					call	fresh
 					call	north_arch
 					SET		OBJ.U, 130
-					SET		OBJ.V, 200
+					SET		OBJ.V, 185
 					STEP	3, 0
 					RUN		character_steer
-					EXPECT_WORD	s_de, $03FF, "the step"
+					EXPECT_WORD	s_de, $0200, "the step"
 
-					TEST	"steer: along V, towards the arch's U"
+					TEST	"steer: into the north arch, towards its U"
 					call	fresh
 					call	north_arch
 					SET		CHARACTER_FACING, 1
@@ -414,10 +418,24 @@ start:				ld		sp,$FE00
 					RUN		character_steer
 					EXPECT_WORD	s_de, $FF03, "the step"
 
-					TEST	"steer: already lined up"
+					TEST	"steer: along the east wall, along V and not across"
+					call	fresh
+					ld		a,128
+					ld		(room_door_z + 1),a
+					ld		a,196
+					ld		(room_door_at + 1),a
+					SET		CHARACTER_FACING, 1
+					SET		OBJ.U, 185
+					SET		OBJ.V, 120
+					STEP	0, 3
+					RUN		character_steer
+					EXPECT_WORD	s_de, $0004, "the step"
+
+					TEST	"steer: already in the middle of the opening"
 					call	fresh
 					call	north_arch
-					SET		OBJ.V, 196
+					SET		OBJ.U, 128
+					SET		OBJ.V, 185
 					STEP	-3, 0
 					RUN		character_steer
 					EXPECT_WORD	s_de, $FD00, "the step"
