@@ -188,7 +188,7 @@ room_wipe:			ld		hl,16384
 					ld		de,16385
 					ld		bc,6143
 					ld		(hl),0
-					ldir
+r					ldir
 					ret
 
 
@@ -961,11 +961,7 @@ special_fill:		ld		(ix+OBJ.GFX),a
 					or		a
 					jr		nz,.buffered
 					ld		hl,sprite_035
-					call	shift_alloc
-					ld		a,(ix+OBJ.BUF_H)
-					or		a
-					jr		nz,.buffered
-					ld		(ix+OBJ.FLAGS),OBJ_SHARED_SHIFT
+					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
 .buffered:			call	room_adjust
 					call	object_place
 					call	depth_insert

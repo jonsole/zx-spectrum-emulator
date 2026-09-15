@@ -328,6 +328,13 @@ depth_relink:		call	depth_recheck
 ; of it. Head Over Heels does the same, in EnlistAux.
 ;
 ; The lower half has to be re-sorted first, which is what makes that true.
+;
+; And the upper is always re-scanned, never asked depth_recheck's question
+; first. Its neighbours are not what matter: when the lower half moves back
+; past something, that something is left between the two halves, and the
+; upper's own neighbours can still guess it in order. Room $38 did exactly
+; that -- the knight stepped down off a block, his legs went in front of it,
+; and his body stayed behind it, drawn in front of a block it was behind.
 ;   IX -> the upper record, in the list
 ;   HL -> the lower record, which is its own NEXT field
 ;   D  - the step in U, E in V, A in Z
@@ -335,9 +342,9 @@ depth_relink:		call	depth_recheck
 depth_step_upper:	call	depth_add_step		; HL comes through this
 					ret		z
 					push	hl
-					call	depth_recheck
-					pop		hl		; POP leaves the carry alone
-					ret		c
+					call	depth_cmp_setup
+					call	depth_unlink
+					pop		hl
 					jr		depth_insert_from
 
 

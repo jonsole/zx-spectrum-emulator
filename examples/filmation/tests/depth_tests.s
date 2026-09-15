@@ -19,6 +19,7 @@ REC_2				EQU		$C0E0
 REC_3				EQU		$C100		; the page boundary is between 2 and 3
 REC_4				EQU		$C120
 REC_5				EQU		$C140
+REC_6				EQU		$C160
 
 ; Where every test box stands on the axes it is not being tested on: V and Z
 ; the same for all of them, so that only U separates.
@@ -380,6 +381,26 @@ start:				ld		sp,$FE00
 					STEP_UPPER	6, 0, 0		; U 40 -> 46
 					call	expect_list
 					DW		REC_1, REC_2, REC_3, REC_4, 0
+
+					; Room $38, as it was drawn wrong: the knight stepped down off a
+					; block, his legs re-sorted in front of it, and his body's own
+					; neighbours are two blocks the axes disagree about -- which guess
+					; it in order. The block left between the halves is certainly
+					; nearer than the body.
+					TEST	"upper: past a nearer one left between the halves"
+					BOX		REC_1, 102, 183, 152, 5, 5, 12		; the legs
+					BOX		REC_2, 104, 168, 164, 8, 8, 12		; the block
+					BOX		REC_3, 141, 196, 128, 3, 5, 40		; an arch leaf
+					BOX		REC_4, 104, 152, 128, 6, 6, 12		; a block below
+					BOX		REC_5, 102, 182, 164, 5, 5, 12		; the body, a unit short
+					BOX		REC_6, 104, 136, 128, 6, 6, 12		; another block below
+					call	make_list
+					DW		REC_1, REC_2, REC_3, REC_4, REC_5, REC_6, 0
+					ld		hl,REC_1
+					ld		ix,REC_5
+					STEP_UPPER	0, 1, 0
+					call	expect_list
+					DW		REC_1, REC_5, REC_2, REC_3, REC_4, REC_6, 0
 
 					TEST	"upper: zero leaves the list alone"
 					call	four_in_a_row

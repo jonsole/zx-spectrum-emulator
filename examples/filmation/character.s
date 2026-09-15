@@ -327,12 +327,8 @@ character_add:		ld		(ix+CHARACTER_PHASE),0
 					;   HL -> the sprite record to size it for
 .half:				ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
-					call	shift_alloc
-					ld		a,(ix+OBJ.BUF_H)
-					or		a
-					jr		nz,.buffered
-					set		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT
-.buffered:			call	room_adjust
+					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
+					call	room_adjust
 					call	character_lift
 					call	object_place
 					jp		depth_insert

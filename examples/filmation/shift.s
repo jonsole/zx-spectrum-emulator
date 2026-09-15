@@ -188,9 +188,10 @@ shift_reset:		ld		hl,shift_arena
 ; this with its largest frame before the object is first placed: a buffer
 ; already allocated is left alone, so an explicit one always wins.
 ;
-; Preserves HL. Leaves BUF_L/BUF_H alone if the arena is full, which drops
-; the object back to being drawn byte-aligned -- see object_update's null
-; buffer guard, which is the same fallback.
+; Preserves HL. If the arena is full, BUF_L/BUF_H are left alone and the
+; object is marked OBJ_SHARED_SHIFT instead, to rotate into the shared buffer at
+; draw time -- slower every time it is drawn, but in the right place. All three
+; callers wanted exactly that, so it is done once, here.
 shift_alloc:		push	hl
 					ld		a,(hl)
 					sprite_width_class
@@ -209,25 +210,28 @@ shift_alloc:		push	hl
 
 					ld		de,(shift_arena_next)
 					add		hl,de		; where the block would end
-					push	hl
-					ld		de,shift_arena + SHIFT_ARENA_SIZE
+					push	de		; and where it starts
 					ex		de,hl
+					ld		hl,shift_arena + SHIFT_ARENA_SIZE
 					or		a
 					sbc		hl,de		; what is left after it
-					pop		hl		; the block end again
+					pop		hl		; the start again
 					jr		c,.full		; less than nothing: no room
 
-					ld		de,(shift_arena_next)
 					xor		a
-					ld		(de),a		; nothing rotated into it yet
-					inc		de
-					ld		(de),a
-					inc		de
-					ld		(ix+OBJ.BUF_L),e
-					ld		(ix+OBJ.BUF_H),d
-					ld		(shift_arena_next),hl
+					ld		(hl),a		; nothing rotated into it yet
+					inc		hl
+					ld		(hl),a
+					inc		hl
+					ld		(ix+OBJ.BUF_L),l
+					ld		(ix+OBJ.BUF_H),h
+					ld		(shift_arena_next),de
+					pop		hl
+					ret
 
-.full:				pop		hl
+					ASSERT	OBJ_SHARED_SHIFT == 1 << 3
+.full:				set		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT
+					pop		hl
 					ret
 
 

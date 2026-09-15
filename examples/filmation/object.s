@@ -195,12 +195,6 @@ collide_list:		DS		2 * (ROOM_MAX_OBJECTS + SPECIAL_SLOTS + 1)
 collide_list_count:	DB		0
 collide_list_at:	DW		0
 
-; How far the gathered box reaches along U and V from where the object stands,
-; so that object_collide can tell whether a ride has handed it a step the
-; gather did not allow for.
-collide_reach_u:	DB		0
-collide_reach_v:	DB		0
-
 ; A ride fills in a step the object did not have when the list was gathered:
 ; object_carry copies whatever it is standing on. So an axis with nothing on it
 ; is gathered this much wider either way, which covers anything in the castle
@@ -215,10 +209,17 @@ collide_other:		DW		0
 ; every test in the scan. It was being recomputed from the record and the
 ; deltas for each object, which is four indexed loads an axis for something
 ; that only changes when an axis is actually cut.
+;
+; Between each floor axis's pair, how far the gathered box reaches along it
+; from where the object stands, so that object_collide can tell whether a ride
+; has handed it a step the gather did not allow for. In this order because
+; collide_gather writes them in it, through one pointer.
 collide_u_min:		DB		0
 collide_u_max:		DB		0
+collide_reach_u:	DB		0
 collide_v_min:		DB		0
 collide_v_max:		DB		0
+collide_reach_v:	DB		0
 collide_z_min:		DB		0
 collide_z_max:		DB		0
 
@@ -307,14 +308,14 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					; A character is the exception at this end too: its record
 					; says twelve because that is the box the depth sort wants,
 					; and the figure is the whole COLLIDE_HEIGHT.
-					ld		a,(iy+OBJ.Z)
-					ld		d,a
+					ld		d,(iy+OBJ.Z)
+					ld		e,(iy+OBJ.SIZE_Z)
 					bit		7,(iy+OBJ.FLAGS)		; OBJ_MOVABLE
 					jr		z,.their_height
-					add		a,COLLIDE_HEIGHT
-					jr		.their_top
-.their_height:		add		a,(iy+OBJ.SIZE_Z)
-.their_top:			ld		e,a
+					ld		e,COLLIDE_HEIGHT
+.their_height:		ld		a,d
+					add		a,e
+					ld		e,a		; their top
 					ld		a,(collide_z_min)
 					cp		e
 					jr		nc,.apart
@@ -368,12 +369,12 @@ collide_box:		ld		a,(collide_eff_u)
 					; units tall got a box of twenty-three, reached up into the block
 					; standing on it, and was stopped in every direction by its own
 					; passenger.
+					ld		c,(ix+OBJ.SIZE_Z)
 					bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE
 					jr		z,.own_height
-					add		a,COLLIDE_HEIGHT
-					jr		.top
-.own_height:		add		a,(ix+OBJ.SIZE_Z)
-.top:				ld		(collide_z_max),a
+					ld		c,COLLIDE_HEIGHT
+.own_height:		add		a,c
+					ld		(collide_z_max),a
 					ret
 
 
@@ -470,44 +471,31 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					jr		z,.no_ride		; only the Z pass can hand over a ride
 					ld		e,CARRY_REACH
 
-.no_ride:			ld		a,(ix+OBJ.DU)
-					call	.span
-					ld		(collide_reach_u),a
-					ld		a,(ix+OBJ.U)
-					sub		(ix+OBJ.SIZE_U)
-					sub		d
-					ld		(collide_u_min),a
-					ld		a,(ix+OBJ.U)
-					add		a,(ix+OBJ.SIZE_U)
-					add		a,c
-					ld		(collide_u_max),a
-
-					ld		a,(ix+OBJ.DV)
-					call	.span
-					ld		(collide_reach_v),a
-					ld		a,(ix+OBJ.V)
-					sub		(ix+OBJ.SIZE_V)
-					sub		d
-					ld		(collide_v_min),a
-					ld		a,(ix+OBJ.V)
-					add		a,(ix+OBJ.SIZE_V)
-					add		a,c
-					ld		(collide_v_max),a
+					ASSERT	collide_reach_u == collide_u_min + 2 && collide_v_min == collide_u_min + 3
+					ASSERT	collide_z_min == collide_u_min + 6 && collide_z_max == collide_u_min + 7
+					ASSERT	OBJ.V == OBJ.U + 1 && OBJ.SIZE_V == OBJ.SIZE_U + 1 && OBJ.DV == OBJ.DU + 1
+.no_ride:			push	ix
+					pop		iy
+					ld		hl,collide_u_min
+					call	.axis		; U
+					inc		iy		; V's fields are U's, one along
+					call	.axis
 
 					ld		e,0
 					ld		a,(ix+OBJ.DZ)
 					call	.span
 					ld		a,(ix+OBJ.Z)
 					sub		d
-					ld		(collide_z_min),a
+					ld		(hl),a		; collide_z_min
+					inc		hl
 					ld		a,(ix+OBJ.Z)
+					ld		b,(ix+OBJ.SIZE_Z)
 					bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: a character's whole
 					jr		z,.own_height		; figure, as collide_box has it
-					add		a,COLLIDE_HEIGHT
-					jr		.top
-.own_height:		add		a,(ix+OBJ.SIZE_Z)
-.top:				add		a,c
-					ld		(collide_z_max),a
+					ld		b,COLLIDE_HEIGHT
+.own_height:		add		a,b
+					add		a,c
+					ld		(hl),a		; collide_z_max
 
 					ld		hl,collide_list
 					ld		c,0
@@ -539,6 +527,26 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					ld		(hl),a
 					inc		hl
 					inc		c
+					ret
+
+					; One floor axis of the box. IY -> the record, moved along so that
+					; its U fields are this axis's; HL -> the axis's min, max and reach,
+					; and past them to the next axis's on the way out.
+.axis:				ld		a,(iy+OBJ.DU)
+					call	.span
+					ld		b,a		; the reach
+					ld		a,(iy+OBJ.U)
+					sub		(iy+OBJ.SIZE_U)
+					sub		d
+					ld		(hl),a		; min
+					inc		hl
+					ld		a,(iy+OBJ.U)
+					add		a,(iy+OBJ.SIZE_U)
+					add		a,c
+					ld		(hl),a		; max
+					inc		hl
+					ld		(hl),b		; reach
+					inc		hl
 					ret
 
 					; A step in A: how far the box reaches below the object (D) and
@@ -693,17 +701,19 @@ object_collide:		xor		a
 
 					; Did a ride hand over more than the gather allowed for? Then
 					; gather again, around the step as it now stands.
+					; SBC with the carry set takes one more off, so it borrows
+					; exactly when the step is no more than the reach.
 					ld		a,(ix+OBJ.DU)
-					call	object_pass.abs
+					call	character_door_find.abs
 					ld		hl,collide_reach_u
-					cp		(hl)
-					jr		z,.u_fits
+					scf
+					sbc		a,(hl)
 					jr		nc,.again
-.u_fits:			ld		a,(ix+OBJ.DV)
-					call	object_pass.abs
+					ld		a,(ix+OBJ.DV)
+					call	character_door_find.abs
 					ld		hl,collide_reach_v
-					cp		(hl)
-					jr		z,.passes
+					scf
+					sbc		a,(hl)
 					jr		c,.passes
 .again:				call	collide_gather
 .passes:
@@ -737,13 +747,6 @@ object_pass:		ld		(collide_mask),a
 					call	object_clamp
 					ld		a,(hl)
 .put:				ld		(ix+0),a		; imm: the same
-					ret
-
-
-; An absolute value, for object_collide's reach checks.
-.abs:				or		a
-					ret		p
-					neg
 					ret
 
 
@@ -897,7 +900,7 @@ object_update:
 					ld		(ix+OBJ.SHIFT),0		; LD does not touch the flags, and
 					jr		z,.no_shift		; the deferred path sets it again
 					; This object needs rotating. Where does it rotate into?
-					bit		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT: not here, but
+.where:				bit		3,(ix+OBJ.FLAGS)		; OBJ_SHARED_SHIFT: not here, but
 					jp		nz,.defer_shift		; at the moment it is drawn
 					ld		b,(ix+OBJ.BUF_H)		; B is free here; A still holds the
 					inc		b		; shift amount, which .shift_sprite
@@ -917,6 +920,8 @@ object_update:
 					call	shift_alloc
 					inc		l
 					pop		af
+					jr		.where		; and ask again, which cannot come back
+					; here: now there is a buffer or the flag
 
 					; A null buffer here means the arena is full, and nothing can be
 					; rotated into a null pointer -- it would read the blit back out
@@ -925,13 +930,8 @@ object_update:
 					; draw time instead, which is slower every time it is drawn but
 					; is in the right place. So the arena is a budget for speed now
 					; rather than a cliff the picture falls off, and a sprite set
-					; that outgrows it gets slower rather than wrong.
-					ld		b,(ix+OBJ.BUF_H)
-					inc		b
-					dec		b
-					jp		nz,.shift_sprite
-					set		3,(ix+OBJ.FLAGS)	; OBJ_SHARED_SHIFT, from here on
-					jp		.defer_shift
+					; that outgrows it gets slower rather than wrong. shift_alloc
+					; sets OBJ_SHARED_SHIFT itself when it cannot give one.
 .no_shift:
 					; Sharing the graphic is what we want, unless this is one of
 					; the pieces the room data has marked as contested -- see
