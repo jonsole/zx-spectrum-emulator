@@ -960,6 +960,50 @@ MachineState Engine::state() {
     });
 }
 
+void Engine::start_profile() {
+    submit_void([this](Spectrum& m) {
+        profile_.clear();
+        profile_start_frame_ = m.ula.frame_count();
+        profile_end_frame_ = profile_start_frame_;
+        m.profile = &profile_;
+    });
+}
+
+void Engine::stop_profile() {
+    submit_void([this](Spectrum& m) {
+        if (m.profile != nullptr) {
+            profile_end_frame_ = m.ula.frame_count();
+            m.profile = nullptr;
+        }
+    });
+}
+
+ProfileSnapshot Engine::profile_snapshot() {
+    return submit<ProfileSnapshot>([this](Spectrum& m) {
+        ProfileSnapshot s;
+        s.active = m.profile != nullptr;
+        const uint64_t end = s.active ? m.ula.frame_count() : profile_end_frame_;
+        s.frames = end - profile_start_frame_;
+        s.instructions = profile_.instructions();
+        s.interrupts = profile_.interrupts();
+        s.interrupt_half_clocks = profile_.interrupt_half_clocks();
+        s.total_half_clocks = profile_.total_half_clocks();
+        for (size_t i = 0; i < Profile::ADDRESSES; i++) {
+            const uint16_t addr = uint16_t(i);
+            if (profile_.hits(addr) == 0) {
+                continue;
+            }
+            ProfileSnapshot::Entry e;
+            e.addr = addr;
+            e.hits = profile_.hits(addr);
+            e.half_clocks = profile_.half_clocks(addr);
+            s.entries.push_back(e);
+        }
+        s.call_nodes = profile_.call_nodes();
+        return s;
+    });
+}
+
 TraceStatus Engine::trace_snapshot() const {
     TraceStatus s;
     if (!trace_) {

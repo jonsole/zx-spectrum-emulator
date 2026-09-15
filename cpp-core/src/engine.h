@@ -100,6 +100,31 @@ struct TraceStatus {
     bool ula = false;
 };
 
+/// What a profile has counted so far -- see Engine::profile_snapshot. Only the
+/// addresses that ran at all, so a caller never walks 64K of zeroes.
+struct ProfileSnapshot {
+    /// Still counting. A stopped profile keeps what it counted.
+    bool active = false;
+    /// Video frames that passed while it was counting, so a caller can quote
+    /// a cost per frame -- what decides whether a game keeps its frame rate.
+    uint64_t frames = 0;
+    uint64_t instructions = 0;
+    uint64_t interrupts = 0;
+    uint64_t interrupt_half_clocks = 0;
+    uint64_t total_half_clocks = 0;
+
+    struct Entry {
+        uint16_t addr = 0;
+        uint64_t hits = 0;
+        uint64_t half_clocks = 0;
+    };
+    /// In address order.
+    std::vector<Entry> entries;
+    /// The calling-context tree, root first, each node after its parent --
+    /// see Profile::CallNode.
+    std::vector<Profile::CallNode> call_nodes;
+};
+
 /// One completed frame picked out of a run -- see Engine::capture_frames.
 struct CapturedFrame {
     /// The ULA's frame counter when this frame was completed, so a caller
@@ -330,6 +355,17 @@ public:
     Registers registers();
     Registers set_registers(Registers r);
     MachineState state();
+
+    /// Starts counting where execution time goes, from zero -- see profile.h.
+    /// Queued like everything above, but serviced at a run's yields, so it
+    /// starts and stops on a running game without stopping it: get to the
+    /// part worth measuring, then start.
+    void start_profile();
+    /// Stops counting, keeping what was counted for profile_snapshot.
+    void stop_profile();
+    /// What has been counted, running or stopped. Empty (and inactive) if
+    /// profiling has never been started.
+    ProfileSnapshot profile_snapshot();
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
@@ -653,6 +689,14 @@ private:
     /// `every` is a spacing in frames rather than in boundaries seen.
     uint64_t capture_next_frame_ = 0;
     std::vector<CapturedFrame> capture_frames_;
+
+    /// The profile's counts, kept after it stops so they can still be read,
+    /// and the frame counter where counting began and (once stopped) ended.
+    /// The machine's `profile` pointer is what says whether it is counting.
+    /// Emulator thread only, like everything the queue serves.
+    Profile profile_;
+    uint64_t profile_start_frame_ = 0;
+    uint64_t profile_end_frame_ = 0;
 
     /// The current capture, or null if tracing has never been started. Owned
     /// here rather than by the machine because it holds a file handle that has

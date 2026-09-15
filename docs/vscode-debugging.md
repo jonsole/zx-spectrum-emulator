@@ -453,6 +453,95 @@ already passed it still belongs to the frame that wrote it. With the overlay
 off, `Ula::note_write` is a relaxed atomic load and a branch, and the per-frame
 compositing pass is skipped entirely.
 
+## Execution profile
+
+Where a program's time goes, painted onto its source. **Start Profiling**
+(the flame on the debug toolbar, or the command palette) counts every
+instruction the machine executes from then on: which address it started at,
+and how many T-states it really took. Let the program run -- play the part of
+the game worth measuring -- and the open source files warm up as it goes:
+
+- each line that ran is tinted by its share of all the time counted, six
+  shades from faint to strong, with the same marks in the scrollbar so a long
+  file's hot spots can be found without scrolling;
+- lines with at least half a percent get their numbers written after them --
+  share, T-states a frame and runs a frame, e.g. `18% · 12,400 T/frame ·
+  950×/frame` -- and a routine's label line leads with the whole routine's
+  total;
+- hovering a line gives the exact figures, including T-states per run;
+- **Show Profile Hot Spots** (or clicking the status bar's flame) lists the
+  most expensive routines and lines, and jumps to one.
+
+### The call tree
+
+**ZX Spectrum Profile**, in the debug sidebar under the tape pane, shows the
+same profile by routine. Every routine the profile saw is listed, most
+expensive first, with its share, T-states a frame and calls a frame; expand
+one and it lists the routines *it* called, with what those calls cost it, plus
+a row for its own code. Those expand the same way, as deep as the calls went.
+Clicking a row opens the routine.
+
+What makes the numbers under a routine trustworthy is that the emulator
+records calls by *path*, not by name: `sprite_blit` called from
+`objects_draw_all` and `sprite_blit` called from `redraw_view` are counted
+separately, so expanding `objects_draw_all` shows only the blitting it did.
+(A call graph read off the source could only put each routine's whole cost
+under every caller.) At the top level a routine reached along several paths
+is added up across them -- once, from its outermost call, if it recurses.
+
+The title bar switches the order between **total** (a routine and everything
+it called: where to drill in) and **own code** (the instructions in the
+routine itself: where they are slow), and each row's numbers follow the order.
+Interrupt handlers show with a lightning icon, under whatever they
+interrupted; **(outside any call)** is code that ran with no call open, which
+for most games is the main loop.
+
+How a call is followed: a `CALL` or `RST` that pushes a return address starts
+one, and it ends when the stack pointer rises past that address -- by `RET`,
+`RETI`, or a `POP` or `LD SP` that throws it away, so a program that unwinds
+by hand still balances. Code reached by `JP` is not a call, so it counts as
+the routine that jumped to it: a dispatcher that ends in `JP (HL)` owns the
+time of whatever it dispatched to. The heat map, which is by address, still
+puts that time on the right lines.
+
+**Stop Profiling** freezes the counts: the map stays up, and is re-read
+whenever the machine stops. **Start** again counts from zero; **Clear Profile**
+takes the map down.
+
+The numbers are per frame whenever frames went by, because that is the budget
+a game is working to: a 48K frame is 69,888 T-states, and a profile of a game
+that holds its frame rate adds up to almost exactly that. A profile taken only
+by stepping reads in totals instead.
+
+What it counts, precisely:
+
+- **The real cost, not the nominal one.** Each instruction is timed off the
+  machine's own clock, so the ULA holding the CPU for a contended address is
+  in the figure, and a `DJNZ` taken (13T) and not (8T) average out to what
+  this run actually did.
+- **Interrupts separately.** An acknowledge sequence runs straight after
+  whatever instruction INT happened to interrupt; it is counted in a bucket of
+  its own (shown in the status bar tooltip), not charged to that line.
+- **A `HALT`'s waiting on the `HALT`,** where it reads as the frame's slack.
+  A busy-wait loop, by contrast, is code like any other and shows as such.
+- **Through the loaded debug info** -- the program's SLD, then the ROM's --
+  exactly as stack frames get their source lines. Time at addresses no source
+  covers is grouped by 256-byte page in the routine list (`$9000-$90FF`), so a
+  game with no source still shows where its time goes.
+- **By 16-bit address.** On a 128K, code in two pages at the same address
+  shares a count.
+
+Profiling works on a running machine: starting, stopping and reading it are
+serviced at the run loop's yields, a couple of milliseconds apart, and never
+pause it. While counting, the editor re-reads it once a second. The cost is a
+few percent of emulation speed while on (`bench_machine`'s "profiling" line),
+and nothing measurable while off.
+
+MCP clients get the same numbers from the `profile` tool -- see
+[Connecting an MCP client](mcp.md), whose report nests the call tree as
+`call_tree`, cut to the calls above `tree_min_percent` -- which is how a
+change can be measured before and after rather than estimated.
+
 ## Call stack
 
 `stackTrace` shows a real, multiple-frame call stack, not just the current

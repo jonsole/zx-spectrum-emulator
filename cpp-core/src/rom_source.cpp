@@ -358,6 +358,23 @@ bool RomSource::symbol_at(uint16_t addr, int32_t max_offset, std::string& name,
     return true;
 }
 
+bool RomSource::code_label_at(uint16_t addr, std::string& name, uint16_t& offset) const {
+    auto it = std::upper_bound(sorted_addrs_.begin(), sorted_addrs_.end(), addr);
+    while (it != sorted_addrs_.begin()) {
+        --it;
+        const size_t idx = size_t(it - sorted_addrs_.begin());
+        // A label on a line of code has that line's address in the T records;
+        // an EQU's value is just a number and, unless it happens to equal an
+        // instruction's address, does not.
+        if (addr_to_loc.count(sorted_addrs_[idx]) != 0) {
+            name = sorted_names_[idx];
+            offset = uint16_t(addr - sorted_addrs_[idx]);
+            return true;
+        }
+    }
+    return false;
+}
+
 RomSourcePtr load_source(const std::string& sld_path, const std::string& asm_path,
                          std::string& error) {
     std::vector<uint8_t> bytes;

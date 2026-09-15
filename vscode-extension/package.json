@@ -160,6 +160,40 @@
         "command": "zxspectrum.setSpeed",
         "title": "ZX Spectrum: Set Emulation Speed...",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "zxspectrum.profileStart",
+        "title": "ZX Spectrum: Start Profiling",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "zxspectrum.profileStop",
+        "title": "ZX Spectrum: Stop Profiling",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "zxspectrum.profileHotSpots",
+        "title": "ZX Spectrum: Show Profile Hot Spots",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "zxspectrum.profileRefresh",
+        "title": "ZX Spectrum: Refresh Profile"
+      },
+      {
+        "command": "zxspectrum.profileClear",
+        "title": "ZX Spectrum: Clear Profile",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "zxspectrum.profileSortBySelf",
+        "title": "ZX Spectrum: Sort Profile Tree by Own Code",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "zxspectrum.profileSortByTotal",
+        "title": "ZX Spectrum: Sort Profile Tree by Total",
+        "icon": "$(list-tree)"
       }
     ],
     "views": {
@@ -168,6 +202,11 @@
           "id": "zxspectrumTape",
           "name": "ZX Spectrum Tape",
           "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "id": "zxspectrumProfile",
+          "name": "ZX Spectrum Profile",
+          "when": "debugType == 'zxspectrum' || zxspectrum.hasProfile"
         }
       ]
     },
@@ -175,6 +214,10 @@
       {
         "view": "zxspectrumTape",
         "contents": "No tape in the deck.\n[Load tape...](command:zxspectrum.loadTape)"
+      },
+      {
+        "view": "zxspectrumProfile",
+        "contents": "Nothing profiled yet. Start profiling, then let the program run: every routine it calls shows here, most expensive first, and expands into the routines it called.\n[Start profiling](command:zxspectrum.profileStart)"
       }
     ],
     "menus": {
@@ -245,6 +288,18 @@
         {
           "command": "zxspectrum.setSpeed",
           "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.profileStart",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling"
+        },
+        {
+          "command": "zxspectrum.profileStop",
+          "when": "debugType == 'zxspectrum' && zxspectrum.profiling"
+        },
+        {
+          "command": "zxspectrum.profileRefresh",
+          "when": "debugType == 'zxspectrum'"
         }
       ],
       "view/item/context": [
@@ -255,6 +310,36 @@
         }
       ],
       "view/title": [
+        {
+          "command": "zxspectrum.profileStart",
+          "when": "view == zxspectrumProfile && !zxspectrum.profiling",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.profileStop",
+          "when": "view == zxspectrumProfile && zxspectrum.profiling",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.profileSortBySelf",
+          "when": "view == zxspectrumProfile && zxspectrum.profileSort != 'self'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "zxspectrum.profileSortByTotal",
+          "when": "view == zxspectrumProfile && zxspectrum.profileSort == 'self'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "zxspectrum.profileHotSpots",
+          "when": "view == zxspectrumProfile && zxspectrum.hasProfile",
+          "group": "navigation@3"
+        },
+        {
+          "command": "zxspectrum.profileClear",
+          "when": "view == zxspectrumProfile && zxspectrum.hasProfile && !zxspectrum.profiling",
+          "group": "navigation@4"
+        },
         {
           "command": "zxspectrum.tapePlay",
           "when": "view == zxspectrumTape && !zxspectrum.tapePlaying",
@@ -296,6 +381,16 @@
           "command": "zxspectrum.setSpeed",
           "when": "debugType == 'zxspectrum'",
           "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.profileStart",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling",
+          "group": "navigation@2"
+        },
+        {
+          "command": "zxspectrum.profileStop",
+          "when": "debugType == 'zxspectrum' && zxspectrum.profiling",
+          "group": "navigation@2"
         }
       ]
     },

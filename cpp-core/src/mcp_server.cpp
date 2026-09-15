@@ -21,6 +21,7 @@
 #include "beeper.h"
 #include "http.h"
 #include "net.h"
+#include "profile_report.h"
 #include "register_names.h"
 #include "screen_stream.h"
 #include "snapshot.h"
@@ -830,6 +831,34 @@ json tools_list() {
         "Report whether a trace is running, its file, and its row count. Safe to poll during a "
         "run, so it can be watched filling up",
         no_params());
+    add("profile",
+        "Measure where execution time goes. `start` counts from zero -- every instruction's "
+        "address, how often it ran, and the T-states it really took (ULA contention included) "
+        "-- `stop` freezes the counts, and `get` reports them. Works on a running machine "
+        "without pausing it: get the game to the part worth measuring, start, let it run, "
+        "then get. The report folds addresses into source lines and routines through the "
+        "loaded SLD debug info (the program's, then the ROM's), most expensive first, with "
+        "T-states per frame -- what decides whether a game holds its frame rate. Interrupt "
+        "acknowledges are counted separately rather than charged to whichever line they "
+        "interrupted; a HALT's waiting shows on the HALT. Code with no source is grouped by "
+        "256-byte page. `call_tree` nests the calls by path, so a routine's children say what "
+        "calling them cost it rather than what they cost the whole program. Use it before and after an optimisation to measure the change "
+        "instead of estimating it.",
+        schema(json{{"action", json{{"type", "string"},
+                                    {"enum", json::array({"start", "stop", "get"})},
+                                    {"description", "start, stop or get."}}},
+                    {"lines", integer_prop("How many of the most expensive source lines to "
+                                           "report. Default 20; 0 for all.")},
+                    {"routines", integer_prop("How many of the most expensive routines to "
+                                              "report. Default 20; 0 for all.")},
+                    {"tree_min_percent",
+                     json{{"type", "number"},
+                          {"description", "The call tree -- what each routine's calls cost it, "
+                                          "by call path -- is cut to the calls holding at least "
+                                          "this percentage of all profiled time. Default 2; "
+                                          "time in the calls cut is reported per node as "
+                                          "other_calls_tstates."}}}},
+               {"action"}));
     add("set_speed",
         "Set emulation speed. \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want), and a `multiplier` scales "
@@ -1493,6 +1522,37 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "trace_status") {
         return json_result(trace_status_json(engine.trace_status()));
+    }
+
+    if (name == "profile") {
+        const json& action_arg = arg(args, "action");
+        const std::string action = action_arg.is_string() ? action_arg.get<std::string>() : "";
+        if (action == "start") {
+            engine.start_profile();
+        } else if (action == "stop") {
+            engine.stop_profile();
+        } else if (action != "get") {
+            return error_result("'action' must be start, stop or get");
+        }
+        size_t lines = 20;
+        size_t routines = 20;
+        const json& lines_arg = arg(args, "lines");
+        if (lines_arg.is_number_unsigned()) {
+            lines = size_t(lines_arg.get<uint64_t>());
+        }
+        const json& routines_arg = arg(args, "routines");
+        if (routines_arg.is_number_unsigned()) {
+            routines = size_t(routines_arg.get<uint64_t>());
+        }
+        double min_percent = 2.0;
+        const json& min_arg = arg(args, "tree_min_percent");
+        if (min_arg.is_number()) {
+            min_percent = min_arg.get<double>();
+        }
+        const ProfileReport report = build_profile_report(engine.profile_snapshot(), sources);
+        json out = profile_report_json(report, lines, routines);
+        out["call_tree"] = profile_call_tree_json(report, min_percent / 100.0, 12);
+        return json_result(out);
     }
 
     if (name == "set_speed") {

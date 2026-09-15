@@ -70,7 +70,7 @@ void bench_machine(bool have_rom) {
 
 /// Through Engine::run() -- the path a DAP `continue` actually takes,
 /// including its per-yield key sync and screen publish.
-void bench_engine(bool have_rom, Speed speed, const char* label) {
+void bench_engine(bool have_rom, Speed speed, bool profile, const char* label) {
     Engine engine;
     if (have_rom) {
         std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
@@ -80,6 +80,9 @@ void bench_engine(bool have_rom, Speed speed, const char* label) {
     }
     engine.set_speed(speed);
     engine.reset();
+    if (profile) {
+        engine.start_profile();
+    }
 
     std::thread runner([&engine] { engine.run(); });
     std::this_thread::sleep_for(std::chrono::seconds(2)); // let it get going
@@ -110,8 +113,10 @@ int main() {
     std::printf("\n");
 
     bench_machine(have_rom);
-    bench_engine(have_rom, Speed::Uncapped, "engine run(), uncapped");
+    bench_engine(have_rom, Speed::Uncapped, false, "engine run(), uncapped");
+    // What counting every instruction's time costs -- see profile.h.
+    bench_engine(have_rom, Speed::Uncapped, true, "engine run(), uncapped, profiling");
     // The default. Should land on 1.00x -- that IS the pass condition.
-    bench_engine(have_rom, Speed::Realtime, "engine run(), realtime (default)");
+    bench_engine(have_rom, Speed::Realtime, false, "engine run(), realtime (default)");
     return 0;
 }

@@ -39,6 +39,7 @@ add_library(zx_core STATIC
   src/engine.cpp
   src/keyboard.cpp
   src/memory.cpp
+  src/profile.cpp
   src/register_names.cpp
   src/snapshot.cpp
   src/spectrum.cpp
@@ -83,6 +84,7 @@ add_executable(zx_server
   src/main.cpp
   src/mcp_server.cpp
   src/net.cpp
+  src/profile_report.cpp
   src/rom_source.cpp
   src/screen_stream.cpp
 )
@@ -143,6 +145,7 @@ zx_add_test(tape_audio_tests)
 zx_add_test(tracelog_tests)
 zx_add_test(video_recorder_tests)
 zx_add_test(frame_capture_tests)
+zx_add_test(profile_tests)
 
 # Not a zx_add_test: the symbol/address-expression parsing it covers lives in
 # rom_source.cpp, which belongs to zx_server rather than zx_core (debug data is
@@ -152,6 +155,15 @@ target_link_libraries(symbol_tests PRIVATE zx_core)
 target_include_directories(symbol_tests PRIVATE tests)
 target_compile_options(symbol_tests PRIVATE ${ZX_WARNINGS})
 add_test(NAME symbol_tests COMMAND symbol_tests)
+# The same arrangement for the profile report: it folds addresses through the
+# SLD data, which is zx_server's, and emits JSON through the vendored header.
+add_executable(profile_report_tests tests/profile_report_tests.cpp src/profile_report.cpp
+                                    src/rom_source.cpp)
+target_link_libraries(profile_report_tests PRIVATE zx_core)
+target_include_directories(profile_report_tests PRIVATE tests)
+target_include_directories(profile_report_tests SYSTEM PRIVATE third_party)
+target_compile_options(profile_report_tests PRIVATE ${ZX_WARNINGS})
+add_test(NAME profile_report_tests COMMAND profile_report_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
 target_compile_definitions(tracelog_tests

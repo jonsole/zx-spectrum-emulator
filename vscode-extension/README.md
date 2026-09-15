@@ -152,6 +152,20 @@ across the whole workspace when it isn't defined there. `MODULE` prefixes are
 not modelled. The parser has its own tests, no vscode needed:
 `node tests/asm_index_test.js`.
 
+## Execution profile
+
+**Start Profiling** (flame button on the debug toolbar) has the emulator count
+every instruction's real cost; the open source files are tinted by how hot
+each line is, the hottest get `share · T/frame · runs/frame` written after
+them, and **Show Profile Hot Spots** lists the worst routines and lines to jump
+to. The **ZX Spectrum Profile** view in the debug sidebar has every routine,
+most expensive first, each expanding into the routines it called and what
+those calls cost it (`profile_tree.js`). The editor re-reads it every second
+while counting and on every stop once stopped. See [docs/vscode-debugging.md](../docs/vscode-debugging.md#execution-profile)
+for what is counted and how; `profile_model.js` (tested by
+`node tests/profile_model_test.js`) turns the server's report into the map,
+and `profile_view.js` paints it.
+
 ## Install
 
 Copy (or symlink) this directory into your VS Code extensions folder as

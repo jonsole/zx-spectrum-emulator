@@ -102,6 +102,13 @@ public:
     static constexpr int32_t NO_MAX = -1;
     bool symbol_at(uint16_t addr, int32_t max_offset, std::string& name, uint16_t& offset) const;
 
+    /// The nearest label at or before `addr` that sits on a line of code --
+    /// what a profile names a routine by. symbol_at alone would as readily
+    /// return an EQU whose value happens to fall just below `addr`
+    /// (VIEW_BUF_ROWS EQU 64 is "a label" at 0x0040 as far as it knows).
+    /// Unbounded, since a routine can be longer than SYMBOL_MAX_OFFSET.
+    bool code_label_at(uint16_t addr, std::string& name, uint16_t& offset) const;
+
     /// Rebuilds the address-sorted index. Call after filling the maps.
     void index();
 

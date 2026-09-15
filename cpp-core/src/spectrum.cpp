@@ -407,9 +407,13 @@ void Spectrum::step_instruction() {
     const uint16_t sp_before = registers().sp;
     const StepKind kind = classify_step(memory, pc_before);
 
-    clock();
-    while (!cpu.is_instruction_boundary()) {
+    if (profile == nullptr) {
         clock();
+        while (!cpu.is_instruction_boundary()) {
+            clock();
+        }
+    } else {
+        clock_profiled(pc_before, sp_before, kind == StepKind::Call);
     }
 
     // Read straight off the CPU rather than through registers(), which
@@ -436,6 +440,67 @@ void Spectrum::step_instruction() {
     // an entry is usually neither: a POP that throws a return address away,
     // an LD SP that abandons a whole frame, a handler that unwinds by hand.
     prune_call_stack(sp_after);
+}
+
+void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_call) {
+    // A halted CPU reports the address after its HALT (see Z80::registers),
+    // but each pass is the HALT executing again, and that is where the time
+    // belongs. The first pass, the one that halts, is not yet halted and
+    // reports the HALT's own address.
+    const uint16_t pc = cpu.halted ? uint16_t(pc_before - 1) : pc_before;
+    const uint64_t interrupts_before = cpu.interrupt_count;
+    const uint64_t start = global_hc();
+
+    // An interrupt is accepted in the instruction's final half-clock (the
+    // overlapped fetch samples INT), and its whole acknowledge sequence then
+    // runs before the next boundary -- inside this same step. So the step is
+    // split where the count changes: the instruction up to there, the
+    // acknowledge after. Each side keeps the same shape every other
+    // instruction has, its own work plus the next fetch's first half-clock.
+    bool interrupted = false;
+    uint64_t split = 0;
+    clock();
+    for (;;) {
+        if (!interrupted && cpu.interrupt_count != interrupts_before) {
+            interrupted = true;
+            split = global_hc();
+        }
+        if (cpu.is_instruction_boundary()) {
+            break;
+        }
+        clock();
+    }
+
+    const uint64_t end = global_hc();
+    const uint16_t sp_after = cpu.regs.sp;
+    // Where execution goes next: a call's target, or an interrupt handler's
+    // first instruction. Not halted by construction -- a call is not a HALT,
+    // and accepting an interrupt clears the latch.
+    const uint16_t pc_after = uint16_t(cpu.regs.pc - 1);
+
+    // In this order: the instruction's time goes to the call path it ran on
+    // (a RET to the routine it returns from, a CALL to its caller), then the
+    // path moves.
+    if (interrupted) {
+        profile->record(pc, split - start);
+        // The stack as the instruction left it, before the acknowledge pushed
+        // its own return address -- so a RET the interrupt landed straight
+        // after still ends its call.
+        profile->unwind(uint16_t(sp_after + 2));
+        // A CALL the interrupt landed straight after is not followed into:
+        // its target is no longer anywhere to be read. Its time goes to the
+        // caller until its RET, which is rare enough to live with.
+        profile->enter_interrupt(pc_after, sp_after);
+        profile->record_interrupt(end - split);
+    } else {
+        profile->record(pc, end - start);
+        profile->unwind(sp_after);
+        // Confirmed by the SP delta, as the call stack is: a conditional CALL
+        // not taken went nowhere.
+        if (is_call && sp_after == uint16_t(sp_before - 2)) {
+            profile->enter_call(pc_after, sp_after);
+        }
+    }
 }
 
 void Spectrum::prune_call_stack(uint16_t sp) {

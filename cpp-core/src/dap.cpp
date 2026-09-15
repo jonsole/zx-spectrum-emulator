@@ -25,6 +25,7 @@
 #include "file_io.h"
 #include "log.h"
 #include "net.h"
+#include "profile_report.h"
 #include "register_names.h"
 #include "rom_source.h"
 
@@ -756,6 +757,13 @@ std::string describe_request(const std::string& command, const json& arguments) 
     if (command == "startTrace" || command == "stopTrace") {
         return command;
     }
+    if (command == "profile") {
+        const std::string action = arg_str(arguments, "action");
+        // "get" is what the editor asks on every stop; only the switches are acts.
+        if (action == "start" || action == "stop") {
+            return "profile " + action;
+        }
+    }
 
     return "";
 }
@@ -1477,6 +1485,30 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         // capture runs, to show the row count climbing and to notice the
         // moment a capture closes itself at its limit.
         body = trace_body(engine.trace_status());
+
+    } else if (command == "profile") {
+        // Not standard DAP: the execution profile behind the editor's heat
+        // map. `start` counts from zero, `stop` freezes the counts, and `get`
+        // reports them folded into source lines and routines -- every line,
+        // since the editor shades each one it has open. All three are queued
+        // jobs the run loop services at its yields, so a profile starts and
+        // stops on a running game without pausing it.
+        const std::string action = arg_str(arguments, "action");
+        if (action == "start") {
+            engine.start_profile();
+        } else if (action == "stop") {
+            engine.stop_profile();
+        } else if (action != "get") {
+            return envelope_response(
+                conn, request_seq, command, false,
+                json{{"message", "profile action must be start, stop or get, not '" + action + "'"}});
+        }
+        const int64_t max_routines = arg_int(arguments, "maxRoutines", 100);
+        const ProfileReport report = build_profile_report(engine.profile_snapshot(), sources);
+        body = profile_report_json(report, 0, max_routines > 0 ? size_t(max_routines) : 0);
+        // The whole call tree, flat: the profile view groups it by routine
+        // itself, in whichever order it is showing.
+        body["call_nodes"] = profile_call_nodes_json(report);
 
     } else if (command == "matchSymbols") {
         // Not standard DAP: what the trace panel's `from`/`to`/`watch` fields

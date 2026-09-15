@@ -19,6 +19,7 @@
 #include "beeper.h"
 #include "keyboard.h"
 #include "memory.h"
+#include "profile.h"
 #include "tape.h"
 #include "tracelog.h"
 #include "ula.h"
@@ -50,6 +51,13 @@ public:
     /// whoever turned tracing on (the Engine), not by the machine -- a trace
     /// outlives individual run/step commands and has a file handle to close.
     TraceLog* trace = nullptr;
+
+    /// Where each instruction's time goes, null when not profiling -- see
+    /// profile.h. Owned by the Engine, for the same reason the trace is: it
+    /// outlives any one run, and is read back after the machine stops.
+    /// Counted in step_instruction(), which costs one pointer test per
+    /// instruction while this is null.
+    Profile* profile = nullptr;
 
     /// Return addresses of CALL/RST frames currently open below the current
     /// PC, oldest first. Maintained by step_instruction(). Cleared whenever
@@ -130,6 +138,12 @@ private:
     /// Drops entries the stack pointer has already risen past, i.e. whose
     /// return address is no longer on the stack at all.
     void prune_call_stack(uint16_t sp);
+
+    /// step_instruction's clock loop when a profile is attached: the same
+    /// loop, timed, with an interrupt's acknowledge sequence split off, and
+    /// the profile's call tree followed into calls, interrupts and back out.
+    /// Kept out of line so the unprofiled loop stays exactly what it was.
+    void clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_call);
 
     /// Decodes MREQ/IORQ and services memory or I/O.
     void service_bus();
