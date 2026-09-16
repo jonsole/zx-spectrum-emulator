@@ -1,61 +1,3 @@
-; 1 goes back a room, 2 on to the next -- with DEBUG_ROOM defined,
-; `build.py --debug-room`, which is also what puts the room number in the
-; corner. It is behind that option because the game wants those keys: the
-; numbers pick up and put down, and an Interface II joystick is 1 to 5.
-;
-; Most numbers between one room and the next have no room against them, so
-; this steps over them rather than making you press the key twenty times: it
-; asks room_find for each number in turn. A room always finds itself again if
-; there is nothing else, so the walk cannot run away.
-;
-; room_find is itself a walk now, so an unlucky press can cost a few thousand
-; T-states. It is a key press, and it only ever happens between rooms.
-;
-; One room a press, not one a frame -- the whole row is compared against what
-; it read last time, so holding the key down does nothing after the first.
-KEY_ROOMS           EQU     $F7FE       ; 1 bit 0, 2 bit 1
-
-                IFDEF   DEBUG_ROOM
-room_keys:          ld      bc,KEY_ROOMS
-                    in      a,(c)
-                    cpl                         ; a key reads 0 while it is held
-                    and     3
-                    ld      hl,room_key_held
-                    cp      (hl)
-                    ld      (hl),a              ; LD does not touch the flags
-                    ret     z                   ; nothing has changed
-                    and     a
-                    ret     z                   ; ...and nothing is held now
-                    rra
-                    ld      e,-1                ; 1: back a room
-                    jr      c,.step
-                    ld      e,1                 ; 2: on to the next
-.step:              ld      a,(room_number)
-.try:               add     a,e
-                    ld      c,a
-                    push    de
-                    push    bc
-                    call    room_find
-                    pop     bc
-                    pop     de
-                    ld      a,c                 ; the number we tried
-                    jr      nc,.try             ; no room there: keep going
-                    ld      (room_number),a
-                    ret
-
-room_key_held:      DB      0
-                ENDIF
-
-
-; Which room to build, and the one on the screen. A game begins in one of four,
-; chosen at random -- Knight Lore's start_locations at $D1E2.
-start_rooms:        DB      $2F, $44, $B3, $8F
-room_number:        DB      $B3
-room_shown:         DB      $B3
-
-; Which side of the room being built the player is walking in through, or $FF
-; for a room he did not walk into. player_entry spends it and puts it back.
-enter_dir:          DB      $FF
 
 
 ; --- the player -------------------------------------------------------------
@@ -70,6 +12,7 @@ PLAYER_V            EQU     128         ; starts him (plyr_spr_init_data)
 PLAYER_FACING       EQU     0           ; -U, up and left
 
 player:             walking_character PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
+walker_player       EQU     player              ; the character movers collide with
 
 ; How many times he can die and carry on. Knight Lore sets five and the start
 ; of the game takes one, through the same lose_life every death goes through,

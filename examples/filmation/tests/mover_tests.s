@@ -972,10 +972,11 @@ one_axis:			ld		a,(REC + OBJ.DU)
 
 
 ; ---------------------------------------------------------------------------
-; The engine around mover.s.
+; The engine and the game around movers.s.
 
 PLAYER_SIZE			EQU		3 * ROOM_STRIDE
 player:				DS		PLAYER_SIZE
+walker_player		EQU		player
 
 stubs:
 collide_hit:		DB		0
@@ -1130,3 +1131,4 @@ sound_sparkle:		ret
 
 
 					INCLUDE	"../knightlore/movers.s"
+					INCLUDE	"../engine/mover.s"

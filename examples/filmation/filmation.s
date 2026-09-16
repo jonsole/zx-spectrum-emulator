@@ -102,7 +102,9 @@ sprite_end:
 					INCLUDE "engine/depth.s"
 					INCLUDE "engine/shift.s"
 					INCLUDE "engine/walker.s"
+					INCLUDE "knightlore/knight.s"
 					INCLUDE "knightlore/movers.s"
+					INCLUDE "engine/mover.s"		; movers.s falls into it
 					INCLUDE "knightlore/special.s"
 					INCLUDE "engine/sound.s"
 					INCLUDE "knightlore/panel.s"
@@ -147,6 +149,7 @@ image_end:
 ; and the door table, which is a handful of loads.
                     ORG     $5B00
                     INCLUDE "knightlore/room_build.s"
+                    INCLUDE "engine/room.s"
                     INCLUDE "knightlore/glance.s"
                     INCLUDE "knightlore/end_at.s"
 room_code_end:
@@ -173,7 +176,8 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; The object pool. A room owns all of it: room_build refills it from the start,
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms.py works out while generating room_data.s.
-POOL_SLOTS          EQU     ROOM_MAX_OBJECTS + SPECIAL_SLOTS
+ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
+POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS
                     ALIGN   32
 room_objects:
                 REPT    POOL_SLOTS
@@ -212,6 +216,7 @@ bit_reverse_table:
 
 ; And code that only runs when a key is pressed, in what is left.
                     INCLUDE "knightlore/pickup.s"
+                    INCLUDE "engine/screen.s"         ; pickup.s falls into it
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end

@@ -753,3 +753,4 @@ sound_z:			ret
 
 
 					INCLUDE	"../engine/walker.s"
+					INCLUDE	"../knightlore/knight.s"

@@ -244,12 +244,6 @@ collide_z_max:		DB		0
 ; character, free to stand anywhere and only five each way, that can sit in
 ; the band where one says touching and the other says clear.
 
-; A character walks into things as one figure, not as the two records it is
-; drawn from. Knight Lore says the same thing with its own numbers: the
-; knight's legs carry W=5, D=5, H=23 and his body carries H=0, so the whole
-; of him is one box hung on the lower half.
-COLLIDE_HEIGHT		EQU		23
-
 
 ; Do our box and this object's overlap on all three axes?
 ;
@@ -1249,9 +1243,6 @@ object_update:
 
 .restore_sp:		ld		sp,0				; restore SP, value set before loop
 					ret
-
-
-
 
 
 ;; Calculate parameters to do with overlapping extents
