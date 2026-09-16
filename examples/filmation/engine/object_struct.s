@@ -1,6 +1,9 @@
 ; The object record, on its own so that something assembling without the rest
 ; of the engine -- tests/depth_tests.s -- can lay records out the same way.
 
+; The stride between records, which the pool's ALIGN fixes.
+ROOM_STRIDE         EQU     32
+
 					STRUCT 	OBJ
 NEXT:				DS		2
 MIN_Y:				DS		1	; byte position

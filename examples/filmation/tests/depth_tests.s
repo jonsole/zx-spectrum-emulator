@@ -12,8 +12,6 @@
 					ORG		$0100
 					INCLUDE	"harness.s"
 
-ROOM_STRIDE			EQU		32		; what filmation.s gives the pool
-
 REC_1				EQU		$C0C0
 REC_2				EQU		$C0E0
 REC_3				EQU		$C100		; the page boundary is between 2 and 3

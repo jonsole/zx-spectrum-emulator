@@ -20,7 +20,6 @@
 					ORG		$0100
 					INCLUDE	"harness.s"
 
-ROOM_STRIDE			EQU		32
 					INCLUDE	"../engine/object_struct.s"
 
 REC					EQU		$C000		; the record under test; a guard's legs follow

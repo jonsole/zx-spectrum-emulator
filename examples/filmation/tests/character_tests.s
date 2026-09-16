@@ -18,7 +18,6 @@
 					ORG		$0100
 					INCLUDE	"harness.s"
 
-ROOM_STRIDE			EQU		32
 					INCLUDE	"../engine/object_struct.s"
 
 REC					EQU		$C000		; the legs; the body follows, then the tail

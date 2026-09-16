@@ -1,3 +1,29 @@
+; This is the final optimized code. It takes the X coordinate in the C register,
+; and the Y coordinate in the B register. The screen address is returned in the HL register pair.
+; BC and DE are unchanged, so there is no need for expensive push and pop operations.
+pixelAddress:   ld      a, b
+                and     %00000111
+                ld      h, a    ; h contains Y2-Y0
+                ld      a, b
+                rra
+                scf             ; set bit 14
+                rra
+                rra
+                ld      l, a    ; l contains Y5-Y3
+                and     %01011000
+                or      h
+                ld      h, a    ; h is complete now
+                ld      a, c    ; divide X by 8
+                rr      l       ; and rotate Y5-Y3 in
+                rra
+                rr      l
+                rra
+                rr      l
+                rra
+                ld      l, a    ; l is complete now
+                ret
+
+
 ; Copy a composited region out of the view buffer and onto the screen.
 ;
 ;   HL - view buffer, at the region's top-left
