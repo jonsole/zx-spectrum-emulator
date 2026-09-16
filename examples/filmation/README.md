@@ -677,3 +677,33 @@ pixelAddress:   ld      a,b
   instructions, and the ROM is never contended.
 - **Cost:** the game depends on the 48K ROM's layout. The 128K's 48 BASIC ROM
   has the routine at the same address; any other ROM would break it silently.
+
+### Hand the arena out by what it is worth, not by build order
+
+`shift_alloc` gives buffers out in the order things ask for them, which is the
+order the room builder happens to place them in. Nothing weighs what a buffer
+is worth to the thing asking. At 4,992 bytes sixteen rooms go a piece or two
+short, and which pieces go without is an accident of the room data.
+
+What a buffer saves is the rotation, every time that object is drawn -- so it
+is worth most to whatever is drawn most:
+
+| | drawn |
+|---|---|
+| the knight | every turn, plus every region another object drags across him |
+| movers | every turn they move |
+| things shoved or carried | while they are moving |
+| scenery | once per region that reaches it |
+
+The knight is already safe: `character_keep` takes his two buffers once at the
+start and keeps them (see `shift_kept`). The rest are first come, first served.
+
+A priority pass would mean giving the movers their buffers before the room's
+scenery -- allocating in behaviour order, or letting `room_add` mark a piece as
+worth one and doing a second pass for the rest. Then a short arena would cost
+only a wall's redraw rather than a ball's every turn, and the arena could very
+likely give back more than the 768 bytes the end screens took.
+
+Measured today at 4,992: the worst room in the castle spends 2.2% of a turn
+rotating at draw time ($97), most of the sixteen about 1%, and no room shows
+anything wrong -- a refused piece still draws in the right place, only slower.
