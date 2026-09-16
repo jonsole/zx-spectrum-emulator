@@ -46,8 +46,10 @@ vid_buff_copy:
 					; LDI counts BC down as it copies. B is the row counter, so
 					; a borrow out of C would silently drop a row -- and rows *
 					; width reaches 512 here, well past a byte. Reset C every
-					; row rather than reason about the total.
-.row:				LD		C,255
+					; row rather than reason about the total -- from D, which
+					; is the screen's high byte and so never below $40, far
+					; more than the eight LDIs a row can take off it.
+.row:				LD		C,D
 					PUSH	DE			; cheaper than unwinding DE afterwards
 					; at any width worth having a routine for
 

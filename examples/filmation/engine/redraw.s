@@ -310,9 +310,9 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ld		hl,view_buffer
 					ld		a,(region_rows)
 					ld		b,a		; row counter, for the DJNZ. C is the copy
-					; routine's own -- it resets it per row so
-					; that LDI's countdown can never borrow
-					; into B and lose a row.
+					; routine's own -- it resets it from D every
+					; row so that LDI's countdown can never
+					; borrow into B and lose a row.
 					call	vid_buff_copy
 
 					;; NB: falls through into redraw_hook, the game's -- which
