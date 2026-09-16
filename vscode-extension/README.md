@@ -38,6 +38,16 @@ A handful of things, in one small extension:
 7. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
    hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
+## Screen scaling
+
+The magnifier in the screen panel's title bar (**ZX Spectrum: Screen Scaling...**) picks the
+filter -- nearest neighbour, sharp bilinear or bilinear -- the size -- fit in whole multiples,
+fit, or a fixed 1x-4x -- and how dark the scanline gaps are, from off to black, stored as the
+`zxspectrum.screen.filter`, `zxspectrum.screen.scale` and `zxspectrum.screen.scanlines` settings. The panel draws into a canvas sized in device pixels, so the chosen filter is the only
+one applied. `screen_scaling.js` (tested by `node tests/screen_scaling_test.js`) does the sizing,
+and its functions are inlined into the page as source. See
+[docs/vscode-debugging.md](../docs/vscode-debugging.md#scaling-and-filtering).
+
 ## Raster position
 
 While the machine is stopped — stepping, or on a breakpoint — the screen panel

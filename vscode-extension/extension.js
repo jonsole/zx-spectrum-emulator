@@ -23,6 +23,16 @@ const { activateAsmLanguage } = require('./asm_language');
 const { activateProfile } = require('./profile_view');
 const { activateRewind } = require('./rewind_view');
 const { activateWatchpoints } = require('./watchpoint_view');
+const {
+  FILTERS,
+  SCALES,
+  SCANLINE_PRESETS,
+  layoutFor,
+  prescaleFactor,
+  scanlinesPossible,
+  scanlineBand,
+  normaliseView,
+} = require('./screen_scaling');
 
 const SCREEN_HOST = '127.0.0.1';
 const SCREEN_PORT = 8500; // must match --screen-port; see README if you changed it
@@ -121,6 +131,18 @@ function activate(context) {
     vscode.window.onDidChangeTextEditorSelection((event) => {
       if (event.selections.length > 0 && !event.selections[0].isEmpty) {
         lastSelection = { document: event.textEditor.document, range: event.selections[0] };
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('zxspectrum.screenScaling', pickScreenScaling)
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      // Whoever changed it -- the title-bar button, the Settings editor, a
+      // settings.json edit -- the open panel follows.
+      if (panel && event.affectsConfiguration('zxspectrum.screen')) {
+        panel.webview.postMessage({ view: screenView() });
       }
     })
   );
@@ -407,7 +429,9 @@ function showScreenPanel(context) {
     vscode.ViewColumn.Beside,
     { enableScripts: true, retainContextWhenHidden: true }
   );
-  panel.webview.html = getHtml();
+  // In the page itself rather than posted after it: a message sent before the
+  // webview's script has run is not guaranteed to arrive.
+  panel.webview.html = getHtml(screenView());
   panel.onDidDispose(
     () => {
       panel = undefined;
@@ -420,6 +444,94 @@ function showScreenPanel(context) {
   panel.webview.onDidReceiveMessage(handleWebviewMessage, null, context.subscriptions);
   connectStream();
   connectAudioStream();
+}
+
+// How the screen panel draws the picture, from the settings -- see
+// screen_scaling.js for what each choice means.
+function screenView() {
+  const config = vscode.workspace.getConfiguration('zxspectrum.screen');
+  return normaliseView({
+    filter: config.get('filter'),
+    scale: config.get('scale'),
+    scanlines: config.get('scanlines'),
+  });
+}
+
+/// One list, three sections: picking a filter changes the filter, a size the
+/// size, a scanline darkness the darkness, and the current one of each is
+/// ticked. Stored as a
+/// user setting, so it holds in every workspace and survives a reload.
+async function pickScreenScaling() {
+  const current = screenView();
+  const items = [{ label: 'Filter', kind: vscode.QuickPickItemKind.Separator }];
+  for (const f of FILTERS) {
+    items.push({
+      label: `${f.id === current.filter ? '$(check)' : '$(blank)'} ${f.label}`,
+      detail: f.detail,
+      setting: 'filter',
+      value: f.id,
+    });
+  }
+  items.push({ label: 'Size', kind: vscode.QuickPickItemKind.Separator });
+  for (const s of SCALES) {
+    items.push({
+      label: `${s.id === current.scale ? '$(check)' : '$(blank)'} ${s.label}`,
+      detail: s.detail,
+      setting: 'scale',
+      value: s.id,
+    });
+  }
+  items.push({ label: 'Scanlines', kind: vscode.QuickPickItemKind.Separator });
+  for (const percent of SCANLINE_PRESETS) {
+    items.push({
+      label: `${percent === current.scanlines ? '$(check)' : '$(blank)'} ${
+        percent === 0 ? 'Off' : `${percent}% dark`
+      }`,
+      detail:
+        percent === 0
+          ? 'Every line lit, as the picture is.'
+          : percent === 100
+            ? 'Black gaps between the lines.'
+            : undefined,
+      setting: 'scanlines',
+      value: percent,
+    });
+  }
+  const custom = !SCANLINE_PRESETS.includes(current.scanlines);
+  items.push({
+    label: `${custom ? '$(check)' : '$(blank)'} ${
+      custom ? `Custom: ${current.scanlines}% dark` : 'Custom...'
+    }`,
+    detail: 'Any darkness from 0 to 100%.',
+    setting: 'scanlines',
+    value: undefined, // asked for below
+  });
+  const pick = await vscode.window.showQuickPick(items, {
+    title: 'ZX Spectrum Screen Scaling',
+    placeHolder: 'Pick a filter, a size or a scanline darkness -- each is set on its own',
+  });
+  if (!pick) {
+    return;
+  }
+  let value = pick.value;
+  if (value === undefined) {
+    const typed = await vscode.window.showInputBox({
+      title: 'Scanline darkness',
+      prompt: 'How dark the gaps between the lines are, 0 (off) to 100 (black)',
+      value: String(current.scanlines),
+      validateInput: (text) =>
+        /^\s*\d{1,3}\s*%?\s*$/.test(text) && Number(text.replace('%', '')) <= 100
+          ? undefined
+          : 'A whole number from 0 to 100',
+    });
+    if (typed === undefined) {
+      return;
+    }
+    value = Number(typed.replace('%', '').trim());
+  }
+  await vscode.workspace
+    .getConfiguration('zxspectrum.screen')
+    .update(pick.setting, value, vscode.ConfigurationTarget.Global);
 }
 
 // Forwards a keydown/keyup captured by the webview (see getHtml()'s script)
@@ -1857,7 +1969,7 @@ function getNonce() {
   return text;
 }
 
-function getHtml() {
+function getHtml(view) {
   const nonce = getNonce();
   // Frames arrive via postMessage as base64, rendered as a data: URI --
   // no network-facing CSP directive is needed at all (no img-src/connect-src
@@ -1870,9 +1982,12 @@ function getHtml() {
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; img-src data:; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
   <style>
-    body { margin:0; padding:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; outline:none; }
-    /* 352x312 (border included) at 2x scale */
-    img { image-rendering: pixelated; width:704px; height:624px; }
+    /* The canvas centres itself with auto margins rather than the body
+       centring it: centring by flex alignment pushes a canvas larger than
+       the panel (a fixed 4x in a small panel) off the top and left, where no
+       scrollbar can reach it. */
+    body { margin:0; padding:0; background:#000; display:flex; min-height:100vh; overflow:auto; outline:none; }
+    canvas { display:block; margin:auto; }
     #mute { position:fixed; top:8px; right:12px; font:16px system-ui,sans-serif;
             background:rgba(0,0,0,.5); color:#fff; border:1px solid #666;
             border-radius:4px; padding:2px 8px; cursor:pointer; opacity:.35; }
@@ -1880,11 +1995,136 @@ function getHtml() {
   </style>
 </head>
 <body tabindex="0">
-  <img id="screen" alt="ZX Spectrum screen" />
+  <canvas id="screen" aria-label="ZX Spectrum screen"></canvas>
   <button id="mute" title="Mute the beeper">&#128266;</button>
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
-    const img = document.getElementById('screen');
+
+    // ---- the picture ----------------------------------------------------
+    //
+    // Drawn into a canvas sized in DEVICE pixels, and laid out at exactly
+    // that size in CSS pixels, so the only filtering is the one chosen here
+    // -- never the browser quietly rescaling the element behind it. The two
+    // functions below are screen_scaling.js's own, inlined as source; its
+    // tests hold them to the answers this page gets.
+    ${layoutFor.toString()}
+
+    ${prescaleFactor.toString()}
+
+    ${scanlinesPossible.toString()}
+
+    ${scanlineBand.toString()}
+
+    const canvas = document.getElementById('screen');
+    const ctx = canvas.getContext('2d');
+    // Sharp bilinear's first pass, nearest neighbour up to a whole multiple.
+    const prescaled = document.createElement('canvas');
+    const prescaledCtx = prescaled.getContext('2d');
+    // The scanline gaps, built once per size and darkness and laid over every
+    // frame -- one drawImage a frame rather than 312 rectangles.
+    const scanlines = document.createElement('canvas');
+    const scanlinesCtx = scanlines.getContext('2d');
+    let scanlinesShown = false;
+    let view = ${JSON.stringify(view)};
+    let frame = null;   // the newest decoded frame, an ImageBitmap
+    let decoding = 0;   // the newest frame handed to the decoder
+
+    function resize() {
+      const l = layoutFor(view.scale, window.innerWidth, window.innerHeight,
+                          window.devicePixelRatio || 1);
+      if (canvas.width !== l.canvasW || canvas.height !== l.canvasH) {
+        canvas.width = l.canvasW;
+        canvas.height = l.canvasH;
+      }
+      canvas.style.width = l.cssW + 'px';
+      canvas.style.height = l.cssH + 'px';
+      buildScanlines();
+    }
+
+    // The gaps are measured from the canvas the picture is drawn into, not
+    // from the scale it was asked for, so they fall exactly between its lines
+    // however the size was rounded.
+    function buildScanlines() {
+      const rowHeight = canvas.height / 312;
+      scanlinesShown = view.scanlines > 0 && scanlinesPossible(rowHeight);
+      if (!scanlinesShown) return;
+      if (scanlines.width !== canvas.width || scanlines.height !== canvas.height) {
+        scanlines.width = canvas.width;
+        scanlines.height = canvas.height;
+      }
+      scanlinesCtx.clearRect(0, 0, scanlines.width, scanlines.height);
+      scanlinesCtx.fillStyle = 'rgba(0, 0, 0, ' + view.scanlines / 100 + ')';
+      const band = scanlineBand(rowHeight);
+      for (let line = 0; line < 312; line++) {
+        scanlinesCtx.fillRect(0, line * rowHeight + band.offset, scanlines.width, band.height);
+      }
+    }
+
+    function draw() {
+      if (!frame) return;
+      const w = canvas.width;
+      const h = canvas.height;
+      // Set on every draw: resizing a canvas resets its context, smoothing
+      // included. 'low' is Chromium's bilinear -- 'medium' adds mipmaps,
+      // which only matter going down, and 'high' is bicubic.
+      if (view.filter === 'bilinear') {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'low';
+        ctx.drawImage(frame, 0, 0, w, h);
+      } else if (view.filter === 'sharp-bilinear') {
+        // Nearest neighbour to the largest whole multiple that fits, then
+        // bilinear for what is left: every pixel stays square and the same
+        // size, and only its edges are blended. At a whole-multiple size
+        // there is nothing left over, and this is nearest neighbour exactly.
+        const k = prescaleFactor(w, h);
+        if (prescaled.width !== 352 * k || prescaled.height !== 312 * k) {
+          prescaled.width = 352 * k;
+          prescaled.height = 312 * k;
+        }
+        prescaledCtx.imageSmoothingEnabled = false;
+        prescaledCtx.drawImage(frame, 0, 0, prescaled.width, prescaled.height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'low';
+        ctx.drawImage(prescaled, 0, 0, w, h);
+      } else {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(frame, 0, 0, w, h);
+      }
+      // After the filter, as a CRT's gaps would be: the dark band is in the
+      // glass, not in the picture being scaled.
+      if (scanlinesShown) {
+        ctx.drawImage(scanlines, 0, 0);
+      }
+    }
+
+    // Decoded off the main thread. Frames arrive fifty times a second and a
+    // decode can take longer than the gap, so a frame that finishes after a
+    // newer one has been sent for decoding is thrown away rather than drawn
+    // over it.
+    async function showFrame(base64) {
+      const seq = ++decoding;
+      const bin = atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      let bitmap;
+      try {
+        bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+      } catch (err) {
+        return; // a damaged frame: the next one will do
+      }
+      if (seq !== decoding) {
+        bitmap.close();
+        return;
+      }
+      if (frame) frame.close();
+      frame = bitmap;
+      draw();
+    }
+
+    // Moving the panel between monitors changes the device pixel ratio, and
+    // Chromium reports that as a resize too.
+    window.addEventListener('resize', () => { resize(); draw(); });
+    resize();
 
     // ---- beeper playback ------------------------------------------------
     //
@@ -1955,7 +2195,11 @@ function getHtml() {
     window.addEventListener('message', (event) => {
       const data = event.data;
       if (data.image !== undefined) {
-        img.src = 'data:image/png;base64,' + data.image;
+        showFrame(data.image);
+      } else if (data.view !== undefined) {
+        view = data.view;
+        resize();
+        draw();
       } else if (data.audio !== undefined) {
         playBlock(data.audio);
       } else if (data.audioRate !== undefined) {

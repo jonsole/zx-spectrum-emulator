@@ -142,6 +142,40 @@ through VS Code. Any client can connect directly and read the same frames
 (4-byte big-endian length prefix + that many PNG bytes, repeated for as long
 as the connection stays open) — see `cpp-core/src/screen_stream.cpp`.
 
+### Scaling and filtering
+
+The magnifier in the panel's title bar -- or **ZX Spectrum: Screen
+Scaling...** from the Command Palette -- sets how the 352x312 picture is
+drawn, and remembers it as a user setting (`zxspectrum.screen.filter` and
+`zxspectrum.screen.scale`, also in the Settings editor):
+
+| Filter | Looks like |
+|---|---|
+| **Nearest neighbour** (the default) | hard-edged pixels, as the ULA drew them -- but at an in-between size some rows and columns come out a device pixel wider than others |
+| **Sharp bilinear** | hard-edged pixels, evenly sized at any size: nearest neighbour up to the largest whole multiple, then bilinear for the fraction that is left, so only pixel edges are blended |
+| **Bilinear** | smoothed, the way a television softened it |
+
+| Size | |
+|---|---|
+| **Fit, whole multiples** (the default) | as large as the panel allows in whole steps, so nearest neighbour stays exact |
+| **Fit** | fill the panel, keeping the shape -- the one where the filter matters |
+| **1x - 4x** | a fixed size; a panel too small for it scrolls |
+
+**Scanlines** (`zxspectrum.screen.scanlines`) darken the lower half of every
+Spectrum line by a percentage -- the picker offers off, 25, 50, 75 and 100%, and
+a custom value takes any whole number in between. They are laid over the
+picture after the filter, as a CRT's gaps are in the glass rather than in the
+picture, and they fall exactly between the lines whatever the size. A line
+needs at least two device pixels for a gap to fit, so at 1x on an unscaled
+display the setting has no effect; at 2x, 50% leaves the top pixel of each
+line as it was and halves the one below.
+
+Sizes are worked out in device pixels, so on a scaled display (125%, 150%) the
+whole-multiple sizes are whole numbers of *physical* pixels, and the canvas is
+never stretched by the browser behind the filter's back. At a whole-multiple
+size, sharp bilinear and nearest neighbour are the same picture; the
+difference shows at **Fit**. The panel used to be a fixed 2x whatever its size.
+
 Frames are read via `engine.machine.render_screen()` directly rather than
 through the engine's normal command queue — a `run()` in progress occupies
 the actor loop for its entire duration, so a queued read would sit unserved

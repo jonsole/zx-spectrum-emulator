@@ -64,8 +64,11 @@ index: definitions, references, rename and call hierarchy, including against
 this repo's own sources) and `node vscode-extension/tests/profile_model_test.js`
 (how a profile report becomes the heat map and the call tree),
 `node vscode-extension/tests/rewind_model_test.js` (the "before live" status
-text) and `node vscode-extension/tests/watchpoint_model_test.js` (how a
-watchpoint reads, and what "player 8" in the Watch Address box means).
+text), `node vscode-extension/tests/watchpoint_model_test.js` (how a
+watchpoint reads, and what "player 8" in the Watch Address box means) and
+`node vscode-extension/tests/screen_scaling_test.js` (how big the screen panel
+draws the picture on a scaled display, where the scanline gaps fall, and that
+the functions the page is given as source still work there).
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion

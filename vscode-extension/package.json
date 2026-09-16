@@ -30,6 +30,43 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "configuration": {
+      "title": "ZX Spectrum",
+      "properties": {
+        "zxspectrum.screen.filter": {
+          "type": "string",
+          "enum": ["nearest", "sharp-bilinear", "bilinear"],
+          "enumDescriptions": [
+            "Hard-edged pixels, as the ULA drew them. Uneven at in-between sizes.",
+            "Hard-edged pixels, evenly sized at any size: nearest neighbour to a whole multiple, then bilinear for the rest.",
+            "Smoothed, as a television would soften it."
+          ],
+          "default": "nearest",
+          "description": "How the screen panel scales the Spectrum's picture."
+        },
+        "zxspectrum.screen.scale": {
+          "type": "string",
+          "enum": ["fit-integer", "fit", "1", "2", "3", "4"],
+          "enumDescriptions": [
+            "As large as the panel allows in whole steps, so every pixel is the same size.",
+            "Fill the panel, keeping the shape.",
+            "352 x 312",
+            "704 x 624",
+            "1056 x 936",
+            "1408 x 1248"
+          ],
+          "default": "fit-integer",
+          "description": "How large the screen panel draws the Spectrum's picture, border included."
+        },
+        "zxspectrum.screen.scanlines": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 0,
+          "markdownDescription": "How dark the gaps between the screen panel's scanlines are, as a percentage: `0` is off, `100` black. Drawn over the lower half of each Spectrum line, after the filter. Needs at least two device pixels to a line, so it shows nothing at `1x` on an unscaled display."
+        }
+      }
+    },
     "grammars": [
       {
         "language": "z80-asm",
@@ -38,6 +75,11 @@
       }
     ],
     "commands": [
+      {
+        "command": "zxspectrum.screenScaling",
+        "title": "ZX Spectrum: Screen Scaling...",
+        "icon": "$(zoom-in)"
+      },
       {
         "command": "zxspectrum.watchAddress",
         "title": "ZX Spectrum: Watch Address...",
@@ -355,6 +397,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "zxspectrum.screenScaling",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen'",
+          "group": "navigation@2"
+        },
         {
           "command": "zxspectrum.writeOverlayOn",
           "when": "activeWebviewPanelId == 'zxspectrumScreen' && !zxspectrum.writeOverlay",
