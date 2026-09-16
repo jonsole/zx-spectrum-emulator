@@ -5,11 +5,16 @@ masked-sprite blitter behind isometric games like *Knight Lore*. Imported from
 its own project tree (it was previously debugged under DeZog/CSpect); this copy
 builds and runs against this emulator.
 
+It comes in two parts: [`engine/`](engine/README.md), an isometric engine
+with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
+built on it. `filmation.s` joins the two -- it lays out memory and includes
+both.
+
 Unlike the other examples here it is a real, multi-file program, which is the
-point of it being in the tree: `filmation.s` is the entry source and `INCLUDE`s
-four others, so the SLD it produces maps addresses into five different files.
-That is exactly the case a single flat line map gets wrong, and the regression
-tests in `cpp-core/tests/symbol_tests.cpp` cover it.
+point of it being in the tree: the SLD it produces maps addresses into nearly
+forty source files across two folders. That is exactly the case a single flat
+line map gets wrong, and the regression tests in
+`cpp-core/tests/symbol_tests.cpp` cover it.
 
 ## Build and run
 
@@ -29,90 +34,64 @@ It writes `output/filmation.sna` (from the `SAVESNA` at the bottom of
 `filmation.s`), plus the `.sld` the debugger maps source lines with and a
 `.lst` listing. `output/` is gitignored; everything in it is regenerated.
 
+Knight Lore's own data is not in the repository. Take it from your own copy of
+the game once, before the first build:
+
+```powershell
+.\.venv-win\Scripts\python.exe examples\filmation\knightlore\kl_extract.py "path\to\Knight Lore.sna"
+```
+
+The unit tests assemble single files against stubs and run them headless:
+
+```powershell
+.\.venv-win\Scripts\python.exe examples\filmation\tests\run_tests.py
+```
+
 ## Source layout
 
-`filmation.s` is the entry point and includes the rest in order:
+`filmation.s` is the entry point. It holds the memory map and includes the rest
+into it:
 
-- **filmation.s** — `ORG`, screen setup, the demo loop (`start:`), the
-  coordinate→screen-address routines (`screen_address`/`pixelAddress`) and the
-  two 256-entry Y→address lookup tables.
-- **sprite.s** — sprite tables and the width-specific blit routines:
-  `sprite_jump_table` trampolines into `sprite_blit_N_of_M`, and
-  `sprite_rotate_table` holds 8×512 bytes of precomputed bit-shifted values so
-  a sub-byte X offset costs a table lookup rather than a shift loop.
-- **object.s** — the object pipeline: `object_update` computes a bounding box
-  and, when the sprite needs a sub-byte X shift, rotates it into that object's
-  own shift buffer; `objects_draw_all` walks the object list, clips against the
-  view extent and dispatches into the blitter.
-- **vid_buff.s** — `vid_buff_copy_1`..`_8`, pushing the compact `view_buffer`
-  out to real screen memory and handling the screen's third-based row
-  addressing. Which one runs depends on the region width; see `copy_routines`.
-- **shift.s** — currently empty; included for future use.
-- **sprite_data.s** — generated, not hand-written. `build.py` regenerates it by
-  running `sprites.py` over `sprite_data.bin` whenever either is newer. Don't
-  hand-edit it.
+| Region | What goes there |
+|---|---|
+| `$5B00` | Room building, which runs once a room: `knightlore/room_build.s`, `engine/room.s` |
+| `$6000` | The castle's data: rooms, templates, pixel adjustments, font, sound effects |
+| `$7400` | The view buffer, the object pool, the bit-reverse and sprite tables, and the pick-up code |
+| `$8000` | Everything that runs every turn: the engine, the sprite bitmaps, the game's movers, the player, the sun |
+
+`$5B00` to `$7FFF` is contended memory, which is why only code that does not run
+every turn goes there. Each region ends with an `ASSERT` and a `DISPLAY` of the
+space it has left.
+
+**[engine/](engine/README.md)** is the engine: blit, projection, depth sort,
+rotation arena, dirty-region redraw, collision, characters and movers. Its
+README lists what a game has to supply.
+
+**knightlore/** is the game:
+
+| File | What it does |
+|---|---|
+| `main.s` | The main loop: menu, a new game, a turn; the room being played |
+| `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
+| `knight.s` | His size, step, jump and doorway box, and the arch nudge |
+| `glance.s` | His top half looking about while he stands |
+| `movers.s` | Every behaviour: slides, fires, balls, guards, gates, the ghost, blocks, spells |
+| `special.s`, `pickup.s` | The collectables and the cauldron; picking up, putting down, the carried objects |
+| `room_build.s` | Decoding a room from the castle's templates; printing the day and lives |
+| `sun.s`, `clock.s` | The sun and moon window, and day and night |
+| `overlay.s` | What is drawn straight on the screen, put back over a redrawn region |
+| `panel.s`, `panel_data.s` | The status panel |
+| `menu.s`, `input.s` | The menu, and keyboard and joystick reading |
+| `end.s`, `end_at.s` | Game over, the tunes, and the percentage of the castle seen |
+| `sound_fx.s` | The sound effects: which tone to play, and when |
+
+The generated files and the scripts that make them are in `knightlore/` too --
+see [The pipeline](#the-pipeline).
 
 The central trick is that the blitter is unrolled and jump-tabled: rather than
 branching on width/shift/height at runtime, an index is computed into a table
 of specialised routines and jumped straight into. Most of the cleverness is in
 address arithmetic, not control flow.
-
-## What it does
-
-`start:` fills the attribute area, places the scene and paints it once, then
-loops over the moving objects, redrawing only the area each of them disturbs.
-
-The scene is ten objects. Nothing authors the draw order — it is derived from
-`U`, `V` and `Z`; see **Depth sorting** below.
-
-| object | sprite | size | U, V, Z | box |
-|---|---|---|---|---|
-| `object_pillar` | 43 | 3×42 | 30, 66, 0 | 12, 12, 30 |
-| `object_block1`..`6` | 20 | 4×28 | 90, 54, Z = 0, 12, … 60 | 16, 16, 12 |
-| `object_player` | 44 | 4×29 | 60, V 20→110, 0 | 16, 16, 13 |
-| `object_ghost` | 40 | 3×19 | a square, see below | 12, 12, 7 |
-| `object_walker` | 4 | 3×23 | U 40→130, 70, 0 | 12, 12, 11 |
-
-Positions are **world** coordinates, not screen ones. The player walks one floor
-axis, which on screen is an isometric diagonal — up-and-right along V.
-
-The ghost walks a **square** around the block stack: out along U, out along V,
-back along U, back along V, one unit per frame, 60 to a side. Only one axis moves
-at a time, so its screen position shifts a single pixel across and at most one row
-down per frame, which is what keeps the union of its old and new extents inside
-`VIEW_BUF_WIDTH`.
-
-That square is the sharpest test of the depth sort in the demo. The ghost's depth
-key `U - V` runs from **−24** at the far corner to **+96** at the near one, while
-the stack's six cubes sit at 36, 48, … 96 — so over one lap the sort has to carry
-the ghost from behind the entire stack to in front of five of its cubes and back
-again, continuously:
-
-| leg | movement | depth key | position in the list |
-|---|---|---|---|
-| out along U | | 38 → 94 | 3 → 7 |
-| out along V | | 94 → 34 | 7 → 2 |
-| back along U | | 34 → −22 | 2 → 1 |
-| back along V | | −22 → 38 | 1 → 3 |
-
-The six blocks are a stack: identical U and V, Z rising by `BLOCK_RISE`. The
-sprite is 28 rows and its top face is a 32×16 diamond, leaving 12 rows of side —
-so a rise of 12 puts each cube exactly on the one below. That 12 is also the
-cube's `SIZE_Z`, which is what makes consecutive cubes *abut* rather than
-overlap: `[0,12)` and `[12,24)` are disjoint, so U and V overlap alone and the
-depth comparison comes out authoritative on Z. `U + V = 144` puts the stack at
-screen x 128, the middle of the screen and a byte boundary, so none of them
-needs a shift buffer.
-
-`object_walker` is a third mover, added to find where the engine runs out of
-frame rather than to look good — it crosses the stack along U at a V that puts
-its dirty rectangle on the cubes for most of its run. See **Cost** below.
-
-`object_table` lists every object; the startup loops walk that rather than the
-`NEXT` chain, which now belongs to the sorted list and is empty during placement.
-Note that `objects_draw_all` sets `IX` to its own `.next_object`, so
-`redraw_object` returns with `IX` destroyed and the loops keep their own copy
-across the call — getting that wrong sends the Z80 into screen memory.
 
 ## Depth sorting
 
@@ -347,12 +326,13 @@ Nothing here is hand-written:
 
 | | |
 |---|---|
-| `kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
-| `rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
-| `sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` |
-| `adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
+| `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
+| `knightlore/rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
+| `knightlore/sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` |
+| `knightlore/adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
 
-`build.py` regenerates the first three. The room data and the adjustment tables
+`build.py` runs `rooms.py` and `sprites.py` whenever their inputs change. The
+extracted files and `sprite_adj.s` sit beside them. The room data and the adjustment tables
 live in contended memory at `$6000`: they are read when a room is built and
 never again, which is where the game itself kept them.
 

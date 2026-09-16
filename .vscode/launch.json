@@ -75,9 +75,9 @@
       // preLaunchTask, so editing any of the .s files and relaunching runs
       // what you just wrote.
       //
-      // `asm` names the ENTRY source only. filmation.s INCLUDEs sprite.s,
-      // object.s, vid_buff.s and the generated sprite_data.s, and the SLD
-      // names all of them -- they are resolved beside filmation.s, so
+      // `asm` names the ENTRY source only. filmation.s INCLUDEs the engine/
+      // and knightlore/ sources, and the SLD names all of them by their path
+      // from filmation.s's folder -- which is where they are resolved, so
       // stepping lands in whichever file the code is actually in.
       "name": "ZX Spectrum: Filmation",
       "type": "zxspectrum",
