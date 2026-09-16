@@ -58,6 +58,15 @@ filmation, Manic Miner and the ROM's idle loop. Known limits: code reached by
 16-bit address; and with contention not yet emulated, contended code is
 measured at its uncontended cost.
 
+Native audio recovers from its device changing (2026-09-16): a shared-mode
+WASAPI stream does not survive headphones being plugged in, a Bluetooth
+speaker connecting, or a sleep/wake, and the render thread used to exit on
+that and leave the process silent until it was restarted. It now closes,
+withdraws its sink and pacing clock, and reopens the current default endpoint
+with a backoff, saying so on the terminal both ways. The waveOut fallback has
+the same blind spot and has not been given the same treatment -- see
+[audio.md](audio.md#when-the-device-goes-away).
+
 [Watchpoints](vscode-debugging.md#watchpoints) are done: flags per address
 checked on the bus in `spectrum.cpp`, watchpoints themselves in `engine.cpp`,
 DAP data breakpoints (so VS Code's own Break on Value Change works) and the

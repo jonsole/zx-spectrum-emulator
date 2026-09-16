@@ -105,6 +105,45 @@ So on WASAPI, raising the flag cannot deepen the device buffer, but it still
 adds slack in front of it -- which is the lever to reach for if the smallest
 period turns out too tight to stay glitch-free.
 
+### When the device goes away
+
+A shared-mode stream does not survive its device changing underneath it.
+Plugging in headphones, a Bluetooth speaker connecting or dropping, a driver
+update, the machine sleeping and waking: any of them invalidates the stream,
+and the only remedy Windows offers is to throw it away and open the current
+default endpoint afresh.
+
+So the render thread supervises itself. When the stream stops asking for audio
+-- an invalidated device, a buffer that will not take a write, or two seconds
+without the event that should arrive every few milliseconds -- it closes
+everything, withdraws the sink and the pacing clock (so the emulator carries
+on at the wall clock rather than waiting for a device that is not there), and
+opens the default endpoint again, backing off from a quarter of a second to
+five seconds between attempts until it succeeds. The device that comes back
+may be a different one with a different mix rate; that is what a reopen is
+for, and the beeper is told the new rate as part of it.
+
+Both halves say so on the server's terminal, because silence otherwise reads
+as a bug in the emulator:
+
+```
+Native audio: the device stopped (the device was invalidated); reopening
+Native audio playback resumed on the default device (48000 Hz, 10ms buffer)
+```
+
+If audio ever stops with no such line, the device is not what stopped --
+check the speed (anything other than 1x is deliberately silent, as is
+`--uncapped`) before looking here.
+
+`ZX_AUDIO_DROP_TEST=<ms>` makes the render loop pretend the device went away
+that often, which is how the reopening path gets exercised without pulling
+hardware out of a running machine.
+
+**Known gap:** the waveOut fallback does not do this. Its feeder never exits,
+so nothing dies, but it also never notices a device that has gone -- if
+WASAPI is unavailable on a machine *and* its device changes, audio stops until
+the server is restarted.
+
 **Remote Desktop:** RDP redirects audio as a compressed stream with its own
 buffering, typically adding 100-250ms plus jitter, all of it downstream of
 anything measurable here. If audio seems far more delayed than the configured
