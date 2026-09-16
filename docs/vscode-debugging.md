@@ -67,6 +67,33 @@ Disassembly View on every stop — clicking the Call Stack entry once after a
 stop refreshes it. Tracked upstream as
 [microsoft/vscode#131253](https://github.com/microsoft/vscode/issues/131253).
 
+### Where the focus goes when it stops
+
+VS Code focuses the editor, and raises its window, every time a debug session
+stops -- which is right when you pressed the key that stopped it, and wrong
+here as often as not: a step or a pause can come from an MCP client, a
+watchpoint can fire while you are typing in another file, and the screen panel
+loses the keyboard exactly when the machine is doing something worth watching.
+
+The workspace's `.vscode/settings.json` turns both off:
+
+```json
+"debug.focusEditorOnBreak": false,
+"debug.focusWindowOnBreak": false
+```
+
+Neither stops the debugger following the program: the call stack, the
+variables, the disassembly and the current-line highlight all still move on
+every stop. They only stop the keyboard and the window being taken. Set them
+in your own user settings to get the same everywhere, or drop them from the
+workspace file to have VS Code's own behaviour back.
+
+The adapter can go further if that is not enough -- DAP's `stopped` event
+carries a `preserveFocusHint` which asks the client not to change focus at all
+-- but it is deliberately not sent: VS Code honours it by not selecting the
+stack frame either, so the editor would stop following the program as you step
+through it.
+
 ## Attaching to a running emulator
 
 Every configuration above **launches**: the `preLaunchTask` stops any running

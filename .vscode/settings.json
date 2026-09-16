@@ -1,5 +1,14 @@
 {
   "debug.allowBreakpointsEverywhere": true,
+  // Stopping moves the debugger's selection without taking the keyboard: the
+  // current line still follows along and the panels still refresh, but focus
+  // stays where it was. Both are VS Code defaults of true, and both are wrong
+  // for this workspace -- a step or a pause here often comes from an MCP
+  // client rather than from a keypress in this window, and having the editor
+  // (or the whole window) snatched mid-sentence is worse than having to click
+  // into it.
+  "debug.focusEditorOnBreak": false,
+  "debug.focusWindowOnBreak": false,
   "cmake.ignoreCMakeListsMissing": true,
   "files.associations": {
     "*.asm": "z80-asm",
