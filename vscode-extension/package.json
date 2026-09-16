@@ -62,13 +62,19 @@
       {
         "command": "zxspectrum.stepBackInto",
         "title": "ZX Spectrum: Step Back Into",
-        "icon": "$(arrow-circle-left)",
+        "icon": {
+          "light": "media/toolbar/step-back-into-light.svg",
+          "dark": "media/toolbar/step-back-into-dark.svg"
+        },
         "enablement": "debugState == 'stopped'"
       },
       {
         "command": "zxspectrum.stepBackOut",
         "title": "ZX Spectrum: Step Back Out",
-        "icon": "$(arrow-circle-up)",
+        "icon": {
+          "light": "media/toolbar/step-back-out-light.svg",
+          "dark": "media/toolbar/step-back-out-dark.svg"
+        },
         "enablement": "debugState == 'stopped'"
       },
       {
@@ -84,7 +90,10 @@
       {
         "command": "zxspectrum.returnToLive",
         "title": "ZX Spectrum: Return to Live",
-        "icon": "$(arrow-circle-right)",
+        "icon": {
+          "light": "media/toolbar/return-to-live-light.svg",
+          "dark": "media/toolbar/return-to-live-dark.svg"
+        },
         "enablement": "debugState == 'stopped'"
       },
       {
@@ -208,17 +217,26 @@
       {
         "command": "zxspectrum.setSpeed",
         "title": "ZX Spectrum: Set Emulation Speed...",
-        "icon": "$(dashboard)"
+        "icon": {
+          "light": "media/toolbar/speed-light.svg",
+          "dark": "media/toolbar/speed-dark.svg"
+        }
       },
       {
         "command": "zxspectrum.profileStart",
         "title": "ZX Spectrum: Start Profiling",
-        "icon": "$(flame)"
+        "icon": {
+          "light": "media/toolbar/profile-start-light.svg",
+          "dark": "media/toolbar/profile-start-dark.svg"
+        }
       },
       {
         "command": "zxspectrum.profileStop",
         "title": "ZX Spectrum: Stop Profiling",
-        "icon": "$(stop-circle)"
+        "icon": {
+          "light": "media/toolbar/profile-stop-light.svg",
+          "dark": "media/toolbar/profile-stop-dark.svg"
+        }
       },
       {
         "command": "zxspectrum.profileHotSpots",

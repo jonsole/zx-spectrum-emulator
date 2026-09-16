@@ -37,6 +37,7 @@ zx-spectrum-emulator/
   scripts/                    # Python helpers -- still current
     build_rom_source.py         # builds rom_disassembly/ (see vscode-debugging.md)
     make_test_tape.py             # generates tapes/
+    make_toolbar_icons.py          # the extension's coloured debug-toolbar icons
   examples/
     hello_rom_call/              # tiny original demo, committed
     filmation/                    # isometric masked-sprite engine; multi-file,
@@ -55,6 +56,7 @@ zx-spectrum-emulator/
     asm_language.js              #   Z80 assembly: definition, references, rename, hierarchy
     asm_index.js                 #   ...the symbol index behind it (no vscode API, tested)
     syntaxes/z80-asm.tmLanguage.json  # sjasmplus syntax colouring
+    media/toolbar/               #   the debug toolbar's icons (scripts/make_toolbar_icons.py)
     tests/                       #   plain-Node tests for the model files
   roms/                        # gitignored; drop your 48K ROM (and the 128K pair) here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
