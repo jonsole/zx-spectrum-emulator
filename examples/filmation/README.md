@@ -116,7 +116,7 @@ across the call — getting that wrong sends the Z80 into screen memory.
 
 ## Depth sorting
 
-[depth.md](depth.md) walks through `depth.s` routine by routine, with worked
+[depth.md](engine/depth.md) walks through `depth.s` routine by routine, with worked
 examples; this section is the summary.
 
 Draw order is a permanent invariant of the list, not something recomputed. When
@@ -160,7 +160,7 @@ record.
 and `Z` and re-sorts only if the step was not zero, so the question is asked at
 the one moment the answer is known. It must be the step really applied, which
 for a character is the clamped `D`/`E` rather than the record's spent `DU`/`DV`
-— see [depth.md](depth.md). It gates on the *world* position: the null
+— see [depth.md](engine/depth.md). It gates on the *world* position: the null
 direction is `(1,-1,1)`, so `U+1, V-1, Z+1` changes an object's depth with no
 screen movement at all.
 

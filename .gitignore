@@ -90,22 +90,22 @@ examples/filmation/output/
 # the game, and their assembly transcription: 3,000 lines of DB that build.py
 # regenerates from the packed file with sprites.py whenever either is newer.
 # Neither is carried -- run kl_extract.py once to produce the packed file.
-examples/filmation/sprite_data.bin
-examples/filmation/sprite_data.s
+examples/filmation/knightlore/sprite_data.bin
+examples/filmation/knightlore/sprite_data.s
 
 # ...and the graphic-number table that sprites.py writes beside it. It is a
 # second file only because the two go to different places in the image: the
 # table wants a 512-byte boundary, and behind the bitmaps its padding was the
 # last thing in the image and rounded the whole thing up.
-examples/filmation/sprite_table.s
-examples/filmation/sprite_adj_gen.s
+examples/filmation/knightlore/sprite_table.s
+examples/filmation/knightlore/sprite_adj_gen.s
 
-# Likewise the assembly form of examples/filmation/room_data.bin: every room
+# Likewise the assembly form of examples/filmation/knightlore/room_data.bin: every room
 # in Knight Lore, the templates they are built from, and the tables that index
 # them. rooms.py regenerates it, so only the packed file is carried. Note that
 # sprite_adj.s is NOT here -- adj.py can only produce it from a running game,
 # so that one is committed.
-examples/filmation/room_data.s
+examples/filmation/knightlore/room_data.s
 
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its

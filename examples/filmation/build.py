@@ -28,6 +28,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 OUT_DIR = HERE / "output"
+# Knight Lore's data and the scripts that turn it into source live in knightlore/.
+KNIGHTLORE = HERE / "knightlore"
 
 # Where sjasmplus might be, best first: the copy this repo fetches for its own
 # disassembly builds, then whatever is on PATH. Kept a search rather than a
@@ -65,12 +67,12 @@ def generate_sprite_data() -> None:
     letting it inherit one -- the original project's SCons build did the same
     thing with a shell redirect.
     """
-    generator = HERE / "sprites.py"
-    packed = HERE / "sprite_data.bin"
-    generated = HERE / "sprite_data.s"
-    table = HERE / "sprite_table.s"
-    adjusted = HERE / "sprite_adj_gen.s"
-    harvest = HERE / "sprite_adj.s"
+    generator = KNIGHTLORE / "sprites.py"
+    packed = KNIGHTLORE / "sprite_data.bin"
+    generated = KNIGHTLORE / "sprite_data.s"
+    table = KNIGHTLORE / "sprite_table.s"
+    adjusted = KNIGHTLORE / "sprite_adj_gen.s"
+    harvest = KNIGHTLORE / "sprite_adj.s"
 
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
@@ -89,7 +91,7 @@ def generate_sprite_data() -> None:
         print(f"Regenerating {out.name} from {packed.name}")
         result = subprocess.run(
             [sys.executable, str(generator), part],
-            cwd=HERE,
+            cwd=KNIGHTLORE,
             capture_output=True,
             encoding="utf-8",
             check=True,
@@ -124,9 +126,9 @@ def generate_room_data() -> None:
     thousands of lines of named templates and commented room records rather
     than one table.
     """
-    generator = HERE / "rooms.py"
-    packed = HERE / "room_data.bin"
-    generated = HERE / "room_data.s"
+    generator = KNIGHTLORE / "rooms.py"
+    packed = KNIGHTLORE / "room_data.bin"
+    generated = KNIGHTLORE / "room_data.s"
 
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
@@ -137,7 +139,7 @@ def generate_room_data() -> None:
         return
 
     print(f"Regenerating {generated.name} from {packed.name}")
-    subprocess.run([sys.executable, str(generator)], cwd=HERE, check=True)
+    subprocess.run([sys.executable, str(generator)], cwd=KNIGHTLORE, check=True)
 
 
 def main() -> None:

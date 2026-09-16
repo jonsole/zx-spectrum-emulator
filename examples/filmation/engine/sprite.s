@@ -249,8 +249,3 @@ SPRITE_ROTATE_BASE	EQU		sprite_rotate_table - 512
 					INCLUDE	"sprite_flip.s"
 
 
-sprite_start:
-					INCLUDE "sprite_data.s"
-sprite_end:
-					DISPLAY "sprite_data size ", sprite_end - sprite_start
-

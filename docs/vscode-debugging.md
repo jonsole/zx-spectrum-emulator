@@ -202,7 +202,7 @@ sprite is all three things over its life:
   about twice a frame — so ticking **Live** watches a buffer being built
   *without stopping the machine to look*. It also re-reads by itself the moment
   a breakpoint hits.
-- **File** — a `.scr`, or a raw blob like `examples/filmation/sprite_data.bin`,
+- **File** — a `.scr`, or a raw blob like `examples/filmation/knightlore/sprite_data.bin`,
   with no debug session needed at all. That is the build-time half of the same
   question.
 - **Selection** — select `DEFB` lines in an assembler source and press **Grab
@@ -899,8 +899,8 @@ is resolved against the file it was clicked in. A path no loaded source
 describes comes back unverified rather than landing on some other file's line
 of the same number.
 
-`examples/filmation/` is the worked example — one entry source plus four
-includes; launch **"ZX Spectrum: Filmation"**.
+`examples/filmation/` is the worked example — one entry source plus the
+engine/ and knightlore/ files it includes; launch **"ZX Spectrum: Filmation"**.
 
 Loading a *new* snapshot always clears the previously-attached debug info
 (it almost certainly doesn't match the new program's addresses) — reattach

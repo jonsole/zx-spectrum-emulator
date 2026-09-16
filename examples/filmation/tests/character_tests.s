@@ -19,7 +19,7 @@
 					INCLUDE	"harness.s"
 
 ROOM_STRIDE			EQU		32
-					INCLUDE	"../object_struct.s"
+					INCLUDE	"../engine/object_struct.s"
 
 REC					EQU		$C000		; the legs; the body follows, then the tail
 
@@ -753,4 +753,4 @@ sound_jump:
 sound_z:			ret
 
 
-					INCLUDE	"../character.s"
+					INCLUDE	"../engine/walker.s"

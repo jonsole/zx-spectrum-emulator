@@ -21,7 +21,7 @@
 					INCLUDE	"harness.s"
 
 ROOM_STRIDE			EQU		32
-					INCLUDE	"../object_struct.s"
+					INCLUDE	"../engine/object_struct.s"
 
 REC					EQU		$C000		; the record under test; a guard's legs follow
 ROOMS				EQU		$C100		; room_objects, for movers_step
@@ -1130,4 +1130,4 @@ sound_take:
 sound_sparkle:		ret
 
 
-					INCLUDE	"../mover.s"
+					INCLUDE	"../knightlore/movers.s"
