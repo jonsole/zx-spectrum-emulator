@@ -47,19 +47,27 @@
 ; $9B, more than the blitting it fed, and dropping it took that room from 16
 ; turns a second to 21.
 ;
-; Measured, not guessed. Every room built in turn with shift_alloc totting up
-; what it was asked for: the hungriest is $41 at 5,682, then $CF at 5,458, $67
-; at 5,306 and $84 at 5,298. 6,144 leaves the worst room 462 to spare and no
-; room in the castle is refused anything. Counted by what was asked for rather
-; than what was granted, because a refusal used to be silent.
+; Measured, not guessed, and measured again since: every room entered in turn
+; and played for a hundred turns, with shift_arena_next read every turn, so
+; that a mover taking its buffer several turns in is counted too. The hungriest
+; are $41 and $BE at 5,718, then $01 at 5,624, $CF at 5,466 and $97 at 5,404.
+; 5,760 leaves the worst room 42 to spare and no room in the castle is refused
+; anything.
 ;
-; It is not silent now. A refusal falls back on rotating at draw time, which is
+; A refusal is not silent. It falls back on rotating at draw time, which is
 ; slow but in the right place, where it used to fall back on drawing
 ; byte-aligned, which is fast and up to seven pixels wrong. So this number is a
 ; budget for speed and no longer something the picture breaks on -- but it
 ; still wants re-measuring if the artwork or the placement changes.
+;
+; Leaving the high scenery out of the arena was tried on paper and does not
+; work: a wall is only about forty-eight rows tall on screen, so a knight
+; standing at the back wall already has his head within a few rows of the tier
+; above, and a jump covers the rest. Every buffered piece is reachable, and the
+; fourth hungriest room -- $87, the gates -- has no high scenery at all, so
+; there is nothing there to win.
 
-SHIFT_ARENA_SIZE	EQU		6144
+SHIFT_ARENA_SIZE	EQU		5760
 
 ; Every buffer carries two bytes in front of it saying what is in it: the
 ; graphic, and then the shift and the way round with bit 7 set, or zero for
