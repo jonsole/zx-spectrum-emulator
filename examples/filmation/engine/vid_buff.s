@@ -54,12 +54,13 @@ vid_buff_row:		; two bytes a column, from the wide end
 
 					; On to the next row of the buffer. It is 512 bytes, so
 					; this is the one place the source pointer crosses a page
-					; and the add has to carry into H.
+					; and the add has to carry into H -- once in thirty-two rows,
+					; so it is the carry that jumps, and the other rows go
+					; straight on.
 					LD		A,L
 .hstride:			ADD		A,0			; patched: VIEW_BUF_WIDTH - width
 					LD		L,A
-					JR		NC,.same_page
-					INC		H
+					JR		C,vid_buff_copy.page
 .same_page:
 					; Next screen row: down one pixel line, and every eighth
 					; line on to the next character row.
@@ -92,7 +93,10 @@ vid_buff_copy:
 					AND		$F8
 					ADD		A,D
 					LD		D,A
-					JR		vid_buff_copy
+					JP		vid_buff_copy		; 2 T less than a JR, on one line in eight
+
+.page:				INC		H
+					JR		vid_buff_row.same_page
 
 ; What redraw_view adds to twice the columns left out, to aim the DJNZ.
 VID_BUFF_LOOP_BASE	EQU		(vid_buff_row - (vid_buff_copy.loop + 2)) & $FF
