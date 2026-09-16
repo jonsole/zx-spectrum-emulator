@@ -63,7 +63,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
                     ORG     $6000
                     INCLUDE "room_data.s"
                     INCLUDE "panel_data.s"
-                    INCLUDE "sprite_adj.s"
+                    INCLUDE "sprite_adj_gen.s"
 
 ; The game's own font: forty 8x8 characters, which is all the text Knight Lore
 ; has. Digits first and then letters, no lower case and no punctuation beyond

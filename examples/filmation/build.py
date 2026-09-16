@@ -69,6 +69,8 @@ def generate_sprite_data() -> None:
     packed = HERE / "sprite_data.bin"
     generated = HERE / "sprite_data.s"
     table = HERE / "sprite_table.s"
+    adjusted = HERE / "sprite_adj_gen.s"
+    harvest = HERE / "sprite_adj.s"
 
     if not packed.is_file():
         # sprite_data.bin is the committed one and sprite_data.s is not, so
@@ -77,14 +79,16 @@ def generate_sprite_data() -> None:
         print(f"note: {packed.name} not present -- using whatever {generated.name} is here.")
         return
 
-    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime)
+    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime,
+                       harvest.stat().st_mtime)
     if all(f.is_file() and f.stat().st_mtime >= newest_input
-           for f in (generated, table)):
+           for f in (generated, table, adjusted)):
         return
 
-    # Two files, because the two halves go to different places in the image --
-    # see the note at the top of sprites.py.
-    for out, part in ((generated, "bitmaps"), (table, "table")):
+    # Three files: the two halves go to different places in the image -- see
+    # the note at the top of sprites.py -- and the adjustments are the harvest
+    # in sprite_adj.s with the trimmed rows folded in.
+    for out, part in ((generated, "bitmaps"), (table, "table"), (adjusted, "adj")):
         print(f"Regenerating {out.name} from {packed.name}")
         result = subprocess.run(
             [sys.executable, str(generator), part],

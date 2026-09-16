@@ -98,6 +98,7 @@ examples/filmation/sprite_data.s
 # table wants a 512-byte boundary, and behind the bitmaps its padding was the
 # last thing in the image and rounded the whole thing up.
 examples/filmation/sprite_table.s
+examples/filmation/sprite_adj_gen.s
 
 # Likewise the assembly form of examples/filmation/room_data.bin: every room
 # in Knight Lore, the templates they are built from, and the tables that index
