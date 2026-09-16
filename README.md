@@ -108,6 +108,10 @@ end:
   worst frames kept in detail -- see
   [Execution profile](docs/vscode-debugging.md#execution-profile). The same
   numbers are the `profile` MCP tool.
+- **Watchpoints.** Stop the machine when the program reads or writes an address
+  or a range, and hear what changed and which instruction did it -- see
+  [Watchpoints](docs/vscode-debugging.md#watchpoints). VS Code's own Break on
+  Value Change works too, and MCP clients get `set_watchpoint`.
 - **Stepping backwards.** At a breakpoint or a pause, step back an
   instruction, back out of a routine, reverse-continue to the last breakpoint or
   run back to whatever last wrote an address, with the whole machine as it was --

@@ -533,6 +533,53 @@ TEST(a_search_that_finds_nothing_leaves_the_machine_where_it_was) {
     CHECK(h.live());
 }
 
+// ---- watchpoints ------------------------------------------------------------------------
+
+namespace {
+
+/// Watches one address for writes, as the Engine's watchpoints do.
+void watch_writes(Spectrum& m, uint16_t addr) {
+    std::vector<uint8_t> flags(WATCH_ADDRESSES, 0);
+    flags[addr] = WATCH_WRITE;
+    m.set_watch_flags(std::move(flags));
+}
+
+} // namespace
+
+TEST(reverse_continue_stops_at_the_previous_watchpoint_hit) {
+    // Running backwards stops where running forwards would. MAIN writes
+    // 0x9000 from 0x8007 every time round its loop.
+    auto m = machine_running(MAIN, SUB);
+    History h(small_history());
+    h.start(*m);
+    run(*m, h, 30000);
+    run_to(*m, h, 0x800B); // just past the write
+    watch_writes(*m, 0x9000);
+
+    const auto r = h.go_back(*m, RewindOp::ReverseContinue, 0, never);
+    CHECK(r.moved);
+    // Before the instruction that wrote, so one step forward shows it happen.
+    CHECK_EQ(int(m->registers().pc), 0x8007);
+}
+
+TEST(a_watchpoint_does_not_fire_while_the_past_replays) {
+    // A replay runs thousands of instructions the program already ran; a
+    // watchpoint firing there would stop the machine over and over on its way
+    // back to a boundary it was asked for.
+    auto m = machine_running(MAIN, SUB);
+    History h(small_history());
+    h.start(*m);
+    run(*m, h, 30000);
+    watch_writes(*m, 0x9000);
+    m->watch_hit = WatchHit();
+
+    h.go_back(*m, RewindOp::StepBackInto, 0, never);
+    CHECK(!m->watch_hit.hit);
+    // ...and the machine is still watching what it was told to watch.
+    CHECK_EQ(m->watch_flags().size(), WATCH_ADDRESSES);
+    CHECK_EQ(int(m->watch_flags()[0x9000]), int(WATCH_WRITE));
+}
+
 // ---- forward again, and new timelines -------------------------------------------------
 
 TEST(running_forward_from_the_past_replays_the_keys_and_reaches_the_head) {

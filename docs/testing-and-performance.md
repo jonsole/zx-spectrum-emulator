@@ -35,6 +35,15 @@ and turn periods), plus the rule that every half-clock is charged exactly once;
 tree against a handful of SLD records. `call_stack` covers the debugger's call
 stack, which follows the profile's rule for when a call has ended.
 
+`watchpoint_tests` covers both halves of watchpoints on hand-written programs:
+the machine's -- a write reporting both values, a write of the same value
+tripping "every write" but not "only when it changes", a read watch ignoring
+the instruction fetch at that address and the ULA's own screen reads, `PUSH`
+and `CALL` onto a watched stack slot, a range hit by `LDIR`, and a debugger's
+poke tripping nothing -- and the Engine's, where a run stops at the
+instruction after the access, resumes correctly, honours a value test, and can
+have a watchpoint armed on a machine that is already running.
+
 Stepping backwards has `rewind_tests` (built only with rewind, the default).
 Its core is a determinism test: the ROM boots, keys are typed through the
 input log, a tape loads through the fast-load trap and a register edit sends
@@ -53,9 +62,10 @@ The VS Code extension's logic that does not need VS Code itself is tested from
 plain Node: `node vscode-extension/tests/asm_index_test.js` (the Z80 symbol
 index: definitions, references, rename and call hierarchy, including against
 this repo's own sources) and `node vscode-extension/tests/profile_model_test.js`
-(how a profile report becomes the heat map and the call tree) and
+(how a profile report becomes the heat map and the call tree),
 `node vscode-extension/tests/rewind_model_test.js` (the "before live" status
-text).
+text) and `node vscode-extension/tests/watchpoint_model_test.js` (how a
+watchpoint reads, and what "player 8" in the Watch Address box means).
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion
@@ -78,6 +88,12 @@ The "profiling" line is the same run with the
 [execution profile](vscode-debugging.md#execution-profile) counting: a few
 percent slower, within the run-to-run noise of these numbers. With profiling
 off it costs nothing measurable -- one pointer test per instruction.
+
+`bench_machine` also has a watchpoint line: an armed watchpoint that nothing
+ever trips, so every memory access the CPU makes pays the flag test, reads
+included. It measured 5.85x realtime against 5.83x and 5.95x for the same run
+unwatched -- no cost worth reporting, which is what made watching reads as well
+as writes worth having from the start.
 
 `bench_machine` says at the top whether rewind is compiled in, and the engine
 lines include keeping its history. Side by side with a `-NoRewind` build of the

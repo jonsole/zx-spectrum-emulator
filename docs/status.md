@@ -58,6 +58,15 @@ filmation, Manic Miner and the ROM's idle loop. Known limits: code reached by
 16-bit address; and with contention not yet emulated, contended code is
 measured at its uncontended cost.
 
+[Watchpoints](vscode-debugging.md#watchpoints) are done: flags per address
+checked on the bus in `spectrum.cpp`, watchpoints themselves in `engine.cpp`,
+DAP data breakpoints (so VS Code's own Break on Value Change works) and the
+`set_watchpoint` MCP tool, with an address or a range, reads as well as writes,
+"only when it changes" and a value test. They share rewind's hook, so Reverse
+Continue stops at the last access too. Measured at no cost worth reporting even
+with one armed. Known limits: DAP hit counts are ignored, a 128K watches the
+16-bit address, and registers are not watchable.
+
 [Stepping backwards](vscode-debugging.md#stepping-backwards) is done: a
 history of checkpoints and logged inputs (`rewind.cpp`) behind step back
 into/over/out, reverse continue, run back to cursor and run back to last write,

@@ -32,6 +32,35 @@
 
 namespace zx {
 
+/// What a watched address is watched for -- the bits of a watch flag. See
+/// Spectrum::set_watch_flags and docs/watchpoints-design.md.
+constexpr uint8_t WATCH_WRITE = 1;
+constexpr uint8_t WATCH_READ = 2;
+/// Only count a write that changes the value there. The one condition the
+/// machine itself applies, because it is the one that needs the old value at
+/// the instant of the write; everything else (a value test, which watchpoint
+/// it was) is decided above, from the hit.
+constexpr uint8_t WATCH_ON_CHANGE = 4;
+/// Flags for every 16-bit address, the size of a full watch map.
+constexpr size_t WATCH_ADDRESSES = 0x10000;
+
+/// The access that tripped a watch, or `hit` false. One per instruction: the
+/// first access that trips keeps the record, since an instruction that writes
+/// two watched bytes has still only stopped once.
+struct WatchHit {
+    bool hit = false;
+    /// True for a write, false for a read.
+    bool write = false;
+    uint16_t addr = 0;
+    /// What was there before, and after. Equal for a read.
+    uint8_t old_value = 0;
+    uint8_t new_value = 0;
+    /// The instruction that did it -- where it started, not where the CPU is
+    /// now. Only meaningful for accesses made from step_instruction(): the
+    /// raw clocking paths (tick(), run_frame()) do not track it.
+    uint16_t pc = 0;
+};
+
 class Spectrum {
 public:
     Z80 cpu;
@@ -46,6 +75,11 @@ public:
     Tape tape;
 
     std::set<uint16_t> breakpoints;
+
+    /// The access that tripped a watch, for whoever is driving the machine to
+    /// notice between instructions. Cleared by the driver, not by the machine
+    /// -- an unread hit is not lost by the next instruction.
+    WatchHit watch_hit;
 
     /// Optional cycle-by-cycle bus recorder, null when not tracing. Owned by
     /// whoever turned tracing on (the Engine), not by the machine -- a trace
@@ -65,14 +99,6 @@ public:
     /// PC), since any of those can leave normal call/return flow and a stale
     /// chain is worse than none.
     std::vector<uint16_t> call_stack;
-
-#if ZX_REWIND
-    /// An address whose CPU writes rewind is searching for, or -1. A write to
-    /// it sets write_watch_hit; nothing else changes. Only compiled in with
-    /// rewind, so the bus decode stays as it was without it.
-    int32_t write_watch = -1;
-    bool write_watch_hit = false;
-#endif
 
     /// A 48K. See set_model for the 128K.
     Spectrum();
@@ -115,6 +141,20 @@ public:
     /// Empty string on success, else the error message. A 16K image is the
     /// 48K's ROM, a 32K one the 128K's pair; see SpectrumMemory::load_rom.
     std::string load_rom(const uint8_t* data, size_t len);
+
+    /// Watches addresses on the bus: one flag byte per address, WATCH_WRITE |
+    /// WATCH_READ | WATCH_ON_CHANGE, ADDRESSES of them, or an empty vector for
+    /// none. Flags rather than a list of watchpoints so that the check on the
+    /// bus is one load and a branch however many there are, and so that a
+    /// range costs no more than a single address.
+    ///
+    /// Only the program's own accesses count. A write through write_memory()
+    /// -- a debugger poking memory -- deliberately does not trip a watch, and
+    /// neither does the ULA reading the screen, which never reaches the bus.
+    void set_watch_flags(std::vector<uint8_t> flags);
+    /// What is being watched, empty when nothing is. Taking a copy is how a
+    /// replay borrows the bus for its own search -- see rewind.h.
+    const std::vector<uint8_t>& watch_flags() const { return watch_flags_; }
 
     std::vector<uint8_t> read_memory(uint16_t addr, size_t length);
     void write_memory(uint16_t addr, const uint8_t* data, size_t length);
@@ -161,6 +201,19 @@ public:
 
 private:
     uint64_t pins_ = PINS_IDLE;
+
+    /// Watch flags, and the pointer the bus decode actually tests -- null
+    /// while nothing is watched, which is the whole cost of this feature to a
+    /// machine that is not using it.
+    std::vector<uint8_t> watch_flags_;
+    const uint8_t* watch_ = nullptr;
+    /// Where the instruction being executed started, for a hit to name. Set
+    /// by step_instruction(), which is the only caller that knows.
+    uint16_t instruction_pc_ = 0;
+
+    /// Records an access that tripped a watch, unless a hit is already
+    /// waiting to be read.
+    void note_watch(uint16_t addr, uint8_t old_value, uint8_t new_value, bool write);
 
     /// Where each call_stack entry's return address was pushed -- SP just
     /// after the CALL. Parallel to call_stack, and private because it is

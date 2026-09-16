@@ -82,6 +82,8 @@ const char* stop_reason_name(StopReason r) {
         // filter, and "exception" is the reason that pairs with it.
         // Nothing here treats an interrupt as an error.
         case StopReason::Interrupt: return "exception";
+        // DAP's own name for a watchpoint stop.
+        case StopReason::DataBreakpoint: return "data breakpoint";
         default: return "error";
     }
 }
@@ -93,6 +95,10 @@ Engine::Engine() {
 #if ZX_REWIND
     // Before the thread starts, which is the only other thing that touches it.
     restart_history(machine_);
+    // Running backwards stops where running forwards would, value tests and
+    // all -- so a search asks the same question of a hit that the run loop
+    // does, minus the bookkeeping.
+    history_.set_watch_filter([this](const WatchHit& hit) { return watch_wanted(hit) != nullptr; });
 #endif
     publish_screen();
     thread_ = std::thread([this] { actor_loop(); });
@@ -700,6 +706,7 @@ MachineState Engine::snapshot(bool running) const {
         s.breakpoints.push_back(bp);
     }
     s.call_stack = machine_.call_stack;
+    s.watch_stop = watch_stop_;
     return s;
 }
 
@@ -866,9 +873,18 @@ Registers Engine::reset() {
 
 Registers Engine::step(uint32_t instructions) {
     Registers r = submit<Registers>([this, instructions](Spectrum& m) {
+        // A hit left unread by whatever stopped last must not stop this
+        // before it has run anything.
+        m.watch_hit = WatchHit();
+        watch_stop_ = WatchStop();
         for (uint32_t i = 0; i < instructions; i++) {
             m.step_instruction();
             after_instruction(m);
+            // Stepping a thousand instructions past the write you are hunting
+            // would be no better than running past it.
+            if (m.watch_hit.hit && watch_stop_wanted(m)) {
+                break;
+            }
         }
         return m.registers();
     }, /*during_run=*/false);
@@ -906,6 +922,8 @@ Registers Engine::step_tstates(uint32_t tstates) {
 Registers Engine::step_over_halt(uint16_t target_pc) {
     pause_requested_.store(false);
     Registers r = submit<Registers>([this, target_pc](Spectrum& m) {
+        m.watch_hit = WatchHit();
+        watch_stop_ = WatchStop();
         const uint64_t yield_every = yield_interval();
         uint64_t count = 0;
         for (;;) {
@@ -914,6 +932,9 @@ Registers Engine::step_over_halt(uint16_t target_pc) {
             }
             m.step_instruction();
             after_instruction(m);
+            if (m.watch_hit.hit && watch_stop_wanted(m)) {
+                break;
+            }
             // NOT just pc == target_pc. That is also exactly what a HALT
             // still waiting displays, and what a `HALT; ...; JP` loop shows
             // every time it comes back round -- so an address-only check
@@ -952,6 +973,10 @@ MachineState Engine::run() {
     }
     StopReason reason = StopReason::Breakpoint;
     MachineState s = submit<MachineState>([this, &reason](Spectrum& m) {
+        // Neither a hit left unread by the last stop nor the last stop itself
+        // belongs to this run.
+        m.watch_hit = WatchHit();
+        watch_stop_ = WatchStop();
         pace_reset();
         const uint64_t yield_every = yield_interval();
         uint64_t count = 0;
@@ -963,6 +988,12 @@ MachineState Engine::run() {
             const uint64_t interrupts_before = m.cpu.interrupt_count;
             m.step_instruction();
             after_instruction(m);
+            if (m.watch_hit.hit && watch_stop_wanted(m)) {
+                // PC is the instruction after the one that made the access;
+                // the stop itself says which instruction that was.
+                reason = StopReason::DataBreakpoint;
+                break;
+            }
             if (break_on_interrupt_.load() && m.cpu.interrupt_count != interrupts_before) {
                 // PC is now the handler's first instruction, which is
                 // where someone asking to break on an interrupt wants to
@@ -1003,6 +1034,144 @@ MachineState Engine::run() {
         on_stopped_(reason, s.pc);
     }
     return s;
+}
+
+uint32_t Engine::set_watchpoint(Watchpoint w) {
+    if (w.length == 0) {
+        w.length = 1;
+    }
+    w.hits = 0;
+    uint32_t id = 0;
+    submit_void([this, w, &id](Spectrum& m) {
+        Watchpoint copy = w;
+        if (copy.id == 0) {
+            copy.id = next_watchpoint_id_++;
+        }
+        bool replaced = false;
+        for (Watchpoint& existing : watchpoints_) {
+            if (existing.id == copy.id) {
+                // An edit keeps the hit count: it is the same watchpoint
+                // being adjusted, not a new one.
+                copy.hits = existing.hits;
+                existing = copy;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            watchpoints_.push_back(copy);
+            if (copy.id >= next_watchpoint_id_) {
+                next_watchpoint_id_ = copy.id + 1;
+            }
+        }
+        id = copy.id;
+        arm_watchpoints(m);
+    });
+    return id;
+}
+
+bool Engine::clear_watchpoint(uint32_t id) {
+    bool removed = false;
+    submit_void([this, id, &removed](Spectrum& m) {
+        if (id == 0) {
+            removed = !watchpoints_.empty();
+            watchpoints_.clear();
+        } else {
+            for (size_t i = 0; i < watchpoints_.size(); i++) {
+                if (watchpoints_[i].id == id) {
+                    watchpoints_.erase(watchpoints_.begin() + long(i));
+                    removed = true;
+                    break;
+                }
+            }
+        }
+        arm_watchpoints(m);
+    });
+    return removed;
+}
+
+std::vector<Watchpoint> Engine::watchpoints() {
+    return submit<std::vector<Watchpoint>>([this](Spectrum& m) {
+        (void)m;
+        return watchpoints_;
+    });
+}
+
+void Engine::arm_watchpoints(Spectrum& m) {
+    std::vector<uint8_t> flags;
+    for (const Watchpoint& w : watchpoints_) {
+        if (!w.enabled || (!w.on_write && !w.on_read)) {
+            continue;
+        }
+        if (flags.empty()) {
+            flags.assign(WATCH_ADDRESSES, 0);
+        }
+        uint8_t bits = 0;
+        if (w.on_write) {
+            bits |= WATCH_WRITE;
+            if (w.on_change) {
+                bits |= WATCH_ON_CHANGE;
+            }
+        }
+        if (w.on_read) {
+            bits |= WATCH_READ;
+        }
+        for (uint32_t i = 0; i < w.length; i++) {
+            flags[uint16_t(w.addr + i)] |= bits;
+        }
+    }
+    // A second pass for the watchpoints that want EVERY write, not only the
+    // ones that change something: where two watchpoints overlap, the machine
+    // has one flag byte to answer both, and it has to be the one that reports
+    // more. The stricter of the two then filters its own hits in
+    // watch_stop_wanted.
+    for (const Watchpoint& w : watchpoints_) {
+        if (!w.enabled || !w.on_write || w.on_change) {
+            continue;
+        }
+        for (uint32_t i = 0; i < w.length; i++) {
+            flags[uint16_t(w.addr + i)] &= uint8_t(~WATCH_ON_CHANGE);
+        }
+    }
+    m.set_watch_flags(std::move(flags));
+}
+
+Watchpoint* Engine::watch_wanted(const WatchHit& hit) {
+    for (Watchpoint& w : watchpoints_) {
+        if (!w.enabled || hit.addr < w.addr || hit.addr >= uint32_t(w.addr) + w.length) {
+            continue;
+        }
+        if (hit.write ? !w.on_write : !w.on_read) {
+            continue;
+        }
+        // Checked here as well as on the bus: two watchpoints over one byte
+        // share a flag, so the machine reports what the laxer of them wants
+        // and the stricter filters its own hits out again.
+        if (hit.write && w.on_change && hit.old_value == hit.new_value) {
+            continue;
+        }
+        if (w.test == Watchpoint::Test::Equals && hit.new_value != w.value) {
+            continue;
+        }
+        if (w.test == Watchpoint::Test::NotEquals && hit.new_value == w.value) {
+            continue;
+        }
+        return &w;
+    }
+    return nullptr;
+}
+
+bool Engine::watch_stop_wanted(Spectrum& m) {
+    const WatchHit hit = m.watch_hit;
+    m.watch_hit = WatchHit(); // consumed, whatever is decided about it
+    Watchpoint* w = watch_wanted(hit);
+    if (w == nullptr) {
+        return false;
+    }
+    w->hits++;
+    watch_stop_ = WatchStop{true,          w->id,          hit.write, hit.addr,
+                            hit.old_value, hit.new_value,  hit.pc};
+    return true;
 }
 
 void Engine::set_breakpoint(uint16_t addr) {

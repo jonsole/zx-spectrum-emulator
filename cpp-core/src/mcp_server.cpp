@@ -130,6 +130,43 @@ json speed_json(const Engine& engine) {
                                     : describe_multiplier(engine.speed_multiplier())}};
 }
 
+json watchpoint_json(const Watchpoint& w) {
+    std::string access = w.on_write ? (w.on_read ? "readwrite" : "write") : "read";
+    json out = json{{"id", w.id},
+                    {"address", w.addr},
+                    {"length", w.length},
+                    {"access", access},
+                    {"on_change", w.on_change},
+                    {"enabled", w.enabled},
+                    {"hits", w.hits}};
+    if (w.test != Watchpoint::Test::None) {
+        out["test"] = w.test == Watchpoint::Test::Equals ? "=" : "<>";
+        out["value"] = w.value;
+    }
+    return out;
+}
+
+json watchpoints_json(const std::vector<Watchpoint>& list) {
+    json out = json::array();
+    for (const Watchpoint& w : list) {
+        out.push_back(watchpoint_json(w));
+    }
+    return json{{"watchpoints", out}};
+}
+
+/// The watchpoint stop a machine is sitting at, or null.
+json watch_stop_json(const WatchStop& stop) {
+    if (!stop.valid) {
+        return json(nullptr);
+    }
+    return json{{"watchpoint", stop.id},
+                {"access", stop.write ? "write" : "read"},
+                {"address", stop.addr},
+                {"old_value", stop.old_value},
+                {"new_value", stop.new_value},
+                {"pc", stop.pc}};
+}
+
 json state_json(const MachineState& s) {
     json paging = json{{"port_7ffd", s.paging},
                        {"rom", (s.paging & PAGING_ROM1) != 0 ? 1 : 0},
@@ -148,6 +185,7 @@ json state_json(const MachineState& s) {
                 {"interrupt_count", s.interrupt_count},
                 {"breakpoints", s.breakpoints},
                 {"call_stack", s.call_stack},
+                {"watch_stop", watch_stop_json(s.watch_stop)},
 #if ZX_REWIND
                 {"rewind", true},
 #else
@@ -503,6 +541,33 @@ json tools_list() {
         no_params());
 #endif
     add("pause", "Pause an in-flight run", no_params());
+    add("set_watchpoint",
+        "Stop the machine when the program reads or writes an address -- what wrote that? "
+        "Covers a single byte or a range (an object record, a buffer), and by default stops "
+        "only on a write that CHANGES the value. The stop is at the instruction after the one "
+        "that made the access, and reports the address, the old and new values and which "
+        "instruction did it; with rewind, one step back puts you just before it. A debugger's "
+        "own write_memory does not trip a watchpoint, and executing a watched address is not "
+        "reading it (use a breakpoint for that).",
+        schema(json{{"address", address_prop("Address or symbol expression to watch.")},
+                    {"length", integer_prop("Bytes covered from `address` (default 1) -- a "
+                                            "whole record in one watchpoint.")},
+                    {"access", string_prop("\"write\" (the default), \"read\" or "
+                                           "\"readwrite\".")},
+                    {"on_change", bool_prop("Only stop when a write changes the value there. "
+                                            "True by default; false stops on every write, "
+                                            "including one that rewrites the same value.")},
+                    {"value", integer_prop("Only stop when the value written is this (0-255). "
+                                           "Implies on_change false.")},
+                    {"not_value", integer_prop("...or when it is anything BUT this.")},
+                    {"id", integer_prop("Edit this existing watchpoint instead of adding one.")}},
+               {"address"}));
+    add("clear_watchpoint", "Remove a watchpoint by id, or all of them",
+        schema(json{{"id", integer_prop("Which one, as listed by list_watchpoints. Omit to "
+                                        "clear every watchpoint.")}},
+               {}));
+    add("list_watchpoints", "What is being watched, each with how often it has stopped the machine",
+        no_params());
     add("set_breakpoint", "Set a breakpoint at an address",
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
     add("clear_breakpoint", "Clear a breakpoint at an address",
@@ -1085,7 +1150,15 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         // Blocks until a breakpoint or a pause, exactly as the Rust server
         // did. `pause` bypasses the command queue, so it can still reach this.
         const MachineState s = engine.run();
-        return json_result(json{{"pc", s.pc}, {"running", s.running}});
+        json out = json{{"pc", s.pc}, {"running", s.running}};
+        // A watchpoint stop needs to say what it caught, or the caller is
+        // left to guess why a run that was going to hit a breakpoint stopped
+        // somewhere else entirely.
+        if (s.watch_stop.valid) {
+            out["stopped_by"] = "watchpoint";
+            out["watch_stop"] = watch_stop_json(s.watch_stop);
+        }
+        return json_result(out);
     }
 
     if (name == "pause") {
@@ -1167,6 +1240,81 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
                                 {"bytes", s.bytes}});
     }
 #endif
+
+    if (name == "set_watchpoint") {
+        Watchpoint w;
+        bool present = false;
+        if (!arg_opt_address(args, "address", sources, present, w.addr, error)) {
+            return error_result(error);
+        }
+        if (!present) {
+            return error_result("'address' is required");
+        }
+        const json& length = arg(args, "length");
+        if (length.is_number_integer()) {
+            const int64_t n = length.get<int64_t>();
+            if (n < 1 || n > 0x10000) {
+                return error_result("'length' must be between 1 and 65536");
+            }
+            w.length = uint16_t(n > 0xFFFF ? 0xFFFF : n);
+        }
+        const std::string access = arg(args, "access").is_string()
+                                       ? arg(args, "access").get<std::string>()
+                                       : std::string("write");
+        if (access == "write") {
+            w.on_write = true;
+        } else if (access == "read") {
+            w.on_write = false;
+            w.on_read = true;
+        } else if (access == "readwrite" || access == "readWrite") {
+            w.on_write = true;
+            w.on_read = true;
+        } else {
+            return error_result("'access' must be \"write\", \"read\" or \"readwrite\"");
+        }
+        const json& on_change = arg(args, "on_change");
+        w.on_change = !on_change.is_boolean() || on_change.get<bool>();
+        const json& value = arg(args, "value");
+        const json& not_value = arg(args, "not_value");
+        if (value.is_number_integer() && not_value.is_number_integer()) {
+            return error_result("'value' and 'not_value' are two answers to the same question");
+        }
+        for (const json* test : {&value, &not_value}) {
+            if (!test->is_number_integer()) {
+                continue;
+            }
+            const int64_t v = test->get<int64_t>();
+            if (v < 0 || v > 0xFF) {
+                return error_result("a watchpoint watches bytes: the value must be 0-255");
+            }
+            w.test = test == &value ? Watchpoint::Test::Equals : Watchpoint::Test::NotEquals;
+            w.value = uint8_t(v);
+            // A value test asks about the value written, so every write has to
+            // be looked at -- including one that writes the same value again.
+            w.on_change = false;
+        }
+        const json& id = arg(args, "id");
+        if (id.is_number_integer()) {
+            w.id = uint32_t(id.get<int64_t>());
+        }
+        w.id = engine.set_watchpoint(w);
+        json out = watchpoints_json(engine.watchpoints());
+        out["id"] = w.id;
+        return json_result(out);
+    }
+
+    if (name == "clear_watchpoint") {
+        const json& id = arg(args, "id");
+        const uint32_t which = id.is_number_integer() ? uint32_t(id.get<int64_t>()) : 0;
+        const bool removed = engine.clear_watchpoint(which);
+        json out = watchpoints_json(engine.watchpoints());
+        out["removed"] = removed;
+        return json_result(out);
+    }
+
+    if (name == "list_watchpoints") {
+        return json_result(watchpoints_json(engine.watchpoints()));
+    }
 
     if (name == "set_breakpoint" || name == "clear_breakpoint") {
         uint16_t addr = 0;

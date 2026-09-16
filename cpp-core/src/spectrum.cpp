@@ -188,25 +188,54 @@ void Spectrum::clock() {
     ula.advance();
 }
 
+void Spectrum::set_watch_flags(std::vector<uint8_t> flags) {
+    watch_flags_ = std::move(flags);
+    // The pointer, not the vector, is what the bus tests -- and it is null
+    // exactly when nothing is watched, so an unwatched machine pays one null
+    // test per memory access and nothing more.
+    watch_ = watch_flags_.empty() ? nullptr : watch_flags_.data();
+}
+
+void Spectrum::note_watch(uint16_t addr, uint8_t old_value, uint8_t new_value, bool write) {
+    if (watch_hit.hit) {
+        return; // one instruction, one stop
+    }
+    watch_hit.hit = true;
+    watch_hit.write = write;
+    watch_hit.addr = addr;
+    watch_hit.old_value = old_value;
+    watch_hit.new_value = new_value;
+    watch_hit.pc = instruction_pc_;
+}
+
 void Spectrum::service_bus() {
     uint16_t addr = get_addr(pins_);
 
     if (asserted(pins_, MREQ)) {
         if (asserted(pins_, RD)) {
-            pins_ = set_data(pins_, memory.read(addr));
+            const uint8_t value = memory.read(addr);
+            // M1 is the opcode fetch: executing a watched address is not
+            // reading it, which is what a breakpoint is for.
+            if (watch_ != nullptr && (watch_[addr] & WATCH_READ) != 0
+                && !asserted(pins_, M1)) {
+                note_watch(addr, value, value, /*write=*/false);
+            }
+            pins_ = set_data(pins_, value);
         } else if (asserted(pins_, WR)) {
             const uint8_t value = get_data(pins_);
+            // Before the write, while what is there is still the old value.
+            if (watch_ != nullptr && (watch_[addr] & WATCH_WRITE) != 0) {
+                const uint8_t old_value = memory.read(addr);
+                if ((watch_[addr] & WATCH_ON_CHANGE) == 0 || old_value != value) {
+                    note_watch(addr, old_value, value, /*write=*/true);
+                }
+            }
             memory.write(addr, value);
             // Every write the CPU makes passes here, which is the one place
             // that sees them all -- so it is where the ULA is told about the
             // ones that landed on the screen. As bank and offset, since on a
             // 128K the screen is a bank rather than an address range.
             ula.note_write(memory.bank_of(addr), uint16_t(addr & (BANK_SIZE - 1)));
-#if ZX_REWIND
-            if (int32_t(addr) == write_watch) {
-                write_watch_hit = true;
-            }
-#endif
         }
         // A bare MREQ with neither RD nor WR is the refresh cycle. Nothing to
         // service -- but note the address IS live on the bus, which is what
@@ -417,6 +446,9 @@ void Spectrum::step_instruction() {
     const uint16_t pc_before = registers().pc;
     const uint16_t sp_before = registers().sp;
     const StepKind kind = classify_step(memory, pc_before);
+    // So that a watch tripped inside this instruction names the instruction
+    // rather than wherever the CPU's fetch pointer has reached.
+    instruction_pc_ = pc_before;
 
     if (profile == nullptr) {
         clock();

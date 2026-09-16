@@ -613,6 +613,62 @@ MCP clients get the same numbers from the `profile` tool -- see
 [Connecting an MCP client](mcp.md#execution-profile) -- which is how a change can
 be measured before and after rather than estimated.
 
+## Watchpoints
+
+A breakpoint asks *when does execution reach here*. A watchpoint asks the
+question that actually comes up: *what wrote that?* Set one on an address and
+the machine stops when the program touches it, with the call stack of the
+routine that did.
+
+**Watch Address...** -- in the editor's context menu, the Command Palette, or
+the eye on the **ZX Spectrum Watchpoints** view in the debug sidebar -- takes an
+address or a symbol, optionally with a length (`player 8`, `$5C3A,2`), and then
+asks what to stop on:
+
+| | Stops when |
+|---|---|
+| **Writes that change it** (the default) | the program writes a different value there |
+| **Every write** | any write, including one that rewrites the value already there |
+| **Reads** | the program reads it as data -- not when it executes it |
+| **Reads and writes** | either |
+
+The stop lands on the instruction *after* the one that made the access -- there
+is no safe place to stop inside an instruction -- and says what happened, in the
+Debug Console and beside the stop: `player+2 ($F6DE) $00 -> $5E, written by
+object_update.on_screen ($CFF8)`. One **Step Back Into** puts you just before
+the write, with everything as it was (see [stepping
+backwards](#stepping-backwards)).
+
+The sidebar view lists what the emulator is watching, whoever set it, each with
+what it is watching for and how often it has stopped the machine; a click on the
+eye switches one off without forgetting it, and the cross removes it.
+
+VS Code's own **Break on Value Change**, in the memory inspector, works too --
+the adapter answers DAP's data-breakpoint requests, so those watchpoints appear
+in the BREAKPOINTS pane with their own checkboxes, with `= 0` or `<> 3` in their
+condition field if you want one. Watchpoints set that way and watchpoints set
+from the view live side by side; neither clears the other. A register row's
+Break on Value Change says to watch the memory it points at instead: registers
+live in the CPU, where nothing on the bus can see them change.
+
+**What counts as an access.** The program's own reads and writes, including its
+stack: a watchpoint on a stack slot catches whatever overwrote a return address.
+A debugger's own poke does not count, and neither does the ULA reading the
+screen fifty times a second, so watching display memory is about the program,
+not the picture. Executing a watched address is not reading it -- that is what a
+breakpoint is for.
+
+**Reverse Continue stops at a watchpoint too**, at the last access before where
+you are, which is the whole of "what wrote that?" with no forward planning:
+notice the bad value, watch it, and run backwards.
+
+**Not yet:** hit counts (`stop on the 40th write`) are accepted from VS Code but
+ignored, with a message saying so; on a 128K a watchpoint watches the 16-bit
+address, whichever bank is paged there; and a watchpoint watches memory, not
+registers. Watching costs nothing measurable while a program runs -- see
+[Testing and performance](testing-and-performance.md#performance) -- so leaving
+one armed is free.
+
 ## Stepping backwards
 
 Stopped at a breakpoint or a pause, you can go **backwards** through what the

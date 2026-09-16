@@ -174,6 +174,18 @@ for what is counted and how; `profile_model.js` (tested by
 `node tests/profile_model_test.js`) turns the server's report into the map,
 and `profile_view.js` paints it.
 
+## Watchpoints
+
+**Watch Address...** (the editor's context menu, the Command Palette, or the eye on the **ZX
+Spectrum Watchpoints** view) watches an address, a symbol or a range for writes, reads, or only
+writes that change the value; the machine stops at the instruction after the access and says what
+changed and what changed it. The view lists what the emulator is watching, whoever set it, with hit
+counts, an eye to switch one off and a cross to remove it. VS Code's own **Break on Value Change**
+in the memory inspector works too -- the adapter answers `dataBreakpointInfo`/`setDataBreakpoints`
+-- and the two kinds live side by side. `watchpoint_view.js` does the wiring and
+`watchpoint_model.js` (tested by `node tests/watchpoint_model_test.js`) the labels and the input
+parsing. See [docs/vscode-debugging.md](../docs/vscode-debugging.md#watchpoints).
+
 ## Stepping backwards
 
 When the server declares `supportsStepBack`, VS Code shows its own **Step Back** and **Reverse

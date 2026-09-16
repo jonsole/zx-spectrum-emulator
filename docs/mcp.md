@@ -53,6 +53,8 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `run_back_to(address)` / `run_back_to_write(address)` | Back to the last time execution reached an address, or to the instruction that last wrote one |
 | `return_to_live()` / `history_status()` | From the past, replay to the newest instant; how much history there is and where the machine is in it |
 | `set_breakpoint(addr)` / `clear_breakpoint(addr)` | PC breakpoints |
+| `set_watchpoint(address, length, access, on_change, value, not_value)` | Stop when the program reads or writes an address or range -- what wrote that? (see [watchpoints](#watchpoints)) |
+| `clear_watchpoint(id=None)` / `list_watchpoints()` | Remove one or all; what is being watched, with hit counts |
 | `read_memory(addr, length, bank=None)` / `write_memory(addr, data_hex)` | Memory access (hex-encoded), as the CPU sees it -- or with `bank`, straight out of one of a 128K's eight RAM banks whether or not it is paged in |
 | `get_registers()` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. Every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
@@ -102,6 +104,33 @@ full (two seconds' worth) is dropped and counted, and the status reports
 `dropped` so a video with gaps says so. ffmpeg is found on `PATH`, or named
 with `zx_server --ffmpeg <path>`; without one, `start_video` says so and
 nothing else changes.
+
+## Watchpoints
+
+`set_watchpoint` stops the machine when the program touches an address, and
+answers the question a breakpoint cannot: *what wrote that?* It takes an
+address or symbol expression, a `length` (a whole object record in one
+watchpoint), an `access` of `"write"` (the default), `"read"` or
+`"readwrite"`, and either `on_change` (the default: only a write that changes
+the value) or a `value` / `not_value` test.
+
+`run()` then answers with `stopped_by: "watchpoint"` and a `watch_stop`: the
+address, the old and new values, which watchpoint it was, and the `pc` of the
+instruction that made the access. The machine itself is stopped at the
+instruction *after* that one; `get_state()` reports the same `watch_stop` until
+the next run.
+
+```
+set_watchpoint {address: "player_x"}   # what moves the player?
+run                                    # -> watch_stop: $9C40 3 -> 255 by sprite_move+7
+step_back {mode: "into"}               # just before the write, everything as it was
+```
+
+The program's own accesses count, its stack included -- a watchpoint on a stack
+slot catches whatever overwrote a return address. A `write_memory` of your own
+does not, and neither does executing a watched address (that is a breakpoint).
+With rewind, `reverse_continue` also stops at the last watchpoint access before
+where you are.
 
 ## Stepping backwards
 

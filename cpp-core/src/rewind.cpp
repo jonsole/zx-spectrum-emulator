@@ -175,9 +175,13 @@ void History::replay(Spectrum& m, size_t index, uint64_t target_hc,
     Profile* profile = m.profile;
     TraceLog* trace = m.trace;
     const bool audio = m.beeper.enabled();
+    std::vector<uint8_t> watch = m.watch_flags();
+    const WatchHit watch_hit = m.watch_hit;
     m.profile = nullptr;
     m.trace = nullptr;
     m.beeper.set_enabled(false, m.global_hc());
+    m.set_watch_flags(replay_watch_);
+    m.watch_hit = WatchHit();
     noting_ = before_instruction ? &before_instruction : nullptr;
 
     const Checkpoint& cp = checkpoints_[index];
@@ -197,8 +201,11 @@ void History::replay(Spectrum& m, size_t index, uint64_t target_hc,
     }
 
     noting_ = nullptr;
+    last_replay_hit_ = m.watch_hit.hit;
     m.profile = profile;
     m.trace = trace;
+    m.set_watch_flags(std::move(watch));
+    m.watch_hit = watch_hit;
     m.beeper.restart_at(m.global_hc());
     m.beeper.set_enabled(audio, m.global_hc());
 }
@@ -263,17 +270,27 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
         live_ = false;
     }
 
-    const bool watch = op == RewindOp::RunBackToWrite;
-    if (watch) {
-        m.write_watch = int32_t(address);
+    // A search borrows the bus the way a watchpoint does, so it sees exactly
+    // what one would -- see spectrum.h's watch flags. Run Back to Last Write
+    // installs a watch of its own; Reverse Continue takes the machine's, so
+    // that running backwards stops at a watchpoint as running forwards does.
+    replay_watch_.clear();
+    if (op == RewindOp::RunBackToWrite) {
+        replay_watch_.assign(WATCH_ADDRESSES, 0);
+        replay_watch_[address] = WATCH_WRITE;
+    } else if (op == RewindOp::ReverseContinue) {
+        replay_watch_ = m.watch_flags();
     }
 
     std::vector<RewindMark> marks;
-    auto note = [&marks](Spectrum& machine) {
-        if (machine.write_watch_hit && !marks.empty()) {
-            marks.back().wrote = true;
+    auto note = [this, &marks](Spectrum& machine) {
+        // The hit belongs to the instruction that has just run, which is the
+        // boundary before this one.
+        if (machine.watch_hit.hit && !marks.empty()
+            && (!watch_filter_ || watch_filter_(machine.watch_hit))) {
+            marks.back().watched = true;
         }
-        machine.write_watch_hit = false;
+        machine.watch_hit.hit = false;
         RewindMark mark;
         mark.hc = machine.global_hc();
         mark.pc = machine.registers().pc;
@@ -293,12 +310,13 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
     size_t index = checkpoint_before(present);
     while (index < checkpoints_.size()) {
         marks.clear();
-        m.write_watch_hit = false;
         replay(m, index, end, note);
-        if (m.write_watch_hit && !marks.empty()) {
-            marks.back().wrote = true;
+        // replay() puts the machine's own watch state back as it found it, so
+        // a hit on the interval's last instruction is read from what it left
+        // behind rather than from the callback, which does not run again.
+        if (last_replay_hit_ && !marks.empty()) {
+            marks.back().watched = true;
         }
-        m.write_watch_hit = false;
 
         for (size_t i = marks.size(); i-- > 0;) {
             const RewindMark& b = marks[i];
@@ -310,9 +328,11 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
                 case RewindOp::StepBackInto: match = true; break;
                 case RewindOp::StepBackOver: match = b.depth <= depth; break;
                 case RewindOp::StepBackOut: match = b.depth < depth; break;
-                case RewindOp::ReverseContinue: match = m.breakpoints.count(b.pc) != 0; break;
+                case RewindOp::ReverseContinue:
+                    match = m.breakpoints.count(b.pc) != 0 || b.watched;
+                    break;
                 case RewindOp::RunBackToAddress: match = b.pc == address; break;
-                case RewindOp::RunBackToWrite: match = b.wrote; break;
+                case RewindOp::RunBackToWrite: match = b.watched; break;
             }
             if (match) {
                 found = true;
@@ -334,8 +354,7 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
         index--;
     }
 
-    m.write_watch = -1;
-    m.write_watch_hit = false;
+    replay_watch_.clear();
 
     if (!found && !result.cancelled && op == RewindOp::ReverseContinue && !checkpoints_.empty()
         && checkpoints_.front().hc < present) {

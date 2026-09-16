@@ -77,7 +77,7 @@ enum class RewindOp : uint8_t {
     StepBackInto,     // the previous instruction executed
     StepBackOver,     // the previous instruction in this routine
     StepBackOut,      // the CALL that entered this routine
-    ReverseContinue,  // the previous breakpoint hit, or the start of the history
+    ReverseContinue,  // the previous breakpoint or watchpoint hit, or the start of the history
     RunBackToAddress, // the previous time execution reached an address
     RunBackToWrite,   // the instruction that last wrote an address
 };
@@ -97,8 +97,8 @@ struct RewindMark {
     uint16_t pc = 0;
     uint32_t depth = 0;
     bool halted = false;
-    /// The instruction starting here wrote the watched address.
-    bool wrote = false;
+    /// The instruction starting here tripped the watch the search installed.
+    bool watched = false;
 };
 
 class History {
@@ -167,6 +167,13 @@ public:
 
     // ---- going back ------------------------------------------------------------
 
+    /// Whether a watch tripped during a search is one worth stopping at --
+    /// the value tests and so on that live above the machine. Without one,
+    /// every tripped watch counts. Set once, by whoever owns the machine.
+    void set_watch_filter(std::function<bool(const WatchHit&)> filter) {
+        watch_filter_ = std::move(filter);
+    }
+
     /// Performs `op` from the machine's present and lands on its target.
     /// `address` is for RunBackToAddress and RunBackToWrite. `cancelled` is
     /// polled between intervals of a long search. When nothing earlier matches,
@@ -220,6 +227,15 @@ private:
     /// A search's per-boundary callback while it replays, so boundaries inside
     /// a raw-clock span are noted too. Null otherwise.
     const std::function<void(Spectrum&)>* noting_ = nullptr;
+    /// What a replay watches on the bus -- the address a write search is
+    /// looking for, or empty. The machine's own watchpoints are put aside
+    /// while it replays: the past is not where they are meant to fire.
+    std::vector<uint8_t> replay_watch_;
+    /// Whether the last replay ended with a watch hit pending -- the access
+    /// made by its very last instruction, which no per-boundary callback runs
+    /// after.
+    bool last_replay_hit_ = false;
+    std::function<bool(const WatchHit&)> watch_filter_;
 };
 
 } // namespace zx

@@ -50,6 +50,8 @@ zx-spectrum-emulator/
     profile_model.js             #   ...the report turned into both (no vscode API, tested)
     rewind_view.js               #   stepping backwards: toolbar, menus, "before live" status
     rewind_model.js              #   ...its status text (no vscode API, tested)
+    watchpoint_view.js           #   watchpoints: the Watch Address command and the sidebar list
+    watchpoint_model.js          #   ...how one reads, and what was typed (no vscode API, tested)
     asm_language.js              #   Z80 assembly: definition, references, rename, hierarchy
     asm_index.js                 #   ...the symbol index behind it (no vscode API, tested)
     syntaxes/z80-asm.tmLanguage.json  # sjasmplus syntax colouring

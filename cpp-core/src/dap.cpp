@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -87,6 +88,12 @@ std::string hex4(uint16_t v) {
     return buf;
 }
 
+std::string hex2(uint8_t v) {
+    char buf[8];
+    std::snprintf(buf, sizeof buf, "0x%02X", v);
+    return buf;
+}
+
 // ---- connections -----------------------------------------------------------
 
 /// One DAP client. Per-connection because DAP says `setBreakpoints` and
@@ -100,6 +107,11 @@ struct Connection {
     std::map<std::string, std::set<uint16_t>> source_breakpoints;
     std::set<uint16_t> instruction_breakpoints;
     std::set<uint16_t> known_breakpoints;
+    /// Watchpoints this connection asked for, by dataId, and the Engine id
+    /// each became. Only these are touched by its setDataBreakpoints, so a
+    /// watchpoint set over MCP -- or from the editor's own command -- is not
+    /// swept away by a client that has none.
+    std::map<std::string, uint32_t> data_breakpoints;
 
     /// Buffered input, so header lines can be read a line at a time and the
     /// body a block at a time off the same stream.
@@ -653,6 +665,129 @@ json do_disassemble(Engine& engine, const Sources& sources, const json& argument
 
 /// Reconciles this connection's two breakpoint categories down to the
 /// engine's single flat set, so setting one kind doesn't wipe out the other.
+/// A watchpoint as a DAP dataId: the address and how many bytes. Parsed back
+/// by parse_data_id, so the two must agree.
+std::string data_id(uint16_t addr, uint16_t length) {
+    return "W:" + hex4(addr) + ":" + std::to_string(length);
+}
+
+bool parse_data_id(const std::string& id, uint16_t& addr, uint16_t& length) {
+    if (id.rfind("W:", 0) != 0) {
+        return false;
+    }
+    const size_t colon = id.find(':', 2);
+    if (colon == std::string::npos) {
+        return false;
+    }
+    const std::string addr_text = id.substr(2, colon - 2);
+    const std::string length_text = id.substr(colon + 1);
+    char* end = nullptr;
+    const unsigned long parsed_addr = std::strtoul(addr_text.c_str(), &end, 0);
+    if (end == addr_text.c_str() || parsed_addr > 0xFFFF) {
+        return false;
+    }
+    const unsigned long parsed_length = std::strtoul(length_text.c_str(), &end, 10);
+    if (parsed_length == 0 || parsed_length > 0x10000) {
+        return false;
+    }
+    addr = uint16_t(parsed_addr);
+    length = uint16_t(parsed_length);
+    return true;
+}
+
+/// DAP's `condition` on a data breakpoint, as this adapter reads it: a test
+/// on the value written. "= 0", "== 0", "<> 3", "!= 3", or a bare "0" meaning
+/// equals. Anything else is refused rather than quietly ignored -- a
+/// condition that does nothing is worse than one that will not take.
+bool parse_watch_condition(const std::string& text, const Sources& sources, Watchpoint& w,
+                           std::string& error) {
+    w.test = Watchpoint::Test::None;
+    std::string rest = text;
+    while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.front()))) {
+        rest.erase(rest.begin());
+    }
+    if (rest.empty()) {
+        return true;
+    }
+    Watchpoint::Test test = Watchpoint::Test::Equals;
+    for (const char* op : {"==", "=", "<>", "!=", "~="}) {
+        const size_t n = std::strlen(op);
+        if (rest.compare(0, n, op) == 0) {
+            test = (op[0] == '<' || op[0] == '!' || op[0] == '~') ? Watchpoint::Test::NotEquals
+                                                                 : Watchpoint::Test::Equals;
+            rest = rest.substr(n);
+            break;
+        }
+    }
+    uint16_t value = 0;
+    if (!sources.parse_address(rest, value, error)) {
+        error = "a watchpoint condition is a value test like \"= 0\" or \"<> 3\": " + error;
+        return false;
+    }
+    if (value > 0xFF) {
+        error = "a watchpoint watches bytes, so its condition must be 0-255";
+        return false;
+    }
+    w.test = test;
+    w.value = uint8_t(value);
+    return true;
+}
+
+json watchpoint_json(const Watchpoint& w, const Sources& sources) {
+    // Named where possible: a watchpoints list reading "0xF6DA" says far less
+    // than "room_shown", and only this side knows the names.
+    std::string symbol;
+    uint16_t offset = 0;
+    std::string named;
+    if (sources.resolve_symbol(w.addr, symbol, offset)) {
+        named = symbol + (offset > 0 ? "+" + std::to_string(offset) : "");
+    }
+    return json{{"id", w.id},
+                {"symbol", named},
+                {"address", w.addr},
+                {"length", w.length},
+                {"onWrite", w.on_write},
+                {"onRead", w.on_read},
+                {"onChange", w.on_change},
+                {"test", w.test == Watchpoint::Test::Equals
+                             ? "="
+                             : (w.test == Watchpoint::Test::NotEquals ? "<>" : "")},
+                {"value", w.value},
+                {"enabled", w.enabled},
+                {"hits", w.hits}};
+}
+
+json watchpoints_json(Engine& engine, const Sources& sources) {
+    json list = json::array();
+    for (const Watchpoint& w : engine.watchpoints()) {
+        list.push_back(watchpoint_json(w, sources));
+    }
+    return json{{"watchpoints", list}};
+}
+
+/// What a watchpoint stop is, in words: "player_x ($9C40) 3 -> 255, written by
+/// sprite_move+7". The description a `stopped` event carries, and the line the
+/// debug console gets.
+std::string describe_watch_stop(const WatchStop& stop, const Sources& sources) {
+    std::string name;
+    uint16_t offset = 0;
+    std::string where = hex4(stop.addr);
+    if (sources.resolve_symbol(stop.addr, name, offset)) {
+        where = name + (offset > 0 ? "+" + std::to_string(offset) : "") + " (" + where + ")";
+    }
+    std::string what = where;
+    if (stop.write) {
+        what += " " + hex2(stop.old_value) + " -> " + hex2(stop.new_value) + ", written by ";
+    } else {
+        what += " read as " + hex2(stop.new_value) + " by ";
+    }
+    std::string by = hex4(stop.pc);
+    if (sources.resolve_symbol(stop.pc, name, offset)) {
+        by = name + (offset > 0 ? "+" + std::to_string(offset) : "") + " (" + by + ")";
+    }
+    return what + by;
+}
+
 void sync_breakpoints(Engine& engine, Connection& conn) {
     std::set<uint16_t> desired = conn.instruction_breakpoints;
     for (const auto& entry : conn.source_breakpoints) {
@@ -757,6 +892,20 @@ std::string describe_request(const std::string& command, const json& arguments) 
     if (command == "startTrace" || command == "stopTrace") {
         return command;
     }
+    if (command == "setWatchpoint") {
+        const json& address = arg(arguments, "address");
+        return "setWatchpoint "
+               + (address.is_string() ? address.get<std::string>() : address.dump());
+    }
+    if (command == "clearWatchpoint") {
+        return command;
+    }
+    if (command == "setDataBreakpoints") {
+        const json& list = arg(arguments, "breakpoints");
+        const size_t count = list.is_array() ? list.size() : 0;
+        return command + ": " + std::to_string(count)
+               + (count == 1 ? " watchpoint" : " watchpoints");
+    }
     if (command == "stepBack" || command == "reverseContinue" || command == "stepBackInto"
         || command == "stepBackOut" || command == "returnToLive") {
         return command;
@@ -854,7 +1003,12 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                     {"supportsWriteMemoryRequest", true},
                     {"supportsDisassembleRequest", true},
                     {"supportsSetVariable", true},
-                    {"supportsSteppingGranularity", false}};
+                    {"supportsSteppingGranularity", false},
+                    // Watchpoints. The bytes form is what lets VS Code's
+                    // memory inspector offer "Break on Value Change" over a
+                    // byte range, which is where one is usually wanted.
+                    {"supportsDataBreakpoints", true},
+                    {"supportsDataBreakpointBytes", true}};
 #if ZX_REWIND
         // What makes VS Code show Step Back and Reverse Continue at all.
         body["supportsStepBack"] = true;
@@ -1277,6 +1431,148 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
 #else
         body = json{{"rewind", false}};
 #endif
+
+    } else if (command == "dataBreakpointInfo") {
+        // Can this be watched, and what do I call it? `name` is an address or
+        // a symbol expression when asAddress is set (the memory inspector, and
+        // the editor's own Watch Address command); otherwise it names a
+        // variable, which here means a register.
+        const std::string name = arg_str(arguments, "name");
+        const json& as_address = arg(arguments, "asAddress");
+        const bool is_address = as_address.is_boolean() && as_address.get<bool>();
+        const int64_t reference = arg_int(arguments, "variablesReference", 0);
+        if (!is_address && reference != 0) {
+            // Registers live in the CPU, not in memory, and nothing on the bus
+            // sees them change. Their memoryReference is what to watch instead.
+            body = json{{"dataId", nullptr},
+                        {"description", name
+                                            + " is a register, which the bus never sees written."
+                                              " Open it in the memory inspector and watch the"
+                                              " address it points at."}};
+        } else {
+            uint16_t addr = 0;
+            std::string addr_error;
+            if (!sources.parse_address(name, addr, addr_error)) {
+                body = json{{"dataId", nullptr}, {"description", addr_error}};
+            } else {
+                const int64_t bytes = arg_int(arguments, "bytes", 1);
+                const uint16_t length = bytes > 0 ? uint16_t(std::min<int64_t>(bytes, 0x100)) : 1;
+                std::string symbol;
+                uint16_t offset = 0;
+                std::string described = hex4(addr);
+                if (sources.resolve_symbol(addr, symbol, offset)) {
+                    described = symbol + (offset > 0 ? "+" + std::to_string(offset) : "") + " ("
+                                + described + ")";
+                }
+                if (length > 1) {
+                    described += ", " + std::to_string(length) + " bytes";
+                }
+                body = json{{"dataId", data_id(addr, length)},
+                            {"description", described},
+                            {"accessTypes", json::array({"read", "write", "readWrite"})},
+                            // An address means the same thing next session.
+                            {"canPersist", true}};
+            }
+        }
+
+    } else if (command == "setDataBreakpoints") {
+        // Replaces THIS connection's watchpoints, as DAP says -- and only
+        // those: see Connection::data_breakpoints.
+        std::map<std::string, uint32_t> wanted;
+        json results = json::array();
+        const json& list = arg(arguments, "breakpoints");
+        if (list.is_array()) {
+            for (const json& bp : list) {
+                const std::string id = arg_str(bp, "dataId");
+                Watchpoint w;
+                if (!parse_data_id(id, w.addr, w.length)) {
+                    results.push_back(json{{"verified", false},
+                                           {"message", "unknown dataId '" + id + "'"}});
+                    continue;
+                }
+                const std::string access = arg_str(bp, "accessType");
+                w.on_read = access == "read" || access == "readWrite";
+                w.on_write = access.empty() || access == "write" || access == "readWrite";
+                std::string condition_error;
+                if (!parse_watch_condition(arg_str(bp, "condition"), sources, w,
+                                           condition_error)) {
+                    results.push_back(json{{"verified", false}, {"message", condition_error}});
+                    continue;
+                }
+                // A value test asks about the value written, so it has to see
+                // every write, not only the ones that change something.
+                w.on_change = w.test == Watchpoint::Test::None;
+                const auto existing = conn.data_breakpoints.find(id);
+                if (existing != conn.data_breakpoints.end()) {
+                    w.id = existing->second; // an edit, not a second watchpoint
+                }
+                const uint32_t assigned = engine.set_watchpoint(w);
+                wanted[id] = assigned;
+                json result = json{{"verified", true}, {"instructionReference", hex4(w.addr)}};
+                if (!arg_str(bp, "hitCondition").empty()) {
+                    result["message"] = "hit counts are not supported; every access stops";
+                }
+                results.push_back(result);
+            }
+        }
+        for (const auto& entry : conn.data_breakpoints) {
+            if (wanted.count(entry.first) == 0) {
+                engine.clear_watchpoint(entry.second);
+            }
+        }
+        conn.data_breakpoints = std::move(wanted);
+        body = json{{"breakpoints", results}};
+
+    } else if (command == "setWatchpoint") {
+        // Not standard DAP: the editor's own Watch Address command, and what
+        // its Watchpoints view edits. Unlike setDataBreakpoints this adds one
+        // rather than replacing a set, so it can live alongside them.
+        uint16_t addr = 0;
+        bool present = false;
+        std::string addr_error;
+        if (!arg_opt_address(arguments, "address", sources, present, addr, addr_error)
+            || !present) {
+            return envelope_response(
+                conn, request_seq, command, false,
+                json{{"message", addr_error.empty() ? "'setWatchpoint' needs an 'address'"
+                                                    : addr_error}});
+        }
+        Watchpoint w;
+        w.id = uint32_t(arg_int(arguments, "id", 0));
+        w.addr = addr;
+        const int64_t length = arg_int(arguments, "length", 1);
+        w.length = length > 0 ? uint16_t(std::min<int64_t>(length, 0x100)) : 1;
+        const std::string access = arg_str(arguments, "access");
+        w.on_read = access == "read" || access == "readWrite";
+        w.on_write = access.empty() || access == "write" || access == "readWrite";
+        const json& on_change = arg(arguments, "onChange");
+        w.on_change = !on_change.is_boolean() || on_change.get<bool>();
+        std::string condition_error;
+        if (!parse_watch_condition(arg_str(arguments, "condition"), sources, w,
+                                   condition_error)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", condition_error}});
+        }
+        if (w.test != Watchpoint::Test::None) {
+            w.on_change = false;
+        }
+        const json& enabled = arg(arguments, "enabled");
+        w.enabled = !enabled.is_boolean() || enabled.get<bool>();
+        engine.set_watchpoint(w);
+        body = watchpoints_json(engine, sources);
+
+    } else if (command == "clearWatchpoint") {
+        // With no id, all of them -- including any a client set through
+        // setDataBreakpoints, which is why those ids are forgotten here too.
+        const uint32_t id = uint32_t(arg_int(arguments, "id", 0));
+        engine.clear_watchpoint(id);
+        if (id == 0) {
+            conn.data_breakpoints.clear();
+        }
+        body = watchpoints_json(engine, sources);
+
+    } else if (command == "watchpoints") {
+        body = watchpoints_json(engine, sources);
 
     } else if (command == "threads") {
         body = json{{"threads", json::array({json{{"id", THREAD_ID}, {"name", "Z80"}}})}};
@@ -1811,11 +2107,24 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
     std::printf("DAP server listening on %s:%u\n", host.c_str(), unsigned(port));
     std::fflush(stdout);
 
-    engine.on_stopped([&sources](StopReason reason, uint16_t pc) {
+    engine.on_stopped([&engine, &sources](StopReason reason, uint16_t pc) {
+        // A watchpoint stop is the one kind where the address is not the
+        // interesting part: what changed, and what changed it, is. Read back
+        // from the machine, which has stopped by the time this runs.
+        std::string description = hex4(pc);
+        if (reason == StopReason::DataBreakpoint) {
+            const WatchStop stop = engine.state().watch_stop;
+            if (stop.valid) {
+                description = describe_watch_stop(stop, sources);
+                broadcast_event("output",
+                                json{{"category", "console"},
+                                     {"output", "Watchpoint: " + description + "\n"}});
+            }
+        }
         broadcast_event("stopped", json{{"reason", stop_reason_name(reason)},
                                         {"threadId", THREAD_ID},
                                         {"allThreadsStopped", true},
-                                        {"description", hex4(pc)}});
+                                        {"description", description}});
         // Named where possible: "stopped at 0x9607" says far less than
         // "stopped at 0x9607 (WAIT_RASTER+9)" when you are trying to work out
         // what the machine was doing.

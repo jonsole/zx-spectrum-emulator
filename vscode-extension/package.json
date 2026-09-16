@@ -39,6 +39,27 @@
     ],
     "commands": [
       {
+        "command": "zxspectrum.watchAddress",
+        "title": "ZX Spectrum: Watch Address...",
+        "icon": "$(eye)",
+        "enablement": "debugType == 'zxspectrum'"
+      },
+      {
+        "command": "zxspectrum.clearWatchpoint",
+        "title": "Remove Watchpoint",
+        "icon": "$(close)"
+      },
+      {
+        "command": "zxspectrum.clearWatchpoints",
+        "title": "ZX Spectrum: Remove All Watchpoints",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "zxspectrum.toggleWatchpoint",
+        "title": "Enable/Disable Watchpoint",
+        "icon": "$(eye-closed)"
+      },
+      {
         "command": "zxspectrum.stepBackInto",
         "title": "ZX Spectrum: Step Back Into",
         "icon": "$(arrow-circle-left)",
@@ -270,6 +291,11 @@
           "id": "zxspectrumProfile",
           "name": "ZX Spectrum Profile",
           "when": "debugType == 'zxspectrum' || zxspectrum.hasProfile"
+        },
+        {
+          "id": "zxspectrumWatchpoints",
+          "name": "ZX Spectrum Watchpoints",
+          "when": "debugType == 'zxspectrum'"
         }
       ]
     },
@@ -279,12 +305,21 @@
         "contents": "No tape in the deck.\n[Load tape...](command:zxspectrum.loadTape)"
       },
       {
+        "view": "zxspectrumWatchpoints",
+        "contents": "Nothing is being watched.\n\nA watchpoint stops the machine when the program reads or writes an address -- what wrote that? -- and says what changed and which instruction did it.\n[Watch an address...](command:zxspectrum.watchAddress)"
+      },
+      {
         "view": "zxspectrumProfile",
         "contents": "Nothing profiled yet. Start profiling, then let the program run: every routine it calls shows here, most expensive first, and expands into the routines it called. The worst frames come first once there are some.\n[Start profiling](command:zxspectrum.profileStart)\nIf the program waits in a loop of its own each frame, mark that routine idle so it does not count as work.\n[Set idle routines...](command:zxspectrum.profileSetIdle)"
       }
     ],
     "menus": {
       "editor/context": [
+        {
+          "command": "zxspectrum.watchAddress",
+          "when": "debugType == 'zxspectrum' && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
+          "group": "debug@5"
+        },
         {
           "command": "zxspectrum.runBackToCursor",
           "when": "debugType == 'zxspectrum' && stepBackSupported && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
@@ -314,6 +349,22 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "zxspectrum.watchAddress",
+          "when": "debugType == 'zxspectrum'"
+        },
+        {
+          "command": "zxspectrum.clearWatchpoint",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.toggleWatchpoint",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.clearWatchpoints",
+          "when": "debugType == 'zxspectrum' && zxspectrum.hasWatchpoints"
+        },
         {
           "command": "zxspectrum.stepBackInto",
           "when": "debugType == 'zxspectrum' && stepBackSupported"
@@ -413,6 +464,16 @@
       ],
       "view/item/context": [
         {
+          "command": "zxspectrum.toggleWatchpoint",
+          "when": "view == zxspectrumWatchpoints && viewItem == zxWatchpoint",
+          "group": "inline@1"
+        },
+        {
+          "command": "zxspectrum.clearWatchpoint",
+          "when": "view == zxspectrumWatchpoints && viewItem == zxWatchpoint",
+          "group": "inline@2"
+        },
+        {
           "command": "zxspectrum.tapeSeek",
           "when": "view == zxspectrumTape && viewItem == zxspectrumTapeBlock",
           "group": "inline"
@@ -439,6 +500,16 @@
         }
       ],
       "view/title": [
+        {
+          "command": "zxspectrum.watchAddress",
+          "when": "view == zxspectrumWatchpoints",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zxspectrum.clearWatchpoints",
+          "when": "view == zxspectrumWatchpoints && zxspectrum.hasWatchpoints",
+          "group": "navigation@2"
+        },
         {
           "command": "zxspectrum.profileStart",
           "when": "view == zxspectrumProfile && !zxspectrum.profiling",

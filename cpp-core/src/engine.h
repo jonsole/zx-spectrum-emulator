@@ -48,6 +48,47 @@
 
 namespace zx {
 
+/// A watchpoint: an address or range, and what about an access to it is worth
+/// stopping for. See docs/watchpoints-design.md.
+///
+/// The machine itself knows only flags per address (spectrum.h); which
+/// watchpoint a hit belongs to, and whether its value test is satisfied, are
+/// worked out here from the hit.
+struct Watchpoint {
+    /// Assigned by the Engine, and how a client names one later.
+    uint32_t id = 0;
+    uint16_t addr = 0;
+    /// Addresses covered, from `addr`. At least 1.
+    uint16_t length = 1;
+    bool on_write = true;
+    bool on_read = false;
+    /// Only stop when a write changes what is there. Ignored by reads.
+    bool on_change = true;
+
+    /// An optional test on the value written, on top of the rest.
+    enum class Test : uint8_t { None, Equals, NotEquals };
+    Test test = Test::None;
+    uint8_t value = 0;
+
+    bool enabled = true;
+    /// Stops it has caused.
+    uint64_t hits = 0;
+};
+
+/// The watchpoint stop a machine is sitting at, if any -- what stopped it and
+/// what the access was.
+struct WatchStop {
+    bool valid = false;
+    uint32_t id = 0;
+    /// True for a write, false for a read.
+    bool write = false;
+    uint16_t addr = 0;
+    uint8_t old_value = 0;
+    uint8_t new_value = 0;
+    /// The instruction that made the access.
+    uint16_t pc = 0;
+};
+
 /// A state snapshot, everything a debugger front end needs in one go.
 struct MachineState {
     Registers registers;
@@ -69,6 +110,8 @@ struct MachineState {
     uint64_t interrupt_count = 0;
     std::vector<uint16_t> breakpoints;
     std::vector<uint16_t> call_stack;
+    /// The watchpoint the machine is stopped at, if it stopped at one.
+    WatchStop watch_stop;
     /// Stepped or run back into the history, rather than at its newest
     /// instant -- see rewind.h. Always false in a build without rewind.
     bool in_past = false;
@@ -289,7 +332,7 @@ struct GraphicsView {
 };
 
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
-enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt };
+enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt, DataBreakpoint };
 
 /// How fast a `run` is allowed to go.
 ///
@@ -396,6 +439,17 @@ public:
     bool running() const { return running_.load(); }
     void set_breakpoint(uint16_t addr);
     void clear_breakpoint(uint16_t addr);
+    /// Watches an address or range, and stops a run or a step when the program
+    /// accesses it -- see Watchpoint. `w.id` of 0 adds a new one; an existing
+    /// id replaces that one, which is how a client edits without a gap where
+    /// nothing is watched. Returns the id.
+    ///
+    /// Queued like a breakpoint, and serviced at a run's yields, so a
+    /// watchpoint can be set on a game that is already running.
+    uint32_t set_watchpoint(Watchpoint w);
+    /// Removes one by id, or (with 0) all of them. True if anything went.
+    bool clear_watchpoint(uint32_t id);
+    std::vector<Watchpoint> watchpoints();
     std::vector<uint8_t> read_memory(uint16_t addr, size_t length);
     void write_memory(uint16_t addr, std::vector<uint8_t> data);
     /// Reads a RAM bank directly, whatever is paged: `offset` is within the
@@ -775,6 +829,22 @@ private:
     /// `every` is a spacing in frames rather than in boundaries seen.
     uint64_t capture_next_frame_ = 0;
     std::vector<CapturedFrame> capture_frames_;
+
+    /// What is being watched, and what the last watchpoint stop was. Emulator
+    /// thread only, like everything else the queue serves.
+    std::vector<Watchpoint> watchpoints_;
+    uint32_t next_watchpoint_id_ = 1;
+    WatchStop watch_stop_;
+    /// Rebuilds the machine's watch flags from `watchpoints_`. Empty flags
+    /// when nothing is enabled, which is what keeps an unwatched machine at
+    /// one null test per memory access.
+    void arm_watchpoints(Spectrum& m);
+    /// The watchpoint a hit belongs to -- the first covering one whose access
+    /// type, change rule and value test the hit satisfies -- or null.
+    Watchpoint* watch_wanted(const WatchHit& hit);
+    /// Whether the machine's pending watch hit is worth stopping for. Consumes
+    /// the hit either way, counts it, and records the stop when there is one.
+    bool watch_stop_wanted(Spectrum& m);
 
     /// The profile's counts, kept after it stops so they can still be read,
     /// and the frame counter where counting began and (once stopped) ended.

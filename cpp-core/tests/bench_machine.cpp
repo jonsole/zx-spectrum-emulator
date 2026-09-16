@@ -70,7 +70,8 @@ void bench_machine(bool have_rom) {
 
 /// Through Engine::run() -- the path a DAP `continue` actually takes,
 /// including its per-yield key sync and screen publish.
-void bench_engine(bool have_rom, Speed speed, bool profile, const char* label) {
+void bench_engine(bool have_rom, Speed speed, bool profile, const char* label,
+                  bool watchpoint = false) {
     Engine engine;
     if (have_rom) {
         std::ifstream f(std::string(ZX_PROJECT_ROOT) + "/roms/48.rom", std::ios::binary);
@@ -82,6 +83,17 @@ void bench_engine(bool have_rom, Speed speed, bool profile, const char* label) {
     engine.reset();
     if (profile) {
         engine.start_profile();
+    }
+    if (watchpoint) {
+        // A write watch on the ROM's first byte: every memory access the CPU
+        // makes pays the flag test, reads included, and nothing ever trips it
+        // -- the ROM does not write to itself, and its character set at
+        // 0x3D00-0x3FFF means an address at the OTHER end is read constantly.
+        // What a watchpoint costs a program that is not hitting it.
+        Watchpoint w;
+        w.addr = 0x0000;
+        w.on_write = true;
+        engine.set_watchpoint(w);
     }
 
     std::thread runner([&engine] { engine.run(); });
@@ -119,6 +131,10 @@ int main() {
     bench_engine(have_rom, Speed::Uncapped, false, "engine run(), uncapped");
     // What counting every instruction's time costs -- see profile.h.
     bench_engine(have_rom, Speed::Uncapped, true, "engine run(), uncapped, profiling");
+    // What watching an address costs the program that is not touching it:
+    // one flag test per memory access, reads included.
+    bench_engine(have_rom, Speed::Uncapped, false, "engine run(), uncapped, one watchpoint",
+                 /*watchpoint=*/true);
     // The default. Should land on 1.00x -- that IS the pass condition.
     bench_engine(have_rom, Speed::Realtime, false, "engine run(), realtime (default)");
     return 0;

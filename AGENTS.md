@@ -132,6 +132,12 @@ examples that need one skip or say so. `sjasmplus` is at
   naming a routine alike. Resolve against the loaded program's own debug info
   first, then the ROM's -- `Sources::active()` is in that order -- and in the
   editor, against the files the current one is `INCLUDE`d with.
+- **`service_bus` is where the machine's accesses are seen.** The ULA's
+  screen-write map, rewind's search and watchpoints all hook the same read and
+  write in `spectrum.cpp`, and they are on the hottest path there is: a new
+  check belongs behind a pointer that is null when the feature is off, the way
+  `watch_` is. Debugger pokes go through `write_memory` instead and
+  deliberately trip none of it.
 - **Everything from outside the machine is a rewind input.** With rewind
   compiled in (the default), keys, pokes, register edits, tape commands and raw
   T-state clocking reach the `Spectrum` through `History::record` in the

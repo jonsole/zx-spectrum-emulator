@@ -1,8 +1,9 @@
 # Watchpoints: design
 
-Status: **agreed; not yet built.** Once built, the user-facing parts
-move into [vscode-debugging.md](vscode-debugging.md) and [mcp.md](mcp.md), and
-this file keeps the internals.
+Status: **built.** How to use them is in
+[vscode-debugging.md](vscode-debugging.md#watchpoints) and
+[mcp.md](mcp.md#watchpoints); this file keeps the design, and [As
+built](#as-built) lists where the build departed from it.
 
 ## What it is for
 
@@ -227,3 +228,32 @@ and new value, and the instruction that did it. `get_state()` reports the list.
 - **The stop is after the writing instruction**, showing old and new values,
   because there is no safe place to stop inside an instruction. Rewind is what
   gets you to before it: one Step Back Into from the stop.
+
+## As built
+
+- **The flags carry one condition, not all of them.** `WATCH_ON_CHANGE` is a
+  third flag bit, because only the machine can see the old value at the instant
+  of the write; the value test and which watchpoint a hit belongs to are worked
+  out in the Engine from the hit. Where two watchpoints cover one byte the
+  machine reports what the laxer of them wants and the stricter filters its own
+  hits out again.
+- **One hit per instruction, kept until it is read.** The machine never clears
+  a hit itself, so a driver that only looks between instructions cannot lose
+  one; the run and step loops clear it when they start, so a hit left over from
+  the last stop cannot stop the next run before it has run anything.
+- **Cost:** nothing measurable. An armed watchpoint that never trips measured
+  5.85x realtime against 5.83x and 5.95x unwatched -- inside the noise, with
+  reads checked as well as writes.
+- **Rewind shares the hook.** `Spectrum::write_watch`, which Run Back to Last
+  Write used, is gone: a replay installs watch flags of its own instead, and
+  `History::replay` puts the machine's own aside while it runs so a watchpoint
+  cannot fire in the past. Reverse Continue matches watchpoint accesses as well
+  as breakpoints, filtered through the same value tests as a forward stop.
+- **DAP:** `dataBreakpointInfo` answers a register row with a null `dataId` and
+  says to watch the memory it points at. `hitCondition` is accepted and
+  ignored, with a message on the breakpoint saying so. A client's
+  `setDataBreakpoints` only replaces the watchpoints that client set, so one set
+  over MCP or from the editor's own command survives.
+- **The editor got a view rather than relying on the BREAKPOINTS pane**, since
+  nothing but VS Code can put entries there, and a watchpoint on a symbol, a
+  range, or one set over MCP has to appear somewhere.
