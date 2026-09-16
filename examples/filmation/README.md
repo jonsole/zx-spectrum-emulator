@@ -678,6 +678,32 @@ pixelAddress:   ld      a,b
 - **Cost:** the game depends on the 48K ROM's layout. The 128K's 48 BASIC ROM
   has the routine at the same address; any other ROM would break it silently.
 
+### One rotate table instead of two
+
+`sprite_rotate_table` holds two pages for each shift 1..7 -- `x >> s`, and the
+bits that fall out of it, `(x << (8 - s)) & 255` -- which is 3,584 bytes, and
+`object_update`'s rotation loop toggles between them with `inc h` / `dec h`.
+
+The two halves are disjoint parts of one rotation: `rotr(x, s)` has `x >> s` in
+its low `8 - s` bits and the fallen-out bits in the top `s`. One page a shift
+would hold both, 1,792 bytes instead of 3,584.
+
+- **Saves** 1,792 bytes of the code region -- far more than anything else left.
+- **Cost:** the loop gets the two halves out of one byte with a mask each, so
+  every lookup grows an `and`, and `or (hl)` -- which merges a byte with its
+  neighbour straight from the table today -- has to become a load, a mask and an
+  or. That is roughly +20% on the rotation, which the profiler puts at about 13%
+  of a busy room's turn: call it 2.5% of the frame rate.
+
+### Cold code into the room builder's region
+
+`$5B00..$5FFF` holds `room.s` and `glance.s` and has 42 bytes free; the code
+region has 1,029. Both are RAM the same CPU reaches, so anything cold enough not
+to mind contended memory can move down there -- `end_at`, `end_attr_at` and
+`end_seen` are about the right size together. It buys the code region those 42
+bytes and costs nothing but the churn of splitting a file. The tune's timing
+code must NOT go: it counts T-states.
+
 ### Hand the arena out by what it is worth, not by build order
 
 `shift_alloc` gives buffers out in the order things ask for them, which is the
