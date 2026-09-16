@@ -73,11 +73,8 @@ def generate_sprite_data() -> None:
     harvest = HERE / "sprite_adj.s"
 
     if not packed.is_file():
-        # sprite_data.bin is the committed one and sprite_data.s is not, so
-        # this only happens if the packed file has been deleted. Carry on if
-        # a generated copy is lying around; otherwise sjasmplus will say so.
-        print(f"note: {packed.name} not present -- using whatever {generated.name} is here.")
-        return
+        sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
+                 "own copy of Knight Lore to produce it")
 
     newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime,
                        harvest.stat().st_mtime)

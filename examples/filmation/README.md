@@ -349,7 +349,7 @@ Nothing here is hand-written:
 
 | | |
 |---|---|
-| `kl_extract.py` | run once against your own game; writes `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
+| `kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
 | `rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
 | `sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` |
 | `adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
