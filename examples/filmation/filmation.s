@@ -104,6 +104,7 @@ room_data_end:
 					INCLUDE "panel.s"
 					INCLUDE "end.s"
 					INCLUDE "menu.s"
+					INCLUDE "input.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -194,7 +195,8 @@ start:              di
                     call    sun_show_all
 
                     ; Poke room_number from the debugger and the castle turns
-                    ; over. The 1 and 2 keys do it from the keyboard.
+                    ; over. The 1 and 2 keys do it from the keyboard, in a
+                    ; build with DEBUG_ROOM.
 .loop:              ld      a,(room_number)
                     ld      hl,room_shown
                     cp      (hl)
@@ -220,7 +222,9 @@ start:              di
                     call    day_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
+                IFDEF   DEBUG_ROOM
                     call    room_keys
+                ENDIF
                     call    turn_pace
                     jr      .loop
 
@@ -317,7 +321,10 @@ turn_pace:          ld      hl,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
                     ret
 
 
-; 1 goes back a room, 2 on to the next.
+; 1 goes back a room, 2 on to the next -- with DEBUG_ROOM defined,
+; `build.py --debug-room`, which is also what puts the room number in the
+; corner. It is behind that option because the game wants those keys: the
+; numbers pick up and put down, and an Interface II joystick is 1 to 5.
 ;
 ; Most numbers between one room and the next have no room against them, so
 ; this steps over them rather than making you press the key twenty times: it
@@ -331,6 +338,7 @@ turn_pace:          ld      hl,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
 ; it read last time, so holding the key down does nothing after the first.
 KEY_ROOMS           EQU     $F7FE       ; 1 bit 0, 2 bit 1
 
+                IFDEF   DEBUG_ROOM
 room_keys:          ld      bc,KEY_ROOMS
                     in      a,(c)
                     cpl                         ; a key reads 0 while it is held
@@ -359,6 +367,7 @@ room_keys:          ld      bc,KEY_ROOMS
                     ret
 
 room_key_held:      DB      0
+                ENDIF
 
 
 ; Which room to build, and the one on the screen. A game begins in one of four,
@@ -527,15 +536,21 @@ player_entry:       ld      a,(enter_dir)
                     ret
 
 
-; Read the keys and walk the player.
+; Read what the player is asking for and walk him.
 ;
-; The four isometric directions are the two floor axes both ways, so the keys
-; pair up as a diamond. Which facing each of them is comes from
-; character_steps, and the numbers here are indexes into it.
-KEY_UPLEFT          EQU     $FBFE       ; Q, bit 0
-KEY_DOWNRIGHT       EQU     $FDFE       ; A, bit 0
-KEY_RIGHT           EQU     $DFFE       ; P bit 0, O bit 1
-KEY_JUMP            EQU     $7FFE       ; SPACE, bit 0
+; The four isometric directions are the two floor axes both ways, and
+; character_steps is in the order a quarter turn clockwise on the screen goes:
+; 0 is -U (up and left, the castle's west), 1 is +V (north), 2 is +U (east)
+; and 3 is -V (south). So a turn is the facing plus or minus one, and a
+; direction on a joystick is one of the four outright.
+; The game gives itself two frames between quarter turns ($C8F2). Two is
+; wrong here: it runs at six to twelve frames a second and this engine runs at
+; eighteen to thirty-five, so the same number spins him at eleven quarter
+; turns a second against the game's three. Eight is what puts ours back on
+; about three.
+PLAYER_TURN_WAIT    EQU     8           ; turns before he will turn again
+
+player_turn_wait:   DB      0
 
 player_step:        ld      ix,player
                     ld      a,(player_state)
@@ -583,49 +598,32 @@ player_step:        ld      ix,player
                     jp      character_stand
 
                     ; Picking up and putting down come first, as the game
-                    ; has them.
-.keys:              call    special_keys
+                    ; has them. Everything below reads what input_read left,
+                    ; so it is read once, here, whatever is steering.
+.keys:              call    input_read
+                    call    special_keys
                     ld      ix,player
 
                     ; The jump key first, because gravity asks about it in the
                     ; same turn: holding it is what makes the difference
                     ; between a hop and a full jump.
-                    ld      bc,KEY_JUMP
-                    in      a,(c)
-                    rra                         ; a key reads 0 while it is held
+                    ld      a,(input_now)
+                    and     INPUT_JUMP
                     ld      a,0
-                    jr      c,.no_jump
+                    jr      z,.no_jump
                     inc     a
                     call    character_jump
 .no_jump:           ld      (character_jump_held),a
 
-                    ld      bc,KEY_UPLEFT
-                    in      a,(c)
-                    rra
-                    jr      nc,.up_left
-                    ld      bc,KEY_DOWNRIGHT
-                    in      a,(c)
-                    rra
-                    jr      nc,.down_right
-                    ld      bc,KEY_RIGHT
-                    in      a,(c)
-                    rra
-                    jr      nc,.up_right
-                    rra
-                    jr      nc,.down_left
+                    call    player_turn
+                    ld      a,(ix+CHARACTER_FACING)
+                    jr      c,.walk
 
-                    ; Nothing held. He still has to fall, and he is still
-                    ; drawn, so that a turn costs about the same whether he
-                    ; walks or not.
+                    ; Not walking -- nothing held, or the move was the turn
+                    ; itself. He still has to fall, and he is still drawn, so
+                    ; that a turn costs about the same either way.
                     jp      character_stand
 
-.up_left:           ld      a,0
-                    jr      .walk
-.up_right:          ld      a,1
-                    jr      .walk
-.down_left:         ld      a,3
-                    jr      .walk
-.down_right:        ld      a,2
 .walk:              push    af
                     bit     0,(ix+OBJ.GFX)          ; a footstep every other frame
                     ld      a,(move_tick)           ; of the walk, audio_B4BB
@@ -636,6 +634,91 @@ player_step:        ld      ix,player
                     ld      ix,player               ; the repaint took IX
 
                     ;; NB: fall through into player_exit
+
+
+; Which way he is being asked to face, and whether that leaves him a step.
+;
+; Turning is a move of its own: the game turns him on the spot and walks him
+; only once he faces the way he is going -- handle_left_right at $C89F and
+; the four chk_facing routines under it.
+;
+; Left and right turn him and forward walks, which is all the keyboard can
+; do. A joystick with directional control on names the direction outright
+; instead, and he turns towards it a quarter at a time until he faces it.
+;   IX -> the player
+; Out: cf set if he should walk, clear if he should stand.
+; Corrupts AF, BC, DE, HL.
+player_turn:        ld      a,(menu_mode)
+                    and     $06                 ; directional control needs a
+                    jr      z,.rotating         ; stick: a keyboard has no
+                    ld      a,(menu_mode)       ; up and down of its own
+                    and     $08
+                    jr      z,.rotating
+
+                    ; The stick says which way, so the only question is
+                    ; whether he is facing it yet.
+                    ld      a,(input_now)
+                    ld      c,$FF               ; nothing held
+                    bit     0,a
+                    jr      z,.not_left
+                    ld      c,0                 ; -U, west
+.not_left:          bit     2,a
+                    jr      z,.not_up
+                    ld      c,1                 ; +V, north
+.not_up:            bit     1,a
+                    jr      z,.not_right
+                    ld      c,2                 ; +U, east
+.not_right:         bit     4,a
+                    jr      z,.not_down
+                    ld      c,3                 ; -V, south
+.not_down:          ld      a,c
+                    inc     a
+                    ret     z                   ; nothing held: he stands
+
+                    ld      a,c
+                    sub     (ix+CHARACTER_FACING)
+                    and     3
+                    scf
+                    ret     z                   ; facing it already: walk
+
+                    ; A quarter turn the short way round, which is the move.
+                    cp      3
+                    ld      a,1
+                    jr      nz,.turn
+                    ld      a,-1
+.turn:              add     a,(ix+CHARACTER_FACING)
+                    and     3
+                    ld      (ix+CHARACTER_FACING),a
+                    or      a                   ; cf clear: no step as well
+                    ret
+
+                    ; Left and right a quarter at a time. Without a wait on it
+                    ; he would spin: the game gives itself two frames
+                    ; ($C8F2), and counts them down whether or not it turns.
+.rotating:          ld      a,(input_now)
+                    and     INPUT_LEFT | INPUT_RIGHT
+                    jr      z,.forward
+                    ld      c,a
+                    ld      hl,player_turn_wait
+                    ld      a,(hl)
+                    or      a
+                    jr      z,.may_turn
+                    dec     (hl)
+                    jr      .forward            ; too soon, but he may still walk
+.may_turn:          ld      (hl),PLAYER_TURN_WAIT
+                    ld      a,1                 ; right goes clockwise
+                    bit     0,c
+                    jr      z,.by
+                    ld      a,-1
+.by:                add     a,(ix+CHARACTER_FACING)
+                    and     3
+                    ld      (ix+CHARACTER_FACING),a
+
+.forward:           ld      a,(input_now)
+                    and     INPUT_FORWARD
+                    ret     z                   ; cf clear: he stands, turned
+                    scf
+                    ret
 
 
 ; Has the step taken him right out through the doorway he was in? The test is

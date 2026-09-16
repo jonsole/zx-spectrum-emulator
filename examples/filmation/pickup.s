@@ -17,10 +17,14 @@
 ; one down.
 ;   IX -> the knight's legs
 ; Corrupts everything.
-special_keys:		ld		bc,KEY_PICKUP
-					in		a,(c)
-					cpl
-					and		$1F
+special_keys:		ld		a,(input_now)
+					ld		b,a
+					ld		a,(menu_mode)
+					and		$08		; while a stick is steering, down is a
+					ld		a,b		; direction and this moves to the letters
+					jr		z,.plain
+					rra
+.plain:				and		INPUT_PICKUP
 					ld		hl,special_key_held
 					jr		nz,.down
 					ld		(hl),a		; let go: the next press counts

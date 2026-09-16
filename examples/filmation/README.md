@@ -669,12 +669,7 @@ the line's attribute. 5 is a toggle rather than a choice, so it debounces. 0
 starts the game.
 
 The choice goes into `menu_mode`, in the layout the game keeps at `$5BA4`: the
-method in bits 1 and 2, directional control in bit 3. **Nothing reads it yet.**
-`player_step` still has Q, A, O and P wired straight in -- which is what
-directional control on the keyboard amounts to -- so at the moment the menu
-records a choice the game does not act on. Reading it means the input pass:
-Kempston on port `$1F`, the cursor keys, Interface II, and the game's own
-turn-and-walk scheme where left and right turn the knight rather than move him.
+method in bits 1 and 2, directional control in bit 3. `input.s` reads it.
 
 The tune is `tune_menu`, the 98 notes of `menu_tune` at `$B253`, played once on
 the way in by the `tune_play` the end screens already had; any key cuts it
@@ -684,6 +679,47 @@ half periods and beat lengths come from the same frequency table at `$B332` as
 the rest.
 
 The whole thing costs 408 bytes.
+
+## What the player is asking for
+
+`input.s` reads whichever of the four the menu chose and leaves one byte in
+`input_now`, in the game's own bit order -- left, right, forward, jump, then
+pick up / put down, and a second pick up bit for when a joystick is steering.
+Bit 4 does two jobs because a stick steering by itself has no use for down, so
+down is where the game puts pick up; turn directional control on and down
+becomes a direction, so pick up moves to bit 5 and the letter keys, which the
+stick has then left free.
+
+The keys are Knight Lore's, which are whole half-rows rather than single keys:
+
+| | |
+|---|---|
+| turn one way | Z, C, M, B |
+| turn the other | X, V, SYM SHIFT, N |
+| walk forward | any of A to G, H to ENTER |
+| jump | any of Q to T, Y to P |
+| pick up / put down | any number |
+
+The cursor keys are 5, 8, 7, 6 and 0; Interface II is 1 to 5 or 6 to 0, the
+first stick's five bits turned over so both read the same way; Kempston is its
+own port, where a bit is *set* while it is held rather than clear.
+
+`player_turn` decides what that means. Turning is a move of its own -- the game
+turns the knight on the spot and walks him only once he faces the way he is
+going -- so left and right turn him a quarter at a time and forward walks. A
+joystick with directional control on names the direction outright instead, and
+he turns towards it a quarter at a time until he faces it, then walks.
+
+The wait between quarter turns is the one number here that is not the game's.
+It gives itself two frames (`$C8F2`); two frames here spins him at eleven
+quarter turns a second against the game's three, because this engine runs at
+eighteen to thirty-five turns a second where the game runs at six to twelve.
+Eight puts ours back at about three.
+
+**1 and 2 no longer walk the castle.** Stepping a room at a time is behind
+`DEBUG_ROOM` now -- `build.py --debug-room`, which is also what puts the room
+number in the corner -- because the game wants those keys: numbers pick up and
+put down, and an Interface II stick is 1 to 5.
 
 ## Space — possibilities not yet taken
 
