@@ -1426,31 +1426,31 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					;
 					; It no longer blanks the lot, though. At 512 bytes that would be
 					; 2816T every region, twice what the old 256-byte buffer cost, and
-					; the rows past the region are never read. `push de` is one byte, so
-					; where the run is entered decides how much it clears: rows * 8
-					; bytes is rows * 4 pushes, so enter that many pushes from the end.
-					; A 30-row region now costs 1320T, under what the flat clear cost.
+					; the rows past the region are never read: only the region's own
+					; rows are cleared, four pushes to each of its eight-byte rows.
+					;
+					; The four used to be one entry point into a straight run of 256
+					; `push de`, which cost nothing per row but 256 bytes of image.
+					; A DJNZ round them costs 13T a row -- 390T on a 30-row region,
+					; under half a percent of a turn -- and gives those bytes back.
+					; region_rows cannot be zero: redraw_view returned above if it was.
 					ld		(.restore_sp+1),sp		; save the real stack
 					ld		a,(region_rows)
+					ld		b,a		; a row an iteration
 					ld		l,a
 					ld		h,0
 					add		hl,hl
-					add		hl,hl		; hl = rows * 4, the pushes needed
-					ld		e,l
-					ld		d,h
+					add		hl,hl
 					add		hl,hl		; hl = rows * 8, the bytes they cover
-					ld		bc,view_buffer
-					add		hl,bc
+					ld		de,view_buffer
+					add		hl,de
 					ld		sp,hl		; PUSH pre-decrements, so this fills downwards
-					ld		hl,.clear_end
-					or		a
-					sbc		hl,de		; ...from here, so exactly de pushes are left
-					ld		de,0		; and this is what every one of them writes
-					jp		(hl)
-				REPT	VIEW_BUF_ROWS * VIEW_BUF_WIDTH / 2
+					ld		de,0		; and this is what every push writes
+.clear:				push	de
 					push	de
-				ENDR
-.clear_end:
+					push	de
+					push	de
+					djnz	.clear
 .restore_sp:		ld		sp,0		; operand set just above
 
 					; No orientation pass here any more. It settled the shared
