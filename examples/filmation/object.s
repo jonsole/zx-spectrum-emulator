@@ -303,13 +303,15 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					cp		e
 					jr		nc,.apart
 
+					; The gather does U and V inline and comes in here.
+					;
 					; Z is a base and a full height, not a centre and a half,
 					; so it keeps the edge comparison.
 					;
 					; A character is the exception at this end too: its record
 					; says twelve because that is the box the depth sort wants,
 					; and the figure is the whole COLLIDE_HEIGHT.
-					ld		d,(iy+OBJ.Z)
+.z:					ld		d,(iy+OBJ.Z)
 					ld		e,(iy+OBJ.SIZE_Z)
 					bit		7,(iy+OBJ.FLAGS)		; OBJ_MOVABLE
 					jr		z,.their_height
@@ -516,6 +518,11 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					ld		(.u_over + 1),a
 					ld		a,(collide_u_max)
 					ld		(.u_under + 1),a
+					ld		a,(collide_v_min)
+					inc		a
+					ld		(.v_over + 1),a
+					ld		a,(collide_v_max)
+					ld		(.v_under + 1),a
 
 					ld		hl,collide_list
 					ld		c,0
@@ -524,19 +531,36 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					jr		z,.other
 					ld		b,a
 					ld		iy,room_objects
+					ld		de,ROOM_STRIDE		; kept across the loop, and only
+					; object_overlaps takes it away
+
+					; Their centre is not kept either. Holding it costs 4T on
+					; every object to save 15T on the few that get past the
+					; first compare, and reading it twice leaves DE alone.
 .each:				ld		a,(iy+OBJ.U)
-					ld		d,a		; their centre
 					add		a,(iy+OBJ.SIZE_U)		; their max
 .u_over:			cp		0		; patched: one past our min
 					jr		c,.next		; their max is at or below it
-					ld		a,d
+					ld		a,(iy+OBJ.U)
 					sub		(iy+OBJ.SIZE_U)		; their min
 .u_under:			cp		0		; patched: our max
 					jr		nc,.next
-					call	object_overlaps.v		; preserves BC and HL
+
+					; V the same way. What is left by here is the handful of
+					; objects standing along our own line of U, so the last
+					; axis and the flags are worth a call.
+					ld		a,(iy+OBJ.V)
+					add		a,(iy+OBJ.SIZE_V)
+.v_over:			cp		0		; patched: one past our min
+					jr		c,.next
+					ld		a,(iy+OBJ.V)
+					sub		(iy+OBJ.SIZE_V)
+.v_under:			cp		0		; patched: our max
+					jr		nc,.next
+					call	object_overlaps.z		; preserves BC and HL
 					call	c,.keep
-.next:				ld		de,ROOM_STRIDE
-					add		iy,de
+					ld		de,ROOM_STRIDE		; which the call does not
+.next:				add		iy,de
 					djnz	.each
 
 .other:				ld		iy,(collide_other)
