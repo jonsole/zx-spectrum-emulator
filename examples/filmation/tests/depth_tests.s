@@ -189,6 +189,16 @@ start:				ld		sp,$FE00
 					EXPECT_CARRY	0, "carry"
 					EXPECT_A	1, "A, a guess"
 
+					; The knight's body over a table he is pushing: above it by
+					; more than it is behind it, which the old sum -- Z counted --
+					; called nearer. Z votes but does not count.
+					TEST	"cmp: above and behind, the floor decides"
+					BOX		REC_1, 101, 112, 140, 5, 5, 11		; U -11, Z +12
+					BOX		REC_2, 112, 106, 128, 6, 10, 12
+					call	compare_1_with_2
+					EXPECT_CARRY	1, "carry"
+					EXPECT_A	1, "A, a guess"
+
 					TEST	"cmp: interpenetrating"
 					BOX_U	REC_1, 40
 					BOX_U	REC_2, 42

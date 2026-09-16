@@ -82,7 +82,8 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 ; case dispatch table -- their key is always the sum over the non-
 ; overlapping axes -- with no dispatch at all. Three axes overlapping is
 ; interpenetration and gives the empty sum, which is the right
-; degenerate answer for free.
+; degenerate answer for free. (Z is the exception: it votes, but its term
+; is left out of the sum -- see there.)
 ;
 ; The SIGNS are ours, not theirs. object_place sends +U down the screen
 ; and +V up it, so the projection's null direction -- which for an
@@ -152,7 +153,14 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					add		hl,de
 .v_over:			
 
-					; Z -- nearer as Z grows, the same shape as U
+					; Z -- nearer as Z grows, the same shape as U, but it only
+					; votes: its term stays out of the sum. The sum is only read
+					; when the separating axes disagree, and when one of them is
+					; Z that is something above and behind something else -- the
+					; knight's body over the top of a table he is pushing, whose
+					; box starts where the table's ends. Counting Z there put the
+					; body in front by a unit, twelve up against eleven back; the
+					; floor is what the eye goes by, and without Z it decides.
 					ld		a,(iy+OBJ.Z)
 					ld		c,a
 					add		a,(iy+OBJ.SIZE_Z)
@@ -164,13 +172,7 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					set		1,b
 					DB		$11		; ld de,nn: over the SET
 .z_near:			set		0,b
-.z_ours:			ld		a,0
-					sub		c
-					ld		e,a
-					sbc		a,a
-					ld		d,a
-					add		hl,de
-.z_over:			
+.z_over:
 
 					; What decides it is not how MANY axes separate the two but
 					; whether they agree. Two axes that both say the same object
@@ -230,7 +232,6 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 					ld		(depth_cmp.v_min+1),a
 
 					ld		a,(ix+OBJ.Z)
-					ld		(depth_cmp.z_ours+1),a
 					inc		a
 					ld		(depth_cmp.z_min+1),a
 					dec		a		; Z again

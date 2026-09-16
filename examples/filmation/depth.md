@@ -180,23 +180,26 @@ On each axis the two boxes are in one of three states:
 On V the meaning of the first two rows swaps, because V grows away from the
 viewer. Their max being below our min means *we* are further.
 
-When an axis separates the boxes, it also adds a **term** to a running total in
-HL, the difference in position in the nearer direction:
+When a floor axis separates the boxes, it also adds a **term** to a running
+total in HL, the difference in position in the nearer direction:
 
 | Axis | Term added to HL |
 |---|---|
 | U | our U − their U |
 | V | their V − our V |
-| Z | our Z − their Z |
+| Z | none: Z votes, but adds nothing |
 
 A positive total means we are nearer. Each term is worked out exactly from two
 unsigned bytes: the SUB gives the low byte and its borrow, and `sbc a,a` turns
 the borrow into the high byte, so a term runs from −255 to +255.
 
 An axis where the boxes overlap says nothing about depth, so it adds nothing.
-Summing only the separating axes gives exactly Head Over Heels' seven-way
-dispatch on which axes separate, without the dispatch. The eighth case, all
-three overlapping, gives an empty sum.
+Head Over Heels sums every separating axis, Z included. Z is left out here
+because the total is only ever read when the axes disagree (see below), and
+when Z is one of the disagreeing axes the floor is what the picture goes by.
+The case that showed it: the knight pushing a table from behind. His body's box
+starts at the table's top, so Z says the body is nearer by 12, U says it is
+further by 11, and with Z counted the body was drawn over the table.
 
 ### The answer
 
@@ -218,11 +221,11 @@ guess. A guard with a spike to its east and below it then got a "guess" from two
 agreeing axes, the scan walked straight past the spike, and the guard was drawn
 in front of it.
 
-**The direction comes from B, not from HL.** A separating axis can add a zero
-term. Take a box of height zero at the same Z as another box's base, like a
-character's body record, which has no height and shares its legs' Z. The flat
-box's top is at the other's base, so Z separates them. But the Z term is our Z
-minus their Z, which is 0, and HL alone would say "level".
+**The direction comes from B, not from HL.** A separating axis can add nothing
+to HL: Z never does, and a floor axis can add a zero term. Take a box of height
+zero at the same Z as another box's base, like a guard's legs record, which has
+no height and shares its torso's Z. The flat box's top is at the other's base,
+so Z separates them, and HL alone would say "level".
 
 B is set with SET rather than INC because a vote has to count once however many
 axes cast it. Two axes both saying nearer must still give 1.
@@ -274,7 +277,6 @@ depth_cmp's own instructions:
 | `.v_ours` | `sub n` | our V |
 | `.z_min` | `cp n` | our Z + 1 |
 | `.z_max` | `cp n` | our Z + SIZE_Z |
-| `.z_ours` | `ld a,n` | our Z |
 
 So the `cp 0`, `ld a,0` and `sub 0` you see in the source are placeholders. The
 labels are there only to give setup an address to write to, one byte past each.
