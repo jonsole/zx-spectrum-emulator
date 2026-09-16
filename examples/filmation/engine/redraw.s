@@ -293,9 +293,10 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ld		b,a		; B is not wanted until pixelAddress
 					ld		a,VIEW_BUF_WIDTH
 					sub		b
-					ld		(vid_buff_copy.hstride+1),a
+					ld		(vid_buff_row.hstride+1),a
 					add		a		; the LDI chain is two bytes a column
-					ld		(vid_buff_copy.entry+1),a
+					add		a,VID_BUFF_LOOP_BASE
+					ld		(vid_buff_copy.loop+1),a
 
 					; ...and where on the screen it goes
 					ld		a,(view_x_extent)		; min x, in bytes
@@ -309,6 +310,7 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ex		de,hl		; de = destination
 					ld		hl,view_buffer
 					ld		a,(region_rows)
+					inc		a		; and one for the DJNZ on the way in
 					ld		b,a		; row counter, for the DJNZ. C is the copy
 					; routine's own -- it resets it from D every
 					; row so that LDI's countdown can never

@@ -28,33 +28,25 @@ pixelAddress:   ld      a, b
 ;
 ;   HL - view buffer, at the region's top-left
 ;   DE - screen address of the same corner
-;   B  - rows
+;   B  - rows, plus one: the DJNZ takes one on the way in
 ;
 ; One routine for every region width, not eight. A width decides two things --
 ; how many bytes of each row to move, and how far the buffer pointer steps to
 ; reach the next row -- and redraw_view knows both before the first row, so it
-; writes them in: the entry jump picks how far into the LDI chain to start, and
-; the stride is an immediate. There is nothing left for a row to decide, which
-; is what the eight copies of the routine used to buy.
+; writes them in: the DJNZ's displacement picks how far into the LDI chain each
+; row starts, and the stride is an immediate. There is nothing left for a row
+; to decide, which is what the eight copies of the routine used to buy.
+;
+; The routine is entered at its foot, vid_buff_copy, which sets a row up and
+; goes round -- so the jump into the chain is the loop's own DJNZ, not a JR of
+; its own that every row would pay for.
 ;
 ; The source is a plain buffer -- one byte per column, no mask interleaved --
 ; which is what view_buffer holds. (There was an interleaved-source variant,
 ; vid_buff_blit_5, for copying a shift buffer straight out; nothing ever called
 ; it, and its 48 bytes went to the menu.)
 
-vid_buff_copy:
-					; LDI counts BC down as it copies. B is the row counter, so
-					; a borrow out of C would silently drop a row -- and rows *
-					; width reaches 512 here, well past a byte. Reset C every
-					; row rather than reason about the total -- from D, which
-					; is the screen's high byte and so never below $40, far
-					; more than the eight LDIs a row can take off it.
-.row:				LD		C,D
-					PUSH	DE			; cheaper than unwinding DE afterwards
-					; at any width worth having a routine for
-
-.entry:				DB		$18, 0		; JR, with the displacement patched:
-					; two bytes a column, from the wide end
+vid_buff_row:		; two bytes a column, from the wide end
 					REPT	VIEW_BUF_WIDTH
 					LDI
 					ENDR
@@ -74,9 +66,24 @@ vid_buff_copy:
 					INC		D
 					LD		A,D
 					AND		$07
-					JR		Z,.adjust
-					DJNZ	.row
+					JR		Z,vid_buff_copy.adjust
+
+					;; NB: fall through into vid_buff_copy
+
+
+vid_buff_copy:
+					; LDI counts BC down as it copies. B is the row counter, so
+					; a borrow out of C would silently drop a row -- and rows *
+					; width reaches 512 here, well past a byte. Reset C every
+					; row rather than reason about the total -- from D, which
+					; is the screen's high byte and so never below $40, far
+					; more than the eight LDIs a row can take off it.
+					LD		C,D
+					PUSH	DE			; cheaper than unwinding DE afterwards
+.loop:				DJNZ	vid_buff_row	; patched: into the chain for the width
+					POP		DE			; the row set up for nobody
 					RET
+
 .adjust:			LD		A,E
 					ADD		A,$20
 					LD		E,A
@@ -85,6 +92,7 @@ vid_buff_copy:
 					AND		$F8
 					ADD		A,D
 					LD		D,A
-					DJNZ	.row
-					RET
+					JR		vid_buff_copy
 
+; What redraw_view adds to twice the columns left out, to aim the DJNZ.
+VID_BUFF_LOOP_BASE	EQU		(vid_buff_row - (vid_buff_copy.loop + 2)) & $FF
