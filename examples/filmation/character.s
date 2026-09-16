@@ -310,16 +310,21 @@ character_add:		ld		(ix+OBJ.U),b
 ; heights. This was sprite_048 for the legs, 3x25 until its blank rows came
 ; off -- and 3x21 is three rows short of a sparkle, which then spilled into the
 ; body's buffer as a smear under every death and every arrival.)
+;
+; The arena is emptied first. This runs at the start of every game, and the
+; arena is still as the last game's last room left it: taking his buffers from
+; there kept them there, so each game after the first had less arena than the
+; one before, and once they were pushed to its very end the body's rotations
+; ran off it and over the code that follows. From empty both always fit, so
+; there is no refusal to prepare for either.
 ;   IX -> the legs record
 ; Corrupts AF, BC, DE, HL.
-character_keep:		ld		(ix+OBJ.BUF_L),0
-					ld		(ix+OBJ.BUF_H),0
+character_keep:		ld		hl,shift_arena
+					ld		(shift_arena_next),hl
 					ld		hl,CHARACTER_LARGEST
 					call	shift_alloc
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
-					ld		(ix+OBJ.BUF_L),0
-					ld		(ix+OBJ.BUF_H),0
 					ld		hl,CHARACTER_TALLEST		; he may be a wolf by the time
 					call	shift_alloc		; this one is wanted
 					ld		bc,-CHARACTER_BODY

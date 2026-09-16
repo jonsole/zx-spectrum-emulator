@@ -153,17 +153,16 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	add_calls, 2, "region_add"
 					EXPECT_BYTE	view_calls, 1, "redraw_view"
 
-					TEST	"keep: both buffers, once, and the arena kept back"
+					TEST	"keep: both buffers, once, from an empty arena, kept back"
 					call	fresh
-					SET		OBJ.BUF_H, $77
-					ld		hl,$9000
+					ld		hl,$9000		; where a last game's last room left it
 					ld		(shift_arena_next),hl
 					RUN		character_keep
 					EXPECT_BYTE	alloc_calls, 2, "buffers asked for"
 					EXPECT_WORD	alloc_hl_1, CHARACTER_LARGEST, "the legs', sized"
 					EXPECT_WORD	alloc_hl_2, CHARACTER_TALLEST, "the walking body's, sized"
-					EXPECT_BYTE	alloc_buf_h, 0, "neither carried over"
-					EXPECT_WORD	shift_kept, $9000, "what the arena keeps back"
+					EXPECT_WORD	alloc_next_1, shift_arena, "asked for from the start"
+					EXPECT_WORD	shift_kept, shift_arena, "what the arena keeps back"
 					EXPECT_WORD	s_ix, REC, "IX"
 
 ; --- character_walk, character_stand, character_move -------------------------
@@ -639,7 +638,7 @@ insert_ix_2:		DW		0
 alloc_calls:		DB		0
 alloc_hl_1:			DW		0
 alloc_hl_2:			DW		0
-alloc_buf_h:		DB		0		; BUF_H as the last one found it
+alloc_next_1:		DW		0		; the arena, as the first ask found it
 place_calls:		DB		0
 add_calls:			DB		0
 defer_calls:		DB		0
@@ -707,17 +706,18 @@ depth_insert:		ld		hl,insert_calls
 					ld		(hl),d
 					ret
 
+shift_arena			EQU		$9800
 shift_arena_next:	DW		0
 shift_kept:			DW		0
 
-shift_alloc:		ld		a,(ix+OBJ.BUF_H)
-					ld		(alloc_buf_h),a
-					ld		a,(alloc_calls)
+shift_alloc:		ld		a,(alloc_calls)
 					inc		a
 					ld		(alloc_calls),a
 					cp		1
 					jr		nz,.second
 					ld		(alloc_hl_1),hl
+					ld		de,(shift_arena_next)
+					ld		(alloc_next_1),de
 					ret
 .second:			ld		(alloc_hl_2),hl
 					ret
