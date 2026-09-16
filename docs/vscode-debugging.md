@@ -32,6 +32,9 @@ required first, on top of [Setup](../README.md#setup):
    `vscode-extension/README.md` for details and re-install instructions after
    editing it.
 
+Every setting and `launch.json` attribute is listed in the [VS Code settings
+reference](vscode-settings.md).
+
 With both in place, open the Run and Debug view and launch **"ZX Spectrum:
 Step through ROM"**. The `preLaunchTask` starts the server automatically
 (watch its output in the dedicated terminal panel) and waits for it to be

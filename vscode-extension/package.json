@@ -67,6 +67,11 @@
         }
       }
     },
+    "breakpoints": [
+      {
+        "language": "z80-asm"
+      }
+    ],
     "grammars": [
       {
         "language": "z80-asm",
@@ -730,7 +735,7 @@
               },
               "tape": {
                 "type": "string",
-                "description": "Path to a .tap or .tzx tape image to insert at launch."
+                "description": "Path to a tape image to insert at launch: .tap, .tzx, .wav or .csw, told apart by content rather than extension. A .wav or .csw is a recording, and always loads at tape speed."
               },
               "tapeAutoStart": {
                 "type": "boolean",
@@ -746,6 +751,11 @@
                 "type": "boolean",
                 "default": true,
                 "description": "Satisfy standard-speed tape blocks instantly by trapping the ROM's LD-BYTES routine. Turbo and custom loaders always fall back to real pulse playback."
+              },
+              "uncapped": {
+                "type": "boolean",
+                "default": false,
+                "description": "Run as fast as the host allows instead of at a real Spectrum's speed. For the Z80 exercisers, which have nothing to watch; the beeper is silent while uncapped. Leaves the speed as the server had it when omitted."
               }
             }
           },

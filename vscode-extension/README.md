@@ -38,6 +38,11 @@ A handful of things, in one small extension:
 7. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
    hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
+## Settings
+
+Every `settings.json` setting and `launch.json` attribute this extension understands, with
+examples, is in [docs/vscode-settings.md](../docs/vscode-settings.md).
+
 ## Screen scaling
 
 The magnifier in the screen panel's title bar (**ZX Spectrum: Screen Scaling...**) picks the
