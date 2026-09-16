@@ -186,8 +186,8 @@ game_over:          di
                     ld      b,END_VERSE_LINES
                     ld      c,0                 ; on black
                     call    end_show
-                    ld      de,tune_complete
-                    call    tune_play
+                    ld      de,tune_complete    ; all of it, as the game plays
+                    call    tune_play_all       ; it: no key cuts this one
                     call    end_pause
 
 .tally:             ld      hl,end_lines
@@ -206,20 +206,18 @@ game_over:          di
                     call    end_percent
                     call    end_rating
 
-                    ; And the game's own dirge over it, which a key cuts short.
+                    ; And the game's own dirge over it, which a key cuts short --
+                    ; but only a key pressed for it. Whatever was held when he
+                    ; died has to be let go first, as the game waits at $BA87,
+                    ; or the walk he died in stops the tune before its first note.
+.release:           call    end_key
+                    jr      nz,.release
                     ld      de,tune_over
                     call    tune_play
 
-                    ;; NB: fall through into end_wait
-
-
-; Wait for a key, pressed and let go, and start again.
-end_wait:           call    end_key
-                    jr      nz,end_wait
-.press:             call    end_key
-                    jr      z,.press
-.release:           call    end_key
-                    jr      nz,.release
+                    ; Then a while to read it, which a key cuts short, and back
+                    ; to the start without being asked -- $BA93 to $BA98.
+                    call    end_pause
                     jp      start
 
 
