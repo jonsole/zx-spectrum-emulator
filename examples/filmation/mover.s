@@ -988,20 +988,30 @@ mover_sliding:		call	mover_move
 BOUNCE_RISE			EQU		4
 BOUNCE_STEP			EQU		2
 
-mover_bounce:		ld		c,(ix+OBJ.DU)
+mover_bounce:		ld		a,(ix+OBJ.DZ)		; before gravity has had it
+					push	af
+					ld		c,(ix+OBJ.DU)
 					ld		b,(ix+OBJ.DV)
 					push	bc
 					call	mover_move_always		; which leaves IX -> the record
 					pop		bc
 					ld		(ix+OBJ.DU),c		; whatever the clamp made of them,
 					ld		(ix+OBJ.DV),b		; it still wants to go that way
+					pop		bc		; B - that DZ
 
 					ld		a,(collide_hit)
 					and		COLLIDE_Z
 					ret		z		; still in the air
 
-					call	sound_bounce
+					; Stopped in Z either way, it springs up again -- but it
+					; only makes a noise if it was coming down. The game keeps
+					; the DZ it started the turn with at $B60C and asks it at
+					; $B645: a ball with a block sitting on it is stopped on
+					; its way UP every turn, and bounced silently in the game
+					; where this clicked on every turn of room $A3.
 					ld		(ix+OBJ.DZ),BOUNCE_RISE
+					bit		7,b
+					call	nz,sound_bounce
 					call	mover_flicker		; and neither axis, until one is picked
 
 					; Knight or werewolf. The game asks $5C08, the legs' graphic.
