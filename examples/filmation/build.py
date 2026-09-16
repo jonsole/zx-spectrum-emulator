@@ -1,8 +1,9 @@
-"""Assembles the Filmation engine: sjasmplus -> output/filmation.{sna,sld,lst}.
+"""Assembles the Filmation engine: sjasmplus -> output/filmation.{z80,sld,lst}.
 
-The .sna comes out of the SAVESNA directive at the bottom of filmation.s, so
-one sjasmplus invocation produces everything the debugger needs -- the
-snapshot to load, the SLD to map addresses to source lines, and a listing.
+sjasmplus writes all 48K of RAM with the SAVEBIN at the bottom of filmation.s,
+the SLD that maps addresses to source lines, and a listing. This wraps the RAM
+as a version 3 .z80 that starts at `start` -- sjasmplus has no .z80 output of
+its own, and its 48K .sna has to push PC into the bottom of the screen.
 
 sprite_data.s and room_data.s are generated rather than hand-written -- see
 sprites.py and rooms.py -- and are regenerated here whenever their packed
@@ -116,7 +117,74 @@ def assemble(sjasmplus: str, defines: list[str]) -> None:
         cwd=HERE,
         check=True,
     )
-    print(f"Wrote {OUT_DIR / 'filmation.sna'} and {OUT_DIR / 'filmation.sld'}")
+    ram = (OUT_DIR / "filmation.bin").read_bytes()
+    start = find_label(OUT_DIR / "filmation.sld", "start")
+    (OUT_DIR / "filmation.z80").write_bytes(z80_snapshot(ram, start))
+    # A .sna left from before this build wrote .z80 would be stale.
+    (OUT_DIR / "filmation.sna").unlink(missing_ok=True)
+    print(f"Wrote {OUT_DIR / 'filmation.z80'} (PC {start:04X}) and {OUT_DIR / 'filmation.sld'}")
+
+
+def find_label(sld: Path, name: str) -> int:
+    """A label's address, from the SLD's label records."""
+    for line in sld.read_text(encoding="utf-8").splitlines():
+        fields = line.split("|")
+        if len(fields) >= 8 and fields[6] == "L":
+            parts = fields[7].split(",")
+            if len(parts) > 2 and parts[1] == name and parts[2] == "":
+                return int(fields[5])
+    sys.exit(f"no label {name} in {sld}")
+
+
+# Version 3 .z80, 48K: a 30-byte header with PC zeroed, 54 more bytes, then
+# the three RAM pages, each compressed -- page 8 is $4000, 4 is $8000 and 5 is
+# $C000. The same layout cpp-core's save_z80 writes.
+Z80_V3_EXTRA = 54
+Z80_PAGES = ((8, 0x0000), (4, 0x4000), (5, 0x8000))  # page, offset into RAM
+
+
+def z80_compress(data: bytes) -> bytes:
+    """ED ED n b for a run of five or more, or of two or more EDs. A lone ED
+    goes out literally along with the byte after it, so that no decoder can
+    take the pair for a run marker."""
+    out = bytearray()
+    i = 0
+    while i < len(data):
+        b = data[i]
+        run = 1
+        while i + run < len(data) and data[i + run] == b and run < 255:
+            run += 1
+        if run >= 5 or (b == 0xED and run >= 2):
+            out += bytes((0xED, 0xED, run, b))
+            i += run
+        elif b == 0xED:
+            out += data[i:i + 2]
+            i += 2
+        else:
+            out.append(b)
+            i += 1
+    return bytes(out)
+
+
+def z80_snapshot(ram: bytes, pc: int) -> bytes:
+    """48K of RAM from $4000, as a machine about to run from `pc`.
+
+    Everything else is what start sets for itself anyway: it disables
+    interrupts and loads SP first thing, and blacks the border.
+    """
+    assert len(ram) == 0xC000, len(ram)
+    header = bytearray(30 + 2 + Z80_V3_EXTRA)
+    header[10] = 0x3F                  # I, as the ROM leaves it
+    header[29] = 1                     # IM 1; IFF1 and IFF2 stay 0
+    header[30:32] = Z80_V3_EXTRA.to_bytes(2, "little")
+    header[32:34] = pc.to_bytes(2, "little")
+    header[34] = 0                     # hardware: 48K
+    header[61] = header[62] = 0xFF     # the ROM is paged in
+    body = bytearray()
+    for page, offset in Z80_PAGES:
+        packed = z80_compress(ram[offset:offset + 0x4000])
+        body += len(packed).to_bytes(2, "little") + bytes((page,)) + packed
+    return bytes(header + body)
 
 
 def generate_room_data() -> None:

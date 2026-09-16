@@ -30,9 +30,9 @@ Add `--debug-room` to print the room number in the top-left corner, for
 finding your way about; the ordinary build leaves it out.
 
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
-It writes `output/filmation.sna` (from the `SAVESNA` at the bottom of
-`filmation.s`), plus the `.sld` the debugger maps source lines with and a
-`.lst` listing. `output/` is gitignored; everything in it is regenerated.
+It writes `output/filmation.z80`, a version 3 snapshot that `build.py` wraps
+round the RAM the `SAVEBIN` at the bottom of `filmation.s` saves, plus the
+`.sld` the debugger maps source lines with and a `.lst` listing. `output/` is gitignored; everything in it is regenerated.
 
 Knight Lore's own data is not in the repository. Take it from your own copy of
 the game once, before the first build:
@@ -536,8 +536,9 @@ work, not less, regardless of how much memory was available for it.
 These timings are **uncontended** — `cpp-core` does not model ULA memory
 contention yet. The correction is small here because everything except the
 screen writes lives above `0x8000`; the stack is explicitly moved to
-`STACK_TOP` at startup for the same reason, since `SAVESNA` otherwise leaves it
-at `0x5D56`, inside the contended window.
+`STACK_TOP` at startup for the same reason, since whatever loaded the game
+leaves it where its own stack was -- `0x5D56`, in the `.sna` this used to
+build, inside the contended window.
 
 ## Collision detection — notes for later
 

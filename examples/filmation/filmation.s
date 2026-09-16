@@ -30,8 +30,9 @@ VIEW_BUF_WIDTH		EQU		8
 ; IS the screen; ours is a small window, and this is what that costs.
 VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 
-; The stack, in UNCONTENDED memory. sjasmplus's SAVESNA leaves SP at 0x5D56,
-; which is inside the ULA-contended 0x4000-0x7FFF window, so on real hardware
+; The stack, in UNCONTENDED memory. Whatever loaded the game leaves SP where
+; its own stack was -- 0x5D56, in the .sna this used to be built as -- which is
+; inside the ULA-contended 0x4000-0x7FFF window, so on real hardware
 ; every call and return there pays a contention delay -- a few hundred
 ; T-states a frame for nothing. Everything else this engine touches already
 ; lives above 0x8000: the sprite data, the rotate table, the view buffer, the
@@ -221,4 +222,7 @@ pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
 
-                    SAVESNA "output/filmation.sna", start
+; All of RAM, for build.py to wrap as output/filmation.z80 with PC at start.
+; Not SAVESNA: a 48K .sna keeps PC on the stack, and sjasmplus puts it at the
+; bottom of the screen to get it there.
+                    SAVEBIN "output/filmation.bin", $4000, $C000

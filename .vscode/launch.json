@@ -84,7 +84,7 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/filmation/output/filmation.sna",
+      "snapshot": "${workspaceFolder}/examples/filmation/output/filmation.z80",
       "sld": "${workspaceFolder}/examples/filmation/output/filmation.sld",
       "asm": "${workspaceFolder}/examples/filmation/filmation.s",
       "preLaunchTask": "filmation.build-and-start-server"
