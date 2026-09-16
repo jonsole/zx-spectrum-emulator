@@ -44,6 +44,7 @@ player_glance:      ld      hl,player_glance_left
 ; are in the room's pool, a long way below him.
 ;   A - the block plus the phase, IX -> the legs
 ; Out: A - the frame to show. Corrupts C.
+walker_glance       EQU     player_glance_body  ; the engine's name for it
 player_glance_body: ld      c,a
                     ld      a,ixh
                     cp      high player

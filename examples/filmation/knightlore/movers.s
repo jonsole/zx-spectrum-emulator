@@ -66,6 +66,14 @@ MOVE_PUSHED		EQU		18
 MOVE_SLIDING		EQU		19
 MOVE_SPECIAL		EQU		20		; a collectable -- see special.s
 
+; What the engine's contact rules need to know about these numbers. It never
+; names a behaviour, only the bands above -- see engine/object.s.
+BEHAVIOUR_DEADLY	EQU		MOVE_STILL		; the first that kills
+BEHAVIOUR_HARMLESS	EQU		MOVE_HARMLESS	; the first that does not
+BEHAVIOUR_GIVES		EQU		MOVE_DROPPING	; the first that gives way under a weight
+BEHAVIOUR_GIVES_LAST	EQU		MOVE_COLLAPSING	; and the last
+BEHAVIOUR_LOOSE		EQU		MOVE_LOOSE		; this and everything above: carried and shoved
+
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
 ; whether it just ran into something -- which is how the game numbers them.

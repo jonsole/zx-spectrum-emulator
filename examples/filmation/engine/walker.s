@@ -226,7 +226,7 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 					add		a,(ix+CHARACTER_LEGS)
 					ld		(ix+OBJ.GFX),a
 					ld		a,c
-					call	player_glance_body		; the knight's may be aside
+					call	walker_glance			; the knight's may be aside
 					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 

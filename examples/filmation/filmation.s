@@ -429,6 +429,7 @@ player_state:       DB      PLAYER_APPEARING
 ; Set when he touches something deadly -- see object_touched -- and read at the
 ; top of his next turn, as the game reads its bit 6 in upd_player_bottom.
 player_touched:     DB      0
+deadly_touched      EQU     player_touched      ; what the engine sets
 
 ; --- day and night -----------------------------------------------------------
 ;
@@ -1759,9 +1760,10 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; The object pool. A room owns all of it: room_build refills it from the start,
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms.py works out while generating room_data.s.
+POOL_SLOTS          EQU     ROOM_MAX_OBJECTS + SPECIAL_SLOTS
                     ALIGN   32
 room_objects:
-                REPT    ROOM_MAX_OBJECTS + SPECIAL_SLOTS
+                REPT    POOL_SLOTS
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
@@ -1773,7 +1775,7 @@ room_objects:
                     ; is that record. Blanking it zeroed two of day_step's operands,
                     ; and the sun never moved again.
                     ALIGN   32
-                    ASSERT  $ == room_objects + (ROOM_MAX_OBJECTS + SPECIAL_SLOTS) * ROOM_STRIDE
+                    ASSERT  $ == room_objects + POOL_SLOTS * ROOM_STRIDE
 
 ; Two tables that were up in the code region until it ran out of room. Neither
 ; is touched by anything that cares about contention -- bit_reverse_table only

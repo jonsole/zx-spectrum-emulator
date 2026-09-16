@@ -191,7 +191,7 @@ collide_eff_z:		DB		0
 ; -- 21,000 T for each block riding on the ghost in room $BB, which is itself
 ; three axes of twenty-odd records every turn. Almost all of them are nowhere
 ; near, and one look at the whole step says so for all three axes at once.
-collide_list:		DS		2 * (ROOM_MAX_OBJECTS + SPECIAL_SLOTS + 1)
+collide_list:		DS		2 * (POOL_SLOTS + 1)
 collide_list_count:	DB		0
 collide_list_at:	DW		0
 
@@ -636,7 +636,7 @@ collide_gather:		ld		a,TURN_PER_GATHER
 object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 					jr		nz,.shoveable		; other way round: one flag in the game
 					ld		a,(iy+OBJ.BEHAVIOUR)	; means both carried and pushed, and it
-					cp		MOVE_LOOSE		; is on the block, the chest, the table
+					cp		BEHAVIOUR_LOOSE	; is on the block, the chest, the table
 					ret		c			; and the knight alike
 .shoveable:			ld		a,(collide_mask)
 					cp		COLLIDE_U
@@ -666,7 +666,7 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 					jr		nz,.rides		; the knight rides in the game too --
 					ld		a,(ix+OBJ.BEHAVIOUR)	; plyr_spr_init_data gives his record
-					cp		MOVE_LOOSE		; flags $1C, which has the same bit 2
+					cp		BEHAVIOUR_LOOSE	; flags $1C, which has the same bit 2
 					ret		c			; a moveable block, a table and a
 										; chest all have
 .rides:
@@ -698,11 +698,11 @@ object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 					ld		a,(ix+OBJ.BEHAVIOUR)
 					jr		.deadly
 .he_is_us:			ld		a,(iy+OBJ.BEHAVIOUR)
-.deadly:			sub		MOVE_STILL
-					cp		MOVE_HARMLESS - MOVE_STILL
+.deadly:			sub		BEHAVIOUR_DEADLY
+					cp		BEHAVIOUR_HARMLESS - BEHAVIOUR_DEADLY
 					ret		nc
 					ld		a,1
-					ld		(player_touched),a
+					ld		(deadly_touched),a
 					ret
 
 
@@ -714,9 +714,9 @@ object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 ;   IY -> what stopped us
 ; Corrupts AF.
 object_landed_on:	ld		a,(iy+OBJ.BEHAVIOUR)
-					cp		MOVE_DROPPING
+					cp		BEHAVIOUR_GIVES
 					ret		c
-					cp		MOVE_COLLAPSING + 1
+					cp		BEHAVIOUR_GIVES_LAST + 1
 					ret		nc
 					set		3,(iy+OBJ.MOVE_STATE)
 					ret

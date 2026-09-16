@@ -745,8 +745,8 @@ redraw_view:		ld		hl,view_calls
 					ld		ix,$BEEF
 					ret
 
-; The knight's glance is filmation.s's; here every body frame is the plain one.
-player_glance_body:	ret
+; The glance is the game's (walker_glance); here every body frame is the plain one.
+walker_glance:		ret
 
 ; Silent: what the sounds play is not what these tests are about.
 sound_jump:
