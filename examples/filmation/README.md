@@ -700,9 +700,11 @@ The keys are Knight Lore's, which are whole half-rows rather than single keys:
 | jump | any of Q to T, Y to P |
 | pick up / put down | any number |
 
-The cursor keys are 5, 8, 7, 6 and 0; Interface II is 1 to 5 or 6 to 0, the
-first stick's five bits turned over so both read the same way; Kempston is its
-own port, where a bit is *set* while it is held rather than clear.
+The cursor keys are 5, 8, 7, 6 and 0. Interface II's first stick is 6, 7, 8, 9
+and 0 -- 6 left, 7 right, 8 down, 9 up, 0 to fire -- and its second, 1 to 5, is
+read as well; the two sit at opposite ends of their half-rows, so the second's
+five bits are turned over before they are merged. Kempston is its own port,
+where a bit is *set* while it is held rather than clear.
 
 `player_turn` decides what that means. Turning is a move of its own -- the game
 turns the knight on the spot and walks him only once he faces the way he is

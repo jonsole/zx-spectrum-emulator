@@ -34,8 +34,10 @@ KEY_ROWS_Q_P        EQU     $DBFE               ; Q to T and Y to P
 KEY_ROWS_1_0        EQU     $E7FE               ; 1 to 5 and 6 to 0
 KEY_ROWS_Z_B        EQU     $7EFE               ; the letters of the bottom row
 KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to ENTER
-KEY_STICK_1_5       EQU     $F7FE               ; 1 to 5: cursor 5, Interface II
-KEY_STICK_0_6       EQU     $EFFE               ; 0, 9, 8, 7, 6: the same again
+KEY_STICK_1_5       EQU     $F7FE               ; 1 to 5: the cursor keys' 5, and
+                                                ; Interface II's second stick
+KEY_STICK_0_6       EQU     $EFFE               ; 0, 9, 8, 7, 6: the rest of the
+                                                ; cursor keys, and its first stick
 KEMPSTON_PORT       EQU     $1F
 
 input_now:          DB      0
@@ -54,10 +56,12 @@ input_read:         ld      a,(menu_mode)
                     ;; NB: fall through into input_interface_ii
 
 
-; Both sticks at once, as the game reads them: the first is keys 1 to 5 and
-; the second 0 to 6, and the first runs the other way round, so its five bits
-; are turned over and the two are merged.
-input_interface_ii: ld      bc,KEY_STICK_1_5
+; Both of the Interface II's sticks at once, as the game reads them. The first
+; is keys 6 to 0 -- 6 left, 7 right, 8 down, 9 up, 0 to fire -- and the second
+; is 1 to 5, the same five directions in the same order. They sit at opposite
+; ends of their half-rows, though, so the second's bits run the other way
+; round: they are turned over before the two are merged.
+input_interface_ii: ld      bc,KEY_STICK_1_5    ; the second stick
                     in      a,(c)
                     cpl                         ; a key reads 0 while it is held
                     and     $1F
@@ -67,7 +71,7 @@ input_interface_ii: ld      bc,KEY_STICK_1_5
                     rl      d
                     djnz    .reverse
 
-                    ld      bc,KEY_STICK_0_6
+                    ld      bc,KEY_STICK_0_6    ; and the first, which they join
                     in      a,(c)
                     cpl
                     and     $1F
