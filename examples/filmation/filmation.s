@@ -733,10 +733,19 @@ player_exit:        ld      a,(ix+CHARACTER_DOOR)
 ; Left and right turn him and forward walks, which is all the keyboard can
 ; do. A joystick with directional control on names the direction outright
 ; instead, and he turns towards it a quarter at a time until he faces it.
+;
+; A jump is a leap: once he is off the ground he goes on the way he faces,
+; whatever is held, and cannot turn until he is down -- move_player at $C9AB
+; walks him on whenever the jumping flag is set, and neither turning routine
+; will turn him while it is. Without it a jump let go of forward stopped dead
+; in the air, and a ball took a run-up and a held key to clear.
 ;   IX -> the player
 ; Out: cf set if he should walk, clear if he should stand.
 ; Corrupts AF, BC, DE, HL.
-player_turn:        ld      a,(menu_mode)
+player_turn:        bit     0,(ix+CHARACTER_STATE)  ; CHARACTER_JUMPING
+                    scf
+                    ret     nz
+                    ld      a,(menu_mode)
                     and     $06                 ; directional control needs a
                     jr      z,.rotating         ; stick: a keyboard has no
                     ld      a,(menu_mode)       ; up and down of its own
