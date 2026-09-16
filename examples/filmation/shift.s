@@ -216,8 +216,25 @@ shift_alloc:		push	hl
 .sized:				add		a		; two bytes a column
 					ld		e,a
 					ld		d,0		; de = bytes in one row
+
+					; The rows -- rounded up to a multiple of eight for a frame of
+					; an animation. A mover's buffer is sized from whatever frame
+					; it shows first, and once the blank rows came off the sprites
+					; the frames of one animation were no longer the same height --
+					; a guard's legs are 13 to 16 rows -- so a taller frame later
+					; ran off the end of the buffer, and off the end of the arena
+					; into the code below it. Every animation's frames round to the
+					; same eight, which sprites.py checks. Scenery never changes
+					; frame and keeps its exact size: rounding that as well
+					; refused more than twice as many buffers across the castle.
+					bit		SPRITE_ANIMATED_BIT,(hl)
 					inc		hl
-					ld		b,(hl)		; rows
+					ld		a,(hl)
+					jr		z,.exact
+					dec		a
+					or		7
+					inc		a
+.exact:				ld		b,a		; rows
 					ld		hl,0
 .size:				add		hl,de
 					djnz	.size		; hl = bytes wanted

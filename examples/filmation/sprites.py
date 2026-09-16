@@ -34,6 +34,25 @@ WHOLE_SPRITE_GRAPHICS = (
 gmap = Path('graphic_map.bin').read_bytes()
 whole_sprites = {gmap[g] for g in WHOLE_SPRITE_GRAPHICS}
 
+# Everything else that animates gets its buffer the first time it needs one,
+# sized from the frame it happens to be showing -- so every frame an object can
+# go on to show has to fit a buffer sized from any other. The trim leaves the
+# frames of one animation different heights; shift_alloc's rounding to eights
+# is what brings them back together, and this is where that is checked. The
+# groups are the movers': a flicker pair, a guard's torso and its walking legs,
+# the ghost's four faces, the spell's four frames, the gate, and the wizard.
+# (Collectables and what rises from the pot are given one size up front.)
+# Their sprites carry bit 7 of byte 0, which is what tells shift_alloc to
+# round; scenery keeps its buffers exact.
+ANIMATIONS = (
+    (176, 177), (180, 181), (86, 87),                       # fires
+    (178, 179), (182, 183),                                 # balls
+    (150, 151), (30, 31), (158, 159),                       # torsos, wizard's legs
+    tuple(range(144, 150)) + tuple(range(152, 158)),        # a guard's legs
+    (80, 81, 82, 83), (164, 165, 166, 167), (8, 9),         # ghost, spell, gate
+)
+animated_sprites = {gmap[g] for frames in ANIMATIONS for g in frames}
+
 f_data = Path('sprite_data.bin').read_bytes()
 
 spr_num = 0
@@ -96,7 +115,8 @@ while f_data:
     # sprite_jump_table group, which puts the width class in bits 4 to 6
     # and leaves bit 0 for the mirrored flag. The height is what is left of
     # the sprite once its blank bottom rows are off.
-    print("\t\t\tDB\t{},{}".format((spr_w - 2) * 16, len(spr_mask_list)))
+    animated = 0x80 if len(spr_trim) - 1 in animated_sprites else 0
+    print("\t\t\tDB\t{},{}".format((spr_w - 2) * 16 | animated, len(spr_mask_list)))
 
     for spr_data,spr_mask in zip(spr_data_list,spr_mask_list):
 
@@ -132,7 +152,10 @@ for g in WHOLE_SPRITE_GRAPHICS:
 # phase, or for the body the glance frames that follow the phases -- and both
 # halves wear the death and arrival sparkles, 112 to 127.
 def rotated_size(n):
-    return (spr_widths[n] + 1) * 2 * spr_heights[n] + 2
+    rows = spr_heights[n]
+    if n in animated_sprites:
+        rows = ((rows - 1) | 7) + 1             # shift_alloc rounds these to eights
+    return (spr_widths[n] + 1) * 2 * rows + 2
 
 KNIGHT_LEGS = ([b + k for b in (16, 48) for k in list(range(0, 6)) + list(range(8, 14))]
                + list(range(112, 128)))
@@ -143,6 +166,12 @@ for label, sprite, frames in (("CHARACTER_LARGEST", 30, KNIGHT_LEGS),
     assert rotated_size(sprite) >= need, (
         "%s (sprite %d) gives %d bytes but a frame needs %d"
         % (label, sprite, rotated_size(sprite), need))
+
+for frames in ANIMATIONS:
+    sizes = {rotated_size(gmap[g]) for g in frames}
+    assert len(sizes) == 1, (
+        "graphics %s want rotation buffers of %s bytes -- the first one shown "
+        "would be overrun by a later one" % (frames, sorted(sizes)))
 
 
 # Graphic 1 is Knight Lore's way of drawing nothing: it is what the knight's
