@@ -106,6 +106,9 @@ int main() {
     Spectrum probe;
     const bool have_rom = load_rom_into(probe);
     std::printf("Machine + engine throughput (1.00x realtime == keeps up with a real 48K)\n");
+    // The engine lines include rewind's history-keeping when it is compiled
+    // in; a -NoRewind build of this benchmark is the number to compare with.
+    std::printf("Rewind: %s\n", ZX_REWIND ? "compiled in" : "compiled out (ZX_REWIND=OFF)");
     if (!have_rom) {
         std::printf("  (roms/48.rom not present -- running an empty machine, numbers are\n"
                     "   still meaningful for the emulation loop itself)\n");

@@ -202,6 +202,11 @@ void Spectrum::service_bus() {
             // ones that landed on the screen. As bank and offset, since on a
             // 128K the screen is a bank rather than an address range.
             ula.note_write(memory.bank_of(addr), uint16_t(addr & (BANK_SIZE - 1)));
+#if ZX_REWIND
+            if (int32_t(addr) == write_watch) {
+                write_watch_hit = true;
+            }
+#endif
         }
         // A bare MREQ with neither RD nor WR is the refresh cycle. Nothing to
         // service -- but note the address IS live on the bus, which is what
@@ -299,6 +304,12 @@ bool Spectrum::stock_ld_bytes() {
 }
 
 bool Spectrum::fast_load_block() {
+    // Walk the tape up to now before asking where it is. The run loop walks it
+    // at its yields, which fall at different instructions from run to run, and
+    // whether a block can still be fast-loaded depends on how far into it the
+    // walk has got -- so without this the trap's answer would depend on timing
+    // outside the machine, and a replay could take a different path.
+    tape.advance_to(global_hc());
     const TapeBlock* b = tape.peek_standard_block();
     if (b == nullptr) {
         return false;
@@ -496,7 +507,7 @@ void Spectrum::clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_ca
         // Confirmed by the SP delta, as the call stack is: a conditional CALL
         // not taken went nowhere.
         if (is_call && sp_after == uint16_t(sp_before - 2)) {
-            profile->enter_call(pc_after, sp_after);
+            profile->enter_call(pc_after, sp_after, pc);
         }
     }
 }
@@ -519,5 +530,147 @@ void Spectrum::run_frame() {
         clock();
     }
 }
+
+#if ZX_REWIND
+void Spectrum::save_state(State& s) {
+    tape.advance_to(global_hc());
+    cpu.save_state(s.cpu);
+    memory.save_state(s.memory);
+    ula.save_state(s.ula);
+    const uint8_t* rows = keyboard.rows();
+    for (int i = 0; i < 8; i++) {
+        s.keys[i] = rows[i];
+    }
+    s.ay = ay;
+    tape.save_state(s.tape);
+    s.pins = pins_;
+    s.call_stack = call_stack;
+    s.call_stack_sp = call_stack_sp_;
+}
+
+void Spectrum::restore_state(const State& s) {
+    cpu.restore_state(s.cpu);
+    memory.restore_state(s.memory);
+    ula.restore_state(s.ula);
+    keyboard.set_rows(s.keys);
+    ay = s.ay;
+    tape.restore_state(s.tape);
+    pins_ = s.pins;
+    call_stack = s.call_stack;
+    call_stack_sp_ = s.call_stack_sp;
+    beeper.restart_at(global_hc());
+}
+
+namespace {
+
+/// FNV-1a, fed field by field -- never whole structs, whose padding bytes are
+/// whatever was on the stack.
+struct Hasher {
+    uint64_t h = 1469598103934665603ull;
+    void byte(uint8_t b) {
+        h ^= b;
+        h *= 1099511628211ull;
+    }
+    void u64(uint64_t v) {
+        for (int i = 0; i < 8; i++) {
+            byte(uint8_t(v >> (i * 8)));
+        }
+    }
+    void bytes(const uint8_t* p, size_t n) {
+        for (size_t i = 0; i < n; i++) {
+            byte(p[i]);
+        }
+    }
+};
+
+void hash_registers(Hasher& h, const Registers& r) {
+    const uint8_t bytes8[] = {r.a, r.f, r.b, r.c, r.d, r.e, r.h, r.l,
+                              r.a_, r.f_, r.b_, r.c_, r.d_, r.e_, r.h_, r.l_,
+                              r.i, r.r, r.im};
+    h.bytes(bytes8, sizeof bytes8);
+    h.u64(r.ix);
+    h.u64(r.iy);
+    h.u64(r.sp);
+    h.u64(r.pc);
+    h.u64(r.wz);
+    h.byte(r.iff1 ? 1 : 0);
+    h.byte(r.iff2 ? 1 : 0);
+}
+
+} // namespace
+
+uint64_t Spectrum::state_hash(const State& s) {
+    Hasher h;
+    hash_registers(h, s.cpu.regs);
+    h.byte(s.cpu.halted ? 1 : 0);
+    h.u64(s.cpu.interrupt_count);
+    h.u64(s.cpu.step);
+    h.byte(s.cpu.opcode);
+    h.byte(s.cpu.dlatch);
+    h.u64(s.cpu.addr);
+    h.byte(s.cpu.prefix_active ? 1 : 0);
+    h.byte(s.cpu.hlx_idx);
+    h.u64(s.cpu.pins);
+
+    h.byte(uint8_t(s.memory.model));
+    h.byte(s.memory.paging);
+    h.bytes(s.memory.ram.data(), s.memory.ram.size());
+
+    h.byte(s.ula.border);
+    h.byte(s.ula.flash_state ? 1 : 0);
+    h.byte(s.ula.screen_bank);
+    h.u64(s.ula.frame_hc);
+    h.u64(s.ula.fetch_count);
+    h.u64(s.ula.fetch_addr);
+    h.byte(s.ula.fetch_data);
+    h.u64(s.ula.line);
+    h.u64(s.ula.dot);
+    h.u64(s.ula.frame_count);
+    h.byte(s.ula.pixel0);
+    h.byte(s.ula.attr0);
+    h.byte(s.ula.pixel1);
+    h.byte(s.ula.attr1);
+    h.byte(s.ula.border_latch);
+
+    h.bytes(s.keys, sizeof s.keys);
+
+    // The AY's registers and selection, which the CPU can read back -- not its
+    // tone and envelope counters, which move only as audio is generated and
+    // so depend on whether anything is listening.
+    for (uint8_t i = 0; i < AY_REGISTERS; i++) {
+        h.byte(s.ay.reg(i));
+    }
+    h.byte(s.ay.selected());
+
+    h.byte(s.tape.fast_load ? 1 : 0);
+    h.byte(s.tape.playing ? 1 : 0);
+    h.byte(s.tape.at_end ? 1 : 0);
+    h.u64(s.tape.block);
+    h.byte(uint8_t(s.tape.phase));
+    h.u64(s.tape.byte);
+    h.byte(s.tape.bit);
+    h.byte(s.tape.second_half ? 1 : 0);
+    h.u64(s.tape.pulses_left);
+    h.byte(s.tape.level ? 1 : 0);
+    h.u64(s.tape.pulse_start_hc);
+    h.u64(s.tape.pulse_hc);
+    h.u64(s.tape.block_start_hc);
+    h.u64(s.tape.total_hc);
+
+    h.u64(s.pins);
+    for (uint16_t v : s.call_stack) {
+        h.u64(v);
+    }
+    for (uint16_t v : s.call_stack_sp) {
+        h.u64(v);
+    }
+    return h.h;
+}
+
+size_t Spectrum::state_bytes(const State& s) {
+    return sizeof(State) + s.memory.ram.size()
+           + (s.call_stack.size() + s.call_stack_sp.size()) * sizeof(uint16_t);
+}
+#endif
 
 } // namespace zx

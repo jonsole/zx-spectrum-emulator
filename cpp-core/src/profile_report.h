@@ -55,6 +55,12 @@ struct ProfileReport {
         uint64_t hits = 0;
         uint64_t half_clocks = 0;
         uint64_t idle_half_clocks = 0;
+        /// For a CALL line, the time its calls took -- everything the routines
+        /// it called did, down the whole call path -- on top of its own. A call
+        /// that recurses back through the same line is counted once, from its
+        /// outermost call, and a call still running counts what it has done.
+        uint64_t calls_half_clocks = 0;
+        uint64_t calls_idle_half_clocks = 0;
         /// The routine and offset of the line's first address, "sprite_blit+12".
         std::string symbol;
     };
@@ -81,14 +87,17 @@ struct ProfileReport {
         std::string name;
         uint16_t addr = 0;
         bool interrupt = false;
+        /// The CALL that entered this path (see Profile::CallNode::site).
+        uint16_t site = 0;
         /// Where the routine's label is, when it has a source line.
         std::string path;
         uint32_t line = 0;
         uint64_t calls = 0;
         uint64_t self_half_clocks = 0;
         uint64_t idle_half_clocks = 0;
-        /// Its own time and all of its children's.
+        /// Its own time and all of its children's, and the idle part of that.
         uint64_t total_half_clocks = 0;
+        uint64_t total_idle_half_clocks = 0;
     };
 
     /// One of the busiest periods, told the same way as the whole profile:
@@ -130,7 +139,7 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
 nlohmann::json profile_report_json(const ProfileReport& report, size_t max_lines,
                                    size_t max_routines, bool worst_nodes);
 
-/// The call tree as a flat array, root first: { id, parent, name, addr,
+/// The call tree as a flat array, root first: { id, parent, name, addr, site,
 /// interrupt, path, line, calls, self_tstates, idle_tstates, tstates }. Every
 /// node -- what the editor's tree view builds its own groupings from.
 nlohmann::json profile_call_nodes_json(const ProfileReport& report);

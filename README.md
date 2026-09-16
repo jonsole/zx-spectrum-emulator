@@ -62,9 +62,8 @@ LLM agent inspects and drives the *same running emulator* over
   `ED`, `DD`, `FD`, and `DD CB d`/`FD CB d`), including the well-known
   undocumented `IXH`/`IXL`/`IYH`/`IYL` register forms.
 
-**Not emulated (yet):** 128K/+2 banking, the AY sound chip, memory contention /
-cycle-exact ULA timing, and tape *saving*. See
-[Status & roadmap](docs/status.md).
+**Not emulated (yet):** the +2A/+3, memory contention / cycle-exact ULA timing,
+and tape *saving*. See [Status & roadmap](docs/status.md).
 
 Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
 [Audio](docs/audio.md).
@@ -97,6 +96,29 @@ Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
   you can set a breakpoint in VS Code, have an MCP client `run()` past other
   breakpoints and hit yours, and watch VS Code's UI update on its own — no
   polling, no manual sync. This is the actual point of the project.
+
+## Tools on top of the emulator
+
+The VS Code extension in `vscode-extension/` is more than the debugger's front
+end:
+
+- **Execution profiler.** Counts where the CPU's time goes while a program runs
+  and paints it onto the source as a heat map, with a call tree by call path in
+  the debug sidebar, idle time (a pacing loop, a `HALT`) counted apart, and the
+  worst frames kept in detail -- see
+  [Execution profile](docs/vscode-debugging.md#execution-profile). The same
+  numbers are the `profile` MCP tool.
+- **Stepping backwards.** At a breakpoint or a pause, step back an
+  instruction, back out of a routine, reverse-continue to the last breakpoint or
+  run back to whatever last wrote an address, with the whole machine as it was --
+  see [Stepping backwards](docs/vscode-debugging.md#stepping-backwards). MCP
+  clients get the same through `step_back` and friends.
+- **Z80 assembly editing.** sjasmplus syntax colouring, Go to Definition, Find
+  All References, Rename, Call Hierarchy, hover documentation and the outline for
+  `.asm`/`.s` files -- see
+  [Editing Z80 assembly](docs/vscode-debugging.md#editing-z80-assembly).
+- **Panels** for the live screen, the cycle-by-cycle bus trace, graphics in
+  memory and the tape deck -- see [Debugging in VS Code](docs/vscode-debugging.md).
 
 ## Requirements
 
@@ -169,8 +191,8 @@ The detail lives in [docs/](docs/), one file per topic:
 
 | Document | What's in it |
 |---|---|
-| [Connecting an MCP client](docs/mcp.md) | Pointing an agent at the running server, and the full tool list |
-| [Debugging in VS Code](docs/vscode-debugging.md) | The DAP front end: launch configs, live screen viewer, call stack, source-level debugging of the ROM and of your own programs |
+| [Connecting an MCP client](docs/mcp.md) | Pointing an agent at the running server, the full tool list, video and the `profile` tool |
+| [Debugging in VS Code](docs/vscode-debugging.md) | The DAP front end: launch configs, live screen viewer, graphics and tape panels, the execution profiler, call stack, source-level debugging of the ROM and of your own programs, and editing Z80 assembly |
 | [Game disassemblies](https://github.com/jonsole/zx-spectrum-disassemblies) | Manic Miner, Fairlight and Atic Atac &mdash; their own repository, checked out here as `game-disassemblies/` |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |

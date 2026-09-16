@@ -40,6 +40,7 @@ const HEAT_RGB = '255, 96, 32';
 const IDLE_TINT = 'rgba(128, 128, 128, 0.12)';
 const IDLE_KEY = 'zxspectrum.profile.idle';
 const PERIOD_KEY = 'zxspectrum.profile.period';
+const CUMULATIVE_KEY = 'zxspectrum.profile.cumulative';
 
 let getSession;       // () => the active zxspectrum session, or undefined
 let workspaceState;   // where the idle list and the period are kept
@@ -108,11 +109,14 @@ function activateProfile(context, sessionGetter) {
     ['zxspectrum.profileSetPeriod', pickPeriod],
     ['zxspectrum.profileShowPeriod', showPeriod],
     ['zxspectrum.profileShowAll', () => showPeriod(undefined)],
+    ['zxspectrum.profileTintWithCalls', () => setCumulative(true)],
+    ['zxspectrum.profileTintOwnCode', () => setCumulative(false)],
   ];
   for (const [name, fn] of commands) {
     context.subscriptions.push(vscode.commands.registerCommand(name, fn));
   }
   setTreeSort('total');
+  setCumulative(workspaceState.get(CUMULATIVE_KEY, true));
 
   context.subscriptions.push(
     vscode.languages.registerHoverProvider({ scheme: 'file' }, { provideHover })
@@ -315,6 +319,20 @@ function showPeriod(element) {
   updateStatus();
 }
 
+/// Whether a CALL line is tinted with the time its calls took as well as its
+/// own. Kept per workspace; re-reads nothing, since the report carries both.
+function setCumulative(cumulative) {
+  workspaceState.update(CUMULATIVE_KEY, cumulative);
+  treeProvider.setCumulative(cumulative);
+  vscode.commands.executeCommand('setContext', 'zxspectrum.profileCumulative', cumulative);
+  if (model !== undefined) {
+    model = indexReport(model.report, { cumulative });
+    treeProvider.setModel(model);
+  }
+  paintAll();
+  updateStatus();
+}
+
 /// Orders the call tree by a routine's total (itself and everything it
 /// called) or by its own code alone -- the first finds what to drill into,
 /// the second where the instructions themselves are slow.
@@ -430,7 +448,7 @@ async function request(action, quiet, extra) {
 }
 
 function adopt(body) {
-  model = indexReport(body);
+  model = indexReport(body, { cumulative: treeProvider.cumulative });
   if (!model.active) {
     stopPolling();
   }
@@ -577,6 +595,7 @@ function updateStatus() {
     parts.push(`turns of ${current.period}`);
   }
   parts.push(`by ${treeProvider.sortBy === 'self' ? 'own code' : 'total'}`);
+  parts.push(treeProvider.cumulative ? 'lines with calls' : 'lines own code');
   if (shownPeriod !== undefined) {
     parts.push(`source shows ${periodName(model, shownPeriod)}`);
   }

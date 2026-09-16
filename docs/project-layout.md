@@ -20,8 +20,11 @@ zx-spectrum-emulator/
       snapshot.cpp                   # .sna (48K/128K) and .z80 loader + writer
       disassembler.cpp                # full documented Z80 disassembler
       tracelog.cpp                     # cycle-by-cycle bus capture
+      profile.cpp                      # execution profile: time per address, call tree, periods
+      rewind.cpp                       # history for stepping backwards: checkpoints, input log, replay
       video_recorder.cpp               # frames -> ffmpeg pipe (MCP start_video)
       rom_source.cpp                    # SLD parser (source-level debug)
+      profile_report.cpp                # a profile folded into source lines, routines, call tree
       spectrum.cpp                       # Spectrum: wires it all together
       engine.cpp                # the shared live instance + command queue
       dap.cpp                    # DAP TCP server
@@ -41,6 +44,16 @@ zx-spectrum-emulator/
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels
+    extension.js                 #   the panels, and activation of everything below
+    profile_view.js              #   execution profile: heat map on the source, hot spots
+    profile_tree.js              #   ...its call tree and worst frames in the debug sidebar
+    profile_model.js             #   ...the report turned into both (no vscode API, tested)
+    rewind_view.js               #   stepping backwards: toolbar, menus, "before live" status
+    rewind_model.js              #   ...its status text (no vscode API, tested)
+    asm_language.js              #   Z80 assembly: definition, references, rename, hierarchy
+    asm_index.js                 #   ...the symbol index behind it (no vscode API, tested)
+    syntaxes/z80-asm.tmLanguage.json  # sjasmplus syntax colouring
+    tests/                       #   plain-Node tests for the model files
   roms/                        # gitignored; drop your 48K ROM (and the 128K pair) here
   rom_disassembly/             # gitignored; scripts/build_rom_source.py output
   game-disassemblies/          # submodule: github.com/jonsole/zx-spectrum-disassemblies

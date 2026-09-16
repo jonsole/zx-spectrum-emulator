@@ -185,6 +185,69 @@ void fold_addresses(const std::vector<AddressCost>& costs, const std::vector<Rom
               });
 }
 
+/// Adds each call's total -- given every node's own time -- to the line of the
+/// CALL that made it. `parents`, `sites` and `interrupts` describe the tree;
+/// `self` and `idle` are per node, from whichever span is being told (the
+/// whole profile, or one period).
+void charge_calls_to_lines(const std::vector<uint32_t>& parents, const std::vector<uint16_t>& sites,
+                           const std::vector<bool>& interrupts, const std::vector<uint64_t>& self,
+                           const std::vector<uint64_t>& idle, const std::vector<RomSourcePtr>& active,
+                           std::map<std::string, std::string>& paths,
+                           std::vector<ProfileReport::Line>& lines) {
+    const size_t count = parents.size();
+    std::vector<uint64_t> total(self);
+    std::vector<uint64_t> total_idle(idle);
+    // A child always follows its parent, so one backwards pass sums subtrees.
+    for (size_t i = count; i-- > 1;) {
+        if (parents[i] < count) {
+            total[parents[i]] += total[i];
+            total_idle[parents[i]] += total_idle[i];
+        }
+    }
+
+    std::map<uint16_t, std::pair<uint64_t, uint64_t>> by_site;
+    for (size_t i = 1; i < count; i++) {
+        if (interrupts[i] || total[i] == 0) {
+            continue;
+        }
+        // The outermost call through this site only: one further in, reached
+        // by recursion through the same CALL, is already inside this total.
+        bool nested = false;
+        for (uint32_t up = parents[i]; up != 0 && up < count; up = parents[up]) {
+            if (!interrupts[up] && sites[up] == sites[i]) {
+                nested = true;
+                break;
+            }
+        }
+        if (nested) {
+            continue;
+        }
+        std::pair<uint64_t, uint64_t>& site = by_site[sites[i]];
+        site.first += total[i];
+        site.second += total_idle[i];
+    }
+
+    std::map<std::pair<std::string, uint32_t>, size_t> line_index;
+    for (size_t i = 0; i < lines.size(); i++) {
+        line_index.emplace(std::make_pair(lines[i].path, lines[i].line), i);
+    }
+    for (const auto& entry : by_site) {
+        for (const RomSourcePtr& source : active) {
+            auto it = source->addr_to_loc.find(entry.first);
+            if (it == source->addr_to_loc.end() || it->second.file >= source->files.size()) {
+                continue;
+            }
+            const std::string& path = absolute_path(source->files[it->second.file].path, paths);
+            auto found = line_index.find(std::make_pair(path, it->second.line));
+            if (found != line_index.end()) {
+                lines[found->second].calls_half_clocks += entry.second.first;
+                lines[found->second].calls_idle_half_clocks += entry.second.second;
+            }
+            break;
+        }
+    }
+}
+
 nlohmann::json lines_json(const std::vector<ProfileReport::Line>& lines, size_t max_lines,
                           bool with_hits) {
     using json = nlohmann::json;
@@ -199,6 +262,10 @@ nlohmann::json lines_json(const std::vector<ProfileReport::Line>& lines, size_t 
                   {"tstates", tstates(l.half_clocks)},
                   {"idle_tstates", tstates(l.idle_half_clocks)},
                   {"symbol", l.symbol}};
+        if (l.calls_half_clocks != 0) {
+            item["calls_tstates"] = tstates(l.calls_half_clocks);
+            item["calls_idle_tstates"] = tstates(l.calls_idle_half_clocks);
+        }
         if (with_hits) {
             item["hits"] = l.hits;
         }
@@ -308,10 +375,12 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         node.parent = from.parent;
         node.addr = from.addr;
         node.interrupt = from.interrupt;
+        node.site = from.site;
         node.calls = from.calls;
         node.self_half_clocks = from.self_half_clocks;
         node.idle_half_clocks = from.idle_half_clocks;
         node.total_half_clocks = from.self_half_clocks;
+        node.total_idle_half_clocks = from.idle_half_clocks;
         if (i == Profile::ROOT) {
             node.name = "(outside any call)";
         } else {
@@ -347,8 +416,27 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         const uint32_t parent = report.call_nodes[i].parent;
         if (parent < report.call_nodes.size()) {
             report.call_nodes[parent].total_half_clocks += report.call_nodes[i].total_half_clocks;
+            report.call_nodes[parent].total_idle_half_clocks +=
+                report.call_nodes[i].total_idle_half_clocks;
         }
     }
+
+    // The tree's shape, for charging calls to their CALL lines -- once with
+    // the whole profile's time, and again below with each worst period's.
+    const size_t node_count = snapshot.call_nodes.size();
+    std::vector<uint32_t> parents(node_count);
+    std::vector<uint16_t> sites(node_count);
+    std::vector<bool> interrupts(node_count);
+    std::vector<uint64_t> self(node_count);
+    std::vector<uint64_t> idle(node_count);
+    for (size_t i = 0; i < node_count; i++) {
+        parents[i] = snapshot.call_nodes[i].parent;
+        sites[i] = snapshot.call_nodes[i].site;
+        interrupts[i] = snapshot.call_nodes[i].interrupt;
+        self[i] = snapshot.call_nodes[i].self_half_clocks;
+        idle[i] = snapshot.call_nodes[i].idle_half_clocks;
+    }
+    charge_calls_to_lines(parents, sites, interrupts, self, idle, active, paths, report.lines);
 
     // The busiest periods, each folded the same way.
     for (const Profile::WorstPeriod& w : snapshot.periods.worst) {
@@ -365,6 +453,16 @@ ProfileReport build_profile_report(const ProfileSnapshot& snapshot, const Source
         }
         fold_addresses(period_costs, active, paths, period.lines, period.routines,
                        period.unmapped_half_clocks);
+        std::vector<uint64_t> period_self(node_count, 0);
+        std::vector<uint64_t> period_idle(node_count, 0);
+        for (const Profile::WorstPeriod::Share& share : w.nodes) {
+            if (share.id < node_count) {
+                period_self[share.id] = share.half_clocks;
+                period_idle[share.id] = share.idle_half_clocks;
+            }
+        }
+        charge_calls_to_lines(parents, sites, interrupts, period_self, period_idle, active, paths,
+                              period.lines);
         period.nodes = w.nodes;
         report.worst.push_back(std::move(period));
     }
@@ -456,6 +554,7 @@ nlohmann::json profile_call_nodes_json(const ProfileReport& report) {
         json item{{"id", i},
                   {"name", n.name},
                   {"addr", n.addr},
+                  {"site", n.site},
                   {"interrupt", n.interrupt},
                   {"calls", n.calls},
                   {"self_tstates", tstates(n.self_half_clocks)},

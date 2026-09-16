@@ -435,6 +435,29 @@ public:
     /// flash_state alone, matching what a reset actually does.
     void reset();
 
+#if ZX_REWIND
+    /// The ULA's position and latches, for rewind's checkpoints. Not the
+    /// picture it has drawn, which nothing the CPU sees depends on: a restore
+    /// replays at least a frame to redraw it.
+    struct State {
+        UlaTiming timing = TIMING_48K;
+        uint8_t border = 0;
+        bool flash_state = false;
+        uint8_t screen_bank = 5;
+        uint32_t frame_hc = 0;
+        uint32_t fetch_count = 0;
+        uint16_t fetch_addr = 0;
+        uint8_t fetch_data = 0;
+        uint32_t line = 0;
+        uint32_t dot = 0;
+        uint64_t frame_count = 0;
+        uint8_t pixel0 = 0, attr0 = 0, pixel1 = 0, attr1 = 0;
+        uint8_t border_latch = 0;
+    };
+    void save_state(State& s) const;
+    void restore_state(const State& s);
+#endif
+
 private:
     UlaTiming t_ = TIMING_48K;
     uint8_t screen_bank_ = 5;

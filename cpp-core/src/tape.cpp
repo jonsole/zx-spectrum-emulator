@@ -1224,4 +1224,40 @@ std::string type_load_command(Spectrum& m) {
     return {};
 }
 
+#if ZX_REWIND
+void Tape::save_state(State& s) const {
+    s.fast_load = fast_load_;
+    s.playing = playing_;
+    s.at_end = at_end_;
+    s.block = block_;
+    s.phase = phase_;
+    s.byte = byte_;
+    s.bit = bit_;
+    s.second_half = second_half_;
+    s.pulses_left = pulses_left_;
+    s.level = level_;
+    s.pulse_start_hc = pulse_start_hc_;
+    s.pulse_hc = pulse_hc_;
+    s.block_start_hc = block_start_hc_;
+    s.total_hc = total_hc_;
+}
+
+void Tape::restore_state(const State& s) {
+    fast_load_ = s.fast_load;
+    playing_ = s.playing;
+    at_end_ = s.at_end;
+    block_ = s.block;
+    phase_ = s.phase;
+    byte_ = s.byte;
+    bit_ = s.bit;
+    second_half_ = s.second_half;
+    pulses_left_ = s.pulses_left;
+    level_ = s.level;
+    pulse_start_hc_ = s.pulse_start_hc;
+    pulse_hc_ = s.pulse_hc;
+    block_start_hc_ = s.block_start_hc;
+    total_hc_ = s.total_hc;
+}
+#endif
+
 } // namespace zx

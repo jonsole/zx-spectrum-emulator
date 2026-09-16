@@ -36,6 +36,7 @@ class ProfileTreeProvider {
     this.onDidChangeTreeData = this.emitter.event;
     this.model = undefined;
     this.sortBy = 'total';
+    this.cumulative = true;
     this.periodModels = new Map(); // period index -> indexed model, per report
   }
 
@@ -50,11 +51,16 @@ class ProfileTreeProvider {
     this.emitter.fire();
   }
 
+  setCumulative(cumulative) {
+    this.cumulative = cumulative;
+    this.periodModels = new Map();
+  }
+
   /// The indexed model for one worst period, built once per report.
   periodModel(period) {
     let model = this.periodModels.get(period.index);
     if (model === undefined) {
-      model = indexReport(periodReport(this.model.report, period));
+      model = indexReport(periodReport(this.model.report, period), { cumulative: this.cumulative });
       this.periodModels.set(period.index, model);
     }
     return model;

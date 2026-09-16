@@ -117,11 +117,13 @@ void Profile::close_period() {
     }
 }
 
-void Profile::enter(uint16_t target, uint16_t sp, bool interrupt) {
+void Profile::enter(uint16_t target, uint16_t sp, bool interrupt, uint16_t site) {
     const uint32_t parent = current_node();
     uint32_t node = parent;
     if (frames_.size() < MAX_DEPTH) {
-        const uint64_t key = (uint64_t(parent) << 17) | (interrupt ? 0x10000u : 0u) | target;
+        // 17 bits of parent (MAX_NODES fits), a flag, 16 of site, 16 of target.
+        const uint64_t key = (uint64_t(parent) << 33) | (uint64_t(interrupt ? 1 : 0) << 32)
+                             | (uint64_t(site) << 16) | target;
         auto found = children_.find(key);
         if (found != children_.end()) {
             node = found->second;
@@ -130,6 +132,7 @@ void Profile::enter(uint16_t target, uint16_t sp, bool interrupt) {
             n.parent = parent;
             n.addr = target;
             n.interrupt = interrupt;
+            n.site = site;
             node = uint32_t(nodes_.size());
             nodes_.push_back(n);
             node_stamp_.push_back(0);

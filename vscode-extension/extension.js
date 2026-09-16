@@ -21,6 +21,7 @@ const os = require('os');
 const path = require('path');
 const { activateAsmLanguage } = require('./asm_language');
 const { activateProfile } = require('./profile_view');
+const { activateRewind } = require('./rewind_view');
 
 const SCREEN_HOST = '127.0.0.1';
 const SCREEN_PORT = 8500; // must match --screen-port; see README if you changed it
@@ -99,6 +100,7 @@ function activate(context) {
   graphicsContext = context;
   activateAsmLanguage(context);
   activateProfile(context, zxDebugSession);
+  activateRewind(context, zxDebugSession);
   context.subscriptions.push(
     vscode.commands.registerCommand('zxspectrum.showScreen', () => showScreenPanel(context))
   );

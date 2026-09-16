@@ -757,6 +757,17 @@ std::string describe_request(const std::string& command, const json& arguments) 
     if (command == "startTrace" || command == "stopTrace") {
         return command;
     }
+    if (command == "stepBack" || command == "reverseContinue" || command == "stepBackInto"
+        || command == "stepBackOut" || command == "returnToLive") {
+        return command;
+    }
+    if (command == "runBackToAddress" || command == "runBackToWrite") {
+        const json& address = arg(arguments, "address");
+        if (address.is_null()) {
+            return command + " line " + std::to_string(arg_int(arguments, "line", -1));
+        }
+        return command + " " + (address.is_string() ? address.get<std::string>() : address.dump());
+    }
     if (command == "profile") {
         const std::string action = arg_str(arguments, "action");
         // "get" is what the editor asks on every stop; only the switches are acts.
@@ -768,6 +779,46 @@ std::string describe_request(const std::string& command, const json& arguments) 
     return "";
 }
 
+
+#if ZX_REWIND
+/// What a rewind request did, to every client: a `zxRewind` event the editor
+/// uses for its status bar, and a line in the debug console when there is
+/// something to say -- a search that found nothing leaves the machine where it
+/// was, and without the line that looks like a button that did nothing.
+void report_rewind(const std::string& command, const RewindOutcome& o) {
+    std::string message;
+    if (!o.error.empty()) {
+        message = o.error;
+    } else if (o.cancelled) {
+        message = "cancelled -- the machine is where it was";
+    } else if (!o.moved && command != "returnToLive") {
+        message = "nothing earlier in the history matches -- the machine is where it was";
+    }
+    broadcast_event("zxRewind", json{{"command", command},
+                                     {"moved", o.moved},
+                                     {"cancelled", o.cancelled},
+                                     {"error", o.error},
+                                     {"message", message},
+                                     {"inPast", o.state.in_past},
+                                     {"behindHalfClocks", o.state.behind_hc}});
+    if (!message.empty()) {
+        broadcast_event("output", json{{"category", "console"},
+                                       {"output", command + ": " + message + "\n"}});
+        log("%s: %s", command.c_str(), message.c_str());
+    }
+}
+
+json history_body(const RewindStatus& s) {
+    return json{{"rewind", true},
+                {"live", s.live},
+                {"oldestHalfClock", s.oldest_hc},
+                {"headHalfClock", s.head_hc},
+                {"positionHalfClock", s.position_hc},
+                {"halfClocksPerFrame", s.hc_per_frame},
+                {"checkpoints", s.checkpoints},
+                {"bytes", s.bytes}};
+}
+#endif
 
 json handle_request(const json& req, Engine& engine, Sources& sources, Connection& conn) {
     const std::string command = req.value("command", std::string());
@@ -804,6 +855,10 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                     {"supportsDisassembleRequest", true},
                     {"supportsSetVariable", true},
                     {"supportsSteppingGranularity", false}};
+#if ZX_REWIND
+        // What makes VS Code show Step Back and Reverse Continue at all.
+        body["supportsStepBack"] = true;
+#endif
 
     } else if (command == "launch") {
         // Lets a launch config opt out of realtime pacing (the exercisers
@@ -1146,6 +1201,82 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                             {"threadId", THREAD_ID},
                                             {"allThreadsStopped", true}});
         }
+
+    } else if (command == "stepBack" || command == "reverseContinue" || command == "stepBackInto"
+               || command == "stepBackOut" || command == "runBackToAddress"
+               || command == "runBackToWrite" || command == "returnToLive") {
+        // stepBack and reverseContinue are standard DAP, sent by VS Code's own
+        // toolbar buttons; the rest are this adapter's, from the extension.
+#if ZX_REWIND
+        if (engine.running()) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", "pause the machine before going back"}});
+        }
+        RewindOp op = RewindOp::StepBackOver;
+        if (command == "reverseContinue") {
+            op = RewindOp::ReverseContinue;
+        } else if (command == "stepBackInto") {
+            op = RewindOp::StepBackInto;
+        } else if (command == "stepBackOut") {
+            op = RewindOp::StepBackOut;
+        } else if (command == "runBackToAddress") {
+            op = RewindOp::RunBackToAddress;
+        } else if (command == "runBackToWrite") {
+            op = RewindOp::RunBackToWrite;
+        }
+        uint16_t address = 0;
+        const json& source = arg(arguments, "source");
+        const int64_t line = arg_int(arguments, "line", -1);
+        if (op == RewindOp::RunBackToAddress && source.is_object() && line >= 0) {
+            // Run Back to Cursor: a source line rather than an address, mapped
+            // the way setBreakpoints maps one -- nudged forward to the next
+            // line with an instruction.
+            size_t source_file = 0;
+            const RomSourcePtr rom_source =
+                sources.source_for_path(source.value("path", std::string()), source_file);
+            uint32_t actual_line = 0;
+            if (rom_source == nullptr
+                || !rom_source->addr_for_line(source_file, uint32_t(line), address, actual_line)) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", rom_source == nullptr
+                                         ? "no debug info loaded for this source"
+                                         : "no instruction at or after this line"}});
+            }
+        } else if (op == RewindOp::RunBackToAddress || op == RewindOp::RunBackToWrite) {
+            bool present = false;
+            std::string addr_error;
+            if (!arg_opt_address(arguments, "address", sources, present, address, addr_error)
+                || !present) {
+                return envelope_response(
+                    conn, request_seq, command, false,
+                    json{{"message", addr_error.empty() ? "'" + command + "' needs an 'address'"
+                                                        : addr_error}});
+            }
+        }
+        // Detached, like continue: a search back through a minute of history
+        // takes seconds, and this connection must stay free to send the pause
+        // that cancels it. The landing arrives as a `stopped` event.
+        const bool to_live = command == "returnToLive";
+        std::thread([&engine, op, address, to_live, command] {
+            const RewindOutcome o = to_live ? engine.return_to_live() : engine.rewind(op, address);
+            report_rewind(command, o);
+        }).detach();
+#else
+        return envelope_response(conn, request_seq, command, false,
+                                 json{{"message", "this zx_server was built without rewind "
+                                                  "(ZX_REWIND=OFF)"}});
+#endif
+
+    } else if (command == "history") {
+        // Not standard DAP: how much history there is and where the machine
+        // is in it, for the editor's "before live" status. Answers a build
+        // without rewind too, so the editor can tell rather than guess.
+#if ZX_REWIND
+        body = history_body(engine.rewind_status());
+#else
+        body = json{{"rewind", false}};
+#endif
 
     } else if (command == "threads") {
         body = json{{"threads", json::array({json{{"id", THREAD_ID}, {"name", "Z80"}}})}};

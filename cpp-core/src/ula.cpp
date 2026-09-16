@@ -414,4 +414,44 @@ void Ula::draw_raster_marker(std::vector<uint8_t>& rgb) const {
     }
 }
 
+#if ZX_REWIND
+void Ula::save_state(State& s) const {
+    s.timing = t_;
+    s.border = border;
+    s.flash_state = flash_state;
+    s.screen_bank = screen_bank_;
+    s.frame_hc = frame_hc_;
+    s.fetch_count = fetch_count_;
+    s.fetch_addr = fetch_addr_;
+    s.fetch_data = fetch_data_;
+    s.line = line_;
+    s.dot = dot_;
+    s.frame_count = frame_count_;
+    s.pixel0 = pixel0_;
+    s.attr0 = attr0_;
+    s.pixel1 = pixel1_;
+    s.attr1 = attr1_;
+    s.border_latch = border_latch_;
+}
+
+void Ula::restore_state(const State& s) {
+    t_ = s.timing;
+    border = s.border;
+    flash_state = s.flash_state;
+    screen_bank_ = s.screen_bank;
+    frame_hc_ = s.frame_hc;
+    fetch_count_ = s.fetch_count;
+    fetch_addr_ = s.fetch_addr;
+    fetch_data_ = s.fetch_data;
+    line_ = s.line;
+    dot_ = s.dot;
+    frame_count_ = s.frame_count;
+    pixel0_ = s.pixel0;
+    attr0_ = s.attr0;
+    pixel1_ = s.pixel1;
+    attr1_ = s.attr1;
+    border_latch_ = s.border_latch;
+}
+#endif
+
 } // namespace zx

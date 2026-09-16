@@ -215,6 +215,30 @@ public:
     /// per-yield tape service from copying the whole list 1700 times a second.
     uint64_t generation() const { return generation_; }
 
+#if ZX_REWIND
+    /// Where the tape is, for rewind's checkpoints: the motor, the fast-load
+    /// setting and the playback cursor. Not what is on it -- inserting or
+    /// ejecting a tape ends the history.
+    struct State {
+        bool fast_load = true;
+        bool playing = false;
+        bool at_end = false;
+        size_t block = 0;
+        TapePhase phase = TapePhase::Idle;
+        size_t byte = 0;
+        uint8_t bit = 0;
+        bool second_half = false;
+        uint32_t pulses_left = 0;
+        bool level = false;
+        uint64_t pulse_start_hc = 0;
+        uint64_t pulse_hc = 0;
+        uint64_t block_start_hc = 0;
+        uint64_t total_hc = 0;
+    };
+    void save_state(State& s) const;
+    void restore_state(const State& s);
+#endif
+
 private:
     std::vector<TapeBlock> blocks_;
     std::vector<TapeBlockInfo> infos_;

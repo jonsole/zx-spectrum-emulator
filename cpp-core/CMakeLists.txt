@@ -50,6 +50,17 @@ add_library(zx_core STATIC
   src/video_recorder.cpp
   src/z80.cpp
 )
+# Rewind: a history of the machine for stepping backwards -- see
+# docs/rewind-design.md. On by default; configure with -DZX_REWIND=OFF (or
+# build.ps1 -NoRewind) for a build with none of it compiled in. PUBLIC, so the
+# servers and tests see the same value the core was built with.
+option(ZX_REWIND "Keep a history of the machine for stepping backwards" ON)
+if(ZX_REWIND)
+  target_sources(zx_core PRIVATE src/rewind.cpp)
+  target_compile_definitions(zx_core PUBLIC ZX_REWIND=1)
+else()
+  target_compile_definitions(zx_core PUBLIC ZX_REWIND=0)
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(zx_core PUBLIC Threads::Threads zx_miniz)
 target_include_directories(zx_core PUBLIC src)
@@ -146,6 +157,10 @@ zx_add_test(tracelog_tests)
 zx_add_test(video_recorder_tests)
 zx_add_test(frame_capture_tests)
 zx_add_test(profile_tests)
+if(ZX_REWIND)
+  zx_add_test(rewind_tests)
+  target_compile_definitions(rewind_tests PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif()
 
 # Not a zx_add_test: the symbol/address-expression parsing it covers lives in
 # rom_source.cpp, which belongs to zx_server rather than zx_core (debug data is

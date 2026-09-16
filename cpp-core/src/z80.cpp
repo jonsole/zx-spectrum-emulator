@@ -782,4 +782,32 @@ uint64_t Z80::clock(uint64_t pins) {
     return halted ? assert_pins(pins, HALT) : release_pins(pins, HALT);
 }
 
+#if ZX_REWIND
+void Z80::save_state(State& s) const {
+    s.regs = regs;
+    s.halted = halted;
+    s.interrupt_count = interrupt_count;
+    s.step = step_;
+    s.opcode = opcode_;
+    s.dlatch = dlatch_;
+    s.addr = addr_;
+    s.prefix_active = prefix_active_;
+    s.hlx_idx = hlx_idx_;
+    s.pins = pins_;
+}
+
+void Z80::restore_state(const State& s) {
+    regs = s.regs;
+    halted = s.halted;
+    interrupt_count = s.interrupt_count;
+    step_ = s.step;
+    opcode_ = s.opcode;
+    dlatch_ = s.dlatch;
+    addr_ = s.addr;
+    prefix_active_ = s.prefix_active;
+    hlx_idx_ = s.hlx_idx;
+    pins_ = s.pins;
+}
+#endif
+
 } // namespace zx

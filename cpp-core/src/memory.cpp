@@ -93,4 +93,42 @@ void SpectrumMemory::remap() {
     slot_bank_[3] = bank_c000_;
 }
 
+#if ZX_REWIND
+void SpectrumMemory::save_state(State& s) const {
+    s.model = model_;
+    s.paging = paging_;
+    if (model_ == Model::Spectrum128) {
+        s.ram.resize(size_t(RAM_BANKS) * BANK_SIZE);
+        for (size_t b = 0; b < RAM_BANKS; b++) {
+            std::copy(bank[b].begin(), bank[b].end(), s.ram.begin() + b * BANK_SIZE);
+        }
+    } else {
+        s.ram.resize(sizeof RAM48_BANKS * BANK_SIZE);
+        for (size_t i = 0; i < sizeof RAM48_BANKS; i++) {
+            const auto& from = bank[RAM48_BANKS[i]];
+            std::copy(from.begin(), from.end(), s.ram.begin() + i * BANK_SIZE);
+        }
+    }
+}
+
+void SpectrumMemory::restore_state(const State& s) {
+    model_ = s.model;
+    paging_ = s.paging;
+    if (model_ == Model::Spectrum128) {
+        for (size_t b = 0; b < RAM_BANKS && (b + 1) * BANK_SIZE <= s.ram.size(); b++) {
+            std::copy(s.ram.begin() + b * BANK_SIZE, s.ram.begin() + (b + 1) * BANK_SIZE,
+                      bank[b].begin());
+        }
+    } else {
+        for (size_t i = 0; i < sizeof RAM48_BANKS && (i + 1) * BANK_SIZE <= s.ram.size(); i++) {
+            std::copy(s.ram.begin() + i * BANK_SIZE, s.ram.begin() + (i + 1) * BANK_SIZE,
+                      bank[RAM48_BANKS[i]].begin());
+        }
+    }
+    // The slot pointers point into this object's own arrays, so they are
+    // derived from the paging, never copied.
+    remap();
+}
+#endif
+
 } // namespace zx

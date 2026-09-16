@@ -39,6 +39,34 @@
     ],
     "commands": [
       {
+        "command": "zxspectrum.stepBackInto",
+        "title": "ZX Spectrum: Step Back Into",
+        "icon": "$(arrow-circle-left)",
+        "enablement": "debugState == 'stopped'"
+      },
+      {
+        "command": "zxspectrum.stepBackOut",
+        "title": "ZX Spectrum: Step Back Out",
+        "icon": "$(arrow-circle-up)",
+        "enablement": "debugState == 'stopped'"
+      },
+      {
+        "command": "zxspectrum.runBackToCursor",
+        "title": "Run Back to Cursor",
+        "enablement": "debugState == 'stopped'"
+      },
+      {
+        "command": "zxspectrum.runBackToWrite",
+        "title": "ZX Spectrum: Run Back to Last Write...",
+        "enablement": "debugState == 'stopped'"
+      },
+      {
+        "command": "zxspectrum.returnToLive",
+        "title": "ZX Spectrum: Return to Live",
+        "icon": "$(arrow-circle-right)",
+        "enablement": "debugState == 'stopped'"
+      },
+      {
         "command": "zxspectrum.showScreen",
         "title": "ZX Spectrum: Show Screen"
       },
@@ -221,6 +249,14 @@
         "command": "zxspectrum.profileShowAll",
         "title": "ZX Spectrum: Show Whole Profile on Source",
         "icon": "$(eye-closed)"
+      },
+      {
+        "command": "zxspectrum.profileTintWithCalls",
+        "title": "ZX Spectrum: Tint CALL Lines With Their Calls' Time"
+      },
+      {
+        "command": "zxspectrum.profileTintOwnCode",
+        "title": "ZX Spectrum: Tint Lines By Their Own Code Only"
       }
     ],
     "views": {
@@ -250,6 +286,16 @@
     "menus": {
       "editor/context": [
         {
+          "command": "zxspectrum.runBackToCursor",
+          "when": "debugType == 'zxspectrum' && stepBackSupported && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
+          "group": "debug@3"
+        },
+        {
+          "command": "zxspectrum.runBackToWrite",
+          "when": "debugType == 'zxspectrum' && stepBackSupported && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
+          "group": "debug@4"
+        },
+        {
           "command": "zxspectrum.showSelectionAsGraphics",
           "when": "editorHasSelection && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
           "group": "zxspectrum@1"
@@ -268,6 +314,26 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "zxspectrum.stepBackInto",
+          "when": "debugType == 'zxspectrum' && stepBackSupported"
+        },
+        {
+          "command": "zxspectrum.stepBackOut",
+          "when": "debugType == 'zxspectrum' && stepBackSupported"
+        },
+        {
+          "command": "zxspectrum.runBackToCursor",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.runBackToWrite",
+          "when": "debugType == 'zxspectrum' && stepBackSupported"
+        },
+        {
+          "command": "zxspectrum.returnToLive",
+          "when": "debugType == 'zxspectrum' && zxspectrum.inPast"
+        },
         {
           "command": "zxspectrum.tapeSeek",
           "when": "false"
@@ -452,9 +518,34 @@
           "command": "zxspectrum.profileSetPeriod",
           "when": "view == zxspectrumProfile",
           "group": "profile@2"
+        },
+        {
+          "command": "zxspectrum.profileTintOwnCode",
+          "when": "view == zxspectrumProfile && zxspectrum.profileCumulative",
+          "group": "profile@3"
+        },
+        {
+          "command": "zxspectrum.profileTintWithCalls",
+          "when": "view == zxspectrumProfile && !zxspectrum.profileCumulative",
+          "group": "profile@3"
         }
       ],
       "debug/toolBar": [
+        {
+          "command": "zxspectrum.stepBackInto",
+          "when": "debugType == 'zxspectrum' && stepBackSupported",
+          "group": "navigation@0"
+        },
+        {
+          "command": "zxspectrum.stepBackOut",
+          "when": "debugType == 'zxspectrum' && stepBackSupported",
+          "group": "navigation@0"
+        },
+        {
+          "command": "zxspectrum.returnToLive",
+          "when": "debugType == 'zxspectrum' && zxspectrum.inPast",
+          "group": "navigation@0"
+        },
         {
           "command": "zxspectrum.setSpeed",
           "when": "debugType == 'zxspectrum'",

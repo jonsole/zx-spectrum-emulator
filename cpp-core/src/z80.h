@@ -187,6 +187,25 @@ public:
 
     uint64_t pins() const { return pins_; }
 
+#if ZX_REWIND
+    /// Everything that decides what the CPU does next, down to where it is
+    /// inside an instruction -- for rewind's checkpoints (see rewind.h).
+    struct State {
+        Registers regs{};
+        bool halted = false;
+        uint64_t interrupt_count = 0;
+        uint16_t step = 0;
+        uint8_t opcode = 0;
+        uint8_t dlatch = 0;
+        uint16_t addr = 0;
+        bool prefix_active = false;
+        uint8_t hlx_idx = 0;
+        uint64_t pins = 0;
+    };
+    void save_state(State& s) const;
+    void restore_state(const State& s);
+#endif
+
     /// True when a fresh opcode fetch has just begun and we are not part-way
     /// through a prefix -- i.e. the previous instruction has fully retired.
     ///

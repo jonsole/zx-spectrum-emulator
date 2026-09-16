@@ -178,6 +178,57 @@ TEST(call_nodes_are_named_by_routine_and_total_their_subtrees) {
     CHECK(flat[3]["interrupt"].get<bool>());
 }
 
+TEST(a_call_line_is_charged_with_what_its_calls_took) {
+    Sources sources("no-rom-here");
+    load(sources);
+    // root -> draw, called from 32800 (line 20), which calls other from 32772
+    // (line 12) -- and other recurses into itself from that same line, which
+    // must not count twice. An interrupt handler charges no line at all.
+    ProfileSnapshot s = snapshot();
+    Profile::CallNode draw = call_node(0, 32768, 1, 100);
+    draw.site = 32800;
+    Profile::CallNode other = call_node(1, 32800, 2, 30);
+    other.site = 32772;
+    other.idle_half_clocks = 6;
+    Profile::CallNode again = call_node(2, 32800, 1, 20);
+    again.site = 32772;
+    Profile::CallNode handler = call_node(0, 0x0038, 1, 7);
+    handler.interrupt = true;
+    handler.site = 32770;
+    s.call_nodes = {call_node(Profile::NO_PARENT, 0, 0, 10), draw, other, again, handler};
+
+    const ProfileReport report = build_profile_report(s, sources);
+    uint64_t line20 = 0;
+    uint64_t line12 = 0;
+    uint64_t line12_idle = 0;
+    uint64_t line11 = 0;
+    for (const ProfileReport::Line& l : report.lines) {
+        if (l.line == 20) {
+            line20 = l.calls_half_clocks;
+        } else if (l.line == 12) {
+            line12 = l.calls_half_clocks;
+            line12_idle = l.calls_idle_half_clocks;
+        } else if (l.line == 11) {
+            line11 = l.calls_half_clocks;
+        }
+    }
+    CHECK_EQ(line20, uint64_t(100 + 30 + 20));
+    CHECK_EQ(line12, uint64_t(30 + 20));
+    CHECK_EQ(line12_idle, uint64_t(6));
+    CHECK_EQ(line11, uint64_t(0));
+
+    const nlohmann::json j = profile_report_json(report, 0, 0, false);
+    bool found = false;
+    for (const nlohmann::json& l : j["lines"]) {
+        if (l["line"].get<uint32_t>() == 20) {
+            CHECK_EQ(l["calls_tstates"].get<double>(), 75.0);
+            found = true;
+        }
+    }
+    CHECK(found);
+    CHECK_EQ(profile_call_nodes_json(report)[1]["site"].get<uint32_t>(), uint32_t(32800));
+}
+
 TEST(the_nested_tree_is_cut_to_what_matters_and_says_what_it_cut) {
     Sources sources("no-rom-here");
     load(sources);

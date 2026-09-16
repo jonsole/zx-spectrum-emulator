@@ -455,85 +455,117 @@ compositing pass is skipped entirely.
 
 ## Execution profile
 
-Where a program's time goes, painted onto its source. **Start Profiling**
-(the flame on the debug toolbar, or the command palette) counts every
-instruction the machine executes from then on: which address it started at,
-and how many T-states it really took. Let the program run -- play the part of
-the game worth measuring -- and the open source files warm up as it goes:
+Where a program's time goes, painted onto its source. **Start Profiling** (the
+flame on the debug toolbar, or the Command Palette) has the emulator count every
+instruction it executes from then on: which address it started at, and how many
+T-states it took. Let the program run -- play the part of the game worth
+measuring -- and the open source files warm up as it goes. Starting, stopping
+and reading a profile never pause the machine, and the editor re-reads it once
+a second while it counts.
 
-- each line that ran is tinted by its share of all the time counted, six
-  shades from faint to strong, with the same marks in the scrollbar so a long
-  file's hot spots can be found without scrolling;
-- lines with at least half a percent get their numbers written after them --
-  share, T-states a frame and runs a frame, e.g. `18% · 12,400 T/frame ·
-  950×/frame` -- and a routine's label line leads with the whole routine's
-  total;
-- hovering a line gives the exact figures, including T-states per run;
-- **Show Profile Hot Spots** (or clicking the status bar's flame) lists the
+On the source:
+
+- **Tint.** Each line that ran is tinted by its share of the busy time counted,
+  six shades from faint to strong, with the same marks in the scrollbar so a
+  long file's hot spots can be found without scrolling. Idle lines are tinted
+  grey (see [idle time](#idle-time)).
+- **Labels.** Lines with at least half a percent get their numbers written
+  after them -- share, T-states a frame and runs a frame, e.g. `18% · 12,400
+  T/frame · 950×/frame` -- and a routine's label line leads with the whole
+  routine's total.
+- **Calls count on the `CALL` line.** A `CALL` line carries the time its calls
+  took as well as its own (see [below](#calls-counted-on-the-call-line)), so
+  the heat leads from the main loop down to where the time goes.
+- **Hover** for the exact figures: T-states, runs, T-states a run, and for a
+  `CALL` line its own share and its calls' share separately.
+- **Show Profile Hot Spots** (or a click on the status bar's flame) lists the
   most expensive routines and lines, and jumps to one.
+
+**Stop Profiling** freezes the counts: the map stays up, and is re-read whenever
+the machine stops. **Start** again counts from zero; **Clear Profile** takes the
+map down.
+
+The numbers are per frame whenever frames went by, because that is the budget a
+game works to: a 48K frame is 69,888 T-states. A profile taken only by stepping
+reads in totals instead.
+
+### Calls counted on the CALL line
+
+By default a `CALL` line is tinted with the time its calls took as well as its
+own: everything the routine it called did, down the whole call path, from that
+line. So `call redraw_flush` in the main loop is as hot as the redraw is, and
+following the heat down through the calls leads to where the time actually
+goes. The label says so -- `44% with calls` -- and the hover splits it into the
+line's own share and its calls'. A call of an idle routine reads `idle with
+calls`. A routine that recurses back through the same `CALL` is counted once,
+from its outermost call, and a call still running (a main loop that never
+returns) counts what it has done so far.
+
+**Tint Lines By Their Own Code Only**, in the profile view's `...` menu, shows
+each line's own instructions alone; **Tint CALL Lines With Their Calls' Time**
+switches back. The choice is kept per workspace and applies to a
+[worst frame](#worst-frames) painted on the source as well.
 
 ### The call tree
 
 **ZX Spectrum Profile**, in the debug sidebar under the tape pane, shows the
-same profile by routine. Every routine the profile saw is listed, most
-expensive first, with its share, T-states a frame and calls a frame; expand
-one and it lists the routines *it* called, with what those calls cost it, plus
-a row for its own code. Those expand the same way, as deep as the calls went.
-Clicking a row opens the routine.
+same profile by routine. Every routine the profile saw is listed, most expensive
+first, with its share, T-states a frame and calls a frame; expand one and it
+lists the routines *it* called, with what those calls cost it, plus a row for
+its own code. Those expand the same way, as deep as the calls went. Clicking a
+row opens the routine.
 
-What makes the numbers under a routine trustworthy is that the emulator
-records calls by *path*, not by name: `sprite_blit` called from
-`objects_draw_all` and `sprite_blit` called from `redraw_view` are counted
-separately, so expanding `objects_draw_all` shows only the blitting it did.
-(A call graph read off the source could only put each routine's whole cost
-under every caller.) At the top level a routine reached along several paths
-is added up across them -- once, from its outermost call, if it recurses.
+What makes the numbers under a routine trustworthy is that the emulator records
+calls by *path*, not by name: `sprite_blit` called from `objects_draw_all` and
+`sprite_blit` called from `redraw_view` are counted separately, so expanding
+`objects_draw_all` shows only the blitting it did. (A call graph read off the
+source could only put each routine's whole cost under every caller.) At the top
+level a routine reached along several paths is added up across them -- once,
+from its outermost call, if it recurses.
 
-The title bar switches the order between **total** (a routine and everything
-it called: where to drill in) and **own code** (the instructions in the
-routine itself: where they are slow), and each row's numbers follow the order.
-Interrupt handlers show with a lightning icon, under whatever they
-interrupted; **(outside any call)** is code that ran with no call open, which
-for most games is the main loop.
+The title bar switches the order between **total** (a routine and everything it
+called: where to drill in) and **own code** (the instructions in the routine
+itself: where they are slow), and each row's numbers follow the order.
+Interrupt handlers show with a lightning icon, under whatever they interrupted;
+idle routines show a clock; **(outside any call)** is code that ran with no call
+open, which for most games is little more than the top of the main loop.
 
 How a call is followed: a `CALL` or `RST` that pushes a return address starts
-one, and it ends when that address is consumed -- by `RET` or `RETI`, or by a
-`POP` or `INC SP` that throws it away, so a program that unwinds by hand still
-balances. SP merely moving does not end anything: code that borrows SP as a
-data pointer (`LD SP,HL` and a run of `PUSH`es to fill a buffer, or `POP`s to
-walk a bitmap) stays inside the call it is in, and a chain abandoned with
-`LD SP` ends when the stack is used again over its slots. The debugger's Call
-Stack follows the same rule, so it no longer empties while a routine has SP
-borrowed. Code reached by
-`JP` is not a call, so it counts as
-the routine that jumped to it: a dispatcher that ends in `JP (HL)` owns the
-time of whatever it dispatched to. The heat map, which is by address, still
-puts that time on the right lines.
+one, and it ends when that address is gone from the stack -- read off it by
+`RET`, `RETI`, or a `POP` or `INC SP` that throws it away, or written over by a
+later `CALL` or `PUSH` into the same slot after the stack was reset. SP merely
+moving ends nothing: code that borrows SP as a data pointer (`LD SP,HL` and a
+run of `PUSH`es to fill a buffer, or `POP`s to walk a bitmap, as filmation's
+renderer does) stays inside the call it is in. Code reached by `JP` is not a
+call, so it counts as the routine that jumped to it -- a dispatcher that ends in
+`JP (HL)` owns the time of whatever it dispatched to. The source tint, which is
+by address, still puts that time on the right lines.
 
 ### Idle time
 
 A game that paces itself spends much of every frame waiting -- filmation's
-`turn_pace` busy-waits out whatever is left of each turn's budget, and a
-profile that counts that as work reads as 58% pacer and a squeezed few percent
-of everything worth optimising. So waiting is counted apart:
+`turn_pace` busy-waits out whatever is left of each turn's budget, and a profile
+that counts that as work reads as 58% pacer and a squeezed few percent of
+everything worth optimising. So waiting is counted apart:
 
 - a `HALT` waiting for its interrupt is always idle;
-- any routine can be marked idle: right-click it in the profile view (**Mark
-  as Idle**), or **Set Idle Routines...** from the view's `...` menu. From
-  then on its time is counted as idle.
+- any routine can be marked idle: right-click it in the profile view (**Mark as
+  Idle**), or **Set Idle Routines...** from the view's `...` menu. From then on
+  its time is counted as idle.
 
 Every share -- on the source, in the tree, in the hot spots list -- is then of
 *busy* time. Idle lines are tinted grey and labelled `idle · N T/frame`, idle
-routines show a clock and sort below the work, and the status bar says how
-much of the time was idle. The list is kept per workspace and sent with every
-start; a routine is matched by its label in the loaded debug info (up to the
-next routine's label), and a name that matches nothing is reported.
+routines show a clock and sort below the work, and the status bar says how much
+of the time was idle. The list is kept per workspace and sent with every start;
+a routine is matched by its label in the loaded debug info (up to the next
+routine's label), and a name that matches nothing is reported. Marking a routine
+idle applies from then on; time already counted stays as it was.
 
 ### Worst frames
 
 Averages hide the frames that actually drop: a room being built, a burst of
-redraws. So the emulator also keeps every frame's busy time, and the ten
-busiest frames in full -- their own time per line and per call path.
+redraws. So the emulator also keeps every frame's busy time, and the ten busiest
+frames in full -- their own time per line and per call path.
 
 **Worst frames** heads the profile view. Its row carries a strip of busy time
 across the whole run, one block per frame (or the busiest of several), where a
@@ -552,49 +584,89 @@ becomes **Worst turns of** that routine, each saying how many frames long it
 was. Changing the period starts the periods again; the rest of the profile is
 kept.
 
-Nothing about a frame's cost is meaningful without idle time counted: every
-48K frame is exactly 69,888 T-states long. Mark the pacing loop idle (or rely
-on a `HALT`) before reading the worst frames.
+Nothing about a frame's cost means anything without idle time counted: every
+48K frame is exactly 69,888 T-states long. Mark the pacing loop idle (or rely on
+a `HALT`) before reading the worst frames.
 
-**Stop Profiling** freezes the counts: the map stays up, and is re-read
-whenever the machine stops. **Start** again counts from zero; **Clear Profile**
-takes the map down.
+### What is counted, exactly
 
-The numbers are per frame whenever frames went by, because that is the budget
-a game is working to: a 48K frame is 69,888 T-states, and a profile of a game
-that holds its frame rate adds up to almost exactly that. A profile taken only
-by stepping reads in totals instead.
-
-What it counts, precisely:
-
-- **The real cost, not the nominal one.** Each instruction is timed off the
-  machine's own clock, so the ULA holding the CPU for a contended address is
-  in the figure, and a `DJNZ` taken (13T) and not (8T) average out to what
-  this run actually did.
+- **Clock time, not nominal time.** Each instruction is timed off the machine's
+  own clock, so a `DJNZ` taken (13T) and not (8T) average out to what this run
+  actually did. ULA memory contention is not emulated yet, so contended code
+  costs what it would uncontended -- its real cost on hardware can be higher.
 - **Interrupts separately.** An acknowledge sequence runs straight after
   whatever instruction INT happened to interrupt; it is counted in a bucket of
   its own (shown in the status bar tooltip), not charged to that line.
-- **A `HALT`'s waiting on the `HALT`,** where it reads as the frame's slack.
-  A busy-wait loop, by contrast, is code like any other and shows as such.
+- **A `HALT`'s waiting on the `HALT`,** where it reads as idle time.
 - **Through the loaded debug info** -- the program's SLD, then the ROM's --
   exactly as stack frames get their source lines. Time at addresses no source
   covers is grouped by 256-byte page in the routine list (`$9000-$90FF`), so a
   game with no source still shows where its time goes.
-- **By 16-bit address.** On a 128K, code in two pages at the same address
-  shares a count.
-
-Profiling works on a running machine: starting, stopping and reading it are
-serviced at the run loop's yields, a couple of milliseconds apart, and never
-pause it. While counting, the editor re-reads it once a second. The cost is a
-few percent of emulation speed while on (`bench_machine`'s "profiling" line),
-and nothing measurable while off.
+- **By 16-bit address.** On a 128K, code in two pages at the same address shares
+  a count.
+- **What it costs.** A few percent of emulation speed while counting
+  (`bench_machine`'s "profiling" line, see
+  [Testing and performance](testing-and-performance.md#performance)), and
+  nothing measurable while not.
 
 MCP clients get the same numbers from the `profile` tool -- see
-[Connecting an MCP client](mcp.md), whose report nests the call tree as
-`call_tree`, cut to the calls above `tree_min_percent`, and takes `idle` and
-`period` the same way, reporting the strip and the worst periods under
-`periods` -- which is how a change can be measured before and after rather
-than estimated.
+[Connecting an MCP client](mcp.md#execution-profile) -- which is how a change can
+be measured before and after rather than estimated.
+
+## Stepping backwards
+
+Stopped at a breakpoint or a pause, you can go **backwards** through what the
+program just did, with the whole machine -- registers, memory, the stack, the
+screen -- exactly as it was at each point:
+
+| Control | Lands on |
+|---|---|
+| **Step Back** (VS Code's own button) | the previous instruction in this routine; a call just returned from is passed over, landing on its `CALL` |
+| **Step Back Into** (toolbar, ←) | the previous instruction executed, whatever it was -- after a `RET`, the `RET` |
+| **Step Back Out** (toolbar, ↑) | the `CALL` that entered the routine you are in |
+| **Reverse Continue** (VS Code's own button) | the most recent earlier breakpoint hit, or the start of the history |
+| **Run Back to Cursor** (editor context menu) | the last time execution reached that line |
+| **Run Back to Last Write...** (editor context menu, Command Palette) | the instruction that last wrote an address or symbol -- who put that value there. It lands before the write; step forward once to see it happen |
+
+Each lands like a step: the call stack, registers, disassembly and screen all
+refresh. A search that finds nothing leaves the machine where it was and says so
+in the status bar and the Debug Console. A long one -- Reverse Continue with no
+breakpoints, through a minute of history -- takes a second or so, and **Pause**
+cancels it.
+
+**In the past**, the status bar shows how far back the machine is ("4.5 frames
+before live"). Stepping or running forward from there **replays** what really
+happened: the same keys at the same instants, the same tape, the same pokes --
+as often as you like. A run carries straight on into the present once it gets
+there. **Return to Live** (the status bar item, or → on the toolbar) replays to
+the newest instant and stops.
+
+**Changing anything in the past starts a new timeline**: a key pressed or
+released, a memory or register edit, a tape command, or stepping by T-states.
+Everything after that point is discarded, and recording carries on from there.
+
+**How much history.** About the last minute of emulated time (a checkpoint of
+the machine every ten frames, up to 256 MB -- a minute of a 48K is about 15 MB).
+A reset, loading a snapshot, a ROM or a tape, ejecting a tape and switching
+model all start a new history, since none of them can be replayed.
+
+**How it works.** The emulator is deterministic, so no instruction-by-instruction
+record is kept. The history is a checkpoint of the whole machine every ten frames
+plus a log of every input from outside it, each stamped with the half-clock it
+arrived at. Going back restores the checkpoint before the target and replays to
+it; a search replays one interval at a time, newest first, noting each
+instruction boundary's address and call depth until one matches. The call depth
+is the [call stack](#call-stack)'s, so Step Back Out and Step Back over a call
+cope with a stack pointer borrowed for data just as the call stack does. Running
+live, keeping the history costs a few percent of emulation speed at most (see
+[Testing and performance](testing-and-performance.md#performance)).
+
+**Not yet:** Run Back to Last Write finds writes the CPU made, not a debugger's
+pokes; on a 128K it watches the 16-bit address, whichever bank is paged there.
+A server built with `-NoRewind` (see
+[Testing and performance](testing-and-performance.md)) has none of this, and
+VS Code shows none of the buttons. The design and its internals are in
+[rewind-design.md](rewind-design.md).
 
 ## Call stack
 
@@ -608,14 +680,17 @@ has no frame-pointer convention, so there's no reliable way to tell a return
 address from ordinary pushed data by inspection alone.
 
 Two things it deliberately doesn't track, both rare in practice: interrupt
-handler entry/exit (`RETI`/`RETN`) is invisible to it on purpose, so it
-can't desync the frames it *does* track; and code that unwinds the stack by
-resetting SP directly instead of matching `RET`s one-for-one (an idiom the
-ROM itself uses for error handling) can leave stale frames until the next
-real `CALL`/`RET` resyncs things. Only reading or writing a frame's return
-address ends it: moving SP (a routine borrowing it to walk data) does not. Cleared automatically on reset, a new
-snapshot, or any direct PC/register write, since a stale call chain would
-be actively misleading rather than just incomplete.
+handler entry/exit (`RETI`/`RETN`) is invisible to it on purpose, so it can't
+desync the frames it *does* track; and code that abandons the stack by resetting
+SP directly, instead of matching `RET`s one-for-one (an idiom the ROM itself
+uses for error handling), keeps its old frames until the stack is used again
+over their slots. A frame ends when its return address is read off the stack
+(`RET`, `POP`) or written over (a `CALL` or `PUSH` into its slot) -- not when SP
+merely moves, which is also what a routine borrowing SP as a data pointer does,
+so the call stack no longer empties while one is paused mid-blit. The
+[profile's call tree](#the-call-tree) follows the same rule. Cleared
+automatically on reset, a new snapshot, or any direct PC/register write, since
+a stale call chain would be actively misleading rather than just incomplete.
 
 ## Source-level debugging of the ROM
 
@@ -712,3 +787,44 @@ Loading a *new* snapshot always clears the previously-attached debug info
 with `load_debug_info`/relaunch for whatever program you loaded next. The
 ROM's own source is unaffected either way; it's always available
 independently once built.
+
+## Editing Z80 assembly
+
+The extension also makes VS Code a Z80 editor. `.asm`, `.s` and `.a80` files
+open as **Z80 Assembly** (language id `z80-asm`), coloured for sjasmplus -- the
+assembler every program in this repo is built with: instructions, registers,
+jump conditions (the `c` in `jr c,.loop` is carry, not the register),
+directives, every number format, strings and comments. The workspace's
+`.vscode/settings.json` maps `*.asm` and `*.s` to it, so another installed
+assembly extension claiming those extensions doesn't take them.
+
+On top of the colouring:
+
+- **Go to Definition** (F12 / Ctrl+click) on any label, constant, macro, macro
+  parameter, struct, struct field or `DEFINE`. A local label resolves under its
+  own parent (`.loop` in `sprite_blit` is `sprite_blit.loop`), and a dotted name
+  goes to the part clicked: `OBJ` in `OBJ.FLAGS` is the struct, `FLAGS` the
+  field. On an `INCLUDE` or `INCBIN` path it opens the file.
+- **Find All References** (Shift+F12).
+- **Rename Symbol** (F2) changes the last part of a name wherever that part is
+  written: renaming `.loop` rewrites `.loop` inside its routine and
+  `sprite_blit.loop` elsewhere; renaming `sprite_blit` rewrites
+  `sprite_blit.loop` but leaves the `.loop`s alone. A name already taken, a
+  reserved word, or a name defined in more than one program is refused.
+  Comments are not changed.
+- **Show Call Hierarchy** (Shift+Alt+H) on a routine, or anywhere inside one:
+  who `CALL`s, `JP`s, `JR`s or `DJNZ`s to it, grouped by the routine each call
+  sits in, and what it calls in turn. Macro invocations count; jumps to a
+  routine's own locals are control flow and are left out.
+- **Hover** shows a symbol's definition line and the comment block above it --
+  the ROM disassembly's routine descriptions, for instance.
+- **Outline**, breadcrumbs and **Go to Symbol** (Ctrl+Shift+O), with local labels
+  nested under their routine, and **Go to Symbol in Workspace** (Ctrl+T).
+
+This is read from the source files, not from the emulator, and works with no
+debug session running. Every `.asm`/`.s`/`.a80` in the workspace is indexed the
+first time one of these is used (about a second for this repo), then kept
+current from the editor and from disk. Several programs here share label names,
+so a name resolves within the files the current one is `INCLUDE`d together with
+first, and across the whole workspace only when it isn't defined there. `MODULE`
+prefixes are not modelled.

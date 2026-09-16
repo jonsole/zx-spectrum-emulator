@@ -33,6 +33,10 @@ A handful of things, in one small extension:
    [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
 5. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
+6. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
+   and the worst frames in the debug sidebar. See "Execution profile" below.
+7. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
+   hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
 ## Raster position
 
@@ -155,9 +159,10 @@ not modelled. The parser has its own tests, no vscode needed:
 ## Execution profile
 
 **Start Profiling** (flame button on the debug toolbar) has the emulator count
-every instruction's real cost; the open source files are tinted by how hot
-each line is, the hottest get `share · T/frame · runs/frame` written after
-them, and **Show Profile Hot Spots** lists the worst routines and lines to jump
+every instruction's cost; the open source files are tinted by how hot each
+line is -- a `CALL` line including the time its calls took, unless **Tint Lines
+By Their Own Code Only** is chosen -- the hottest get `share · T/frame ·
+runs/frame` written after them, and **Show Profile Hot Spots** lists the worst routines and lines to jump
 to. The **ZX Spectrum Profile** view in the debug sidebar has every routine,
 most expensive first, each expanding into the routines it called and what
 those calls cost it (`profile_tree.js`), headed by the worst frames (or turns
@@ -168,6 +173,19 @@ while counting and on every stop once stopped. See [docs/vscode-debugging.md](..
 for what is counted and how; `profile_model.js` (tested by
 `node tests/profile_model_test.js`) turns the server's report into the map,
 and `profile_view.js` paints it.
+
+## Stepping backwards
+
+When the server declares `supportsStepBack`, VS Code shows its own **Step Back** and **Reverse
+Continue** buttons; this extension adds **Step Back Into** and **Step Back Out** beside them,
+**Run Back to Cursor** and **Run Back to Last Write...** to the editor's context menu, and a
+status bar item while the machine is in the past ("4.5 frames before live") that returns to live
+when clicked. Each sends one of the server's own requests (`stepBackInto`, `stepBackOut`,
+`runBackToAddress`, `runBackToWrite`, `returnToLive`); the landing arrives as an ordinary
+`stopped` event, then a `zxRewind` event whose message, when there is one, goes to the status bar.
+`rewind_view.js` does the wiring and `rewind_model.js` (tested by `node tests/rewind_model_test.js`)
+the status text. See
+[docs/vscode-debugging.md](../docs/vscode-debugging.md#stepping-backwards).
 
 ## Install
 

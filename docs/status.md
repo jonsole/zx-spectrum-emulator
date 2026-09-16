@@ -47,6 +47,32 @@ just a declarative debugger-type stub). Explicitly designed to keep working
 standalone, independent of VS Code: the streaming port has no VS-Code-specific
 code in it, same as DAP/MCP.
 
+An [execution profiler](vscode-debugging.md#execution-profile) is done: the
+core counts each instruction's clock time per address and per call path
+(`profile.cpp`), with idle time and per-frame (or per-turn) busy time kept
+apart and the worst frames in detail; `profile_report.cpp` folds that through
+the SLD data for the DAP `profile` request and the MCP `profile` tool, and the
+extension paints it as a heat map and a call tree. Verified live against
+filmation, Manic Miner and the ROM's idle loop. Known limits: code reached by
+`JP` counts as the routine that jumped to it; a 128K's paged code is counted by
+16-bit address; and with contention not yet emulated, contended code is
+measured at its uncontended cost.
+
+[Stepping backwards](vscode-debugging.md#stepping-backwards) is done: a
+history of checkpoints and logged inputs (`rewind.cpp`) behind step back
+into/over/out, reverse continue, run back to cursor and run back to last write,
+in VS Code and over MCP, with running forward from the past replaying and any
+change there starting a new timeline. On by default; `build.ps1 -NoRewind`
+builds without it. Verified by hashing the whole machine at every frame through
+replays of a ROM boot, a fast-loaded tape and a 128K's paging, and live against
+filmation. Known limits: run back to last write sees the CPU's writes only, and
+on a 128K watches the 16-bit address whatever bank is paged.
+
+[Z80 assembly editing](vscode-debugging.md#editing-z80-assembly) is done in the
+extension: sjasmplus syntax colouring and a workspace symbol index behind Go to
+Definition, Find All References, Rename, Call Hierarchy, hover and the outline.
+`MODULE` prefixes are not modelled.
+
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
 - Tape loading — **done** for `.tap`/`.tzx` (see [Tape](tape.md));

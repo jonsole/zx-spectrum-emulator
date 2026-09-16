@@ -12,6 +12,8 @@
 #                            billions of emulated instructions and a Debug
 #                            build turns minutes into hours.
 #   .\build.ps1 -Target zx_server        build just one target
+#   .\build.ps1 -NoRewind                build without rewind (ZX_REWIND=OFF),
+#                                        into build\<config>-norewind
 #   .\build.ps1 -BuildDir <path>         build somewhere else entirely
 #
 # -BuildDir exists for one specific job: building a change while the user's
@@ -24,7 +26,8 @@ param(
     [switch]$Test,
     [switch]$Slow,
     [string]$Target,
-    [string]$BuildDir
+    [string]$BuildDir,
+    [switch]$NoRewind
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,12 +57,14 @@ $env:PATH = "$cmakeDir;$ninjaDir;$env:PATH"
 
 $buildType = if ($Release) { 'RelWithDebInfo' } else { 'Debug' }
 $srcDir = $PSScriptRoot
-$buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $srcDir "build\$buildType" }
+$defaultDir = if ($NoRewind) { "build\$buildType-norewind" } else { "build\$buildType" }
+$buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $srcDir $defaultDir }
+$rewind = if ($NoRewind) { 'OFF' } else { 'ON' }
 
 # The -D argument is quoted: unquoted, PowerShell can pass it through with
 # $buildType unexpanded, which CMake then takes as a literal config name and
 # Ninja chokes on ("expected newline, got lexing error").
-cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType"
+cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType" "-DZX_REWIND=$rewind"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
 if ($Target) {

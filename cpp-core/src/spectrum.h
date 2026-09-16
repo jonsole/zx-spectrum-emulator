@@ -66,6 +66,14 @@ public:
     /// chain is worse than none.
     std::vector<uint16_t> call_stack;
 
+#if ZX_REWIND
+    /// An address whose CPU writes rewind is searching for, or -1. A write to
+    /// it sets write_watch_hit; nothing else changes. Only compiled in with
+    /// rewind, so the bus decode stays as it was without it.
+    int32_t write_watch = -1;
+    bool write_watch_hit = false;
+#endif
+
     /// A 48K. See set_model for the 128K.
     Spectrum();
 
@@ -121,6 +129,35 @@ public:
     const std::vector<uint8_t>& screen() const { return ula.screen(); }
 
     void reset();
+
+#if ZX_REWIND
+    /// The whole machine as far as anything the CPU can observe goes -- what a
+    /// rewind checkpoint holds. See rewind.h, and docs/rewind-design.md for
+    /// what is left out and why.
+    struct State {
+        Z80::State cpu;
+        SpectrumMemory::State memory;
+        Ula::State ula;
+        uint8_t keys[8] = {};
+        Ay ay;
+        Tape::State tape;
+        uint64_t pins = 0;
+        std::vector<uint16_t> call_stack;
+        std::vector<uint16_t> call_stack_sp;
+    };
+    /// Captures the machine. Not const: the tape's playback cursor is walked
+    /// up to the present first, so the same instant always saves the same
+    /// cursor however lazily it had been walked (see Tape::advance_to).
+    void save_state(State& s);
+    /// Puts the machine back as `s` had it. The picture and the audio are not
+    /// in a State; the beeper restarts its clock from the restored instant.
+    void restore_state(const State& s);
+    /// A hash of everything in `s` the CPU can observe, for checking that two
+    /// runs reached the same state.
+    static uint64_t state_hash(const State& s);
+    /// Approximate bytes a State of this machine takes.
+    static size_t state_bytes(const State& s);
+#endif
 
 private:
     uint64_t pins_ = PINS_IDLE;

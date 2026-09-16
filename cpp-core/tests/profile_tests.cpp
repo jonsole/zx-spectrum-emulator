@@ -172,7 +172,8 @@ uint32_t child(const Profile& profile, uint32_t parent, uint16_t addr) {
 } // namespace
 
 TEST(calls_nest_and_each_node_holds_its_own_time) {
-    // CALL A twice, then NOP. A calls B and returns; B is NOP, RET.
+    // CALL A, CALL A again from the next line, then NOP. A calls B and
+    // returns; B is NOP, RET.
     Spectrum machine;
     setup(machine, {0xCD, 0x00, 0x81, 0xCD, 0x00, 0x81, 0x00});
     put(machine, ROUTINE_A, {0xCD, 0x00, 0x82, 0xC9});
@@ -182,19 +183,31 @@ TEST(calls_nest_and_each_node_holds_its_own_time) {
     run_to(machine, PROGRAM + 6);
     machine.step_instruction(); // the NOP, back at the root
 
+    // The two CALLs of A are two paths, each with its own A and its own B.
     const std::vector<Profile::CallNode>& nodes = profile.call_nodes();
-    CHECK_EQ(nodes.size(), size_t(3));
+    CHECK_EQ(nodes.size(), size_t(5));
     const uint32_t a = child(profile, Profile::ROOT, ROUTINE_A);
     const uint32_t b = child(profile, a, ROUTINE_B);
     CHECK(a != 0);
     CHECK(b != 0);
-    CHECK_EQ(nodes[a].calls, uint64_t(2));
-    CHECK_EQ(nodes[b].calls, uint64_t(2));
+    CHECK_EQ(int(nodes[a].site), int(PROGRAM));
+    CHECK_EQ(int(nodes[b].site), int(ROUTINE_A));
+    CHECK_EQ(nodes[a].calls, uint64_t(1));
+    CHECK_EQ(nodes[b].calls, uint64_t(1));
+    uint32_t second_a = 0;
+    for (size_t i = 1; i < nodes.size(); i++) {
+        if (nodes[i].parent == Profile::ROOT && nodes[i].site == PROGRAM + 3) {
+            second_a = uint32_t(i);
+        }
+    }
+    CHECK(second_a != 0);
+    CHECK(second_a != a);
     // CALL is 17T, RET 10T, NOP 4T -- each charged where it ran: a CALL to
     // its caller, a RET to the routine it leaves.
     CHECK_EQ(nodes[Profile::ROOT].self_half_clocks, uint64_t((17 + 17 + 4) * 2));
-    CHECK_EQ(nodes[a].self_half_clocks, uint64_t((17 + 10) * 2 * 2));
-    CHECK_EQ(nodes[b].self_half_clocks, uint64_t((4 + 10) * 2 * 2));
+    CHECK_EQ(nodes[a].self_half_clocks, uint64_t((17 + 10) * 2));
+    CHECK_EQ(nodes[second_a].self_half_clocks, uint64_t((17 + 10) * 2));
+    CHECK_EQ(nodes[b].self_half_clocks, uint64_t((4 + 10) * 2));
     CHECK_EQ(sum_self(profile), profile.total_half_clocks());
     CHECK_EQ(profile.depth(), size_t(0));
 }

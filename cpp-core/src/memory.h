@@ -3,6 +3,7 @@
 // rust-core/zx-core/src/memory.rs, and since grown the 128K's paging.
 
 #include <array>
+#include <vector>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -88,6 +89,19 @@ public:
     std::array<std::array<uint8_t, BANK_SIZE>, RAM_BANKS> bank{};
 
     SpectrumMemory();
+
+#if ZX_REWIND
+    /// The RAM and the paging, for rewind's checkpoints. Only the banks the
+    /// model can reach: 5, 2 and 0 on a 48K, all eight on a 128K. The ROMs are
+    /// not kept -- loading one ends the history.
+    struct State {
+        Model model = Model::Spectrum48;
+        uint8_t paging = 0;
+        std::vector<uint8_t> ram;
+    };
+    void save_state(State& s) const;
+    void restore_state(const State& s);
+#endif
 
     /// Loads a 16K image as the 48K ROM or a 32K one as the 128K pair (ROM 0
     /// then ROM 1). Returns an empty string on success, or the error message.

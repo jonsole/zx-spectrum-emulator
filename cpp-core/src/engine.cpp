@@ -90,6 +90,10 @@ Engine::Engine() {
 #ifdef _WIN32
     timeBeginPeriod(1); // see the note on the include above
 #endif
+#if ZX_REWIND
+    // Before the thread starts, which is the only other thing that touches it.
+    restart_history(machine_);
+#endif
     publish_screen();
     thread_ = std::thread([this] { actor_loop(); });
 }
@@ -342,12 +346,20 @@ std::vector<CapturedFrame> Engine::capture_frames(uint32_t count, uint32_t every
         // Bounded by the frames the capture can possibly want, so a capture
         // that is somehow never satisfied cannot run the machine forever.
         const uint64_t at_most = uint64_t(count) * (every == 0 ? 1 : every) + 1;
+        //
+        // A frame's worth of whole instructions rather than run_frame's raw
+        // clocking, so the machine is left at an instruction boundary, the
+        // call stack and tape trap work as in a run, and rewind has nothing
+        // to do but record it as a run.
         Registers r = submit<Registers>([this, at_most](Spectrum& m) {
             sync_keys();
             for (uint64_t i = 0; i < at_most && capture_active_.load(std::memory_order_relaxed);
                  i++) {
-                m.run_frame();
-                note_frame(m);
+                const uint64_t frame = m.ula.frame_count();
+                while (m.ula.frame_count() == frame) {
+                    m.step_instruction();
+                    after_instruction(m);
+                }
             }
             return m.registers();
         }, /*during_run=*/false);
@@ -629,7 +641,28 @@ void Engine::publish_progress() {
 
 void Engine::sync_keys() {
     std::lock_guard<std::mutex> lock(key_mutex_);
+#if ZX_REWIND
+    const uint8_t* rows = keys_.rows();
+    if (history_.live()) {
+        std::memcpy(synced_keys_, rows, sizeof synced_keys_);
+        if (std::memcmp(rows, machine_.keyboard.rows(), sizeof synced_keys_) == 0) {
+            return;
+        }
+    } else {
+        // In the past the machine holds the past's keys. Only a key pressed
+        // or released since is new -- and it starts a new timeline.
+        if (std::memcmp(rows, synced_keys_, sizeof synced_keys_) == 0) {
+            return;
+        }
+        std::memcpy(synced_keys_, rows, sizeof synced_keys_);
+    }
+    RewindInput input;
+    input.kind = RewindInputKind::Keys;
+    std::memcpy(input.keys, rows, sizeof input.keys);
+    history_.record(machine_, std::move(input));
+#else
     machine_.keyboard.set_rows(keys_.rows());
+#endif
 }
 
 std::vector<uint8_t> Engine::screen() {
@@ -649,6 +682,10 @@ void Engine::key_up(const std::string& key) {
 
 MachineState Engine::snapshot(bool running) const {
     MachineState s;
+#if ZX_REWIND
+    s.in_past = !history_.live();
+    s.behind_hc = history_.head_hc(machine_) - machine_.global_hc();
+#endif
     s.registers = machine_.registers();
     s.pc = s.registers.pc;
     s.halted = machine_.cpu.halted;
@@ -669,8 +706,17 @@ MachineState Engine::snapshot(bool running) const {
 // ---- queued operations -----------------------------------------------------
 
 std::string Engine::load_rom(std::vector<uint8_t> data) {
-    return submit<std::string>([data = std::move(data)](Spectrum& m) {
-        return m.load_rom(data.data(), data.size());
+    return submit<std::string>([this, data = std::move(data)](Spectrum& m) {
+        std::string error = m.load_rom(data.data(), data.size());
+#if ZX_REWIND
+        // Replay would run the new ROM over the old one's history.
+        if (error.empty()) {
+            restart_history(m);
+        }
+#else
+        (void)this;
+#endif
+        return error;
     });
 }
 
@@ -679,7 +725,14 @@ bool Engine::has_rom(Model model) {
 }
 
 void Engine::set_model(Model model) {
-    submit_void([model](Spectrum& m) { m.set_model(model); });
+    submit_void([this, model](Spectrum& m) {
+        m.set_model(model);
+#if ZX_REWIND
+        restart_history(m);
+#else
+        (void)this;
+#endif
+    });
     // A model switch is a reset, and announced as one so a debugger refreshes
     // -- unless a run is in flight, which simply carries on in the new model.
     if (!running_.load() && on_stopped_) {
@@ -692,8 +745,15 @@ Model Engine::model() {
 }
 
 std::string Engine::load_snapshot(std::vector<uint8_t> data) {
-    std::string err = submit<std::string>([data = std::move(data)](Spectrum& m) {
-        return zx::load_snapshot(m, data.data(), data.size());
+    std::string err = submit<std::string>([this, data = std::move(data)](Spectrum& m) {
+        std::string error = zx::load_snapshot(m, data.data(), data.size());
+#if ZX_REWIND
+        // Even on failure: a loader can have got part-way into the machine.
+        restart_history(m);
+#else
+        (void)this;
+#endif
+        return error;
     });
     if (err.empty() && on_stopped_) {
         on_stopped_(StopReason::Entry, registers().pc);
@@ -734,6 +794,11 @@ std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool 
             }
             m.tape.set_fast_load(tape_fast_load_.load());
             if (!auto_start) {
+#if ZX_REWIND
+                // The history's checkpoints hold where the tape was, not what
+                // is on it, so a different tape ends it.
+                restart_history(m);
+#endif
                 return error;
             }
             // Typing runs a couple of seconds of emulation, which is exactly
@@ -743,7 +808,11 @@ std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool 
             // type_load_command starts the motor itself, at the right
             // moment relative to the ENTER keypress -- which is a moment this
             // function has no way to reach from outside it.
-            return type_load_command(m);
+            error = type_load_command(m);
+#if ZX_REWIND
+            restart_history(m);
+#endif
+            return error;
         });
     // Waits for the emulator thread to republish the tape snapshot before
     // returning. submit() comes back the instant the job's promise is set,
@@ -761,8 +830,15 @@ std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool 
 }
 
 std::string Engine::wait_for_tape() {
-    std::string err =
-        submit<std::string>([](Spectrum& m) { return type_load_command(m); });
+    std::string err = submit<std::string>([this](Spectrum& m) {
+        std::string error = type_load_command(m);
+#if ZX_REWIND
+        restart_history(m);
+#else
+        (void)this;
+#endif
+        return error;
+    });
     // Only when the machine was not already running: serviced at a run's
     // yield the run simply carries on, and announcing a stop it never made
     // would leave a debugger showing a stopped machine that is still going.
@@ -773,8 +849,13 @@ std::string Engine::wait_for_tape() {
 }
 
 Registers Engine::reset() {
-    Registers r = submit<Registers>([](Spectrum& m) {
+    Registers r = submit<Registers>([this](Spectrum& m) {
         m.reset();
+#if ZX_REWIND
+        restart_history(m);
+#else
+        (void)this;
+#endif
         return m.registers();
     });
     if (on_stopped_) {
@@ -787,7 +868,7 @@ Registers Engine::step(uint32_t instructions) {
     Registers r = submit<Registers>([this, instructions](Spectrum& m) {
         for (uint32_t i = 0; i < instructions; i++) {
             m.step_instruction();
-            note_frame(m);
+            after_instruction(m);
         }
         return m.registers();
     }, /*during_run=*/false);
@@ -799,10 +880,21 @@ Registers Engine::step(uint32_t instructions) {
 
 Registers Engine::step_tstates(uint32_t tstates) {
     Registers r = submit<Registers>([this, tstates](Spectrum& m) {
+#if ZX_REWIND
+        // Clocked raw, which a replay must do too (see RewindInputKind). In
+        // the past, that makes it a new timeline.
+        RewindInput input;
+        input.kind = RewindInputKind::RawClocks;
+        input.value = uint64_t(tstates) * HC_PER_TSTATE;
+        history_.record(m, std::move(input));
+#endif
         for (uint32_t i = 0; i < tstates; i++) {
             m.tick();
             note_frame(m);
         }
+#if ZX_REWIND
+        history_.on_instruction(m);
+#endif
         return m.registers();
     }, /*during_run=*/false);
     if (on_stopped_) {
@@ -821,7 +913,7 @@ Registers Engine::step_over_halt(uint16_t target_pc) {
                 break;
             }
             m.step_instruction();
-            note_frame(m);
+            after_instruction(m);
             // NOT just pc == target_pc. That is also exactly what a HALT
             // still waiting displays, and what a `HALT; ...; JP` loop shows
             // every time it comes back round -- so an address-only check
@@ -870,7 +962,7 @@ MachineState Engine::run() {
             }
             const uint64_t interrupts_before = m.cpu.interrupt_count;
             m.step_instruction();
-            note_frame(m);
+            after_instruction(m);
             if (break_on_interrupt_.load() && m.cpu.interrupt_count != interrupts_before) {
                 // PC is now the handler's first instruction, which is
                 // where someone asking to break on an interrupt wants to
@@ -934,7 +1026,15 @@ void Engine::write_memory(uint16_t addr, std::vector<uint8_t> data) {
     // that shows it is part of the same job.
     screen_dirty_.store(true);
     submit_void([this, addr, data = std::move(data)](Spectrum& m) {
+#if ZX_REWIND
+        RewindInput input;
+        input.kind = RewindInputKind::Memory;
+        input.addr = addr;
+        input.bytes = data;
+        history_.record(m, std::move(input));
+#else
         m.write_memory(addr, data.data(), data.size());
+#endif
         // In the job, so that a caller who pokes and then reads the screen is
         // guaranteed to see the poke -- see set_raster_view for why the
         // publish actor_loop does after the job is not enough.
@@ -947,8 +1047,16 @@ Registers Engine::registers() {
 }
 
 Registers Engine::set_registers(Registers r) {
-    Registers out = submit<Registers>([r](Spectrum& m) {
+    Registers out = submit<Registers>([this, r](Spectrum& m) {
+#if ZX_REWIND
+        RewindInput input;
+        input.kind = RewindInputKind::Registers;
+        input.regs = r;
+        history_.record(m, std::move(input));
+#else
+        (void)this;
         m.set_registers(r);
+#endif
         return m.registers();
     });
     if (on_stopped_) {
@@ -963,6 +1071,95 @@ MachineState Engine::state() {
         return snapshot(false);
     });
 }
+
+#if ZX_REWIND
+void Engine::restart_history(Spectrum& m) {
+    history_.start(m);
+    std::memcpy(synced_keys_, m.keyboard.rows(), sizeof synced_keys_);
+    synced_fast_load_ = m.tape.fast_load();
+}
+
+void Engine::after_history_jump(Spectrum& m) {
+    // The frame the machine is now in has been seen, whichever way it jumped:
+    // otherwise the video recorder and a frame capture would take the replay's
+    // last frame as a new one.
+    last_frame_seen_ = m.ula.frame_count();
+    publish_progress();
+    // Published here, in the job, for the reason write_memory gives.
+    screen_dirty_.store(true);
+    publish_screen();
+}
+
+RewindOutcome Engine::rewind(RewindOp op, uint16_t address) {
+    RewindOutcome out;
+    if (running_.load()) {
+        out.error = "the machine is running: pause it before stepping back";
+        return out;
+    }
+    // Pause is how a long search is cancelled, so an old one must not cancel
+    // this before it starts.
+    pause_requested_.store(false);
+    out = submit<RewindOutcome>([this, op, address](Spectrum& m) {
+        RewindOutcome o;
+        const History::Result r = history_.go_back(m, op, address, [this] {
+            return pause_requested_.load();
+        });
+        o.moved = r.moved;
+        o.cancelled = r.cancelled;
+        after_history_jump(m);
+        o.state = snapshot(false);
+        return o;
+    }, /*during_run=*/false);
+    // Reverse Continue landing on a breakpoint is a breakpoint stop, as its
+    // forward twin's would be; everything else is a step.
+    StopReason reason = StopReason::Step;
+    if (op == RewindOp::ReverseContinue && out.moved) {
+        for (uint16_t bp : out.state.breakpoints) {
+            if (bp == out.state.pc) {
+                reason = StopReason::Breakpoint;
+            }
+        }
+    }
+    if (on_stopped_) {
+        on_stopped_(reason, out.state.pc);
+    }
+    return out;
+}
+
+RewindOutcome Engine::return_to_live() {
+    RewindOutcome out;
+    if (running_.load()) {
+        out.error = "the machine is running, and a running machine is live";
+        return out;
+    }
+    out = submit<RewindOutcome>([this](Spectrum& m) {
+        RewindOutcome o;
+        o.moved = !history_.live();
+        history_.return_to_live(m);
+        after_history_jump(m);
+        o.state = snapshot(false);
+        return o;
+    }, /*during_run=*/false);
+    if (on_stopped_) {
+        on_stopped_(StopReason::Step, out.state.pc);
+    }
+    return out;
+}
+
+RewindStatus Engine::rewind_status() {
+    return submit<RewindStatus>([this](Spectrum& m) {
+        RewindStatus s;
+        s.live = history_.live();
+        s.oldest_hc = history_.oldest_hc();
+        s.head_hc = history_.head_hc(m);
+        s.position_hc = m.global_hc();
+        s.hc_per_frame = m.ula.timing().hc_per_frame();
+        s.checkpoints = history_.checkpoint_count();
+        s.bytes = history_.bytes();
+        return s;
+    });
+}
+#endif
 
 void Engine::start_profile() {
     submit_void([this](Spectrum& m) {
@@ -1184,6 +1381,35 @@ void Engine::service_queue() {
 void Engine::service_tape() {
     if (tape_change_pending_.load(std::memory_order_acquire)) {
         std::lock_guard<std::mutex> lock(tape_mutex_);
+#if ZX_REWIND
+        // Each one an input, so a replay plays the tape as the run did.
+        RewindInput input;
+        const bool fast_load = tape_fast_load_.load();
+        if (fast_load != synced_fast_load_) {
+            synced_fast_load_ = fast_load;
+            input.kind = RewindInputKind::TapeFastLoad;
+            input.value = fast_load ? 1 : 0;
+            history_.record(machine_, input);
+        }
+        input.value = 0;
+        if (pending_tape_ == TapeCommand::Play) {
+            input.kind = RewindInputKind::TapePlay;
+            history_.record(machine_, input);
+        } else if (pending_tape_ == TapeCommand::Stop) {
+            input.kind = RewindInputKind::TapeStop;
+            history_.record(machine_, input);
+        } else if (pending_tape_ == TapeCommand::Rewind) {
+            input.kind = RewindInputKind::TapeRewind;
+            history_.record(machine_, input);
+        } else if (pending_tape_ == TapeCommand::Eject) {
+            machine_.tape.eject();
+            restart_history(machine_);
+        } else if (pending_tape_ == TapeCommand::Seek) {
+            input.kind = RewindInputKind::TapeSeek;
+            input.value = pending_tape_block_;
+            history_.record(machine_, input);
+        }
+#else
         machine_.tape.set_fast_load(tape_fast_load_.load());
         if (pending_tape_ == TapeCommand::Play) {
             machine_.tape.play(machine_.global_hc());
@@ -1196,6 +1422,7 @@ void Engine::service_tape() {
         } else if (pending_tape_ == TapeCommand::Seek) {
             machine_.tape.seek(pending_tape_block_);
         }
+#endif
         pending_tape_ = TapeCommand::None;
         tape_change_pending_.store(false, std::memory_order_release);
     }

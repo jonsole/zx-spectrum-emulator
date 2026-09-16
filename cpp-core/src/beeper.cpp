@@ -337,4 +337,16 @@ std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples, uint32_t sa
     return out;
 }
 
+#if ZX_REWIND
+void Beeper::restart_at(uint64_t now_hc) {
+    sum_ = 0;
+    count_ = 0;
+    acc_ = 0;
+    dc_in_ = 0.0f;
+    dc_out_ = 0.0f;
+    pending_.clear();
+    last_hc_ = now_hc;
+}
+#endif
+
 } // namespace zx

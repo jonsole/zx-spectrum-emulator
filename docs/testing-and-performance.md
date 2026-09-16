@@ -27,6 +27,36 @@ the emulator's playback and the other is Sinclair's loader, and only the code
 under test sits between them. Tests that need the real ROM skip
 themselves rather than fail when `roms/48.rom` is absent.
 
+The execution profiler has two of its own: `profile_tests` checks costs worked
+out by hand from the Z80's documented timings (a `DJNZ` loop, a `HALT` woken by
+interrupts, nested and recursive calls, a stack pointer borrowed for data, frame
+and turn periods), plus the rule that every half-clock is charged exactly once;
+`profile_report_tests` checks the folding into lines, routines and the call
+tree against a handful of SLD records. `call_stack` covers the debugger's call
+stack, which follows the profile's rule for when a call has ended.
+
+Stepping backwards has `rewind_tests` (built only with rewind, the default).
+Its core is a determinism test: the ROM boots, keys are typed through the
+input log, a tape loads through the fast-load trap and a register edit sends
+the machine into code that borrows the stack pointer and `HALT`s, all while the
+whole machine state is hashed at every frame -- then replays from checkpoints
+across the run must reproduce every hash, on a 48K and on a 128K. A part of the
+machine a checkpoint misses shows up as the frame it first diverges at. The
+rest check each backward operation against the boundaries a program was seen to
+pass through the first time (a step back must land on exactly that half-clock,
+PC, call depth and state), and the timeline rules: replaying forward reaches
+the head and goes live, and a key pressed in the past branches. Check a change
+to the rewind code with `build.ps1 -NoRewind -Target zx_server` as well: the
+feature must compile out cleanly.
+
+The VS Code extension's logic that does not need VS Code itself is tested from
+plain Node: `node vscode-extension/tests/asm_index_test.js` (the Z80 symbol
+index: definitions, references, rename and call hierarchy, including against
+this repo's own sources) and `node vscode-extension/tests/profile_model_test.js`
+(how a profile report becomes the heat map and the call tree) and
+`node vscode-extension/tests/rewind_model_test.js` (the "before live" status
+text).
+
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion
 emulated instructions per pass.
@@ -38,10 +68,23 @@ the machine and Engine layers, i.e. what a connected client actually
 experiences, rather than bare CPU throughput:
 
 ```
-  machine (CPU+ULA, direct clock)        50.7 M half-clocks/s     7.25x realtime
-  engine run(), uncapped                 40.5 M half-clocks/s     5.79x realtime
+  machine (CPU+ULA, direct clock)        47.6 M half-clocks/s     6.81x realtime
+  engine run(), uncapped                 42.4 M half-clocks/s     6.06x realtime
+  engine run(), uncapped, profiling      40.6 M half-clocks/s     5.81x realtime
   engine run(), realtime (default)        7.0 M half-clocks/s     1.00x realtime
 ```
+
+The "profiling" line is the same run with the
+[execution profile](vscode-debugging.md#execution-profile) counting: a few
+percent slower, within the run-to-run noise of these numbers. With profiling
+off it costs nothing measurable -- one pointer test per instruction.
+
+`bench_machine` says at the top whether rewind is compiled in, and the engine
+lines include keeping its history. Side by side with a `-NoRewind` build of the
+benchmark (`build.ps1 -Release -NoRewind -Target bench_machine`, into
+`build\RelWithDebInfo-norewind`), uncapped engine runs measured 4.25x and
+3.83x realtime with rewind against 4.36x and 4.05x without: a few percent at
+most, inside the noise between runs. Realtime runs are unaffected.
 
 So the core runs a 48K at **~7× real hardware speed** with headroom to spare,
 and paces itself down to 1.00× for normal use — games run at the right speed,

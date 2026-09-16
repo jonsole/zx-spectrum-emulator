@@ -296,6 +296,52 @@ test('the sparkline scales busy time to blocks', () => {
   assert.strictEqual(sparkline([], 10, 1), '');
 });
 
+// ---- calls counted on the CALL line ----
+
+// main's CALL draw line is cheap itself; draw is where the time goes. And a
+// CALL of the idle pacer is idle, with its calls.
+const CALLS = {
+  frames: 0,
+  tstates: 10000,
+  idle_tstates: 2000,
+  lines: [
+    { path: SPRITE, line: 10, hits: 1, tstates: 17, idle_tstates: 0, calls_tstates: 6000, calls_idle_tstates: 0, symbol: 'main+3' },
+    { path: SPRITE, line: 11, hits: 1, tstates: 17, idle_tstates: 0, calls_tstates: 2100, calls_idle_tstates: 2000, symbol: 'main+6' },
+    { path: SPRITE, line: 40, hits: 50, tstates: 5900, idle_tstates: 0, symbol: 'draw.loop' },
+  ],
+  routines: [],
+};
+
+test('a CALL line is as hot as what it called, with its calls', () => {
+  const model = indexReport(CALLS);
+  const key = reportKeyFor(model, SPRITE);
+  const call = model.byFile.get(key).get(10);
+  assert.strictEqual(call.withCalls, true);
+  assert.strictEqual(call.share, (17 + 6000) / 8000);
+  assert.strictEqual(heatLevel(call.share), HEAT_LEVELS);
+  assert.strictEqual(lineLabel(model, call, undefined), '75% with calls · 6,017 T · 1.00×');
+  const hover = lineHover(model, call, undefined);
+  assert.ok(hover.includes('Own code 0.2%; the calls made here another 75%, 6,000 T'), hover);
+  // The line inside draw is unchanged: it made no calls.
+  assert.strictEqual(model.byFile.get(key).get(40).withCalls, false);
+});
+
+test('a CALL of an idle routine is idle with its calls', () => {
+  const model = indexReport(CALLS);
+  const pace = model.byFile.get(reportKeyFor(model, SPRITE)).get(11);
+  assert.strictEqual(pace.idle, true);
+  assert.strictEqual(lineLabel(model, pace, undefined), 'idle with calls · 2,117 T · 1.00×');
+});
+
+test('own code only shows a CALL line as just the CALL', () => {
+  const model = indexReport(CALLS, { cumulative: false });
+  const call = model.byFile.get(reportKeyFor(model, SPRITE)).get(10);
+  assert.strictEqual(call.withCalls, false);
+  assert.strictEqual(call.share, 17 / 8000);
+  assert.strictEqual(lineLabel(model, call, undefined), undefined);
+  assert.strictEqual(model.byFile.get(reportKeyFor(model, SPRITE)).get(11).idle, false);
+});
+
 if (failures > 0) {
   console.log(failures + ' failed');
   process.exit(1);

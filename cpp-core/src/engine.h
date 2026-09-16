@@ -28,6 +28,7 @@
 // the only moment Play is ever wanted. Those five use atomics and a mutexed
 // snapshot instead.
 
+#include "rewind.h"
 #include "snapshot.h"
 #include "spectrum.h"
 #include "video_recorder.h"
@@ -68,7 +69,39 @@ struct MachineState {
     uint64_t interrupt_count = 0;
     std::vector<uint16_t> breakpoints;
     std::vector<uint16_t> call_stack;
+    /// Stepped or run back into the history, rather than at its newest
+    /// instant -- see rewind.h. Always false in a build without rewind.
+    bool in_past = false;
+    /// How far behind the newest instant recorded, in half-clocks. 0 when live.
+    uint64_t behind_hc = 0;
 };
+
+#if ZX_REWIND
+/// Where the machine is in its history -- see Engine::rewind_status.
+struct RewindStatus {
+    bool live = true;
+    /// The oldest instant the history reaches, the newest recorded, and the
+    /// machine's own -- all global half-clocks.
+    uint64_t oldest_hc = 0;
+    uint64_t head_hc = 0;
+    uint64_t position_hc = 0;
+    uint64_t hc_per_frame = 0;
+    size_t checkpoints = 0;
+    size_t bytes = 0;
+};
+
+/// What a step back (or a return to live) did -- see Engine::rewind.
+struct RewindOutcome {
+    /// Why nothing was attempted, or "".
+    std::string error;
+    /// Whether it found somewhere to go. A search that found nothing leaves
+    /// the machine where it was.
+    bool moved = false;
+    /// Stopped by a pause before it found anything; the machine is where it was.
+    bool cancelled = false;
+    MachineState state;
+};
+#endif
 
 /// What a trace capture is currently doing. Reported back to whoever asked for
 /// it, since a capture can also stop itself on reaching its row limit.
@@ -388,6 +421,20 @@ public:
     /// like the rest, so it can be changed while a profile counts.
     void set_profile_options(ProfileOptions options);
 
+#if ZX_REWIND
+    /// Goes back through the history and stops there, announced as a step --
+    /// see rewind.h for what each operation lands on. `address` is for
+    /// RunBackToAddress and RunBackToWrite. Only on a stopped machine: a run
+    /// has to be paused first, and the error says so. A long search can be
+    /// cancelled with pause(), leaving the machine where it was.
+    RewindOutcome rewind(RewindOp op, uint16_t address = 0);
+    /// Replays from the past to the newest instant recorded, and stops there.
+    RewindOutcome return_to_live();
+    /// How much history there is and where the machine is in it. Serviced at
+    /// a run's yields, like the other reads.
+    RewindStatus rewind_status();
+#endif
+
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
     /// Starts recording every half-clock to `options.path`, replacing any
@@ -613,6 +660,24 @@ public:
 
 private:
     Spectrum machine_;
+#if ZX_REWIND
+    /// The machine's history, for stepping backwards. Emulator thread only.
+    /// Everything that feeds the machine from outside -- keys, pokes, register
+    /// edits, the tape transport, raw clocking -- goes through
+    /// history_.record, so a replay applies exactly what the live machine had;
+    /// everything that replaces the machine starts it afresh.
+    History history_;
+    /// The key rows and fast-load flag last taken from outside, so that only a
+    /// CHANGE is an input. In the past the machine's own rows are the past's,
+    /// and differ from the live ones without anyone having pressed anything.
+    uint8_t synced_keys_[8] = {0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F};
+    bool synced_fast_load_ = true;
+    /// Starts a fresh history at the machine's present.
+    void restart_history(Spectrum& m);
+    /// After the machine has jumped through its history: the screen, progress
+    /// and frame bookkeeping catch up with where it now is.
+    void after_history_jump(Spectrum& m);
+#endif
     std::thread thread_;
 
     /// A queued command, and whether the run loop may execute it at one of its
@@ -802,7 +867,17 @@ private:
     /// Sleeps until wall-clock time has caught up with emulated time. No-op
     /// when uncapped, or when the emulator is already behind.
     void pace_wait();
+    /// Brings the machine's keys into line with the live ones. With rewind,
+    /// only a change is applied, and it is logged -- see synced_keys_.
     void sync_keys();
+    /// What every run and step does after each instruction: the frame tap,
+    /// and with rewind the history's checkpointing and replay of logged inputs.
+    void after_instruction(Spectrum& m) {
+        note_frame(m);
+#if ZX_REWIND
+        history_.on_instruction(m);
+#endif
+    }
     MachineState snapshot(bool running) const;
     TraceStatus trace_snapshot() const;
     /// Hands `log` (null to stop) to the emulator thread and waits for it to

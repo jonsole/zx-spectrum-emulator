@@ -147,8 +147,27 @@ json state_json(const MachineState& s) {
                 {"frame_count", s.frame_count},
                 {"interrupt_count", s.interrupt_count},
                 {"breakpoints", s.breakpoints},
-                {"call_stack", s.call_stack}};
+                {"call_stack", s.call_stack},
+#if ZX_REWIND
+                {"rewind", true},
+#else
+                {"rewind", false},
+#endif
+                {"in_past", s.in_past},
+                {"behind_tstates", s.behind_hc / HC_PER_TSTATE}};
 }
+
+#if ZX_REWIND
+json rewind_json(const RewindOutcome& o) {
+    return json{{"moved", o.moved},
+                {"cancelled", o.cancelled},
+                {"pc", o.state.pc},
+                {"registers", registers_json(o.state.registers)},
+                {"call_stack", o.state.call_stack},
+                {"in_past", o.state.in_past},
+                {"behind_tstates", o.state.behind_hc / HC_PER_TSTATE}};
+}
+#endif
 
 // ---- tool results ----------------------------------------------------------
 
@@ -453,6 +472,36 @@ json tools_list() {
                                            "instructions.")}},
                {}));
     add("run", "Run until a breakpoint is hit or pause is called", no_params());
+#if ZX_REWIND
+    add("step_back",
+        "Go back through what the program just did, with the whole machine -- registers, "
+        "memory, stack, screen -- exactly as it was. \"into\" is the previous instruction "
+        "executed, whatever it was; \"over\" the previous one in this routine, passing over a "
+        "call just returned from to land on its CALL; \"out\" the CALL that entered this "
+        "routine. The machine must be stopped. Stepping or running forward from the past "
+        "replays what really happened; any input there (a key, a poke, a register edit, the "
+        "tape) starts a new timeline and discards the old future. The history covers about "
+        "the last minute, and ends at a reset or a load.",
+        schema(json{{"mode", string_prop("\"into\", \"over\" (the default) or \"out\".")},
+                    {"count", integer_prop("How many steps back (default 1).")}},
+               {}));
+    add("reverse_continue",
+        "Run backwards to the most recent earlier breakpoint hit, or to the start of the "
+        "history if there is none. The machine must be stopped; pause cancels a long search.",
+        no_params());
+    add("run_back_to",
+        "Run backwards to the last time execution reached an address.",
+        schema(json{{"address", address_prop("Address or symbol expression.")}}, {"address"}));
+    add("run_back_to_write",
+        "Run backwards to the instruction that last wrote an address -- who put that value "
+        "there. Lands before the write, so stepping forward once shows it happen.",
+        schema(json{{"address", address_prop("Address or symbol expression.")}}, {"address"}));
+    add("return_to_live",
+        "From the past, replay to the newest instant recorded and stop there.", no_params());
+    add("history_status",
+        "How much history there is for stepping back, and where the machine is in it.",
+        no_params());
+#endif
     add("pause", "Pause an in-flight run", no_params());
     add("set_breakpoint", "Set a breakpoint at an address",
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
@@ -833,7 +882,7 @@ json tools_list() {
         no_params());
     add("profile",
         "Measure where execution time goes. `start` counts from zero -- every instruction's "
-        "address, how often it ran, and the T-states it really took (ULA contention included) "
+        "address, how often it ran, and the T-states it took, timed off the machine's clock "
         "-- `stop` freezes the counts, and `get` reports them. Works on a running machine "
         "without pausing it: get the game to the part worth measuring, start, let it run, "
         "then get. The report folds addresses into source lines and routines through the "
@@ -841,11 +890,13 @@ json tools_list() {
         "T-states per frame -- what decides whether a game holds its frame rate. Interrupt "
         "acknowledges are counted separately rather than charged to whichever line they "
         "interrupted; a HALT's waiting shows on the HALT. Code with no source is grouped by "
-        "256-byte page. `periods` has every frame's (or turn's) busy time as a strip, and the "
+        "256-byte page. A CALL line's `calls_tstates` is the time its calls took, on top of its "
+        "own `tstates`. `periods` has every frame's (or turn's) busy time as a strip, and the "
         "busiest ones with their own lines and routines -- where averages hide a spike. "
         "`call_tree` nests the calls by path, so a routine's children say what "
-        "calling them cost it rather than what they cost the whole program. Use it before and after an optimisation to measure the change "
-        "instead of estimating it.",
+        "calling them cost it rather than what they cost the whole program. ULA memory "
+        "contention is not emulated yet, so contended code costs what it would uncontended. "
+        "Use it before and after an optimisation to measure the change instead of estimating it.",
         schema(json{{"action", json{{"type", "string"},
                                     {"enum", json::array({"start", "stop", "get"})},
                                     {"description", "start, stop or get."}}},
@@ -1041,6 +1092,81 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         engine.pause();
         return text_result("paused");
     }
+
+#if ZX_REWIND
+    if (name == "step_back" || name == "reverse_continue" || name == "run_back_to"
+        || name == "run_back_to_write") {
+        RewindOp op = RewindOp::ReverseContinue;
+        uint16_t address = 0;
+        int64_t count = 1;
+        if (name == "step_back") {
+            const std::string mode = arg(args, "mode").is_string()
+                                         ? arg(args, "mode").get<std::string>()
+                                         : std::string("over");
+            if (mode == "into") {
+                op = RewindOp::StepBackInto;
+            } else if (mode == "over") {
+                op = RewindOp::StepBackOver;
+            } else if (mode == "out") {
+                op = RewindOp::StepBackOut;
+            } else {
+                return error_result("'mode' must be \"into\", \"over\" or \"out\"");
+            }
+            const json& n = arg(args, "count");
+            count = n.is_number_integer() ? n.get<int64_t>() : 1;
+            if (count < 1) {
+                return error_result("'count' must be at least 1");
+            }
+        } else if (name == "run_back_to" || name == "run_back_to_write") {
+            op = name == "run_back_to" ? RewindOp::RunBackToAddress : RewindOp::RunBackToWrite;
+            bool present = false;
+            if (!arg_opt_address(args, "address", sources, present, address, error)) {
+                return error_result(error);
+            }
+            if (!present) {
+                return error_result("'address' is required");
+            }
+        }
+        RewindOutcome o;
+        int64_t done = 0;
+        for (; done < count; done++) {
+            o = engine.rewind(op, address);
+            if (!o.error.empty()) {
+                return error_result(o.error);
+            }
+            if (!o.moved) {
+                break;
+            }
+        }
+        json out = rewind_json(o);
+        out["steps"] = done;
+        if (o.cancelled) {
+            out["note"] = "cancelled by pause -- the machine is where it was";
+        } else if (!o.moved) {
+            out["note"] = "nothing earlier in the history matches";
+        }
+        return json_result(out);
+    }
+
+    if (name == "return_to_live") {
+        const RewindOutcome o = engine.return_to_live();
+        if (!o.error.empty()) {
+            return error_result(o.error);
+        }
+        return json_result(rewind_json(o));
+    }
+
+    if (name == "history_status") {
+        const RewindStatus s = engine.rewind_status();
+        const double frame = double(s.hc_per_frame);
+        return json_result(json{{"live", s.live},
+                                {"tstates_behind", (s.head_hc - s.position_hc) / HC_PER_TSTATE},
+                                {"frames_behind", double(s.head_hc - s.position_hc) / frame},
+                                {"frames_available", double(s.head_hc - s.oldest_hc) / frame},
+                                {"checkpoints", s.checkpoints},
+                                {"bytes", s.bytes}});
+    }
+#endif
 
     if (name == "set_breakpoint" || name == "clear_breakpoint") {
         uint16_t addr = 0;

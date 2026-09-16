@@ -4,8 +4,9 @@
 // For every address an instruction starts at, how many times it ran and how
 // many half-clocks it took. Measured off the machine's own clock rather than
 // looked up from an opcode's nominal length, so what it counts is what the
-// instruction really cost on that run: the ULA holding the clock for a
-// contended address is in there, and so is a DJNZ taken versus not.
+// instruction cost on that run: a DJNZ taken versus not, and -- once the ULA
+// holds the CPU's clock for contended memory, which it does not yet -- the
+// delay that adds too, with no change here.
 //
 // Alongside that, a calling-context tree: one node per distinct call path,
 // holding how often that path was entered and the half-clocks spent in its
@@ -14,6 +15,10 @@
 // really cost it -- not what those routines cost the whole program, which is
 // all a call graph read off the source could say. A node's total is its own
 // time plus its children's.
+//
+// A path is also told apart by the CALL it went through: two CALL lines in one
+// routine that reach the same subroutine are two nodes. That is what lets a
+// CALL line be charged with the time its calls took, as well as its own.
 //
 // Filled by Spectrum::step_instruction(), which every run, step and step-over
 // goes through. step_tstates() and run_frame() clock the machine directly and
@@ -106,6 +111,9 @@ public:
         /// interrupt node, the handler's first instruction.
         uint16_t addr = 0;
         bool interrupt = false;
+        /// Where the CALL (or RST) that entered this path is. Unused for the
+        /// root and for an interrupt, which have no call site.
+        uint16_t site = 0;
         /// Times this path was entered.
         uint64_t calls = 0;
         /// Half-clocks spent in this node's own code, not its children's.
@@ -248,11 +256,12 @@ public:
             frames_, [](const Frame& f) { return f.sp; }, sp_before, sp_after));
     }
 
-    /// A CALL or RST to `target` whose return address now sits at `sp`.
-    void enter_call(uint16_t target, uint16_t sp) { enter(target, sp, false); }
+    /// A CALL or RST at `site` to `target`, whose return address now sits at
+    /// `sp`.
+    void enter_call(uint16_t target, uint16_t sp, uint16_t site) { enter(target, sp, false, site); }
     /// An interrupt accepted into the handler at `target`, its return address
     /// at `sp`.
-    void enter_interrupt(uint16_t target, uint16_t sp) { enter(target, sp, true); }
+    void enter_interrupt(uint16_t target, uint16_t sp) { enter(target, sp, true, 0); }
 
     /// Starts again from nothing. The idle map and the period marker are
     /// settings, not counts, and are kept.
@@ -317,7 +326,7 @@ private:
     }
 
     uint32_t current_node() const { return frames_.empty() ? ROOT : frames_.back().node; }
-    void enter(uint16_t target, uint16_t sp, bool interrupt);
+    void enter(uint16_t target, uint16_t sp, bool interrupt, uint16_t site);
     void open_period(uint64_t frame);
     void close_period();
     void reset_periods();
@@ -332,8 +341,8 @@ private:
     uint64_t idle_total_ = 0;
 
     std::vector<CallNode> nodes_;
-    /// (parent, interrupt, address) -> child node, so re-entering a path
-    /// finds the node it had last time.
+    /// (parent, interrupt, call site, address) -> child node, so re-entering
+    /// a path finds the node it had last time.
     std::unordered_map<uint64_t, uint32_t> children_;
     std::vector<Frame> frames_;
 

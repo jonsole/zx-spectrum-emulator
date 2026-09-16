@@ -150,6 +150,13 @@ public:
     /// alone, matching `Ula::reset()` leaving `border` alone.
     void reset();
 
+#if ZX_REWIND
+    /// Starts integrating afresh from `now_hc`, dropping what was pending. For
+    /// after rewind restores the machine: its clock has jumped, backwards as
+    /// often as not, and audio is not something to replay.
+    void restart_at(uint64_t now_hc);
+#endif
+
 private:
     bool enabled_ = false;
     uint32_t rate_ = AUDIO_SAMPLE_RATE;

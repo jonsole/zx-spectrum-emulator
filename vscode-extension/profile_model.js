@@ -7,6 +7,11 @@
 // map and the tree need, and nothing here touches the vscode API -- so it can
 // be tested from plain Node, see tests/profile_model_test.js.
 //
+// A CALL line can be shown with the time its calls took added to its own --
+// cumulative, the default -- so the line that calls sprite_blit is as hot as
+// sprite_blit is from there, and following the heat down leads to the cost.
+// Off, every line shows only its own instructions.
+//
 // Shares are of BUSY time: everything counted, less what was idle (a HALT
 // waiting, or a routine marked idle). A game that spends most of each frame
 // in its pacing loop would otherwise read as 58% pacer and a squeezed few
@@ -69,18 +74,20 @@ function isIdle(tstates, idle) {
 ///   idle       the idle part of it; busy = total - idle
 ///   frames     video frames that passed while counting (0 when only stepped,
 ///              or for a single period)
-///   byFile     file key -> Map(line -> { hits, tstates, idle, symbol, share })
+///   cumulative whether a CALL line's share includes its calls
+///   byFile     file key -> Map(line -> stats), see statsFor
 ///   routines   by file key -> Map(line -> routine), for the label lines
 ///   byName     base name -> [file keys], for a path the SLD spelt differently
 ///   callTree   the call nodes, indexed -- see the call tree below
 ///   periods    the report's periods, strip and worst, as sent
 ///
 /// Lines are 1-based, as the report has them.
-function indexReport(report) {
+function indexReport(report, options) {
   const total = report.tstates || 0;
   const idle = report.idle_tstates || 0;
   const model = {
     report,
+    cumulative: !options || options.cumulative !== false,
     active: !!report.active,
     frames: report.frames || 0,
     total,
@@ -131,16 +138,34 @@ function indexReport(report) {
   return model;
 }
 
+/// One line's (or routine's) numbers:
+///
+///   tstates, idleTstates            its own instructions
+///   callsTstates, callsIdleTstates  what the calls made from it took
+///   withCalls                       whether what is shown includes those
+///   shownTstates                    the time shown: own, or own plus calls
+///   share, idle                     of what is shown
+///   ownShare                        of its own instructions alone
 function statsFor(model, entry, extra) {
   const tstates = entry.tstates || 0;
   const idle = entry.idle_tstates || 0;
+  const calls = entry.calls_tstates || 0;
+  const callsIdle = entry.calls_idle_tstates || 0;
+  const withCalls = model.cumulative && calls > 0;
+  const shown = withCalls ? tstates + calls : tstates;
+  const shownIdle = withCalls ? idle + callsIdle : idle;
   return Object.assign(
     {
       hits: entry.hits,
       tstates,
       idleTstates: idle,
-      idle: isIdle(tstates, idle),
-      share: model.busy > 0 ? (tstates - idle) / model.busy : 0,
+      callsTstates: calls,
+      callsIdleTstates: callsIdle,
+      withCalls,
+      shownTstates: shown,
+      idle: isIdle(shown, shownIdle),
+      share: model.busy > 0 ? (shown - shownIdle) / model.busy : 0,
+      ownShare: model.busy > 0 ? (tstates - idle) / model.busy : 0,
     },
     extra
   );
@@ -190,12 +215,14 @@ function lineLabel(model, stats, routine) {
   }
   if (stats !== undefined) {
     let text;
+    const shown = stats.shownTstates !== undefined ? stats.shownTstates : stats.tstates;
+    const calls = stats.withCalls ? ' with calls' : '';
     if (stats.idle) {
-      if (model.total > 0 && stats.tstates / model.total >= LABEL_SHARE) {
-        text = `idle · ${formatCount(perFrame(model, stats.tstates))} T${unit}`;
+      if (model.total > 0 && shown / model.total >= LABEL_SHARE) {
+        text = `idle${calls} · ${formatCount(perFrame(model, shown))} T${unit}`;
       }
     } else if (stats.share >= LABEL_SHARE) {
-      text = `${formatShare(stats.share)} · ${formatCount(perFrame(model, stats.tstates))} T${unit}`;
+      text = `${formatShare(stats.share)}${calls} · ${formatCount(perFrame(model, shown))} T${unit}`;
     }
     if (text !== undefined) {
       if (stats.hits !== undefined) {
@@ -231,6 +258,13 @@ function lineHover(model, stats, routine) {
         row += ` and ${formatCount(stats.hits / model.frames)} runs`;
       }
       rows.push(`${row} a frame, over ${model.frames.toLocaleString('en-GB')} frames`);
+    }
+    if (stats.callsTstates > 0) {
+      const callsBusy = stats.callsTstates - stats.callsIdleTstates;
+      rows.push(`Own code ${formatShare(stats.ownShare)}; the calls made here another ` +
+        `${formatShare(model.busy > 0 ? callsBusy / model.busy : 0)}, ` +
+        `${formatCount(perFrame(model, stats.callsTstates))} T${model.frames > 0 ? ' a frame' : ''}` +
+        (stats.callsIdleTstates > 0 ? ` (${formatCount(perFrame(model, stats.callsIdleTstates))} of it idle)` : ''));
     }
     if (stats.symbol) {
       rows.push(`at \`${stats.symbol}\``);
@@ -541,6 +575,7 @@ function periodsScale(model) {
 /// whole profile can show it: its lines and routines as sent, and the call
 /// tree's nodes carrying that period's time instead of the whole profile's.
 function periodReport(report, period) {
+  // Lines carry their calls' time already, per period, from the server.
   const base = report.call_nodes || [];
   const self = new Map();
   for (const triple of period.nodes || []) {
