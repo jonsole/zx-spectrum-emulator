@@ -67,7 +67,7 @@
 ; fourth hungriest room -- $87, the gates -- has no high scenery at all, so
 ; there is nothing there to win.
 
-SHIFT_ARENA_SIZE	EQU		5760
+SHIFT_ARENA_SIZE	EQU		4992
 
 ; Every buffer carries two bytes in front of it saying what is in it: the
 ; graphic, and then the shift and the way round with bit 7 set, or zero for
@@ -173,9 +173,18 @@ shift_at_draw:		push	bc
 					ret
 
 
-; Hand the whole arena back. Called when a room is built; every object in the
-; old room loses its buffer with it, which is the point.
-shift_reset:		ld		hl,shift_arena
+; Where the arena starts handing out. The knight's two buffers are taken once,
+; at the start of the game, and kept: the arena is given out in the order
+; things ask for it and he is added after the room is built, so a room that
+; asks for more than there is would have refused HIM -- and he is the one thing
+; redrawn every turn, so he is the worst of them all to leave rotating at draw
+; time. Scenery asked for later goes without instead, which costs only the
+; redraws it is in.
+shift_kept:			DW		shift_arena
+
+; Hand back everything but those. Called when a room is built; every other
+; object in the old room loses its buffer with it, which is the point.
+shift_reset:		ld		hl,(shift_kept)
 					ld		(shift_arena_next),hl
 					ret
 

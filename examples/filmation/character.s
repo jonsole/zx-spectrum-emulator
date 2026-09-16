@@ -214,6 +214,7 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 					add		a,(ix+CHARACTER_LEGS)
 					ld		(ix+OBJ.GFX),a
 					ld		a,c
+					call	player_glance_body		; the knight's may be aside
 					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
@@ -264,12 +265,10 @@ character_add:		ld		(ix+OBJ.U),b
 					ld		(ix+CHARACTER_BODY+OBJ.FLAGS),OBJ_MOVABLE
 					call	character_frame		; which puts the mirror bit back
 
-					ld		hl,CHARACTER_LARGEST
 					call	.half
 					ld		bc,CHARACTER_BODY
 					add		ix,bc
-					ld		hl,CHARACTER_TALLEST		; the knight may be a wolf by the
-					call	.half		; time this buffer is wanted
+					call	.half
 					ld		bc,-CHARACTER_BODY
 					add		ix,bc
 
@@ -284,18 +283,35 @@ character_add:		ld		(ix+OBJ.U),b
 					call	pair_region_add
 					jp		redraw_view
 
-					; Each half's rotation buffer, sized for the largest thing it will
-					; ever show rather than whatever it shows first. The legs walk in
-					; 3x16 frames but die and come back as sparkles of up to 3x24, and
-					; the body is 3x24 facing away and 3x25 facing us -- a buffer
-					; sized on the way in would be overrun by the other. If the arena
-					; cannot spare one, rotate at draw time instead of risking it.
-					;   HL -> the sprite record to size it for
-.half:				ld		(ix+OBJ.BUF_L),0
-					ld		(ix+OBJ.BUF_H),0
-					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
-					call	character_place
+					; One half: placed where it stands and threaded into the sort.
+					; Its rotation buffer is character_keep's, taken once at the
+					; start of the game and kept, so there is none to ask for here.
+.half:				call	character_place
 					jp		depth_insert
+
+
+; The knight's two rotation buffers, taken once at the start of the game and
+; kept for good -- see shift_kept. Sized for the largest frame either half will
+; ever show rather than whatever it shows first: the legs walk in 3x16 frames
+; but die and come back as sparkles of up to 3x24, and his top half is 3x25 as
+; a knight and 3x30 as a wolf.
+;   IX -> the legs record
+; Corrupts AF, BC, DE, HL.
+character_keep:		ld		(ix+OBJ.BUF_L),0
+					ld		(ix+OBJ.BUF_H),0
+					ld		hl,CHARACTER_LARGEST
+					call	shift_alloc
+					ld		bc,CHARACTER_BODY
+					add		ix,bc
+					ld		(ix+OBJ.BUF_L),0
+					ld		(ix+OBJ.BUF_H),0
+					ld		hl,CHARACTER_TALLEST		; he may be a wolf by the time
+					call	shift_alloc		; this one is wanted
+					ld		bc,-CHARACTER_BODY
+					add		ix,bc
+					ld		hl,(shift_arena_next)
+					ld		(shift_kept),hl
+					ret
 
 
 ; Walk a character one step in facing A, and repaint what that disturbed.
@@ -346,7 +362,8 @@ character_walk_on:	call	character_settle
 ; engine does -- but a turn with no knight to draw is a turn that costs next
 ; to nothing, so the game ran at one speed walking and at a sprint standing
 ; still, and everything else in the room with it.
-character_stand:	ld		de,0
+character_stand:	call	character_frame		; only the knight stands still, and
+					ld		de,0		; his top half looks about while he does
 					call	character_settle
 					jp		character_move
 

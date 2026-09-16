@@ -32,6 +32,7 @@ COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
 COLLIDE_Z			EQU		4
 OBJ_PASSABLE		EQU		$04
+OBJ_FLIP_BIT		EQU		0
 CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 9
 room_objects		EQU		ROOMS
 
@@ -624,7 +625,10 @@ start:				ld		sp,$FE00
 					call	ghost_speed
 					call	snap
 					EXPECT_A	1, "DV is a ghost's speed"
-					EXPECT_FIELD	OBJ.GFX, 83, "the graphic"
+					ld		a,(REC + OBJ.GFX)
+					call	ghost_frame
+					call	snap
+					EXPECT_A	1, "the graphic is one of its four"
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_V, "MOVE_STATE, what stopped it"
 
 					TEST	"ghost: no step at all, a new way to go"
@@ -635,7 +639,53 @@ start:				ld		sp,$FE00
 					call	ghost_speed
 					call	snap
 					EXPECT_A	1, "DU is a ghost's speed"
+					ld		a,(REC + OBJ.GFX)
+					call	ghost_frame
+					call	snap
+					EXPECT_A	1, "the graphic is one of its four"
+
+; Which way it faces -- calc_ghost_sprite. The wider step picks the axis: along
+; U it is mirrored, and the sign picks the pair, the other way round on V.
+
+					TEST	"ghost face: along +U, the low pair, mirrored"
+					call	fresh
+					SET		OBJ.GFX, 83
+					SET		OBJ.FLAGS, 0
+					SET		OBJ.DU, 4
+					SET		OBJ.DV, -3
+					RUN		mover_ghost.face
+					EXPECT_FIELD	OBJ.GFX, 81, "the graphic"
+					EXPECT_FIELD	OBJ.FLAGS, 1, "mirrored"
+
+					TEST	"ghost face: along -U, the high pair, mirrored"
+					call	fresh
+					SET		OBJ.GFX, 80
+					SET		OBJ.FLAGS, 0
+					SET		OBJ.DU, -4
+					SET		OBJ.DV, 3
+					RUN		mover_ghost.face
 					EXPECT_FIELD	OBJ.GFX, 82, "the graphic"
+					EXPECT_FIELD	OBJ.FLAGS, 1, "mirrored"
+
+					TEST	"ghost face: along +V, the high pair, not mirrored"
+					call	fresh
+					SET		OBJ.GFX, 80
+					SET		OBJ.FLAGS, 1
+					SET		OBJ.DU, -3
+					SET		OBJ.DV, 4
+					RUN		mover_ghost.face
+					EXPECT_FIELD	OBJ.GFX, 82, "the graphic"
+					EXPECT_FIELD	OBJ.FLAGS, 0, "not mirrored"
+
+					TEST	"ghost face: along -V, the low pair, not mirrored"
+					call	fresh
+					SET		OBJ.GFX, 83
+					SET		OBJ.FLAGS, 1
+					SET		OBJ.DU, 3
+					SET		OBJ.DV, -4
+					RUN		mover_ghost.face
+					EXPECT_FIELD	OBJ.GFX, 81, "the graphic"
+					EXPECT_FIELD	OBJ.FLAGS, 0, "not mirrored"
 
 ; --- mover_bounce ------------------------------------------------------------------
 
@@ -881,6 +931,15 @@ spell_near_player:	ld		a,100
 					ret
 
 ; A = 1 if A is one of a ghost's four speeds, 0 if not.
+; A ghost's graphic: A = 1 if it is one of its four frames, else 0.
+ghost_frame:		sub		80
+					cp		4
+					ld		a,0
+					ret		nc
+					inc		a
+					ret
+
+
 ghost_speed:		ld		hl,.speeds
 					ld		bc,4
 					cpir
@@ -1049,6 +1108,14 @@ special_hide:		ld		(hide_ix),ix
 
 mover_cauldron:		ret
 mover_special:		ret
+
+; character.s's, which the ghost's facing borrows: A, made positive.
+character_door_find:
+.abs:				or		a
+					ret		p
+					neg
+					ret
+
 
 ; Silent: what the sounds play is not what these tests are about.
 sound_u:

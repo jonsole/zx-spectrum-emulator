@@ -899,6 +899,7 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 					ld		a,(move_tick)
 					call	.pick
 					ld		(ix+OBJ.DV),a
+					call	.face
 
 .go:				call	mover_move_always		; which leaves IX -> the record
 					ld		a,(collide_hit)	; whether something stopped it, kept
@@ -913,7 +914,38 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 					ld		hl,ghost_deltas
 					add		hl,bc
 					ld		a,(hl)
-					ret		
+					ret
+
+
+					; And which way it faces, from the step it has just taken --
+					; calc_ghost_sprite. The wider of the two says whether it
+					; drifts along U or along V: along U it is drawn mirrored,
+					; and the sign picks between its two pairs of frames, the
+					; other way round on the two axes. It keeps the pair until
+					; it turns again, and flickers between the two of them.
+.face:				ld		a,(ix+OBJ.DU)
+					call	character_door_find.abs
+					ld		c,a
+					ld		a,(ix+OBJ.DV)
+					call	character_door_find.abs
+					cp		c
+					jr		nc,.face_v
+
+					set		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
+					ld		a,(ix+OBJ.DU)
+					or		a
+					jr		.face_pair
+
+.face_v:			res		OBJ_FLIP_BIT,(ix+OBJ.FLAGS)
+					ld		a,(ix+OBJ.DV)
+					cpl				; along V the pairs swap over
+					or		a
+
+.face_pair:			jp		m,.face_high
+					res		1,(ix+OBJ.GFX)		; graphics 80 and 81
+					ret
+.face_high:			set		1,(ix+OBJ.GFX)		; ...or 82 and 83
+					ret
 
 
 ; ---------------------------------------------------------------------------

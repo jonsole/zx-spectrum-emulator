@@ -151,6 +151,9 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 					ld		hl,special_count
 					inc		(hl)
 					call	special_flash
+					ld		a,(special_count)		; the last of them ends the game:
+					cp		SPECIAL_WANTED		; the game fills the room with
+					jp		nc,game_over		; sparkles that chase him first
 					ld		ix,(mover_ix)
 .wrong:				xor		a
 					ld		(special_busy),a

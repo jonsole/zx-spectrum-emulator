@@ -146,15 +146,25 @@ start:				ld		sp,$FE00
 					EXPECT_BODY	OBJ.FLAGS, OBJ_MOVABLE, "the body's flags"
 					EXPECT_LEGS	OBJ.GFX, LEGS_BASE + 8, "the legs' graphic"
 					EXPECT_BODY	OBJ.GFX, BODY_BASE + 8, "the body's graphic"
-					EXPECT_BYTE	alloc_calls, 2, "buffers asked for"
-					EXPECT_WORD	alloc_hl_1, CHARACTER_LARGEST, "the legs', sized"
-					EXPECT_WORD	alloc_hl_2, CHARACTER_TALLEST, "the walking body's, sized"
-					EXPECT_BYTE	alloc_buf_h, 0, "no buffer carried over"
+					EXPECT_BYTE	alloc_calls, 0, "no buffer asked for: character_keep has them"
 					EXPECT_BYTE	insert_calls, 2, "both sorted in"
 					EXPECT_WORD	insert_ix_1, REC, "the legs first"
 					EXPECT_WORD	insert_ix_2, REC + CHARACTER_BODY, "then the body"
 					EXPECT_BYTE	add_calls, 2, "region_add"
 					EXPECT_BYTE	view_calls, 1, "redraw_view"
+
+					TEST	"keep: both buffers, once, and the arena kept back"
+					call	fresh
+					SET		OBJ.BUF_H, $77
+					ld		hl,$9000
+					ld		(shift_arena_next),hl
+					RUN		character_keep
+					EXPECT_BYTE	alloc_calls, 2, "buffers asked for"
+					EXPECT_WORD	alloc_hl_1, CHARACTER_LARGEST, "the legs', sized"
+					EXPECT_WORD	alloc_hl_2, CHARACTER_TALLEST, "the walking body's, sized"
+					EXPECT_BYTE	alloc_buf_h, 0, "neither carried over"
+					EXPECT_WORD	shift_kept, $9000, "what the arena keeps back"
+					EXPECT_WORD	s_ix, REC, "IX"
 
 ; --- character_walk, character_stand, character_move -------------------------
 
@@ -697,6 +707,9 @@ depth_insert:		ld		hl,insert_calls
 					ld		(hl),d
 					ret
 
+shift_arena_next:	DW		0
+shift_kept:			DW		0
+
 shift_alloc:		ld		a,(ix+OBJ.BUF_H)
 					ld		(alloc_buf_h),a
 					ld		a,(alloc_calls)
@@ -731,6 +744,9 @@ redraw_view:		ld		hl,view_calls
 					inc		(hl)
 					ld		ix,$BEEF
 					ret
+
+; The knight's glance is filmation.s's; here every body frame is the plain one.
+player_glance_body:	ret
 
 ; Silent: what the sounds play is not what these tests are about.
 sound_jump:

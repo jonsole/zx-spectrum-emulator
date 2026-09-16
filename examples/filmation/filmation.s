@@ -38,12 +38,17 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ; object records and the code. The stack was the one thing left behind.
 ;
 ; It starts at the very top of memory -- SP = 0, so the first push lands at
-; $FFFE -- and STACK_RESERVE is kept clear below it. The deepest it has been
-; measured is 26 bytes: every room in the castle entered, walked, jumped in and
-; picked up in, with the untouched bytes counted afterwards. It used to start
-; at $FF00 with the 256 bytes above it standing empty, and those went to code.
+; $FFFE -- and STACK_RESERVE is kept clear below it. It used to start at $FF00
+; with the 256 bytes above it standing empty, and those went to code.
+;
+; The reserve is measured, not guessed: the bytes below the stack are filled
+; with a pattern, the game is played through the rooms with everything in them
+; moving -- the pot, a portcullis, collapsing blocks, pickups, a death, a
+; change of light and a new game -- and the untouched bytes counted afterwards.
+; That says 34, where it said 26 before the sounds and the panel, which nest
+; deeper. Anything that adds to the deepest call chain wants re-measuring.
 STACK_TOP			EQU		0x0000
-STACK_RESERVE		EQU		64
+STACK_RESERVE		EQU		48		; 34 used, 14 spare
 
 ; ---------------------------------------------------------------------------
 ; The castle, in contended memory.
@@ -57,6 +62,7 @@ STACK_RESERVE		EQU		64
 ; adj.py from a running game. Neither is hand-written.
                     ORG     $6000
                     INCLUDE "room_data.s"
+                    INCLUDE "panel_data.s"
                     INCLUDE "sprite_adj.s"
 
 ; The game's own font: forty 8x8 characters, which is all the text Knight Lore
@@ -96,6 +102,7 @@ room_data_end:
 					INCLUDE "special.s"
 					INCLUDE "sound.s"
 					INCLUDE "panel.s"
+					INCLUDE "end.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -149,6 +156,13 @@ start:              di
                     ld      (sun_x),a
                     ld      a,PLAYER_LEGS_GFX
                     call    player_form
+                    ld      ix,player
+                    call    character_keep      ; his rotation buffers, for good
+                    ld      hl,end_rooms_seen   ; no room seen yet
+                    ld      de,end_rooms_seen + 1
+                    ld      bc,END_ROOMS - 1
+                    ld      (hl),0
+                    ldir
                     call    special_init
 
         ; Nothing goes into a room that was not built. room_build leaves the
@@ -525,6 +539,7 @@ player_step:        ld      ix,player
                     ld      a,(player_touched)
                     or      a
                     jp      nz,player_die
+                    call    player_glance
 
                     ; Nobody else is walking about. object_collide tests this
                     ; on top of the room's pool, for the characters that are
@@ -725,7 +740,7 @@ player_phase:       cp      PLAYER_CHANGING
                     ; by -- or, with none left, a new game.
 .gone:              ld      hl,player_lives
                     dec     (hl)
-                    jp      m,start
+                    jp      m,game_over
                     ld      a,PLAYER_APPEARING
                     ld      (player_state),a
                     ld      a,(entered_by)      ; the arch, for his height
@@ -827,42 +842,6 @@ player_twinkle:     call    mover_rand
                     xor     OBJ_FLIP_H
                     ld      (ix+OBJ.FLAGS),a
                     jr      player_repaint
-
-
-; The clock's turn. It stops once the wizard has everything, as the game's does.
-day_step:           ld      a,(move_tick)
-                    and     SUN_TURNS - 1
-                    ret     nz
-                    ld      a,(special_count)
-                    cp      SPECIAL_WANTED
-                    ret     nc
-                    ld      hl,sun_x
-                    inc     (hl)
-                    ld      a,(hl)
-                    cp      SUN_SET
-                    jp      nz,sun_show
-
-                    ; The light changes, and so should he.
-                    ld      (hl),SUN_RISE
-                    ld      a,1
-                    ld      (player_change),a
-                    ld      hl,night
-                    ld      a,(hl)
-                    xor     PLAYER_WOLF
-                    ld      (hl),a
-                    jp      nz,sun_show_all     ; nightfall
-
-                    ; Dawn: inc_days, and at forty the end. There is no screen
-                    ; for that yet, so it is the same new game losing the last
-                    ; life is.
-                    ld      hl,days
-                    ld      a,(hl)
-                    add     a,1                 ; INC leaves the half-carry DAA wants
-                    daa
-                    ld      (hl),a
-                    cp      DAYS_ALLOWED
-                    jp      nz,sun_show_all
-                    jp      start
 
 
 ; The knight's two graphic bases, for man or wolf. character_frame works each
@@ -1224,22 +1203,6 @@ sun_place:          ld      a,(sun_x)
                     djnz    .shift
                     ret
 
-
-; Fill a block of attributes -- fill_window, at $C515.
-;   A - the attribute, HL -> the top-left cell, B - columns, C - rows
-; Corrupts BC, DE, HL.
-sun_fill:           ld      de,32
-.row:               push    bc
-                    push    hl
-.cell:              ld      (hl),a
-                    inc     hl
-                    djnz    .cell
-                    pop     hl
-                    add     hl,de
-                    pop     bc
-                    dec     c
-                    jr      nz,.row
-                    ret
 
 
 
@@ -1617,6 +1580,7 @@ image_end:
 ; and the door table, which is a handful of loads.
                     ORG     $5B00
                     INCLUDE "room.s"
+                    INCLUDE "glance.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end
@@ -1656,6 +1620,8 @@ room_objects:
 ;
 ; sprite_table is read as `ld h,(high sprite_table)/2 / ld l,a / add hl,hl`, so
 ; its page has to be even: a 512 boundary, not merely a 256 one.
+                    INCLUDE "clock.s"
+
                     ALIGN   256
 ; Every byte with its bits the other way round, for mirroring a sprite. Knight
 ; Lore keeps the same table at $F100 and reaches it exactly this way, with the
