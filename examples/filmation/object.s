@@ -288,7 +288,8 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					cp		e
 					jr		nc,.apart		; their min >= our max
 
-					ld		a,(iy+OBJ.V)
+					; The gather does its own U test, inline, and comes in here.
+.v:					ld		a,(iy+OBJ.V)
 					ld		d,a
 					add		a,(iy+OBJ.SIZE_V)
 					ld		e,a
@@ -497,6 +498,25 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					add		a,c
 					ld		(hl),a		; collide_z_max
 
+					; Almost everything in the room is somewhere else along U, so
+					; that one test is what the sweep spends its time on -- and
+					; it was paying 27T of call and return to reach it and 13T
+					; a time to read our own edges out of memory. Inline, with
+					; the edges patched in as immediates the way depth_cmp_setup
+					; hoists its own, a miss costs 40T where it used to cost
+					; 102T. What passes goes into object_overlaps at .v, which
+					; is the same routine with the U test already done.
+					;
+					; The edges are the swept box .axis has just written, so
+					; this has to follow it. One past the minimum, because
+					; touching exactly counts as apart and a CP that way round
+					; says "less than".
+					ld		a,(collide_u_min)
+					inc		a
+					ld		(.u_over + 1),a
+					ld		a,(collide_u_max)
+					ld		(.u_under + 1),a
+
 					ld		hl,collide_list
 					ld		c,0
 					ld		a,(room_object_count)
@@ -504,9 +524,18 @@ collide_gather:		ld		a,TURN_PER_GATHER
 					jr		z,.other
 					ld		b,a
 					ld		iy,room_objects
-.each:				call	object_overlaps		; preserves BC and HL
+.each:				ld		a,(iy+OBJ.U)
+					ld		d,a		; their centre
+					add		a,(iy+OBJ.SIZE_U)		; their max
+.u_over:			cp		0		; patched: one past our min
+					jr		c,.next		; their max is at or below it
+					ld		a,d
+					sub		(iy+OBJ.SIZE_U)		; their min
+.u_under:			cp		0		; patched: our max
+					jr		nc,.next
+					call	object_overlaps.v		; preserves BC and HL
 					call	c,.keep
-					ld		de,ROOM_STRIDE
+.next:				ld		de,ROOM_STRIDE
 					add		iy,de
 					djnz	.each
 
