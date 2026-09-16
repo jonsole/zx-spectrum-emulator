@@ -43,8 +43,13 @@ CHARACTER_PHASES	EQU		6		; ...of which this many are the walk
 					; as well: sprite_adj has -6 for the legs and -8 for the
 					; body and object_place subtracts that, so the body lands
 					; two pixels lower than its Z alone would put it.
-CHARACTER_LARGEST	EQU		sprite_048		; 3x25: the biggest frame either half shows
-CHARACTER_TALLEST	EQU		sprite_092		; 3x30: the werewolf's body, which only a
+; What the two kept rotation buffers are sized from -- the biggest frame each
+; half can wear, once sprites.py has taken the blank rows off. That is a fact
+; about the trimmed set, not the game's artwork, so sprites.py checks it on
+; every build: a buffer too small gets rotated past its end, into the other.
+CHARACTER_LARGEST	EQU		sprite_030		; 3x24: the sparkle the legs die and
+					; come back as, which is bigger than any walking frame
+CHARACTER_TALLEST	EQU		sprite_092		; 3x29: the werewolf's body, which only a
 					; walking character's top half ever wears
 CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; the same twelve Knight Lore gives the
@@ -136,10 +141,17 @@ CHARACTER_FALL_MAX	EQU		-8 & $FF		; terminal velocity, so that the
 ; as a macro call takes the address BEFORE the macro's first line, so an ALIGN
 ; inside would leave the name pointing short of the record it names -- which
 ; it did, by eight bytes, and every field read came back as its neighbour.
+;
+; The two depth boxes stack to exactly the figure collision uses: the legs from
+; his feet to CHARACTER_BODY_UP, the body from there to COLLIDE_HEIGHT. The body
+; used to be twelve as well, which reached a unit above the top collision
+; stops him at -- so a jump into the underside of a block left his head's box a
+; unit inside it for that turn, all three axes overlapped, the sort had nothing
+; to go on, and his head came out in front of the block.
 				MACRO	character_record legs_base, body_base, facing
-					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
+					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, CHARACTER_BODY_UP
 					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; the rest of the legs' slot
-					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, 12
+					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, COLLIDE_HEIGHT - CHARACTER_BODY_UP
 					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; ...and of the body's
 
 					; ...and then the character's own, in the order the EQUs give
@@ -292,9 +304,12 @@ character_add:		ld		(ix+OBJ.U),b
 
 ; The knight's two rotation buffers, taken once at the start of the game and
 ; kept for good -- see shift_kept. Sized for the largest frame either half will
-; ever show rather than whatever it shows first: the legs walk in 3x16 frames
-; but die and come back as sparkles of up to 3x24, and his top half is 3x25 as
-; a knight and 3x30 as a wolf.
+; ever show rather than whatever it shows first: the legs walk in frames no
+; taller than 3x21 but die and come back as sparkles of 3x24, and his top half
+; is at most 3x21 as a knight and 3x29 as a wolf. (Those are the trimmed
+; heights. This was sprite_048 for the legs, 3x25 until its blank rows came
+; off -- and 3x21 is three rows short of a sparkle, which then spilled into the
+; body's buffer as a smear under every death and every arrival.)
 ;   IX -> the legs record
 ; Corrupts AF, BC, DE, HL.
 character_keep:		ld		(ix+OBJ.BUF_L),0

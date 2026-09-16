@@ -18,11 +18,29 @@ part = sys.argv[1] if len(sys.argv) > 1 else "all"
 bitmaps = io.StringIO()
 console, sys.stdout = sys.stdout, bitmaps
 
+# Four places draw a sprite without asking object_update for it, and each one
+# knows how tall it is: the panel's pieces and the menu's frame hang from a row
+# of their own, and the sun window walks its disc sixteen rows down and its
+# frame six bytes a row for all thirty-one. A sprite of theirs that lost rows
+# here would slide down its anchor or read past its end, and no adjustment
+# would put it back -- the frame's corner is drawn upside down as well, which
+# no adjustment could ever answer for. They keep their blank rows.
+WHOLE_SPRITE_GRAPHICS = (
+    88, 96,             # the sun and the moon, sixteen rows in sun_place
+    90, 186,            # the window's frame, indexed by row in sun_draw
+    134, 135, 136, 140, # the panel's chain, bars, ends and the knight's head
+    137,                # the menu's frame: its corner, drawn upside down too
+)
+gmap = Path('graphic_map.bin').read_bytes()
+whole_sprites = {gmap[g] for g in WHOLE_SPRITE_GRAPHICS}
+
 f_data = Path('sprite_data.bin').read_bytes()
 
 spr_num = 0
 spr_list = []
 spr_trim = []               # blank rows taken off the bottom of each sprite
+spr_widths = []             # and what is left of each, for the checks below
+spr_heights = []
 while f_data:
 
     spr_w_f = f_data[0]
@@ -62,7 +80,8 @@ while f_data:
     # many added to its pixel nudge, which is what the adjustments part below
     # does. At least one row always stays: a sprite of none would draw 256.
     trim = 0
-    while (len(spr_mask_list) - trim > 1
+    while (len(spr_trim) not in whole_sprites
+           and len(spr_mask_list) - trim > 1
            and all(m == 0 for m in spr_mask_list[-1 - trim])
            and all(d == 0 for d in spr_data_list[-1 - trim])):
         trim += 1
@@ -70,6 +89,8 @@ while f_data:
         spr_mask_list = spr_mask_list[:-trim]
         spr_data_list = spr_data_list[:-trim]
     spr_trim.append(trim)
+    spr_widths.append(spr_w)
+    spr_heights.append(len(spr_mask_list))
 
     # The blit index, not a width: (width - 2) scaled by the stride of a
     # sprite_jump_table group, which puts the width class in bits 4 to 6
@@ -100,23 +121,28 @@ while f_data:
 
     f_data = f_data[num_bytes:]
 
-# Three places draw a sprite without asking object_update for it, and each
-# one knows how tall it is: the panel's pieces hang from a row of their own in
-# panel_pieces, and the sun window walks its disc sixteen rows down and its
-# frame six bytes a row for all thirty-one. A sprite of theirs that lost rows
-# here would slide down its anchor or read past its end, and no adjustment
-# would put it back, so the trim has to leave them alone. None of them has a
-# blank row today -- this says so out loud rather than leaving it to luck.
-WHOLE_SPRITE_GRAPHICS = (
-    88, 96,             # the sun and the moon, sixteen rows in sun_place
-    90, 186,            # the window's frame, indexed by row in sun_draw
-    134, 135, 136, 140, # the panel's chain, bars, ends and the knight's head
-)
-gmap = Path('graphic_map.bin').read_bytes()
 for g in WHOLE_SPRITE_GRAPHICS:
-    assert spr_trim[gmap[g]] == 0, (
-        "graphic %d is drawn whole but its sprite has %d blank rows to trim"
-        % (g, spr_trim[gmap[g]]))
+    assert spr_trim[gmap[g]] == 0, "graphic %d was meant to be left whole" % g
+
+# The knight keeps two rotation buffers for life, sized by shift_alloc from two
+# named sprites -- CHARACTER_LARGEST and CHARACTER_TALLEST in character.s. The
+# trim changes heights, so check that each is still at least as big as every
+# frame its half can wear; one that is not gets rotated past its end. The
+# frames are character_frame's: a base, a facing block of 0 or 8, and a walk
+# phase, or for the body the glance frames that follow the phases -- and both
+# halves wear the death and arrival sparkles, 112 to 127.
+def rotated_size(n):
+    return (spr_widths[n] + 1) * 2 * spr_heights[n] + 2
+
+KNIGHT_LEGS = ([b + k for b in (16, 48) for k in list(range(0, 6)) + list(range(8, 14))]
+               + list(range(112, 128)))
+KNIGHT_BODY = [b + k for b in (32, 64) for k in range(16)] + list(range(112, 128))
+for label, sprite, frames in (("CHARACTER_LARGEST", 30, KNIGHT_LEGS),
+                              ("CHARACTER_TALLEST", 92, KNIGHT_BODY)):
+    need = max(rotated_size(gmap[g]) for g in frames)
+    assert rotated_size(sprite) >= need, (
+        "%s (sprite %d) gives %d bytes but a frame needs %d"
+        % (label, sprite, rotated_size(sprite), need))
 
 
 # Graphic 1 is Knight Lore's way of drawing nothing: it is what the knight's

@@ -47,8 +47,6 @@ It writes `output/filmation.sna` (from the `SAVESNA` at the bottom of
 - **vid_buff.s** — `vid_buff_copy_1`..`_8`, pushing the compact `view_buffer`
   out to real screen memory and handling the screen's third-based row
   addressing. Which one runs depends on the region width; see `copy_routines`.
-  (`vid_buff_blit_5` alongside them reads an interleaved mask/data source and is
-  not reachable from `copy_routines`.)
 - **shift.s** — currently empty; included for future use.
 - **sprite_data.s** — generated, not hand-written. `build.py` regenerates it by
   running `sprites.py` over `sprite_data.bin` whenever either is newer. Don't

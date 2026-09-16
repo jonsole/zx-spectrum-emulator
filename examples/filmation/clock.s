@@ -1,8 +1,9 @@
 ; ---------------------------------------------------------------------------
-; The day's clock and the attribute fill the panel and the sun's window share.
-; Both are cold -- the clock does nothing on seven turns in eight, and the fill
-; only when something is redrawn -- so they live down here, in what the mirror
-; table's ALIGN would otherwise leave empty.
+; The day's clock. It is cold -- it does nothing on seven turns in eight -- so it
+; lives down here, in what the mirror table's ALIGN would otherwise leave empty.
+; (The attribute fill the panel and the sun's window share used to be here too;
+; it is at the end of pickup.s now, since the object pool grew by the twelve
+; bytes its last record had been missing.)
 
 ; The clock's turn. It stops once the wizard has everything, as the game's does.
 day_step:           ld      a,(move_tick)
@@ -39,19 +40,3 @@ day_step:           ld      a,(move_tick)
                     jp      nz,sun_show_all
                     jp      game_over           ; the forty days are up
 
-
-; Fill a block of attributes -- fill_window, at $C515.
-;   A - the attribute, HL -> the top-left cell, B - columns, C - rows
-; Corrupts BC, DE, HL.
-sun_fill:           ld      de,32
-.row:               push    bc
-                    push    hl
-.cell:              ld      (hl),a
-                    inc     hl
-                    djnz    .cell
-                    pop     hl
-                    add     hl,de
-                    pop     bc
-                    dec     c
-                    jr      nz,.row
-                    ret

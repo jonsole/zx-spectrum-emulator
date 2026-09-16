@@ -166,9 +166,24 @@ room_build:			ld		c,a
 					add		a,c		; and the rest of the body is objects
 					ld		(room_bytes_left),a
 
+					; The screen goes black at once, by its attributes, and the room
+					; is drawn behind that. start colours it in with room_paper once
+					; the knight and the panel are there as well, so a new room
+					; appears whole instead of being watched as it draws. Nothing is
+					; wiped: redraw_screen writes every pixel there is.
+					;
+					; Nothing may colour a cell in the meantime, or the panel's DAY
+					; and the sun window turn up before the room they belong to --
+					; and everything that colours one goes through sun_fill. So its
+					; first byte is a RET until room_paper puts the LD back, and so
+					; is the first of redraw_view's panel hook, which would only
+					; draw those again for every tile of the room that reached them.
 					push	de
-					call	room_wipe
-					call	room_paper
+					xor		a
+					call	screen_colour
+					ld		a,$C9		; RET
+					ld		(sun_fill),a
+					ld		(redraw_hook),a
 					call	room_shape
 					pop		de
 
@@ -194,11 +209,23 @@ room_wipe:			ld		hl,16384
 					ret
 
 
-; The room's colour. Bits 0-2 of the attribute byte, always bright.
-room_paper:			ld		a,(room_attr)
+; The room's colour over the whole screen. Bits 0-2 of the attribute byte,
+; always bright.
+room_paper:			ld		a,SUN_FILL_ON		; colours may go on again
+					ld		(sun_fill),a
+					ld		a,REDRAW_HOOK_ON		; and the panel be put back
+					ld		(redraw_hook),a
+					ld		a,(room_attr)
 					and		7
 					or		64		; BRIGHT
-					ld		hl,22528
+
+					;; NB: fall through into screen_colour
+
+
+; Every attribute cell one colour.
+;   A - the colour
+; Corrupts BC, DE, HL.
+screen_colour:		ld		hl,22528
 					ld		de,22529
 					ld		bc,767
 					ld		(hl),a
@@ -643,8 +670,7 @@ room_show:			ld		hl,object_place
 					call	room_each
 					ld		hl,room_insert_one
 					call	room_each
-					ld		hl,redraw_object
-					;; NB: fall through into room_each
+					jp		redraw_screen		; and all of it drawn, a tile at a time
 
 
 ; Call a routine once for every object in the room. One walk for the three
@@ -913,7 +939,7 @@ special_room_enter:	xor		a
 					ld		a,c
 					cp		SPECIAL_ROWS
 					jr		c,.row
-.shown:				jp		special_show
+.shown:				ret		; start draws them, and the panel, once the room is lit
 
 
 ; Where a row says its collectable is.

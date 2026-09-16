@@ -192,6 +192,15 @@ start:              di
                     ld      (entered_by),a
                     call    special_room_enter
                     call    player_add
+
+                    ; The room is drawn, still black: now it appears, all at
+                    ; once. Then the carried objects and the panel, and the sun
+                    ; window on top as it always was -- drawn now rather than in
+                    ; the dark, so they are drawn once each: drawing a panel
+                    ; piece over itself is not harmless, since a data bit
+                    ; outside its mask XORs back off, as it does in the game.
+                    call    room_paper
+                    call    special_show
                     call    sun_show_all
 
                     ; Poke room_number from the debugger and the castle turns
@@ -1470,8 +1479,42 @@ redraw_flush:		ld		a,(pend_y_extent+1)
 					jp		redraw_view
 
 
-; Repaint one object's own area, with no previous position to take in --
-; what the opening screen is built from.
+; The whole screen, composited in tiles the size of the view buffer: left to
+; right along a row of them, and the rows top to bottom. This is how a new room
+; is drawn. An object at a time drags each object's neighbours through the blit
+; again for every one of them, and mirrors the shared graphics back and forth as
+; it goes; a tile composites everything that reaches it once. The tiles meet
+; edge to edge and cover every pixel, so nothing has to be wiped first.
+; Corrupts everything.
+					ASSERT	32 % VIEW_BUF_WIDTH == 0 && SCREEN_ROWS % VIEW_BUF_ROWS == 0
+redraw_screen:		ld		de,0		; D - the tile's top row, E - its left column
+.tile:				push	de
+					ld		l,d
+					ld		a,d
+					add		a,VIEW_BUF_ROWS
+					ld		h,a
+					ld		(view_y_extent),hl		; l = min, h = max
+					ld		l,e
+					ld		a,e
+					add		a,VIEW_BUF_WIDTH
+					ld		h,a
+					ld		(view_x_extent),hl
+					call	redraw_view
+					pop		de
+					ld		a,e
+					add		a,VIEW_BUF_WIDTH
+					and		31		; off the right-hand edge is column 0
+					ld		e,a
+					jr		nz,.tile
+					ld		a,d
+					add		a,VIEW_BUF_ROWS
+					ld		d,a
+					cp		SCREEN_ROWS
+					jr		c,.tile
+					ret
+
+
+; Repaint one object's own area, with no previous position to take in.
 ;   IX -> the object
 redraw_object:		ld		a,(ix+OBJ.MIN_Y)
 					ld		(view_y_extent),a
@@ -1586,7 +1629,13 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					; carried objects draw the whole panel after them, as the game
 					; does; otherwise the panel puts back the pieces the region
 					; touched. The sun goes on top of both.
-					ld		a,(view_y_extent+1)		; max, exclusive
+					;
+					; Not while a room is being drawn in the dark, though: this
+					; first byte is a RET until room_paper, and the panel, the
+					; carried objects and the sun are drawn once each after the
+					; room instead of once for every tile that reaches them.
+REDRAW_HOOK_ON		EQU		$3A		; LD A,(nn): what redraw_hook starts with
+redraw_hook:		ld		a,(view_y_extent+1)		; max, exclusive
 					cp		PANEL_ROW + 1
 					ret		c
 					ld		hl,panel_redraw
@@ -1672,6 +1721,7 @@ image_end:
                     ORG     $5B00
                     INCLUDE "room.s"
                     INCLUDE "glance.s"
+                    INCLUDE "end_at.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end
@@ -1702,6 +1752,15 @@ room_objects:
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
+                    ; object_record lays down only the first twenty bytes of a
+                    ; record, and the ALIGN in front of the next one is what gives
+                    ; it the rest. The last one has no next one: without this its
+                    ; last twelve bytes were whatever came after the pool -- which
+                    ; is day_step -- and the fullest room's second collectable slot
+                    ; is that record. Blanking it zeroed two of day_step's operands,
+                    ; and the sun never moved again.
+                    ALIGN   32
+                    ASSERT  $ == room_objects + (ROOM_MAX_OBJECTS + SPECIAL_SLOTS) * ROOM_STRIDE
 
 ; Two tables that were up in the code region until it ran out of room. Neither
 ; is touched by anything that cares about contention -- bit_reverse_table only

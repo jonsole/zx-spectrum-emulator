@@ -139,7 +139,8 @@ sound_gate:         ld      a,(move_tick)
                     jr      sound_noise
 
 
-; A pickup, a drop or a life -- toggle_audio_hw_x16: sixteen cycles at $80.
+; A pickup, a drop, a life, or a change on the menu -- toggle_audio_hw_x16:
+; sixteen cycles at $80. Corrupts AF and C.
 sound_pickup:       ld      bc,$8010
                     jp      sound_tone
 

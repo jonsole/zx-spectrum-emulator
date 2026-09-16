@@ -607,7 +607,7 @@ north_arch:			ld		a,128
 ; ---------------------------------------------------------------------------
 ; The engine around character.s.
 
-sprite_048:			DB		0		; CHARACTER_LARGEST and CHARACTER_TALLEST
+sprite_030:			DB		0		; CHARACTER_LARGEST and CHARACTER_TALLEST
 sprite_092:			DB		0		; name these; only their addresses matter
 
 stubs:

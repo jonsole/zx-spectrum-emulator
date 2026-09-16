@@ -12,8 +12,9 @@
 ; is what the eight copies of the routine used to buy.
 ;
 ; The source is a plain buffer -- one byte per column, no mask interleaved --
-; which is what view_buffer holds. vid_buff_blit_5 at the bottom is the
-; interleaved-source variant, and nothing calls it.
+; which is what view_buffer holds. (There was an interleaved-source variant,
+; vid_buff_blit_5, for copying a shift buffer straight out; nothing ever called
+; it, and its 48 bytes went to the menu.)
 
 vid_buff_copy:
 					; LDI counts BC down as it copies. B is the row counter, so
@@ -59,43 +60,3 @@ vid_buff_copy:
 					DJNZ	.row
 					RET
 
-
-; As above, but for a source that interleaves a mask byte with every data
-; byte -- a shift buffer rather than the view buffer. Nothing copies one of
-; those to the screen today, so this is not in copy_routines.
-vid_buff_blit_5:	LD		C,255
-					PUSH    DE
-                	LDI
-					inc		hl
-                	LDI
-					inc		hl
-                	LDI
-					inc		hl
-               		LDI
-					inc		hl
-                	LDI
-					inc		hl
-					LD		A,VIEW_BUF_WIDTH-5
-					ADD		L
-					LD		L,A
-					ADC		A,H
-					SUB		L
-					LD		H,A
-                	POP     DE
-
-					INC     D
-                	LD      A,D
-                	AND     $07
-                	JR      Z,.adjust
-                	DJNZ    vid_buff_blit_5
-                	RET
-.adjust: 			LD      A,E
-                	ADD     A,$20
-                	LD      E,A
-                	CCF
-                	SBC     A,A
-                	AND     $F8
-                	ADD     A,D
-                	LD      D,A
-                	DJNZ    vid_buff_blit_5
-                	RET

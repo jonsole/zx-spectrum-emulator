@@ -237,29 +237,21 @@ special_show:		ld		hl,special_carried + 2
 ;   C - the character column
 special_show_one:	push	af
 
-					; Its colour, three by three.
+					; Its colour, three by three -- through sun_fill, which leaves
+					; it alone while the room is still being drawn in the dark.
 					and		15
 					ld		e,a
 					ld		d,0
 					ld		hl,special_colours
 					add		hl,de
-					ld		e,(hl)
+					ld		a,(hl)
 					ld		hl,$5800 + 21 * 32
-					ld		a,l
-					add		a,c
-					ld		l,a
-					ld		b,3
-.attr:				ld		(hl),e
-					inc		hl
-					ld		(hl),e
-					inc		hl
-					ld		(hl),e
-					ld		a,l
-					add		a,30
-					ld		l,a
-					jr		nc,.attr_on
-					inc		h
-.attr_on:			djnz	.attr
+					ld		e,c		; the column, and D is still 0
+					add		hl,de
+					push	bc
+					ld		bc,3 << 8 | 3
+					call	sun_fill
+					pop		bc
 
 					; Blank the place: the bottom 24 rows, three bytes across. A row at
 					; a time through pixelAddress, which hands back the screen's own
@@ -345,3 +337,23 @@ screen_sprite:		ld		l,a
 .bottom:			cp		0		; patched: the row below the bottom
 					jr		c,.rows
 					ret
+
+
+; Fill a block of attributes -- fill_window, at $C515. While a room is being
+; drawn in the dark its first byte is a RET, so nothing is coloured in before the
+; room is: see room_build and room_paper.
+;   A - the attribute, HL -> the top-left cell, B - columns, C - rows
+; Corrupts BC, DE, HL.
+SUN_FILL_ON         EQU     $11                 ; LD DE,nn: what it starts with
+sun_fill:           ld      de,32
+.row:               push    bc
+                    push    hl
+.cell:              ld      (hl),a
+                    inc     hl
+                    djnz    .cell
+                    pop     hl
+                    add     hl,de
+                    pop     bc
+                    dec     c
+                    jr      nz,.row
+                    ret

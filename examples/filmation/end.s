@@ -90,8 +90,11 @@ tune_over:          DB      $2E,$17,$27,$17,$2E,$17,$27,$17,$2C,$19,$27,$19,$2C,
 tune_complete:      DB      $1B,$1D,$1E,$1B,$1D,$1E,$20,$1D,$1E,$20,$22,$1E,$1D,$1E
                     DB      $20,$1D,$1B,$1D,$1E,$1B,$1A,$1B,$1D,$1A,$9B,$FF
 
-TUNE_NOTES          EQU     15
-tune_notes:         DB      $16
+TUNE_NOTES          EQU     17
+tune_notes:         DB      $14
+                    DW      $0452
+                    DB      $19
+                    DB      $16
                     DW      $03F6
                     DB      $1C
                     DB      $17
@@ -106,6 +109,9 @@ tune_notes:         DB      $16
                     DB      $1B
                     DW      $0338
                     DB      $25
+                    DB      $1C
+                    DW      $0318
+                    DB      $27
                     DB      $1D
                     DW      $02FA
                     DB      $29
@@ -178,6 +184,7 @@ game_over:          di
                     jr      c,.tally
                     ld      hl,end_verse
                     ld      b,END_VERSE_LINES
+                    ld      c,0                 ; on black
                     call    end_show
                     ld      de,tune_complete
                     call    tune_play
@@ -185,6 +192,7 @@ game_over:          di
 
 .tally:             ld      hl,end_lines
                     ld      b,END_LINES
+                    ld      c,0
                     call    end_show
 
                     ld      a,(days)            ; the day it ended on
@@ -215,15 +223,17 @@ end_wait:           call    end_key
                     jp      start
 
 
-; A screen of the game's words: black, and then the lines.
-;   HL -> the lines, B - how many
-end_show:           push    bc
+; A screen of the game's words: one colour, and then the lines.
+;   HL -> the lines, B - how many, C - the colour to lay under them
+end_show:           ld      a,c                 ; before room_wipe, which
+                    ld      (.paper + 1),a      ; counts BC down to nothing
+                    push    bc
                     push    hl
                     call    room_wipe
-                    xor     a                   ; black on black: the words bring
-                    ld      hl,$5800            ; their own colours
-                    ld      de,$5801
-                    ld      bc,767
+.paper:             ld      a,0                 ; patched: black on black for the
+                    ld      hl,$5800            ; end screens, whose words bring
+                    ld      de,$5801            ; their own colours; the menu lays
+                    ld      bc,767              ; its frame's yellow under all
                     ld      (hl),a
                     ldir
                     pop     hl
@@ -268,6 +278,20 @@ tune_play:          ld      a,(de)
                     call    end_key
                     jr      z,tune_play
                     ret
+
+
+; The whole of a tune, whatever is held -- play_audio at $B2CF, which is what
+; the start of a game wants: 0 is still down when the menu lets go of it, and
+; tune_play would take that as "stop".
+;   DE -> the notes
+tune_play_all:      ld      a,(de)
+                    cp      $FF
+                    ret     z
+                    push    de
+                    call    tune_note
+                    pop     de
+                    inc     de
+                    jr      tune_play_all
 
 
 ; One note: its number in bits 0 to 5, and how long to hold it in 6 and 7.
@@ -454,28 +478,3 @@ end_seen:           ld      hl,end_rooms_seen
                     ret
 
 
-; Where a cell is on the screen, and where its attribute is.
-;   D - the row, E - the column
-end_at:             ld      a,d
-                    add     a,a
-                    add     a,a
-                    add     a,a
-                    ld      b,a
-                    ld      a,e
-                    add     a,a
-                    add     a,a
-                    add     a,a
-                    ld      c,a
-                    jp      pixelAddress
-
-end_attr_at:        ld      h,0
-                    ld      l,d
-                    add     hl,hl
-                    add     hl,hl
-                    add     hl,hl
-                    add     hl,hl
-                    add     hl,hl               ; the row * 32
-                    ld      c,e
-                    ld      b,$58
-                    add     hl,bc
-                    ret
