@@ -103,6 +103,7 @@ room_data_end:
 					INCLUDE "sound.s"
 					INCLUDE "panel.s"
 					INCLUDE "end.s"
+					INCLUDE "menu.s"
 
 					STRUCT SPRITE
 WIDTH:				DS		1
@@ -129,6 +130,10 @@ start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
                     xor     a                   ; the border black and the speaker
                     out     ($FE),a             ; still, as clear_scrn leaves them
+
+                    ; The menu first, every time: a game that ends comes back
+                    ; through here, and the game itself goes back to its menu.
+                    call    menu_run
 
                     ; A game from the beginning -- which is also where losing the
                     ; last life comes back to.

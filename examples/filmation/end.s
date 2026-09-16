@@ -79,18 +79,22 @@ end_verse:          DB      $47, 7, 8
                     DB      $10,$18,$26,$0F,$18,$1B,$1D,$11,$26,$1D,$18,$26,$16,$12
                     DB      $1B,$0E,$26,$16,$0A,$1B,$0E + $80   ; GO FORTH TO MIRE MARE
 
-; The two tunes, and the notes they need. A note is its number in bits 0 to 5
-; and how long to hold it in 6 and 7; the game's frequency table has an entry
-; for every note in five octaves, and these are the twelve these two play --
-; the half period to count out, and how many of them a beat is.
+; The two tunes, and the notes they and the menu's need. A note is its number
+; in bits 0 to 5 and how long to hold it in 6 and 7; the game's frequency table
+; has an entry for every note in five octaves, and these are the fifteen the
+; three tunes play -- the half period to count out, and how many of them a
+; beat is. The menu's own notes are in menu.s, with the menu.
 tune_over:          DB      $2E,$17,$27,$17,$2E,$17,$27,$17,$2C,$19,$27,$19,$2C,$19
                     DB      $27,$19,$2A,$1B,$27,$1B,$2A,$1B,$27,$1B,$2A,$1B,$27,$1B
                     DB      $2A,$1B,$27,$1B,$FF
 tune_complete:      DB      $1B,$1D,$1E,$1B,$1D,$1E,$20,$1D,$1E,$20,$22,$1E,$1D,$1E
                     DB      $20,$1D,$1B,$1D,$1E,$1B,$1A,$1B,$1D,$1A,$9B,$FF
 
-TUNE_NOTES          EQU     12
-tune_notes:         DB      $17
+TUNE_NOTES          EQU     15
+tune_notes:         DB      $16
+                    DW      $03F6
+                    DB      $1C
+                    DB      $17
                     DW      $03CB
                     DB      $1D
                     DB      $19
@@ -114,6 +118,12 @@ tune_notes:         DB      $17
                     DB      $22
                     DW      $027B
                     DB      $37
+                    DB      $24
+                    DW      $0251
+                    DB      $3E
+                    DB      $25
+                    DW      $023F
+                    DB      $41
                     DB      $27
                     DW      $021C
                     DB      $49

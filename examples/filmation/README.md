@@ -650,6 +650,41 @@ loss, and broad-phase filtering only starts paying once there are enough
 pairwise tests to filter.
 
 
+## The menu
+
+`menu.s` is the screen the game starts and restarts at -- `start` calls
+`menu_run` before anything else, and losing the last life comes back through
+`start`, so the end screens lead back to the menu the way the game's own do.
+
+Eight lines, in `end_show`'s shape: an attribute, a character row and column,
+then the characters with the last carrying bit 7. The text, the colours and the
+positions are the game's own (`menu_text`, `menu_colours` and `menu_xy` at
+`$BDA2`), its bottom-up pixel coordinates converted to our rows and columns --
+its `($58,$9F)` is our row 4, column 11. The last line is ours: the game prints
+its copyright there, which would be false on this build.
+
+Keys 1 to 4 choose the input method and 5 turns directional control over; the
+chosen method flashes, and so does the toggle while it is on, which is bit 7 of
+the line's attribute. 5 is a toggle rather than a choice, so it debounces. 0
+starts the game.
+
+The choice goes into `menu_mode`, in the layout the game keeps at `$5BA4`: the
+method in bits 1 and 2, directional control in bit 3. **Nothing reads it yet.**
+`player_step` still has Q, A, O and P wired straight in -- which is what
+directional control on the keyboard amounts to -- so at the moment the menu
+records a choice the game does not act on. Reading it means the input pass:
+Kempston on port `$1F`, the cursor keys, Interface II, and the game's own
+turn-and-walk scheme where left and right turn the knight rather than move him.
+
+The tune is `tune_menu`, the 98 notes of `menu_tune` at `$B253`, played once on
+the way in by the `tune_play` the end screens already had; any key cuts it
+short, which is what `play_audio_wait_key` does with its flag at `$5BD1`. Three
+of its notes -- `$16`, `$24` and `$25` -- were not in `tune_notes`, and their
+half periods and beat lengths come from the same frequency table at `$B332` as
+the rest.
+
+The whole thing costs 408 bytes.
+
 ## Space — possibilities not yet taken
 
 Every region is close to full. These are savings that have been looked at and
