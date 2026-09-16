@@ -220,14 +220,14 @@ room_shape:			ld		a,(room_attr)
 					ld		h,0
 					ld		de,room_size_tbl
 					add		hl,de
-					ld		a,(hl)		; how far the floor reaches along U,
-					ld		(room_half_u),a		; measured from the room's centre
-					inc		hl
-					ld		a,(hl)
-					ld		(room_half_v),a
-					inc		hl
-					ld		a,(hl)
-					ld		(room_floor_z),a
+					; How far the floor reaches along U and V, measured from the
+					; room's centre, and then the floor's own height: three bytes
+					; in the table, in the order they are kept in here.
+					ASSERT	room_half_v == room_half_u + 1
+					ASSERT	room_floor_z == room_half_u + 2
+					ld		de,room_half_u
+					ld		bc,3
+					ldir
 					ret
 
 
@@ -459,18 +459,9 @@ room_unpack:		push	hl
 					ld		a,(hl)
 					ld		(room_stage + 0),a		; sprite
 					inc		hl
-					ld		a,(hl)
-					ld		(room_stage + 4),a		; size U
-					inc		hl
-					ld		a,(hl)
-					ld		(room_stage + 5),a		; size V
-					inc		hl
-					ld		a,(hl)
-					ld		(room_stage + 6),a		; size Z
-					inc		hl
-					ld		a,(hl)
-					ld		(room_stage + 7),a		; flags
-					inc		hl
+					ld		de,room_stage + 4		; size U, size V, size Z and
+					ld		bc,4		; the flags, in that order in both
+					ldir		; (DE is the caller's and already on the stack)
 					ld		c,(hl)		; the offsets byte
 
 					ld		a,(room_packed)
