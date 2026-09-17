@@ -46,6 +46,8 @@ TEST(a_running_machine_is_sampled_without_being_stopped) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     CHECK(engine.running());
+    // And a state asked for mid-run says so -- it is what get_state reports.
+    CHECK(engine.state().running);
 
     const std::vector<CapturedFrame> frames = engine.capture_frames(4, 1, PLENTY);
     CHECK_EQ(frames.size(), size_t(4));
@@ -57,6 +59,7 @@ TEST(a_running_machine_is_sampled_without_being_stopped) {
     engine.pause();
     runner.join();
     CHECK(!engine.running());
+    CHECK(!engine.state().running);
 }
 
 TEST(a_capture_nobody_fills_times_out_with_nothing) {

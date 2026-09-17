@@ -1237,7 +1237,9 @@ Registers Engine::set_registers(Registers r) {
 MachineState Engine::state() {
     return submit<MachineState>([this](Spectrum& m) {
         (void)m;
-        return snapshot(false);
+        // Serviced at a run's yields when one is in flight, so this can be
+        // asked mid-run and has to say so.
+        return snapshot(running_.load());
     });
 }
 

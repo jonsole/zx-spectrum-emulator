@@ -29,6 +29,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -509,7 +510,13 @@ json tools_list() {
                     {"ticks", integer_prop("If set, step this many T-states instead of whole "
                                            "instructions.")}},
                {}));
-    add("run", "Run until a breakpoint is hit or pause is called", no_params());
+    add("run",
+        "Run until a breakpoint is hit or pause is called. By default this does not return "
+        "until the machine stops; with wait false it starts the machine and returns at once, "
+        "so a game can be left running -- follow it with get_state, get_screen or pause.",
+        schema(json{{"wait", bool_prop("Wait for the machine to stop before returning (default "
+                                       "true). False returns as soon as it is running.")}},
+               {}));
 #if ZX_REWIND
     add("step_back",
         "Go back through what the program just did, with the whole machine -- registers, "
@@ -1147,6 +1154,26 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "run") {
+        const json& wait = arg(args, "wait");
+        if (wait.is_boolean() && !wait.get<bool>()) {
+            // A run is a queued job, so a second one would sit behind the
+            // first and start the moment a pause ended it.
+            if (engine.running()) {
+                return error_result("already running -- pause it first");
+            }
+            // Detached, as DAP's continue is; the stop is announced through
+            // the Engine's handlers like any other.
+            std::thread([&engine] { engine.run(); }).detach();
+            // The run marks itself running on its own thread. Give it a moment
+            // to, so a get_state straight after this does not see a machine
+            // that has not started yet. A run that stops at once never shows
+            // as running, and the state below says where it stopped.
+            for (int i = 0; i < 250 && !engine.running(); i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            const MachineState s = engine.state();
+            return json_result(json{{"pc", s.pc}, {"running", s.running}});
+        }
         // Blocks until a breakpoint or a pause, exactly as the Rust server
         // did. `pause` bypasses the command queue, so it can still reach this.
         const MachineState s = engine.run();
