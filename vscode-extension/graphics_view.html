@@ -28,27 +28,43 @@
     }
     input[type=number] { width: 4.5em; }
     input[type=checkbox] { width: auto; }
-    #address { width: 14em; }
-    #fileName { opacity: .8; max-width: 22em; overflow: hidden; text-overflow: ellipsis;
-                white-space: nowrap; }
     button { cursor: pointer; background: var(--vscode-button-secondaryBackground, #3a3d41);
              color: var(--vscode-button-secondaryForeground, #ccc); border-color: transparent; }
     button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
     button.primary { background: var(--vscode-button-background, #0e639c);
                      color: var(--vscode-button-foreground, #fff); }
     button.primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+    button:disabled { opacity: .45; cursor: default; }
     .hidden { display: none !important; }
 
+    /* ---- the sheet ---- */
     #stage { flex: 1 1 auto; overflow: auto; padding: 8px; }
-    #tiles { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+    #tiles { min-height: 60px; }
+    .section { margin: 0 0 14px; }
+    .section-head {
+      display: flex; gap: 6px; align-items: center; padding: 2px 4px; margin-bottom: 6px;
+      border-bottom: 1px solid var(--vscode-panel-border, #333);
+    }
+    .section-head .gname { font-weight: 600; cursor: text; }
+    .section-head .gname.loose { font-weight: normal; opacity: .7; cursor: default; }
+    .section-head .gcount { opacity: .55; margin-right: auto; }
+    .section-head input { width: 16em; }
+    .section-head button { padding: 0 6px; }
+    .flow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; min-height: 40px;
+            border-radius: 3px; }
+    .flow.drop-into { outline: 2px dashed var(--vscode-focusBorder, #0e639c); outline-offset: 2px; }
+    .flow .hint { opacity: .5; padding: 10px 4px; }
+    /* flex-start, or a sprite narrower than its caption is stretched to it. */
     .tile {
-      margin: 0; display: flex; flex-direction: column; gap: 3px;
+      margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
       border: 1px solid transparent; border-radius: 3px; padding: 4px;
+      cursor: grab;
     }
-    .tile.current {
-      border-color: var(--vscode-focusBorder, #0e639c);
-      background: rgba(128, 160, 255, .06);
-    }
+    .tile:hover { border-color: var(--vscode-panel-border, #444); }
+    .tile.dragging { opacity: .4; }
+    /* Where a dragged sprite will land: a bar on the side it goes. */
+    .tile.drop-before { box-shadow: -3px 0 0 var(--vscode-focusBorder, #0e639c); }
+    .tile.drop-after { box-shadow: 3px 0 0 var(--vscode-focusBorder, #0e639c); }
     .tile canvas { image-rendering: pixelated; display: block; }
     .caption {
       display: flex; gap: 6px; align-items: center; justify-content: space-between;
@@ -57,7 +73,7 @@
     }
     .caption .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .caption button { padding: 0 4px; line-height: 1.4; font-size: 11px; }
-    #empty { opacity: .6; padding: 12px 4px; }
+    #empty { opacity: .6; padding: 12px 4px; line-height: 1.6; }
 
     #status {
       flex: 0 0 auto; padding: 4px 8px; min-height: 1.3em;
@@ -65,153 +81,344 @@
       font-family: var(--vscode-editor-font-family, monospace);
       white-space: pre; overflow: hidden; text-overflow: ellipsis;
     }
-    #status.warn { color: var(--vscode-errorForeground, #f48771); }
+    .warn { color: var(--vscode-errorForeground, #f48771); }
+
+    /* ---- the Add / Edit dialog ---- */
+    dialog {
+      padding: 0; width: min(94vw, 1100px); height: min(90vh, 760px);
+      color: inherit; background: var(--vscode-editorWidget-background, #252526);
+      border: 1px solid var(--vscode-widget-border, #454545); border-radius: 4px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .45); }
+    dialog[open] { display: flex; flex-direction: column; }
+    #editorTitle {
+      flex: 0 0 auto; margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600;
+      border-bottom: 1px solid var(--vscode-panel-border, #333);
+    }
+    .editor-body { flex: 1 1 auto; display: flex; min-height: 0; }
+    .editor-controls {
+      flex: 0 0 auto; width: 270px; overflow: auto; padding: 8px 12px;
+      border-right: 1px solid var(--vscode-panel-border, #333);
+    }
+    fieldset { border: 0; margin: 0 0 10px; padding: 0; }
+    legend {
+      padding: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+      opacity: .6;
+    }
+    .row { display: grid; grid-template-columns: 76px 1fr; gap: 4px 8px; align-items: center;
+           margin-bottom: 4px; }
+    .row > label { opacity: .8; }
+    .row input[type=number], .row select, .row input[type=text] { width: 100%; box-sizing: border-box; }
+    .row.checks { grid-template-columns: 76px 1fr; }
+    .row .inline { display: flex; gap: 10px; flex-wrap: wrap; }
+    #fileName { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                display: block; font-size: 11px; }
+    .editor-preview { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+    .preview-bar {
+      flex: 0 0 auto; display: flex; gap: 8px; align-items: center; padding: 6px 10px;
+      border-bottom: 1px solid var(--vscode-panel-border, #333);
+    }
+    .preview-bar .title { opacity: .6; font-size: 11px; text-transform: uppercase;
+                          letter-spacing: .04em; margin-right: auto; }
+    #previewBox { flex: 1 1 auto; overflow: auto; padding: 10px; }
+    #preview { image-rendering: pixelated; display: block; }
+    #editorStatus {
+      flex: 0 0 auto; padding: 4px 12px; min-height: 1.3em;
+      border-top: 1px solid var(--vscode-panel-border, #333);
+      font-family: var(--vscode-editor-font-family, monospace);
+      white-space: pre; overflow: hidden; text-overflow: ellipsis;
+    }
+    .editor-buttons {
+      flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 8px 12px;
+      border-top: 1px solid var(--vscode-panel-border, #333);
+    }
+    .editor-buttons button { min-width: 72px; padding: 3px 10px; }
+
+    /* ---- the Export dialog ---- */
+    /* A modal dialog is pinned top and bottom, so auto would fill the window. */
+    #exporter { width: min(94vw, 540px); height: fit-content; }
+    #exportTitle {
+      margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 600;
+      border-bottom: 1px solid var(--vscode-panel-border, #333);
+    }
+    .export-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .export-body p { margin: 0 0 4px; }
+    .export-body .note { margin: 6px 0 0; opacity: .7; }
+    .export-body .sub { margin: -2px 0 2px 22px; opacity: .7; font-size: 11px; }
   </style>
 </head>
 <body>
   <div id="bar">
     <div class="group">
-      <label for="source">From</label>
-      <select id="source">
-        <option value="memory">Memory</option>
-        <option value="file">File</option>
-        <option value="selection">Selection</option>
-      </select>
-    </div>
-
-    <div class="group src src-memory">
-      <input id="address" list="symbols" placeholder="address or symbol"
-             title="16384, $4000, 0x4000, 4000h, or a symbol name -- optionally +/- an offset" />
-      <datalist id="symbols"></datalist>
-    </div>
-    <div class="group src src-file">
-      <button id="pickFile">Choose file...</button>
-      <span id="fileName">no file</span>
-    </div>
-    <div class="group src src-file src-selection">
-      <label for="offset">Skip</label>
-      <input id="offset" type="number" min="0" step="1" value="0"
-             title="Bytes to skip at the start of the data" />
-    </div>
-    <div class="group src src-selection">
-      <button id="grab">Grab selection</button>
-    </div>
-    <div class="group">
-      <button id="refresh" title="Re-read the data now">Refresh</button>
-      <label title="Keep re-reading while the machine runs"><input id="live" type="checkbox" /> Live</label>
       <button id="add" class="primary"
-              title="Keep this sprite on the sheet, so the settings are free to move on to the next one">+ Add</button>
+              title="Choose some graphics -- from memory, a file or a selection -- and add them to the sheet">Add...</button>
+      <button id="newGroup" title="Make a named group to put sprites in">New group</button>
+      <button id="refresh" title="Re-read every sprite on the sheet now">Refresh</button>
+      <label title="Keep re-reading sprites from memory while the machine runs"><input id="live" type="checkbox" /> Live</label>
     </div>
-
     <div class="sep"></div>
-
     <div class="group">
-      <label for="format">As</label>
-      <select id="format">
-        <option value="sprite">Sprites</option>
-        <option value="font">Font</option>
-        <option value="screen">Screen ($4000 layout)</option>
-      </select>
+      <button id="export" title="Save the sheet as a picture, a JSON atlas and, if you like, assembler source">Export...</button>
+      <button id="import" title="Add the sprites from an exported JSON atlas to the sheet">Import...</button>
     </div>
-    <div class="group fmt-linear">
-      <label for="width">Width</label>
-      <input id="width" type="number" min="1" max="64" step="1" value="2"
-             title="Bytes across, before any mask interleaving" />
-      <label for="height">Height</label>
-      <input id="height" type="number" min="1" max="256" step="1" value="16"
-             title="Pixel rows per item" />
-      <label for="count">Count</label>
-      <input id="count" type="number" min="1" max="1024" step="1" value="16" />
-      <label for="columns">Cols</label>
-      <input id="columns" type="number" min="1" max="64" step="1" value="8" />
-      <label for="header">Header</label>
-      <input id="header" type="number" min="0" max="64" step="1" value="0"
-             title="Bytes to skip before EACH item -- a per-sprite width/height pair, say" />
-    </div>
-    <div class="group fmt-font">
-      <label for="first">First code</label>
-      <input id="first" type="number" min="0" max="255" step="1" value="32" />
-    </div>
-
-    <div class="sep fmt-linear"></div>
-
-    <div class="group fmt-linear">
-      <label for="interleave">Mask</label>
-      <select id="interleave" title="Whether each row byte is preceded or followed by a mask byte">
-        <option value="none">none</option>
-        <option value="md">mask, data</option>
-        <option value="dm">data, mask</option>
-      </select>
-      <label title="Treat a CLEAR mask bit as transparent instead of a set one">
-        <input id="invertMask" type="checkbox" /> invert</label>
-      <label title="Row 0 of the data is the BOTTOM row of the picture, as Ultimate stored theirs">
-        <input id="bottomUp" type="checkbox" /> flip</label>
-    </div>
-
     <div class="sep"></div>
-
-    <div class="group fmt-linear">
-      <label for="ink">Ink</label><select id="ink"></select>
-      <label for="paper">Paper</label><select id="paper"></select>
-    </div>
     <div class="group">
       <label for="zoom">Zoom</label>
-      <input id="zoom" type="number" min="1" max="16" step="1" value="4" />
+      <input id="zoom" type="number" min="1" max="16" step="1" value="3" />
       <label><input id="grid" type="checkbox" checked /> grid</label>
-      <label class="fmt-linear"><input id="labels" type="checkbox" checked /> labels</label>
+      <label><input id="labels" type="checkbox" checked /> labels</label>
     </div>
   </div>
 
-  <div id="stage"><div id="tiles"></div></div>
-  <div id="status">Nothing loaded yet.</div>
+  <div id="stage">
+    <div id="tiles"></div>
+    <div id="empty" class="hidden">
+      Nothing on the sheet yet. <b>Add...</b> some graphics -- sprites, a font or a
+      screen, from memory, a file or a selection in the editor.<br>
+      Double-click a sprite to change it, drag sprites to put them in order, and use
+      <b>New group</b> to gather them into named groups.
+    </div>
+  </div>
+  <div id="status"></div>
+
+  <dialog id="editor">
+    <h2 id="editorTitle">Add graphics</h2>
+    <div class="editor-body">
+      <div class="editor-controls">
+        <fieldset>
+          <legend>Sprite</legend>
+          <div class="row">
+            <label for="name">Name</label>
+            <input id="name" type="text" spellcheck="false"
+                   title="What the export calls it -- the atlas frame and the assembler label, after its group's name. Letters, digits and underscores" />
+          </div>
+          <div class="row">
+            <label for="group">Group</label>
+            <select id="group" title="The group it goes in on the sheet, and in the export"></select>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Data</legend>
+          <div class="row">
+            <label for="source">From</label>
+            <select id="source">
+              <option value="memory">Memory</option>
+              <option value="file">File</option>
+              <option value="selection">Selection</option>
+            </select>
+          </div>
+          <div class="row src src-memory">
+            <label for="address">Address</label>
+            <input id="address" type="text" list="symbols" placeholder="address or symbol"
+                   title="16384, $4000, 0x4000, 4000h, or a symbol name -- optionally +/- an offset" />
+            <datalist id="symbols"></datalist>
+          </div>
+          <div class="row src src-file">
+            <label>File</label>
+            <div>
+              <button id="pickFile">Choose file...</button>
+              <span id="fileName">no file</span>
+            </div>
+          </div>
+          <div class="row src src-selection">
+            <label>Selection</label>
+            <div><button id="grab" title="Take whatever DEFB lines are selected in the editor now">Grab selection</button></div>
+          </div>
+          <div class="row src src-file src-selection">
+            <label for="offset">Skip</label>
+            <input id="offset" type="number" min="0" step="1" value="0"
+                   title="Bytes to skip at the start of the data" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Layout</legend>
+          <div class="row">
+            <label for="format">As</label>
+            <select id="format">
+              <option value="sprite">Sprites</option>
+              <option value="font">Font</option>
+              <option value="screen">Screen ($4000 layout)</option>
+            </select>
+          </div>
+          <div class="row fmt-linear">
+            <label for="width">Width</label>
+            <input id="width" type="number" min="1" max="64" step="1" value="2"
+                   title="Bytes across, before any mask interleaving" />
+          </div>
+          <div class="row fmt-linear">
+            <label for="height">Height</label>
+            <input id="height" type="number" min="1" max="256" step="1" value="16"
+                   title="Pixel rows per item" />
+          </div>
+          <div class="row fmt-linear">
+            <label for="count">Count</label>
+            <input id="count" type="number" min="1" max="1024" step="1" value="16" />
+          </div>
+          <div class="row fmt-linear">
+            <label for="columns">Columns</label>
+            <input id="columns" type="number" min="1" max="64" step="1" value="8" />
+          </div>
+          <div class="row fmt-linear">
+            <label for="header">Header</label>
+            <input id="header" type="number" min="0" max="64" step="1" value="0"
+                   title="Bytes to skip before EACH item -- a per-sprite width/height pair, say" />
+          </div>
+          <div class="row fmt-font">
+            <label for="first">First code</label>
+            <input id="first" type="number" min="0" max="255" step="1" value="32" />
+          </div>
+        </fieldset>
+
+        <fieldset class="fmt-linear">
+          <legend>Mask</legend>
+          <div class="row">
+            <label for="interleave">Mask</label>
+            <select id="interleave" title="Whether each row byte is preceded or followed by a mask byte">
+              <option value="none">none</option>
+              <option value="md">mask, data</option>
+              <option value="dm">data, mask</option>
+            </select>
+          </div>
+          <div class="row">
+            <span></span>
+            <div class="inline">
+              <label title="Treat a CLEAR mask bit as transparent instead of a set one">
+                <input id="invertMask" type="checkbox" /> invert</label>
+              <label title="Row 0 of the data is the BOTTOM row of the picture, as Ultimate stored theirs">
+                <input id="bottomUp" type="checkbox" /> flip</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Colour</legend>
+          <div class="row">
+            <label for="ink">Ink</label><select id="ink"></select>
+          </div>
+          <div class="row">
+            <label for="paper">Paper</label><select id="paper"></select>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="editor-preview">
+        <div class="preview-bar">
+          <span class="title">Preview</span>
+          <label for="previewZoom">Zoom</label>
+          <input id="previewZoom" type="number" min="1" max="16" step="1" value="3"
+                 title="The sheet's zoom -- the preview is drawn as the sheet will draw it" />
+          <button id="reread" title="Read the data again">Re-read</button>
+        </div>
+        <div id="previewBox"><canvas id="preview"></canvas></div>
+      </div>
+    </div>
+    <div id="editorStatus"></div>
+    <div class="editor-buttons">
+      <button id="cancel">Cancel</button>
+      <button id="ok" class="primary">OK</button>
+    </div>
+  </dialog>
+
+  <dialog id="exporter">
+    <h2 id="exportTitle">Export</h2>
+    <div class="export-body">
+      <p id="exportWhat"></p>
+      <label><input type="checkbox" checked disabled /> Atlas (.json) -- every sprite, its group, its settings and where its bytes came from</label>
+      <label><input id="exportPng" type="checkbox" /> Picture (.png) -- one pixel per Spectrum pixel, masked pixels transparent</label>
+      <div class="sub">The atlas then says where each frame is in it, as TexturePacker and Aseprite do.</div>
+      <label><input id="exportReference" type="checkbox" /> Point into the snapshot instead of carrying the bytes</label>
+      <div class="sub">Sprites read from memory point into the machine, saved as a .sna beside the atlas;
+        sprites from a file point into that file. Sprites from a selection always carry their bytes.</div>
+      <label><input id="exportAsm" type="checkbox" /> Assembler source (.s) -- the bytes as DEFB, in their original order</label>
+      <p class="note">You choose the atlas's name next; the other files go beside it with the same name.</p>
+    </div>
+    <div class="editor-buttons">
+      <button id="exportCancel">Cancel</button>
+      <button id="exportOk" class="primary">Export...</button>
+    </div>
+  </dialog>
 
   <script>
     const vscodeApi = acquireVsCodeApi();
 
-    // The ULA's own palette, so a sprite here is the colour it will be on the
-    // screen panel: two-thirds brightness for normal, full for bright, and
-    // black identical in both halves because the Spectrum's is.
-    const PALETTE = [
-      [0, 0, 0], [0, 0, 192], [192, 0, 0], [192, 0, 192],
-      [0, 192, 0], [0, 192, 192], [192, 192, 0], [192, 192, 192],
-      [0, 0, 0], [0, 0, 255], [255, 0, 0], [255, 0, 255],
-      [0, 255, 0], [0, 255, 255], [255, 255, 0], [255, 255, 255]
-    ];
-    const COLOUR_NAMES = ['black', 'blue', 'red', 'magenta', 'green', 'cyan', 'yellow', 'white'];
+    // graphics_model.js -- the palette, the decoding, and the export -- is
+    // inlined here by showGraphicsPanel() in extension.js.
+    /*@graphics_model.js@*/
 
-    const BITMAP_BYTES = 6144;
-    const ATTR_BYTES = 768;
+    // The id the dialog's preview is read under. Sprites on the sheet get
+    // numbers, and sprites an MCP client pins get 'mcp-' ids until their bytes
+    // arrive, so none of them ever collide.
+    const PREVIEW = 'preview';
 
-    // The id the live, still-being-adjusted sprite is read under. Pinned ones
-    // get a number, so the two never collide.
-    const CURRENT = 'current';
+    // Bytes taken from an editor selection are kept with the sprite: there is
+    // no way to read them again once the selection has moved on. Selections are
+    // DEFB tables, a few kilobytes at most; anything past this is not kept.
+    const SELECTION_KEEP_LIMIT = 65536;
 
-    // What the controls are set to: the sprite you are currently dialling in.
-    // Everything here is per-sprite EXCEPT zoom/grid/labels/live, which are how
-    // the whole sheet is shown and so are not copied when one is pinned.
-    const state = Object.assign({
-      source: 'memory',
-      address: '$4000',
-      offset: 0,
-      format: 'screen',
-      width: 2, height: 16, count: 16, columns: 8, header: 0, first: 32,
-      interleave: 'none', invertMask: false, bottomUp: false,
-      ink: 0, paper: 15,
-      zoom: 3, grid: true, labels: true, live: false,
-      // Sprites kept on the sheet. Each is a frozen copy of the settings above
-      // plus its own id, so they can come from different files, addresses and
-      // formats at once -- which is the only way to show a set whose members
-      // are not all the same size.
-      pinned: [],
-      nextId: 1
-    }, vscodeApi.getState() || {});
+    function keepSelectionBytes(entry, bytes) {
+      delete entry.selectionBytes;
+      if (entry.source === 'selection' && bytes.length <= SELECTION_KEEP_LIMIT) {
+        entry.selectionBytes = toBase64(bytes);
+      }
+    }
+
+    // Kept across a panel close and a window reload:
+    //   zoom, grid, labels, live   how the sheet is shown
+    //   pinned, nextId             the sprites on it, in order
+    //   groups, nextGroupId        the named groups, in order: { id, name }. A
+    //                              sprite holds its group's id, so a rename is
+    //                              one change
+    //   draft                      what Add... opens with: whatever the dialog
+    //                              last held, so it resumes where it left off
+    //   exportPng, exportReference, exportAsm
+    //                              what Export... wrote last time
+    // A panel from before the dialog kept its working sprite at the top level
+    // of the state; that becomes the draft, so nothing that was dialled in is
+    // lost.
+    /*@graphics_sheet@*/
+    const saved = vscodeApi.getState() || window.__zxSheet || {};
+    const state = {
+      zoom: saved.zoom || 3,
+      grid: saved.grid !== false,
+      labels: saved.labels !== false,
+      live: saved.live === true,
+      pinned: Array.isArray(saved.pinned) ? saved.pinned : [],
+      nextId: saved.nextId || 1,
+      groups: Array.isArray(saved.groups) ? saved.groups : [],
+      nextGroupId: saved.nextGroupId || 1,
+      draft: withDefaults(saved.draft || saved),
+      exportPng: saved.exportPng !== false,
+      exportReference: saved.exportReference === true,
+      exportAsm: saved.exportAsm === true
+    };
+    // A sheet from before names and groups: every sprite gets a name, and a
+    // sprite can only be in a group that exists.
+    for (const entry of state.pinned) {
+      if (!state.groups.some((g) => g.id === entry.group)) {
+        entry.group = '';
+      }
+    }
+    for (const entry of state.pinned) {
+      entry.name = sanitizeLabel(entry.name);
+      if (!entry.name) {
+        entry.name = suggestName(entry, takenNames(entry.group, entry.id));
+      }
+    }
 
     // Bytes and provenance per id. Not persisted: it is megabytes of sprite in
     // a store meant for a little UI state, and re-reading is one message.
     const bytesById = new Map();
     const originById = new Map();
-    // Filled in by the last draw, for the status line.
-    let truncatedById = new Map();
+    // Filled in by the last draw of each, for the status lines.
+    const truncatedById = new Map();
+
+    // The dialog while it is open: whether it is adding a sprite or changing
+    // one, which one, and the settings it is showing -- a copy, so nothing on
+    // the sheet changes until OK.
+    let dialog = null;
 
     const el = (id) => document.getElementById(id);
     // One item's worth of pixels, reused across every tile: putImageData into
@@ -220,7 +427,15 @@
     const cell = document.createElement('canvas');
     const cellCtx = cell.getContext('2d');
 
-    // ---- controls ----------------------------------------------------------
+    // Webview state only lasts as long as the panel: closing it throws the
+    // state away. So the sheet also goes to the extension, which keeps it in
+    // the workspace and hands it back to the next panel (window.__zxSheet).
+    function save() {
+      vscodeApi.setState(state);
+      vscodeApi.postMessage({ type: 'saveSheet', state });
+    }
+
+    // ---- the dialog's controls -----------------------------------------------
 
     function fillColourSelects() {
       for (const id of ['ink', 'paper']) {
@@ -234,157 +449,276 @@
       }
     }
 
-    // Every control is bound the same way: id -> state key, kind. Layout
-    // changes redraw from the bytes already in hand; source changes go back for
-    // more. That split is the whole reason for keeping the bytes around.
+    // Every control is bound the same way: id, kind, and what a change means.
+    // Layout changes redraw from the bytes already in hand; source changes go
+    // back for more. That split is the whole reason for keeping the bytes
+    // around -- dragging the width until a sprite snaps into focus costs no
+    // reads at all.
     const CONTROLS = [
-      ['source', 'source', 'text', 'reread'],
-      ['address', 'address', 'text', 'reread'],
-      ['format', 'format', 'text', 'format'],
-      ['offset', 'offset', 'int', 'reread'],
-      ['width', 'width', 'int', 'reread'],
-      ['height', 'height', 'int', 'reread'],
-      ['count', 'count', 'int', 'reread'],
-      ['columns', 'columns', 'int', 'draw'],
-      ['header', 'header', 'int', 'reread'],
-      ['first', 'first', 'int', 'draw'],
-      ['interleave', 'interleave', 'text', 'reread'],
-      ['invertMask', 'invertMask', 'bool', 'draw'],
-      ['bottomUp', 'bottomUp', 'bool', 'draw'],
-      ['ink', 'ink', 'int', 'draw'],
-      ['paper', 'paper', 'int', 'draw'],
-      ['zoom', 'zoom', 'int', 'draw'],
-      ['grid', 'grid', 'bool', 'draw'],
-      ['labels', 'labels', 'bool', 'draw'],
-      ['live', 'live', 'bool', 'live']
+      ['name', 'text', 'name'],
+      ['group', 'text', 'name'],
+      ['source', 'text', 'reread'],
+      ['address', 'text', 'reread'],
+      ['format', 'text', 'format'],
+      ['offset', 'int', 'reread'],
+      ['width', 'int', 'reread'],
+      ['height', 'int', 'reread'],
+      ['count', 'int', 'reread'],
+      ['columns', 'int', 'draw'],
+      ['header', 'int', 'reread'],
+      ['first', 'int', 'draw'],
+      ['interleave', 'text', 'reread'],
+      ['invertMask', 'bool', 'draw'],
+      ['bottomUp', 'bool', 'draw'],
+      ['ink', 'int', 'draw'],
+      ['paper', 'int', 'draw']
     ];
 
-    function save() {
-      vscodeApi.setState(state);
-    }
-
-    function pushStateToControls() {
-      for (const [id, key, kind] of CONTROLS) {
+    function pushConfigToControls(cfg) {
+      for (const [id, kind] of CONTROLS) {
         const node = el(id);
         if (kind === 'bool') {
-          node.checked = Boolean(state[key]);
+          node.checked = Boolean(cfg[id]);
         } else {
-          node.value = String(state[key]);
+          node.value = cfg[id] === undefined ? '' : String(cfg[id]);
         }
       }
-      showRelevantControls();
+      showFileName(cfg);
+      showRelevantControls(cfg);
+    }
+
+    function showFileName(cfg) {
+      const name = cfg.file ? fileLeafOf(cfg.file) : 'no file';
+      el('fileName').textContent = name;
+      el('fileName').title = cfg.file || '';
     }
 
     // Fields that mean nothing for the current source or format are hidden
     // rather than disabled. A width box beside a screen dump is not a setting
     // you have yet to reach -- it is a question the format does not have.
-    function showRelevantControls() {
-      const linear = state.format !== 'screen';
-      for (const node of document.querySelectorAll('.src')) {
-        node.classList.toggle('hidden', !node.classList.contains('src-' + state.source));
+    function showRelevantControls(cfg) {
+      const linear = cfg.format !== 'screen';
+      for (const node of el('editor').querySelectorAll('.src')) {
+        node.classList.toggle('hidden', !node.classList.contains('src-' + cfg.source));
       }
-      for (const node of document.querySelectorAll('.fmt-linear')) {
+      for (const node of el('editor').querySelectorAll('.fmt-linear')) {
         node.classList.toggle('hidden', !linear);
       }
-      for (const node of document.querySelectorAll('.fmt-font')) {
-        node.classList.toggle('hidden', state.format !== 'font');
+      for (const node of el('editor').querySelectorAll('.fmt-font')) {
+        node.classList.toggle('hidden', cfg.format !== 'font');
       }
     }
 
-    function bindControls() {
-      for (const [id, key, kind, effect] of CONTROLS) {
+    function bindDialogControls() {
+      for (const [id, kind, effect] of CONTROLS) {
         const node = el(id);
         node.addEventListener('change', () => {
-          state[key] = kind === 'bool' ? node.checked
-                     : kind === 'int' ? (parseInt(node.value, 10) || 0)
-                     : node.value;
-          save();
-          showRelevantControls();
-          if (effect === 'format') {
-            applyFormatDefaults();
+          if (!dialog) {
+            return;
+          }
+          dialog.cfg[id] = kind === 'bool' ? node.checked
+                         : kind === 'int' ? (parseInt(node.value, 10) || 0)
+                         : node.value;
+          showRelevantControls(dialog.cfg);
+          if (id === 'name') {
+            nameTyped(node);
+          } else if (NAMING_KEYS.includes(id)) {
+            refreshSuggestedName();
+          }
+          if (effect === 'name') {
+            reportDialogStatus();
+          } else if (effect === 'format') {
+            applyFormatDefaults(dialog.cfg);
           } else if (effect === 'reread') {
-            requestCurrent();
-          } else if (effect === 'live') {
-            vscodeApi.postMessage({ type: 'live', on: state.live });
+            requestPreview();
           } else {
-            draw();
+            drawPreview();
           }
         });
       }
-      el('refresh').addEventListener('click', requestAll);
-      el('pickFile').addEventListener('click', () => vscodeApi.postMessage({ type: 'pickFile' }));
-      el('grab').addEventListener('click', requestCurrent);
-      el('add').addEventListener('click', pinCurrent);
       // Symbol completion is a round trip per keystroke against a parsed file
       // on the server, the same as the trace panel's address fields.
       el('address').addEventListener('input', () => {
         vscodeApi.postMessage({ type: 'symbols', prefix: el('address').value });
       });
+      el('pickFile').addEventListener('click', () => vscodeApi.postMessage({ type: 'pickFile' }));
+      el('grab').addEventListener('click', requestPreview);
+      el('reread').addEventListener('click', requestPreview);
+      el('previewZoom').addEventListener('change', () => {
+        setZoom(parseInt(el('previewZoom').value, 10));
+      });
+      el('ok').addEventListener('click', () => closeDialog(true));
+      el('cancel').addEventListener('click', () => closeDialog(false));
+      // Escape: the dialog would close itself, which would skip closeDialog.
+      el('editor').addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeDialog(false);
+      });
+    }
+
+    // ---- names ----------------------------------------------------------------
+    //
+    // Every sprite has a name, and it is a label: the export writes it as the
+    // atlas frame and the assembler label, after its group's name. The dialog
+    // offers one made from where the data came from, and keeps offering a
+    // fresh one as the source changes -- until you type your own.
+
+    const NAMING_KEYS = ['group', 'source', 'address', 'offset', 'format'];
+
+    // The names already used by sprites in a group ('' for no group), leaving
+    // out one sprite -- the one being changed.
+    function takenNames(groupId, exceptId) {
+      const taken = new Set();
+      for (const entry of state.pinned) {
+        if ((entry.group || '') === (groupId || '') && entry.id !== exceptId) {
+          taken.add(entry.name);
+        }
+      }
+      return taken;
+    }
+
+    function refreshSuggestedName() {
+      if (!dialog || !dialog.autoName) {
+        return;
+      }
+      dialog.cfg.name = suggestName(dialog.cfg, takenNames(dialog.cfg.group, dialog.editId));
+      el('name').value = dialog.cfg.name;
+    }
+
+    // A typed name is cleaned into a label as it is committed. Clearing the
+    // box hands naming back to the dialog.
+    function nameTyped(node) {
+      const clean = sanitizeLabel(node.value);
+      dialog.autoName = clean === '';
+      dialog.cfg.name = clean;
+      node.value = clean;
+      refreshSuggestedName();
+    }
+
+    function fillGroupSelect(selected) {
+      const select = el('group');
+      select.textContent = '';
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = '(no group)';
+      select.appendChild(none);
+      for (const group of state.groups) {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = group.name;
+        select.appendChild(option);
+      }
+      select.value = selected || '';
     }
 
     // Picking a format that has an obvious shape fills that shape in. Landing
     // on "Font" with a 2x16 sprite layout still set would show 96 items of
     // garbage, and leave you to work out which four boxes were wrong.
-    function applyFormatDefaults() {
-      if (state.format === 'font') {
-        Object.assign(state, {
+    function applyFormatDefaults(cfg) {
+      if (cfg.format === 'font') {
+        Object.assign(cfg, {
           width: 1, height: 8, count: 96, columns: 16, header: 0,
           interleave: 'none', bottomUp: false
         });
-        if (state.source === 'memory' && !state.address) {
-          state.address = '$3D00';
+        if (cfg.source === 'memory' && !cfg.address) {
+          cfg.address = '$3D00';
         }
       }
-      save();
-      pushStateToControls();
-      requestCurrent();
+      pushConfigToControls(cfg);
+      requestPreview();
     }
 
-    // ---- the sheet ---------------------------------------------------------
+    // ---- opening and closing the dialog -----------------------------------------
 
-    // What defines one sprite, as opposed to how the sheet is displayed. Pinning
-    // copies exactly this, which is why a pinned sprite keeps its own size,
-    // format, mask arrangement and colours while zoom and grid stay global.
-    const SPRITE_KEYS = ['source', 'address', 'file', 'offset', 'format', 'width', 'height',
-                         'count', 'columns', 'header', 'first', 'interleave', 'invertMask',
-                         'bottomUp', 'ink', 'paper'];
-
-    function spriteConfig(from) {
-      const cfg = {};
-      for (const key of SPRITE_KEYS) {
-        cfg[key] = from[key];
+    // mode 'add' puts a new sprite on the sheet on OK; mode 'edit' changes the
+    // sprite `editId` in place, keeping its position. Cancel does neither.
+    function openDialog(mode, cfg, editId) {
+      dialog = { mode, editId, cfg: withDefaults(cfg), autoName: false };
+      if (!groupById(dialog.cfg.group)) {
+        dialog.cfg.group = '';
       }
-      return cfg;
+      dialog.cfg.name = sanitizeLabel(dialog.cfg.name);
+      if (!dialog.cfg.name) {
+        dialog.autoName = true;
+        dialog.cfg.name = suggestName(dialog.cfg, takenNames(dialog.cfg.group, editId));
+      }
+      fillGroupSelect(dialog.cfg.group);
+      bytesById.delete(PREVIEW);
+      originById.delete(PREVIEW);
+      el('editorTitle').textContent = mode === 'add'
+        ? 'Add graphics'
+        : 'Change ' + (dialog.cfg.name || 'sprite #' + editId);
+      el('ok').textContent = mode === 'add' ? 'Add' : 'OK';
+      el('previewZoom').value = String(state.zoom);
+      pushConfigToControls(dialog.cfg);
+      const editor = el('editor');
+      if (!editor.open) {
+        editor.showModal();
+      }
+      drawPreview();
+      requestPreview();
     }
 
-    // The working sprite as a config. `file` is the host's business -- the page
-    // only ever sees a name -- so it rides along as whatever the host last told
-    // us, and the host resolves an absent one to the file it has open.
-    function currentConfig() {
-      const cfg = spriteConfig(state);
-      cfg.id = CURRENT;
-      return cfg;
-    }
-
-    function pinCurrent() {
-      if (!bytesById.has(CURRENT)) {
-        warn('Nothing to add yet -- no data has been read.');
+    function closeDialog(ok) {
+      if (!dialog) {
         return;
       }
-      const entry = spriteConfig(state);
-      entry.id = state.nextId++;
-      // The host names what it served; keeping that is what lets a pinned
-      // sprite be re-read later from the same place, and what the caption says.
-      const origin = originById.get(CURRENT);
-      entry.file = origin && origin.path ? origin.path : undefined;
-      entry.originLabel = origin ? origin.label : '';
-      state.pinned.push(entry);
-      // The bytes are already in hand; carry them over rather than making a
-      // round trip to fetch what we are looking at.
-      bytesById.set(entry.id, bytesById.get(CURRENT));
-      originById.set(entry.id, origin);
+      if (ok) {
+        const bytes = bytesById.get(PREVIEW);
+        if (!bytes) {
+          dialogWarn('Nothing to add yet -- no data has been read.');
+          return;
+        }
+        if (takenNames(dialog.cfg.group, dialog.editId).has(dialog.cfg.name)) {
+          const group = groupById(dialog.cfg.group);
+          dialogWarn((group ? 'The group ' + group.name : 'The sheet, outside the groups,')
+                     + ' already has a sprite called ' + dialog.cfg.name + '.');
+          return;
+        }
+        const origin = originById.get(PREVIEW);
+        const entry = spriteConfig(dialog.cfg);
+        // The host names what it served; keeping that is what lets a sprite
+        // be re-read later from the same place, and what its caption says.
+        entry.file = origin && origin.path ? origin.path : dialog.cfg.file;
+        entry.originLabel = origin ? origin.label : '';
+        keepSelectionBytes(entry, bytes);
+        if (dialog.mode === 'edit') {
+          const index = state.pinned.findIndex((e) => e.id === dialog.editId);
+          if (index < 0) {
+            dialogWarn('That sprite is no longer on the sheet.');
+            return;
+          }
+          entry.id = dialog.editId;
+          state.pinned[index] = entry;
+        } else {
+          entry.id = state.nextId++;
+          state.pinned.push(entry);
+        }
+        // The bytes are already in hand; carry them over rather than making a
+        // round trip to fetch what is on the screen.
+        bytesById.set(entry.id, bytes);
+        originById.set(entry.id, origin);
+      }
+      // Add remembers where it was, OK or not: opening it again resumes there
+      // rather than back at the defaults. Changing a sprite leaves it alone.
+      // A name belongs to one sprite, so the next one starts without it.
+      if (dialog.mode === 'add') {
+        state.draft = spriteConfig(dialog.cfg);
+        state.draft.name = '';
+      }
+      dialog = null;
+      bytesById.delete(PREVIEW);
+      originById.delete(PREVIEW);
+      el('editor').close();
       save();
       draw();
+    }
+
+    function editPinned(id) {
+      const entry = state.pinned.find((e) => e.id === id);
+      if (entry) {
+        openDialog('edit', entry, id);
+      }
     }
 
     function removePinned(id) {
@@ -395,44 +729,140 @@
       draw();
     }
 
-    // Loads a pinned sprite's settings back into the controls, so a near-miss
-    // can be adjusted and re-added rather than retyped.
-    function editPinned(id) {
-      const entry = state.pinned.find((e) => e.id === id);
-      if (!entry) {
+    // Moves sprite `id` to just before (or after) sprite `targetId`, joining
+    // that sprite's group; or, with no target, to the end of group `groupId`.
+    function moveSprite(id, targetId, after, groupId) {
+      const from = state.pinned.findIndex((e) => e.id === id);
+      if (from < 0 || id === targetId) {
         return;
       }
-      for (const key of SPRITE_KEYS) {
-        if (entry[key] !== undefined) {
-          state[key] = entry[key];
+      const [moved] = state.pinned.splice(from, 1);
+      let to = state.pinned.length;
+      moved.group = groupId || '';
+      if (targetId !== undefined) {
+        const target = state.pinned.findIndex((e) => e.id === targetId);
+        if (target >= 0) {
+          to = after ? target + 1 : target;
+          moved.group = state.pinned[target].group || '';
+        }
+      }
+      // Names are unique within a group, so one arriving may need a new one.
+      if (takenNames(moved.group, moved.id).has(moved.name)) {
+        moved.name = uniqueName(moved.name, takenNames(moved.group, moved.id));
+      }
+      state.pinned.splice(to, 0, moved);
+      save();
+      draw();
+    }
+
+    function uniqueName(name, taken) {
+      if (!taken.has(name)) {
+        return name;
+      }
+      for (let n = 2; ; n++) {
+        if (!taken.has(name + '_' + n)) {
+          return name + '_' + n;
+        }
+      }
+    }
+
+    // ---- groups ----------------------------------------------------------------
+
+    // The group being renamed, whose heading draws as a text box.
+    let renamingGroup = null;
+
+    function groupById(id) {
+      return id ? state.groups.find((g) => g.id === id) : undefined;
+    }
+
+    function groupNameOf(entry) {
+      const group = groupById(entry.group);
+      return group ? group.name : '';
+    }
+
+    function membersOf(groupId) {
+      return state.pinned.filter((e) => (e.group || '') === (groupId || ''));
+    }
+
+    // The sprites in the order the sheet shows them -- those in no group, then
+    // each group's in turn -- which is the order an export writes them in.
+    function sheetOrder(ids) {
+      let order = membersOf('');
+      for (const group of state.groups) {
+        order = order.concat(membersOf(group.id));
+      }
+      return ids ? order.filter((e) => ids.includes(e.id)) : order;
+    }
+
+    function uniqueGroupName(base, exceptId) {
+      const taken = new Set(state.groups.filter((g) => g.id !== exceptId).map((g) => g.name));
+      if (base !== 'group' && !taken.has(base)) {
+        return base;
+      }
+      for (let n = base === 'group' ? 1 : 2; ; n++) {
+        const name = base + (base === 'group' ? '' : '_') + n;
+        if (!taken.has(name)) {
+          return name;
+        }
+      }
+    }
+
+    function newGroup() {
+      const group = { id: 'g' + state.nextGroupId++, name: uniqueGroupName('group') };
+      state.groups.push(group);
+      renamingGroup = group.id;
+      save();
+      draw();
+      return group;
+    }
+
+    function renameGroup(id, text) {
+      renamingGroup = null;
+      const group = groupById(id);
+      const name = sanitizeLabel(text);
+      let refused = false;
+      if (group && name && name !== group.name) {
+        refused = state.groups.some((g) => g.id !== id && g.name === name);
+        if (!refused) {
+          group.name = name;
         }
       }
       save();
-      pushStateToControls();
-      requestCurrent();
+      draw();
+      // After the draw, which would otherwise put the sheet's count over it.
+      if (refused) {
+        warn('There is already a group called ' + name + '.');
+      }
+    }
+
+    // The group goes; its sprites stay on the sheet, out of any group.
+    function removeGroup(id) {
+      state.groups = state.groups.filter((g) => g.id !== id);
+      for (const entry of state.pinned) {
+        if (entry.group === id) {
+          entry.group = '';
+          entry.name = uniqueName(entry.name, takenNames('', entry.id));
+        }
+      }
+      save();
+      draw();
+    }
+
+    function setZoom(zoom) {
+      state.zoom = Math.max(1, Math.min(16, zoom || 1));
+      el('zoom').value = String(state.zoom);
+      el('previewZoom').value = String(state.zoom);
+      save();
+      draw();
+      drawPreview();
     }
 
     // ---- reading -----------------------------------------------------------
 
-    function bytesPerRow(cfg) {
-      return cfg.width * (cfg.interleave === 'none' ? 1 : 2);
-    }
-
-    function bytesPerItem(cfg) {
-      return cfg.header + bytesPerRow(cfg) * cfg.height;
-    }
-
-    function bytesWanted(cfg) {
-      if (cfg.format === 'screen') {
-        return BITMAP_BYTES + ATTR_BYTES;
-      }
-      return Math.max(1, bytesPerItem(cfg) * cfg.count);
-    }
-
-    function requestFor(cfg) {
+    function requestFor(cfg, id) {
       vscodeApi.postMessage({
         type: 'read',
-        id: cfg.id,
+        id,
         source: cfg.source,
         address: cfg.address,
         file: cfg.file,
@@ -441,67 +871,24 @@
       });
     }
 
-    function requestCurrent() {
-      requestFor(currentConfig());
+    function requestPreview() {
+      if (dialog) {
+        requestFor(dialog.cfg, PREVIEW);
+      }
     }
 
-    // Refresh means the whole sheet, not just the sprite being dialled in: a
-    // pinned sprite pointing at memory is exactly the thing you pin in order to
-    // watch it change.
-    function requestAll() {
-      requestCurrent();
+    // A sprite taken from an editor selection is never re-read: its selection
+    // is long gone, and asking again would read whatever is selected now. Its
+    // bytes are kept with it instead (see keepSelectionBytes).
+    function requestSheet(memoryOnly) {
       for (const entry of state.pinned) {
-        requestFor(entry);
+        if (entry.source === 'selection') {
+          continue;
+        }
+        if (!memoryOnly || entry.source === 'memory') {
+          requestFor(entry, entry.id);
+        }
       }
-    }
-
-    // ---- decoding ----------------------------------------------------------
-    //
-    // Parameterised by config and bytes rather than reading one global pair,
-    // because the whole point of the sheet is that each sprite has its own.
-
-    // Where in the supplied bytes the given pixel of the given item lives, and
-    // which bit of it. Returns null when the data ran out, which is normal:
-    // the count is a guess until you have seen the picture.
-    function locate(cfg, bytes, item, x, y) {
-      const row = cfg.bottomUp ? cfg.height - 1 - y : y;
-      const byteCol = x >> 3;
-      const stride = cfg.interleave === 'none' ? 1 : 2;
-      const base = item * bytesPerItem(cfg) + cfg.header + row * bytesPerRow(cfg)
-                   + byteCol * stride;
-      const dataAt = cfg.interleave === 'md' ? base + 1 : base;
-      const maskAt = cfg.interleave === 'md' ? base : cfg.interleave === 'dm' ? base + 1 : -1;
-      if (dataAt >= bytes.length || (maskAt >= 0 && maskAt >= bytes.length)) {
-        return null;
-      }
-      return { dataAt, maskAt, bit: 7 - (x & 7) };
-    }
-
-    // A pixel is one of three things, and the mask decides which two are on
-    // offer: with no mask every pixel is ink or paper, and with one, a masked
-    // pixel is transparent whatever its data bit says.
-    function pixelKind(cfg, bytes, item, x, y) {
-      const at = locate(cfg, bytes, item, x, y);
-      if (!at) {
-        return { kind: 'missing' };
-      }
-      let masked = false;
-      if (at.maskAt >= 0) {
-        const maskByte = cfg.invertMask ? bytes[at.maskAt] ^ 0xFF : bytes[at.maskAt];
-        masked = (maskByte >> at.bit & 1) === 1;
-      }
-      const set = (bytes[at.dataAt] >> at.bit & 1) === 1;
-      return { kind: masked ? 'clear' : set ? 'ink' : 'paper', at };
-    }
-
-    // The display file's famous scramble: y = 0bYYyyyxxx maps to
-    // 0b010YY xxx yyy, so consecutive addresses walk down eight-line bands
-    // rather than down the screen.
-    function screenOffset(x, y) {
-      const third = (y >> 6) & 3;
-      const line = (y >> 3) & 7;
-      const row = y & 7;
-      return (third << 11) | (row << 8) | (line << 5) | (x >> 3);
     }
 
     // ---- drawing -----------------------------------------------------------
@@ -509,17 +896,10 @@
     const GAP = 6;
     const LABEL_H = 14;
 
-    function itemPixelSize(cfg) {
-      if (cfg.format === 'screen') {
-        return { w: 256, h: 192 };
-      }
-      return { w: cfg.width * 8, h: cfg.height };
-    }
-
     function layout(cfg) {
       const size = itemPixelSize(cfg);
       const zoom = Math.max(1, state.zoom);
-      const count = cfg.format === 'screen' ? 1 : Math.max(1, cfg.count);
+      const count = itemCount(cfg);
       const columns = cfg.format === 'screen' ? 1 : Math.max(1, Math.min(cfg.columns, count));
       const rows = Math.ceil(count / columns);
       const labelH = state.labels && cfg.format !== 'screen' && count > 1 ? LABEL_H : 0;
@@ -555,9 +935,7 @@
 
       let truncated = 0;
       for (let index = 0; index < box.count; index++) {
-        const short = cfg.format === 'screen'
-          ? paintScreen(cfg, bytes, image)
-          : paintItem(cfg, bytes, image, index);
+        const short = renderItem(cfg, bytes, index, image.data);
         if (short) {
           truncated++;
         }
@@ -592,66 +970,6 @@
       }
     }
 
-    function paintItem(cfg, bytes, image, index) {
-      const pixels = image.data;
-      const w = image.width;
-      let short = false;
-      for (let y = 0; y < image.height; y++) {
-        for (let x = 0; x < w; x++) {
-          const p = pixelKind(cfg, bytes, index, x, y);
-          const at = (y * w + x) * 4;
-          if (p.kind === 'clear' || p.kind === 'missing') {
-            pixels[at + 3] = 0;
-            if (p.kind === 'missing') {
-              short = true;
-            }
-            continue;
-          }
-          const rgb = PALETTE[(p.kind === 'ink' ? cfg.ink : cfg.paper) & 15];
-          pixels[at] = rgb[0];
-          pixels[at + 1] = rgb[1];
-          pixels[at + 2] = rgb[2];
-          pixels[at + 3] = 255;
-        }
-      }
-      return short;
-    }
-
-    // Screen mode reads its own colours out of the attribute area when there
-    // is one. A 6144-byte .scr has no attributes, so it falls back to the ink
-    // and paper pickers -- which is why they stay meaningful here.
-    function paintScreen(cfg, bytes, image) {
-      const pixels = image.data;
-      const haveAttrs = bytes.length >= BITMAP_BYTES + ATTR_BYTES;
-      let short = false;
-      for (let y = 0; y < 192; y++) {
-        for (let x = 0; x < 256; x++) {
-          const at = (y * 256 + x) * 4;
-          const offset = screenOffset(x, y);
-          if (offset >= bytes.length) {
-            pixels[at + 3] = 0;
-            short = true;
-            continue;
-          }
-          const set = (bytes[offset] >> (7 - (x & 7)) & 1) === 1;
-          let ink = cfg.ink;
-          let paper = cfg.paper;
-          if (haveAttrs) {
-            const attr = bytes[BITMAP_BYTES + (y >> 3) * 32 + (x >> 3)];
-            const bright = (attr & 0x40) ? 8 : 0;
-            ink = (attr & 7) | bright;
-            paper = ((attr >> 3) & 7) | bright;
-          }
-          const rgb = PALETTE[(set ? ink : paper) & 15];
-          pixels[at] = rgb[0];
-          pixels[at + 1] = rgb[1];
-          pixels[at + 2] = rgb[2];
-          pixels[at + 3] = 255;
-        }
-      }
-      return short;
-    }
-
     // Byte boundaries, not pixel ones: what you are usually trying to see is
     // which byte column a stray bit is in. Suppressed below 3x, where the
     // lines would be most of the picture.
@@ -675,15 +993,6 @@
       ctx.stroke();
     }
 
-    function labelText(cfg, index) {
-      if (cfg.format !== 'font') {
-        return '#' + index;
-      }
-      const code = (cfg.first + index) & 0xFF;
-      const printable = code >= 32 && code < 127 ? String.fromCharCode(code) : '';
-      return code + (printable ? " '" + printable + "'" : '');
-    }
-
     function drawLabel(ctx, cfg, x, y, box, index) {
       ctx.fillStyle = getComputedStyle(document.body).color;
       ctx.globalAlpha = .65;
@@ -697,10 +1006,10 @@
 
     // ---- the tiles ---------------------------------------------------------
 
-    // A one-line description of what a tile is showing, for its caption.
-    function describeConfig(cfg) {
+    // A one-line description of what a sprite is showing, for its caption.
+    function describeConfig(cfg, id) {
       const where = cfg.source === 'memory' ? cfg.address
-                  : cfg.source === 'file' ? (fileLeaf(cfg) + '+' + cfg.offset)
+                  : cfg.source === 'file' ? (fileLeaf(cfg, id) + '+' + cfg.offset)
                   : 'selection';
       if (cfg.format === 'screen') {
         return where + '  screen';
@@ -718,23 +1027,39 @@
       return text;
     }
 
-    function fileLeaf(cfg) {
-      const path = cfg.file || (originById.get(cfg.id) || {}).path || '';
-      const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-      return cut >= 0 ? path.slice(cut + 1) : (path || 'file');
+    function fileLeaf(cfg, id) {
+      return fileLeafOf(cfg.file || (originById.get(id) || {}).path || '');
     }
 
-    function makeTile(cfg, isCurrent) {
-      const bytes = bytesById.get(cfg.id) || new Uint8Array(0);
+    // The sprite being dragged, while a drag is on.
+    let dragId = null;
+
+    function clearDropMarks() {
+      for (const node of document.querySelectorAll('.drop-before, .drop-after, .drop-into')) {
+        node.classList.remove('drop-before', 'drop-after', 'drop-into');
+      }
+    }
+
+    // Which side of `figure` a drop at clientX lands on. Tiles flow in rows, so
+    // the horizontal half is what decides before or after.
+    function dropsAfter(figure, clientX) {
+      const rect = figure.getBoundingClientRect();
+      return clientX > rect.left + rect.width / 2;
+    }
+
+    function makeTile(entry) {
+      const bytes = bytesById.get(entry.id) || new Uint8Array(0);
       const figure = document.createElement('figure');
-      figure.className = 'tile' + (isCurrent ? ' current' : '');
+      figure.className = 'tile';
+      figure.draggable = true;
+      figure.dataset.id = String(entry.id);
+      figure.title = 'Double-click to change it; drag to move it';
 
       const canvas = document.createElement('canvas');
-      const truncated = paintTile(cfg, bytes, canvas);
-      truncatedById.set(cfg.id, truncated);
+      truncatedById.set(entry.id, paintTile(entry, bytes, canvas));
       canvas.addEventListener('mousemove', (event) => {
-        const hit = hitTest(cfg, canvas, event.clientX, event.clientY);
-        reportStatus(hit ? describe(cfg, bytes, hit) : undefined);
+        const hit = hitTest(entry, canvas, event.clientX, event.clientY);
+        reportStatus(hit ? describe(entry, entry.id, bytes, hit) : undefined);
       });
       canvas.addEventListener('mouseleave', () => reportStatus());
       figure.appendChild(canvas);
@@ -743,49 +1068,270 @@
       caption.className = 'caption';
       const what = document.createElement('span');
       what.className = 'what';
-      what.textContent = isCurrent ? describeConfig(cfg) : '#' + cfg.id + '  ' + describeConfig(cfg);
-      what.title = isCurrent ? 'The sprite the controls are set to' : describeConfig(cfg);
+      what.textContent = '#' + entry.id + '  ' + entry.name + '  ' + describeConfig(entry, entry.id);
+      what.title = describeConfig(entry, entry.id);
       caption.appendChild(what);
 
-      if (!isCurrent) {
-        const edit = document.createElement('button');
-        edit.textContent = '✎';
-        edit.title = 'Load these settings back into the controls';
-        edit.addEventListener('click', () => editPinned(cfg.id));
-        caption.appendChild(edit);
+      const edit = document.createElement('button');
+      edit.textContent = '✎';
+      edit.title = 'Change this sprite';
+      edit.addEventListener('click', () => editPinned(entry.id));
+      caption.appendChild(edit);
 
-        const bin = document.createElement('button');
-        bin.textContent = '🗑';
-        bin.title = 'Remove from the sheet';
-        bin.addEventListener('click', () => removePinned(cfg.id));
-        caption.appendChild(bin);
-      }
+      const exportOne = document.createElement('button');
+      exportOne.textContent = '⤓';
+      exportOne.title = 'Export just this sprite';
+      exportOne.addEventListener('click', () => openExport([entry.id]));
+      caption.appendChild(exportOne);
+
+      const bin = document.createElement('button');
+      bin.textContent = '🗑';
+      bin.title = 'Remove from the sheet';
+      bin.addEventListener('click', () => removePinned(entry.id));
+      caption.appendChild(bin);
       figure.appendChild(caption);
+
+      figure.addEventListener('dblclick', (event) => {
+        if (event.target.closest('button')) {
+          return;
+        }
+        editPinned(entry.id);
+      });
+
+      figure.addEventListener('dragstart', (event) => {
+        dragId = entry.id;
+        figure.classList.add('dragging');
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(entry.id));
+        }
+      });
+      figure.addEventListener('dragend', () => {
+        dragId = null;
+        figure.classList.remove('dragging');
+        clearDropMarks();
+      });
+      figure.addEventListener('dragover', (event) => {
+        if (dragId === null || dragId === entry.id) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const after = dropsAfter(figure, event.clientX);
+        clearDropMarks();
+        figure.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      figure.addEventListener('drop', (event) => {
+        if (dragId === null) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const id = dragId;
+        dragId = null;
+        clearDropMarks();
+        moveSprite(id, entry.id, dropsAfter(figure, event.clientX));
+      });
       return figure;
+    }
+
+    // Dropping on the sheet itself, clear of any group, sends the dragged
+    // sprite to the end, out of any group.
+    function bindSheetDrops() {
+      const tiles = el('tiles');
+      tiles.addEventListener('dragover', (event) => {
+        if (dragId !== null) {
+          event.preventDefault();
+          clearDropMarks();
+        }
+      });
+      tiles.addEventListener('drop', (event) => {
+        if (dragId === null) {
+          return;
+        }
+        event.preventDefault();
+        const id = dragId;
+        dragId = null;
+        clearDropMarks();
+        moveSprite(id, undefined, true, '');
+      });
+    }
+
+    function button(text, title, onClick) {
+      const node = document.createElement('button');
+      node.textContent = text;
+      node.title = title;
+      node.addEventListener('click', onClick);
+      return node;
+    }
+
+    function makeGroupHead(group, count) {
+      const head = document.createElement('div');
+      head.className = 'section-head';
+      if (!group) {
+        const name = document.createElement('span');
+        name.className = 'gname loose';
+        name.textContent = 'Not in a group';
+        head.appendChild(name);
+      } else if (renamingGroup === group.id) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'rename';
+        input.value = group.name;
+        input.spellcheck = false;
+        let done = false;
+        const finish = (keep) => {
+          if (done) {
+            return;
+          }
+          done = true;
+          if (keep) {
+            renameGroup(group.id, input.value);
+          } else {
+            renamingGroup = null;
+            draw();
+          }
+        };
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            finish(true);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            finish(false);
+          }
+        });
+        input.addEventListener('blur', () => finish(true));
+        head.appendChild(input);
+      } else {
+        const name = document.createElement('span');
+        name.className = 'gname';
+        name.textContent = group.name;
+        name.title = 'Double-click to rename';
+        name.addEventListener('dblclick', () => {
+          renamingGroup = group.id;
+          draw();
+        });
+        head.appendChild(name);
+      }
+      const counter = document.createElement('span');
+      counter.className = 'gcount';
+      counter.textContent = count + ' sprite' + (count === 1 ? '' : 's');
+      head.appendChild(counter);
+      if (group) {
+        head.appendChild(button('+', 'Add graphics to this group', () =>
+          openDialog('add', Object.assign({}, state.draft, { group: group.id }))));
+        head.appendChild(button('✎', 'Rename this group', () => {
+          renamingGroup = group.id;
+          draw();
+        }));
+        head.appendChild(button('⤓', 'Export this group', () =>
+          openExport(membersOf(group.id).map((e) => e.id), group)));
+        head.appendChild(button('🗑', 'Remove the group -- its sprites stay on the sheet', () =>
+          removeGroup(group.id)));
+      }
+      return head;
+    }
+
+    // One group's sprites (or those in none), under a heading once there are
+    // groups at all. Dropping a sprite anywhere in it moves it to the end of
+    // that group.
+    function makeSection(group) {
+      const groupId = group ? group.id : '';
+      const members = membersOf(groupId);
+      const section = document.createElement('div');
+      section.className = 'section';
+      section.dataset.group = groupId;
+      if (state.groups.length > 0) {
+        section.appendChild(makeGroupHead(group, members.length));
+      }
+      const flow = document.createElement('div');
+      flow.className = 'flow';
+      for (const entry of members) {
+        flow.appendChild(makeTile(entry));
+      }
+      if (members.length === 0 && state.groups.length > 0) {
+        const hint = document.createElement('div');
+        hint.className = 'hint';
+        hint.textContent = group
+          ? 'Empty -- drag sprites here, or press + to add some.'
+          : 'Drop a sprite here to take it out of its group.';
+        flow.appendChild(hint);
+      }
+      flow.addEventListener('dragover', (event) => {
+        if (dragId === null) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        clearDropMarks();
+        flow.classList.add('drop-into');
+      });
+      flow.addEventListener('dragleave', () => flow.classList.remove('drop-into'));
+      flow.addEventListener('drop', (event) => {
+        if (dragId === null) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const id = dragId;
+        dragId = null;
+        clearDropMarks();
+        moveSprite(id, undefined, true, groupId);
+      });
+      section.appendChild(flow);
+      return section;
     }
 
     function draw() {
       const tiles = el('tiles');
       tiles.textContent = '';
-      truncatedById = new Map();
-      tiles.appendChild(makeTile(currentConfig(), true));
-      for (const entry of state.pinned) {
-        tiles.appendChild(makeTile(entry, false));
+      truncatedById.clear();
+      if (state.pinned.length > 0 || state.groups.length > 0) {
+        tiles.appendChild(makeSection(undefined));
       }
+      for (const group of state.groups) {
+        tiles.appendChild(makeSection(group));
+      }
+      el('empty').classList.toggle('hidden', state.pinned.length > 0 || state.groups.length > 0);
       reportStatus();
+      const rename = tiles.querySelector('input.rename');
+      if (rename) {
+        rename.focus();
+        rename.select();
+      }
+    }
+
+    function drawPreview() {
+      if (!dialog) {
+        return;
+      }
+      const bytes = bytesById.get(PREVIEW) || new Uint8Array(0);
+      const canvas = el('preview');
+      truncatedById.set(PREVIEW, paintTile(dialog.cfg, bytes, canvas));
+      el('ok').disabled = !bytesById.has(PREVIEW);
+      reportDialogStatus();
+    }
+
+    function bindPreviewHover() {
+      const canvas = el('preview');
+      canvas.addEventListener('mousemove', (event) => {
+        if (!dialog) {
+          return;
+        }
+        const bytes = bytesById.get(PREVIEW) || new Uint8Array(0);
+        const hit = hitTest(dialog.cfg, canvas, event.clientX, event.clientY);
+        reportDialogStatus(hit ? describe(dialog.cfg, PREVIEW, bytes, hit) : undefined);
+      });
+      canvas.addEventListener('mouseleave', () => reportDialogStatus());
     }
 
     // ---- status and hover --------------------------------------------------
 
-    function hex(value, digits) {
-      return '$' + value.toString(16).toUpperCase().padStart(digits, '0');
-    }
-
     // Where a byte at this offset into the data lives, said in whatever terms
     // the source makes meaningful -- an address for memory, an offset for a
     // file, nothing at all for a selection that came out of a text buffer.
-    function whereIs(cfg, offset) {
-      const origin = originById.get(cfg.id);
+    function whereIs(cfg, id, offset) {
+      const origin = originById.get(id);
       if (origin && origin.kind === 'memory' && typeof origin.address === 'number') {
         return hex((origin.address + offset) & 0xFFFF, 4);
       }
@@ -801,6 +1347,12 @@
       status.classList.add('warn');
     }
 
+    function dialogWarn(text) {
+      const status = el('editorStatus');
+      status.textContent = text;
+      status.classList.add('warn');
+    }
+
     function reportStatus(extra) {
       const status = el('status');
       status.classList.remove('warn');
@@ -808,20 +1360,38 @@
         status.textContent = extra;
         return;
       }
-      const origin = originById.get(CURRENT);
-      const bytes = bytesById.get(CURRENT);
+      const n = state.pinned.length;
+      const g = state.groups.length;
+      status.textContent = n === 0 && g === 0 ? ''
+        : n + ' on the sheet' + (g ? ', in ' + g + ' group' + (g === 1 ? '' : 's') : '');
+    }
+
+    // What the preview is showing: where the bytes came from, how many, and
+    // whether the layout asks for more than there are.
+    function reportDialogStatus(extra) {
+      const status = el('editorStatus');
+      status.classList.remove('warn');
+      if (extra) {
+        status.textContent = extra;
+        return;
+      }
+      if (!dialog) {
+        status.textContent = '';
+        return;
+      }
+      const origin = originById.get(PREVIEW);
+      const bytes = bytesById.get(PREVIEW);
       const parts = [];
-      parts.push(origin ? origin.label : 'nothing loaded');
-      parts.push((bytes ? bytes.length : 0) + ' bytes');
-      if (state.format !== 'screen') {
-        parts.push(bytesPerItem(currentConfig()) + ' per item');
-        const short = truncatedById.get(CURRENT) || 0;
-        if (short) {
+      parts.push(origin ? origin.label : 'reading...');
+      if (bytes) {
+        parts.push(bytes.length + ' bytes');
+      }
+      if (dialog.cfg.format !== 'screen') {
+        parts.push(bytesPerItem(dialog.cfg) + ' per item');
+        const short = truncatedById.get(PREVIEW) || 0;
+        if (bytes && short) {
           parts.push(short + ' item' + (short === 1 ? '' : 's') + ' short of data');
         }
-      }
-      if (state.pinned.length > 0) {
-        parts.push(state.pinned.length + ' on the sheet');
       }
       status.textContent = parts.join('   ');
     }
@@ -847,34 +1417,224 @@
     // The point of the whole panel, really: not "what does this look like" but
     // "which byte is that pixel in". Everything else is in service of being
     // able to point at a wrong pixel and be told where to go and fix it.
-    function describe(cfg, bytes, hit) {
+    function describe(cfg, id, bytes, hit) {
       if (cfg.format === 'screen') {
         const offset = screenOffset(hit.x, hit.y);
         const attr = BITMAP_BYTES + (hit.y >> 3) * 32 + (hit.x >> 3);
         return 'x=' + hit.x + ' y=' + hit.y +
-               '   bitmap ' + whereIs(cfg, offset) + ' bit ' + (7 - (hit.x & 7)) +
-               '   attr ' + whereIs(cfg, attr);
+               '   bitmap ' + whereIs(cfg, id, offset) + ' bit ' + (7 - (hit.x & 7)) +
+               '   attr ' + whereIs(cfg, id, attr);
       }
       const p = pixelKind(cfg, bytes, hit.index, hit.x, hit.y);
-      const head = (cfg.id === CURRENT ? '' : '#' + cfg.id + '  ')
+      const head = (id === PREVIEW ? '' : '#' + id + '  ')
                  + labelText(cfg, hit.index) + '   x=' + hit.x + ' y=' + hit.y;
       if (p.kind === 'missing') {
         return head + '   past the end of the data';
       }
-      let text = head + '   ' + whereIs(cfg, p.at.dataAt) + ' bit ' + p.at.bit +
+      let text = head + '   ' + whereIs(cfg, id, p.at.dataAt) + ' bit ' + p.at.bit +
                  ' = %' + bytes[p.at.dataAt].toString(2).padStart(8, '0');
       if (p.at.maskAt >= 0) {
-        text += '   mask ' + whereIs(cfg, p.at.maskAt) +
+        text += '   mask ' + whereIs(cfg, id, p.at.maskAt) +
                 ' = %' + bytes[p.at.maskAt].toString(2).padStart(8, '0');
       }
       return text + '   ' + p.kind;
     }
 
+    // ---- the sheet's own controls ---------------------------------------------
+
+    function bindSheetControls() {
+      el('zoom').value = String(state.zoom);
+      el('grid').checked = state.grid;
+      el('labels').checked = state.labels;
+      el('live').checked = state.live;
+      el('add').addEventListener('click', () => openDialog('add', state.draft));
+      el('newGroup').addEventListener('click', () => newGroup());
+      el('refresh').addEventListener('click', () => {
+        requestSheet(false);
+        requestPreview();
+      });
+      el('zoom').addEventListener('change', () => setZoom(parseInt(el('zoom').value, 10)));
+      for (const id of ['grid', 'labels']) {
+        el(id).addEventListener('change', () => {
+          state[id] = el(id).checked;
+          save();
+          draw();
+          drawPreview();
+        });
+      }
+      el('live').addEventListener('change', () => {
+        state.live = el('live').checked;
+        save();
+        vscodeApi.postMessage({ type: 'live', on: state.live });
+      });
+    }
+
+    // ---- export and import ---------------------------------------------------
+
+    // The sprites the export dialog is for, and the group when it is one, while
+    // it is open.
+    let exporting = null;
+
+    function openExport(ids, group) {
+      const entries = sheetOrder(ids);
+      if (entries.length === 0) {
+        warn(group ? 'The group ' + group.name + ' is empty.' : 'Nothing on the sheet to export.');
+        return;
+      }
+      exporting = { ids, group };
+      const one = entries[0];
+      el('exportTitle').textContent = group ? 'Export the group ' + group.name
+        : ids.length === 1 ? 'Export ' + one.name
+        : 'Export the sheet';
+      el('exportWhat').textContent = entries.length === 1
+        ? '#' + one.id + '  ' + one.name + '  ' + describeConfig(one, one.id)
+        : entries.length + ' sprites, in the order they are on the sheet'
+          + (state.groups.length && !group ? ', with their groups.' : '.');
+      el('exportPng').checked = state.exportPng;
+      el('exportReference').checked = state.exportReference;
+      el('exportAsm').checked = state.exportAsm;
+      el('exporter').showModal();
+    }
+
+    function closeExport(ok) {
+      const job = exporting;
+      exporting = null;
+      state.exportPng = el('exportPng').checked;
+      state.exportReference = el('exportReference').checked;
+      state.exportAsm = el('exportAsm').checked;
+      save();
+      el('exporter').close();
+      if (ok && job) {
+        exportSprites(job.ids, job.group);
+      }
+    }
+
+    // Everything is made here -- the picture needs a canvas to encode it --
+    // and the extension asks where to put it, writes the files, and saves the
+    // snapshot an atlas that points into one needs.
+    function exportSprites(ids, group) {
+      const entries = sheetOrder(ids).map((e) => Object.assign({}, e, { groupName: groupNameOf(e) }));
+      const names = assignNames(entries);
+      const pack = packSheet(entries, bytesById, names);
+      if (pack.frames.length === 0) {
+        warn('Nothing to export: no data has been read for ' +
+             (entries.length === 1 ? 'that sprite.' : 'any of those sprites.'));
+        return;
+      }
+      const base = group ? group.name
+                 : entries.length === 1 ? names.get(entries[0].id)
+                 : 'sprites';
+      let png;
+      if (state.exportPng) {
+        const canvas = document.createElement('canvas');
+        canvas.width = pack.width;
+        canvas.height = pack.height;
+        const ctx = canvas.getContext('2d');
+        const image = ctx.createImageData(pack.width, pack.height);
+        image.data.set(renderSheet(entries, bytesById, pack));
+        ctx.putImageData(image, 0, 0);
+        png = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+      }
+      // Named after the suggestion; the extension renames the references
+      // once the save dialog has said what the files are really called.
+      const files = { image: png ? base + '.png' : null, atlas: base + '.json' };
+      const options = { image: files.image, reference: state.exportReference };
+      vscodeApi.postMessage({
+        type: 'export',
+        name: base,
+        png,
+        reference: state.exportReference,
+        atlas: buildAtlas(entries, bytesById, originById, names, pack, options),
+        asm: state.exportAsm ? buildAsm(entries, bytesById, originById, names, pack, files) : undefined,
+        frames: pack.frames.length,
+        skipped: pack.skipped
+      });
+    }
+
+    function bindExport() {
+      el('export').addEventListener('click', () => openExport(sheetOrder().map((e) => e.id)));
+      el('exportOk').addEventListener('click', () => closeExport(true));
+      el('exportCancel').addEventListener('click', () => closeExport(false));
+      el('exporter').addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeExport(false);
+      });
+      el('import').addEventListener('click', () => vscodeApi.postMessage({ type: 'import' }));
+    }
+
+    // An exported atlas's sprites join the end of the sheet, in their groups,
+    // showing the bytes they were exported with -- or, when the atlas only
+    // pointed at them, whatever the extension could read from there. A group
+    // whose name is already taken comes in beside it under a new one, rather
+    // than mixing two sets of sprites. Sprites from memory or a file are still
+    // tied to where they came from, so the next Refresh (or stop) reads them
+    // again; one that arrived with no bytes at all is read straight away.
+    function importAtlas(atlas, from) {
+      const result = readAtlas(atlas);
+      const groupIds = new Map();
+      for (const name of result.groups) {
+        const group = { id: 'g' + state.nextGroupId++, name: uniqueGroupName(name) };
+        state.groups.push(group);
+        groupIds.set(name, group.id);
+      }
+      const unread = [];
+      for (const sprite of result.sprites) {
+        const entry = spriteConfig(sprite.cfg);
+        entry.id = state.nextId++;
+        entry.group = groupIds.get(sprite.cfg.group) || '';
+        entry.name = uniqueName(entry.name || suggestName(entry, takenNames(entry.group)),
+                                takenNames(entry.group, entry.id));
+        entry.originLabel = sprite.origin.label;
+        keepSelectionBytes(entry, sprite.bytes);
+        state.pinned.push(entry);
+        bytesById.set(entry.id, sprite.bytes);
+        originById.set(entry.id, sprite.origin);
+        if (sprite.bytes.length === 0 && entry.source !== 'selection') {
+          unread.push(entry);
+        }
+      }
+      save();
+      draw();
+      for (const entry of unread) {
+        requestFor(entry, entry.id);
+      }
+      const count = result.sprites.length;
+      const groups = result.groups.length;
+      const added = count + ' sprite' + (count === 1 ? '' : 's')
+                  + (groups ? ' in ' + groups + ' group' + (groups === 1 ? '' : 's') : '')
+                  + ' added from ' + fileLeafOf(from || 'the atlas');
+      if (result.problems.length) {
+        warn((count ? added + '. ' : '') + result.problems.join(' '));
+      } else {
+        el('status').classList.remove('warn');
+        el('status').textContent = added;
+      }
+    }
+
     // ---- host messages -----------------------------------------------------
 
-    // Set when a pushed view asked to be pinned; acted on once its bytes land,
-    // since there is nothing to pin until then.
-    let pendingPin = false;
+    // Sprites an MCP client asked to have put straight on the sheet, by the id
+    // their bytes were requested under. Added when the bytes land, since there
+    // is nothing to add until then.
+    const pendingPins = new Map();
+    let pinSeq = 0;
+
+    function addPinned(cfg, bytes, origin) {
+      const entry = spriteConfig(cfg);
+      entry.id = state.nextId++;
+      if (!groupById(entry.group)) {
+        entry.group = '';
+      }
+      entry.name = suggestName(entry, takenNames(entry.group));
+      entry.file = origin && origin.path ? origin.path : cfg.file;
+      entry.originLabel = origin ? origin.label : '';
+      keepSelectionBytes(entry, bytes);
+      state.pinned.push(entry);
+      bytesById.set(entry.id, bytes);
+      originById.set(entry.id, origin);
+      save();
+      draw();
+    }
 
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -882,16 +1642,32 @@
         return;
       }
       if (message.type === 'data') {
-        // An id of undefined is an older host, or a reply to a request made
-        // before ids existed; treat it as the working sprite.
-        const id = message.id === undefined ? CURRENT : message.id;
-        bytesById.set(id, Uint8Array.from(atob(message.bytes), (c) => c.charCodeAt(0)));
-        originById.set(id, message.origin);
-        if (id === CURRENT && pendingPin) {
-          pendingPin = false;
-          pinCurrent();   // draws
+        // An id of undefined is an older host; there is no working sprite any
+        // more, so it can only have been meant for the preview.
+        const id = message.id === undefined || message.id === 'current' ? PREVIEW : message.id;
+        const bytes = fromBase64(message.bytes);
+        if (pendingPins.has(id)) {
+          const cfg = pendingPins.get(id);
+          pendingPins.delete(id);
+          addPinned(cfg, bytes, message.origin);
           return;
         }
+        if (id === PREVIEW) {
+          // A read the dialog asked for and then closed before it landed.
+          if (!dialog) {
+            return;
+          }
+          bytesById.set(id, bytes);
+          originById.set(id, message.origin);
+          drawPreview();
+          return;
+        }
+        // A sprite removed while its read was on the way.
+        if (!state.pinned.some((e) => e.id === id)) {
+          return;
+        }
+        bytesById.set(id, bytes);
+        originById.set(id, message.origin);
         draw();
       } else if (message.type === 'symbols') {
         const list = el('symbols');
@@ -904,70 +1680,97 @@
         }
       } else if (message.type === 'view') {
         // Somebody set the view over MCP -- see "driving the panel from MCP"
-        // in extension.js. Unknown keys (the server's `version`, its `file`
-        // path) are ignored by the `in state` test rather than filtered by
-        // name, so a server that grows a field cannot poison the state here.
-        if (message.fileName) {
-          el('fileName').textContent = message.fileName;
-          el('fileName').title = message.fileName;
-        }
-        for (const key of Object.keys(message.view || {})) {
-          if (key in state && key !== 'pinned' && key !== 'nextId') {
-            state[key] = message.view[key];
+        // in extension.js. It is a proposal: the dialog opens on it, and OK
+        // decides whether it joins the sheet. `pin` is the caller saying so
+        // already, and adds it without asking. Only known keys are taken, so
+        // a server that grows a field cannot poison the state here.
+        const view = message.view || {};
+        const cfg = Object.assign({}, state.draft, { name: '' });
+        for (const key of SPRITE_KEYS) {
+          if (key in view && view[key] !== undefined && view[key] !== null) {
+            cfg[key] = view[key];
           }
         }
-        // A pushed view carries the host's own path, which the page needs so a
-        // sprite pinned from it can be re-read later.
-        if (message.view && message.view.file) {
-          state.file = message.view.file;
+        for (const key of ['zoom', 'grid', 'labels']) {
+          if (key in view) {
+            state[key] = view[key];
+          }
+        }
+        el('zoom').value = String(state.zoom);
+        el('grid').checked = state.grid;
+        el('labels').checked = state.labels;
+        // Every call merges over the last, so the next one starts from this.
+        state.draft = spriteConfig(cfg);
+        save();
+        // A view the extension caught up on at startup: it was acted on when
+        // it was asked for, so all it changes now is where Add... starts.
+        if (message.quiet) {
+          return;
         }
         if (message.pin) {
-          // The MCP caller asked for this to land on the sheet rather than
-          // replace what is being dialled in.
-          save();
-          pushStateToControls();
-          pendingPin = true;
+          const id = 'mcp-' + (++pinSeq);
+          pendingPins.set(id, spriteConfig(cfg));
+          requestFor(cfg, id);
+          draw();
         } else {
-          save();
-          pushStateToControls();
+          openDialog('add', cfg);
         }
-        requestCurrent();
       } else if (message.type === 'file') {
-        el('fileName').textContent = message.name;
-        el('fileName').title = message.name;
-        state.file = message.path;
-        save();
-        requestCurrent();
+        // The answer to the dialog's Choose file...
+        if (dialog) {
+          dialog.cfg.file = message.path;
+          showFileName(dialog.cfg);
+          refreshSuggestedName();
+          requestPreview();
+        }
       } else if (message.type === 'useSelection') {
         // The "Show Selection as ZX Spectrum Graphics" command, which has
         // already stashed the selection host-side.
-        state.source = 'selection';
-        save();
-        pushStateToControls();
-        requestCurrent();
+        const cfg = Object.assign({}, dialog ? dialog.cfg : state.draft, { source: 'selection' });
+        openDialog(dialog ? dialog.mode : 'add', cfg, dialog ? dialog.editId : undefined);
       } else if (message.type === 'refresh') {
-        // Pinned sprites reading from memory are exactly what you pin in order
-        // to watch change, so a refresh is the whole sheet.
-        if (state.source === 'memory') {
-          requestCurrent();
+        // A stop, or Live ticking. Sprites reading from memory are exactly
+        // what you put on the sheet in order to watch them change.
+        requestSheet(true);
+        if (dialog && dialog.cfg.source === 'memory') {
+          requestPreview();
         }
-        for (const entry of state.pinned) {
-          if (entry.source === 'memory') {
-            requestFor(entry);
-          }
+      } else if (message.type === 'exported') {
+        let text = 'Exported ' + message.frames + ' frame' + (message.frames === 1 ? '' : 's')
+                 + ' to ' + message.files.map(fileLeafOf).join(', ');
+        if (message.skipped && message.skipped.length) {
+          text += '   (left out, no data read: #' + message.skipped.join(', #') + ')';
         }
+        el('status').classList.remove('warn');
+        el('status').textContent = text;
+      } else if (message.type === 'imported') {
+        importAtlas(message.atlas, message.path);
       } else if (message.type === 'error') {
-        warn(message.text);
+        if (dialog) {
+          dialogWarn(message.text);
+        } else {
+          warn(message.text);
+        }
       }
     });
 
+    // Selection sprites come back with the bytes they were added with.
+    for (const entry of state.pinned) {
+      if (entry.selectionBytes) {
+        bytesById.set(entry.id, fromBase64(entry.selectionBytes));
+      }
+    }
+
     fillColourSelects();
-    pushStateToControls();
-    bindControls();
+    bindDialogControls();
+    bindSheetControls();
+    bindSheetDrops();
+    bindPreviewHover();
+    bindExport();
     draw();
     vscodeApi.postMessage({ type: 'ready' });
     vscodeApi.postMessage({ type: 'live', on: state.live });
-    requestAll();
+    requestSheet(false);
   </script>
 </body>
 </html>

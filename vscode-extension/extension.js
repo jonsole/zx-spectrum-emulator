@@ -23,6 +23,7 @@ const { activateAsmLanguage } = require('./asm_language');
 const { activateProfile } = require('./profile_view');
 const { activateRewind } = require('./rewind_view');
 const { activateWatchpoints } = require('./watchpoint_view');
+const graphicsModel = require('./graphics_model');
 const {
   FILTERS,
   SCALES,
@@ -1537,7 +1538,7 @@ function stopTracePolling() {
 // vocabulary its own business.
 const GRAPHICS_FIELD_NAMES = { invert_mask: 'invertMask', flip: 'bottomUp' };
 
-function graphicsViewMessage(view) {
+function graphicsViewMessage(view, quiet) {
   const mapped = {};
   for (const key of Object.keys(view)) {
     mapped[GRAPHICS_FIELD_NAMES[key] || key] = view[key];
@@ -1548,12 +1549,14 @@ function graphicsViewMessage(view) {
     // An action rather than a setting: "add this to the sheet" instead of
     // "replace what is being dialled in".
     pin: view.pin === true,
+    // A view caught up on rather than just asked for (see catchUpGraphicsView).
+    quiet: quiet === true,
     // The page shows a name, not a path; the host is the side that has one.
     fileName: view.file ? path.basename(view.file) : undefined,
   };
 }
 
-function applyGraphicsView(context, view) {
+function applyGraphicsView(context, view, quiet) {
   if (!view || typeof view.version !== 'number' || view.version <= graphicsAppliedVersion) {
     return;
   }
@@ -1563,7 +1566,7 @@ function applyGraphicsView(context, view) {
   }
   const fresh = !graphicsPanel;
   showGraphicsPanel(context);
-  postOrQueueGraphics(graphicsViewMessage(view), fresh);
+  postOrQueueGraphics(graphicsViewMessage(view, quiet), fresh);
 }
 
 // Asks the server where the panel is meant to be pointed. Used when the panel
@@ -1586,8 +1589,12 @@ async function catchUpGraphicsView(mayOpen) {
   }
   // Version 0 means nothing has ever been asked for, and the panel keeps its
   // own last state rather than being dragged to the server's defaults.
+  // Applied quietly: the page takes it as where Add... starts, and neither
+  // adds it nor opens the dialog on it. A catch-up happens on every session
+  // start and panel open, long after the call it replays -- acting on a `pin`
+  // again then would put the same sprite on a remembered sheet each time.
   if (body && body.version > 0 && (mayOpen || graphicsPanel)) {
-    applyGraphicsView(graphicsContext, body);
+    applyGraphicsView(graphicsContext, body, true);
   }
 }
 
@@ -1617,7 +1624,7 @@ function showGraphicsPanel(context) {
     vscode.ViewColumn.Active,
     { enableScripts: true, retainContextWhenHidden: true }
   );
-  graphicsPanel.webview.html = webviewHtml(path.join(__dirname, 'graphics_view.html'));
+  graphicsPanel.webview.html = graphicsPageHtml();
   graphicsPanel.onDidDispose(
     () => {
       graphicsPanel = undefined;
@@ -1632,6 +1639,27 @@ function showGraphicsPanel(context) {
     context.subscriptions
   );
   return graphicsPanel;
+}
+
+// The page with graphics_model.js inlined where it has its marker -- the same
+// source the tests run, so the decoding and the export are tested in Node and
+// used unchanged in the webview. A function replacement, because the model's
+// source is full of '$' and a replacement string would read "$'" as a pattern.
+//
+// The sheet the page last saved goes in the same way, as `window.__zxSheet`:
+// a webview's own state is dropped when its panel closes, so the extension
+// keeps a copy in the workspace (GRAPHICS_SHEET_KEY) and a reopened panel
+// starts from it. `<` is escaped so no sprite name can close the script.
+const GRAPHICS_SHEET_KEY = 'zxspectrum.graphicsSheet';
+
+function graphicsPageHtml() {
+  const model = fs.readFileSync(path.join(__dirname, 'graphics_model.js'), 'utf8');
+  const sheet = graphicsContext ? graphicsContext.workspaceState.get(GRAPHICS_SHEET_KEY) : undefined;
+  const sheetJs = 'window.__zxSheet = ' +
+    JSON.stringify(sheet && typeof sheet === 'object' ? sheet : null).replace(/</g, '\\u003c') + ';';
+  return webviewHtml(path.join(__dirname, 'graphics_view.html'))
+    .replace('/*@graphics_model.js@*/', () => model)
+    .replace('/*@graphics_sheet@*/', () => sheetJs);
 }
 
 // The editor context-menu entry. Takes the selection here rather than letting
@@ -1704,6 +1732,181 @@ async function handleGraphicsMessage(message) {
     await sendGraphicsSymbols(message);
   } else if (message.type === 'live') {
     setGraphicsLive(message.on === true);
+  } else if (message.type === 'export') {
+    await exportGraphics(message);
+  } else if (message.type === 'import') {
+    await importGraphics();
+  } else if (message.type === 'saveSheet') {
+    if (graphicsContext && message.state && typeof message.state === 'object') {
+      await graphicsContext.workspaceState.update(GRAPHICS_SHEET_KEY, message.state);
+    }
+  }
+}
+
+// ---- export and import ------------------------------------------------------
+//
+// The page makes the files (see graphics_model.js); this asks where they go,
+// writes them, and does the parts that need the machine or the disk. The save
+// dialog names the atlas, and the picture and the source go beside it under
+// the same name -- a set of files that only works together is easier to keep
+// together if it cannot be named apart.
+
+let graphicsExportDir;  // where the last export went, so the next starts there
+
+function workspaceDir() {
+  const folders = vscode.workspace.workspaceFolders;
+  return folders && folders.length ? folders[0].uri.fsPath : os.homedir();
+}
+
+// A path in the atlas is kept relative to the atlas when that works, so a
+// sheet exported inside a repo still finds its files from another clone.
+function pathForAtlas(file, atlasDir) {
+  const relative = path.relative(atlasDir, file);
+  if (!relative || path.isAbsolute(relative)) {
+    return file;
+  }
+  return relative.split(path.sep).join('/');
+}
+
+function fileSizeOrNull(file) {
+  try {
+    return fs.statSync(file).size;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function exportGraphics(message) {
+  const dir = graphicsExportDir || workspaceDir();
+  const suggested = message.name || 'sprites';
+  const chosen = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(dir, suggested + '.json')),
+    saveLabel: 'Export',
+    filters: { 'Sprite atlas': ['json'] },
+  });
+  if (!chosen) {
+    return;
+  }
+  const atlasPath = /\.json$/i.test(chosen.fsPath) ? chosen.fsPath : chosen.fsPath + '.json';
+  const stem = atlasPath.replace(/\.json$/i, '');
+  const pngPath = stem + '.png';
+  const snaPath = stem + '.sna';
+  const asmPath = stem + '.s';
+  const atlasDir = path.dirname(atlasPath);
+  graphicsExportDir = atlasDir;
+
+  const atlas = message.atlas || {};
+  const meta = atlas.meta || {};
+  const sprites = (meta.zx && meta.zx.sprites) || [];
+  if (message.png) {
+    meta.image = path.basename(pngPath);
+  }
+  const written = [atlasPath];
+  try {
+    if (message.png) {
+      fs.writeFileSync(pngPath, Buffer.from(message.png, 'base64'));
+      written.unshift(pngPath);
+    }
+    if (message.reference) {
+      // Sprites read from memory point into the machine as it is now, saved
+      // beside the atlas -- only when there are any, and only then does the
+      // export need a session.
+      let machine = null;
+      if (sprites.some((sprite) => sprite.source === 'memory' && typeof sprite.bytes !== 'string')) {
+        const session = zxDebugSession();
+        if (!session) {
+          postGraphicsError('Pointing sprites from memory into a snapshot needs the debug ' +
+                            'session they were read from -- start one, or export their bytes instead.');
+          return;
+        }
+        const saved = await session.customRequest('saveSnapshot', { path: snaPath });
+        machine = { file: path.basename(snaPath), size: (saved && saved.bytes) || fileSizeOrNull(snaPath) };
+        written.push(snaPath);
+      }
+      const lost = graphicsModel.addSnapshotPointers(sprites, machine, fileSizeOrNull);
+      if (lost.length) {
+        postGraphicsError('Could not point these into a snapshot: ' + lost.join(', '));
+        return;
+      }
+    }
+    for (const sprite of sprites) {
+      if (typeof sprite.file === 'string' && sprite.file) {
+        sprite.file = pathForAtlas(sprite.file, atlasDir);
+      }
+      if (sprite.snapshot && typeof sprite.snapshot.file === 'string') {
+        sprite.snapshot.file = pathForAtlas(path.resolve(atlasDir, sprite.snapshot.file), atlasDir);
+      }
+    }
+    fs.writeFileSync(atlasPath, JSON.stringify(atlas, null, 2) + '\n');
+    if (typeof message.asm === 'string') {
+      // The source was written naming the suggested files; name the real ones.
+      const asm = message.asm
+        .replace(suggested + '.png', path.basename(pngPath))
+        .replace(suggested + '.json', path.basename(atlasPath));
+      fs.writeFileSync(asmPath, asm);
+      written.push(asmPath);
+    }
+  } catch (err) {
+    postGraphicsError('Could not export: ' + errorText(err));
+    return;
+  }
+  postGraphics({
+    type: 'exported',
+    files: written,
+    frames: message.frames,
+    skipped: message.skipped || [],
+  });
+}
+
+// Paths in an atlas are relative to it, and a sprite that only points at its
+// bytes gets them read here, where the disk is -- the panel is shown them as
+// if the atlas had carried them. One whose file has gone arrives without, and
+// the panel reads it the usual way (or says why it cannot).
+async function importGraphics() {
+  const chosen = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    openLabel: 'Import',
+    filters: { 'Sprite atlas': ['json'], 'All files': ['*'] },
+    defaultUri: vscode.Uri.file(graphicsExportDir || workspaceDir()),
+  });
+  if (!chosen || chosen.length === 0) {
+    return;
+  }
+  const atlasPath = chosen[0].fsPath;
+  const atlasDir = path.dirname(atlasPath);
+  let atlas;
+  try {
+    atlas = JSON.parse(fs.readFileSync(atlasPath, 'utf8'));
+  } catch (err) {
+    postGraphicsError('Could not read ' + path.basename(atlasPath) + ': ' + errorText(err));
+    return;
+  }
+  const sprites = (atlas && atlas.meta && atlas.meta.zx && atlas.meta.zx.sprites) || [];
+  const unreadable = [];
+  for (const sprite of Array.isArray(sprites) ? sprites : []) {
+    if (!sprite || typeof sprite !== 'object') {
+      continue;
+    }
+    if (typeof sprite.file === 'string' && sprite.file) {
+      sprite.file = path.resolve(atlasDir, sprite.file);
+    }
+    if (sprite.snapshot && typeof sprite.snapshot.file === 'string') {
+      sprite.snapshot.file = path.resolve(atlasDir, sprite.snapshot.file);
+    }
+    if (typeof sprite.bytes !== 'string') {
+      try {
+        const bytes = graphicsModel.pointedBytes(sprite, (file) => fs.readFileSync(file));
+        if (bytes) {
+          sprite.bytes = Buffer.from(bytes).toString('base64');
+        }
+      } catch (err) {
+        unreadable.push((sprite.name || '?') + ' (' + errorText(err) + ')');
+      }
+    }
+  }
+  postGraphics({ type: 'imported', atlas, path: atlasPath });
+  if (unreadable.length) {
+    postGraphicsError('Could not read the bytes for ' + unreadable.join(', '));
   }
 }
 

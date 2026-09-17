@@ -2017,6 +2017,30 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         }
         body = tape_body(engine.tape_status(), engine.tape_blocks());
 
+    } else if (command == "saveSnapshot") {
+        // Not standard DAP: MCP's save_snapshot, for the graphics panel. An
+        // export that points into a snapshot instead of carrying a picture
+        // saves the machine beside its atlas, so the addresses it names can be
+        // read back later. A .sna unless the path ends in .z80.
+        const std::string path = arg_str(arguments, "path");
+        std::string tail = path.size() >= 4 ? path.substr(path.size() - 4) : std::string();
+        for (size_t i = 0; i < tail.size(); i++) {
+            tail[i] = char(std::tolower(static_cast<unsigned char>(tail[i])));
+        }
+        const SnapshotFormat format = tail == ".z80" ? SnapshotFormat::Z80 : SnapshotFormat::Sna;
+        std::vector<uint8_t> data;
+        const std::string message = path.empty() ? "no path given"
+                                                 : engine.save_snapshot(data, format);
+        if (!message.empty()) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", message}});
+        }
+        if (!write_file(path, data)) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", "couldn't write " + path}});
+        }
+        body = json{{"path", path}, {"bytes", data.size()}};
+
     } else if (command == "tapeControl") {
         // Queue-free, like the trace requests: Play has to reach a game that
         // is already running and waiting for its next tape part.

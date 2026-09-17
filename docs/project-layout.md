@@ -56,6 +56,8 @@ zx-spectrum-emulator/
     watchpoint_view.js           #   watchpoints: the Watch Address command and the sidebar list
     watchpoint_model.js          #   ...how one reads, and what was typed (no vscode API, tested)
     screen_scaling.js            #   the screen panel's size and filter (no vscode API, tested)
+    graphics_view.html           #   the graphics panel's page
+    graphics_model.js            #   ...its decoding and sprite sheet export (no vscode API, tested)
     asm_language.js              #   Z80 assembly: definition, references, rename, hierarchy
     asm_index.js                 #   ...the symbol index behind it (no vscode API, tested)
     syntaxes/z80-asm.tmLanguage.json  # sjasmplus syntax colouring

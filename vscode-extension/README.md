@@ -23,14 +23,19 @@ A handful of things, in one small extension:
 4. **A graphics viewer.** The "ZX Spectrum: Show Graphics" command opens a panel that draws bytes
    the way the ULA would -- as a sprite sheet, a character set, or a screen dump. The bytes come
    from the running machine's memory (by address or symbol, live while it runs), from a file, or
-   from a `DEFB` selection in an editor. **+ Add** keeps the sprite being dialled in and frees the
-   controls for the next, so one sheet can hold sprites of different sizes, from different files,
-   in different formats; a bin button on each removes it. Hovering a pixel names the byte and bit
-   holding it. The
-   page is `graphics_view.html`, beside `extension.js` rather than in `tools/` like the trace
-   viewer: every byte it draws arrives from the extension host, so unlike that one it is no use
-   standalone, and it goes where the install already carries it. See
-   [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
+   from a `DEFB` selection in an editor. **Add...** opens a dialog with every per-sprite setting
+   and a live preview, and only **Add** puts the sprite on the sheet, so one sheet can hold
+   sprites of different sizes, from different files, in different formats. Every sprite has a
+   name, sprites can be gathered into named groups, double-click changes one in the same dialog,
+   and dragging reorders them or moves them between groups. Hovering a pixel names the byte and
+   bit holding it. **Export...** writes a JSON atlas in TexturePacker's layout, with a PNG sheet
+   beside it and assembler source if wanted, or pointing into a snapshot instead of carrying the
+   bytes; **Import...** reads one back. The page is `graphics_view.html`, beside `extension.js`
+   rather than in `tools/` like the trace viewer: every byte it draws arrives from the extension
+   host, so unlike that one it is no use standalone, and it goes where the install already
+   carries it. `graphics_model.js` (tested by `node tests/graphics_model_test.js`) does the
+   decoding, the packing and the three export formats, and is inlined into the page as source.
+   See [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
 5. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
 6. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
@@ -260,6 +265,11 @@ edits show up without re-copying) after changing anything here, then reload agai
   it as a `zxGraphicsView` event, and `onDidReceiveDebugSessionCustomEvent` picks it up here. VS
   Code hands extensions unknown DAP events for exactly this purpose. One-way: the panel's own
   controls are not written back.
+- The graphics panel makes its export files itself -- the picture needs a canvas -- and the
+  extension only asks where they go and writes them. An export that points into a snapshot has
+  the machine saved beside the atlas over a `saveSnapshot` custom request (MCP's
+  `save_snapshot`, for DAP), and an import reads the bytes a pointing atlas names here, where
+  the disk is, so the page sees an import the same either way.
 - The graphics panel's memory reads go through DAP `readMemory`, which the engine services at a
   running machine's own yields -- so its **Live** box re-reads about four times a second without
   pausing anything. It also refreshes on every `stopped` event, which the extension hears by

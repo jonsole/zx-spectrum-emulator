@@ -76,7 +76,11 @@ watchpoint reads, and what "player 8" in the Watch Address box means) and
 `node vscode-extension/tests/screen_scaling_test.js` (how big the screen panel
 draws the picture on a scaled display, how the border crop keeps each side in
 proportion, where the scanline gaps fall, and that the functions the page is
-given as source still work there).
+given as source still work there) and
+`node vscode-extension/tests/graphics_model_test.js` (the graphics panel's
+export: names and labels, how the sheet is packed, the picture's transparency,
+the atlas, that the assembler source assembles back to the same bytes, groups,
+pointing into a `.sna`, and reading an atlas back).
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion

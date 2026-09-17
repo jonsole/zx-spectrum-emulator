@@ -214,12 +214,12 @@ sprite is all three things over its life:
   with no debug session needed at all. That is the build-time half of the same
   question.
 - **Selection** — select `DEFB` lines in an assembler source and press **Grab
-  selection**, or right-click and use **"Show Selection as ZX Spectrum
-  Graphics"**. Everything sjasmplus writes for a byte is understood: `0x3C`,
-  `$3C`, `#3C`, `3Ch`, `0b00111100`, `%00111100`, `60`. When the selection
-  contains `DEFB` lines only those contribute, so catching the label above the
-  table or an `EQU` beside it does not push numbers into the middle of the
-  picture.
+  selection** in the dialog, or right-click and use **"Show Selection as ZX
+  Spectrum Graphics"**, which opens the dialog on them. Everything sjasmplus
+  writes for a byte is understood: `0x3C`, `$3C`, `#3C`, `3Ch`, `0b00111100`,
+  `%00111100`, `60`. When the selection contains `DEFB` lines only those
+  contribute, so catching the label above the table or an `EQU` beside it does
+  not push numbers into the middle of the picture.
 
 ### Formats
 
@@ -252,17 +252,43 @@ that item, **the address of the byte holding it and which bit**, the byte in
 binary, and the mask byte beside it. Everything else in the panel is in service
 of being able to point at one wrong pixel and be told where to go and fix it.
 
-Layout changes redraw from the bytes already in hand rather than re-reading, so
-dragging the width up and down until an unknown sprite format snaps into focus
-costs nothing.
+Layout changes in the dialog redraw its preview from the bytes already in
+hand rather than re-reading, so dragging the width up and down until an unknown
+sprite format snaps into focus costs nothing.
+
+### Adding and changing a sprite
+
+**Add...** opens a dialog holding every per-sprite setting — where the bytes
+come from, the layout, the mask arrangement and the colours — beside a preview
+of what they draw. Nothing reaches the sheet until **Add**; **Cancel** (or
+Escape) throws the attempt away. The dialog opens where the last Add left off,
+so a run of similar sprites only needs the offset changed each time. **Add**
+stays disabled until the preview has bytes, so a sprite that reads nothing
+cannot be added.
+
+Every sprite has a **name**, and it is a label: letters, digits and
+underscores, since the export writes it as the atlas frame and the assembler
+label. The dialog offers one made from where the data came from — the symbol
+(`guard_tab`), the file and offset (`sprite_data_120`), or `sprite1`,
+`sprite2`... when there is nothing better — and keeps offering a fresh one as
+the source changes, until you type your own. Clearing the box hands naming back
+to the dialog. **Group** picks the group the sprite goes in (see below). Two
+sprites in the same group, or two outside any group, cannot share a name; the
+same name in two groups is fine.
+
+**Double-click** a sprite on the sheet (or press its **✎**) to open the same
+dialog on it. **OK** changes that sprite in place, keeping its number and its
+position; **Cancel** leaves it as it was. Editing a sprite does not change
+where the next **Add...** starts.
 
 ### The sheet
 
-The controls describe **one** sprite: the one being dialled in, shown first and
-outlined. **+ Add** keeps it, and the settings are then free to move on to the
-next one. Each kept sprite carries its own frozen copy of everything
-per-sprite — source, address or file, size, format, mask arrangement, colours —
-so a sheet can hold sprites of **different sizes, from different files, in
+The sheet holds the sprites that have been added, in order. **Drag** a sprite
+to move it: dropping on the left half of another sprite puts it before that
+one, the right half after, and dropping on empty sheet sends it to the end.
+Each sprite carries its own frozen copy of everything per-sprite — name,
+group, source, address or file, size, format, mask arrangement, colours — so a
+sheet can hold sprites of **different sizes, from different files, in
 different formats** at once.
 
 That is the answer to "show me several sprites when they are not all the same
@@ -271,28 +297,117 @@ carries its own width and height and no two neighbours need agree: a single
 fixed grid can only ever describe one shape, and repacking the data into one
 would throw away the byte addresses that make the panel worth having.
 
-Each kept sprite has two buttons:
-
-- **✎** puts its settings back into the controls, so a near-miss can be
-  adjusted and re-added rather than retyped.
-- **🗑** removes it.
+Each sprite has three buttons: **✎** opens it in the dialog, **⤓** exports
+just that sprite, and **🗑** removes it.
 
 Only `zoom`, `grid`, `labels` and `Live` are properties of the sheet rather
-than of a sprite, so changing those changes every tile at once.
+than of a sprite, so changing those changes every tile at once. The dialog's
+preview zoom is the sheet's zoom, so what the preview shows is what the sheet
+will.
 
-**Refresh** re-reads the whole sheet, not just the sprite being dialled in —
-a sprite pinned to an address in memory is exactly the thing you pin in order
-to watch it change, and the same goes for the automatic refresh on every stop.
-A sprite pinned from a file keeps that file's path, so it goes on reading the
-file it came from after **Choose file...** has moved on to another.
+**Refresh** re-reads every sprite on the sheet — a sprite from an address in
+memory is exactly the thing you add in order to watch it change, and the same
+goes for the automatic refresh on every stop. A sprite from a file keeps that
+file's path, so it goes on reading the file it came from after **Choose
+file...** has moved on to another.
 
-The sheet is remembered across a panel close and a window reload. The bytes
-are not — they are re-read, because megabytes of sprite do not belong in a
-store meant for a little UI state.
+The sheet is remembered across a panel close and a window reload, per
+workspace: the page hands it to the extension on every change, and a newly
+opened panel starts from it. (A webview's own saved state would not do — VS
+Code drops it when the panel is closed.) Memory and file bytes are not — they are re-read, because megabytes of sprite do not
+belong in a store meant for a little UI state. A sprite taken from a selection
+is the exception: there is nothing to re-read it from once the selection has
+moved, so its bytes (up to 64 KB) are kept with it and it is never re-read.
+
+### Groups
+
+**New group** adds a named group to the sheet, with its name ready to type
+(it is a label too, so `knight team` becomes `knight_team`). The sheet then
+shows the sprites in no group first, under "Not in a group", and each group
+after, under its own heading. Sprites join a group by being dragged into it —
+onto one of its sprites, to land beside that one, or anywhere else in the group
+to go at its end — or by being added with that group chosen in the dialog.
+Dragging one into "Not in a group" takes it out again.
+
+A group's heading has its name (double-click it, or press **✎**, to rename;
+Enter keeps the new name and Escape drops it), how many sprites it holds, and:
+
+- **+** opens **Add...** with the group already chosen. The next **Add...**
+  starts in the group last added to, so a run of frames goes into one group
+  without choosing it each time.
+- **⤓** exports the group on its own, named after it.
+- **🗑** removes the group. Its sprites stay on the sheet, out of any group, and
+  one whose name is already used there gets a `_2`.
+
+In an export a group is a prefix: a sprite `walk` in the group `knight` is
+`knight_walk` in the atlas and the source, so `walk` in `knight` and `walk` in
+`guard` never collide. The groups are listed in the atlas too, and each one
+starts a new row of the picture.
+
+### Exporting and importing
+
+**Export...** saves the whole sheet, a group's **⤓** saves that group, and a
+sprite's **⤓** saves that sprite. A dialog asks what to write; the save dialog
+then asks for the atlas's name, and the other files go beside it under the same
+name — `knight.json`, `knight.png`, `knight.sna`, `knight.s`.
+
+- **Atlas (.json)** — always written. It is TexturePacker's "JSON (Hash)"
+  layout, which Aseprite also writes and Phaser loads as it is: a `frames`
+  object keyed by frame name, and `meta`. A sprite with several items has a
+  frame for each: `knight_walk_0`, `knight_walk_1`..., or `font_65` by
+  character code in a font. Everything the panel knows rides along under `zx`
+  keys, which engines ignore: for each frame, its sprite, group, item, byte
+  offset and address; in `meta.zx`, the groups in order, and every sprite's
+  settings, where it was read from, its length and, unless the export points
+  instead (below), its bytes in base64.
+- **Picture (.png)** — ticked by default. The sprites at one image pixel per
+  Spectrum pixel, without the grid or the labels, each sprite keeping its own
+  columns, a pixel apart so an engine that filters the picture never bleeds one
+  frame into the next. Masked pixels are fully transparent; ink and paper are
+  the sprite's own colours, and a screen uses its attributes. With a picture,
+  each frame in the atlas has its rectangle in it (`frame`, `sourceSize` and
+  the rest); without one, the atlas has no `meta.image` and its frames only
+  say what they are and where their bytes live.
+- **Point into the snapshot instead of carrying the bytes** — the atlas names
+  where each sprite's bytes are rather than holding a copy. A sprite read from
+  memory gets `snapshot: { file, offset, address }` into the machine, which the
+  export saves as a `.sna` beside the atlas (it needs the debug session for
+  that, through a `saveSnapshot` request, and the snapshot is the machine as it
+  is at the moment of export). A sprite from a `.sna` file points into that
+  file, with the address its bytes load at; one from any other file is found by
+  its own `file` and `offset`. A sprite from a selection has nowhere else to be
+  read from, and one in the ROM (the character set at `$3D00`, say) is not in a
+  `.sna`, so those carry their bytes either way. File paths are written
+  relative to the atlas, so an export inside a repo works from another clone.
+- **Assembler source (.s)** — sjasmplus `DEFB` lines, byte for byte as they
+  were read and in their original order: mask bytes where they were, header
+  bytes first, bottom row first when the data runs that way. It assembles back
+  to exactly the data it came from. Each row is written in binary with a
+  picture of the row beside it (`#` ink, `.` paper, a space where the mask is
+  clear); a screen is written in hex, 32 bytes to a line, with `_bitmap` and
+  `_attrs` labels. Each sprite, each of its items and each group gets a label,
+  and every label in the file is unique — a sprite named `ball` with two items
+  writes `ball`, `ball_0` and `ball_1`, so a second one named `ball_1` becomes
+  `ball_1_2`.
+
+The dialog remembers what was ticked. A sprite with no data read yet is left
+out, and the status line says which.
+
+**Import...** reads an atlas back and adds its sprites to the end of the sheet,
+in their groups — a group whose name is already taken comes in beside it as
+`knight_2` rather than mixing two sets of sprites. Each sprite shows the bytes
+it was exported with, or, for an atlas that points, the bytes read from its
+snapshot or file. It stays tied to where it came from, though: the next
+**Refresh**, or the next stop, reads a memory sprite from the running machine
+again. A file that is not an export from this panel is refused, and a
+hand-edited atlas loses only the fields that do not make sense, each clamped or
+reset to its default rather than refusing the whole sheet.
 
 ### Driving it from MCP
 
-`set_graphics_view` points the panel at something. It is the only MCP tool that
+`set_graphics_view` points the panel at something: it opens the **Add**
+dialog on that view, so the person sees the preview and decides whether it goes
+on the sheet. It is the only MCP tool that
 moves anything in the editor rather than in the machine — it changes nothing
 the emulator does and returns no picture, so it is for putting a sprite in
 front of the person you are working with ("here is what is actually at
@@ -311,8 +426,8 @@ but a misspelled `source`, `format` or `interleave` **is** refused, because a
 typo that reached the panel would leave it drawing nothing with the mistake
 three processes away from whoever had to find it.
 
-`pin=true` **adds** the sprite to the sheet instead of replacing the one being
-dialled in, which is how a set of differently-sized sprites is put up: one call
+`pin=true` **adds** the sprite to the sheet straight away, with no dialog,
+which is how a set of differently-sized sprites is put up: one call
 per sprite, each with its own width, height and format. Every other field
 merges over the previous call, so a run of sprites in the same format only has
 to restate what actually differs — usually just an offset and a size:
@@ -330,7 +445,11 @@ another tile. It is cleared on every call.
 
 The panel opens itself if it is closed. With no debug session at all the view
 is remembered, and the panel picks it up when one starts — though only the last
-one, since the server holds a view rather than a sheet.
+one, since the server holds a view rather than a sheet, and only as where
+**Add...** starts: a view caught up on like that neither opens the dialog nor
+adds to the sheet, even with `pin`. The same catch-up happens at every session
+start, and acting on it again would put the last pinned sprite on the
+remembered sheet once more each time.
 
 #### How it gets there
 
