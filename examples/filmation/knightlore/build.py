@@ -8,10 +8,17 @@ knightlore.s, which is where the debugger resolves them. This wraps the RAM as a
 .z80 that starts at `start` -- sjasmplus has no .z80 output of its own, and its
 48K .sna has to push PC into the bottom of the screen.
 
-sprite_data.s and room_data.s are generated rather than hand-written -- see
-sprites.py and rooms.py -- and are regenerated here whenever their packed
-inputs or their generators are newer, which is the one build step beyond
-calling the assembler.
+sprite_data.s, font.s and room_data.s are generated rather than hand-written
+-- see sprite_source.py, font_source.py and rooms.py -- and are regenerated
+here whenever their inputs or their generators are newer, which is the one
+build step beyond calling the assembler.
+
+The sprites and the font each come from a sheet -- sprites.png with
+sprites.json, font.png with font.json -- which is where that artwork lives:
+sprite_sheet.py and font_sheet.py unpack them out of sprite_data.bin and
+font.bin, and this makes one the first time it finds none. It never remakes
+one that is already there, because that is where your edits to the artwork
+live -- run the unpacking script by hand to go back to the game's own.
 
 sprite_adj.s is generated too, but by adj.py from a RUNNING Knight Lore, so it
 is committed and never rebuilt here.
@@ -68,42 +75,66 @@ def find_sjasmplus() -> str:
 
 
 def generate_sprite_data() -> None:
-    """Regenerates sprite_data.s when its inputs have moved on.
+    """Regenerates the sprite sources when the sheet has moved on.
 
-    sprites.py writes the table to stdout, so this captures it rather than
-    letting it inherit one -- the original project's SCons build did the same
-    thing with a shell redirect.
+    Two steps: sprite_sheet.py unpacks sprite_data.bin into sprites.png and
+    sprites.json if there is no sheet yet, and sprite_source.py turns that
+    sheet into the three assembler files. Only the first run makes a sheet --
+    an existing one is the artwork, edits and all, and is never overwritten.
     """
-    generator = KNIGHTLORE / "sprites.py"
     packed = KNIGHTLORE / "sprite_data.bin"
-    generated = KNIGHTLORE / "sprite_data.s"
-    table = KNIGHTLORE / "sprite_table.s"
-    adjusted = KNIGHTLORE / "sprite_adj_gen.s"
+    unpack = KNIGHTLORE / "sprite_sheet.py"
+    generator = KNIGHTLORE / "sprite_source.py"
+    sheet = KNIGHTLORE / "sprites.png"
+    atlas = KNIGHTLORE / "sprites.json"
     harvest = KNIGHTLORE / "sprite_adj.s"
+    generated = [KNIGHTLORE / name for name in
+                 ("sprite_data.s", "sprite_table.s", "sprite_adj_gen.s")]
 
-    if not packed.is_file():
-        sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
-                 "own copy of Knight Lore to produce it")
+    if not sheet.is_file() or not atlas.is_file():
+        if not packed.is_file():
+            sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
+                     "own copy of Knight Lore to produce it")
+        print(f"Unpacking {packed.name} into {sheet.name} and {atlas.name}")
+        subprocess.run([sys.executable, str(unpack)], cwd=KNIGHTLORE, check=True)
 
-    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime,
-                       harvest.stat().st_mtime)
-    if all(f.is_file() and f.stat().st_mtime >= newest_input
-           for f in (generated, table, adjusted)):
+    newest_input = max(f.stat().st_mtime
+                       for f in (generator, sheet, atlas, harvest))
+    if all(f.is_file() and f.stat().st_mtime >= newest_input for f in generated):
         return
 
-    # Three files: the two halves go to different places in the image -- see
-    # the note at the top of sprites.py -- and the adjustments are the harvest
-    # in sprite_adj.s with the trimmed rows folded in.
-    for out, part in ((generated, "bitmaps"), (table, "table"), (adjusted, "adj")):
-        print(f"Regenerating {out.name} from {packed.name}")
-        result = subprocess.run(
-            [sys.executable, str(generator), part],
-            cwd=KNIGHTLORE,
-            capture_output=True,
-            encoding="utf-8",
-            check=True,
-        )
-        out.write_text(result.stdout, encoding="utf-8")
+    print(f"Regenerating the sprite sources from {sheet.name}")
+    subprocess.run([sys.executable, str(generator)], cwd=KNIGHTLORE, check=True)
+
+
+def generate_font_data() -> None:
+    """Regenerates font.s when the font sheet has moved on.
+
+    The same two steps as the sprites: font_sheet.py unpacks font.bin into
+    font.png and font.json if there is no sheet yet, and font_source.py turns
+    that sheet into font.s. Only the first run makes a sheet -- an existing one
+    is the artwork, edits and all, and is never overwritten.
+    """
+    packed = KNIGHTLORE / "font.bin"
+    unpack = KNIGHTLORE / "font_sheet.py"
+    generator = KNIGHTLORE / "font_source.py"
+    sheet = KNIGHTLORE / "font.png"
+    atlas = KNIGHTLORE / "font.json"
+    generated = KNIGHTLORE / "font.s"
+
+    if not sheet.is_file() or not atlas.is_file():
+        if not packed.is_file():
+            sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
+                     "own copy of Knight Lore to produce it")
+        print(f"Unpacking {packed.name} into {sheet.name} and {atlas.name}")
+        subprocess.run([sys.executable, str(unpack)], cwd=KNIGHTLORE, check=True)
+
+    newest_input = max(f.stat().st_mtime for f in (generator, sheet, atlas))
+    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+        return
+
+    print(f"Regenerating {generated.name} from {sheet.name}")
+    subprocess.run([sys.executable, str(generator)], cwd=KNIGHTLORE, check=True)
 
 
 def assemble(sjasmplus: str, defines: list[str]) -> None:
@@ -228,6 +259,7 @@ def main() -> None:
 
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
+    generate_font_data()
     generate_room_data()
     assemble(sjasmplus, defines)
 

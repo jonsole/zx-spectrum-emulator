@@ -334,8 +334,8 @@ and every graphic both read from the code and harvested agrees. The few body
 facings the game never shows borrow their other side's (`STANDS_IN`).
 
 The harvest is `sprite_adj.s`, committed because it cannot be rebuilt without
-the game. `sprites.py` folds in the blank rows it takes off the bottom of each
-sprite and writes `sprite_adj_gen.s`, which is what the build includes.
+the game. `sprite_source.py` folds in the blank rows it takes off the bottom of
+each sprite and writes `sprite_adj_gen.s`, which is what the build includes.
 
 Forcing a room needs no register writes: the frame loop ends with `JP $AFBD` at
 `$B085`, one instruction past the room-entry call, so pointing it at `$AFBA`
@@ -362,10 +362,16 @@ Nothing here is hand-written:
 |---|---|
 | `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
 | `knightlore/rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
-| `knightlore/sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` and `sprite_table.s`; with `sprite_adj.s`, -> `sprite_adj_gen.s` |
+| `knightlore/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprites.png` and `sprites.json`, the sprite sheet: an atlas the extension's graphics panel opens, and the artwork's home |
+| `knightlore/sprite_source.py` | `sprites.png` + `sprites.json` -> `sprite_data.s` and `sprite_table.s`; with `sprite_adj.s`, -> `sprite_adj_gen.s` |
+| `knightlore/font_sheet.py` | `font.bin` -> `font.png` and `font.json`, the font sheet: forty 8x8 characters, the digits and letters given to the panel as fonts so it labels each cell with what it draws |
+| `knightlore/font_source.py` | `font.png` + `font.json` -> `font.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `font.bin` |
 | `knightlore/adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
 
-`build.py` runs `rooms.py` and `sprites.py` whenever their inputs change. The
+`build.py` runs `rooms.py`, `sprite_source.py` and `font_source.py` whenever
+their inputs change, and the matching `*_sheet.py` the first time it finds no
+sheet -- never again after that, because a sheet is where edits to the artwork
+live. The
 castle's data lives in contended memory at `$6000`, as the game's own did: the
 room tables are read only when a room is built, and the adjustment lookup is a
 handful of reads a move.
@@ -379,7 +385,7 @@ graphics, and **10 of those objects are mirrored**; six of the eight graphics
 serve both orientations.
 
 The mirror is horizontal, about the screen's vertical axis. Row order does not
-enter into it, so nothing here has to know that `sprites.py` already turned
+enter into it, so nothing here has to know that `sprite_source.py` already turned
 Ultimate's bottom-up rows the right way up. Knight Lore also has a vertical
 flip, but no object in the game ever asks for one — every site touching the
 flags byte uses `$40` — and only one sprite in our set (`sprite_014`, 4x32, not
@@ -490,7 +496,7 @@ sprite can be rotated too: its rotated form is 6 bytes wide, and
 
 `object_update` computed `MAX_X` by adding the sprite record's first byte to
 `MIN_X`. That byte is the *blit index* -- `(width-2)*32` then, `(width-2)*16`
-now -- not a width in bytes, and `sprites.py` had changed the encoding without
+now -- not a width in bytes, and the sprite generator had changed the encoding without
 this being updated, so `MAX_X` came out far too large for anything wider than 2
 bytes.
 

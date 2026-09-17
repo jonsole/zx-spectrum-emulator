@@ -887,7 +887,7 @@ object_update:
 					; the jump table's padding, which then ran as code.
 					;
 					; (hl) is the BLIT INDEX, (width-2) * JUMP_GROUP, not a width in
-					; bytes -- sprites.py changed that encoding. So unpack the width
+					; bytes -- sprite_source.py changed that encoding. So unpack the width
 					; back out rather than adding it raw, which is what the old
 					; "adc (hl) / inc a" did.
 					ld		a,(hl)		; blit index: (width - 2) * JUMP_GROUP
@@ -1446,7 +1446,7 @@ objects_draw_all:
 					; which is eight bytes into this record with two pops to go.
 					;
 					; Ultimate did not need any of this. Their artwork is stored
-					; bottom row first -- sprites.py turns it the right way up on the
+					; bottom row first -- sprite_source.py turns it the right way up on the
 					; way in -- and an object hung on its base draws upward from a
 					; known address, so running off the top of the screen just means
 					; drawing fewer rows and stopping. Top-down data has to find the

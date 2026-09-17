@@ -11,8 +11,8 @@
 COLLIDE_HEIGHT		EQU		23
 
 ; What the two kept rotation buffers are sized from -- the biggest frame each
-; half can wear, once sprites.py has taken the blank rows off. That is a fact
-; about the trimmed set, not the game's artwork, so sprites.py checks it on
+; half can wear, once sprite_source.py has taken the blank rows off. That is a fact
+; about the trimmed set, not the game's artwork, so sprite_source.py checks it on
 ; every build: a buffer too small gets rotated past its end, into the other.
 CHARACTER_LARGEST	EQU		sprite_030		; 3x24: the sparkle the legs die and
 					; come back as, which is bigger than any walking frame

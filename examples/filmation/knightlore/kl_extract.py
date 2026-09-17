@@ -19,7 +19,7 @@ It writes five files next to itself, and those are what the build uses
 
   sprite_data.bin  $728C-$AF6B less six empty records, 15,572 bytes: the 103
                    sprites, in the game's own format and address order.
-                   sprites.py turns this into sprite_data.s.
+                   sprite_sheet.py turns this into the sprite sheet.
 
   graphic_map.bin  256 bytes, one per Knight Lore graphic number, giving the
                    index of the sprite in sprite_data.bin that holds its
@@ -27,7 +27,7 @@ It writes five files next to itself, and those are what the build uses
                    use. The game's own table at $7112 is 256 pointers into
                    sprite memory, and several graphic numbers share a bitmap,
                    which is why 186 valid graphics resolve to 103 sprites.
-                   sprites.py uses this to number sprite_table the way the
+                   the sheet carries this, to number sprite_table the way the
                    game numbers its graphics, so the room templates can name
                    sprites directly.
 

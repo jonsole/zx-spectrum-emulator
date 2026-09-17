@@ -18,7 +18,7 @@
 ; down and masks with 7, which drops the spare bits on the way past.
 SPRITE_FLIPPED		EQU		0x01
 SPRITE_ANIMATED_BIT	EQU		7		; a frame of a mover's animation: see
-									; shift_alloc, and ANIMATIONS in sprites.py
+									; shift_alloc, and ANIMATIONS in sprite_sheet.py
 WIDTH_CLASS_SHIFT	EQU		4		; where the class sits in byte 0, and so
 JUMP_GROUP			EQU		1 << WIDTH_CLASS_SHIFT		; the stride of a group
 SHIFT_FINAL_AT		EQU		JUMP_GROUP - 2		; the shift entry ends a group

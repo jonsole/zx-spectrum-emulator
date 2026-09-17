@@ -225,7 +225,7 @@ shift_alloc:		push	hl
 					; a guard's legs are 13 to 16 rows -- so a taller frame later
 					; ran off the end of the buffer, and off the end of the arena
 					; into the code below it. Every animation's frames round to the
-					; same eight, which sprites.py checks. Scenery never changes
+					; same eight, which sprite_source.py checks. Scenery never changes
 					; frame and keeps its exact size: rounding that as well
 					; refused more than twice as many buffers across the castle.
 					bit		SPRITE_ANIMATED_BIT,(hl)

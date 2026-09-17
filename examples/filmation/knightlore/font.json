@@ -1,0 +1,1330 @@
+{
+ "frames": {
+  "font_digits_48": {
+   "frame": {
+    "x": 0,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 0,
+    "offset": 0,
+    "group": "font"
+   }
+  },
+  "font_digits_49": {
+   "frame": {
+    "x": 10,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 1,
+    "offset": 8,
+    "group": "font"
+   }
+  },
+  "font_digits_50": {
+   "frame": {
+    "x": 20,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 2,
+    "offset": 16,
+    "group": "font"
+   }
+  },
+  "font_digits_51": {
+   "frame": {
+    "x": 30,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 3,
+    "offset": 24,
+    "group": "font"
+   }
+  },
+  "font_digits_52": {
+   "frame": {
+    "x": 40,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 4,
+    "offset": 32,
+    "group": "font"
+   }
+  },
+  "font_digits_53": {
+   "frame": {
+    "x": 50,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 5,
+    "offset": 40,
+    "group": "font"
+   }
+  },
+  "font_digits_54": {
+   "frame": {
+    "x": 60,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 6,
+    "offset": 48,
+    "group": "font"
+   }
+  },
+  "font_digits_55": {
+   "frame": {
+    "x": 70,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 7,
+    "offset": 56,
+    "group": "font"
+   }
+  },
+  "font_digits_56": {
+   "frame": {
+    "x": 80,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 8,
+    "offset": 64,
+    "group": "font"
+   }
+  },
+  "font_digits_57": {
+   "frame": {
+    "x": 90,
+    "y": 12,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_digits",
+    "item": 9,
+    "offset": 72,
+    "group": "font"
+   }
+  },
+  "font_letters_65": {
+   "frame": {
+    "x": 0,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 0,
+    "offset": 0,
+    "group": "font"
+   }
+  },
+  "font_letters_66": {
+   "frame": {
+    "x": 10,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 1,
+    "offset": 8,
+    "group": "font"
+   }
+  },
+  "font_letters_67": {
+   "frame": {
+    "x": 20,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 2,
+    "offset": 16,
+    "group": "font"
+   }
+  },
+  "font_letters_68": {
+   "frame": {
+    "x": 30,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 3,
+    "offset": 24,
+    "group": "font"
+   }
+  },
+  "font_letters_69": {
+   "frame": {
+    "x": 40,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 4,
+    "offset": 32,
+    "group": "font"
+   }
+  },
+  "font_letters_70": {
+   "frame": {
+    "x": 50,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 5,
+    "offset": 40,
+    "group": "font"
+   }
+  },
+  "font_letters_71": {
+   "frame": {
+    "x": 60,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 6,
+    "offset": 48,
+    "group": "font"
+   }
+  },
+  "font_letters_72": {
+   "frame": {
+    "x": 70,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 7,
+    "offset": 56,
+    "group": "font"
+   }
+  },
+  "font_letters_73": {
+   "frame": {
+    "x": 80,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 8,
+    "offset": 64,
+    "group": "font"
+   }
+  },
+  "font_letters_74": {
+   "frame": {
+    "x": 90,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 9,
+    "offset": 72,
+    "group": "font"
+   }
+  },
+  "font_letters_75": {
+   "frame": {
+    "x": 100,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 10,
+    "offset": 80,
+    "group": "font"
+   }
+  },
+  "font_letters_76": {
+   "frame": {
+    "x": 110,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 11,
+    "offset": 88,
+    "group": "font"
+   }
+  },
+  "font_letters_77": {
+   "frame": {
+    "x": 120,
+    "y": 34,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 12,
+    "offset": 96,
+    "group": "font"
+   }
+  },
+  "font_letters_78": {
+   "frame": {
+    "x": 0,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 13,
+    "offset": 104,
+    "group": "font"
+   }
+  },
+  "font_letters_79": {
+   "frame": {
+    "x": 10,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 14,
+    "offset": 112,
+    "group": "font"
+   }
+  },
+  "font_letters_80": {
+   "frame": {
+    "x": 20,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 15,
+    "offset": 120,
+    "group": "font"
+   }
+  },
+  "font_letters_81": {
+   "frame": {
+    "x": 30,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 16,
+    "offset": 128,
+    "group": "font"
+   }
+  },
+  "font_letters_82": {
+   "frame": {
+    "x": 40,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 17,
+    "offset": 136,
+    "group": "font"
+   }
+  },
+  "font_letters_83": {
+   "frame": {
+    "x": 50,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 18,
+    "offset": 144,
+    "group": "font"
+   }
+  },
+  "font_letters_84": {
+   "frame": {
+    "x": 60,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 19,
+    "offset": 152,
+    "group": "font"
+   }
+  },
+  "font_letters_85": {
+   "frame": {
+    "x": 70,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 20,
+    "offset": 160,
+    "group": "font"
+   }
+  },
+  "font_letters_86": {
+   "frame": {
+    "x": 80,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 21,
+    "offset": 168,
+    "group": "font"
+   }
+  },
+  "font_letters_87": {
+   "frame": {
+    "x": 90,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 22,
+    "offset": 176,
+    "group": "font"
+   }
+  },
+  "font_letters_88": {
+   "frame": {
+    "x": 100,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 23,
+    "offset": 184,
+    "group": "font"
+   }
+  },
+  "font_letters_89": {
+   "frame": {
+    "x": 110,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 24,
+    "offset": 192,
+    "group": "font"
+   }
+  },
+  "font_letters_90": {
+   "frame": {
+    "x": 120,
+    "y": 44,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_letters",
+    "item": 25,
+    "offset": 200,
+    "group": "font"
+   }
+  },
+  "font_marks_0": {
+   "frame": {
+    "x": 0,
+    "y": 66,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_marks",
+    "item": 0,
+    "offset": 0,
+    "group": "font"
+   }
+  },
+  "font_marks_1": {
+   "frame": {
+    "x": 10,
+    "y": 66,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_marks",
+    "item": 1,
+    "offset": 8,
+    "group": "font"
+   }
+  },
+  "font_marks_2": {
+   "frame": {
+    "x": 20,
+    "y": 66,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_marks",
+    "item": 2,
+    "offset": 16,
+    "group": "font"
+   }
+  },
+  "font_marks_3": {
+   "frame": {
+    "x": 30,
+    "y": 66,
+    "w": 8,
+    "h": 8
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 8
+   },
+   "sourceSize": {
+    "w": 8,
+    "h": 8
+   },
+   "zx": {
+    "sprite": "font_marks",
+    "item": 3,
+    "offset": 24,
+    "group": "font"
+   }
+  }
+ },
+ "meta": {
+  "app": "ZX Spectrum emulator graphics viewer",
+  "version": "1.0",
+  "image": "font.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 157,
+   "h": 76
+  },
+  "scale": "1",
+  "zx": {
+   "version": 1,
+   "groups": [
+    {
+     "name": "font",
+     "sprites": [
+      "font_digits",
+      "font_letters",
+      "font_marks"
+     ],
+     "frames": [
+      "font_digits_48",
+      "font_digits_49",
+      "font_digits_50",
+      "font_digits_51",
+      "font_digits_52",
+      "font_digits_53",
+      "font_digits_54",
+      "font_digits_55",
+      "font_digits_56",
+      "font_digits_57",
+      "font_letters_65",
+      "font_letters_66",
+      "font_letters_67",
+      "font_letters_68",
+      "font_letters_69",
+      "font_letters_70",
+      "font_letters_71",
+      "font_letters_72",
+      "font_letters_73",
+      "font_letters_74",
+      "font_letters_75",
+      "font_letters_76",
+      "font_letters_77",
+      "font_letters_78",
+      "font_letters_79",
+      "font_letters_80",
+      "font_letters_81",
+      "font_letters_82",
+      "font_letters_83",
+      "font_letters_84",
+      "font_letters_85",
+      "font_letters_86",
+      "font_letters_87",
+      "font_letters_88",
+      "font_letters_89",
+      "font_letters_90",
+      "font_marks_0",
+      "font_marks_1",
+      "font_marks_2",
+      "font_marks_3"
+     ]
+    }
+   ],
+   "sprites": [
+    {
+     "name": "digits",
+     "group": "font",
+     "source": "sheet",
+     "width": 1,
+     "height": 8,
+     "header": 0,
+     "interleave": "none",
+     "invertMask": false,
+     "bottomUp": false,
+     "ink": 15,
+     "paper": 0,
+     "format": "font",
+     "first": 48,
+     "count": 10,
+     "columns": 10,
+     "origin": "font.bin +$0000",
+     "label": "font_digits",
+     "frames": [
+      "font_digits_48",
+      "font_digits_49",
+      "font_digits_50",
+      "font_digits_51",
+      "font_digits_52",
+      "font_digits_53",
+      "font_digits_54",
+      "font_digits_55",
+      "font_digits_56",
+      "font_digits_57"
+     ],
+     "length": 80,
+     "bytes": "OGzW1tbWbDgYOFgYGBgYfDhMDDxgwsL+OEwMPA6GhvwYOFia/hoYfP7CwPwGBoZ8HjJgfMbGxnx+RkwMGBgw+DhsbHz+xsZ8fMbGxnwMmPA=",
+     "firstIndex": 0,
+     "glyphs": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "name": "letters",
+     "group": "font",
+     "source": "sheet",
+     "width": 1,
+     "height": 8,
+     "header": 0,
+     "interleave": "none",
+     "invertMask": false,
+     "bottomUp": false,
+     "ink": 15,
+     "paper": 0,
+     "format": "font",
+     "first": 65,
+     "count": 26,
+     "columns": 13,
+     "origin": "font.bin +$0050",
+     "label": "font_letters",
+     "frames": [
+      "font_letters_65",
+      "font_letters_66",
+      "font_letters_67",
+      "font_letters_68",
+      "font_letters_69",
+      "font_letters_70",
+      "font_letters_71",
+      "font_letters_72",
+      "font_letters_73",
+      "font_letters_74",
+      "font_letters_75",
+      "font_letters_76",
+      "font_letters_77",
+      "font_letters_78",
+      "font_letters_79",
+      "font_letters_80",
+      "font_letters_81",
+      "font_letters_82",
+      "font_letters_83",
+      "font_letters_84",
+      "font_letters_85",
+      "font_letters_86",
+      "font_letters_87",
+      "font_letters_88",
+      "font_letters_89",
+      "font_letters_90"
+     ],
+     "length": 208,
+     "bytes": "DBwuZkbO22b4bGx4bGZm/A4yYEDAwuZ8YHBobGZmZvz+YGR8ZGB6xsZ6YGR8ZGBgDjBgxs72Zg7uxsb+xsbG7nwYGBgYGBh8HgYGhobGfhzkaHB4bGRk9uBgYGBgYGL+xu7u1tbWxu7M1tbm5MTI3jhsxsbGxmw4+Gxmdm5gYPA4bMbGxtZsOvhsZnZ+eGzmOGRgPAaGxnz+mpgYGBgYGPYmRk7O1tZm4mJkZGhocGDuxtbW1u7uxsbGbDg4bMbGhmYWDgYETDh+RgwYMGLC/g==",
+     "firstIndex": 10,
+     "glyphs": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "U",
+      "V",
+      "W",
+      "X",
+      "Y",
+      "Z"
+     ]
+    },
+    {
+     "name": "marks",
+     "group": "font",
+     "source": "sheet",
+     "width": 1,
+     "height": 8,
+     "header": 0,
+     "interleave": "none",
+     "invertMask": false,
+     "bottomUp": false,
+     "ink": 15,
+     "paper": 0,
+     "format": "sprite",
+     "first": 32,
+     "count": 4,
+     "columns": 4,
+     "origin": "font.bin +$0120",
+     "label": "font_marks",
+     "frames": [
+      "font_marks_0",
+      "font_marks_1",
+      "font_marks_2",
+      "font_marks_3"
+     ],
+     "length": 32,
+     "bytes": "AAAAAAAYGAA8QpmhoZlCPAAAAAAAAAAAAGJkCBAmRgA=",
+     "firstIndex": 36,
+     "glyphs": [
+      ".",
+      "(c)",
+      "space",
+      "%"
+     ]
+    }
+   ],
+   "font": {
+    "_comment": "Written by font_sheet.py, read by font_source.py; the graphics panel ignores it. A character's index IS its code in the game's own text -- see end.s.",
+    "palette": {
+     "paper": [
+      0,
+      0,
+      0,
+      255
+     ],
+     "ink": [
+      255,
+      255,
+      255,
+      255
+     ]
+    },
+    "cell": 8,
+    "glyphs": [
+     "0",
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F",
+     "G",
+     "H",
+     "I",
+     "J",
+     "K",
+     "L",
+     "M",
+     "N",
+     "O",
+     "P",
+     "Q",
+     "R",
+     "S",
+     "T",
+     "U",
+     "V",
+     "W",
+     "X",
+     "Y",
+     "Z",
+     ".",
+     "(c)",
+     "space",
+     "%"
+    ]
+   }
+  }
+ }
+}

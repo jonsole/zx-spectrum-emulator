@@ -27,7 +27,7 @@
 ; around the flip too: the draw loop holds its next object there.
 ;
 ; Row order is untouched: a horizontal mirror does not care which way up the
-; rows are stored, which is why nothing here has to know that sprites.py
+; rows are stored, which is why nothing here has to know that sprite_source.py
 ; already turned Ultimate's bottom-up rows the right way round.
 ;
 ; Records are ALIGN 4, so every row starts on an even address: masks are even
