@@ -1741,10 +1741,33 @@ async function handleGraphicsMessage(message) {
     await exportGraphics(message);
   } else if (message.type === 'import') {
     await importGraphics();
+  } else if (message.type === 'clear') {
+    await clearGraphicsSheet(message);
   } else if (message.type === 'saveSheet') {
     if (graphicsContext && message.state && typeof message.state === 'object') {
       await graphicsContext.workspaceState.update(GRAPHICS_SHEET_KEY, message.state);
     }
+  }
+}
+
+// Clearing the sheet is asked about rather than undone: a sprite read from
+// memory or a file can be added again from where it came from, but one that
+// carries its own bytes -- grabbed from a selection, or imported from an
+// atlas -- has nowhere to be read back from once it is gone.
+async function clearGraphicsSheet(message) {
+  const count = Math.max(0, Number(message && message.count) || 0);
+  const choice = await vscode.window.showWarningMessage(
+    'Clear the graphics sheet?',
+    {
+      modal: true,
+      detail: 'Takes ' + count + ' sprite' + (count === 1 ? '' : 's')
+            + ' and every group off it. Sprites that carry their own bytes, from a '
+            + 'selection or an imported atlas, cannot be read back afterwards.',
+    },
+    'Clear',
+  );
+  if (choice === 'Clear') {
+    postGraphics({ type: 'cleared' });
   }
 }
 

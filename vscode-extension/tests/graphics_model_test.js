@@ -275,8 +275,30 @@ test('a hand-edited atlas costs the bad fields, not the sheet', () => {
   assert.strictEqual(cfg.interleave, 'none');
   assert.strictEqual(cfg.ink, 15);
   assert.strictEqual(back.problems.length, 2);
-  assert.ok(/selection and has no bytes/.test(back.problems[0]));
+  assert.ok(/carries no bytes/.test(back.problems[0]));
   assert.ok(/not an object/.test(back.problems[1]));
+});
+
+// A sheet sprite is the other one whose bytes have to travel with it: it was
+// drawn rather than found, so there is no address and no file to fall back on.
+test('a sheet sprite with no bytes is a problem too', () => {
+  const back = m.readAtlas({ meta: { zx: { sprites: [
+    { name: 'drawn', source: 'sheet', bytes: '' }
+  ] } } });
+  assert.strictEqual(back.sprites[0].cfg.source, 'sheet');
+  assert.ok(m.carriesBytes(back.sprites[0].cfg));
+  assert.strictEqual(back.problems.length, 1);
+  assert.ok(/carries no bytes/.test(back.problems[0]));
+  assert.ok(/sheet sprite/.test(back.problems[0]));
+});
+
+// The three sources that can be read again are not carriers: a sheet sprite
+// must never be asked for from the host.
+test('only a selection and a sheet carry their own bytes', () => {
+  assert.ok(m.carriesBytes({ source: 'selection' }));
+  assert.ok(m.carriesBytes({ source: 'sheet' }));
+  assert.ok(!m.carriesBytes({ source: 'memory' }));
+  assert.ok(!m.carriesBytes({ source: 'file' }));
 });
 
 test('something that is not an export is refused', () => {

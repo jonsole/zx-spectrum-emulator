@@ -667,6 +667,7 @@ function describeSprite(entry, origin) {
   const where = origin && origin.label ? origin.label
               : entry.source === 'memory' ? 'memory ' + entry.address
               : entry.source === 'file' ? fileLeafOf(entry.file || '') + ' +' + (entry.offset || 0)
+              : entry.source === 'sheet' ? 'the sheet'
               : 'a selection';
   if (entry.format === 'screen') {
     return where + ', a screen';
@@ -805,7 +806,16 @@ function buildAsm(entries, bytesById, originById, names, pack, files) {
 
 // ---- reading an export back ---------------------------------------------------------
 
-const SOURCES = ['memory', 'file', 'selection'];
+const SOURCES = ['memory', 'file', 'selection', 'sheet'];
+
+// Sources with nowhere to be read from again, so that the bytes have to travel
+// with the sprite: a text selection, which has long since moved on, and a
+// sheet, whose sprites were drawn rather than found anywhere a panel can
+// reach -- an atlas written by a tool of your own, say, from a picture. Asking
+// the host for either one's bytes would serve something else entirely.
+function carriesBytes(cfg) {
+  return cfg.source === 'selection' || cfg.source === 'sheet';
+}
 const FORMATS = ['sprite', 'font', 'screen'];
 const INTERLEAVES = ['none', 'md', 'dm'];
 const LIMITS = {
@@ -875,8 +885,9 @@ function readAtlas(atlas) {
         problems.push((cfg.name || 'Sprite ' + (n + 1)) + ': its bytes are not valid base64.');
       }
     }
-    if (cfg.source === 'selection' && bytes.length === 0) {
-      problems.push((cfg.name || 'Sprite ' + (n + 1)) + ' came from a selection and has no bytes.');
+    if (carriesBytes(cfg) && bytes.length === 0) {
+      problems.push((cfg.name || 'Sprite ' + (n + 1)) + ' carries no bytes, and a '
+                    + cfg.source + ' sprite has nowhere else to read them from.');
     }
     const origin = { kind: 'import', label: typeof raw.origin === 'string' ? raw.origin : '' };
     if (cfg.source === 'memory' && Number.isInteger(raw.resolvedAddress)) {
@@ -896,6 +907,7 @@ if (typeof module !== 'undefined') {
     locate, pixelKind, screenOffset, renderItem, labelText, hex, fileLeafOf,
     sanitizeLabel, suggestedBaseName, suggestName, defaultBaseName, spriteLabel, frameName,
     presentItems, assignNames, packSheet, renderSheet, toBase64, fromBase64, buildAtlas,
+    carriesBytes,
     snaOffsetOf, snaAddressOf, addSnapshotPointers, pointedBytes, buildAsm, readAtlas
   };
 }

@@ -161,6 +161,7 @@
     <div class="group">
       <button id="export" title="Save the sheet as a picture, a JSON atlas and, if you like, assembler source">Export...</button>
       <button id="import" title="Add the sprites from an exported JSON atlas to the sheet">Import...</button>
+      <button id="clear" title="Take every sprite and group off the sheet">Clear</button>
     </div>
     <div class="sep"></div>
     <div class="group">
@@ -207,6 +208,10 @@
               <option value="memory">Memory</option>
               <option value="file">File</option>
               <option value="selection">Selection</option>
+              <!-- Not a source you can choose: it is what an imported sprite
+                   has when its bytes came with it. Disabled so that it shows
+                   for such a sprite without offering itself to a new one. -->
+              <option value="sheet" disabled>Sheet</option>
             </select>
           </div>
           <div class="row src src-memory">
@@ -225,6 +230,10 @@
           <div class="row src src-selection">
             <label>Selection</label>
             <div><button id="grab" title="Take whatever DEFB lines are selected in the editor now">Grab selection</button></div>
+          </div>
+          <div class="row src src-sheet">
+            <label>Bytes</label>
+            <div>Carried in the sheet -- there is nowhere to read them from again.</div>
           </div>
           <div class="row src src-file src-selection">
             <label for="offset">Skip</label>
@@ -353,15 +362,16 @@
     // arrive, so none of them ever collide.
     const PREVIEW = 'preview';
 
-    // Bytes taken from an editor selection are kept with the sprite: there is
-    // no way to read them again once the selection has moved on. Selections are
-    // DEFB tables, a few kilobytes at most; anything past this is not kept.
-    const SELECTION_KEEP_LIMIT = 65536;
+    // A sprite whose bytes have nowhere to be read from again keeps them (see
+    // carriesBytes). Those are DEFB tables and single sprites, a few kilobytes
+    // at most; anything past this is not kept.
+    const CARRIED_KEEP_LIMIT = 65536;
 
-    function keepSelectionBytes(entry, bytes) {
+    function keepCarriedBytes(entry, bytes) {
+      delete entry.carriedBytes;
       delete entry.selectionBytes;
-      if (entry.source === 'selection' && bytes.length <= SELECTION_KEEP_LIMIT) {
-        entry.selectionBytes = toBase64(bytes);
+      if (carriesBytes(entry) && bytes.length <= CARRIED_KEEP_LIMIT) {
+        entry.carriedBytes = toBase64(bytes);
       }
     }
 
@@ -542,8 +552,8 @@
         vscodeApi.postMessage({ type: 'symbols', prefix: el('address').value });
       });
       el('pickFile').addEventListener('click', () => vscodeApi.postMessage({ type: 'pickFile' }));
-      el('grab').addEventListener('click', requestPreview);
-      el('reread').addEventListener('click', requestPreview);
+      el('grab').addEventListener('click', () => requestPreview(true));
+      el('reread').addEventListener('click', () => requestPreview(true));
       el('previewZoom').addEventListener('change', () => {
         setZoom(parseInt(el('previewZoom').value, 10));
       });
@@ -645,6 +655,17 @@
       fillGroupSelect(dialog.cfg.group);
       bytesById.delete(PREVIEW);
       originById.delete(PREVIEW);
+      // A sprite that carries its own bytes -- grabbed from a selection, or
+      // read back out of an atlas -- has nowhere to be read from again: the
+      // host would serve whatever is selected in an editor now. The bytes it
+      // is already drawn with on the sheet are the ones being changed, so the
+      // dialog opens with those rather than with nothing.
+      if (mode === 'edit' && carriesBytes(dialog.cfg) && bytesById.has(editId)) {
+        bytesById.set(PREVIEW, bytesById.get(editId));
+        if (originById.has(editId)) {
+          originById.set(PREVIEW, originById.get(editId));
+        }
+      }
       el('editorTitle').textContent = mode === 'add'
         ? 'Add graphics'
         : 'Change ' + (dialog.cfg.name || 'sprite #' + editId);
@@ -681,7 +702,7 @@
         // be re-read later from the same place, and what its caption says.
         entry.file = origin && origin.path ? origin.path : dialog.cfg.file;
         entry.originLabel = origin ? origin.label : '';
-        keepSelectionBytes(entry, bytes);
+        keepCarriedBytes(entry, bytes);
         if (dialog.mode === 'edit') {
           const index = state.pinned.findIndex((e) => e.id === dialog.editId);
           if (index < 0) {
@@ -719,6 +740,23 @@
       if (entry) {
         openDialog('edit', entry, id);
       }
+    }
+
+    // Everything on the sheet goes: the sprites, their bytes, their groups, and
+    // any pin still waiting on its data. The ids carry on climbing rather than
+    // restarting, so nothing in flight can land on a new sprite's id. What the
+    // Add... dialog opens with is a draft, not a sprite, and stays.
+    function clearSheet() {
+      const had = state.pinned.length;
+      state.pinned = [];
+      state.groups = [];
+      bytesById.clear();
+      originById.clear();
+      truncatedById.clear();
+      pendingPins.clear();
+      save();
+      draw();
+      reportStatus('Cleared ' + had + ' sprite' + (had === 1 ? '' : 's') + ' off the sheet.');
     }
 
     function removePinned(id) {
@@ -871,18 +909,29 @@
       });
     }
 
-    function requestPreview() {
-      if (dialog) {
-        requestFor(dialog.cfg, PREVIEW);
+    // `force` is the Grab selection and Re-read buttons saying to go back to
+    // the host whatever the source. Without it, a sprite that carries its own
+    // bytes keeps them: changing its width or its height re-reads nothing,
+    // because there is nothing to re-read, and asking anyway would replace the
+    // artwork with whatever happens to be selected in an editor.
+    function requestPreview(force) {
+      if (!dialog) {
+        return;
       }
+      if (force !== true && carriesBytes(dialog.cfg) && bytesById.has(PREVIEW)) {
+        drawPreview();
+        return;
+      }
+      requestFor(dialog.cfg, PREVIEW);
     }
 
-    // A sprite taken from an editor selection is never re-read: its selection
-    // is long gone, and asking again would read whatever is selected now. Its
-    // bytes are kept with it instead (see keepSelectionBytes).
+    // A sprite that carries its own bytes is never re-read: a selection is
+    // long gone and a sheet was never anywhere to begin with, so asking again
+    // would read whatever is selected now. Its bytes are kept with it instead
+    // (see keepCarriedBytes).
     function requestSheet(memoryOnly) {
       for (const entry of state.pinned) {
-        if (entry.source === 'selection') {
+        if (carriesBytes(entry)) {
           continue;
         }
         if (!memoryOnly || entry.source === 'memory') {
@@ -1453,6 +1502,15 @@
         requestSheet(false);
         requestPreview();
       });
+      el('clear').addEventListener('click', () => {
+        if (!state.pinned.length && !state.groups.length) {
+          reportStatus('The sheet is already empty.');
+          return;
+        }
+        // The host asks, because a sprite that carries its own bytes cannot be
+        // read back from anywhere once it is off the sheet.
+        vscodeApi.postMessage({ type: 'clear', count: state.pinned.length });
+      });
       el('zoom').addEventListener('change', () => setZoom(parseInt(el('zoom').value, 10)));
       for (const id of ['grid', 'labels']) {
         el(id).addEventListener('change', () => {
@@ -1585,11 +1643,11 @@
         entry.name = uniqueName(entry.name || suggestName(entry, takenNames(entry.group)),
                                 takenNames(entry.group, entry.id));
         entry.originLabel = sprite.origin.label;
-        keepSelectionBytes(entry, sprite.bytes);
+        keepCarriedBytes(entry, sprite.bytes);
         state.pinned.push(entry);
         bytesById.set(entry.id, sprite.bytes);
         originById.set(entry.id, sprite.origin);
-        if (sprite.bytes.length === 0 && entry.source !== 'selection') {
+        if (sprite.bytes.length === 0 && !carriesBytes(entry)) {
           unread.push(entry);
         }
       }
@@ -1628,7 +1686,7 @@
       entry.name = suggestName(entry, takenNames(entry.group));
       entry.file = origin && origin.path ? origin.path : cfg.file;
       entry.originLabel = origin ? origin.label : '';
-      keepSelectionBytes(entry, bytes);
+      keepCarriedBytes(entry, bytes);
       state.pinned.push(entry);
       bytesById.set(entry.id, bytes);
       originById.set(entry.id, origin);
@@ -1743,6 +1801,8 @@
         }
         el('status').classList.remove('warn');
         el('status').textContent = text;
+      } else if (message.type === 'cleared') {
+        clearSheet();
       } else if (message.type === 'imported') {
         importAtlas(message.atlas, message.path);
       } else if (message.type === 'error') {
@@ -1756,8 +1816,11 @@
 
     // Selection sprites come back with the bytes they were added with.
     for (const entry of state.pinned) {
-      if (entry.selectionBytes) {
-        bytesById.set(entry.id, fromBase64(entry.selectionBytes));
+      // carriedBytes was called selectionBytes before a sheet could be a
+      // source of its own; a sheet saved by that panel still restores.
+      const carried = entry.carriedBytes || entry.selectionBytes;
+      if (carried) {
+        bytesById.set(entry.id, fromBase64(carried));
       }
     }
 
