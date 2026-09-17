@@ -1,4 +1,4 @@
-// MCP server, ported from rust-core/zx-server/src/mcp.rs.
+// MCP server, first ported from the project's former Rust server.
 //
 // Speaks the Streamable HTTP transport directly rather than pulling in an MCP
 // library: the protocol here is JSON-RPC 2.0 over an HTTP POST, and with the
@@ -10,8 +10,8 @@
 // neither is needed since every tool here is request/response, so GET is
 // refused with 405 (which the spec explicitly allows).
 //
-// The tool surface matches the Rust server's, plus set_speed for the
-// emulator's realtime pacing.
+// The tool surface started as the Rust server's, plus set_speed for the
+// emulator's realtime pacing, and has grown since.
 
 #include "mcp_server.h"
 
@@ -1174,8 +1174,8 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             const MachineState s = engine.state();
             return json_result(json{{"pc", s.pc}, {"running", s.running}});
         }
-        // Blocks until a breakpoint or a pause, exactly as the Rust server
-        // did. `pause` bypasses the command queue, so it can still reach this.
+        // Blocks until a breakpoint or a pause, as it always
+        // has. `pause` bypasses the command queue, so it can still reach this.
         const MachineState s = engine.run();
         json out = json{{"pc", s.pc}, {"running", s.running}};
         // A watchpoint stop needs to say what it caught, or the caller is

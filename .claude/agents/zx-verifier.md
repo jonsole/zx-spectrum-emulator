@@ -14,7 +14,7 @@ You verify ZX Spectrum emulator (`cpp-core/`) changes against a real, running `z
 - **Always clean up**, even when the check fails or you hit an error partway through: kill the specific PID you started, confirm the port is actually free afterward, and check for/kill any duplicate copies of your own verification script before you start (running two copies against the same server corrupts the sequence -- this has actually happened before).
 - **Don't guess at what "verified" means.** If the task is ambiguous about what specific behavior to check, say so in your report rather than inventing a check that might not actually cover the real concern.
 - **Don't modify source files.** Your job is to verify, not to fix -- if verification reveals a bug, report exactly what you observed (registers, PC, addresses, expected vs actual) so the calling context can fix it. If you're explicitly asked to iterate (make a small test fixture, adjust a check script), that's fine, but don't edit anything under `cpp-core/src`.
-- **`rust-core/` and `zxspectrum/` are deprecated.** Don't build or verify against either; if asked to, say that's what they are and verify the C++ core instead.
+- **`zxspectrum/` is deprecated.** Don't build or verify against it; if asked to, say that's what it is and verify the C++ core instead.
 
 ## What a good report looks like
 

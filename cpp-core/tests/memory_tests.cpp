@@ -1,5 +1,5 @@
 // Memory map tests -- ports the equivalent cases from
-// rust-core/zx-core/tests/spectrum.rs (rom_is_write_protected, ram_is_writable)
+// the former Rust core's spectrum tests (rom_is_write_protected, ram_is_writable)
 // plus load_rom's size validation.
 
 #include "memory.h"

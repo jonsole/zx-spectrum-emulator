@@ -1,6 +1,6 @@
 #pragma once
 // Bit positions within the Z80 flags register (Registers::f).
-// Ported from rust-core/zx-core/src/flags.rs.
+// First ported from the project's former Rust core.
 
 #include <cstdint>
 

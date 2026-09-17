@@ -1,5 +1,5 @@
 // Screen-frame streaming TCP server, ported from
-// rust-core/zx-server/src/screen_stream.rs: on each connection, loops forever
+// the project's former Rust server: on each connection, loops forever
 // pushing the live display as a length-prefixed PNG frame (4-byte big-endian
 // length + PNG bytes) until the client disconnects.
 //

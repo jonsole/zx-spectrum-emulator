@@ -20,9 +20,9 @@
 // That is the window a 48K ULA samples to decide whether to halt the CPU
 // clock for contention, and the window in which a refresh address landing in
 // screen RAM produces "snow". A whole-T-state core cannot represent it, and
-// rust-core's attempts to fake it are exactly what this rewrite is undoing.
+// The former Rust core's attempts to fake it are exactly what this rewrite undid.
 //
-// Ported from rust-core/zx-core/src/cpu.rs, with the T-state sequences
+// First ported from the project's former Rust core, with the T-state sequences
 // expanded per the above and cross-checked against SpecIde's own state names
 // (ST_OCF_T1H_ADDRWR / ST_OCF_T1L_ADDRWR / ...).
 //
@@ -209,7 +209,7 @@ public:
     /// True when a fresh opcode fetch has just begun and we are not part-way
     /// through a prefix -- i.e. the previous instruction has fully retired.
     ///
-    /// rust-core made this a PIN test (`M1|RD` both asserted), mirroring
+    /// The former Rust core made this a PIN test (`M1|RD` both asserted), mirroring
     /// z80_opdone(). That no longer works here for two reasons: M1 and RD
     /// now assert on different half-cycles (T1H and T1L), so they are never
     /// simultaneously true at the one moment a caller wants to sample; and

@@ -42,7 +42,7 @@ detail yet -- just captured here so they don't get lost.
       cycle-accurate timing (some games rely on it for effects/sync); no
       Python reference to verify against, so correctness would need to lean
       on published reference T-state tables instead.
-      **Update:** was implemented in the Rust core, then deliberately
+      **Update:** was implemented in the former Rust core, then deliberately
       stripped back out -- the T-state-level bus-timing model it needed
       turned out fragile enough (several real edge-case bugs found and
       fixed over one session) to warrant a cleaner redesign rather than

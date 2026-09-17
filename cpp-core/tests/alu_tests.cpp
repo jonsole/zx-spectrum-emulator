@@ -1,8 +1,8 @@
 // Exhaustive differential test of our ALU against vendor/chips/z80.h's own
 // flag functions.
 //
-// This is possible (and much simpler than the Rust project's FFI-based
-// zx-core-conformance crate) because z80.h is a C header whose internals are
+// This is possible (and much simpler than the former Rust core's FFI-based
+// conformance crate) because z80.h is a C header whose internals are
 // `static inline` under CHIPS_IMPL -- defining that and including it here puts
 // _z80_add_flags, _z80_szp_flags[], _z80_daa and friends directly in this
 // translation unit, callable with no shim at all.

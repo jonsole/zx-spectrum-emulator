@@ -1,13 +1,13 @@
 #pragma once
 // Z80 bus pin encoding: address bits 0-15, data bits 16-23, control lines from
-// bit 24. Bit POSITIONS match rust-core/zx-core/src/pins.rs and z80.h.
+// bit 24. Bit POSITIONS match z80.h.
 //
 // POLARITY DOES NOT. Every Z80 control signal is ACTIVE LOW on the real chip,
 // and that is what this models: a bit that is CLEAR means the line is being
 // driven (asserted); a bit that is SET means it is idle. So the resting state
 // of the bus is PINS_IDLE -- all control bits high -- not zero.
 //
-// rust-core and z80.h both represent control lines active-high (bit set ==
+// The former Rust core and z80.h both represented control lines active-high (bit set ==
 // asserted). That is easier to write and fine for a core that only ever asks
 // "is this line requesting something". It stops being fine here: the ULA work
 // this core exists for reasons entirely in terms of real signal levels ("the

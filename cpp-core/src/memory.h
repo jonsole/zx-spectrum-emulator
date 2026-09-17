@@ -1,6 +1,6 @@
 #pragma once
 // The bus the CPU reads/writes through. Ported from
-// rust-core/zx-core/src/memory.rs, and since grown the 128K's paging.
+// the project's former Rust core, and since grown the 128K's paging.
 
 #include <array>
 #include <vector>

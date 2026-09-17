@@ -76,5 +76,4 @@ zx-spectrum-emulator/
 
   # deprecated, kept for history -- see the note in the README
   zxspectrum/ + tests/*.py     # the original Python core and its pytest suite
-  rust-core/                   # the from-scratch Rust Z80 core
 ```

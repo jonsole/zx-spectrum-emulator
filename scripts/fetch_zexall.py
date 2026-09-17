@@ -8,7 +8,7 @@ copyrighted firmware/game -- ZEXALL is GPL v2.0 and meant to be redistributed
 for exactly this purpose. It's still fetched rather than committed, purely to
 avoid vendoring a second project's source tree into this one; the actual
 `.com` binaries this project runs against are the point, not the assembly
-source (also fetched here for reference, but unused by the Rust harness).
+source (also fetched here for reference, but unused by the test harness).
 
 Usage:
     python scripts/fetch_zexall.py

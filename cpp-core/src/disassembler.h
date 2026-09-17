@@ -1,6 +1,6 @@
 #pragma once
 // Z80 disassembler -- decodes bytes into mnemonic text. Ported from
-// rust-core/zx-core/src/disassembler.rs. Implements the documented Z80
+// the project's former Rust core. Implements the documented Z80
 // instruction set via the standard bit-field decomposition of the opcode byte
 // (x/y/z/p/q -- see http://www.z80.info/decoding.htm), covering unprefixed,
 // CB, ED, DD, FD, and the DD CB d / FD CB d double-prefixed forms.

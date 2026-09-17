@@ -573,7 +573,7 @@ function percentItems(items, setting, current, presets, name) {
 }
 
 // Forwards a keydown/keyup captured by the webview (see getHtml()'s script)
-// to the emulator via a DAP custom request (server-side: dap.rs's
+// to the emulator via a DAP custom request (server-side: dap.cpp's
 // "keyDown"/"keyUp" handlers). Silently drops the keypress if there's no
 // active zxspectrum session -- nothing sensible to do with it otherwise,
 // and this fires on every keystroke so a warning popup per keypress would
@@ -596,8 +596,8 @@ async function handleWebviewMessage(message) {
   try {
     await session.customRequest(message.type, { key: message.key });
   } catch (err) {
-    // Most likely cause: the Python server (no keyDown/keyUp custom
-    // request) is what's actually running, not the Rust one.
+    // Most likely cause: a server too old to have the keyDown/keyUp custom
+    // requests.
   }
 }
 

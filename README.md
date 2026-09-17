@@ -25,10 +25,11 @@ LLM agent inspects and drives the *same running emulator* over
 > ## The C++ core is the project
 >
 > `cpp-core/` is the only supported implementation. The original Python core
-> (`zxspectrum/`, `cffi` around `z80.h`) and the from-scratch Rust core
-> (`rust-core/`) are both **deprecated**: still in the repo, but no longer
-> developed, no longer verified, and no longer wired into `.vscode/` — every
-> launch configuration now targets the C++ server. Tape loading, beeper audio
+> (`zxspectrum/`, `cffi` around `z80.h`) is **deprecated**: still in the repo,
+> but no longer developed, no longer verified, and no longer wired into
+> `.vscode/` — every launch configuration targets the C++ server. (A
+> from-scratch Rust core came in between; it has been removed, and lives on in
+> the git history.) Tape loading, beeper audio
 > and cycle-by-cycle bus tracing only ever existed in the C++ core.
 >
 > The `scripts/` helpers are still Python and still current — only the Python
@@ -206,7 +207,6 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Testing and performance](docs/testing-and-performance.md) | The test suites, ZEXALL/ZEXDOC, and measured throughput |
 | [Project layout](docs/project-layout.md) | What lives where in the tree |
 | [Status & roadmap](docs/status.md) | What is done, what is next |
-| [Rust core](docs/rust-core.md) | The deprecated from-scratch Rust implementation, kept for history |
 
 Installing from scratch is a separate, checkable procedure: **[INSTALL.md](INSTALL.md)**.
 

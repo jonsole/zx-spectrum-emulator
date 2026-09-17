@@ -1,5 +1,5 @@
 #pragma once
-// Flag-computing ALU helpers, ported from rust-core/zx-core/src/alu.rs --
+// Flag-computing ALU helpers, first ported from the project's former Rust core --
 // which was itself ported directly from vendor/chips/z80.h's _z80_add_flags /
 // _z80_sub_flags / _z80_cp_flags / etc, NOT re-derived from the Z80 spec.
 // That lineage matters: the undocumented behavior here (e.g. CP's bit3/bit5

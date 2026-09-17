@@ -340,10 +340,10 @@ successful install.
 ## Other cores
 
 The repo also contains the original Python implementation (`zxspectrum/`,
-`pyproject.toml`, `tests/*.py`) and a from-scratch Rust one (`rust-core/`).
-**Both are deprecated** — kept for history, no longer developed or verified, and
-no longer referenced from `.vscode/`. Install and use the C++ core; do not build
-the others, and do not add Rust or Python variants of new work.
+`pyproject.toml`, `tests/*.py`). **It is deprecated** — kept for history, no
+longer developed or verified, and no longer referenced from `.vscode/`. Install
+and use the C++ core; do not build the Python one, and do not add Python
+variants of new work.
 
 The Python helpers under `scripts/` are a different thing and are *not*
 deprecated — see step 7.

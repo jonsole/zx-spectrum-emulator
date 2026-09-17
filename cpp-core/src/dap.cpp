@@ -1,5 +1,5 @@
-// DAP (Debug Adapter Protocol) TCP server. Ported from
-// rust-core/zx-server/src/dap.rs.
+// DAP (Debug Adapter Protocol) TCP server. First ported from the project's
+// former Rust server.
 //
 // Real base-protocol framing (`Content-Length: N\r\n\r\n{json}`), a
 // per-connection request loop, and `Engine` events forwarded to every open
@@ -1276,7 +1276,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                     {"mimeType", "text/x-asm"}};
 
     } else if (command == "continue") {
-        // Detached, mirroring the Rust server's spawned task: a run that
+        // Detached, as a spawned task: a run that
         // never hits a breakpoint must not wedge this connection's request
         // loop, so `pause` can still reach it and the `stopped` event
         // arrives via the Engine handler.

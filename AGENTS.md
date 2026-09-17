@@ -7,9 +7,8 @@ tripped people before.
 
 ## The short version
 
-- **`cpp-core/` is the emulator.** `zxspectrum/` (Python), `rust-core/` and the
-  pytest suite in `tests/` are deprecated -- don't build, fix or verify against
-  them. The Python helpers in `scripts/` are still current.
+- **`cpp-core/` is the emulator.** `zxspectrum/` (Python) and the pytest suite
+  in `tests/` are deprecated -- don't build, fix or verify against them. The Python helpers in `scripts/` are still current.
 - **Someone may be using the emulator while you work.** Their `zx_server.exe`
   holds the default ports and locks its own binary. Build and test beside it,
   not over it -- see [A live emulator](#a-live-emulator).

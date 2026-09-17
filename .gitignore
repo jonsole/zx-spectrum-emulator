@@ -13,12 +13,9 @@ roms/*
 !roms/.gitkeep
 .pytest_cache/
 
-# Rust build output
-rust-core/target/
-
 # Fetched reference copy of z80_gen.py (github.com/floooh/chips) -- a
 # reading aid for scripts/generate_z80_dispatch.py, which ports its
-# algorithm to Rust; not committed since it's someone else's source tree,
+# algorithm to C++; not committed since it's someone else's source tree,
 # not this project's, and generate_z80_dispatch.py is the actual artifact.
 .chips-codegen-src/
 

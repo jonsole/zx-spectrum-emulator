@@ -1,6 +1,6 @@
 #pragma once
 // Z80 register file, including the shadow (alternate) set and the two index
-// registers. Ported from rust-core/zx-core/src/registers.rs.
+// registers. First ported from the project's former Rust core.
 //
 // Flags are kept as a raw byte (`f`) rather than individual bools, matching
 // how the real hardware treats it -- bit layout is in flags.h.

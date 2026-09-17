@@ -1,6 +1,6 @@
 #pragma once
 // sjasmplus SLD debug data: address <-> source line, and named symbols.
-// Ported from rust-core/zx-server/src/rom_source.rs.
+// First ported from the project's former Rust server.
 //
 // Used for both the commented ROM disassembly (built by
 // scripts/build_rom_source.py) and for an arbitrary user-assembled program's

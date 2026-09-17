@@ -137,7 +137,7 @@ the checked-in library rather than re-deriving it.
   the thing being checked genuinely needs live, protocol-level interaction
   (stepping, breakpoints, timing as observed through the debugger) rather than
   a function call's return value.
-- Doesn't touch `rust-core/` or `zxspectrum/`. Both are deprecated; there is
-  nothing there to verify.
+- Doesn't touch `zxspectrum/`. It is deprecated; there is nothing there to
+  verify.
 - Doesn't commit anything or touch git -- purely a local, throwaway
   verification run.
