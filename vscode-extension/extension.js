@@ -101,6 +101,16 @@ let audioSocket;
 let audioReconnectTimer;
 let audioBuffer = Buffer.alloc(0);
 let audioPreambleSeen = false;
+// The screen panel's volume, which reaches both the panel's own playback and
+// the server's native sound device; 0 is mute, and the level before a mute is
+// kept so the speaker button can go back to it. Both are kept across reloads,
+// so a reload never turns the sound back up by itself, and are handed to
+// every server the extension meets.
+const VOLUME_KEY = 'zxspectrum.audioVolume';
+const VOLUME_BEFORE_MUTE_KEY = 'zxspectrum.audioVolumeBeforeMute';
+let audioVolume = 100;
+let audioVolumeBeforeMute = 100;
+let volumeState; // the extension's globalState, where both are kept
 // Whether the emulator is painting the display-write overlay. Off at every
 // launch, which is what a freshly started server has it as.
 let writeOverlayOn = false;
@@ -111,6 +121,9 @@ let rasterView = { marker: true, inProgress: true, pending: false };
 
 function activate(context) {
   graphicsContext = context;
+  volumeState = context.globalState;
+  audioVolume = clampPercent(volumeState.get(VOLUME_KEY, 100), 100);
+  audioVolumeBeforeMute = clampPercent(volumeState.get(VOLUME_BEFORE_MUTE_KEY, 100), 100) || 100;
   activateAsmLanguage(context);
   activateProfile(context, zxDebugSession);
   activateRewind(context, zxDebugSession);
@@ -309,6 +322,9 @@ function activate(context) {
       refreshSpeedStatus();
       publishUiContext();
       publishLiveState();
+      // A server that has just started is at full volume, whatever the
+      // panel says.
+      sendVolume();
       // A view can be set over MCP before VS Code is there to hear it. This is
       // the event that reliably has a session to ask, so it is where the
       // catching up happens.
@@ -433,7 +449,7 @@ function showScreenPanel(context) {
   );
   // In the page itself rather than posted after it: a message sent before the
   // webview's script has run is not guaranteed to arrive.
-  panel.webview.html = getHtml(screenView());
+  panel.webview.html = getHtml(screenView(), audioVolume, audioVolumeBeforeMute);
   panel.onDidDispose(
     () => {
       panel = undefined;
@@ -557,6 +573,17 @@ function percentItems(items, setting, current, presets, name) {
 // and this fires on every keystroke so a warning popup per keypress would
 // be far too noisy.
 async function handleWebviewMessage(message) {
+  if (message.type === 'setVolume') {
+    audioVolume = clampPercent(message.volume, audioVolume);
+    audioVolumeBeforeMute = clampPercent(message.before, audioVolumeBeforeMute) || 100;
+    // Stored when a drag ends rather than at every step of it.
+    if (message.persist) {
+      volumeState.update(VOLUME_KEY, audioVolume);
+      volumeState.update(VOLUME_BEFORE_MUTE_KEY, audioVolumeBeforeMute);
+    }
+    sendVolume();
+    return;
+  }
   if (message.type !== 'keyDown' && message.type !== 'keyUp') return;
   const session = vscode.debug.activeDebugSession;
   if (!session || session.type !== 'zxspectrum') return;
@@ -565,6 +592,26 @@ async function handleWebviewMessage(message) {
   } catch (err) {
     // Most likely cause: the Python server (no keyDown/keyUp custom
     // request) is what's actually running, not the Rust one.
+  }
+}
+
+// A whole percentage from 0 to 100, or `fallback` when it is not a number.
+function clampPercent(value, fallback) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return n < 0 ? 0 : n > 100 ? 100 : n;
+}
+
+// Tells the server how loud its native sound device should be. Quietly does
+// nothing without a session, and against a server too old to know the request
+// -- the panel's own playback follows the slider either way.
+async function sendVolume() {
+  const session = vscode.debug.activeDebugSession;
+  if (!session || session.type !== 'zxspectrum') return;
+  try {
+    await session.customRequest('setAudioVolume', { volume: audioVolume });
+  } catch (err) {
+    // an older server
   }
 }
 
@@ -1985,7 +2032,7 @@ function getNonce() {
   return text;
 }
 
-function getHtml(view) {
+function getHtml(view, startVolume, startVolumeBeforeMute) {
   const nonce = getNonce();
   // Frames arrive via postMessage as base64, rendered as a data: URI --
   // no network-facing CSP directive is needed at all (no img-src/connect-src
@@ -2004,15 +2051,23 @@ function getHtml(view) {
        scrollbar can reach it. */
     body { margin:0; padding:0; background:#000; display:flex; min-height:100vh; overflow:auto; outline:none; }
     canvas { display:block; margin:auto; }
-    #mute { position:fixed; top:8px; right:12px; font:16px system-ui,sans-serif;
-            background:rgba(0,0,0,.5); color:#fff; border:1px solid #666;
-            border-radius:4px; padding:2px 8px; cursor:pointer; opacity:.35; }
-    #mute:hover { opacity:1; }
+    /* The speaker button, with the volume slider sliding out beside it on
+       hover. Faint until pointed at, so it keeps out of the picture. */
+    #audio { position:fixed; top:8px; right:12px; display:flex; align-items:center;
+             gap:6px; opacity:.35; }
+    #audio:hover { opacity:1; }
+    #mute { font:16px system-ui,sans-serif; background:rgba(0,0,0,.5); color:#fff;
+            border:1px solid #666; border-radius:4px; padding:2px 8px; cursor:pointer; }
+    #volume { width:0; opacity:0; margin:0; transition:width .15s, opacity .15s; }
+    #audio:hover #volume, #volume:focus { width:96px; opacity:1; }
   </style>
 </head>
 <body tabindex="0">
   <canvas id="screen" aria-label="ZX Spectrum screen"></canvas>
-  <button id="mute" title="Mute the beeper">&#128266;</button>
+  <div id="audio">
+    <input id="volume" type="range" min="0" max="100" step="1" aria-label="Volume" />
+    <button id="mute"></button>
+  </div>
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
 
@@ -2167,7 +2222,18 @@ function getHtml(view) {
     let audioCtx = null;
     let sampleRate = 44100;
     let nextStart = 0;
-    let muted = false;
+    // One volume for all the sound, wherever it comes out: this panel's own
+    // playback, and -- through the extension -- the server's sound device.
+    // 0 is mute; the level before a mute is what the speaker button restores.
+    let volume = ${Number(startVolume)};
+    let volumeBeforeMute = ${Number(startVolumeBeforeMute)};
+    let gainNode = null;
+    // Shaped so that the middle of the slider sounds about half as loud:
+    // loudness follows the square of the amplitude far more closely than the
+    // amplitude itself. The server applies the same curve.
+    function gainFor(percent) {
+      return (percent / 100) * (percent / 100);
+    }
 
     // How far ahead of 'now' to aim, and the point past which we are
     // drifting and should drop a block to claw the latency back. The server
@@ -2179,6 +2245,9 @@ function getHtml(view) {
     function ensureAudio() {
       if (!audioCtx) {
         audioCtx = new AudioContext({ sampleRate: sampleRate });
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = gainFor(volume);
+        gainNode.connect(audioCtx.destination);
       }
       // Autoplay policy: the context starts suspended until the user has
       // interacted with the panel, so this is retried on every gesture.
@@ -2187,7 +2256,8 @@ function getHtml(view) {
     }
 
     function playBlock(base64) {
-      if (muted) return;
+      // Scheduled even at volume 0, so turning it back up picks up where the
+      // stream is rather than re-seeding the cursor.
       const ctx = ensureAudio();
       if (ctx.state !== 'running') return; // still waiting on a gesture
 
@@ -2212,7 +2282,7 @@ function getHtml(view) {
       }
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      source.connect(gainNode);
       source.start(nextStart);
       nextStart += buffer.duration;
     }
@@ -2239,19 +2309,45 @@ function getHtml(view) {
         // rather than resampling everything by hand.
         if (data.audioRate !== sampleRate) {
           sampleRate = data.audioRate;
-          if (audioCtx) { audioCtx.close(); audioCtx = null; }
+          if (audioCtx) { audioCtx.close(); audioCtx = null; gainNode = null; }
           nextStart = 0;
         }
       }
     });
 
     const muteButton = document.getElementById('mute');
+    const volumeSlider = document.getElementById('volume');
+    function showVolume() {
+      // Muted, one-wave and three-wave speakers, as a volume icon has them.
+      muteButton.innerHTML = volume === 0 ? '&#128263;' : volume < 50 ? '&#128265;' : '&#128266;';
+      muteButton.title = volume === 0
+        ? 'Unmute (back to ' + volumeBeforeMute + '%)'
+        : 'Mute -- volume ' + volume + '%, this panel and the sound device';
+      volumeSlider.value = String(volume);
+      volumeSlider.title = 'Volume ' + volume + '%';
+      if (gainNode) gainNode.gain.value = gainFor(volume);
+    }
+    // 'persist' is false while a slider is being dragged: every step is heard
+    // at once, but only where it ends up is remembered.
+    function setVolume(percent, persist) {
+      volume = percent;
+      if (percent > 0) volumeBeforeMute = percent;
+      showVolume();
+      vscodeApi.postMessage({ type: 'setVolume', volume: volume, before: volumeBeforeMute, persist: persist });
+    }
+    showVolume();
     muteButton.addEventListener('click', () => {
-      muted = !muted;
-      muteButton.innerHTML = muted ? '&#128263;' : '&#128266;';
-      muteButton.title = muted ? 'Unmute the beeper' : 'Mute the beeper';
-      if (!muted) ensureAudio();
+      setVolume(volume === 0 ? (volumeBeforeMute || 100) : 0, true);
+      if (volume > 0) ensureAudio();
       document.body.focus(); // keep keystrokes going to the Spectrum
+    });
+    volumeSlider.addEventListener('input', () => {
+      setVolume(Number(volumeSlider.value), false);
+    });
+    volumeSlider.addEventListener('change', () => {
+      setVolume(Number(volumeSlider.value), true);
+      if (volume > 0) ensureAudio();
+      document.body.focus();
     });
 
     // Maps a browser KeyboardEvent to the Spectrum keys it means (see

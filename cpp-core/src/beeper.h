@@ -240,4 +240,21 @@ void measure_level(const std::vector<int16_t>& samples, float& rms, float& peak)
 std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples,
                                 uint32_t sample_rate = AUDIO_SAMPLE_RATE);
 
+/// Scales `n` samples in place for a playback volume of `percent`, 0 to 100,
+/// on a squared curve: loudness follows the square of the amplitude far more
+/// closely than the amplitude itself, so 50% sounds about half as loud rather
+/// than barely quieter. 100 (or more) leaves the samples alone; 0 silences
+/// them. What the native sound device applies on the way out -- see
+/// Engine::set_device_volume. The screen panel uses the same curve.
+inline void apply_volume(int16_t* samples, size_t n, uint32_t percent) {
+    if (percent >= 100) {
+        return;
+    }
+    // Out of 10000; 32767 * 10000 fits comfortably in 32 bits.
+    const int32_t scale = int32_t(percent * percent);
+    for (size_t i = 0; i < n; i++) {
+        samples[i] = int16_t(int32_t(samples[i]) * scale / 10000);
+    }
+}
+
 } // namespace zx

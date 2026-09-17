@@ -53,8 +53,9 @@ clock, since a network client should not be able to stall the emulator.
 
 - **In VS Code.** The screen panel plays it. The extension host connects to
   the audio stream port and forwards blocks to the webview, which schedules
-  them through the Web Audio API. There is a mute button in the top-right
-  corner. Browsers will not start audio until you have interacted with the
+  them through the Web Audio API. The speaker in the top-right corner is the
+  volume control for all of the sound, wherever it comes out -- see
+  [Volume](#volume). Browsers will not start audio until you have interacted with the
   panel, so the first keypress or click is what gets it going.
 - **Out of the server process.** `--audio-device` opens the default output
   directly. Never fatal: no sound card, or a device held exclusively by
@@ -75,6 +76,32 @@ Aquaplane launch configurations do (otherwise the panel plays the same audio
 a second time, slightly out of phase). Audio is dropped entirely while the
 emulator runs uncapped (`--uncapped`) -- samples generated hundreds of times
 faster than real time are not playable.
+
+## Volume
+
+The speaker button in the screen panel's top-right corner mutes, and pointing
+at it slides out a volume slider beside it. It is one control for all of the
+sound, wherever it comes out: the panel's own playback, and -- through the
+DAP `setAudioVolume` request -- the server's native sound device, which is
+where the sound is when the server runs with `--audio-device`, as the repo's
+launch configurations do.
+
+- **Mute is 0%.** The button remembers the level it muted from and goes back
+  to it; the icon shows muted, quiet (below 50%) or loud.
+- **The slider is shaped for the ear.** Amplitude goes with the square of the
+  percentage, since loudness follows the square far more closely than the
+  amplitude itself: 50% sounds about half as loud rather than barely quieter.
+  The panel and the device use the same curve.
+- **Turning it down never changes the machine's speed.** The device goes on
+  taking samples at its own rate -- that rate is what paces the emulator --
+  and only scales what it plays, so at 0% the machine still runs at exactly
+  real speed rather than stalling or running flat out. Measured on the device
+  at 0% and 100%: 50.9 frames a second both ways.
+- **It is remembered.** The extension keeps the level across reloads and hands
+  it to every server it connects to, so a restarted server does not come back
+  at full volume.
+- **`get_audio` is unaffected**: it measures what the machine produced, not
+  what the speaker was allowed to play.
 
 ## Backends and latency
 

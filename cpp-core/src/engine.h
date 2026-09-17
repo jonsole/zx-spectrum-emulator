@@ -712,6 +712,18 @@ public:
     /// announces and what get_audio reports.
     uint32_t audio_sample_rate() const { return audio_sample_rate_.load(); }
 
+    /// The native sound device's (--audio-device) volume, 0 to 100 percent;
+    /// 0 is mute. Only the device's output is scaled: it goes on taking
+    /// samples at its own rate, because that rate is what paces the emulator,
+    /// so a quiet or muted device neither stalls the machine nor lets it run
+    /// flat out. The screen panel scales its own playback to match, and
+    /// get_audio still measures what the machine produced. An atomic, read by
+    /// the device's thread for every block it fills. Values above 100 are 100.
+    void set_device_volume(uint32_t percent) {
+        device_volume_.store(percent > 100 ? 100 : percent, std::memory_order_relaxed);
+    }
+    uint32_t device_volume() const { return device_volume_.load(std::memory_order_relaxed); }
+
 private:
     Spectrum machine_;
 #if ZX_REWIND
@@ -802,6 +814,7 @@ private:
     PacingClock pacing_clock_;
     size_t pacing_target_ = 0;
     std::atomic<uint32_t> audio_sample_rate_{AUDIO_SAMPLE_RATE};
+    std::atomic<uint32_t> device_volume_{100};
     /// Consecutive waits that timed out. A device that has stopped draining
     /// must not be able to freeze the emulator, so after a few of these the
     /// sink is dropped and pacing falls back to the clock.

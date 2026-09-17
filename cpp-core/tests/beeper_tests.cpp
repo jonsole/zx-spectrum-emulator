@@ -208,4 +208,27 @@ TEST(audio_ring_write_larger_than_capacity_keeps_the_newest) {
     CHECK_EQ(int(out[2]), 5);
 }
 
+TEST(volume_follows_a_squared_curve_and_leaves_full_volume_alone) {
+    std::vector<int16_t> full = {10000, -10000, 32767, -32768, 0};
+    std::vector<int16_t> s = full;
+    apply_volume(s.data(), s.size(), 100);
+    CHECK(s == full);
+
+    // Half way is a quarter of the amplitude: about half as loud.
+    s = full;
+    apply_volume(s.data(), s.size(), 50);
+    CHECK_EQ(int(s[0]), 2500);
+    CHECK_EQ(int(s[1]), -2500);
+    CHECK_EQ(int(s[2]), 8191);  // 32767 / 4, rounded towards zero
+    CHECK_EQ(int(s[3]), -8192);
+
+    s = full;
+    apply_volume(s.data(), s.size(), 10);
+    CHECK_EQ(int(s[0]), 100); // a hundredth
+
+    s = full;
+    apply_volume(s.data(), s.size(), 0);
+    CHECK(s == std::vector<int16_t>(full.size(), 0));
+}
+
 RUN_TESTS()

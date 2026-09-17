@@ -166,6 +166,9 @@ void feed(HWAVEOUT device, Engine& engine, std::shared_ptr<AudioRing> ring, Layo
             }
             std::vector<int16_t>& block = blocks[size_t(i)];
             ring->read(block.data(), block_samples);
+            // Taken whatever the volume, for pacing's sake; see
+            // Engine::set_device_volume.
+            apply_volume(block.data(), block.size(), engine.device_volume());
 
             h.dwFlags &= ~WHDR_DONE;
             if (waveOutWrite(device, &h, sizeof h) != MMSYSERR_NOERROR) {

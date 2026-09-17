@@ -1571,6 +1571,18 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         }
         body = watchpoints_json(engine, sources);
 
+    } else if (command == "setAudioVolume") {
+        // Not standard DAP: the screen panel's volume slider and mute button,
+        // reaching the native sound device, which is where the sound is when
+        // the server runs with --audio-device. A percentage, 0 to 100; with
+        // none given, just reports. Not logged: a dragged slider sends dozens.
+        const json& volume = arg(arguments, "volume");
+        if (volume.is_number()) {
+            const double v = volume.get<double>();
+            engine.set_device_volume(v <= 0 ? 0u : v >= 100 ? 100u : uint32_t(v + 0.5));
+        }
+        body = json{{"volume", engine.device_volume()}};
+
     } else if (command == "watchpoints") {
         body = watchpoints_json(engine, sources);
 

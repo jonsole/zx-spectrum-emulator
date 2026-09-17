@@ -236,6 +236,10 @@ needed for the extension to work elsewhere:
   ports runs fine, but its panel stays blank. The DAP port is `debugServer`
   above, and the MCP port is whatever the MCP client is pointed at (see
   [Connecting an MCP client](mcp.md)).
+- **The volume.** The screen panel's speaker and slider set it, and the
+  extension remembers it across reloads on its own rather than in
+  `settings.json` -- a slider being dragged is not something to write to a
+  settings file at every step. See [Volume](audio.md#volume).
 - **Anything about the running machine.** Speed, the display-write overlay, the
   raster view, watchpoints and profiling are commands, not settings: their state
   lives in the server and starts afresh with it.

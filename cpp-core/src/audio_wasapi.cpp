@@ -98,12 +98,18 @@ using SharedPtr = std::shared_ptr<Shared>;
 /// Writes `frames` of the ring's mono audio into the device buffer, in the
 /// engine's format, padding with SILENCE (never held samples) if the ring
 /// runs short. Returns how many real frames were taken.
+///
+/// Turned down, the frames are still all taken -- the rate the device takes
+/// them at is what paces the emulator (see Engine::set_device_volume) -- and
+/// scaled on the way out, to silence at 0.
 size_t fill(BYTE* out, UINT32 frames, AudioRing& ring, const WAVEFORMATEX* fmt,
-            std::vector<int16_t>& scratch, bool is_float) {
+            std::vector<int16_t>& scratch, bool is_float, uint32_t volume) {
     const size_t channels = fmt->nChannels;
     scratch.resize(frames);
     const size_t got = ring.read(scratch.data(), frames);
-    for (size_t i = got; i < frames; i++) {
+    const size_t audible = volume == 0 ? 0 : got;
+    apply_volume(scratch.data(), audible, volume);
+    for (size_t i = audible; i < frames; i++) {
         scratch[i] = 0; // underrun: silence, deliberately
     }
 
@@ -316,7 +322,7 @@ uint64_t drop_test_ms() {
 
 /// Feeds the device until it stops wanting audio. Returns why it ended, for
 /// the log -- it only returns when the stream is finished with.
-const char* render_loop(Stream& s, std::vector<int16_t>& scratch) {
+const char* render_loop(Stream& s, const Engine& engine, std::vector<int16_t>& scratch) {
     const auto started = std::chrono::steady_clock::now();
     for (;;) {
         if (drop_test_ms() != 0) {
@@ -346,7 +352,7 @@ const char* render_loop(Stream& s, std::vector<int16_t>& scratch) {
         if (FAILED(s.render->GetBuffer(free_frames, &data))) {
             return "its buffer could not be written";
         }
-        fill(data, free_frames, *s.ring, s.format, scratch, s.is_float);
+        fill(data, free_frames, *s.ring, s.format, scratch, s.is_float, engine.device_volume());
         s.render->ReleaseBuffer(free_frames, 0);
 
         // What the speaker still has to get through, which is what the
@@ -390,7 +396,7 @@ void playback_thread(Engine* engine, uint32_t latency_ms, Stream stream) {
 
     std::vector<int16_t> scratch;
     for (;;) {
-        const char* why = render_loop(stream, scratch);
+        const char* why = render_loop(stream, *engine, scratch);
         close_stream(*engine, stream);
         // Said out loud, because the alternative is silence that looks like a
         // bug in the emulator: nothing else in the server would mention it.

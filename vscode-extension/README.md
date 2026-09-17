@@ -55,6 +55,15 @@ pixels, so the chosen filter is the only one applied. `screen_scaling.js` (teste
 into the page as source. See
 [docs/vscode-debugging.md](../docs/vscode-debugging.md#scaling-and-filtering).
 
+## Volume
+
+The speaker in the screen panel's top-right corner mutes, and a slider slides out beside it on
+hover. It sets the volume of the panel's own playback and, over the `setAudioVolume` custom
+request, of the server's native sound device -- where the sound is when the server runs with
+`--audio-device`. Mute is 0%, and the button goes back to the level it muted from. The level is
+kept in the extension's global state, so it survives reloads, and is sent to every server the
+extension connects to. See [docs/audio.md](../docs/audio.md#volume).
+
 ## Raster position
 
 While the machine is stopped — stepping, or on a breakpoint — the screen panel
