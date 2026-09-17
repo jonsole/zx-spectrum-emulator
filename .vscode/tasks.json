@@ -40,10 +40,14 @@
       "problemMatcher": []
     },
     {
+      // The server and nothing else. A plain build is thirty-odd executables,
+      // every one relinked with link-time optimisation whenever the core
+      // changes, and a launch needs exactly one of them. The tests and tools
+      // build with build.ps1 -Test, or -Target zx_tests / zx_tools.
       "label": "zxspectrum-cpp.build",
       "type": "shell",
       "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "build.ps1", "-Release"],
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "build.ps1", "-Release", "-Target", "zx_server"],
       "options": { "cwd": "${workspaceFolder}/cpp-core" },
       "dependsOn": "zxspectrum-cpp.stop-stale-server",
       "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },

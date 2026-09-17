@@ -8,6 +8,7 @@ zx-spectrum-emulator/
                               #   reference only, not the emulator (zlib license)
   cpp-core/                   # THE emulator
     build.ps1                 # configure + build + test (finds MSVC itself)
+    CMakeLists.txt            # the core (zx_core) and the server (zx_server)
     src/
       z80.cpp                 # the Z80: cycle-stepped, pin-level
       alu.cpp                  # flags and arithmetic
@@ -33,7 +34,8 @@ zx-spectrum-emulator/
       audio_stream.cpp              # audio TCP stream
       audio_wasapi.cpp               # native playback (Windows)
       main.cpp                        # entrypoint: engine + every server
-    tests/                    # CTest executables, benchmarks, diagnostics
+    tests/                    # CTest executables, benchmarks, diagnostics --
+                              #   their own CMakeLists.txt, behind ZX_BUILD_TESTS
   scripts/                    # Python helpers -- still current
     build_rom_source.py         # builds rom_disassembly/ (see vscode-debugging.md)
     make_test_tape.py             # generates tapes/

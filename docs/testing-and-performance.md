@@ -10,6 +10,13 @@ cd cpp-core
 .\build.ps1 -Release -Slow     # ZEXALL + ZEXDOC only -- many minutes each
 ```
 
+The suite, the benchmarks and the diagnostic tools are defined in
+`cpp-core/tests/CMakeLists.txt`, apart from the core and the server in the
+top-level `CMakeLists.txt`, and built by default. `-Target zx_tests` builds
+just the suite and `-Target zx_tools` just the benchmarks and diagnostics;
+VS Code's launch builds `zx_server` alone, so a launch never relinks them.
+`-NoTests` configures a build with none of them (`ZX_BUILD_TESTS=OFF`).
+
 128 assertions across ten executables: the ALU and a pin-level check diffed
 against the vendored `z80.h` reference (`alu_tests`, `pin_level`, and
 `differential`, which runs both cores in lockstep), the 48K memory map, the

@@ -11,9 +11,15 @@
 #                            (ZEXALL/ZEXDOC). Use with -Release; these are
 #                            billions of emulated instructions and a Debug
 #                            build turns minutes into hours.
-#   .\build.ps1 -Target zx_server        build just one target
+#   .\build.ps1 -Target zx_server        build just one target -- zx_server is
+#                                        what VS Code's launch builds; zx_tests
+#                                        is the whole CTest suite, zx_tools the
+#                                        benchmarks and diagnostics
 #   .\build.ps1 -NoRewind                build without rewind (ZX_REWIND=OFF),
 #                                        into build\<config>-norewind
+#   .\build.ps1 -NoTests                 configure the server alone, with no
+#                                        tests or tools (ZX_BUILD_TESTS=OFF),
+#                                        into build\<config>-notests
 #   .\build.ps1 -BuildDir <path>         build somewhere else entirely
 #
 # -BuildDir exists for one specific job: building a change while the user's
@@ -27,10 +33,15 @@ param(
     [switch]$Slow,
     [string]$Target,
     [string]$BuildDir,
-    [switch]$NoRewind
+    [switch]$NoRewind,
+    [switch]$NoTests
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($NoTests -and ($Test -or $Slow)) {
+    throw "-NoTests builds no tests, so there is nothing for -Test or -Slow to run"
+}
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found -- is Visual Studio (or its Build Tools) installed?" }
@@ -57,14 +68,19 @@ $env:PATH = "$cmakeDir;$ninjaDir;$env:PATH"
 
 $buildType = if ($Release) { 'RelWithDebInfo' } else { 'Debug' }
 $srcDir = $PSScriptRoot
-$defaultDir = if ($NoRewind) { "build\$buildType-norewind" } else { "build\$buildType" }
+# Each variant in a directory of its own, so switching between them never
+# forces a full rebuild of another.
+$defaultDir = "build\$buildType"
+if ($NoRewind) { $defaultDir += '-norewind' }
+if ($NoTests) { $defaultDir += '-notests' }
 $buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $srcDir $defaultDir }
 $rewind = if ($NoRewind) { 'OFF' } else { 'ON' }
+$tests = if ($NoTests) { 'OFF' } else { 'ON' }
 
 # The -D argument is quoted: unquoted, PowerShell can pass it through with
 # $buildType unexpanded, which CMake then takes as a literal config name and
 # Ninja chokes on ("expected newline, got lexing error").
-cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType" "-DZX_REWIND=$rewind"
+cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType" "-DZX_REWIND=$rewind" "-DZX_BUILD_TESTS=$tests"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
 if ($Target) {

@@ -45,7 +45,7 @@ if (Test-Listening $DapPort) {
 }
 
 if (-not (Test-Path $Exe)) {
-    Write-Error "$Exe does not exist. Build it first: cd cpp-core; .\build.ps1 -Release"
+    Write-Error "$Exe does not exist. Build it first: cd cpp-core; .\build.ps1 -Release -Target zx_server"
     exit 1
 }
 

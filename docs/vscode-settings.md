@@ -197,7 +197,7 @@ starts it rather than in any setting. The repo's `.vscode/tasks.json` has:
 
 | Task | Does |
 |---|---|
-| `zxspectrum-cpp.start-server` | Stops any running server (Windows will not relink an executable in use), builds `cpp-core` in Release, and starts `zx_server.exe` |
+| `zxspectrum-cpp.start-server` | Stops any running server (Windows will not relink an executable in use), builds `zx_server` in Release -- the server alone, not the tests and tools -- and starts it |
 | `zxspectrum-cpp.start-server-if-absent` | Starts a server only if nothing is listening on the DAP port, and never stops or rebuilds one -- the task for attaching |
 | `zxspectrum-cpp.build`, `zxspectrum-cpp.stop-stale-server` | The two steps the first task depends on |
 

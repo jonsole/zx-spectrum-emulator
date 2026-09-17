@@ -24,11 +24,14 @@ tripped people before.
 
 ```powershell
 cd cpp-core
-.\build.ps1                      # Debug, into build\Debug
-.\build.ps1 -Release             # RelWithDebInfo, into build\RelWithDebInfo -- what VS Code launches
+.\build.ps1                      # Debug, into build\Debug: the server, the tests and the tools
+.\build.ps1 -Release             # RelWithDebInfo, into build\RelWithDebInfo
 .\build.ps1 -Test                # build, then the fast CTest suite (label "slow" excluded)
 .\build.ps1 -Release -Slow       # ZEXALL/ZEXDOC only: many minutes, Release or it takes hours
+.\build.ps1 -Release -Target zx_server     # the server alone -- what VS Code's launch builds
+.\build.ps1 -Target zx_tests               # the CTest suite alone; zx_tools for the rest
 .\build.ps1 -Target profile_tests          # one target
+.\build.ps1 -NoTests                       # a build that is only the server (ZX_BUILD_TESTS=OFF)
 .\build.ps1 -Release -BuildDir <dir>       # somewhere else entirely (see below)
 ```
 
@@ -36,7 +39,12 @@ Run the whole fast suite (`-Test`) before calling a core change done; it takes
 about a minute and a half. Each test is a plain executable built from
 `cpp-core/tests/<name>.cpp` with the three-macro harness in
 `tests/test_main.h` (`TEST`, `CHECK`, `CHECK_EQ`), registered in
-`cpp-core/CMakeLists.txt` with `zx_add_test`. Tests that need the real ROM find
+`cpp-core/tests/CMakeLists.txt` with `zx_add_test`. The top-level
+`cpp-core/CMakeLists.txt` is the core and the server only; everything in
+`tests/` -- the suite, the benchmarks and the diagnostics -- hangs off the
+`ZX_BUILD_TESTS` option, and every executable still lands at the top of the
+build directory. A new tool goes in `tests/CMakeLists.txt` and into the
+`zx_tests` or `zx_tools` group there. Tests that need the real ROM find
 it through `ZX_PROJECT_ROOT` and skip themselves when `roms/48.rom` is absent.
 
 Expected values in tests are worked out, not captured: costs from the Z80's

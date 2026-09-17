@@ -21,6 +21,12 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   endif()
 endif()
 
+# Every executable goes to the top of the build tree -- tests and tools
+# included, although they are defined in tests/ -- because that is where
+# scripts and docs run them from (build\RelWithDebInfo\bench_machine.exe,
+# examples/filmation's z80_com_runner).
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 # Warnings-as-errors on our own code only -- vendored third_party/ targets are
 # added with their own (looser) settings, since we don't control their source.
 if(MSVC)
@@ -108,164 +114,20 @@ endif()
 # /WX would fail the build on them -- included as SYSTEM so they're exempt.
 target_include_directories(zx_server SYSTEM PRIVATE third_party)
 
-# ---- tests ------------------------------------------------------------------
-# Hand-rolled assertions (see tests/test_main.h) rather than a framework --
-# these are plain executables run by CTest, and the emulator's own test needs
-# (diff two cores, run ZEXALL to completion) don't benefit from one.
-enable_testing()
-
-# USES_REFERENCE marks a test that #includes the vendored vendor/chips/z80.h
-# (with CHIPS_IMPL) to diff against the real reference core. Those get the
-# vendor include path and relaxed warnings, since z80.h's own warnings aren't
-# ours to fix and /WX would fail the build on them.
-function(zx_add_test name)
-  cmake_parse_arguments(ARG "USES_REFERENCE" "" "" ${ARGN})
-  add_executable(${name} tests/${name}.cpp)
-  target_link_libraries(${name} PRIVATE zx_core)
-  target_include_directories(${name} PRIVATE tests)
-  if(ARG_USES_REFERENCE)
-    # vendor/, not vendor/chips/, so the reference is included as
-    # "chips/z80.h" and cannot be confused with our own src/z80.h.
-    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
-    if(MSVC)
-      target_compile_options(${name} PRIVATE /W3 /wd4244)
-    else()
-      target_compile_options(${name} PRIVATE -Wall)
-    endif()
-  else()
-    target_compile_options(${name} PRIVATE ${ZX_WARNINGS})
-  endif()
-  add_test(NAME ${name} COMMAND ${name})
-endfunction()
-
-zx_add_test(memory_tests)
-zx_add_test(register_names_tests)
-zx_add_test(beeper_tests)
-zx_add_test(alu_tests USES_REFERENCE)
-zx_add_test(pin_level)
-zx_add_test(int_timing)
-zx_add_test(differential USES_REFERENCE)
-zx_add_test(spectrum_tests)
-zx_add_test(spectrum128_tests)
-zx_add_test(ay_tests)
-zx_add_test(floating_bus)
-zx_add_test(call_stack)
-zx_add_test(graphics_view)
-zx_add_test(tape_tests)
-zx_add_test(tape_audio_tests)
-zx_add_test(tracelog_tests)
-zx_add_test(video_recorder_tests)
-zx_add_test(frame_capture_tests)
-zx_add_test(profile_tests)
-zx_add_test(watchpoint_tests)
-if(ZX_REWIND)
-  zx_add_test(rewind_tests)
-  target_compile_definitions(rewind_tests PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+# ---- tests and tools ------------------------------------------------------------
+# Everything that is not the server -- the CTest suite, the benchmarks and the
+# diagnostic tools -- is in tests/CMakeLists.txt. On by default, so a plain
+# build and build.ps1 -Test have it all; -DZX_BUILD_TESTS=OFF configures a
+# build that is only the server.
+#
+# Building just one part of an ON build is a matter of target, and needs no
+# reconfigure: zx_server alone (what VS Code's launch builds, since relinking
+# thirty-odd executables with link-time optimisation for every core change is
+# what made launching slow), zx_tests for the suite, zx_tools for the rest.
+option(ZX_BUILD_TESTS "Build the test suite, benchmarks and diagnostic tools" ON)
+if(ZX_BUILD_TESTS)
+  # Here rather than in tests/, so that ctest run from the top of the build
+  # tree finds the tests defined down there.
+  enable_testing()
+  add_subdirectory(tests)
 endif()
-
-# Not a zx_add_test: the symbol/address-expression parsing it covers lives in
-# rom_source.cpp, which belongs to zx_server rather than zx_core (debug data is
-# file-based tooling, not machine state), so it is compiled in directly.
-add_executable(symbol_tests tests/symbol_tests.cpp src/rom_source.cpp)
-target_link_libraries(symbol_tests PRIVATE zx_core)
-target_include_directories(symbol_tests PRIVATE tests)
-target_compile_options(symbol_tests PRIVATE ${ZX_WARNINGS})
-add_test(NAME symbol_tests COMMAND symbol_tests)
-# The same arrangement for the profile report: it folds addresses through the
-# SLD data, which is zx_server's, and emits JSON through the vendored header.
-add_executable(profile_report_tests tests/profile_report_tests.cpp src/profile_report.cpp
-                                    src/rom_source.cpp)
-target_link_libraries(profile_report_tests PRIVATE zx_core)
-target_include_directories(profile_report_tests PRIVATE tests)
-target_include_directories(profile_report_tests SYSTEM PRIVATE third_party)
-target_compile_options(profile_report_tests PRIVATE ${ZX_WARNINGS})
-add_test(NAME profile_report_tests COMMAND profile_report_tests)
-# Diffs against tests/data/visualz80_reference.txt, found relative to the
-# project root rather than the build tree.
-target_compile_definitions(tracelog_tests
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-# Needs the real ROM, which is copyrighted and gitignored -- the test skips
-# gracefully if it is absent.
-target_compile_definitions(spectrum_tests
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-# The same for the 128K's ROM pair (roms/128.rom).
-target_compile_definitions(spectrum128_tests
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-# The fast-load trap and the auto-typed LOAD "" only mean anything against the
-# real ROM; those tests skip gracefully without it, the parser ones do not need
-# it at all.
-target_compile_definitions(tape_tests
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-# Same again: the round-trip tests drive the real ROM's loader off decoded
-# audio, and skip gracefully when the ROM is absent.
-target_compile_definitions(tape_audio_tests
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-# ---- throughput benchmark ---------------------------------------------------
-# Not a test (nothing to assert -- it reports numbers). Build and run manually;
-# only meaningful in an optimised build.
-add_executable(bench tests/bench.cpp)
-target_link_libraries(bench PRIVATE zx_core)
-target_compile_options(bench PRIVATE ${ZX_WARNINGS})
-
-# Companion to bench: measures the machine and Engine layers rather than the
-# bare CPU, i.e. what a connected client actually experiences.
-add_executable(bench_machine tests/bench_machine.cpp)
-target_link_libraries(bench_machine PRIVATE zx_core)
-target_compile_options(bench_machine PRIVATE ${ZX_WARNINGS})
-target_compile_definitions(bench_machine
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-# Diagnostic, not a test: runs a snapshot until it derails and dumps the
-# instruction history that led there.
-add_executable(trace tests/trace.cpp)
-target_link_libraries(trace PRIVATE zx_core)
-target_compile_options(trace PRIVATE ${ZX_WARNINGS})
-target_compile_definitions(trace
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-# Diagnostic, not a test: drives the audio path end to end and writes a WAV.
-# Needs a few of zx_server's sources (the stream server and its sockets) as
-# well as zx_core, so that `beep serve` can stand the real servers up without
-# main.cpp -- which is the only way to hear this without starting the whole
-# debug server.
-add_executable(beep tests/beep.cpp src/audio_device.cpp src/audio_stream.cpp
-                    src/audio_wasapi.cpp src/net.cpp)
-target_link_libraries(beep PRIVATE zx_core)
-target_compile_options(beep PRIVATE ${ZX_WARNINGS})
-target_compile_definitions(beep
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-if(WIN32)
-  target_link_libraries(beep PRIVATE ws2_32)
-endif()
-
-# Diagnostic, not a test: dumps the rendered canvas for eyeballing.
-add_executable(screenshot tests/screenshot.cpp)
-target_link_libraries(screenshot PRIVATE zx_core)
-target_compile_options(screenshot PRIVATE ${ZX_WARNINGS})
-target_compile_definitions(screenshot
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-# Not a test on its own: runs a Z80 .com, exiting with A, for the unit tests
-# the examples write in Z80 -- see examples/filmation/tests/run_tests.py.
-add_executable(z80_com_runner tests/z80_com_runner.cpp)
-target_link_libraries(z80_com_runner PRIVATE zx_core)
-target_compile_options(z80_com_runner PRIVATE ${ZX_WARNINGS})
-
-# ---- ZEXALL / ZEXDOC --------------------------------------------------------
-# One executable, run twice with different arguments. Labelled "slow" and
-# excluded from the default ctest run (build.ps1 -Test): a full pass is well
-# over a billion emulated instructions and takes many minutes even optimised.
-# Run with build.ps1 -Slow.
-add_executable(zexall_runner tests/zexall.cpp)
-target_link_libraries(zexall_runner PRIVATE zx_core)
-target_compile_options(zexall_runner PRIVATE ${ZX_WARNINGS})
-# The .com images live outside the build tree; baked in rather than found by
-# walking relative paths, which break depending on where ctest is invoked.
-target_compile_definitions(zexall_runner
-  PRIVATE ZX_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-foreach(suite zexdoc zexall)
-  add_test(NAME ${suite} COMMAND zexall_runner ${suite})
-  set_tests_properties(${suite} PROPERTIES LABELS "slow" TIMEOUT 7200)
-endforeach()
