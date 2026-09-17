@@ -17,10 +17,12 @@ own, and neither side polls the other to find out.
 [dap]: https://microsoft.github.io/debug-adapter-protocol/
 [mcp]: https://modelcontextprotocol.io/
 
-![A knight walking through a room of the Filmation engine's Knight Lore remake, running in the emulator](docs/images/readme/knightlore.gif)
+![The knight walks through a room; night falls and he turns into the werewolf](docs/images/readme/knightlore.gif)
 
-*A game running under the debugger — recorded by the emulator itself, with the
-`start_video` tool.*
+*Night falling on the Filmation engine's Knight Lore remake. The emulator
+recorded this itself (the `start_video` tool), while an agent played it, and
+brought nightfall on early by poking the day clock at `sun_x` mid-stride —
+which is what having the machine on the end of an API is for.*
 
 ```
    VS Code                                  Claude, or any MCP client
