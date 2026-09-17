@@ -5,6 +5,10 @@ masked-sprite blitter behind isometric games like *Knight Lore*. Imported from
 its own project tree (it was previously debugged under DeZog/CSpect); this copy
 builds and runs against this emulator.
 
+![Knight Lore on the Filmation engine, running in this emulator: the menu, then four rooms and a life lost on the spikes](media/knightlore.gif)
+
+*Played in this emulator and recorded with its `start_video` tool.*
+
 It comes in two parts: [`engine/`](engine/README.md), an isometric engine
 with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
 built on it. `knightlore/knightlore.s` joins the two -- it lays out memory
