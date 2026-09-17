@@ -225,4 +225,4 @@ pool_end:
 ; All of RAM, for build.py to wrap as output/knightlore.z80 with PC at start.
 ; Not SAVESNA: a 48K .sna keeps PC on the stack, and sjasmplus puts it at the
 ; bottom of the screen to get it there.
-                    SAVEBIN "../output/knightlore.bin", $4000, $C000
+                    SAVEBIN "output/knightlore.bin", $4000, $C000

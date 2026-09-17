@@ -85,8 +85,8 @@
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/filmation/output/knightlore.z80",
-      "sld": "${workspaceFolder}/examples/filmation/output/knightlore.sld",
+      "snapshot": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.z80",
+      "sld": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.sld",
       "asm": "${workspaceFolder}/examples/filmation/knightlore/knightlore.s",
       "preLaunchTask": "filmation.build-and-start-server"
     },

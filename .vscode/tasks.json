@@ -109,7 +109,7 @@
       "label": "filmation.build",
       "type": "shell",
       "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
-      "args": ["examples/filmation/build.py"],
+      "args": ["examples/filmation/knightlore/build.py"],
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
       "problemMatcher": {

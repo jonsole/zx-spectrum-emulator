@@ -13,6 +13,7 @@ have been built first:
     cpp-core/build.ps1 -Release -Target z80_com_runner
 """
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,8 +23,22 @@ FILMATION = HERE.parent
 REPO = FILMATION.parent.parent
 OUT_DIR = FILMATION / "output" / "tests"
 
-sys.path.insert(0, str(FILMATION))
-from build import find_sjasmplus  # noqa: E402
+# The same search knightlore/build.py makes, kept here so that the engine's
+# tests do not reach into the game's build.
+SJASMPLUS_CANDIDATES = [
+    REPO / "tools" / "sjasmplus" / "sjasmplus.exe",
+    REPO / ".venv-win" / "Scripts" / "sjasmplus.exe",
+]
+
+
+def find_sjasmplus() -> str:
+    for candidate in SJASMPLUS_CANDIDATES:
+        if candidate.is_file():
+            return str(candidate)
+    on_path = shutil.which("sjasmplus")
+    if on_path is not None:
+        return on_path
+    sys.exit("sjasmplus not found -- see knightlore/build.py for where to get it")
 
 RUNNER_CANDIDATES = [
     REPO / "cpp-core" / "build" / "RelWithDebInfo" / "z80_com_runner.exe",

@@ -23,17 +23,18 @@ Launch **"ZX Spectrum: Filmation"** from the Run and Debug view. The
 runs what you just wrote. To build it by hand:
 
 ```powershell
-.\.venv-win\Scripts\python.exe examples\filmation\build.py
+.\.venv-win\Scripts\python.exe examples\filmation\knightlore\build.py
 ```
 
 Add `--debug-room` to print the room number in the top-left corner, for
 finding your way about; the ordinary build leaves it out.
 
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
-It writes `output/knightlore.z80`, a version 3 snapshot that `build.py` wraps
-round the RAM the `SAVEBIN` at the bottom of `knightlore/knightlore.s` saves,
-plus the `.sld` the debugger maps source lines with and a `.lst` listing.
-`output/` is gitignored; everything in it is regenerated.
+It writes `knightlore/output/knightlore.z80`, a version 3 snapshot that
+`build.py` wraps round the RAM the `SAVEBIN` at the bottom of
+`knightlore/knightlore.s` saves, plus the `.sld` the debugger maps source
+lines with and a `.lst` listing. `output/` is gitignored; everything in it is
+regenerated.
 
 Knight Lore's own data is not in the repository. Take it from your own copy of
 the game once, before the first build:
@@ -73,6 +74,7 @@ README lists what a game has to supply.
 | File | What it does |
 |---|---|
 | `knightlore.s` | The entry source: the memory map and the include list |
+| `build.py` | Generates what needs generating, assembles `knightlore.s` and writes the `.z80` |
 | `main.s` | The main loop: menu, a new game, a turn; the room being played |
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |

@@ -1,10 +1,10 @@
 """Assembles Knight Lore on the Filmation engine: sjasmplus, from
-knightlore/knightlore.s -> output/knightlore.{z80,sld,lst}.
+knightlore.s -> output/knightlore.{z80,sld,lst}, both beside this script.
 
 sjasmplus writes all 48K of RAM with the SAVEBIN at the bottom of
 knightlore.s, the SLD that maps addresses to source lines, and a listing. It
-runs in knightlore/, so the SLD names every source relative to knightlore.s,
-which is where the debugger resolves them. This wraps the RAM as a version 3
+runs here, in knightlore/, so the SLD names the game's sources relative to
+knightlore.s, which is where the debugger resolves them. This wraps the RAM as a version 3
 .z80 that starts at `start` -- sjasmplus has no .z80 output of its own, and its
 48K .sna has to push PC into the bottom of the screen.
 
@@ -29,11 +29,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Knight Lore's sources, its data and the scripts that turn the data into
+# source all live here, beside this script.
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parent.parent
+KNIGHTLORE = HERE
+REPO = HERE.parent.parent.parent
 OUT_DIR = HERE / "output"
-# Knight Lore's data and the scripts that turn it into source live in knightlore/.
-KNIGHTLORE = HERE / "knightlore"
+# Where the build wrote before it moved in here.
+OLD_OUT_DIR = HERE.parent / "output"
 
 # Where sjasmplus might be, best first: the copy this repo fetches for its own
 # disassembly builds, then whatever is on PATH. Kept a search rather than a
@@ -111,9 +114,9 @@ def assemble(sjasmplus: str, defines: list[str]) -> None:
     subprocess.run(
         [
             sjasmplus,
-            "--sld=../output/knightlore.sld",
+            "--sld=output/knightlore.sld",
             "--fullpath",
-            "--lst=../output/knightlore.lst",
+            "--lst=output/knightlore.lst",
             *[f"-D{name}" for name in defines],
             "knightlore.s",
         ],
@@ -123,10 +126,11 @@ def assemble(sjasmplus: str, defines: list[str]) -> None:
     ram = (OUT_DIR / "knightlore.bin").read_bytes()
     start = find_label(OUT_DIR / "knightlore.sld", "start")
     (OUT_DIR / "knightlore.z80").write_bytes(z80_snapshot(ram, start))
-    # What the build wrote before the entry source was knightlore.s would be
-    # stale, and loadable by mistake.
-    for old in ("sna", "z80", "bin", "sld", "lst"):
-        (OUT_DIR / f"filmation.{old}").unlink(missing_ok=True)
+    # What the build wrote before it moved in here would be stale, and
+    # loadable by mistake.
+    for name in ("filmation", "knightlore"):
+        for old in ("sna", "z80", "bin", "sld", "lst"):
+            (OLD_OUT_DIR / f"{name}.{old}").unlink(missing_ok=True)
     print(f"Wrote {OUT_DIR / 'knightlore.z80'} (PC {start:04X}) and {OUT_DIR / 'knightlore.sld'}")
 
 

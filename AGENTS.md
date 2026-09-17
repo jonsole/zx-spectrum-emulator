@@ -109,7 +109,7 @@ changes touch:
 | `cpp-core/src/profile.cpp`, `profile_report.cpp` | The execution profiler and its report |
 | `cpp-core/src/rewind.cpp` | Stepping backwards: checkpoints, the input log, replay |
 | `vscode-extension/` | Debugger registration, panels, profiler view, Z80 language support |
-| `examples/filmation/` | A real multi-file sjasmplus program, built by its `build.py` |
+| `examples/filmation/` | A real multi-file sjasmplus program, built by its `knightlore/build.py` |
 | `game-disassemblies/` | Submodule: Manic Miner, Fairlight, Atic Atac |
 
 ROM images are not in the repository (`roms/` is gitignored); tests and
