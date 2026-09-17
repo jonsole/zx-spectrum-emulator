@@ -147,7 +147,25 @@ connects to that port itself, before an extension is asked.
 `.sna`, `.z80`, `.tap` and `.tzx` files open -- from File > Open, the
 Explorer, or anywhere else -- in a small read-only editor (`program_view.js`)
 that says what the file is: the snapshot format and the Spectrum it needs, or
-the tape's blocks and the files its headers name. Its **Run** button starts a
+the tape's blocks and the files its headers name. Beside that it draws the
+program's screen in its border colour, scaled to the editor. The page measures
+itself and puts the picture beside the details or above them, whichever lets
+it be larger with the details -- and the Run button -- still wholly in view,
+and redoes that whenever the editor is resized:
+
+- **A snapshot's** is the 6912 bytes at `$4000` -- straight out of a `.sna`
+  (after its 27-byte header, on a 128K too, since `$4000` is always page 5), or
+  unpacked from a `.z80`'s memory (all of it in version 1, page 8 in versions 2
+  and 3). The border is the one the snapshot saved.
+- **A tape's** is its loading screen: the data block a `SCREEN$` header
+  announces, or failing that the first headerless block that is a flag byte and
+  6912 bytes, with or without a checksum -- which is how most custom loaders
+  carry theirs. A screen a loader packs or splits (Exolon's, Head Over
+  Heels') is not found, and the page shows none. Tapes carry no border colour,
+  so the border is white.
+
+A `.tap` with stray bytes after its last block -- common in the wild -- is
+read up to them, and the page says how many were ignored. Its **Run** button starts a
 debug session on it that carries straight on running; **Debug** stops at the
 first instruction. The same two are **Run in ZX Spectrum** and **Debug in ZX
 Spectrum** on the Explorer's context menu, and ticking *Run programs as soon as

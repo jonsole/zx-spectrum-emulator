@@ -167,8 +167,9 @@ the status bar shows the current speed:
 ### Opening a snapshot or a tape
 
 Open a `.sna`, `.z80`, `.tap` or `.tzx` file the way you open any file --
-**File > Open**, or from the Explorer. It opens in a page that says what it is
-(48K or 128K, what is on the tape), with two buttons:
+**File > Open**, or from the Explorer. It opens in a page that shows its
+screen -- the picture saved in a snapshot, or a tape's loading screen -- and
+says what it is (48K or 128K, what is on the tape), with two buttons:
 
 - **Run** resets the emulator, loads the program and runs it.
 - **Debug** does the same but stops at the program's first instruction.

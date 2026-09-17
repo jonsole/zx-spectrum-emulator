@@ -86,7 +86,8 @@ for `zx_server`, the directory it runs it in, its command line, and reading the
 port's process from `netstat`) and
 `node vscode-extension/tests/program_info_test.js` (what an opened snapshot or
 tape is, including the repo's own, which ROM it gets, the launch configuration
-it makes, and telling a `.z80` source file from a snapshot).
+it makes, telling a `.z80` source file from a snapshot, and finding the screen
+in a `.sna`, a compressed `.z80` and a tape's loading screen).
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion

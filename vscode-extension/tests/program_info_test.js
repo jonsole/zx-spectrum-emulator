@@ -74,6 +74,8 @@ test('a .tap lists its blocks and the files its headers name', () => {
   const d = p.describeProgram('t.tap', Uint8Array.from(header.concat(data)));
   assert.deepStrictEqual(d.details, ['2 blocks', 'Program: HELLO']);
   assert.strictEqual(p.describeProgram('t.tap', Uint8Array.from([50, 0, 1, 2])).kind, 'unknown');
+  const trailing = p.describeProgram('t.tap', Uint8Array.from(header.concat(data, [9, 9, 9])));
+  assert.deepStrictEqual(trailing.details, ['2 blocks', 'Program: HELLO', '3 stray bytes at the end, ignored']);
 });
 
 test('a .tzx is recognised by its signature', () => {
@@ -105,6 +107,92 @@ test('the launch configuration loads the program the right way', () => {
   });
   assert.deepStrictEqual(p.debugInfoCandidates('/g/prog.sna'),
     { sld: '/g/prog.sld', asm: ['/g/prog.asm', '/g/prog.s', '/g/prog.a80'] });
+});
+
+// ---- the screen ----
+
+// A 6912-byte screen whose bytes say where they are, so a wrong offset shows.
+function screenPattern() {
+  return Uint8Array.from({ length: 6912 }, (_, i) => (i * 7 + 3) & 0xFF);
+}
+
+function packZ80(data) {
+  const out = [];
+  for (let i = 0; i < data.length;) {
+    let run = 1;
+    while (i + run < data.length && data[i + run] === data[i] && run < 255) run++;
+    if (run >= 5 || (data[i] === 0xED && run >= 2)) {
+      out.push(0xED, 0xED, run, data[i]);
+      i += run;
+    } else {
+      out.push(data[i]);
+      i++;
+    }
+  }
+  return Uint8Array.from(out);
+}
+
+test('.z80 compression unpacks', () => {
+  const out = new Uint8Array(8);
+  assert.strictEqual(p.unpackZ80(Uint8Array.from([1, 0xED, 0xED, 5, 9, 2, 0xED, 3]), 0, 8, out), 8);
+  assert.deepStrictEqual(Array.from(out), [1, 9, 9, 9, 9, 9, 2, 0xED]);
+});
+
+test('a .sna\'s screen and border', () => {
+  const sna = new Uint8Array(49179);
+  sna[26] = 5;
+  sna.set(screenPattern(), 27);
+  const r = p.programScreen('x.sna', sna);
+  assert.deepStrictEqual([r.border, r.source], [5, 'the snapshot']);
+  assert.deepStrictEqual(r.screen, screenPattern());
+});
+
+test('a compressed version 1 .z80\'s screen', () => {
+  const ram = new Uint8Array(49152);
+  ram.set(screenPattern(), 0);
+  const body = packZ80(ram);
+  const z = new Uint8Array(30 + body.length + 4);
+  z[6] = 0x00; z[7] = 0x80;          // PC: version 1
+  z[12] = 0x20 | (3 << 1);           // compressed, border 3
+  z.set(body, 30);
+  z.set([0, 0xED, 0xED, 0], 30 + body.length);
+  const r = p.programScreen('x.z80', z);
+  assert.strictEqual(r.border, 3);
+  assert.deepStrictEqual(r.screen, screenPattern());
+});
+
+test('a version 3 .z80\'s screen is page 8', () => {
+  const page8 = new Uint8Array(16384);
+  page8.set(screenPattern(), 0);
+  const packed = packZ80(page8);
+  const other = Uint8Array.from([0xED, 0xED, 255, 1, 0xED, 0xED, 255, 1]);
+  const header = new Uint8Array(30 + 2 + 54);
+  header[30] = 54;
+  header[34] = 0;
+  const block = (page, data) => Uint8Array.from([data.length & 0xFF, data.length >> 8, page, ...data]);
+  const file = Uint8Array.from([...header, ...block(4, other), ...block(8, packed), ...block(5, other)]);
+  assert.deepStrictEqual(p.programScreen('x.z80', file).screen, screenPattern());
+});
+
+test('a tape\'s SCREEN$ block, and a headerless one', () => {
+  const tapBlock = (flag, data) => {
+    const len = data.length + 2;
+    return [len & 0xFF, len >> 8, flag, ...data, 0];
+  };
+  const header = [3, ...Buffer.from('screen    '), 0x00, 0x1B, 0x00, 0x40, 0, 0];
+  const tap = Uint8Array.from([...tapBlock(0, header), ...tapBlock(0xFF, screenPattern())]);
+  const r = p.programScreen('x.tap', tap);
+  assert.strictEqual(r.source, 'the tape\'s loading screen');
+  assert.deepStrictEqual(r.screen, screenPattern());
+
+  // A custom loader's block: a flag and 6912 bytes, with no checksum.
+  const bare = [...screenPattern()];
+  const tzxBody = [0x10, 0, 0, 0x01, 0x1B, 0x77, ...bare];
+  const tzx = Uint8Array.from([...Buffer.from('ZXTape!'), 0x1A, 1, 20, ...tzxBody]);
+  const t = p.programScreen('x.tzx', tzx);
+  assert.deepStrictEqual(t && t.screen, screenPattern());
+
+  assert.strictEqual(p.programScreen('x.tap', Uint8Array.from(tapBlock(0xFF, [1, 2, 3]))), null);
 });
 
 const REPO = path.join(__dirname, '..', '..');

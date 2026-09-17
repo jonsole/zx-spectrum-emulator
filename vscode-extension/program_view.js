@@ -109,7 +109,13 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-function pageHtml(fileName, described, runOnOpen) {
+// `picture` is programScreen()'s result or null: drawn on a canvas by the
+// page, with the ULA's palette and its display file layout, inside a border of
+// the snapshot's colour. The page lays itself out to the editor (fit(),
+// below): the picture beside the details or above them, whichever lets it be
+// larger with everything still in view, and sized to that -- so nothing needs
+// scrolling to reach unless the editor is too small for the details alone.
+function pageHtml(fileName, described, runOnOpen, picture) {
   const nonce = crypto.randomBytes(16).toString('hex');
   const unknown = described.kind === 'unknown';
   const title = unknown ? 'Not something the emulator can load'
@@ -124,8 +130,10 @@ function pageHtml(fileName, described, runOnOpen) {
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
 <style>
+  html, body { margin: 0; height: 100%; }
   body { font: 13px var(--vscode-font-family, system-ui, sans-serif); color: var(--vscode-foreground);
-         background: var(--vscode-editor-background); padding: 28px 32px; }
+         background: var(--vscode-editor-background); padding: 20px 24px; box-sizing: border-box;
+         overflow: auto; }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
   h2 { font-size: 13px; font-weight: normal; opacity: .75; margin: 0 0 18px; }
   ul { margin: 0 0 22px; padding-left: 18px; line-height: 1.7; }
@@ -137,9 +145,21 @@ function pageHtml(fileName, described, runOnOpen) {
   button.primary:hover { background: var(--vscode-button-hoverBackground); }
   label { opacity: .85; }
   p.note { opacity: .7; max-width: 60em; line-height: 1.5; }
+  .layout { display: flex; gap: 24px; align-items: flex-start; }
+  .layout.stacked { flex-direction: column; }
+  .info { flex: 1 1 auto; min-width: 0; }
+  .info > :last-child { margin-bottom: 0; }
+  figure { margin: 0; flex: none; }
+  canvas { display: block; width: 304px; height: 240px; image-rendering: pixelated;
+           box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+  figcaption { opacity: .6; font-size: 12px; margin-top: 6px; }
 </style>
 </head>
 <body>
+<div class="layout">
+  ${picture ? `<figure><canvas id="screen" width="304" height="240"></canvas>
+    <figcaption>${escapeHtml('The screen, from ' + picture.source)}</figcaption></figure>` : ''}
+  <div class="info">
   <h1>${escapeHtml(fileName)}</h1>
   <h2>${escapeHtml(title)}</h2>
   <ul>${rows.map((row) => `<li>${row}</li>`).join('')}</ul>
@@ -152,7 +172,95 @@ function pageHtml(fileName, described, runOnOpen) {
   <p class="note">Running a program resets the emulator, and takes the place of any debug session already
   running. The emulator is started if it is not running. A <code>.sld</code> and a source file of the same
   name beside this one are loaded with it, for stepping through its source.</p>`}
+  </div>
+</div>
 <script nonce="${nonce}">
+  const picture = ${picture ? JSON.stringify({ screen: Buffer.from(picture.screen).toString('base64'), border: picture.border }) : 'null'};
+  if (picture) {
+    // Bright black is black; the rest at two-thirds, bright at full.
+    const palette = [[0,0,0],[0,0,192],[192,0,0],[192,0,192],[0,192,0],[0,192,192],[192,192,0],[192,192,192],
+                     [0,0,0],[0,0,255],[255,0,0],[255,0,255],[0,255,0],[0,255,255],[255,255,0],[255,255,255]];
+    const bytes = Uint8Array.from(atob(picture.screen), (c) => c.charCodeAt(0));
+    const canvas = document.getElementById('screen');
+    const ctx = canvas.getContext('2d');
+    const image = ctx.createImageData(304, 240);
+    const border = palette[picture.border & 7];
+    for (let i = 0; i < 304 * 240; i++) {
+      image.data.set(border, i * 4);
+      image.data[i * 4 + 3] = 255;
+    }
+    for (let y = 0; y < 192; y++) {
+      for (let x = 0; x < 256; x++) {
+        // The display file's own order: y = 0bYYyyyxxx is byte 0b010YY xxx yyy.
+        const at = ((y >> 6) << 11) | ((y & 7) << 8) | (((y >> 3) & 7) << 5) | (x >> 3);
+        const attr = bytes[6144 + (y >> 3) * 32 + (x >> 3)];
+        const bright = attr & 0x40 ? 8 : 0;
+        const set = (bytes[at] >> (7 - (x & 7))) & 1;
+        const rgb = palette[set ? (attr & 7) | bright : ((attr >> 3) & 7) | bright];
+        image.data.set(rgb, ((y + 24) * 304 + x + 24) * 4);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+  // Side by side or stacked, and how big: whichever layout lets the picture
+  // be larger with the details still wholly in view. The details' height is
+  // measured in each layout rather than guessed, since it depends on the
+  // width the text wraps to.
+  const layout = document.querySelector('.layout');
+  const figure = document.querySelector('figure');
+  const details = document.querySelector('.info');
+  const GAP = 24;
+  function fit() {
+    if (!figure) {
+      return;
+    }
+    const canvas = document.getElementById('screen');
+    const body = getComputedStyle(document.body);
+    const width = document.body.clientWidth - parseFloat(body.paddingLeft) - parseFloat(body.paddingRight);
+    const height = document.body.clientHeight - parseFloat(body.paddingTop) - parseFloat(body.paddingBottom);
+    const caption = figure.offsetHeight - canvas.offsetHeight;
+
+    // Beside the picture, the details column is tried at a few widths: a
+    // wider column is shorter, which is what lets a short editor still have
+    // them side by side.
+    layout.classList.remove('stacked');
+    let side = 0;
+    let sideWidth = 0;
+    for (let w = 260; w <= Math.min(620, width - 100); w += 60) {
+      details.style.width = w + 'px';
+      if (details.offsetHeight > height) {
+        continue;
+      }
+      const scale = Math.min((width - w - GAP) / 304, (height - caption) / 240);
+      if (scale > side) {
+        side = scale;
+        sideWidth = w;
+      }
+    }
+    const sideFits = sideWidth > 0;
+
+    layout.classList.add('stacked');
+    details.style.width = '';
+    const stacked = Math.min(width / 304, (height - caption - GAP - details.offsetHeight) / 240);
+
+    let scale;
+    if (sideFits && side >= stacked && side > 0.3) {
+      layout.classList.remove('stacked');
+      details.style.width = sideWidth + 'px';
+      scale = side;
+    } else if (stacked > 0.3) {
+      scale = stacked;
+    } else {
+      // Too small for both: the details stay whole, and the page scrolls to
+      // a picture kept just big enough to make out.
+      scale = Math.min(width / 304, 0.5);
+    }
+    canvas.style.width = Math.floor(304 * scale) + 'px';
+    canvas.style.height = Math.floor(240 * scale) + 'px';
+  }
+  fit();
+  new ResizeObserver(fit).observe(document.body);
+
   const vscode = acquireVsCodeApi();
   for (const id of ['run', 'debug']) {
     const button = document.getElementById(id);
@@ -189,7 +297,8 @@ class ProgramEditorProvider {
       : { kind: 'unknown', problem: 'The file could not be read, or is empty.' };
     const config = vscode.workspace.getConfiguration('zxspectrum');
     panel.webview.options = { enableScripts: true };
-    panel.webview.html = pageHtml(fileName, described, config.get('program.runOnOpen', false));
+    const picture = described.kind === 'unknown' ? null : info.programScreen(fileName, bytes);
+    panel.webview.html = pageHtml(fileName, described, config.get('program.runOnOpen', false), picture);
     panel.webview.onDidReceiveMessage((message) => {
       if (message.type === 'run') {
         runProgram(uri, false);

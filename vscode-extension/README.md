@@ -16,7 +16,8 @@ A handful of things, in one small extension:
    its command line. See
    [docs/vscode-debugging.md](../docs/vscode-debugging.md#starting-the-emulator-from-the-extension).
 2. **Opens snapshots and tapes.** `.sna`, `.z80`, `.tap` and `.tzx` open in a read-only custom
-   editor (`program_view.js`) that says what the program is, with Run and Debug buttons that
+   editor (`program_view.js`) that shows the program's screen (a snapshot's, or a tape's loading
+   screen) and says what the program is, with Run and Debug buttons that
    launch a session on it; the Explorer's context menu has the same two. A `.z80` that is really
    assembly source goes to the text editor. `program_info.js` (tested by
    `node tests/program_info_test.js`) reads the headers and makes the launch configuration. Run
