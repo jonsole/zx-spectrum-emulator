@@ -47,6 +47,9 @@ snapshots/*.sna
 !snapshots/zexall.sna
 !snapshots/zexccfb.sna
 !snapshots/zexdoc.sna
+# .z80 has no exceptions: save_snapshot writes .sna or .z80 by the path's
+# extension, and every .z80 that lands here is a game paused mid-run.
+snapshots/*.z80
 tapes/*.tap
 tapes/*.tzx
 tapes/*.wav
