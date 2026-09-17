@@ -336,6 +336,43 @@ character. Point it at `$3D00` for the ROM's own.
 bytes rather than 6144, colours it from the attributes that follow. A `.scr` on
 disk and `$4000` in the running machine are the same picture by two routes.
 
+### Every setting, and where it lives
+
+A sprite carries its own copy of the first group, which is what lets one sheet
+hold sprites of different shapes; the second group belongs to the sheet, so
+changing one of those changes every tile at once. The MCP column is what
+`set_graphics_view` calls the same thing, and the atlas column what
+[the atlas file](graphics-atlas.md) calls it.
+
+| Dialog | MCP | Atlas | Values | Default | What it does |
+|---|---|---|---|---|---|
+| Name | -- | `name` | letters, digits, `_` | offered | The label the export writes for it |
+| Group | -- | `group` | a group's name | last used | Which group it is in |
+| Source | `source` | `source` | `memory`, `file`, `selection` | `memory` | Where the bytes come from |
+| Address | `address` | `address` | a number or a symbol, `sprite_000+4` | `$4000` | For `memory`. Re-read on every stop and **Refresh** |
+| File | `file` | `file` | a path | -- | For `file`: `.scr`, `.sna`, `.z80` or a raw blob |
+| Offset | `offset` | `offset` | 0-2147483647 | 0 | For `file` and selections: bytes skipped first |
+| Format | `format` | `format` | `sprite`, `font`, `screen` | `screen` | The layout the bytes are read with |
+| Width | `width` | `width` | 1-64 | 2 | Bytes across an item, before mask interleaving -- so 3 is 24 pixels |
+| Height | `height` | `height` | 1-256 | 16 | Pixel rows an item |
+| Count | `count` | `count` | 1-1024 | 16 | Items. Higher than the data runs is fine: the extra are reported, not drawn as rubbish |
+| Cols | `columns` | `columns` | 1-64 | 8 | Items per row, on the sheet and in the exported picture |
+| Header | `header` | `header` | 0-64 | 0 | Bytes skipped before **each** item, for data carrying its own width/height |
+| First | `first` | `first` | 0-255 | 32 | In a `font`: the character code of item 0 |
+| Mask | `interleave` | `interleave` | `none`, `md`, `dm` | `none` | Mask and data per byte across a row: none, mask first, data first |
+| Invert | `invert_mask` | `invertMask` | boolean | false | A **clear** mask bit means transparent |
+| Flip | `flip` | `bottomUp` | boolean | false | Row 0 of the data is the bottom row of the picture |
+| Ink, Paper | `ink`, `paper` | `ink`, `paper` | 0-15 | 0, 15 | The ULA colours a set and a clear bit are drawn in |
+
+Sheet-wide, and so not part of a sprite: **zoom** (`zoom`, 1-16, default 3),
+**grid** (`grid`, on, and suppressed below 3x where the lines would be most of
+the picture), **labels** (`labels`, on) and **Live**.
+
+How many bytes a sprite reads follows from the layout: a row is `width` bytes,
+doubled when a mask is interleaved; an item is `header` plus `height` rows; and
+a sprite is `count` items. A `screen` is 6,912 -- 6,144 of bitmap and 768 of
+attributes -- or 6,144 with no colour.
+
 ### The point of it
 
 Hover any pixel. The status line says which item it is in, where it is within
@@ -442,7 +479,8 @@ sprite's **⤓** saves that sprite. A dialog asks what to write; the save dialog
 then asks for the atlas's name, and the other files go beside it under the same
 name — `knight.json`, `knight.png`, `knight.sna`, `knight.s`.
 
-- **Atlas (.json)** — always written. It is TexturePacker's "JSON (Hash)"
+- **Atlas (.json)** — always written, and specified field by field in
+  [The graphics atlas](graphics-atlas.md). It is TexturePacker's "JSON (Hash)"
   layout, which Aseprite also writes and Phaser loads as it is: a `frames`
   object keyed by frame name, and `meta`. A sprite with several items has a
   frame for each: `knight_walk_0`, `knight_walk_1`..., or `font_65` by
@@ -510,6 +548,8 @@ set_graphics_view(source="memory", address="sprite_000", format="sprite",
                   interleave="md", flip=true)
 ```
 
+The fields are the dialog's, under the names in the table above -- `flip` for
+the dialog's flip (`bottomUp` in an atlas) and `invert_mask` for its invert.
 Every field is left as it was when omitted, so a width can be corrected without
 restating the address. Numbers out of range are clamped rather than refused —
 these land in a UI, and the nearest sensible value beats an error nobody sees —

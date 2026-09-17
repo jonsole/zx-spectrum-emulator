@@ -495,7 +495,8 @@ saves just that one. You choose from:
 
 **Import...** loads an exported atlas back onto the sheet.
 
-Details: [Graphics viewer](vscode-debugging.md#graphics-viewer).
+Details: [Graphics viewer](vscode-debugging.md#graphics-viewer), and
+[The graphics atlas](graphics-atlas.md) for what is in an exported `.json`.
 
 ## Recording a bus trace
 
