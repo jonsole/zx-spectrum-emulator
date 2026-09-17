@@ -30,7 +30,7 @@ Z0					EQU		0
 HALF				EQU		4		; SIZE_U and SIZE_V are half-widths
 TALL				EQU		10		; SIZE_Z is a height
 
-					INCLUDE	"../engine/object_struct.s"
+					INCLUDE	"../object_struct.s"
 
 
 ; ---------------------------------------------------------------------------
@@ -601,6 +601,6 @@ s_prev:				DB		"PREV named by field ", 0
 ; ---------------------------------------------------------------------------
 ; The code under test.
 
-					INCLUDE	"../engine/depth.s"
+					INCLUDE	"../depth.s"
 
 					ASSERT	$ < REC_1

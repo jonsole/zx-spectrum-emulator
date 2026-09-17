@@ -1,8 +1,10 @@
-; Unit tests for character.s, in Z80, run on the C++ core by run_tests.py.
+; Unit tests for engine/walker.s, in Z80, run on the C++ core by run_tests.py.
 ;
-; character.s is assembled on its own, and so is everything in it: the frames,
+; walker.s is assembled on its own, and so is everything in it: the frames,
 ; walking, jumping and falling, the doorways, and the room-edge and floor half
-; of the clamp that the movers share. What it calls out to is stubbed below.
+; of the clamp that the movers share. What it calls out to is stubbed below,
+; and the numbers a game gives it are set here -- they are Knight Lore's, so
+; the expectations read as the knight's, but nothing of the game is assembled.
 ; object_collide reports whatever the test says gave, and can cut the step or
 ; add to it the way a ride does; the depth sorts apply the step; placement,
 ; the redraw and shift_alloc count their calls and note what they were handed.
@@ -18,11 +20,11 @@
 					ORG		$0100
 					INCLUDE	"harness.s"
 
-					INCLUDE	"../engine/object_struct.s"
+					INCLUDE	"../object_struct.s"
 
 REC					EQU		$C000		; the legs; the body follows, then the tail
 
-; What the engine gives character.s.
+; What the rest of the engine gives walker.s.
 COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
 COLLIDE_Z			EQU		4
@@ -31,6 +33,19 @@ OBJ_FLIP_BIT		EQU		0
 
 LEGS_BASE			EQU		16
 BODY_BASE			EQU		32
+
+; What a game gives walker.s: a character's size, step, jump and doorway box.
+COLLIDE_HEIGHT		EQU		23
+CHARACTER_BODY_UP	EQU		12
+CHARACTER_HALF_U	EQU		5
+CHARACTER_HALF_V	EQU		5
+CHARACTER_STEP		EQU		3
+CHARACTER_JUMP_DZ	EQU		8
+CHARACTER_FALL_MAX	EQU		-8 & $FF
+DOOR_ACROSS			EQU		6
+DOOR_ALONG			EQU		15
+DOOR_LEVEL			EQU		4
+DOOR_HEIGHT			EQU		13
 
 
 ; Run a routine with IX -> the legs, and keep what came back.
@@ -386,78 +401,6 @@ start:				ld		sp,$FE00
 					RUN		character_door_find
 					EXPECT_TAIL	CHARACTER_DOOR, 1, "the doorway"
 
-; --- character_steer -----------------------------------------------------------
-
-					TEST	"steer: no arch, no nudge"
-					call	fresh
-					STEP	-3, 0
-					RUN		character_steer
-					EXPECT_WORD	s_de, $FD00, "the step"
-
-					; A north arch nudges him along U towards the middle of its
-					; opening, whichever way he walks -- the game chooses by the
-					; arch's own mirroring. Along the wall that only lengthens or
-					; shortens his step; it never takes him across into the arch.
-					TEST	"steer: along the north wall, never across it"
-					call	fresh
-					call	north_arch
-					SET		OBJ.U, 130
-					SET		OBJ.V, 185
-					STEP	-3, 0
-					RUN		character_steer
-					EXPECT_WORD	s_de, $FC00, "the step"
-
-					TEST	"steer: along the north wall, past the middle"
-					call	fresh
-					call	north_arch
-					SET		OBJ.U, 130
-					SET		OBJ.V, 185
-					STEP	3, 0
-					RUN		character_steer
-					EXPECT_WORD	s_de, $0200, "the step"
-
-					TEST	"steer: into the north arch, towards its U"
-					call	fresh
-					call	north_arch
-					SET		CHARACTER_FACING, 1
-					SET		OBJ.U, 130
-					SET		OBJ.V, 185
-					STEP	0, 3
-					RUN		character_steer
-					EXPECT_WORD	s_de, $FF03, "the step"
-
-					TEST	"steer: along the east wall, along V and not across"
-					call	fresh
-					ld		a,128
-					ld		(room_door_z + 1),a
-					ld		a,196
-					ld		(room_door_at + 1),a
-					SET		CHARACTER_FACING, 1
-					SET		OBJ.U, 185
-					SET		OBJ.V, 120
-					STEP	0, 3
-					RUN		character_steer
-					EXPECT_WORD	s_de, $0004, "the step"
-
-					TEST	"steer: already in the middle of the opening"
-					call	fresh
-					call	north_arch
-					SET		OBJ.U, 128
-					SET		OBJ.V, 185
-					STEP	-3, 0
-					RUN		character_steer
-					EXPECT_WORD	s_de, $FD00, "the step"
-
-					TEST	"steer: not on the arch's storey"
-					call	fresh
-					call	north_arch
-					SET		OBJ.U, 130
-					SET		OBJ.V, 185
-					SET		OBJ.Z, 128 + DOOR_LEVEL
-					STEP	-3, 0
-					RUN		character_steer
-					EXPECT_WORD	s_de, $FD00, "the step"
-
 ; --- the room's edges and floor ------------------------------------------------
 
 					TEST	"bound: a step into the far wall cut to fit"
@@ -546,7 +489,7 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	collide_hit, COLLIDE_V, "collide_hit, with the edge in it"
 
 					call	finish
-					DB		"character_tests", 0
+					DB		"walker_tests", 0
 
 
 ; ---------------------------------------------------------------------------
@@ -603,10 +546,12 @@ north_arch:			ld		a,128
 
 
 ; ---------------------------------------------------------------------------
-; The engine around character.s.
+; The engine and the game around walker.s.
 
-sprite_030:			DB		0		; CHARACTER_LARGEST and CHARACTER_TALLEST
-sprite_092:			DB		0		; name these; only their addresses matter
+; The two sprites that size the kept rotation buffers. Only their addresses
+; matter.
+CHARACTER_LARGEST:	DB		0
+CHARACTER_TALLEST:	DB		0
 
 stubs:
 collide_hit:		DB		0
@@ -747,10 +692,13 @@ redraw_view:		ld		hl,view_calls
 ; The glance is the game's (walker_glance); here every body frame is the plain one.
 walker_glance:		ret
 
+; So is the nudge towards an arch, which knightlore/tests/knight_tests.s tests;
+; here a walk takes the step it was given.
+character_steer:	ret
+
 ; Silent: what the sounds play is not what these tests are about.
 sound_jump:
 sound_z:			ret
 
 
-					INCLUDE	"../engine/walker.s"
-					INCLUDE	"../knightlore/knight.s"
+					INCLUDE	"../walker.s"

@@ -674,7 +674,7 @@ To run them:
 
 ```
 cpp-core/build.ps1 -Release -Target z80_com_runner
-python examples/filmation/tests/run_tests.py
+python examples/filmation/engine/tests/run_tests.py depth
 ```
 
 A failure prints the test's name, what was checked, and the value it got

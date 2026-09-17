@@ -30,6 +30,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
+| `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the game's |
 
 ## Laying out memory
 
@@ -93,8 +94,9 @@ The engine names nothing else of the game's.
 The top-level file also provides `VIEW_BUF_WIDTH`, `VIEW_BUF_ROWS`,
 `view_buffer`, `shift_shared` and `bit_reverse_table`, as laid out above.
 
-`../tests/character_tests.s` and `../tests/mover_tests.s` stub most of this
-list, which makes them a working minimal example.
+`tests/walker_tests.s` and `tests/mover_tests.s` supply most of this list
+themselves -- the walker's numbers, a one-behaviour `mover_tbl`, stubs for
+the rest -- which makes them a working minimal example.
 
 ## Using it
 

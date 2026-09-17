@@ -1,14 +1,16 @@
-"""Assembles and runs the Filmation engine's Z80 unit tests.
+"""Assembles and runs the Filmation example's Z80 unit tests.
 
-Every *_tests.s here is a self-contained program: it INCLUDEs the engine file
-it tests, checks it, and returns its failure count in A. sjasmplus turns each
-into a .com under output/tests, and cpp-core's z80_com_runner runs it on the
+The engine's suites are here, beside this script, and the game's are in
+knightlore/tests; the game's use the harness from here. Every *_tests.s is a
+self-contained program: it INCLUDEs the file it tests, checks it, and returns
+its failure count in A. sjasmplus turns each into a .com under
+examples/filmation/output/tests, and cpp-core's z80_com_runner runs it on the
 C++ Z80 core and exits with that count.
 
-    python examples/filmation/tests/run_tests.py [name ...]
+    python examples/filmation/engine/tests/run_tests.py [name ...]
 
-With no names it runs them all; `depth` runs depth_tests.s. The runner has to
-have been built first:
+With no names it runs them all, the engine's first; `depth` runs
+depth_tests.s, wherever it is. The runner has to have been built first:
 
     cpp-core/build.ps1 -Release -Target z80_com_runner
 """
@@ -19,9 +21,10 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-FILMATION = HERE.parent
+FILMATION = HERE.parent.parent
 REPO = FILMATION.parent.parent
 OUT_DIR = FILMATION / "output" / "tests"
+SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests"]
 
 # The same search knightlore/build.py makes, kept here so that the engine's
 # tests do not reach into the game's build.
@@ -39,6 +42,7 @@ def find_sjasmplus() -> str:
     if on_path is not None:
         return on_path
     sys.exit("sjasmplus not found -- see knightlore/build.py for where to get it")
+
 
 RUNNER_CANDIDATES = [
     REPO / "cpp-core" / "build" / "RelWithDebInfo" / "z80_com_runner.exe",
@@ -60,7 +64,7 @@ def run_suite(source: Path, sjasmplus: str, runner: Path) -> bool:
     lst = OUT_DIR / (source.stem + ".lst")
     assembled = subprocess.run(
         [sjasmplus, "--nologo", "--fullpath", f"--raw={com}", f"--lst={lst}", source.name],
-        cwd=HERE,
+        cwd=source.parent,
         capture_output=True,
         text=True,
     )
@@ -74,13 +78,15 @@ def run_suite(source: Path, sjasmplus: str, runner: Path) -> bool:
 
 def main() -> None:
     names = sys.argv[1:]
+    everything = [s for d in SUITE_DIRS for s in sorted(d.glob("*_tests.s"))]
     if names:
-        sources = [HERE / f"{name}_tests.s" for name in names]
-        missing = [s.name for s in sources if not s.is_file()]
+        by_name = {s.stem: s for s in everything}
+        missing = [f"{n}_tests.s" for n in names if f"{n}_tests" not in by_name]
         if missing:
             sys.exit("no such suite: " + ", ".join(missing))
+        sources = [by_name[f"{n}_tests"] for n in names]
     else:
-        sources = sorted(HERE.glob("*_tests.s"))
+        sources = everything
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     sjasmplus = find_sjasmplus()

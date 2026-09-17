@@ -1,11 +1,14 @@
-; Unit tests for mover.s, in Z80, run on the C++ core by run_tests.py.
+; Unit tests for knightlore/movers.s, in Z80, run on the C++ core by
+; engine/tests/run_tests.py.
 ;
-; mover.s is assembled on its own. Everything it calls out to -- the collision
-; clamp, the depth sort, placement, the redraw regions, the pair flip -- is a
-; stub below that counts its calls and writes down what it was handed. So what
-; is tested is each mover's own decision: the step it puts in the record, the
-; graphic and MOVE_STATE it leaves, and what it asks the rest of the engine to
-; do. Whether the clamp and the sort are right is their own suites' business.
+; movers.s is assembled with the engine's mover framework, engine/mover.s, and
+; nothing else. Everything they call out to -- the collision clamp, the depth
+; sort, placement, the redraw regions, the pair flip -- is a stub below that
+; counts its calls and writes down what it was handed. So what is tested is
+; each mover's own decision: the step it puts in the record, the graphic and
+; MOVE_STATE it leaves, and what it asks the rest of the engine to do. The
+; framework itself is engine/tests/mover_tests.s's business, and the clamp and
+; the sort their own suites'.
 ;
 ; The stubs behave the way the real routines' contracts say, and no better:
 ; object_place and redraw_defer come back with IX pointing somewhere else, as
@@ -18,14 +21,14 @@
 ; which.
 
 					ORG		$0100
-					INCLUDE	"harness.s"
+					INCLUDE	"../../engine/tests/harness.s"
 
-					INCLUDE	"../engine/object_struct.s"
+					INCLUDE	"../../engine/object_struct.s"
 
 REC					EQU		$C000		; the record under test; a guard's legs follow
 ROOMS				EQU		$C100		; room_objects, for movers_step
 
-; What the engine gives mover.s. The template numbers are rooms.py's to choose;
+; What the engine gives movers.s. The template numbers are rooms.py's to choose;
 ; these only have to be different from each other.
 COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
@@ -116,84 +119,6 @@ start:				ld		sp,$FE00
 					call	mover_find
 					call	snap
 					EXPECT_A	MOVE_NONE, "the behaviour"
-
-; --- movers_step -------------------------------------------------------------
-
-					TEST	"step: only a mover gets a turn"
-					call	fresh
-					call	three_records
-					ld		a,MOVE_NONE
-					ld		(ROOMS + OBJ.BEHAVIOUR),a
-					ld		a,MOVE_STILL
-					ld		(ROOMS + ROOM_STRIDE + OBJ.BEHAVIOUR),a
-					ld		a,MOVE_PUSHED
-					ld		(ROOMS + 2 * ROOM_STRIDE + OBJ.BEHAVIOUR),a
-					ld		a,1
-					ld		(ROOMS + 2 * ROOM_STRIDE + OBJ.DU),a
-					ld		a,3
-					ld		(room_object_count),a
-					call	movers_step
-					EXPECT_BYTE	clamp_calls, 1, "clamps"
-					EXPECT_WORD	clamp_ix, ROOMS + 2 * ROOM_STRIDE, "the record clamped"
-					EXPECT_BYTE	move_tick, 1, "move_tick"
-					EXPECT_BYTE	ROOMS + 2 * ROOM_STRIDE + OBJ.DU, 0, "the table's DU, spent"
-
-					TEST	"step: an empty room still counts the turn"
-					call	fresh
-					ld		a,41
-					ld		(move_tick),a
-					call	movers_step
-					EXPECT_BYTE	move_tick, 42, "move_tick"
-					EXPECT_BYTE	clamp_calls, 0, "clamps"
-
-; --- mover_clamp, mover_move, mover_paint --------------------------------------
-
-					TEST	"clamp: gravity, and passable for its own test"
-					call	fresh
-					SET		OBJ.FLAGS, $81
-					SET		OBJ.DU, 2
-					SET		OBJ.DV, -3
-					SET		OBJ.DZ, 1
-					RUN		mover_clamp
-					EXPECT_BYTE	clamp_calls, 1, "clamps"
-					EXPECT_BYTE	clamp_flags, $81 | OBJ_PASSABLE, "FLAGS during the clamp"
-					EXPECT_FIELD	OBJ.FLAGS, $81, "FLAGS after"
-					EXPECT_BYTE	clamp_dz, 0, "DZ, one taken off"
-					EXPECT_WORD	clamp_de, $02FD, "D and E, the step"
-					EXPECT_WORD	collide_other, player, "collide_other"
-
-					TEST	"move: nothing left of the step, nothing drawn"
-					call	fresh
-					SET		OBJ.DU, 2
-					ld		a,1
-					ld		(stub_block),a
-					RUN		mover_move
-					EXPECT_BYTE	clamp_calls, 1, "clamps"
-					EXPECT_BYTE	reset_calls, 0, "region_reset"
-					EXPECT_BYTE	step_calls, 0, "depth_step"
-					EXPECT_WORD	s_ix, REC, "IX"
-
-					TEST	"move: a step is sorted, placed and drawn"
-					call	fresh
-					SET		OBJ.U, 100
-					SET		OBJ.DU, 2
-					RUN		mover_move
-					EXPECT_BYTE	reset_calls, 1, "region_reset"
-					EXPECT_BYTE	add_calls, 2, "region_add, before and after"
-					EXPECT_BYTE	step_calls, 1, "depth_step"
-					EXPECT_WORD	step_de, $0200, "the step sorted by"
-					EXPECT_BYTE	place_calls, 1, "object_place"
-					EXPECT_BYTE	defer_calls, 1, "redraw_defer"
-					EXPECT_FIELD	OBJ.U, 102, "U"
-					EXPECT_WORD	s_ix, REC, "IX"
-
-					TEST	"move always: drawn even with nothing left"
-					call	fresh
-					ld		a,1
-					ld		(stub_block),a
-					RUN		mover_move_always
-					EXPECT_BYTE	defer_calls, 1, "redraw_defer"
-					EXPECT_WORD	s_ix, REC, "IX"
 
 ; --- mover_slide ---------------------------------------------------------------
 ; The wave is (move_tick + bit 5 of the record's address) folded into 0..15, and
@@ -406,7 +331,7 @@ start:				ld		sp,$FE00
 					EXPECT_LEGS	OBJ.GFX, 144, "the legs"
 					EXPECT_BYTE	flip_calls, 0, "flips"
 
-; --- mover_move_pair, mover_guard_u, mover_guard_sq ----------------------------
+; --- mover_guard_u, mover_guard_sq ---------------------------------------------
 
 					TEST	"guard U: forward, the legs sorted, then the torso"
 					call	fresh
@@ -441,22 +366,6 @@ start:				ld		sp,$FE00
 					RUN		mover_guard_u
 					EXPECT_BYTE	clamp_de + 1, -2 & $FF, "D, the step along U"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, turned"
-
-					TEST	"pair: legs that stay put are not re-sorted"
-					call	fresh
-					call	guard_at_100
-					RUN		mover_move_pair
-					EXPECT_BYTE	relink_calls, 0, "legs re-sorted"
-					EXPECT_BYTE	upper_calls, 1, "torso asked"
-
-					TEST	"pair: legs out of step are brought back and sorted"
-					call	fresh
-					call	guard_at_100
-					ld		a,108		; the wizard's pieces start eight apart
-					ld		(REC + ROOM_STRIDE + OBJ.U),a
-					RUN		mover_move_pair
-					EXPECT_LEGS	OBJ.U, 100, "the legs' U"
-					EXPECT_BYTE	relink_calls, 1, "legs re-sorted"
 
 					TEST	"square: north, and on to east when stopped along V"
 					call	fresh
@@ -844,7 +753,7 @@ start:				ld		sp,$FE00
 					EXPECT_WORD	hide_ix, REC, "...of it"
 
 					call	finish
-					DB		"mover_tests", 0
+					DB		"movers_tests", 0
 
 
 ; ---------------------------------------------------------------------------
@@ -1130,5 +1039,5 @@ sound_take:
 sound_sparkle:		ret
 
 
-					INCLUDE	"../knightlore/movers.s"
-					INCLUDE	"../engine/mover.s"
+					INCLUDE	"../movers.s"
+					INCLUDE	"../../engine/mover.s"

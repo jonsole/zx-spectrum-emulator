@@ -166,7 +166,7 @@ target_compile_definitions(screenshot
   PRIVATE ${ZX_ROOT_DEFINE})
 
 # Not a test on its own: runs a Z80 .com, exiting with A, for the unit tests
-# the examples write in Z80 -- see examples/filmation/tests/run_tests.py.
+# the examples write in Z80 -- see examples/filmation/engine/tests/run_tests.py.
 add_executable(z80_com_runner z80_com_runner.cpp)
 target_link_libraries(z80_com_runner PRIVATE zx_core)
 target_compile_options(z80_com_runner PRIVATE ${ZX_WARNINGS})

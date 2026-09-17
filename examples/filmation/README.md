@@ -43,10 +43,12 @@ the game once, before the first build:
 .\.venv-win\Scripts\python.exe examples\filmation\knightlore\kl_extract.py "path\to\Knight Lore.sna"
 ```
 
-The unit tests assemble single files against stubs and run them headless:
+The unit tests assemble single files against stubs and run them headless --
+the engine's in `engine/tests`, the game's in `knightlore/tests`, and one
+command for all of them:
 
 ```powershell
-.\.venv-win\Scripts\python.exe examples\filmation\tests\run_tests.py
+.\.venv-win\Scripts\python.exe examples\filmation\engine\tests\run_tests.py
 ```
 
 ## Source layout
@@ -88,6 +90,7 @@ README lists what a game has to supply.
 | `menu.s`, `input.s` | The menu, and keyboard and joystick reading |
 | `end.s`, `end_at.s` | Game over, the tunes, and the percentage of the castle seen |
 | `sound_fx.s` | The sound effects: which tone to play, and when |
+| `tests/` | Unit tests for the movers and the arch nudge, run by `engine/tests/run_tests.py` |
 
 The generated files and the scripts that make them are in `knightlore/` too --
 see [The pipeline](#the-pipeline).

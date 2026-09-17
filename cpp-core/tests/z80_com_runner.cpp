@@ -3,7 +3,7 @@
 // character in E; 9, a '$'-terminated string at DE) and a HALT at $0000 for the
 // program to finish on.
 //
-// It exists for unit tests written in Z80 itself -- examples/filmation/tests --
+// It exists for unit tests written in Z80 itself -- examples/filmation's --
 // where the code under test is assembled into a .com alongside the checks. So
 // the exit status is what the program says, not what it prints: A when it
 // jumps to $0000, which a test suite sets to its failure count. Anything that

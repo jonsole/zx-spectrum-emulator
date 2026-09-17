@@ -12,7 +12,7 @@
 
 					ORG		$0100
 					INCLUDE	"harness.s"
-					INCLUDE	"../engine/sprite_defs.s"
+					INCLUDE	"../sprite_defs.s"
 
 BUF					EQU		$C0FC		; two header bytes, then rows from $C0FE on
 
@@ -195,7 +195,7 @@ spare_out:			DB		(3 - 2) << WIDTH_CLASS_SHIFT | $8F
 
 ; --- the code under test -----------------------------------------------------
 
-					INCLUDE	"../engine/sprite_flip.s"
+					INCLUDE	"../sprite_flip.s"
 
 					ALIGN	256
 bit_reverse_table:
