@@ -7,9 +7,9 @@ files it is configured through:
 
 | File | What goes in it |
 |---|---|
-| `settings.json` (user or workspace) | How the screen panel draws the picture |
+| `settings.json` (user or workspace) | How the emulator is started, how the screen panel draws the picture, and what opening a snapshot does |
 | `.vscode/launch.json` | What a debug session loads and how it connects |
-| `.vscode/tasks.json` | How the server is started, and with which flags |
+| `.vscode/tasks.json` | How this repo's own configurations build and start the server |
 
 The repo's own `.vscode/` folder has all three set up; this page is for
 changing them, or for setting up another workspace. How the pieces fit
@@ -17,8 +17,58 @@ together is in [Debugging in VS Code](vscode-debugging.md).
 
 ## settings.json
 
-The extension contributes four settings, all about the screen panel. They are
-under **ZX Spectrum** in the Settings editor, and the magnifier in the screen
+All the extension's settings are under **ZX Spectrum** in the Settings editor.
+
+### Starting the emulator
+
+A launch configuration without a `debugServer` (see [launch.json](#launchjson))
+connects to `zxspectrum.server.dapPort`, and the extension starts the emulator
+first if nothing is listening there. These settings say where it is and how it
+is started. A server that was already running -- from a task, a terminal, an
+MCP client or another window -- is joined as it is, whatever they say.
+
+| Setting | Values | Default | What it does |
+|---|---|---|---|
+| `zxspectrum.server.autoStart` | boolean | `true` | Start the emulator when a session needs it and nothing is listening. Off, such a session fails with a message instead |
+| `zxspectrum.server.path` | path | `""` | Where `zx_server` is. `${workspaceFolder}`, `${userHome}` and `~` are expanded. Empty: each workspace folder's `cpp-core/build/RelWithDebInfo/`, then `PATH` |
+| `zxspectrum.server.roms` | list of paths | `[]` | ROMs to load at start (`--rom`). Empty: `roms/48.rom` and `roms/128.rom` in the emulator's checkout, when they are there. A launch configuration's `rom` still applies to its own session |
+| `zxspectrum.server.sound` | `"device"`, `"panel"`, `"off"` | `"device"` | Sound out of the computer's sound card, through the screen panel, or not at all |
+| `zxspectrum.server.args` | list of strings | `[]` | More command-line flags, after the ones the settings make -- `["--ffmpeg", "C:/tools/ffmpeg.exe"]`, say |
+| `zxspectrum.server.stopOnExit` | boolean | `true` | Stop the emulator this window started when the window closes. Either way it keeps running between debug sessions |
+| `zxspectrum.server.dapPort` | port | `4711` | The debug adapter port (`--dap-port`) |
+| `zxspectrum.server.mcpPort` | port | `8000` | The MCP port (`--mcp-port`) |
+| `zxspectrum.server.screenPort` | port | `8500` | The screen stream (`--screen-port`), which the screen panel reads |
+| `zxspectrum.server.audioPort` | port | `8501` | The audio stream (`--audio-port`), which the screen panel plays with `"panel"` sound |
+
+```jsonc
+{
+  // A build somewhere else, on spare ports, with the sound in the panel.
+  "zxspectrum.server.path": "~/zx-spectrum-emulator/cpp-core/build/RelWithDebInfo/zx_server.exe",
+  "zxspectrum.server.dapPort": 4799,
+  "zxspectrum.server.mcpPort": 8099,
+  "zxspectrum.server.screenPort": 8599,
+  "zxspectrum.server.audioPort": 8598,
+  "zxspectrum.server.sound": "panel"
+}
+```
+
+The server runs in the root of the checkout it was built in (where
+`rom_disassembly/` is found), or else the first workspace folder. Its output is
+in the **ZX Spectrum Emulator** output channel, and the **Spectrum** item in the
+status bar -- shown while an emulator is running -- has Stop, Restart and the
+log. The ports apply to the server the extension starts and to what the screen
+panel connects to, so a server started some other way on other ports needs
+them set to match.
+
+### Opening programs
+
+| Setting | Values | Default | What it does |
+|---|---|---|---|
+| `zxspectrum.program.runOnOpen` | boolean | `false` | Run a `.sna`, `.z80`, `.tap` or `.tzx` as soon as it is opened, instead of showing it with **Run** and **Debug** buttons. The box on that page sets it too |
+
+### The screen panel
+
+Four settings say how the panel draws the picture. The magnifier in the screen
 panel's title bar (**ZX Spectrum: Screen Scaling...**) sets them too -- as user
 settings, so they hold in every workspace. The open panel follows any change at
 once, however it was made.
@@ -62,21 +112,28 @@ filtering](vscode-debugging.md#scaling-and-filtering).
 
 ## launch.json
 
-Every configuration is a `zxspectrum` debug session that connects to a server
-which is already running -- the extension has no debug adapter of its own.
-Four attributes make that work, and they are VS Code's rather than this
-extension's:
+Every configuration is a `zxspectrum` debug session connected to the
+emulator's DAP port. There are two ways to get it there:
+
+- **Leave `debugServer` out.** The extension connects to
+  `zxspectrum.server.dapPort`, starting the emulator first if nothing is
+  running (see [Starting the emulator](#starting-the-emulator)). This is all a
+  project of your own needs.
+- **Give `debugServer`, with a `preLaunchTask` that starts the server.** VS
+  Code then connects to that port itself and the extension starts nothing.
+  This repo's configurations do this, so that every launch rebuilds the
+  emulator first -- see [tasks.json](#tasksjson).
 
 | Attribute | Value | Why |
 |---|---|---|
 | `type` | `"zxspectrum"` | Selects this extension's debugger |
 | `request` | `"launch"` or `"attach"` | Launch sets the machine up from scratch; attach joins it as it is |
-| `debugServer` | `4711` | The server's DAP port, which VS Code connects to directly. Must match the server's `--dap-port` |
-| `preLaunchTask` | `"zxspectrum-cpp.start-server"` (launch) or `"zxspectrum-cpp.start-server-if-absent"` (attach) | Starts the server first -- see [tasks.json](#tasksjson) |
+| `debugServer` | a port, e.g. `4711` | Optional. Connect to this port directly and start nothing |
+| `preLaunchTask` | e.g. `"zxspectrum-cpp.start-server"` | Optional. A task to run first -- with `debugServer`, the one that starts the server |
 
 Paths are best written with `${workspaceFolder}`: the server resolves a
-relative path against its own working directory, which is only the workspace
-folder when the task started it.
+relative path against its own working directory, which is not necessarily the
+workspace folder.
 
 ### Launch attributes
 
@@ -96,14 +153,15 @@ come after the snapshot and the reset it replaces:
 | 6 | `waitForTape` | boolean | `false` | Boot and type `LOAD ""` with no tape, leaving the ROM loader waiting for one inserted later. Ignored when a tape is auto-starting, which has already done it |
 | 7 | `sld` | path | none | An sjasmplus SLD file, for source-level debugging of the loaded program. Needs `asm`; either one alone is ignored |
 | | `asm` | path | none | The **entry** source the SLD was assembled from. Files it `INCLUDE`s are found through the SLD |
+| 8 | `stopOnEntry` | boolean | `true` | Stop at the first instruction once everything is loaded. `false` carries straight on running |
 
 Two behaviours that are easy to trip over:
 
 - **Debug info outlives the launch that loaded it.** A later launch without
   `sld` and `asm` keeps the previous program's, rather than clearing it; one
   that has them replaces it.
-- **The session starts stopped.** Nothing runs until Continue, whatever was
-  loaded.
+- **The session starts stopped** unless `stopOnEntry` is `false`. Nothing runs
+  until Continue, whatever was loaded.
 
 ### Attach attributes
 
@@ -118,7 +176,18 @@ can still step its source.
 
 ### Examples
 
-The ROM on its own:
+The ROM on its own, with the emulator started by the extension:
+
+```jsonc
+{
+  "name": "ZX Spectrum",
+  "type": "zxspectrum",
+  "request": "launch",
+  "rom": "${workspaceFolder}/roms/48.rom"
+}
+```
+
+The same in this repo, rebuilding the emulator first:
 
 ```jsonc
 {
@@ -138,10 +207,8 @@ A 128K, booting to its menu:
   "name": "ZX Spectrum 128",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/128.rom",
-  "machine": "128",
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "machine": "128"
 }
 ```
 
@@ -152,12 +219,10 @@ Your own program, with its source:
   "name": "My game",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/48.rom",
   "snapshot": "${workspaceFolder}/game/output/game.sna",
   "sld": "${workspaceFolder}/game/output/game.sld",
-  "asm": "${workspaceFolder}/game/main.s",
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "asm": "${workspaceFolder}/game/main.s"
 }
 ```
 
@@ -168,37 +233,35 @@ A tape, loading as it would on the real machine:
   "name": "Load a tape at tape speed",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/48.rom",
   "tape": "${workspaceFolder}/tapes/game.tzx",
-  "tapeFastLoad": false,
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "tapeFastLoad": false
 }
 ```
 
-Joining a server that is already running, without resetting it. **Add
-Configuration...** offers this as the *Attach to a running emulator* snippet,
-without the task line -- add it, or start the server yourself first:
+Joining the emulator that is already running, without resetting it -- or
+starting it, if nothing is. **Add Configuration...** offers this as the
+*Attach to a running emulator* snippet:
 
 ```jsonc
 {
   "name": "ZX Spectrum: Attach",
   "type": "zxspectrum",
-  "request": "attach",
-  "debugServer": 4711,
-  "preLaunchTask": "zxspectrum-cpp.start-server-if-absent"
+  "request": "attach"
 }
 ```
 
 ## tasks.json
 
-The server's own options are command-line flags, so they live in the task that
-starts it rather than in any setting. The repo's `.vscode/tasks.json` has:
+Only needed for configurations that give a `debugServer`, which is how this
+repo's own configurations rebuild the emulator before every launch. Elsewhere
+the extension starts it, with the flags the [settings](#starting-the-emulator)
+make. The repo's `.vscode/tasks.json` has:
 
 | Task | Does |
 |---|---|
 | `zxspectrum-cpp.start-server` | Stops any running server (Windows will not relink an executable in use), builds `zx_server` in Release -- the server alone, not the tests and tools -- and starts it |
-| `zxspectrum-cpp.start-server-if-absent` | Starts a server only if nothing is listening on the DAP port, and never stops or rebuilds one -- the task for attaching |
+| `zxspectrum-cpp.start-server-if-absent` | Starts a server only if nothing is listening on the DAP port, and never stops or rebuilds one. No configuration uses it now -- the extension does the same for any configuration without a `debugServer` -- but it is there for one that wants it |
 | `zxspectrum-cpp.build`, `zxspectrum-cpp.stop-stale-server` | The two steps the first task depends on |
 
 `start-server` passes these flags:
@@ -207,7 +270,7 @@ starts it rather than in any setting. The repo's `.vscode/tasks.json` has:
 "args": [
   "--dap-port", "4711",     // must match launch.json's debugServer
   "--mcp-port", "8000",     // where MCP clients connect
-  "--screen-port", "8500",  // must stay 8500: the screen panel only looks there
+  "--screen-port", "8500",  // must match zxspectrum.server.screenPort
   "--audio-device",         // sound out of the host's speakers...
   "--no-audio"              // ...and not a second time through the panel
 ]
@@ -231,11 +294,7 @@ needed for the extension to work elsewhere:
 
 ## What is not a setting
 
-- **The screen and audio ports.** The panel always connects to `127.0.0.1`,
-  port 8500 for the picture and 8501 for sound. A server started on other
-  ports runs fine, but its panel stays blank. The DAP port is `debugServer`
-  above, and the MCP port is whatever the MCP client is pointed at (see
-  [Connecting an MCP client](mcp.md)).
+- **The host.** Everything is on `127.0.0.1`.
 - **The volume.** The screen panel's speaker and slider set it, and the
   extension remembers it across reloads on its own rather than in
   `settings.json` -- a slider being dragged is not something to write to a

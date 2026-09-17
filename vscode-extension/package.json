@@ -19,14 +19,35 @@
     "onCommand:zxspectrum.showSelectionAsGraphics",
     "onCommand:zxspectrum.loadTape",
     "onView:zxspectrumTape",
-    "onDebug:zxspectrum"
+    "onDebug:zxspectrum",
+    "onDebugResolve:zxspectrum",
+    "onCommand:zxspectrum.serverStart",
+    "onCommand:zxspectrum.serverStop",
+    "onCommand:zxspectrum.serverRestart",
+    "onCommand:zxspectrum.serverLog",
+    "onCommand:zxspectrum.runProgram",
+    "onCommand:zxspectrum.debugProgram",
+    "onCustomEditor:zxspectrum.program"
   ],
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "zxspectrum.program",
+        "displayName": "ZX Spectrum Program",
+        "selector": [
+          { "filenamePattern": "*.sna" },
+          { "filenamePattern": "*.z80" },
+          { "filenamePattern": "*.tap" },
+          { "filenamePattern": "*.tzx" }
+        ],
+        "priority": "default"
+      }
+    ],
     "languages": [
       {
         "id": "z80-asm",
         "aliases": ["Z80 Assembly", "z80-asm"],
-        "extensions": [".asm", ".s", ".a80"],
+        "extensions": [".asm", ".s", ".a80", ".z80"],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -71,6 +92,77 @@
           "maximum": 100,
           "default": 0,
           "markdownDescription": "How dark the gaps between the screen panel's scanlines are, as a percentage: `0` is off, `100` black. Drawn over the lower half of each Spectrum line, after the filter. Needs at least two device pixels to a line, so it shows nothing at `1x` on an unscaled display."
+        },
+        "zxspectrum.program.runOnOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run a snapshot or tape as soon as it is opened, instead of showing it with Run and Debug buttons. Running one resets the emulator."
+        },
+        "zxspectrum.server.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Start the emulator when a debug session needs it and nothing is listening on `#zxspectrum.server.dapPort#`. Only for launch configurations without a `debugServer`: one with it connects to that port itself."
+        },
+        "zxspectrum.server.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where `zx_server` is. `${workspaceFolder}` and `~` are expanded. Left empty, the extension looks in each workspace folder's `cpp-core/build/RelWithDebInfo`, then on `PATH`."
+        },
+        "zxspectrum.server.roms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "ROMs a started emulator loads (`--rom`). Left empty, `roms/48.rom` and `roms/128.rom` beside the emulator's checkout, when they are there. A launch configuration's own `rom` still applies to its session."
+        },
+        "zxspectrum.server.sound": {
+          "type": "string",
+          "enum": ["device", "panel", "off"],
+          "enumDescriptions": [
+            "Out of this computer's sound card, from the emulator itself.",
+            "Through the screen panel.",
+            "No sound."
+          ],
+          "default": "device",
+          "description": "Where a started emulator's sound goes."
+        },
+        "zxspectrum.server.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Extra command-line arguments for a started emulator, after the ones the settings above make -- `--ffmpeg <path>`, say."
+        },
+        "zxspectrum.server.stopOnExit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stop the emulator this window started when the window closes. It keeps running between debug sessions either way."
+        },
+        "zxspectrum.server.dapPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 4711,
+          "markdownDescription": "The emulator's debug adapter port (`--dap-port`). Launch configurations without a `debugServer` connect here."
+        },
+        "zxspectrum.server.mcpPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8000,
+          "markdownDescription": "The port a started emulator serves MCP on (`--mcp-port`)."
+        },
+        "zxspectrum.server.screenPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8500,
+          "markdownDescription": "The emulator's screen stream port (`--screen-port`), which the screen panel reads."
+        },
+        "zxspectrum.server.audioPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8501,
+          "markdownDescription": "The emulator's audio stream port (`--audio-port`), which the screen panel plays when `#zxspectrum.server.sound#` is `panel`."
         }
       }
     },
@@ -87,6 +179,36 @@
       }
     ],
     "commands": [
+      {
+        "command": "zxspectrum.serverStart",
+        "title": "ZX Spectrum: Start Emulator"
+      },
+      {
+        "command": "zxspectrum.serverStop",
+        "title": "ZX Spectrum: Stop Emulator"
+      },
+      {
+        "command": "zxspectrum.serverRestart",
+        "title": "ZX Spectrum: Restart Emulator"
+      },
+      {
+        "command": "zxspectrum.serverLog",
+        "title": "ZX Spectrum: Show Emulator Log"
+      },
+      {
+        "command": "zxspectrum.serverMenu",
+        "title": "ZX Spectrum: Emulator"
+      },
+      {
+        "command": "zxspectrum.runProgram",
+        "title": "Run in ZX Spectrum",
+        "icon": "$(play)"
+      },
+      {
+        "command": "zxspectrum.debugProgram",
+        "title": "Debug in ZX Spectrum",
+        "icon": "$(debug-alt)"
+      },
       {
         "command": "zxspectrum.screenScaling",
         "title": "ZX Spectrum: Screen Scaling...",
@@ -425,7 +547,39 @@
           "group": "navigation@1"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "zxspectrum.runProgram",
+          "when": "resourceExtname =~ /^\\.(sna|z80|tap|tzx)$/i",
+          "group": "navigation@90"
+        },
+        {
+          "command": "zxspectrum.debugProgram",
+          "when": "resourceExtname =~ /^\\.(sna|z80|tap|tzx)$/i",
+          "group": "navigation@91"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "zxspectrum.runProgram",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.debugProgram",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.serverMenu",
+          "when": "false"
+        },
+        {
+          "command": "zxspectrum.serverStop",
+          "when": "zxspectrum.serverRunning"
+        },
+        {
+          "command": "zxspectrum.serverRestart",
+          "when": "zxspectrum.serverRunning"
+        },
         {
           "command": "zxspectrum.watchAddress",
           "when": "debugType == 'zxspectrum'"
@@ -759,6 +913,11 @@
                 "default": true,
                 "description": "Satisfy standard-speed tape blocks instantly by trapping the ROM's LD-BYTES routine. Turbo and custom loaders always fall back to real pulse playback."
               },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": true,
+                "description": "Stop at the first instruction once the program is loaded. false carries straight on running it."
+              },
               "uncapped": {
                 "type": "boolean",
                 "default": false,
@@ -779,15 +938,33 @@
             }
           }
         },
+        "initialConfigurations": [
+          {
+            "name": "ZX Spectrum",
+            "type": "zxspectrum",
+            "request": "launch",
+            "rom": "${workspaceFolder}/roms/48.rom"
+          }
+        ],
         "configurationSnippets": [
           {
+            "label": "ZX Spectrum: Launch",
+            "description": "Start (or join) the emulator, reset it, and load a snapshot.",
+            "body": {
+              "name": "ZX Spectrum: ${1:My program}",
+              "type": "zxspectrum",
+              "request": "launch",
+              "rom": "^\"\\${workspaceFolder}/roms/48.rom\"",
+              "snapshot": "^\"\\${workspaceFolder}/${2:program.sna}\""
+            }
+          },
+          {
             "label": "ZX Spectrum: Attach to a running emulator",
-            "description": "Connect to a zx_server that is already running, without resetting it.",
+            "description": "Join the emulator as it is, without resetting it -- starting it first if nothing is running.",
             "body": {
               "name": "ZX Spectrum: Attach",
               "type": "zxspectrum",
-              "request": "attach",
-              "debugServer": 4711
+              "request": "attach"
             }
           }
         ]

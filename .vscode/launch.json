@@ -20,6 +20,16 @@
       "preLaunchTask": "zxspectrum-cpp.start-server"
     },
     {
+      // The quick way in: no build and no task. With no debugServer the
+      // extension connects to zxspectrum.server.dapPort itself, starting the
+      // emulator that is already built if nothing is running -- so this is
+      // the one to use when the emulator is not what you are changing.
+      "name": "ZX Spectrum: Step through ROM (no build)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/48.rom"
+    },
+    {
       // The 128K: the 32K ROM pair (roms/128.rom, ROM 0 then ROM 1) and the
       // machine to go with it. Boots to the 128 menu; "Tape Loader" is the
       // first entry, so a tape given here auto-starts through it.
@@ -317,19 +327,19 @@
       // loaded, and whatever the machine is doing keeps doing it -- so this
       // is the configuration for "something is running, let me look at it".
       //
-      // Note the different preLaunchTask. The launch configurations above use
-      // zxspectrum-cpp.start-server, whose first step kills every running
-      // zx_server and whose second rebuilds the executable -- both fatal to
-      // an attach. This one only starts a server if none is listening.
+      // No debugServer and no preLaunchTask: the extension joins whatever is
+      // listening on zxspectrum.server.dapPort, and starts the emulator only
+      // if nothing is. The launch configurations above use
+      // zxspectrum-cpp.start-server instead, whose first step kills every
+      // running zx_server and whose second rebuilds it -- both fatal to an
+      // attach.
       //
       // Add "sld" and "asm" to step a program's source rather than raw
       // disassembly; they are the only settings attach accepts, because
       // everything else in a launch config resets the machine.
       "name": "ZX Spectrum: Attach to running emulator",
       "type": "zxspectrum",
-      "request": "attach",
-      "debugServer": 4711,
-      "preLaunchTask": "zxspectrum-cpp.start-server-if-absent"
+      "request": "attach"
     }
   ]
 }

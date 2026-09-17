@@ -80,7 +80,13 @@ given as source still work there) and
 `node vscode-extension/tests/graphics_model_test.js` (the graphics panel's
 export: names and labels, how the sheet is packed, the picture's transparency,
 the atlas, that the assembler source assembles back to the same bytes, groups,
-pointing into a `.sna`, and reading an atlas back).
+pointing into a `.sna`, and reading an atlas back),
+`node vscode-extension/tests/server_launch_test.js` (where the extension looks
+for `zx_server`, the directory it runs it in, its command line, and reading the
+port's process from `netstat`) and
+`node vscode-extension/tests/program_info_test.js` (what an opened snapshot or
+tape is, including the repo's own, which ROM it gets, the launch configuration
+it makes, and telling a `.z80` source file from a snapshot).
 
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion

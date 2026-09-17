@@ -1,9 +1,10 @@
 // ZX Spectrum Debug extension.
 //
-// Two jobs: (1) purely declarative -- registering the "zxspectrum" debugger
-// type (see package.json) so launch.json's debugServer field can connect
-// directly to zx-spectrum-emulator's DAP server, no adapter code needed for
-// that part; (2) this file -- a live screen viewer and beeper. A webview's own
+// Two jobs: (1) registering the "zxspectrum" debugger type (see package.json)
+// -- a configuration's debugServer connects straight to zx-spectrum-emulator's
+// DAP server, and one without it goes through server_view.js, which starts the
+// server when nothing is listening; (2) this file -- a live screen viewer and
+// beeper. A webview's own
 // JS can't open a raw TCP socket, so this runs in the extension host (Node,
 // has raw socket access via `net`), connects to the emulator's screen and
 // audio stream ports, and forwards frames and sample blocks into the webview
@@ -23,6 +24,8 @@ const { activateAsmLanguage } = require('./asm_language');
 const { activateProfile } = require('./profile_view');
 const { activateRewind } = require('./rewind_view');
 const { activateWatchpoints } = require('./watchpoint_view');
+const { activateServer, deactivateServer, ports: serverPorts } = require('./server_view');
+const { activatePrograms } = require('./program_view');
 const graphicsModel = require('./graphics_model');
 const {
   FILTERS,
@@ -37,9 +40,9 @@ const {
   normaliseView,
 } = require('./screen_scaling');
 
+// The screen and audio ports are zxspectrum.server.screenPort and .audioPort
+// (serverPorts()), the same settings a server the extension starts is given.
 const SCREEN_HOST = '127.0.0.1';
-const SCREEN_PORT = 8500; // must match --screen-port; see README if you changed it
-const AUDIO_PORT = 8501; // must match --audio-port
 const RECONNECT_DELAY_MS = 1000;
 
 // How often the row counter is refreshed while a capture runs. traceStatus
@@ -125,6 +128,8 @@ function activate(context) {
   volumeState = context.globalState;
   audioVolume = clampPercent(volumeState.get(VOLUME_KEY, 100), 100);
   audioVolumeBeforeMute = clampPercent(volumeState.get(VOLUME_BEFORE_MUTE_KEY, 100), 100) || 100;
+  activateServer(context);
+  activatePrograms(context);
   activateAsmLanguage(context);
   activateProfile(context, zxDebugSession);
   activateRewind(context, zxDebugSession);
@@ -618,7 +623,7 @@ async function sendVolume() {
 
 function connectStream() {
   recvBuffer = Buffer.alloc(0);
-  socket = net.connect(SCREEN_PORT, SCREEN_HOST);
+  socket = net.connect(serverPorts().screen, SCREEN_HOST);
 
   socket.on('data', (chunk) => {
     recvBuffer = Buffer.concat([recvBuffer, chunk]);
@@ -2165,7 +2170,7 @@ function webviewHtml(file) {
 function connectAudioStream() {
   audioBuffer = Buffer.alloc(0);
   audioPreambleSeen = false;
-  audioSocket = net.connect(AUDIO_PORT, SCREEN_HOST);
+  audioSocket = net.connect(serverPorts().audio, SCREEN_HOST);
 
   audioSocket.on('data', (chunk) => {
     audioBuffer = Buffer.concat([audioBuffer, chunk]);
@@ -2650,6 +2655,7 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
 }
 
 function deactivate() {
+  deactivateServer();
   disconnectStream();
   disconnectAudioStream();
   stopWatchingTrace();

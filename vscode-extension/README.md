@@ -5,14 +5,29 @@ Using it rather than working on it? Start with the
 
 A handful of things, in one small extension:
 
-1. **Registers the `zxspectrum` debugger type** so `launch.json`'s `debugServer` field can connect
-   directly to `zx-spectrum-emulator`'s DAP server -- purely declarative for this part, no adapter
-   code, since `debugServer` overrides how VS Code connects.
-2. **A live screen viewer.** The "ZX Spectrum: Show Screen" command opens a panel that stays live,
+1. **Registers the `zxspectrum` debugger type, and starts the emulator.** A configuration with a
+   `debugServer` connects straight to `zx-spectrum-emulator`'s DAP server, as this repo's do after
+   their `preLaunchTask` has rebuilt and started it. One without goes through a debug adapter
+   descriptor factory (`server_view.js`) that joins whatever listens on
+   `zxspectrum.server.dapPort` and starts `zx_server` itself when nothing does, with the ports,
+   sound, ROMs and flags the `zxspectrum.server.*` settings give. Its output goes to a "ZX Spectrum
+   Emulator" output channel, and a status bar item offers Stop, Restart and the log.
+   `server_launch.js` (tested by `node tests/server_launch_test.js`) finds the executable and builds
+   its command line. See
+   [docs/vscode-debugging.md](../docs/vscode-debugging.md#starting-the-emulator-from-the-extension).
+2. **Opens snapshots and tapes.** `.sna`, `.z80`, `.tap` and `.tzx` open in a read-only custom
+   editor (`program_view.js`) that says what the program is, with Run and Debug buttons that
+   launch a session on it; the Explorer's context menu has the same two. A `.z80` that is really
+   assembly source goes to the text editor. `program_info.js` (tested by
+   `node tests/program_info_test.js`) reads the headers and makes the launch configuration. Run
+   uses a `stopOnEntry: false` launch attribute, which a debug adapter tracker implements by
+   continuing from the server's entry stop. See
+   [docs/vscode-debugging.md](../docs/vscode-debugging.md#opening-snapshots-and-tapes).
+3. **A live screen viewer.** The "ZX Spectrum: Show Screen" command opens a panel that stays live,
    fed by the emulator's screen-stream port (`--screen-port`, default `8500`) -- this is real
    extension code (`extension.js`), the first the project needed, since a webview panel can't be
    created any other way.
-3. **A trace viewer and recorder.** The "ZX Spectrum: Show Trace" command opens a `.zxtrace`
+4. **A trace viewer and recorder.** The "ZX Spectrum: Show Trace" command opens a `.zxtrace`
    capture (see [docs/tracing.md](../docs/tracing.md)) as a banded table and a timing
    diagram. The page itself is `tools/trace_viewer.html` in the repo, hosted in a webview rather
    than copied here -- the same file opens standalone in a browser. The extension host reads the
@@ -23,7 +38,7 @@ A handful of things, in one small extension:
    running, and the finished file loads into the panel by itself. Its **start** and **stop**
    triggers capture a window of code (an address or symbol name, which the server resolves) or a
    window of the video frame (a T-state) rather than only a window of time.
-4. **A graphics viewer.** The "ZX Spectrum: Show Graphics" command opens a panel that draws bytes
+5. **A graphics viewer.** The "ZX Spectrum: Show Graphics" command opens a panel that draws bytes
    the way the ULA would -- as a sprite sheet, a character set, or a screen dump. The bytes come
    from the running machine's memory (by address or symbol, live while it runs), from a file, or
    from a `DEFB` selection in an editor. **Add...** opens a dialog with every per-sprite setting
@@ -39,11 +54,11 @@ A handful of things, in one small extension:
    carries it. `graphics_model.js` (tested by `node tests/graphics_model_test.js`) does the
    decoding, the packing and the three export formats, and is inlined into the page as source.
    See [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
-5. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
+6. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
-6. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
+7. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
    and the worst frames in the debug sidebar. See "Execution profile" below.
-7. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
+8. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
    hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
 ## Settings
@@ -253,8 +268,9 @@ edits show up without re-copying) after changing anything here, then reload agai
 
 ## Notes
 
-- `SCREEN_HOST`/`SCREEN_PORT` in `extension.js` are hardcoded to match the server's own defaults
-  (`127.0.0.1:8500`) -- edit both sides together if you run a non-default `--screen-port`.
+- The screen and audio panels connect to `127.0.0.1` on `zxspectrum.server.screenPort` and
+  `.audioPort` -- the same settings a server the extension starts is given -- so set them to match
+  a server started some other way on non-default ports.
 - The panel auto-opens when a `zxspectrum`-type debug session starts (`vscode.debug.onDidStartDebugSession`),
   or open it manually via the Command Palette.
 - If the emulator server restarts (a normal part of picking up code changes during development),

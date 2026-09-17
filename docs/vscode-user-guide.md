@@ -49,9 +49,15 @@ Then open the **repository folder itself** in VS Code. The launch
 configurations and tasks in `.vscode/` use paths relative to it, so they break
 if you open a parent folder or a subfolder.
 
-You don't start the emulator yourself. Each debug configuration starts it
-before connecting, and it keeps running after the debug session ends, so an
-MCP client (an AI agent, say) can keep using the same machine.
+You don't start the emulator yourself. Starting a debug session, or opening a
+snapshot, starts it if it isn't already running. It keeps running after the
+debug session ends, so an MCP client (an AI agent, say) can keep using the same
+machine, and it stops when you close the window. The **Spectrum** item in the
+status bar shows it is running and has Stop, Restart and its log.
+
+In another folder, VS Code needs to be told where the emulator is: set
+**`zxspectrum.server.path`** to your `zx_server.exe` (see [Starting the
+emulator](vscode-settings.md#starting-the-emulator)).
 
 ## Your first session
 
@@ -59,6 +65,8 @@ MCP client (an AI agent, say) can keep using the same machine.
 2. Pick **ZX Spectrum: Step through ROM** and press **F5**.
 3. A terminal opens and shows the emulator being built and started. VS Code
    then connects, and the machine stops at the ROM's first instruction.
+   (**Step through ROM (no build)** skips the build and starts the emulator
+   that is already built.)
 4. The **screen panel** opens beside your code.
 5. Press **F5** (Continue). The screen shows `© 1982 Sinclair Research Ltd`.
 
@@ -156,19 +164,37 @@ the status bar shows the current speed:
 
 ## Loading software
 
-### Snapshots (`.sna`, `.z80`)
+### Opening a snapshot or a tape
 
-Put the path in a launch configuration:
+Open a `.sna`, `.z80`, `.tap` or `.tzx` file the way you open any file --
+**File > Open**, or from the Explorer. It opens in a page that says what it is
+(48K or 128K, what is on the tape), with two buttons:
+
+- **Run** resets the emulator, loads the program and runs it.
+- **Debug** does the same but stops at the program's first instruction.
+
+![A snapshot opened in VS Code, with Run and Debug buttons](images/user-guide/open-snapshot.png)
+*Opening a snapshot. Run started the emulator and the game, in the screen panel on the right.*
+
+Right-click a file in the Explorer for **Run in ZX Spectrum** and **Debug in
+ZX Spectrum** without opening it. Tick *Run programs as soon as they are
+opened* to skip the page.
+
+A `.sld` with the same name beside the program, and a source file with that
+name too, are loaded with it, so you can step through its source. A `.z80`
+file that is really assembly source opens as text, as usual.
+
+### Snapshots in a launch configuration
+
+For a program you debug often, put its path in a launch configuration:
 
 ```json
 {
   "name": "My game",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/48.rom",
-  "snapshot": "${workspaceFolder}/snapshots/mygame.z80",
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "snapshot": "${workspaceFolder}/snapshots/mygame.z80"
 }
 ```
 
@@ -220,12 +246,10 @@ and your entry source file, to the configuration that loads the program:
   "name": "My program",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/48.rom",
   "snapshot": "${workspaceFolder}/build/myprog.sna",
   "sld": "${workspaceFolder}/build/myprog.sld",
-  "asm": "${workspaceFolder}/src/main.asm",
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "asm": "${workspaceFolder}/src/main.asm"
 }
 ```
 
@@ -238,10 +262,11 @@ With these files in place:
 `asm` is only the **entry** file. Files it `INCLUDE`s are found beside it and
 work the same way.
 
-**Rebuild on every launch.** To assemble before each launch, make your own
-task that runs sjasmplus and then starts the server, and name it as the
-`preLaunchTask`. **ZX Spectrum: Filmation** in the repo's `launch.json` is a
-worked example, using the `filmation.build-and-start-server` task.
+**Rebuild on every launch.** To assemble before each launch, make a task
+that runs sjasmplus and name it as the configuration's `preLaunchTask`. The
+emulator is still started for you. (**ZX Spectrum: Filmation** in the repo's
+`launch.json` goes further, rebuilding the emulator too, with the
+`filmation.build-and-start-server` task and a `debugServer`.)
 
 **Stepping into the ROM with source.** Build the commented ROM disassembly
 once ([INSTALL.md, step 7](../INSTALL.md#step-7--optional-extras)). From then
@@ -527,6 +552,9 @@ session), use **ZX Spectrum: Attach to running emulator** instead:
 - It starts the emulator only if none is running.
 - It never resets or rebuilds anything.
 
+A launch configuration without a `debugServer` joins a running emulator in
+the same way, but then resets it.
+
 Add `sld` and `asm` to it to see your program's source.
 
 The emulator can be shared with an MCP client (such as Claude Code) at the
@@ -538,10 +566,12 @@ same time. Both see and control the same machine. See
 | Problem | What to do |
 |---|---|
 | *Configured debug type 'zxspectrum' is not supported* | The extension isn't installed, or its folder is misnamed. Redo [INSTALL.md step 4](../INSTALL.md#step-4--install-the-vs-code-extension), then run **Developer: Reload Window** |
+| *Could not find the ZX Spectrum emulator* | Set `zxspectrum.server.path` to your `zx_server.exe`, or open the emulator's repository with a build in `cpp-core/build/RelWithDebInfo` |
+| *The ZX Spectrum emulator stopped as it started* | Run **ZX Spectrum: Show Emulator Log**. Usually a port already in use (change the `zxspectrum.server.*Port` settings) or a ROM it could not read |
 | Launch hangs before connecting | Read the emulator's terminal. The usual causes are a build error, or another program using port 4711, 8000 or 8500 |
 | Build fails with *LNK1168* | An emulator is still running and holds the file open. Stop it, then launch again |
 | Keys do nothing | Click the screen panel so it has focus |
-| Screen panel stays black | Check `roms/48.rom` is present: 16,384 bytes, first byte `F3` |
+| Screen panel stays black | Check `roms/48.rom` is present: 16,384 bytes, first byte `F3`. An emulator started on other ports needs the `zxspectrum.server.screenPort` setting to match |
 | No sound | Speed must be 1x, and the volume not muted |
 | Breakpoints in `.asm` files are ignored | Open the repository root folder: its workspace settings allow breakpoints in assembly files |
 | Stops show disassembly, not your source | Check `sld` and `asm` in the configuration. For the ROM, build the ROM disassembly |

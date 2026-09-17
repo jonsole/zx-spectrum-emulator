@@ -319,7 +319,7 @@ equivalent check is `get_screen` returning a PNG of the boot screen.
 | `bind: address already in use` on 4711/8000/8500 | An old server is still up | Stop it (see above), or run yours on spare ports |
 | MCP client shows `zx-spectrum` failed/disconnected, or tools error with connection refused on 127.0.0.1:8000 | `zx_server.exe` is not running — the MCP endpoint lives inside it | Start the server (step 6, or run it by hand), then reconnect the client |
 | MCP tools worked, then all stopped at once | The server exited — often the rebuild's `stop-stale-server` task killed it | Relaunch the server and reconnect; DAP disconnecting alone does *not* do this |
-| Screen panel stays black | Server started without a ROM, or `--screen-port` differs from the extension's hardcoded 8500 | Check `roms/48.rom`; keep the screen port at 8500 — both sides are hardcoded (`SCREEN_HOST`/`SCREEN_PORT` in `extension.js`) |
+| Screen panel stays black | Server started without a ROM, or on a `--screen-port` other than the extension's `zxspectrum.server.screenPort` (8500 by default) | Check `roms/48.rom`; set `zxspectrum.server.screenPort` to the port the server uses |
 | Screen panel shows nothing and no error | Webview-side failure | Focus the panel, run **Developer: Open Webview Developer Tools**, read its console |
 | Machine runs but never reaches BASIC | Wrong or truncated ROM | Re-verify size 16384 and first byte `F3` |
 | Sound doubles or phases | Both the native device and the panel are playing | Use a `-audio` task (`--audio-device --no-audio`) or neither, not a mix |

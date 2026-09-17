@@ -99,6 +99,76 @@ carries a `preserveFocusHint` which asks the client not to change focus at all
 stack frame either, so the editor would stop following the program as you step
 through it.
 
+## Starting the emulator from the extension
+
+The repo's configurations above start the server through a `preLaunchTask`,
+because working on the emulator means rebuilding it before every launch. A
+configuration that leaves out `debugServer` works another way: the extension's
+debug adapter descriptor factory (`server_view.js`) connects to
+`zxspectrum.server.dapPort`, and when nothing is listening there it starts
+`zx_server` itself and waits for the port to answer. **"ZX Spectrum: Step
+through ROM (no build)"** is the repo's example, and it is all a project of
+your own needs:
+
+```json
+{ "name": "ZX Spectrum", "type": "zxspectrum", "request": "launch", "rom": "${workspaceFolder}/roms/48.rom" }
+```
+
+- **Which server.** `zxspectrum.server.path`, or else
+  `cpp-core/build/RelWithDebInfo/zx_server.exe` in any workspace folder, or
+  else `PATH`. It runs in the root of the checkout it was built in, where
+  `rom_disassembly/` is.
+- **How.** The ports, the sound (`device`, `panel` or `off`), the ROMs to boot
+  with and any extra flags are settings -- see [Starting the
+  emulator](vscode-settings.md#starting-the-emulator). The screen and audio
+  panels connect to the same port settings, so a server on other ports is seen
+  by the panel too.
+- **Joined, not replaced.** Anything already listening on the port -- a
+  task's server, an MCP client's, another window's -- is used as it is. A
+  start in progress is shared by sessions that ask at once.
+- **Lifetime.** Like a task's server, it outlives the debug session, so MCP
+  clients keep their machine. It is stopped when the window closes, unless
+  `zxspectrum.server.stopOnExit` is off.
+- **Seeing it.** The server's output goes to the **ZX Spectrum Emulator**
+  output channel. While an emulator is running, a **Spectrum** item in the
+  status bar says whose it is and offers Stop, Restart and the log; the same
+  are **ZX Spectrum: Start / Stop / Restart Emulator** and **Show Emulator
+  Log** in the Command Palette. Stopping one this window did not start asks
+  first, and (on Windows) finds the process by the port it holds.
+- **Not polled.** The status is refreshed when a session starts or ends, on
+  those commands, and when the window regains focus -- a probe is a connection
+  the server logs, and one every few seconds would fill its log.
+
+A configuration with a `debugServer` never reaches any of this: VS Code
+connects to that port itself, before an extension is asked.
+
+## Opening snapshots and tapes
+
+`.sna`, `.z80`, `.tap` and `.tzx` files open -- from File > Open, the
+Explorer, or anywhere else -- in a small read-only editor (`program_view.js`)
+that says what the file is: the snapshot format and the Spectrum it needs, or
+the tape's blocks and the files its headers name. Its **Run** button starts a
+debug session on it that carries straight on running; **Debug** stops at the
+first instruction. The same two are **Run in ZX Spectrum** and **Debug in ZX
+Spectrum** on the Explorer's context menu, and ticking *Run programs as soon as
+they are opened* (`zxspectrum.program.runOnOpen`) skips the page.
+
+- **The session.** A launch with `snapshot` or `tape` (auto-started) and no
+  `debugServer`, so the emulator is started if it is not running. A program
+  already being debugged is stopped first: there is one machine.
+- **The ROM.** Chosen by size from `zxspectrum.server.roms` or the checkout's
+  `roms/`: the 32K pair for a 128K snapshot (with `machine` set to match), the
+  16K ROM otherwise.
+- **Source.** A `.sld` of the same name beside the file, with an `.asm`, `.s`
+  or `.a80` of that name too, is loaded with it.
+- **Running on.** The server stops every session on entry; `stopOnEntry:
+  false` (a launch attribute anyone can use) has the extension continue from
+  that one stop.
+- **`.z80` source files.** The extension is also a Z80 assembly editor, and
+  `.z80` is an assembly extension as well as a snapshot one. A `.z80` whose
+  first 4K has no NUL bytes and almost no control characters is text, and is
+  handed straight to the text editor.
+
 ## Attaching to a running emulator
 
 Every configuration above **launches**: the `preLaunchTask` stops any running
@@ -118,10 +188,11 @@ from there.
 
 Two differences from the launch configurations are worth knowing:
 
-- **A different `preLaunchTask`.** `zxspectrum-cpp.start-server-if-absent`
-  starts a server only when nothing is listening on the DAP port, and never
-  stops one that is. It also does not build -- a build would replace the
-  executable of the process being attached to.
+- **No `debugServer` and no `preLaunchTask`.** The extension joins whatever
+  is listening on the DAP port, and starts a server only if nothing is (see
+  [above](#starting-the-emulator-from-the-extension)). The launch
+  configurations' task would stop the running server and rebuild it, which is
+  exactly what an attach must not do.
 - **`sld` and `asm` are the only settings it accepts.** Debug info is not
   machine state, so loading it disturbs nothing; `rom`, `snapshot` and `tape`
   are all ignored, because each of them resets the machine and would destroy

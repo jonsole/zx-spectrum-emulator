@@ -58,6 +58,10 @@ zx-spectrum-emulator/
     screen_scaling.js            #   the screen panel's size and filter (no vscode API, tested)
     graphics_view.html           #   the graphics panel's page
     graphics_model.js            #   ...its decoding and sprite sheet export (no vscode API, tested)
+    server_view.js               #   starting the emulator: debug adapter factory, status bar
+    server_launch.js             #   ...where zx_server is and its command line (no vscode API, tested)
+    program_view.js              #   opening .sna/.z80/.tap/.tzx: the Run/Debug page, stopOnEntry
+    program_info.js              #   ...what a snapshot or tape is (no vscode API, tested)
     asm_language.js              #   Z80 assembly: definition, references, rename, hierarchy
     asm_index.js                 #   ...the symbol index behind it (no vscode API, tested)
     syntaxes/z80-asm.tmLanguage.json  # sjasmplus syntax colouring
