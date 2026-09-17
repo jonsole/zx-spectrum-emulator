@@ -4,10 +4,12 @@ A ZX Spectrum 48K/128K emulator for the two people most likely to want one
 today: someone writing new machine code for the machine, and someone taking an
 old game apart to find out how it worked.
 
-It has no window of its own. What it has instead is a debugger you drive from
-VS Code, over the [Debug Adapter Protocol][dap], and the same machine exposed
-as tools an LLM agent drives over [MCP][mcp] — both attached to the *same
-running Spectrum*, at the same time. Set a breakpoint in the VS Code gutter,
+The screen, the keyboard and the sound are all there — live, in a VS Code
+panel, and streamed on an open port to anything else that wants them. What sits
+behind them is the point: a debugger you drive from VS Code, over the
+[Debug Adapter Protocol][dap], and the same machine exposed as tools an LLM
+agent drives over [MCP][mcp] — both attached to the *same running Spectrum*, at
+the same time. Set a breakpoint in the VS Code gutter,
 then ask Claude to run until the sprite routine writes to the screen: your
 breakpoint still catches it, VS Code's registers and call stack update on their
 own, and neither side polls the other to find out.
