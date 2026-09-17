@@ -179,11 +179,13 @@ Command Palette offers **ZX Spectrum: Show Screen**.
 Open the repo folder itself in VS Code (`code .` from the repo root). The
 `.vscode/` folder is already configured and needs no edits:
 
-- `tasks.json` — builds `cpp-core` and starts `zx_server.exe` on 4711 (DAP) /
-  8000 (MCP) / 8500 (screen); a variant also opens the host's sound card. Its
+- `tasks.json` — assembles the three programs that are built from source, and
+  builds `zx_server.exe` and starts it on 4711 (DAP) / 8000 (MCP) / 8500
+  (screen) for the one configuration that asks for a fresh build. Its
   `zxspectrum-cpp.stop-stale-server` task kills a leftover `zx_server.exe`
   first, because a running one holds the `.exe` open and the next link fails
-  with LNK1168.
+  with LNK1168. Every other configuration lets the extension start the
+  emulator.
 - `launch.json` — the debug configurations.
 - `settings.json` — sets `debug.allowBreakpointsEverywhere`, needed to place
   breakpoints in `.asm` files.
@@ -197,8 +199,11 @@ Run and Debug (Ctrl+Shift+D) → pick **"ZX Spectrum: Step through ROM"** → F5
 
 What should happen, in order:
 
-1. A dedicated terminal panel appears, running the build, then the server; it
-   ends on `DAP server listening on 127.0.0.1:4711`.
+1. The extension starts `zx_server.exe` — its output goes to the **ZX Spectrum
+   Emulator** output channel, ending on
+   `DAP server listening on 127.0.0.1:4711`, and a **Spectrum** item appears
+   in the status bar. (Picking **"Step through ROM (rebuild the emulator)"**
+   instead builds it first, in a dedicated terminal panel.)
 2. VS Code connects and the machine stops at the ROM's first instruction.
 3. The **live screen panel** opens by itself, showing the display.
 4. The Disassembly View shows Z80 at the current PC; the Variables pane shows
@@ -212,15 +217,19 @@ These configurations work from a clean checkout, no extra assets needed:
 
 | Configuration | Needs |
 |---|---|
-| Step through ROM | `roms/48.rom` only |
-| hello_rom_call example | committed in `examples/` |
-| Border rainbow example | committed in `examples/` |
-| Tape (fast load) / Tape (real pulse load) / Tape (waiting for LOAD) | committed in `tapes/` |
+| Step through ROM, and the 128K one | `roms/48.rom`, `roms/128.rom` |
+| Tape (real pulse load) / Tape (waiting for LOAD) | committed in `tapes/` |
 | ZEXALL / ZEXDOC / ZEXCCFB / Z80 full test suite | committed in `snapshots/` |
 
-The Manic Miner, Fairlight, Aquaplane and Chronos configurations point into
-`game_disassembly/` and `snapshots/`, which are gitignored copyrighted content —
-they fail until those are built or supplied (step 7).
+Programs themselves no longer have launch configurations: open a `.sna`,
+`.z80`, `.tap` or `.tzx` from the Explorer and press Run or Debug on the page
+that opens. The committed examples in `examples/` (`hello_rom_call`,
+`border_rainbow`, `ldir_contention`) work that way from a clean checkout, and
+the `.sld` beside each one is picked up for source-level stepping.
+
+The Filmation, Fairlight and Knight Lore configurations assemble their source
+on every launch, and point into `examples/filmation/` and the
+`game-disassemblies/` submodule — they fail until those are built (step 7).
 
 ## Step 7 — Optional extras
 
@@ -254,6 +263,17 @@ or, in a clone that predates it, `git submodule update --init`. The build
 scripts are `game-disassemblies/scripts/build_*.py`; they need the same venv
 and `sjasmplus`, plus a game image and a `roms/48.rom` of their own. They write
 into `game-disassemblies/game_disassembly/`. Copyrighted; never committed.
+
+**The fast tape loader.** [zx-tape-loader](https://github.com/jonsole/zx-tape-loader)
+is a second submodule, checked out as `examples/zx-tape-loader/` — a custom
+high-speed loader for the 48K that draws an animated countdown from inside its
+own bit-reading loop, plus `loader.py`/`convert_tape.py`, which re-encode a
+standard-speed `.tap`/`.tzx` through it and render the result to a WAV you can
+play into real hardware. The same `--recurse-submodules` clone (or `git
+submodule update --init`) brings it down. It assembles with `sjasmplus` and its
+Python needs `numpy` and `scipy`; its own `.vscode/` targets DeZog rather than
+this emulator, so drive it from the emulator's launch configurations instead.
+Its Lunar Jetman payload is copyrighted and stays in that repository.
 
 **Tape images.** `tapes/loading-test.tap` / `.tzx` are already committed.
 `python scripts\make_test_tape.py` regenerates them.

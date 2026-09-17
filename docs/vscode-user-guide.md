@@ -63,10 +63,10 @@ emulator](vscode-settings.md#starting-the-emulator)).
 
 1. Open **Run and Debug** (Ctrl+Shift+D).
 2. Pick **ZX Spectrum: Step through ROM** and press **F5**.
-3. A terminal opens and shows the emulator being built and started. VS Code
-   then connects, and the machine stops at the ROM's first instruction.
-   (**Step through ROM (no build)** skips the build and starts the emulator
-   that is already built.)
+3. The extension starts the emulator if it isn't already running, connects,
+   and the machine stops at the ROM's first instruction.
+   (**Step through ROM (rebuild the emulator)** rebuilds `zx_server` first, in
+   a terminal — for when the emulator is what you are changing.)
 4. The **screen panel** opens beside your code.
 5. Press **F5** (Continue). The screen shows `© 1982 Sinclair Research Ltd`.
 
@@ -74,22 +74,28 @@ That's the whole chain working. From here:
 
 - **Pause** (F6) stops the machine wherever it is.
 - **Stop** (Shift+F5) ends the debug session. The emulator keeps running.
-- **F5** on any configuration starts again. It rebuilds the emulator if the
-  code changed, and resets the machine.
+- **F5** on any configuration starts again, and resets the machine. It joins
+  the emulator that is already running rather than restarting it -- only
+  **Step through ROM (rebuild the emulator)** replaces it with a fresh build.
 
 Other configurations you can use straight after checkout:
 
 | Configuration | What it runs |
 |---|---|
 | ZX Spectrum 128: Step through ROM | The 128K, booting to its menu |
-| hello_rom_call example | A tiny program with source, for trying source-level stepping |
-| Border rainbow example | A border-effect demo |
-| Tape (fast load), Tape (real pulse load), Tape (waiting for LOAD) | Loading from a tape image |
+| Tape (real pulse load) | A tape read pulse by pulse off the EAR line, the slow way a real cassette loads |
+| Tape (waiting for LOAD) | Stops in the ROM loader with no tape, ready for one you choose |
 | ZEXALL, ZEXDOC and the other Z80 tests | The CPU exercisers (uncapped speed, nothing to watch) |
 
-The game configurations (Manic Miner, Fairlight and others) need files you
-have to build or supply first. See
-[INSTALL.md, step 7](../INSTALL.md#step-7--optional-extras).
+There is no configuration for simply running a program any more: open the
+`.sna`, `.z80`, `.tap` or `.tzx` from the Explorer instead, and press Run or
+Debug on the page that opens (see [Opening a snapshot or a tape](#opening-a-snapshot-or-a-tape)). A
+`.sld` and source file of the same name beside it are loaded too, so stepping
+lands in the source.
+
+The game configurations that are left -- Filmation, Fairlight and Knight Lore
+-- assemble their source on every launch, and need files you have to build or
+supply first. See [INSTALL.md, step 7](../INSTALL.md#step-7--optional-extras).
 
 ## The screen panel
 
@@ -266,8 +272,7 @@ work the same way.
 **Rebuild on every launch.** To assemble before each launch, make a task
 that runs sjasmplus and name it as the configuration's `preLaunchTask`. The
 emulator is still started for you. (**ZX Spectrum: Filmation** in the repo's
-`launch.json` goes further, rebuilding the emulator too, with the
-`filmation.build-and-start-server` task and a `debugServer`.)
+`launch.json` is exactly that: a `filmation.build` task, and no more.)
 
 **Stepping into the ROM with source.** Build the commented ROM disassembly
 once ([INSTALL.md, step 7](../INSTALL.md#step-7--optional-extras)). From then

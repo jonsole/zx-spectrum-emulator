@@ -38,9 +38,13 @@ Every setting and `launch.json` attribute is listed in the [VS Code settings
 reference](vscode-settings.md).
 
 With both in place, open the Run and Debug view and launch **"ZX Spectrum:
-Step through ROM"**. The `preLaunchTask` starts the server automatically
-(watch its output in the dedicated terminal panel) and waits for it to be
-ready before connecting.
+Step through ROM"**. The extension starts `zx_server` itself if nothing is
+listening on the DAP port, and waits for it to be ready before connecting --
+see [Starting the emulator from the
+extension](#starting-the-emulator-from-the-extension). Only **"Step through
+ROM (rebuild the emulator)"** goes the other way, through a `preLaunchTask`
+that rebuilds the server first; watch its output in the dedicated terminal
+panel.
 
 Without the ROM disassembly built (see below), this drives VS Code's
 **Disassembly View** rather than a source view: breakpoints are instruction
@@ -101,14 +105,12 @@ through it.
 
 ## Starting the emulator from the extension
 
-The repo's configurations above start the server through a `preLaunchTask`,
-because working on the emulator means rebuilding it before every launch. A
-configuration that leaves out `debugServer` works another way: the extension's
+A configuration that leaves out `debugServer` has the extension do it: the
 debug adapter descriptor factory (`server_view.js`) connects to
 `zxspectrum.server.dapPort`, and when nothing is listening there it starts
-`zx_server` itself and waits for the port to answer. **"ZX Spectrum: Step
-through ROM (no build)"** is the repo's example, and it is all a project of
-your own needs:
+`zx_server` itself and waits for the port to answer. That is how all but one
+of the repo's own configurations work, and it is all a project of your own
+needs:
 
 ```json
 { "name": "ZX Spectrum", "type": "zxspectrum", "request": "launch", "rom": "${workspaceFolder}/roms/48.rom" }
@@ -189,9 +191,10 @@ they are opened* (`zxspectrum.program.runOnOpen`) skips the page.
 
 ## Attaching to a running emulator
 
-Every configuration above **launches**: the `preLaunchTask` stops any running
-`zx_server`, rebuilds it, starts a fresh one, and the `launch` request then
-resets the machine and loads whatever the config names. That is what you want
+Every configuration above **launches**: the `launch` request resets the
+machine and loads whatever the config names (and, in the one configuration
+with a `preLaunchTask` that starts the server, rebuilds `zx_server` first).
+That is what you want
 when you are starting a debugging session from nothing, and exactly what you
 do not want when something is already running and you would like to look at
 it -- a machine an MCP client started (see
@@ -206,11 +209,12 @@ from there.
 
 Two differences from the launch configurations are worth knowing:
 
-- **No `debugServer` and no `preLaunchTask`.** The extension joins whatever
-  is listening on the DAP port, and starts a server only if nothing is (see
-  [above](#starting-the-emulator-from-the-extension)). The launch
-  configurations' task would stop the running server and rebuild it, which is
-  exactly what an attach must not do.
+- **It never resets.** Like the launch configurations, it has no
+  `debugServer`, so the extension joins whatever is listening on the DAP port
+  and starts a server only if nothing is (see
+  [above](#starting-the-emulator-from-the-extension)). Never give an attach
+  the rebuild configuration's `preLaunchTask`: that task stops the running
+  server and rebuilds it, which is exactly what an attach must not do.
 - **`sld` and `asm` are the only settings it accepts.** Debug info is not
   machine state, so loading it disturbs nothing; `rom`, `snapshot` and `tape`
   are all ignored, because each of them resets the machine and would destroy
@@ -1133,12 +1137,11 @@ Over DAP, add `sld`/`asm` to the launch config alongside `snapshot`:
   "name": "My program",
   "type": "zxspectrum",
   "request": "launch",
-  "debugServer": 4711,
   "rom": "${workspaceFolder}/roms/48.rom",
   "snapshot": "${workspaceFolder}/yourprogram.sna",
   "sld": "${workspaceFolder}/yourprogram.sld",
   "asm": "${workspaceFolder}/yourprogram.asm",
-  "preLaunchTask": "zxspectrum-cpp.start-server"
+  "preLaunchTask": "assemble-my-program"
 }
 ```
 

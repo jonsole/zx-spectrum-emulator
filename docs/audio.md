@@ -71,9 +71,9 @@ zx_server.exe --rom roms/48.rom --audio-device --audio-latency-ms 80
 ```
 
 `--no-audio` stops the stream server binding at all; pair it with
-`--audio-device` for native-only output, which is what the Manic Miner and
-Aquaplane launch configurations do (otherwise the panel plays the same audio
-a second time, slightly out of phase). Audio is dropped entirely while the
+`--audio-device` for native-only output, which is what the repository's
+server task does (otherwise the panel plays the same audio a second time,
+slightly out of phase). Audio is dropped entirely while the
 emulator runs uncapped (`--uncapped`) -- samples generated hundreds of times
 faster than real time are not playable.
 

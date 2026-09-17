@@ -20,11 +20,12 @@ program that loads its own next part.
 There is no tape in the repo (games are copyrighted), so
 `scripts/make_test_tape.py` generates one: a tiny autostarting BASIC program
 that turns the border yellow and prints `TAPE LOADED OK`, written to
-`tapes/loading-test.tap` and `.tzx`. Two launch configs point at it —
-**Tape (fast load)** and **Tape (real pulse load)** — which is the quickest way
-to see both paths working.
+`tapes/loading-test.tap` and `.tzx`. Opening either from the Explorer and
+pressing Run fast-loads it, which is the quickest way to see that path work;
+the **Tape (real pulse load)** launch configuration runs the same tape the slow
+way, off the EAR line.
 
-A third, **Tape (waiting for LOAD)**, takes no tape at all: it boots, types
+A third way in, **Tape (waiting for LOAD)**, takes no tape at all: it boots, types
 `LOAD ""` and stops in the ROM loader, where a real Spectrum sits once you have
 typed the command and not yet pressed Play. Insert whatever you like afterwards
 and press Play:

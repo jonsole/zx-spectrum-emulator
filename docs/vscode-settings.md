@@ -121,8 +121,9 @@ emulator's DAP port. There are two ways to get it there:
   project of your own needs.
 - **Give `debugServer`, with a `preLaunchTask` that starts the server.** VS
   Code then connects to that port itself and the extension starts nothing.
-  This repo's configurations do this, so that every launch rebuilds the
-  emulator first -- see [tasks.json](#tasksjson).
+  One configuration in this repo does that -- "Step through ROM (rebuild the
+  emulator)", for when the emulator itself is what you are changing -- see
+  [tasks.json](#tasksjson).
 
 | Attribute | Value | Why |
 |---|---|---|
@@ -187,11 +188,12 @@ The ROM on its own, with the emulator started by the extension:
 }
 ```
 
-The same in this repo, rebuilding the emulator first:
+The same, but rebuilding the emulator first -- what this repo's "Step through
+ROM (rebuild the emulator)" is for:
 
 ```jsonc
 {
-  "name": "ZX Spectrum: Step through ROM",
+  "name": "ZX Spectrum: Step through ROM (rebuild the emulator)",
   "type": "zxspectrum",
   "request": "launch",
   "debugServer": 4711,
@@ -253,16 +255,20 @@ starting it, if nothing is. **Add Configuration...** offers this as the
 
 ## tasks.json
 
-Only needed for configurations that give a `debugServer`, which is how this
-repo's own configurations rebuild the emulator before every launch. Elsewhere
-the extension starts it, with the flags the [settings](#starting-the-emulator)
-make. The repo's `.vscode/tasks.json` has:
+Only needed for a configuration that gives a `debugServer`, or one that has
+something to build first. Otherwise the extension starts the server, with the
+flags the [settings](#starting-the-emulator) make. The repo's
+`.vscode/tasks.json` has:
 
 | Task | Does |
 |---|---|
-| `zxspectrum-cpp.start-server` | Stops any running server (Windows will not relink an executable in use), builds `zx_server` in Release -- the server alone, not the tests and tools -- and starts it |
-| `zxspectrum-cpp.start-server-if-absent` | Starts a server only if nothing is listening on the DAP port, and never stops or rebuilds one. No configuration uses it now -- the extension does the same for any configuration without a `debugServer` -- but it is there for one that wants it |
+| `zxspectrum-cpp.start-server` | Stops any running server (Windows will not relink an executable in use), builds `zx_server` in Release -- the server alone, not the tests and tools -- and starts it. One configuration uses it: "Step through ROM (rebuild the emulator)" |
 | `zxspectrum-cpp.build`, `zxspectrum-cpp.stop-stale-server` | The two steps the first task depends on |
+| `filmation.build`, `fairlight.build`, `knightlore.build` | Assemble those three programs from source. Their configurations name these directly -- the server is the extension's business |
+
+To start a server only when nothing is listening, leave the `preLaunchTask`
+out: a configuration without a `debugServer` has the extension do exactly
+that.
 
 `start-server` passes these flags:
 

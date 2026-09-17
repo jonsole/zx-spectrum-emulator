@@ -1,30 +1,28 @@
 {
-  // Every configuration here connects to the same thing: zx_server.exe's DAP
-  // port. `debugServer` tells VS Code to talk to an already-running adapter
-  // rather than launching one, and the `preLaunchTask` -- the same one for
-  // every configuration here -- is what starts it:
+  // What is left here is what opening a file cannot do for you.
   //
-  //   zxspectrum-cpp.start-server   build, then serve, with sound out of the
-  //                                 host's speakers rather than the screen panel
+  // A .sna, .z80, .tap or .tzx in the Explorer opens on a page with Run and
+  // Debug buttons (vscode-extension/program_view.js), and a .sld and source
+  // file of the same name beside it are loaded with it -- so every "run this
+  // committed snapshot" configuration this file used to carry is now a
+  // double-click. What is kept is the ROM, which is no file to open; the three
+  // games assembled from source on every launch; the exercisers, which need
+  // uncapped speed; the two tape loads that are not the default fast one; and
+  // attach.
   //
-  // The `type` is still required to match the vscode-extension/ debugger
-  // registration before VS Code will attempt the connection at all.
+  // None of these start the emulator themselves: with no `debugServer`, the
+  // extension connects to zxspectrum.server.dapPort and starts zx_server there
+  // if nothing is listening (server_view.js), with the ports, ROMs and sound
+  // its settings ask for. The one exception is the last configuration, which
+  // rebuilds the emulator first -- for when the emulator is what you are
+  // changing. The `preLaunchTask` the three games name only assembles their
+  // source; the server is still the extension's business.
+  //
+  // The `type` matches the vscode-extension/ debugger registration.
   "version": "0.2.0",
   "configurations": [
     {
       "name": "ZX Spectrum: Step through ROM",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // The quick way in: no build and no task. With no debugServer the
-      // extension connects to zxspectrum.server.dapPort itself, starting the
-      // emulator that is already built if nothing is running -- so this is
-      // the one to use when the emulator is not what you are changing.
-      "name": "ZX Spectrum: Step through ROM (no build)",
       "type": "zxspectrum",
       "request": "launch",
       "rom": "${workspaceFolder}/roms/48.rom"
@@ -36,48 +34,8 @@
       "name": "ZX Spectrum 128: Step through ROM",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/128.rom",
-      "machine": "128",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      "name": "ZX Spectrum: hello_rom_call example",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/hello_rom_call/test.sna",
-      "sld": "${workspaceFolder}/examples/hello_rom_call/test.sld",
-      "asm": "${workspaceFolder}/examples/hello_rom_call/test.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // Committed example, no build step: writes the border register in a
-      // tight loop, so a correct ULA draws stripes and a wrong one doesn't.
-      // Snapshot only -- there is no .sld beside it to step the source with.
-      "name": "ZX Spectrum: Border rainbow example",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/border_rainbow/test.sna",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // Committed example: IM2 + EI/HALT, then one LDIR copying 256 bytes
-      // from uncontended memory into the screen. Written to isolate write-side
-      // memory contention -- which this core does not emulate yet, so what it
-      // shows today is the uncontended timing, not the real thing.
-      "name": "ZX Spectrum: LDIR contention example",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/ldir_contention/test.sna",
-      "sld": "${workspaceFolder}/examples/ldir_contention/test.sld",
-      "asm": "${workspaceFolder}/examples/ldir_contention/test.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "machine": "128"
     },
     {
       // Your own Filmation engine (examples/filmation) -- the masked-sprite
@@ -93,93 +51,29 @@
       "name": "ZX Spectrum: Filmation",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.z80",
       "sld": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.sld",
       "asm": "${workspaceFolder}/examples/filmation/knightlore/knightlore.s",
-      "preLaunchTask": "filmation.build-and-start-server"
+      "preLaunchTask": "filmation.build"
     },
     {
-      // The three Manic Miner configurations below read what
-      // game-disassemblies/scripts/build_manicminer.py writes. That script
-      // moved into the submodule, and so did its output directory, so run it
-      // once after a fresh clone -- there is no preLaunchTask here because it
-      // fetches its skool source from the network.
-      "name": "ZX Spectrum: Manic Miner",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.sna",
-      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.sld",
-      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // The speed-patched build from game-disassemblies/scripts/build_manicminer_fast.py: same
-      // game, ~1.65x through its main loop. Run that script first -- it needs
-      // mm.asm, so game-disassemblies/scripts/build_manicminer.py has to have run at least once.
-      "name": "ZX Spectrum: Manic Miner (fast)",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.sna",
-      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.sld",
-      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-fast.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // As above, but locked to the frame interrupt via IM 2 + HALT: a steady
-      // cadence instead of a loop time that varies with what is on screen.
-      "name": "ZX Spectrum: Manic Miner (frame-locked)",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.sna",
-      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.sld",
-      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/manicminer/mm-sync.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
+      // Fairlight, reassembled on every launch from the disassembly in the
+      // game-disassemblies submodule -- run its build script once after a
+      // fresh clone, since it fetches what it needs from the network.
       "name": "ZX Spectrum: Fairlight",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sna",
       "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sld",
       "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.asm",
-      "preLaunchTask": "fairlight.build-and-start-server"
+      "preLaunchTask": "fairlight.build"
     },
     {
-      // Atic Atac. Unlike the two below there is no preLaunchTask: the build
-      // has to defeat the tape's own decryptor by running it, and then map
-      // which bytes are code by playing the game in a simulator, which is far
-      // too slow to sit through on every launch. Run it once, against a tape
-      // you own:
-      //
-      //   python game-disassemblies/scripts/build_aticatac.py --tape "Atic Atac.tap"
-      //
-      // The disassembly covers $6000-$D5FF, which is the whole game -- 100% of
-      // it, named. Everything below $6000 is the loader's leavings and the
-      // system variables.
-      "name": "ZX Spectrum: Atic Atac",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.sna",
-      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.sld",
-      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/aticatac/aticatac.asm",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // Knight Lore, rebuilt on every launch by the preLaunchTask -- so
-      // editing game-disassemblies/scripts/knightlore_annotations.ctl and
-      // relaunching steps through the commentary you just wrote.
+      // Knight Lore, disassembled again on every launch by the preLaunchTask
+      // -- so editing game-disassemblies/scripts/knightlore_annotations.ctl
+      // and relaunching steps through the commentary you just wrote.
       //
       // The disassembly starts at $6108 and runs to the top of memory. Below
       // that is the game's own RAM, which is deliberately not disassembled:
@@ -193,61 +87,26 @@
       "name": "ZX Spectrum: Knight Lore",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.sna",
       "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.sld",
       "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/knightlore/knightlore.asm",
-      "preLaunchTask": "knightlore.build-and-start-server"
+      "preLaunchTask": "knightlore.build"
     },
     {
-      "name": "ZX Spectrum: Aquaplane",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game_disassembly/aquaplane/aquaplane.sna",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // Multichannel beeper music -- it drives port 0xFE far harder than a
-      // typical game, so it is the useful stress test for the audio path.
-      "name": "ZX Spectrum: Chronos",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/snapshots/Chronos.sna",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // Tape loading, the fast way: the ROM's LD-BYTES is trapped and each
-      // standard-speed block is satisfied instantly. The tape is a generated
-      // autostarting BASIC program (scripts/make_test_tape.py), so a
-      // successful load turns the border yellow and prints TAPE LOADED OK --
-      // by the time this config finishes launching, it has already happened.
-      "name": "ZX Spectrum: Tape (fast load)",
-      "type": "zxspectrum",
-      "request": "launch",
-      "debugServer": 4711,
-      "rom": "${workspaceFolder}/roms/48.rom",
-      "tape": "${workspaceFolder}/tapes/loading-test.tap",
-      "preLaunchTask": "zxspectrum-cpp.start-server"
-    },
-    {
-      // The same tape, loaded the way a real cassette would be: fast load off,
-      // so the ROM reads actual pulses off the EAR line. Press Continue and
-      // watch it take about ten seconds, with loading stripes in the border
-      // and the loading screech out of the speakers. This is the path
-      // every turbo and custom loader falls back to.
+      // The same tape opening a .tzx would load, but the way a real cassette
+      // does it: fast load off, so the ROM reads actual pulses off the EAR
+      // line. Press Continue and watch it take about ten seconds, with loading
+      // stripes in the border and the loading screech out of the speakers.
+      // This is the path every turbo and custom loader falls back to, and the
+      // reason this one is a launch configuration: opening a tape file always
+      // fast-loads it.
       "name": "ZX Spectrum: Tape (real pulse load)",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "tape": "${workspaceFolder}/tapes/loading-test.tzx",
-      "tapeFastLoad": false,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "tapeFastLoad": false
     },
     {
       // The generic one: boots, types LOAD "" and stops in the ROM loader with
@@ -262,51 +121,45 @@
       // it is not a bug: the trap fires on ARRIVING at LD-BYTES, and by now the
       // ROM is already sitting inside it. Which is the point of this target --
       // it is for watching a real load, and for breakpointing the loader with a
-      // tape you choose at the time. For an instant load, insert with
-      // auto_start left on (what "ZX Spectrum: Load Tape..." does) and it resets
-      // and retypes, so the trap gets its moment.
+      // tape you choose at the time. For an instant load, open the tape file
+      // itself (or "ZX Spectrum: Load Tape...") and it resets and retypes, so
+      // the trap gets its moment.
       "name": "ZX Spectrum: Tape (waiting for LOAD)",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "waitForTape": true,
-      "tapeFastLoad": false,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "tapeFastLoad": false
     },
     {
-      // The exercisers below all run `uncapped`: they have no visual output to
-      // get wrong and take minutes even so. Nothing comes out of the speakers
-      // while they do -- the beeper is switched off entirely at uncapped
-      // speed -- even though they start the same audio-enabled server.
+      // The exercisers below all run `uncapped` -- which is why they are here
+      // rather than opened from snapshots/: at 50 frames a second they would
+      // take hours. They have no visual output to get wrong and take minutes
+      // even so. Nothing comes out of the speakers while they run, whatever
+      // the sound setting says -- the beeper is switched off entirely at
+      // uncapped speed.
       "name": "ZX Spectrum: Z80 full test suite",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/z80full.sna",
-      "uncapped": true,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "uncapped": true
     },
     {
       "name": "ZX Spectrum: ZEXALL",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/zexall.sna",
-      "uncapped": true,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "uncapped": true
     },
     {
       "name": "ZX Spectrum: ZEXDOC",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/zexdoc.sna",
-      "uncapped": true,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "uncapped": true
     },
     {
       // The narrow one: CCF/SCF set the undocumented flag bits from A and the
@@ -314,11 +167,9 @@
       "name": "ZX Spectrum: ZEXCCFB (CCF/SCF flag test)",
       "type": "zxspectrum",
       "request": "launch",
-      "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
       "snapshot": "${workspaceFolder}/snapshots/zexccfb.sna",
-      "uncapped": true,
-      "preLaunchTask": "zxspectrum-cpp.start-server"
+      "uncapped": true
     },
     {
       // Joins a machine that is ALREADY RUNNING instead of starting one: the
@@ -327,19 +178,26 @@
       // loaded, and whatever the machine is doing keeps doing it -- so this
       // is the configuration for "something is running, let me look at it".
       //
-      // No debugServer and no preLaunchTask: the extension joins whatever is
-      // listening on zxspectrum.server.dapPort, and starts the emulator only
-      // if nothing is. The launch configurations above use
-      // zxspectrum-cpp.start-server instead, whose first step kills every
-      // running zx_server and whose second rebuilds it -- both fatal to an
-      // attach.
-      //
       // Add "sld" and "asm" to step a program's source rather than raw
       // disassembly; they are the only settings attach accepts, because
       // everything else in a launch config resets the machine.
       "name": "ZX Spectrum: Attach to running emulator",
       "type": "zxspectrum",
       "request": "attach"
+    },
+    {
+      // The only configuration that still starts the server itself, because
+      // it is the only one that needs it built first: the preLaunchTask stops
+      // whatever is running (Windows will not relink an executable in use),
+      // rebuilds zx_server and starts it, and `debugServer` has VS Code talk
+      // to that port directly. Use this one when the emulator is what you are
+      // changing; anything above is quicker.
+      "name": "ZX Spectrum: Step through ROM (rebuild the emulator)",
+      "type": "zxspectrum",
+      "request": "launch",
+      "debugServer": 4711,
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "preLaunchTask": "zxspectrum-cpp.start-server"
     }
   ]
 }
