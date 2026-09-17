@@ -4,10 +4,11 @@
 // alone, with no outside names, because the webview needs them too and gets
 // them as source text (see getHtml in extension.js).
 //
-// The picture is 352x312, border included. Every size here is worked out in
-// DEVICE pixels first and only then turned back into CSS pixels: on a 150%
-// display a "2x" picture is three device pixels a Spectrum pixel, and a
-// nearest-neighbour filter is only crisp when that number is whole.
+// The picture is 352x312, border included, and the border setting crops it
+// down towards the 256x192 paper before anything is scaled. Every size here is
+// worked out in DEVICE pixels first and only then turned back into CSS pixels:
+// on a 150% display a "2x" picture is three device pixels a Spectrum pixel,
+// and a nearest-neighbour filter is only crisp when that number is whole.
 
 /// The filters, in the order they are offered.
 const FILTERS = [
@@ -42,14 +43,35 @@ const SCALES = [
   { id: '4', label: '4x', detail: '1408 x 1248' },
 ];
 
+/// The part of the 352x312 frame that is shown, for a border setting: `x`,
+/// `y`, `w` and `h` in Spectrum pixels. 100 is all the border the emulator
+/// draws, 0 the paper alone, and in between each side keeps that share of its
+/// own depth -- the border is not the same all round (48 pixels each side, 64
+/// lines above and 56 below), so a flat number of pixels would leave it
+/// lopsided. Whole pixels only, so the crop always starts on a line and a
+/// column, and scanlines and nearest neighbour stay aligned with them.
+function visibleRect(borderPercent) {
+  const LEFT = 48;
+  const RIGHT = 48;
+  const TOP = 64;
+  const BOTTOM = 56;
+  const share = borderPercent >= 0 && borderPercent <= 100 ? borderPercent / 100 : 1;
+  const left = Math.round(LEFT * share);
+  const right = Math.round(RIGHT * share);
+  const top = Math.round(TOP * share);
+  const bottom = Math.round(BOTTOM * share);
+  return { x: LEFT - left, y: TOP - top, w: left + 256 + right, h: top + 192 + bottom };
+}
+
 /// The canvas size for a scale setting, in a panel `availW` x `availH` CSS
-/// pixels on a display with `dpr` device pixels to the CSS pixel. `canvasW`
-/// and `canvasH` are the backing store, in device pixels; `cssW` and `cssH`
-/// are what it is laid out at, so the two map one to one and the browser
-/// never rescales the canvas behind the filter's back.
-function layoutFor(scale, availW, availH, dpr) {
-  const NATIVE_W = 352;
-  const NATIVE_H = 312;
+/// pixels on a display with `dpr` device pixels to the CSS pixel, for a
+/// picture `srcW` x `srcH` Spectrum pixels (the whole frame unless the border
+/// is cropped). `canvasW` and `canvasH` are the backing store, in device
+/// pixels; `cssW` and `cssH` are what it is laid out at, so the two map one to
+/// one and the browser never rescales the canvas behind the filter's back.
+function layoutFor(scale, availW, availH, dpr, srcW, srcH) {
+  const NATIVE_W = srcW > 0 ? srcW : 352;
+  const NATIVE_H = srcH > 0 ? srcH : 312;
   const ratio = dpr > 0 ? dpr : 1;
   // Device pixels per Spectrum pixel.
   let perPixel;
@@ -73,11 +95,18 @@ function layoutFor(scale, availW, availH, dpr) {
 
 /// Sharp bilinear's first pass: the whole multiple to scale up to with
 /// nearest neighbour before bilinear covers the rest. The largest that does
-/// not overshoot the canvas, and never less than 1.
-function prescaleFactor(canvasW, canvasH) {
-  const k = Math.floor(Math.min(canvasW / 352, canvasH / 312));
+/// not overshoot the canvas, and never less than 1. `srcW` x `srcH` is the
+/// picture being scaled, as for layoutFor.
+function prescaleFactor(canvasW, canvasH, srcW, srcH) {
+  const w = srcW > 0 ? srcW : 352;
+  const h = srcH > 0 ? srcH : 312;
+  const k = Math.floor(Math.min(canvasW / w, canvasH / h));
   return k >= 1 ? k : 1;
 }
+
+/// The border sizes offered in the picker, as percentages of the border the
+/// emulator draws. Any whole number from 0 to 100 works.
+const BORDER_PRESETS = [100, 75, 50, 25, 0];
 
 /// The scanline darknesses offered in the picker, as percentages. Any whole
 /// number from 0 to 100 works; these are the ones worth a click.
@@ -109,19 +138,33 @@ function normaliseView(view) {
   const v = view || {};
   const filter = FILTERS.some((f) => f.id === v.filter) ? v.filter : 'nearest';
   const scale = SCALES.some((s) => s.id === v.scale) ? v.scale : 'fit-integer';
-  let scanlines = Math.round(Number(v.scanlines));
-  if (!Number.isFinite(scanlines) || scanlines < 0) {
-    scanlines = 0;
-  } else if (scanlines > 100) {
-    scanlines = 100;
+  return {
+    filter,
+    scale,
+    scanlines: percent(v.scanlines, 0),
+    // Unset means all of it: a panel with no setting shows what it always has.
+    border: percent(v.border, 100),
+  };
+}
+
+/// A whole percentage from 0 to 100, or `fallback` when it is not a number.
+function percent(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
   }
-  return { filter, scale, scanlines };
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return n < 0 ? 0 : n > 100 ? 100 : n;
 }
 
 module.exports = {
   FILTERS,
   SCALES,
   SCANLINE_PRESETS,
+  BORDER_PRESETS,
+  visibleRect,
   layoutFor,
   prescaleFactor,
   scanlinesPossible,

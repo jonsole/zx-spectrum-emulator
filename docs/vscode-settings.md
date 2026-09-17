@@ -17,7 +17,7 @@ together is in [Debugging in VS Code](vscode-debugging.md).
 
 ## settings.json
 
-The extension contributes three settings, all about the screen panel. They are
+The extension contributes four settings, all about the screen panel. They are
 under **ZX Spectrum** in the Settings editor, and the magnifier in the screen
 panel's title bar (**ZX Spectrum: Screen Scaling...**) sets them too -- as user
 settings, so they hold in every workspace. The open panel follows any change at
@@ -27,13 +27,15 @@ once, however it was made.
 |---|---|---|---|
 | `zxspectrum.screen.filter` | `"nearest"`, `"sharp-bilinear"`, `"bilinear"` | `"nearest"` | How the 352x312 picture is scaled: hard-edged pixels; hard-edged pixels kept evenly sized at any size; or smoothed |
 | `zxspectrum.screen.scale` | `"fit-integer"`, `"fit"`, `"1"`, `"2"`, `"3"`, `"4"` | `"fit-integer"` | How large it is drawn: as large as the panel allows in whole multiples; filling the panel; or a fixed size, scrolling if the panel is smaller |
+| `zxspectrum.screen.border` | whole number, `0`-`100` | `100` | How much of the border to show, as a percentage of the 48 pixels each side, 64 lines above and 56 below that the emulator draws: `100` is all of it, `0` the 256x192 paper alone. The picture is scaled to fit what is left |
 | `zxspectrum.screen.scanlines` | whole number, `0`-`100` | `0` | How dark the gap in the lower half of each line is, as a percentage: `0` is off, `100` black |
 
 ```jsonc
 {
-  // Crisp pixels that fill the panel, with a light CRT texture.
+  // Crisp pixels that fill the panel, a narrow border, and a light CRT texture.
   "zxspectrum.screen.filter": "sharp-bilinear",
   "zxspectrum.screen.scale": "fit",
+  "zxspectrum.screen.border": 25,
   "zxspectrum.screen.scanlines": 40
 }
 ```
@@ -48,6 +50,10 @@ Things worth knowing:
 - **Sizes are in device pixels.** On a 125% or 150% display, `"fit-integer"`
   picks whole multiples of *physical* pixels, which is what keeps nearest
   neighbour exact there.
+- **The border crops before anything is scaled.** Sizes, whole multiples and
+  scanlines are all of the cropped picture, and each side is cropped in whole
+  pixels, so nearest neighbour and the scanline gaps stay aligned with the
+  Spectrum's own lines.
 - **Anything unrecognised falls back to the default** rather than breaking the
   panel.
 

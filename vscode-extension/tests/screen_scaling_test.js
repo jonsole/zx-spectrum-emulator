@@ -5,6 +5,7 @@
 
 const assert = require('assert');
 const {
+  visibleRect,
   layoutFor,
   prescaleFactor,
   scanlinesPossible,
@@ -84,17 +85,54 @@ test('settings from outside fall back to the defaults', () => {
     filter: 'nearest',
     scale: 'fit-integer',
     scanlines: 0,
+    border: 100,
   });
-  assert.deepStrictEqual(normaliseView({ filter: 'lanczos', scale: '9', scanlines: 'dark' }), {
-    filter: 'nearest',
-    scale: 'fit-integer',
-    scanlines: 0,
+  assert.deepStrictEqual(
+    normaliseView({ filter: 'lanczos', scale: '9', scanlines: 'dark', border: 'wide' }),
+    { filter: 'nearest', scale: 'fit-integer', scanlines: 0, border: 100 }
+  );
+  assert.deepStrictEqual(
+    normaliseView({ filter: 'bilinear', scale: 'fit', scanlines: 40, border: 25 }),
+    { filter: 'bilinear', scale: 'fit', scanlines: 40, border: 25 }
+  );
+});
+
+test('border is a whole percentage from 0 to 100, and all of it when unset', () => {
+  assert.strictEqual(normaliseView({}).border, 100);
+  assert.strictEqual(normaliseView({ border: 0 }).border, 0); // off, not unset
+  assert.strictEqual(normaliseView({ border: -10 }).border, 0);
+  assert.strictEqual(normaliseView({ border: 180 }).border, 100);
+  assert.strictEqual(normaliseView({ border: '50' }).border, 50);
+});
+
+test('all of the border is the whole frame', () => {
+  assert.deepStrictEqual(visibleRect(100), { x: 0, y: 0, w: 352, h: 312 });
+});
+
+test('none of the border is the paper alone', () => {
+  assert.deepStrictEqual(visibleRect(0), { x: 48, y: 64, w: 256, h: 192 });
+});
+
+test('in between, each side keeps its own share', () => {
+  // 48 each side, 64 above, 56 below: half is 24, 24, 32 and 28.
+  assert.deepStrictEqual(visibleRect(50), { x: 24, y: 32, w: 304, h: 252 });
+  // A third rounds each side on its own: 16, 16, 21 and 18.
+  assert.deepStrictEqual(visibleRect(33), { x: 32, y: 43, w: 288, h: 231 });
+});
+
+test('the picture sizes follow the crop', () => {
+  // The paper alone, 256x192, in an 800x700 panel: three whole times fits.
+  assert.deepStrictEqual(layoutFor('fit-integer', 800, 700, 1, 256, 192), {
+    canvasW: 768,
+    canvasH: 576,
+    cssW: 768,
+    cssH: 576,
   });
-  assert.deepStrictEqual(normaliseView({ filter: 'bilinear', scale: 'fit', scanlines: 40 }), {
-    filter: 'bilinear',
-    scale: 'fit',
-    scanlines: 40,
-  });
+  // A fixed 2x is twice the crop, not twice the frame.
+  assert.strictEqual(layoutFor('2', 800, 700, 1, 256, 192).canvasW, 512);
+  // Sharp bilinear's whole multiple is of the crop too.
+  assert.strictEqual(prescaleFactor(700, 525, 256, 192), 2);
+  assert.strictEqual(prescaleFactor(700, 525), 1); // the whole frame would only fit once
 });
 
 test('scanline darkness is a whole percentage from 0 to 100', () => {
@@ -130,12 +168,18 @@ test('the functions stand alone, so the webview can be given their source', () =
   const rebuilt = new Function(
     `${layoutFor.toString()}\n${prescaleFactor.toString()}\n` +
       `${scanlinesPossible.toString()}\n${scanlineBand.toString()}\n` +
-      'return { layoutFor, prescaleFactor, scanlinesPossible, scanlineBand };'
+      `${visibleRect.toString()}\n` +
+      'return { layoutFor, prescaleFactor, scanlinesPossible, scanlineBand, visibleRect };'
   )();
   assert.deepStrictEqual(rebuilt.layoutFor('fit', 800, 700, 1.5), layoutFor('fit', 800, 700, 1.5));
   assert.strictEqual(rebuilt.prescaleFactor(790, 700), 2);
   assert.strictEqual(rebuilt.scanlinesPossible(2), true);
   assert.deepStrictEqual(rebuilt.scanlineBand(3), scanlineBand(3));
+  assert.deepStrictEqual(rebuilt.visibleRect(50), visibleRect(50));
+  assert.deepStrictEqual(
+    rebuilt.layoutFor('fit', 800, 700, 1, 256, 192),
+    layoutFor('fit', 800, 700, 1, 256, 192)
+  );
 });
 
 if (failures > 0) {

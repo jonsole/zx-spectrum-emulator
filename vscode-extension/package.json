@@ -58,6 +58,13 @@
           "default": "fit-integer",
           "description": "How large the screen panel draws the Spectrum's picture, border included."
         },
+        "zxspectrum.screen.border": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 100,
+          "markdownDescription": "How much of the border the screen panel shows, as a percentage of what the emulator draws (48 pixels each side, 64 lines above and 56 below): `100` is all of it, `0` the 256x192 paper alone. Each side keeps that share of its own depth, and the picture is scaled to fit what is left."
+        },
         "zxspectrum.screen.scanlines": {
           "type": "integer",
           "minimum": 0,

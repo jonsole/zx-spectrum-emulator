@@ -27,6 +27,8 @@ const {
   FILTERS,
   SCALES,
   SCANLINE_PRESETS,
+  BORDER_PRESETS,
+  visibleRect,
   layoutFor,
   prescaleFactor,
   scanlinesPossible,
@@ -454,6 +456,7 @@ function screenView() {
     filter: config.get('filter'),
     scale: config.get('scale'),
     scanlines: config.get('scanlines'),
+    border: config.get('border'),
   });
 }
 
@@ -481,44 +484,37 @@ async function pickScreenScaling() {
       value: s.id,
     });
   }
+  items.push({ label: 'Border', kind: vscode.QuickPickItemKind.Separator });
+  percentItems(items, 'border', current.border, BORDER_PRESETS, (percent) =>
+    percent === 100 ? 'All of it' : percent === 0 ? 'None -- the paper alone' : `${percent}%`
+  );
   items.push({ label: 'Scanlines', kind: vscode.QuickPickItemKind.Separator });
-  for (const percent of SCANLINE_PRESETS) {
-    items.push({
-      label: `${percent === current.scanlines ? '$(check)' : '$(blank)'} ${
-        percent === 0 ? 'Off' : `${percent}% dark`
-      }`,
-      detail:
-        percent === 0
-          ? 'Every line lit, as the picture is.'
-          : percent === 100
-            ? 'Black gaps between the lines.'
-            : undefined,
-      setting: 'scanlines',
-      value: percent,
-    });
-  }
-  const custom = !SCANLINE_PRESETS.includes(current.scanlines);
-  items.push({
-    label: `${custom ? '$(check)' : '$(blank)'} ${
-      custom ? `Custom: ${current.scanlines}% dark` : 'Custom...'
-    }`,
-    detail: 'Any darkness from 0 to 100%.',
-    setting: 'scanlines',
-    value: undefined, // asked for below
-  });
+  percentItems(items, 'scanlines', current.scanlines, SCANLINE_PRESETS, (percent) =>
+    percent === 0 ? 'Off' : `${percent}% dark`
+  );
   const pick = await vscode.window.showQuickPick(items, {
     title: 'ZX Spectrum Screen Scaling',
-    placeHolder: 'Pick a filter, a size or a scanline darkness -- each is set on its own',
+    placeHolder: 'Pick a filter, a size, a border or a scanline darkness -- each is set on its own',
   });
   if (!pick) {
     return;
   }
   let value = pick.value;
   if (value === undefined) {
+    const prompts = {
+      border: {
+        title: 'Border size',
+        prompt: 'How much of the border to show, 0 (the paper alone) to 100 (all of it)',
+      },
+      scanlines: {
+        title: 'Scanline darkness',
+        prompt: 'How dark the gaps between the lines are, 0 (off) to 100 (black)',
+      },
+    };
     const typed = await vscode.window.showInputBox({
-      title: 'Scanline darkness',
-      prompt: 'How dark the gaps between the lines are, 0 (off) to 100 (black)',
-      value: String(current.scanlines),
+      title: prompts[pick.setting].title,
+      prompt: prompts[pick.setting].prompt,
+      value: String(current[pick.setting]),
       validateInput: (text) =>
         /^\s*\d{1,3}\s*%?\s*$/.test(text) && Number(text.replace('%', '')) <= 100
           ? undefined
@@ -532,6 +528,26 @@ async function pickScreenScaling() {
   await vscode.workspace
     .getConfiguration('zxspectrum.screen')
     .update(pick.setting, value, vscode.ConfigurationTarget.Global);
+}
+
+/// A percentage setting's presets, then a Custom entry that shows the current
+/// value when it is not one of them. A Custom pick has no value: the picker
+/// asks for one.
+function percentItems(items, setting, current, presets, name) {
+  for (const percent of presets) {
+    items.push({
+      label: `${percent === current ? '$(check)' : '$(blank)'} ${name(percent)}`,
+      setting,
+      value: percent,
+    });
+  }
+  const custom = !presets.includes(current);
+  items.push({
+    label: `${custom ? '$(check)' : '$(blank)'} ${custom ? `Custom: ${current}%` : 'Custom...'}`,
+    detail: 'Any whole percentage from 0 to 100.',
+    setting,
+    value: undefined,
+  });
 }
 
 // Forwards a keydown/keyup captured by the webview (see getHtml()'s script)
@@ -2015,6 +2031,8 @@ function getHtml(view) {
 
     ${scanlineBand.toString()}
 
+    ${visibleRect.toString()}
+
     const canvas = document.getElementById('screen');
     const ctx = canvas.getContext('2d');
     // Sharp bilinear's first pass, nearest neighbour up to a whole multiple.
@@ -2026,12 +2044,16 @@ function getHtml(view) {
     const scanlinesCtx = scanlines.getContext('2d');
     let scanlinesShown = false;
     let view = ${JSON.stringify(view)};
+    // The part of the frame shown, for the border setting: the picture is
+    // this rectangle of it, everywhere below.
+    let crop = visibleRect(view.border);
     let frame = null;   // the newest decoded frame, an ImageBitmap
     let decoding = 0;   // the newest frame handed to the decoder
 
     function resize() {
+      crop = visibleRect(view.border);
       const l = layoutFor(view.scale, window.innerWidth, window.innerHeight,
-                          window.devicePixelRatio || 1);
+                          window.devicePixelRatio || 1, crop.w, crop.h);
       if (canvas.width !== l.canvasW || canvas.height !== l.canvasH) {
         canvas.width = l.canvasW;
         canvas.height = l.canvasH;
@@ -2045,7 +2067,9 @@ function getHtml(view) {
     // from the scale it was asked for, so they fall exactly between its lines
     // however the size was rounded.
     function buildScanlines() {
-      const rowHeight = canvas.height / 312;
+      // The crop starts on a whole line, so the first line of the canvas is
+      // the first line of a Spectrum line and the gaps stay in step.
+      const rowHeight = canvas.height / crop.h;
       scanlinesShown = view.scanlines > 0 && scanlinesPossible(rowHeight);
       if (!scanlinesShown) return;
       if (scanlines.width !== canvas.width || scanlines.height !== canvas.height) {
@@ -2055,7 +2079,7 @@ function getHtml(view) {
       scanlinesCtx.clearRect(0, 0, scanlines.width, scanlines.height);
       scanlinesCtx.fillStyle = 'rgba(0, 0, 0, ' + view.scanlines / 100 + ')';
       const band = scanlineBand(rowHeight);
-      for (let line = 0; line < 312; line++) {
+      for (let line = 0; line < crop.h; line++) {
         scanlinesCtx.fillRect(0, line * rowHeight + band.offset, scanlines.width, band.height);
       }
     }
@@ -2070,25 +2094,26 @@ function getHtml(view) {
       if (view.filter === 'bilinear') {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'low';
-        ctx.drawImage(frame, 0, 0, w, h);
+        ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
       } else if (view.filter === 'sharp-bilinear') {
         // Nearest neighbour to the largest whole multiple that fits, then
         // bilinear for what is left: every pixel stays square and the same
         // size, and only its edges are blended. At a whole-multiple size
         // there is nothing left over, and this is nearest neighbour exactly.
-        const k = prescaleFactor(w, h);
-        if (prescaled.width !== 352 * k || prescaled.height !== 312 * k) {
-          prescaled.width = 352 * k;
-          prescaled.height = 312 * k;
+        const k = prescaleFactor(w, h, crop.w, crop.h);
+        if (prescaled.width !== crop.w * k || prescaled.height !== crop.h * k) {
+          prescaled.width = crop.w * k;
+          prescaled.height = crop.h * k;
         }
         prescaledCtx.imageSmoothingEnabled = false;
-        prescaledCtx.drawImage(frame, 0, 0, prescaled.width, prescaled.height);
+        prescaledCtx.drawImage(frame, crop.x, crop.y, crop.w, crop.h,
+                               0, 0, prescaled.width, prescaled.height);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'low';
         ctx.drawImage(prescaled, 0, 0, w, h);
       } else {
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(frame, 0, 0, w, h);
+        ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
       }
       // After the filter, as a CRT's gaps would be: the dark band is in the
       // glass, not in the picture being scaled.

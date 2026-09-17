@@ -164,6 +164,14 @@ drawn, and remembers it as a user setting (`zxspectrum.screen.filter` and
 | **Fit** | fill the panel, keeping the shape -- the one where the filter matters |
 | **1x - 4x** | a fixed size; a panel too small for it scrolls |
 
+**Border** (`zxspectrum.screen.border`) is how much of the border to show, as
+a percentage of what the emulator draws -- 48 pixels each side, 64 lines above
+and 56 below. At 100 (the default) you see all of it; at 0, only the 256x192
+paper; in between, each side keeps that share of its own depth, so the border
+stays in proportion. The picture is scaled to fit what is left, so a smaller
+border buys a bigger playfield in the same panel. The picker offers 100, 75,
+50, 25 and 0%, and a custom value takes anything in between.
+
 **Scanlines** (`zxspectrum.screen.scanlines`) darken the lower half of every
 Spectrum line by a percentage -- the picker offers off, 25, 50, 75 and 100%, and
 a custom value takes any whole number in between. They are laid over the
