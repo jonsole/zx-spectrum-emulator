@@ -17,6 +17,11 @@ own, and neither side polls the other to find out.
 [dap]: https://microsoft.github.io/debug-adapter-protocol/
 [mcp]: https://modelcontextprotocol.io/
 
+![A knight walking through a room of the Filmation engine's Knight Lore remake, running in the emulator](docs/images/readme/knightlore.gif)
+
+*A game running under the debugger — recorded by the emulator itself, with the
+`start_video` tool.*
+
 ```
    VS Code                                  Claude, or any MCP client
    breakpoints, stepping,                   memory, breakpoints, keys,
@@ -44,14 +49,22 @@ own, and neither side polls the other to find out.
   whatever last wrote an address — with the whole machine as it was, not a
   re-simulation. See
   [Stepping backwards](docs/vscode-debugging.md#stepping-backwards).
+
+  ![Registers, a stopped line of Z80 source and the call stack in VS Code](docs/images/readme/debugging.png)
+
 - **Shows where the time went.** A profiler counts each instruction's clock
   time and paints it onto your source as a heat map, with a call tree by call
   path and the worst frames kept in detail — idle time counted separately, so
   a pacing loop doesn't drown the real work. See
   [Execution profile](docs/vscode-debugging.md#execution-profile).
+
+  ![The profile tree beside source tinted by how much time each line took](docs/images/readme/profile.png)
+
 - **Records the bus half-clock by half-clock.** The Z80 core is pin-level and
   cycle-stepped, so the [cycle-by-cycle trace](docs/tracing.md) is simply that
   bus, written down: every address, every data byte, every control line.
+
+  ![A timing diagram of CLK, M1, MREQ, IORQ, RFSH, RD, WR and the address and data buses](docs/images/readme/trace.png)
 - **Debugs the ROM as source.** `scripts/build_rom_source.py` reproduces the
   48K ROM **byte for byte** from a commented disassembly, so stepping into
   `PRINT` lands you in readable, annotated code — with your own
@@ -60,6 +73,8 @@ own, and neither side polls the other to find out.
 - **Treats graphics as graphics.** Find sprites in memory, name and group
   them, and export a sheet as a PNG with a TexturePacker-style JSON atlas or
   as `DEFB` source — and import it back.
+
+  ![A sheet of sprites read out of memory, one group named baddies](docs/images/readme/graphics.png)
 
 **How accurate is it?** The Z80 is diffed instruction for instruction against
 the vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` and passes
