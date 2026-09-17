@@ -686,18 +686,24 @@ object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 ; place: every contact in all three passes of its clamp -- $CBAF, $CBFE and
 ; $CC4D -- copies each side's deadly bit into the other's "touched" bit, so it
 ; does not matter whether he walks into a spike or a guard walks into him.
+;
+; The two bits are separate there, though, and a thing can carry only the one
+; that says it kills when it hits him. Those are [CRUSHING, HARMLESS): deadly
+; when they are the mover, and harmless when he is.
 ;   IX -> us, IY -> what we touched
 ; Corrupts AF.
 object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 					jr		nz,.he_is_us
 					bit		7,(iy+OBJ.FLAGS)
 					ret		z		; neither of us is
-					ld		a,(ix+OBJ.BEHAVIOUR)
-					jr		.deadly
-.he_is_us:			ld		a,(iy+OBJ.BEHAVIOUR)
-.deadly:			sub		BEHAVIOUR_DEADLY
+					ld		a,(ix+OBJ.BEHAVIOUR)	; it came at him
+					sub		BEHAVIOUR_DEADLY
 					cp		BEHAVIOUR_HARMLESS - BEHAVIOUR_DEADLY
-					ret		nc
+					jr		.deadly
+.he_is_us:			ld		a,(iy+OBJ.BEHAVIOUR)	; he came at it
+					sub		BEHAVIOUR_DEADLY
+					cp		BEHAVIOUR_CRUSHING - BEHAVIOUR_DEADLY
+.deadly:			ret		nc
 					ld		a,1
 					ld		(deadly_touched),a
 					ret

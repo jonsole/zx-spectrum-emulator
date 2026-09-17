@@ -76,7 +76,7 @@ The engine names nothing else of the game's.
 | `ROOM_SLOTS` | EQU | room.s | How many of them `room_add` may fill |
 | `room_objects` | label | object.s, mover.s, room.s | The pool (see above) |
 | `COLLIDE_HEIGHT` | EQU | object.s, walker.s | A character's height as one collision box |
-| `BEHAVIOUR_DEADLY`, `BEHAVIOUR_HARMLESS` | EQU | object.s | Behaviours in `[DEADLY, HARMLESS)` kill a character they touch |
+| `BEHAVIOUR_DEADLY`, `BEHAVIOUR_CRUSHING`, `BEHAVIOUR_HARMLESS` | EQU | object.s | Behaviours in `[DEADLY, CRUSHING)` kill a character they touch; those in `[CRUSHING, HARMLESS)` only when they move into it |
 | `BEHAVIOUR_GIVES`, `BEHAVIOUR_GIVES_LAST` | EQU | object.s | Behaviours in this range get `MOVE_STATE` bit 3 when landed on |
 | `BEHAVIOUR_LOOSE` | EQU | object.s | This and above are carried by what they stand on and shoved by what hits them |
 | `BEHAVIOUR_FIRST_TURN` | EQU | mover.s | The lowest behaviour that gets a turn |

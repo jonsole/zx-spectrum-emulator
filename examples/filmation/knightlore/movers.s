@@ -20,7 +20,7 @@ MOVE_NONE			EQU		0
 ; deadly -- see object_touched. Knight Lore marks them with a flag it sets from
 ; each object's own update routine, set_both_deadly_flags at $B85C: gargoyles,
 ; spikes, spiked balls, bouncing balls of both kinds, fires, guards, the wizard
-; and the ghost. Not the repel spell, the gates or the cauldron's bubbles.
+; and the ghost. Not the repel spell or the cauldron's bubbles.
 ;
 ; MOVE_STILL is deadly and does nothing else. Spikes and gargoyles have no
 ; update of their own beyond the flag, and movers_step steps straight over it.
@@ -34,10 +34,16 @@ MOVE_GHOST		EQU		7
 MOVE_BOUNCE		EQU		8
 MOVE_SPIKE_BALL	EQU		9
 
-MOVE_HARMLESS	EQU		10		; and from here on, nothing kills
-MOVE_SLIDE_U		EQU		10
-MOVE_SLIDE_V		EQU		11
-MOVE_GATE			EQU		12
+; The gates only kill what they come down on. upd_9 sets bit 7 of $0D alone --
+; "fatal if it hits the player" -- and not bit 5, "fatal if he hits it", so the
+; clamp at $CBAF only passes it on when the gate is the one moving. Walking into
+; a gate is safe; standing under one as it drops is not.
+MOVE_CRUSHING	EQU		10
+MOVE_GATE			EQU		10
+
+MOVE_HARMLESS	EQU		11		; and from here on, nothing kills
+MOVE_SLIDE_U		EQU		11
+MOVE_SLIDE_V		EQU		12
 MOVE_SPELL		EQU		13
 MOVE_CAULDRON	EQU		14		; what rises out of the pot -- see special.s
 MOVE_DROPPING	EQU		15		; these two give way under a weight: see
@@ -70,6 +76,7 @@ MOVE_SPECIAL		EQU		20		; a collectable -- see special.s
 ; names a behaviour, only the bands above -- see engine/object.s.
 BEHAVIOUR_FIRST_TURN	EQU		MOVE_BALL		; the first with a turn, and mover_tbl's first
 BEHAVIOUR_DEADLY	EQU		MOVE_STILL		; the first that kills
+BEHAVIOUR_CRUSHING	EQU		MOVE_CRUSHING	; the first that kills only when it moves
 BEHAVIOUR_HARMLESS	EQU		MOVE_HARMLESS	; the first that does not
 BEHAVIOUR_GIVES		EQU		MOVE_DROPPING	; the first that gives way under a weight
 BEHAVIOUR_GIVES_LAST	EQU		MOVE_COLLAPSING	; and the last
@@ -129,9 +136,9 @@ mover_tbl:			DW		mover_ball			; MOVE_BALL
 					DW		mover_ghost		; MOVE_GHOST
 					DW		mover_bounce		; MOVE_BOUNCE
 					DW		mover_spike_ball	; MOVE_SPIKE_BALL
+					DW		mover_gate			; MOVE_GATE
 					DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_slide_v		; MOVE_SLIDE_V
-					DW		mover_gate			; MOVE_GATE
 					DW		mover_spell		; MOVE_SPELL
 					DW		mover_cauldron	; MOVE_CAULDRON
 					DW		mover_dropping	; MOVE_DROPPING
