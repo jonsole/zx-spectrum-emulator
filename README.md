@@ -1,40 +1,69 @@
 # zx-spectrum-emulator
 
-A headless ZX Spectrum 48K emulator whose primary interface isn't a keyboard and a
-CRT — it's two debugging APIs sharing one live machine. You can set a breakpoint
-and single-step in VS Code (over the [Debug Adapter Protocol][dap]) while an
-LLM agent inspects and drives the *same running emulator* over
-[MCP][mcp], both seeing consistent state in real time.
+A ZX Spectrum 48K/128K emulator for the two people most likely to want one
+today: someone writing new machine code for the machine, and someone taking an
+old game apart to find out how it worked.
+
+It has no window of its own. What it has instead is a debugger you drive from
+VS Code, over the [Debug Adapter Protocol][dap], and the same machine exposed
+as tools an LLM agent drives over [MCP][mcp] — both attached to the *same
+running Spectrum*, at the same time. Set a breakpoint in the VS Code gutter,
+then ask Claude to run until the sprite routine writes to the screen: your
+breakpoint still catches it, VS Code's registers and call stack update on their
+own, and neither side polls the other to find out.
 
 [dap]: https://microsoft.github.io/debug-adapter-protocol/
 [mcp]: https://modelcontextprotocol.io/
 
 ```
-                     ┌─────────────────────────────┐
-   VS Code  ───DAP──▶│                              │
-  (breakpoints,      │   Engine (command queue +    │◀──MCP─── Claude / any
-   stepping,         │   emulation thread) owns the  │           MCP client
-   registers)        │   ONE live Spectrum        │
-                     └─────────────────────────────┘
-                                   │
-                     command queue + event fan-out
-                     (both sides see every state
-                      change, however it happened)
+   VS Code                                  Claude, or any MCP client
+   breakpoints, stepping,                   memory, breakpoints, keys,
+   registers                                the screen, the profiler
+        │ DAP                          MCP │
+        ▼                                  ▼
+   ┌──────────────────────────────────────────────┐
+   │  Engine: one command queue, one emulation    │
+   │  thread, ONE live Spectrum                   │
+   └──────────────────────────────────────────────┘
+                        │
+        every change — a breakpoint hit, a register
+        written, a key pressed — reaches both sides
 ```
 
-> ## The C++ core is the project
->
-> `cpp-core/` is the only supported implementation. The original Python core
-> (`zxspectrum/`, `cffi` around `z80.h`) is **deprecated**: still in the repo,
-> but no longer developed, no longer verified, and no longer wired into
-> `.vscode/` — every launch configuration targets the C++ server. (A
-> from-scratch Rust core came in between; it has been removed, and lives on in
-> the git history.) Tape loading, beeper audio
-> and cycle-by-cycle bus tracing only ever existed in the C++ core.
->
-> The `scripts/` helpers are still Python and still current — only the Python
-> *emulator* is deprecated. For a clean install, follow
-> **[INSTALL.md](INSTALL.md)**, which is C++-only throughout.
+## What it does that a normal emulator doesn't
+
+- **Hands the machine to an agent.** Every debugging action is an MCP tool:
+  read and write memory, set breakpoints and watchpoints, step, run, press
+  keys, read the screen, record video, profile. An agent can hunt down the
+  routine that draws the score and report back while you keep your own
+  session — see [Connecting an MCP client](docs/mcp.md).
+- **Runs backwards.** At any stop, step back an instruction, step back out of
+  a routine, reverse-continue to the previous breakpoint, or run back to
+  whatever last wrote an address — with the whole machine as it was, not a
+  re-simulation. See
+  [Stepping backwards](docs/vscode-debugging.md#stepping-backwards).
+- **Shows where the time went.** A profiler counts each instruction's clock
+  time and paints it onto your source as a heat map, with a call tree by call
+  path and the worst frames kept in detail — idle time counted separately, so
+  a pacing loop doesn't drown the real work. See
+  [Execution profile](docs/vscode-debugging.md#execution-profile).
+- **Records the bus half-clock by half-clock.** The Z80 core is pin-level and
+  cycle-stepped, so the [cycle-by-cycle trace](docs/tracing.md) is simply that
+  bus, written down: every address, every data byte, every control line.
+- **Debugs the ROM as source.** `scripts/build_rom_source.py` reproduces the
+  48K ROM **byte for byte** from a commented disassembly, so stepping into
+  `PRINT` lands you in readable, annotated code — with your own
+  sjasmplus-assembled program's symbols layered on top of it, not replacing
+  it.
+- **Treats graphics as graphics.** Find sprites in memory, name and group
+  them, and export a sheet as a PNG with a TexturePacker-style JSON atlas or
+  as `DEFB` source — and import it back.
+
+**How accurate is it?** The Z80 is diffed instruction for instruction against
+the vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` and passes
+ZEXALL and ZEXDOC in full; tape loading works at pulse level through the EAR
+line, `.wav` and `.csw` recordings included. Memory contention and the +2A/+3
+are not emulated — see [Status & roadmap](docs/status.md).
 
 ## What's actually emulated
 
@@ -122,8 +151,30 @@ end:
   All References, Rename, Call Hierarchy, hover documentation and the outline for
   `.asm`/`.s` files -- see
   [Editing Z80 assembly](docs/vscode-debugging.md#editing-z80-assembly).
-- **Panels** for the live screen, the cycle-by-cycle bus trace, graphics in
-  memory and the tape deck -- see [Debugging in VS Code](docs/vscode-debugging.md).
+- **Opening a program.** File -> Open a `.sna`, `.z80`, `.tap` or `.tzx` and it
+  opens on a page showing the screen the snapshot or the tape's loading screen
+  holds, what machine the program wants and what the tape contains, with Run and
+  Debug buttons. The emulator is started if it isn't running, so a snapshot goes
+  from Explorer to running machine in one double-click.
+- **A graphics viewer** that reads sprites out of memory or a snapshot, names and
+  groups them, and exports a sheet as PNG plus a TexturePacker-style JSON atlas
+  or `DEFB` source -- and imports one back.
+- **Panels** for the live screen, the cycle-by-cycle bus trace and the tape deck
+  -- see [Debugging in VS Code](docs/vscode-debugging.md).
+
+> ## The C++ core is the project
+>
+> `cpp-core/` is the only supported implementation. The original Python core
+> (`zxspectrum/`, `cffi` around `z80.h`) is **deprecated**: still in the repo,
+> but no longer developed, no longer verified, and no longer wired into
+> `.vscode/` — every launch configuration targets the C++ server. (A
+> from-scratch Rust core came in between; it has been removed, and lives on in
+> the git history.) Tape loading, beeper audio
+> and cycle-by-cycle bus tracing only ever existed in the C++ core.
+>
+> The `scripts/` helpers are still Python and still current — only the Python
+> *emulator* is deprecated. For a clean install, follow
+> **[INSTALL.md](INSTALL.md)**, which is C++-only throughout.
 
 ## Requirements
 
@@ -187,8 +238,11 @@ pair is easy to find (the Fuse emulator ships them as `128-0.rom` and
 
 One process, one `Engine`, every server — MCP, DAP, the
 [screen stream](docs/vscode-debugging.md#live-screen-viewer) and the
-[audio stream](docs/audio.md) — sharing the one live machine. Normally you don't run this by hand: the VS Code
-`preLaunchTask` starts it (see [Connecting VS Code](docs/vscode-debugging.md)).
+[audio stream](docs/audio.md) — sharing the one live machine. Normally you
+don't run this by hand: the VS Code extension starts a server when a debug
+session needs one and nothing is listening, and this repository's own launch
+configurations start it from a `preLaunchTask` instead (see
+[Connecting VS Code](docs/vscode-debugging.md)).
 
 ## Documentation
 
