@@ -772,3 +772,55 @@ likely give back more than the 768 bytes the end screens took.
 Measured today at 4,992: the worst room in the castle spends 2.2% of a turn
 rotating at draw time ($97), most of the sixteen about 1%, and no room shows
 anything wrong -- a refused piece still draws in the right place, only slower.
+
+### The view buffer above `$8000`
+
+The view buffer is at `$7400`, in contended memory, and it is the hottest data
+the engine has: every region's clear pushes through it, every blit writes it,
+and the copy reads it back out. It went there when the code region ran out of
+room. Moving it up was priced on 2026-09-17 and left alone.
+
+**What contention costs it.** `cpp-core` does not model contention, so it was
+estimated, by `cpp-core/tests/filmation_contention.cpp` (built with
+`build.ps1 -Release -Target filmation_contention`; its header has the command
+line). It plays the game headless, watches `$5B00-$7FFF` over all 128 rooms,
+20 settled turns each, and charged every instruction that touched it the delay
+a 48K's ULA adds at that point in the frame -- from T-state 14,335, for 192
+lines, the first 128 T of each 224-T line delay by 6, 5, 4, 3, 2, 1, 0, 0. An
+instruction counts once however many bytes it touches, so a `PUSH` is
+undercounted and the figures are a lower bound. The screen's own writes are
+not counted; they have nowhere else to go.
+
+| contended memory | instructions a turn | delay a turn | of a turn |
+|---|---|---|---|
+| the view buffer, `$7400` | 1,154 | ~1,065 T | 0.44% |
+| the object pool, `$7600` | 444 | ~409 T | 0.17% |
+| everything else below `$8000` | 302 | ~276 T | 0.11% |
+
+The average settled turn was 243,294 T. The worst room, `$27`, spends about
+2,560 T of a 401,000 T turn on the view buffer: 0.64%. It is this small because
+the ULA only delays an access in the 128 T of each line it is drawing -- about
+35% of the frame -- and then by 2.6 T on average.
+
+**What the move would take.**
+
+- The buffer at `$8000`, ahead of `sprite.s`, costs exactly 512 bytes of the
+  code region and no padding: everything after it moves up by a multiple of
+  512, so every `ALIGN 4`, `256` and `512` lands where it did.
+- Taking it out of `$7400` moves that region down by 512 for the same reason,
+  and leaves 516 bytes free after `screen_sprite`.
+- So 502 to 516 bytes of cold code has to come down, the code region having 10
+  free. The one clean fit found is exactly 516: the menu's code, `menu_run` to
+  `menu_paint` (352), and the end screens' printing, `end_string` to `end_seen`
+  (164). Neither falls through across its edges. `menu_mode` stays up -- it is
+  read every turn -- and so do the tunes, whose playing counts T-states.
+- That splits `menu.s` and `end.s` in two and leaves the `$7400` region with
+  nothing free and the code region with 14.
+
+**Why not.** Half a percent on real hardware, nothing at all measurable in this
+emulator, for two file splits and a full region. Most of the contention there
+is, is data -- the buffer and the pool -- and the pool, at 1,216 bytes, has
+nowhere above `$8000` to go in any case. Worth revisiting if the code region
+gains the room, or if `cpp-core` comes to model contention and the figures can
+be measured rather than estimated.
+

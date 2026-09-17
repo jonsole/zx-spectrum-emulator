@@ -172,6 +172,14 @@ target_link_libraries(z80_com_runner PRIVATE zx_core)
 target_compile_options(z80_com_runner PRIVATE ${ZX_WARNINGS})
 add_dependencies(zx_tools z80_com_runner)
 
+# Diagnostic for examples/filmation, not a test: estimates what ULA contention
+# would cost a Knight Lore turn on a real 48K, since the core does not model it.
+# See "The view buffer above $8000" in that example's README.
+add_executable(filmation_contention filmation_contention.cpp)
+target_link_libraries(filmation_contention PRIVATE zx_core)
+target_compile_options(filmation_contention PRIVATE ${ZX_WARNINGS})
+add_dependencies(zx_tools filmation_contention)
+
 # ---- ZEXALL / ZEXDOC --------------------------------------------------------
 # One executable, run twice with different arguments. Labelled "slow" and
 # excluded from the default ctest run (build.ps1 -Test): a full pass is well
