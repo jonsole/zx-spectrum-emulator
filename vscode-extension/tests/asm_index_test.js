@@ -329,7 +329,9 @@ test('outgoing calls leave out jumps inside the routine itself', () => {
 test('the repo\'s own sources resolve', () => {
   const root = path.resolve(__dirname, '..', '..');
   const index = new AsmIndex();
-  const film = path.join(root, 'examples', 'filmation');
+  // The Filmation engine's own sources, moved into engine/ with the Knight
+  // Lore game split out beside them.
+  const film = path.join(root, 'examples', 'filmation', 'engine');
   const rom = path.join(root, 'rom_disassembly', 'rom.asm');
   if (!fs.existsSync(film) || !fs.existsSync(rom)) {
     console.log('     (skipped: sources not present)');
