@@ -37,12 +37,12 @@ MENU_SIDES          EQU     128
 
 ; The choice, in Knight Lore's own layout -- it keeps the same byte at $5BA4.
 ; Bits 1 and 2 are the input method: 00 keyboard, 01 Kempston, 10 cursor,
-; 11 Interface II. Bit 3 is directional control, which turns the left and
-; right keys from turning the knight into walking him that way.
+; 11 Interface II. Bit 3 is directional control: a stick names the way to
+; walk rather than turning him. It means nothing on the keyboard.
 ;
-; NOTHING READS IT YET. player_step still has Q, A, O, P and SPACE wired
-; straight in, which is what directional control on the keyboard amounts to.
-; The menu is what sets this byte; reading it is the input pass, still to do.
+; input_read takes the method from it, player_turn the directional control,
+; and special_keys the directional control too, to know where a stick has put
+; pick up.
 menu_mode:          DB      0
 
 ; 5 is a toggle rather than a choice, so it only counts on the way down.

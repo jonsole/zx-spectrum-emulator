@@ -239,10 +239,10 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ld		hl,(view_x_extent)
 					ld		a,h
 					sub		l
-					cp		VIEW_BUF_WIDTH + 1		; a region wider than the buffer has
-					jr		c,.width_ok		; no routine to copy it, so clamp
-					ld		a,VIEW_BUF_WIDTH		; rather than index off the end of
-.width_ok:			ld		(region_width),a		; copy_routines
+					cp		VIEW_BUF_WIDTH + 1		; a region wider than the buffer
+					jr		c,.width_ok		; would aim the copy's DJNZ before the
+					ld		a,VIEW_BUF_WIDTH		; start of its LDI chain, so clamp
+.width_ok:			ld		(region_width),a
 					ld		a,TURN_PER_REGION
 					call	turn_add
 

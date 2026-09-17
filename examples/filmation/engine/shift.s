@@ -22,9 +22,8 @@
 ; objects of 19, wanting 1,838 bytes between them.
 ;
 ; $B3 is not the worst room, though, and sizing the arena to it was a bug --
-; a quiet one, because a failed allocation is not an error here: the object
-; falls back to byte-aligned and draws up to seven pixels left of where it
-; belongs. Room $88 wants 2,728 bytes across 10 objects, so three of them
+; a quiet one, because a failed allocation was not an error: the object fell
+; back to byte-aligned and drew up to seven pixels left of where it belonged. Room $88 wants 2,728 bytes across 10 objects, so three of them
 ; missed out and stood seven pixels left of true -- one of them the right-hand
 ; half of the far corner, which is why the two walls did not meet there.
 ;
@@ -51,8 +50,10 @@
 ; and played for a hundred turns, with shift_arena_next read every turn, so
 ; that a mover taking its buffer several turns in is counted too. The hungriest
 ; are $41 and $BE at 5,718, then $01 at 5,624, $CF at 5,466 and $97 at 5,404.
-; 5,760 leaves the worst room 42 to spare and no room in the castle is refused
-; anything.
+; 5,760 left the worst room 42 to spare and no room in the castle was refused
+; anything. The end screens took 768 bytes of that, and at 4,992 sixteen rooms
+; go a piece or two short -- which rotate at draw time instead, see below and
+; the README's note on handing the arena out by what it is worth.
 ;
 ; A refusal is not silent. It falls back on rotating at draw time, which is
 ; slow but in the right place, where it used to fall back on drawing

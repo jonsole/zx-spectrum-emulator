@@ -9,7 +9,7 @@
 ; Scenery templates carry their own positions, so a piece is copied almost
 ; field for field into an object record. Object templates do not -- one block
 ; template serves every block in the castle -- so their positions come from the
-; room, one packed byte each, unpacked in room_objects below.
+; room, one packed byte each, unpacked in room_unpack below.
 ;
 ; See room_data.s, which rooms.py generates, for the data itself.
 ; ---------------------------------------------------------------------------

@@ -6,16 +6,19 @@
 ; blitted -- which is after EVERY object has been updated. So the buffer
 ; cannot be shared: with one between them, the last object to shift would
 ; overwrite what the others had prepared and they would all draw its
-; bitmap. Each movable object carries its own instead.
+; bitmap. Each object that needs one takes its own from the room's arena --
+; see shift.s -- or, if it is marked OBJ_SHARED_SHIFT or the arena is full,
+; rotates into the one shared buffer at the moment it is drawn.
 ;
 ; An object that is only ever drawn byte-aligned never reaches that path,
-; so it needs no buffer at all and passes 0.
+; so it needs no buffer at all, and a record declared with object_record
+; passes 0 for one to be found when it is wanted.
 
 OBJ_MOVABLE			EQU		0x80		; FLAGS bit 7
 
 ; FLAGS bit 5: SPRITE_L/H points at this object's own rotated copy rather
 ; than at the shared graphic. Set by shift_sprite, cleared on the byte-
-; aligned path. redraw_orient skips these -- the copy is private, it was
+; aligned path. sprite_orient skips these -- the copy is private, it was
 ; rotated from the orientation the object wanted, and SPRITE - 2 is not a
 ; sprite header at all but whatever happens to precede the buffer.
 OBJ_SHIFTED			EQU		0x20
@@ -123,9 +126,9 @@ SCREEN_ROWS			EQU		192		; the last row an object may be drawn on
 ; layout, so the row is flipped back here -- which is why Z is
 ; subtracted rather than added.
 ;
-; The two origins are Knight Lore's $80 and $68 in spirit: they say
-; where the world's origin lands on screen, and are ours to choose.
-; These put a floor (Z = 0) across the lower half with U, V in 0..120.
+; The two origins say where the world's origin lands on screen, and are
+; ours to choose. X is 128; Y is 40, which is 296 mod 256 -- the origin
+; Knight Lore itself uses, once its bottom-up rows are turned over.
 ; object_place is where the projection is done.
 WORLD_X_ORIGIN		EQU		128
 WORLD_Y_ORIGIN		EQU		40		; 296 mod 256 -- the origin Knight Lore itself uses
@@ -843,7 +846,7 @@ object_update:
 					; before shift_sprite rotates: a rotated copy is private to one
 					; object and nothing looks at it again, so it must be taken from
 					; the orientation that object asked for. An unshifted object gets
-					; checked again at draw time, in redraw_orient, because some
+					; checked again at draw time, in sprite_orient, because some
 					; other object may mirror the shared bytes in the meantime.
 					;
 					; BC is the screen position and is wanted below; DE is not live
@@ -872,15 +875,15 @@ object_update:
 					; MAX_X is EXCLUSIVE -- the first byte column past the object, so
 					; MAX_X - MIN_X is its width in bytes. That is what
 					; extent_intersect needs: it takes the overlap as the smaller of
-					; the sprite width and the distance to the view edge, and an
-					; overlap wider than the sprite indexes past the last
-					; sprite_blit_N_of_M entry for that width and into the jump
-					; table's padding, which then executes as code.
+					; the sprite width and the distance to the view edge. When the
+					; blit was one unrolled routine per (columns, width) pair, an
+					; overlap wider than the sprite indexed past them all and into
+					; the jump table's padding, which then ran as code.
 					;
-					; (hl) is the BLIT INDEX, (width-2)*32, not a width in bytes --
-					; sprites.py changed that encoding, see the commented-out line
-					; beside it. So unpack the width back out rather than adding it
-					; raw, which is what the old "adc (hl) / inc a" did.
+					; (hl) is the BLIT INDEX, (width-2) * JUMP_GROUP, not a width in
+					; bytes -- sprites.py changed that encoding. So unpack the width
+					; back out rather than adding it raw, which is what the old
+					; "adc (hl) / inc a" did.
 					ld		a,(hl)		; blit index: (width - 2) * JUMP_GROUP
 					sprite_width_class
 					add		a,2		; width in bytes
@@ -1513,9 +1516,9 @@ objects_draw_all:
 					; blitter, and sprite_blit_setup writes into it the two
 					; numbers that used to pick between twenty.
 					;
-					; Out of line only to keep this loop inside a byte's reach:
-					; the four filter tests above are JRs, and the setup is
-					; longer than what is left of their range.
+					; Out of line because it was once the thing that kept this
+					; loop inside a JR's reach of the filter tests above. They
+					; are JPs now, and it stays out of line for its size.
 					ex		af,af'				; x overlap: the columns to composite
 					jp		sprite_blit_setup
 

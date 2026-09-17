@@ -17,7 +17,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 |---|---|
 | `object_struct.s` | The `OBJ` record and `ROOM_STRIDE`, the 32-byte slot every record sits in |
 | `sprite_defs.s` | Sprite header layout and the `sprite_width_class` macro |
-| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 8×512-byte `sprite_rotate_table` for sub-byte shifts |
+| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 7×512-byte `sprite_rotate_table` for sub-byte shifts |
 | `sprite_flip.s` | `sprite_flip_h` mirrors a sprite in place; `bit_reverse_bytes` makes its table |
 | `object.s` | Projection (`object_place`), bounds and rotation (`object_update`), the draw walk (`objects_draw_all`), and collision (`object_collide`) |
 | `depth.s` | The depth-ordered list: insert, unlink, step and relink. See [depth.md](depth.md) |

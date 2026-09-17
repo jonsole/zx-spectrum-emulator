@@ -62,14 +62,16 @@ includes the rest into it, the engine's files as `../engine/`:
 
 | Region | What goes there |
 |---|---|
-| `$5B00` | Room building, which runs once a room: `knightlore/room_build.s`, `engine/room.s` |
-| `$6000` | The castle's data: rooms, templates, pixel adjustments, font, sound effects |
-| `$7400` | The view buffer, the object pool, the bit-reverse and sprite tables, and the pick-up code |
-| `$8000` | Everything that runs every turn: the engine, the sprite bitmaps, the game's movers, the player, the sun |
+| `$5B00` | Room building, and a little small code: `knightlore/room_build.s`, `engine/room.s`, `knightlore/glance.s`, `knightlore/end_at.s` |
+| `$6000` | The castle's data: rooms, templates, pixel adjustments, the panel's pieces, the font, the collectables' tables, the shared rotation buffer, the sound effects |
+| `$7400` | The view buffer, the object pool, the clock, the bit-reverse and sprite tables, and the pick-up code with `engine/screen.s` |
+| `$8000` | The engine, the sprite bitmaps, the game's movers, the player, the sun |
 
-`$5B00` to `$7FFF` is contended memory, which is why only code that does not run
-every turn goes there. Each region ends with an `ASSERT` and a `DISPLAY` of the
-space it has left.
+`$5B00` to `$7FFF` is contended memory, where the ULA delays every access, so
+what goes there is what can afford it: data read when a room is built, code that
+runs only when a key is pressed, and a few small things that run every turn.
+Each region ends with an `ASSERT` that it fits and a `DISPLAY` of the space it
+has left.
 
 **[engine/](engine/README.md)** is the engine: blit, projection, depth sort,
 rotation arena, dirty-region redraw, collision, characters and movers. Its
@@ -84,7 +86,7 @@ README lists what a game has to supply.
 | `main.s` | The main loop: menu, a new game, a turn; the room being played |
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |
-| `glance.s` | His top half looking about while he stands |
+| `glance.s` | His top half looking about as he goes |
 | `movers.s` | Every behaviour: slides, fires, balls, guards, gates, the ghost, blocks, spells |
 | `special.s`, `pickup.s` | The collectables and the cauldron; picking up, putting down, the carried objects |
 | `room_build.s` | Decoding a room from the castle's templates; printing the day and lives |
@@ -99,10 +101,11 @@ README lists what a game has to supply.
 The generated files and the scripts that make them are in `knightlore/` too --
 see [The pipeline](#the-pipeline).
 
-The central trick is that the blitter is unrolled and jump-tabled: rather than
-branching on width/shift/height at runtime, an index is computed into a table
-of specialised routines and jumped straight into. Most of the cleverness is in
-address arithmetic, not control flow.
+The blitter is one routine, patched for each sprite: `sprite_blit_setup` writes
+in how many columns of a row land in the region and where the clipped ones end,
+so nothing is decided per row. `sprite_jump_table` holds only the arithmetic
+that turns a row count into a byte offset for each width. Most of the
+cleverness is in address arithmetic, not control flow.
 
 ## Depth sorting
 
@@ -110,8 +113,8 @@ address arithmetic, not control flow.
 examples; this section is the summary.
 
 Draw order is a permanent invariant of the list, not something recomputed. When
-an object moves it is unlinked and re-inserted in one pass; an object whose
-step is zero costs one `OR` and nothing else. There is no sort.
+an object moves it is unlinked and re-inserted in one pass; a zero step is
+caught by `depth_add_step`'s test and goes no further. There is no sort.
 
 This is Head Over Heels' design. Knight Lore instead rebuilds a list of dirty
 objects every frame and repeatedly scans for one that nothing occludes, draws it
@@ -119,25 +122,33 @@ and restarts from the head — O(n²) at best, and since a "draw that one first"
 decision discards the scan and restarts with a new candidate, O(n³) worst case,
 bounded only by an 8-entry cycle stack.
 
-**The comparator.** `depth_cmp` compares two solid boxes. On any axis where they
-do *not* overlap, that axis's coordinate is part of the key; where they do
-overlap the axis says nothing and contributes nothing. That single rule is
-exactly Head Over Heels' seven-case dispatch table — their key is always the sum
-over the non-overlapping axes — with no dispatch at all, and the eighth case
-(all three overlapping, i.e. interpenetration) falls out as the empty sum.
+**The comparator.** `depth_cmp` compares two solid boxes. On any floor axis
+where they do *not* overlap, that axis's coordinate difference is part of the
+key; where they do overlap the axis says nothing and contributes nothing. That
+single rule is exactly Head Over Heels' seven-case dispatch table — their key is
+always the sum over the non-overlapping axes — with no dispatch at all, and
+interpenetration falls out as the empty sum.
+
+Z is the exception: a separation in Z still says which box is nearer, but its
+term is left out of the sum. The sum is only read when the separating axes
+disagree, and when one of them is Z that is something above and behind
+something else — the knight's body over the top of a table he is pushing —
+where the floor is what the eye goes by.
 
 The *signs* are ours, not theirs. `object_place` sends `+U` down the screen and
 `+V` up it, so the projection's null direction — which for an orthographic
-projection is the depth axis — is `(1,-1,1)`, and depth is **`U - V + Z`**. Head
-Over Heels' `U + V + Z` comes from a projection where both floor axes descend.
+projection is the depth axis — is `(1,-1,1)`: `+U` and `+Z` are nearer, `+V`
+further. Head Over Heels' `U + V + Z` comes from a projection where both floor
+axes descend.
 
-**Two return values.** `depth_cmp` returns both an ordering (carry) and whether
-that ordering is *authoritative* — true exactly when one axis separates the
-boxes. The insert scan needs this because isometric depth is genuinely
-non-transitive: A in front of B in front of C in front of A is constructible, so
-there is no total order to sort by. The scan's insertion point therefore *lags*
-its cursor: a merely-guessed ordering advances the cursor but is not trusted
-enough to commit to.
+**Two answers.** `depth_cmp` returns an ordering (carry) and whether it is
+*certain* (`A = 0`). It is certain when every axis that separates the boxes
+names the same one as nearer — two agreeing axes are more certain than one, not
+less. Axes that disagree, or none at all, leave a guess from the sum. The insert
+scan needs the difference because isometric depth is genuinely non-transitive:
+A in front of B in front of C in front of A is constructible, so there is no
+total order to sort by. The scan's insertion point therefore *lags* its cursor:
+a guessed ordering advances the cursor but is not trusted enough to commit to.
 
 **The list is doubly linked purely so unlink is O(1).** The reverse chain is
 never used for drawing. `PREV` does not point at the previous object — it points
@@ -157,8 +168,8 @@ screen movement at all.
 **No extra repainting is needed.** A relink is a single-element permutation, so
 it preserves the relative order of every other pair — two objects that did not
 move cannot swap. An object's position in the list can only affect pixels it
-covers, so the union of its old and new extents, which `redraw_moved` already
-repaints, is exactly sufficient.
+covers, so the union of its old and new extents, which a move repaints anyway,
+is exactly sufficient.
 
 ## Isometric world coordinates
 
@@ -182,45 +193,48 @@ flipped back here — which is why Z is subtracted rather than added, and why
 `object_update` now takes `B` as the sprite's **base** row and derives the top
 as `base - height`. That is what makes `Z = 0` mean "standing on the floor".
 
-`WORLD_X_ORIGIN`/`WORLD_Y_ORIGIN` are Knight Lore's `$80` and `$68` in spirit:
-they say where the world origin lands on screen, and are ours to pick.
+`WORLD_X_ORIGIN` and `WORLD_Y_ORIGIN` say where the world's origin lands on
+screen: 128 and 40 -- Knight Lore's own Y origin, 296, taken mod 256 once its
+bottom-up rows are turned over.
 
-**Objects without a shift buffer must keep `U + V` a multiple of 8.** In world
-coordinates a static object no longer lands on a byte boundary by luck, and an
-object with no buffer cannot be rotated. `object_update` refuses rather than
-rotating into a null pointer — it draws byte-aligned, up to 7 pixels left of
-true. The origin is itself a multiple of 8, so keeping the sum aligned keeps
-such objects exact.
+In world coordinates most objects land off the byte grid, and those are rotated
+into a buffer to be drawn -- see [Shift buffers](#shift-buffers). Nothing has to
+keep `U + V` on a multiple of 8.
 
-The two static objects are placed **once**, before the loop: `objects_draw_all`
-only ever reads a record, so their extents, blit index and sprite pointer stay
-valid frame after frame. The two movers are updated every frame from a `MOVER`
-record (`x`, `dx`, `min`, `max`) by `mover_step`.
+A static object is placed once, when its room is built: `objects_draw_all` only
+ever reads a record, so its extents, blit index and sprite pointer stay valid
+until something moves it.
 
 ## Redrawing only what moved
 
-Nothing draws the whole screen. The objects are spread far enough apart that no
-single view could hold them — the view buffer is `VIEW_BUF_WIDTH` bytes across
-and the scene is most of the screen — so the loop redraws **per moved object**:
+Nothing is redrawn but what changed. A move repaints the union of where the
+object was and where it now is, and every mover does it the same way --
+`mover_paint`:
 
 ```
-for each mover:
-    extent_save         remember the extent it has now
-    mover_step          move it
-    object_update       recompute its extent
-    redraw_moved        repaint the union of the two
+region_reset, region_add      the extent it has now
+depth_step                    move it, and re-sort it if it moved
+room_adjust, object_place     its new extent
+region_add                    ...added to the region
+redraw_defer                  repaint the region, or hold it back
 ```
 
-`redraw_moved` sets `view_x_extent`/`view_y_extent` to the union of where the
-object was and where it now is, then `redraw_view` clears just those rows of
-the buffer, calls `objects_draw_all`, and copies the region to the screen. The
-old half of the union erases the previous image; the new half draws it where it
-is. Because `objects_draw_all` composites **every** object intersecting the
-region, anything the mover passed over is put back in the same pass — which is
-what makes the pillar and block reappear intact behind it.
+`redraw_view` clears just the region's rows of the view buffer, calls
+`objects_draw_all`, and copies the region to the screen. The old half of the
+union erases the previous image; the new half draws it where it is. Because
+`objects_draw_all` composites **every** object intersecting the region,
+anything the mover passed over is put back in the same pass.
 
-The opening screen is built by placing all four objects and then calling
-`redraw_object` (the same path, with no previous extent) once for each.
+`redraw_defer` holds a region back while it overlaps one already waiting and
+the union still fits the buffer, so a ghost carrying two blocks is drawn once
+rather than three times; `redraw_flush` draws whatever is left at the end of the
+turn. A character's two records go into one region (`pair_region_add`), so his
+waist does not flicker between them.
+
+A new room is drawn whole by `redraw_screen`, which composites the screen in
+tiles the size of the view buffer, left to right and top to bottom -- each tile
+once, rather than dragging every object's neighbours through the blit again for
+each of them.
 
 ### The buffer is 8 x 64
 
@@ -252,19 +266,21 @@ covers. `objects_draw_all` gets the row address with three doublings and an
 `rl d` that shifts a pre-halved base back up with the carry underneath it, which
 is why `view_buffer` is `ALIGN 512`: it needs `high view_buffer` to be even.
 
-One bound is left: `rows * width` must stay under 256, because the `vid_buff_*`
-routines use `B` as the row counter while `LDI` decrements `BC` — a borrow out
-of `C` would silently eat a row. That would now be reachable (64 × 8 is 512), so
-the copy resets `C` every row rather than rely on the total.
+One bound is left: `rows * width` can reach 512, and the copy uses `B` as its
+row counter while `LDI` counts `BC` down -- a borrow out of `C` would silently
+eat a row. So the copy reloads `C` every row, from `D`, the screen address's
+high byte, which is never below `$40`.
 
-The region width varies, so the copy is dispatched through `copy_routines`:
-`vid_buff_copy_1..8`, one per column count.
+The copy is one routine for every width, `vid_buff_copy`. `redraw_view` patches
+in the step from the end of one buffer row to the start of the next, and aims
+the routine's DJNZ at the point in its chain of eight `LDI`s where a row of this
+width starts -- so the jump into the chain is the loop's own, and a row decides
+nothing.
 
 The clear is sized to the region for the same reason. Blanking all 512 bytes
-would cost 2816T every region, twice what the old 256-byte buffer did, and the
-rows past the region are never read. `push de` is one byte, so where the run of
-pushes is entered decides how much it clears — enter it `rows * 4` pushes from
-the end. A 30-row region costs 1320T, under what the old flat clear cost.
+would cost 2816T every region, and the rows past the region are never read, so
+`redraw_view` points `SP` just past the region's rows and pushes zeroes, four
+`push de` a row round a DJNZ: about 1,700T for a 30-row region.
 
 ## Building a room
 
@@ -272,25 +288,29 @@ The example no longer draws one hand-copied room. It builds any of Knight
 Lore's 128 from the game's own data.
 
 Knight Lore does not store rooms as lists of objects. It stores **templates**,
-and a room is four bytes plus a handful of indices naming them. Room $B3 is:
+and a room is three bytes plus a handful of indices naming them. Room $B3 is:
 
 ```
-room_B3:            DB      $06, 4, 0
+room_B3:            DB      $B3, 6, $86
                     DB      BG_ARCH_N, BG_ARCH_E, BG_ARCH_S, BG_WALLS_0
 ```
 
-an attribute byte, a scenery count, an object-byte count, and four indices --
-which expand to exactly the 19 objects that used to be pasted into
-`filmation.s`, as the entry source was then. The attribute byte carries the
-room's colour in bits 0-2 and its shape in bits 3 up; there are three shapes,
-`64 x 64 x 128` and two narrower ones, and only the floor changes.
+its number, how far it is to the next record, and a byte carrying its colour in
+bits 0-2, its shape in bits 3-4 and how many scenery indices follow in bits 5-7.
+The four indices expand to exactly the 19 objects that used to be pasted into
+`filmation.s`, as the entry source was then. There are three shapes,
+`64 x 64 x 128` and two narrower ones, and only the floor changes. The records
+are in ascending order, and `room_find` walks them by their skips.
 
 **Scenery** templates carry their own positions, so a piece is
 `sprite, U, V, Z, size U, size V, size Z, flags` -- our object record almost
-field for field, which makes the expansion a copy. **Object** templates carry
-no position at all, so one block template serves every block in the castle;
-their positions come from the room, one packed byte each, three bits of U,
-three of V and two of Z, unpacked in `room_unpack`.
+field for field, which makes the expansion a copy. **Object** templates carry no
+position -- `sprite, size U, size V, size Z, flags, offsets` -- so one block
+template serves every block in the castle. After a room's scenery indices come
+its objects, in groups: a byte naming the template and how many (bits 3-7 and
+0-2), then one packed position each, three bits of U, three of V and two of Z.
+`room_unpack` turns those into a position, nudged half a cell and raised by the
+template's offsets byte.
 
 ### Numbering sprites the game's way
 
@@ -307,29 +327,32 @@ buffer's row address uses, and it needs the same `ALIGN 512`.
 Every sprite is nudged a few pixels so its artwork lines up with its logical
 position. Knight Lore picks those inside **29 different per-graphic update
 routines** -- it is behaviour, not a table -- so `adj.py` takes the values
-rather than the code, driving a running game and reading the pairs out of live
-object records. Ten rooms cover all 50 (graphic, mirrored) pairs the castle
-uses. The result reproduces all 19 of room $B3's adjustments exactly.
+rather than the code. It drives a running game, walks and turns the knight,
+forces room after room, and reads the pairs out of live object records. Where a
+routine loads a fixed pair, `adj.py` has that from the code too (`FROM_CODE`),
+and every graphic both read from the code and harvested agrees. The few body
+facings the game never shows borrow their other side's (`STANDS_IN`).
+
+The harvest is `sprite_adj.s`, committed because it cannot be rebuilt without
+the game. `sprites.py` folds in the blank rows it takes off the bottom of each
+sprite and writes `sprite_adj_gen.s`, which is what the build includes.
 
 Forcing a room needs no register writes: the frame loop ends with `JP $AFBD` at
 `$B085`, one instruction past the room-entry call, so pointing it at `$AFBA`
 makes the game rebuild whatever room `$5C10` names, every frame.
 
-### What is not clipped
+### Clipping at the screen's edges
 
-An object whose top runs off the screen is **dropped**. `MIN_Y` is a single
-byte, so `base - height` wraps when a sprite is taller than its base row; the
-region that implies is hundreds of rows tall, and the offset into the view
-buffer overflows the one carry the row address can take, which puts the blit
-outside the buffer entirely. It found this by overwriting the room templates.
+An object whose top runs off the screen is clipped, not dropped. `MIN_Y` is a
+single byte, so `base - height` would wrap for a sprite taller than its base
+row. Instead `object_update` clamps `MIN_Y` to row 0 and keeps the rows it lost
+in `CLIP_TOP`, and `objects_draw_all` starts the bitmap that many rows in, on
+top of whatever the region itself cuts off. A base below the last row is
+clipped to it, and an object wholly below the screen gets an empty extent.
 
-Rooms with tall stacks lose a few objects to this. Clipping a sprite against
-row 0 -- clamping the extent and starting the bitmap that many rows in -- is
-the fix, and it has to work through the rotation path too, so it is its own
-piece of work rather than a guard.
-
-Foreground objects are placed but inert: no monster moves and nothing
-animates. Placement is room generation; behaviour is not.
+Ultimate never needed the first of these. Their artwork is stored bottom row
+first and drawn upward from the base, so running off the top just means
+stopping early; top-down data has to find its first visible row instead.
 
 ### The pipeline
 
@@ -339,13 +362,13 @@ Nothing here is hand-written:
 |---|---|
 | `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
 | `knightlore/rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
-| `knightlore/sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` |
+| `knightlore/sprites.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprite_data.s` and `sprite_table.s`; with `sprite_adj.s`, -> `sprite_adj_gen.s` |
 | `knightlore/adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
 
 `build.py` runs `rooms.py` and `sprites.py` whenever their inputs change. The
-extracted files and `sprite_adj.s` sit beside them. The room data and the adjustment tables
-live in contended memory at `$6000`: they are read when a room is built and
-never again, which is where the game itself kept them.
+castle's data lives in contended memory at `$6000`, as the game's own did: the
+room tables are read only when a room is built, and the adjustment lookup is a
+handful of reads a move.
 
 ## Mirroring
 
@@ -372,141 +395,138 @@ about 1.2 KB for this room alone and grows with every room, which gives back
 exactly what mirroring was for.
 
 The header has room for the flag because byte 0 is the blit index,
-`(width - 2) * 32`, so bits 5-7 are the width class and bits 0-4 are spare.
-Knight Lore keeps the same state in the same byte at bit 6, which is part of
-the width field for us. Anything using byte 0 as a jump-table index masks it
-with `BLIT_IDX_MASK` first; the width unpack does not need to, since it rotates
-the class down and masks with 7 on the way past.
+`(width - 2) * 16`, so bits 4-6 are the width class. Bit 0 is the orientation,
+and bit 7 marks a frame of an animation, whose rotation buffer is sized for the
+largest frame. Knight Lore keeps the orientation in the same byte at bit 6,
+which is part of the width field for us. Anything using byte 0 as a jump-table
+index masks it with `BLIT_IDX_MASK` first; `sprite_width_class` does not need
+to, since it rotates the class down and masks with 7 on the way past.
 
-`sprite_flip_h` makes two passes over each row: the first reverses the bits of
-every byte where it lies, the second swaps the columns end for end. Splitting
-them is what keeps the second free of a special case for an odd middle column —
-widths 1, 3 and 5 all occur — because a column with no partner is simply never
-reached, and the first pass has already dealt with it.
+`sprite_flip_h` makes one pass over each row, from both ends at once: the near
+column takes the far one's bytes reversed and the far column the near one's,
+until the two meet. An odd middle column -- widths 1, 3 and 5 all occur -- needs
+nothing of its own: when the ends reach it they are the same column, and
+swapping it with itself, reversed both ways, leaves it reversed in place.
 
-### Sharing means checking at render time
+### Sharing means checking at draw time
 
 Because the bytes are shared, an object that draws a graphic unmirrored can find
 that another object has mirrored it since. So the orientation is checked **when
-the object is about to be rendered**, not when it is placed. Two places do it:
+the object is about to be drawn**, not only when it is placed:
 
-- `object_update`, before the width is read and before `shift_sprite` rotates. A
-  rotated copy is private to one object and nothing looks at it again, so it has
-  to be taken from the orientation that object asked for.
-- `redraw_orient`, walking the list immediately before `objects_draw_all`, for
-  every object still drawing from the shared graphic.
+- `object_update`, before the width is read and before a rotation. A rotated
+  copy is private to one object and nothing looks at it again, so it has to be
+  taken from the orientation that object asked for.
+- `sprite_orient`, inside `objects_draw_all`, for each object as it is about to
+  be blitted.
 
-`FLAGS` bit 5 says which of the two an object is: set by `shift_sprite`, cleared
-on the byte-aligned path. `redraw_orient` skips the shifted ones — their
-`SPRITE_L/H` points into a private buffer, so `SPRITE - 2` is not a sprite
-header at all. For an unshifted object it is, because `SPRITE` is the record
-plus 2 and records are `ALIGN 4`, so the two `dec l` cannot borrow.
+`FLAGS` bit 5 (`OBJ_SHIFTED`) says an object draws from private bytes -- its own
+rotated buffer, or a cached copy -- and `sprite_orient` leaves those alone:
+their `SPRITE_L/H` points into the arena, so `SPRITE - 2` is not a sprite
+header at all. For any other object it is, because `SPRITE` is the record plus
+2 and records are `ALIGN 4`, so the two `dec l` cannot borrow. `FLAGS` bit 0 is
+the orientation the object wants, in the same bit position as `SPRITE_FLIPPED`
+in the header, so comparing them is a plain `XOR`.
 
-`FLAGS` bit 0 is the orientation the object wants, in the same bit position as
-`SPRITE_FLIPPED` in the header, so comparing them is a plain `XOR`.
+It used to be settled once per region, by a `redraw_orient` pass before
+`objects_draw_all`, because the draw loop reads its record through `SP` and had
+no stack to call with. That cannot work: two objects in one region wanting
+opposite orientations leave whichever the pass reached last holding the
+graphic, and room $88 put a few pixels of one arch leaf on the other. The loop
+now puts the real stack back once it has read the sprite address -- the last
+thing it wants from the record -- and calls `sprite_orient` there.
 
-### Why not inside `objects_draw_all`
+### Pieces that would fight over a graphic
 
-That is where the check belongs by rights, and it will not fit. The routine
-repurposes `SP` as its record pointer and reads the record as a sequential run
-of `POP`s: `pop iy` takes NEXT, so `IY` holds the *next* object rather than this
-one, and the record is reachable only through `SP`. `FLAGS` lands in `E` and the
-sprite address in `HL'`, on opposite sides of a `jp (hl)` through
-`sprite_jump_table` and an `exx`. `redraw_orient` runs at the same point in the
-frame with a normal stack and free registers, and leaves the hot loop alone.
+A graphic that two objects in one region want opposite ways round is mirrored
+back and forth, twice a region -- ten thousand T a time for something the size
+of an arch leaf. Standing in front of room $88's two right-hand leaves cost 85%
+of a turn.
 
-It applies the same extent cull `objects_draw_all` does. Without it, every object
-in the room would be dragged into whichever orientation it wanted on every single
-region, and objects sharing a graphic in opposite orientations would mirror it
-back and forth for nothing.
+So `rooms.py` finds the graphics some room wants both ways, nominates one
+orientation of each, and marks every piece wearing it `OBJ_CACHE`. Those draw
+from a private copy out of the arena -- one copy a graphic, shared by its twins
+in the same room -- and everything else goes on sharing.
 
-### What it costs
-
-Painting the room went from 301,113 T to 373,598 T, a one-off 24% on the opening
-screen: 15 mirrors during the draw against a floor of about 11 (a graphic must be
-turned once for each run of objects wanting the same side), plus `redraw_orient`
-walking 19 objects for each of 19 regions.
-
-Steady state is the cull walk, roughly 1.3 kT per region, and nothing else —
-mirrors only happen when two objects sharing a graphic in **opposite**
-orientations fall inside the **same** region. Dirty-rectangle redraw makes that
-much rarer than it is in Knight Lore, which repaints every dirty object every
-frame. This room never hits it: the three copies of graphic 71 are far apart.
-
-Placement costs 14 mirrors, which is exactly the number of times the requested
-orientation differs from the last one asked for, walking `room_data` in order.
-
-## Shift buffers, one per movable object
+## Shift buffers
 
 An object at a sub-byte X offset is drawn by rotating its sprite into a buffer
-first, and that rotated copy has to survive until the object is blitted —
-which happens after *every* object has been updated. So the buffer cannot be
-shared: with one between them, the last object to shift would overwrite what
-the others had prepared, and they would all draw its bitmap.
+first, and that rotated copy has to survive until the object is blitted --
+which happens after *every* object has been updated. So objects that rotate
+when they are placed cannot share a buffer: the last one to rotate would
+overwrite what the others had prepared, and they would all draw its bitmap.
 
-Each movable object therefore carries its own buffer, as a `BUF_L`/`BUF_H`
-pointer in its `OBJ` record. `object_update` rotates into that buffer and
-points the object's `SPRITE_L/H` at it.
-
-An object that is only ever drawn byte-aligned never reaches the shifting path
-at all — its `SPRITE_L/H` point straight at the sprite's own bitmap — so it
-needs no buffer and carries a null pointer. The pillar and block here allocate
+Each of them takes its own from a per-room arena, `shift_arena` (4,992 bytes),
+the first time `object_update` finds it off the byte grid, and `shift_reset`
+hands the arena back when the next room is built. Which objects need one is a
+property of where the room puts them -- in world coordinates most statics land
+on an arbitrary pixel -- so it is settled then rather than declared with the
+record. A buffer is sized for the largest frame its object will show, and
+carries two bytes in front saying what is in it, so a move that changes neither
+the graphic, the shift nor the way round -- a ghost going diagonally -- rotates
 nothing.
+
+An object marked `OBJ_SHARED_SHIFT`, or one the arena has run out for, has no
+buffer of its own. It rotates at the moment it is drawn, into the one shared
+buffer, `shift_shared` -- 416 bytes, the arch leaf `sprite_071` rotated -- which
+is slower every time it is drawn but in the right place. It used to fall back on
+drawing byte-aligned, up to seven pixels left of true.
+
+The knight's two buffers are taken once a game and kept (`character_keep`,
+`shift_kept`), sized for the sparkle his legs die as and the werewolf's body.
 
 Records are declared with the `object_record` macro:
 
 ```
-object_pillar:      object_record   0,           0,                   12, 12, 30
-object_player:      object_record   OBJ_MOVABLE, player_shift_buffer, 16, 16, 13
+                    object_record   flags, shift_buf, size_u, size_v, size_z
 ```
 
-`SHIFT_BUFFER_MAX` (416) is the worst case across this whole sprite set —
-sprite 71, 3 bytes × 52 rows, needing `(width + 1) * 2 * height`. Sprites 5
-bytes wide are not in that figure because they cannot be shifted at all:
-`object_update` bumps `BLIT_IDX` by one width-class for the overflow column,
-and `96 + 32` is past the end of `sprite_jump_table`. An object that only ever
-uses one known sprite can be given exactly `(width + 1) * 2 * height` instead.
+where `shift_buf` is 0 for a buffer to be found when one is wanted. A 5-byte
+sprite can be rotated too: its rotated form is 6 bytes wide, and
+`sprite_jump_table` has a group for that.
 
 
 ## Changed since the import
 
 `object_update` computed `MAX_X` by adding the sprite record's first byte to
-`MIN_X`. That byte is the *blit index*, `(width-2)*32`, not a width in bytes —
-`sprites.py` changed the encoding and this was never updated — so `MAX_X` came
-out far too large for anything wider than 2 bytes.
+`MIN_X`. That byte is the *blit index* -- `(width-2)*32` then, `(width-2)*16`
+now -- not a width in bytes, and `sprites.py` had changed the encoding without
+this being updated, so `MAX_X` came out far too large for anything wider than 2
+bytes.
 
 It survived on the right, where `extent_intersect` saturates and an over-large
 `MAX_X` just reads as "extends past the edge". It did not survive elsewhere:
 the overlap is taken as the smaller of the sprite width and the distance to
 the view edge, so a **3-byte sprite at the view's left edge** got an overlap of
-5 (the view width). The blit dispatch is `4 + overlap*4 + BLIT_IDX`, which for
-overlap 5 in the 3-byte group lands on `sprite_jump_table` **padding** — it
-jumps into `DB 0,0,0,0`, runs on through the `DW` as code, and a stray `PUSH`
-writes over the object record, because `SP` is still pointing into it.
+5 (the view width). The blit was then one unrolled routine per columns-and-width
+pair, dispatched as `4 + overlap*4 + BLIT_IDX`, which for overlap 5 in the
+3-byte group landed on `sprite_jump_table` **padding** -- it jumped into
+`DB 0,0,0,0`, ran on through the `DW` as code, and a stray `PUSH` wrote over the
+object record, because `SP` was still pointing into it.
 
 `MAX_X` is now `MIN_X + width`, exclusive, with the width unpacked back out of
 the blit index; the shift path bumps it by one alongside the `BLIT_IDX` bump,
-for the overflow column. This is a fix to the engine, not just to the demo —
+for the overflow column. This is a fix to the engine, not just to the game --
 it is a divergence from the original project tree.
 
 Two further engine changes, both in `object.s`:
 
-- `OBJ` gained `BUF_L`/`BUF_H`, and `object_update` now rotates into the
-  object's own buffer instead of one shared `shift_buffer DS 512`. The shared
-  buffer is gone. The new fields sit after `SPRITE_H`, so the sequence of
-  `POP`s `objects_draw_all` reads a record with is untouched.
+- `OBJ` gained `BUF_L`/`BUF_H`, and `object_update` rotates into the object's
+  own buffer instead of one shared `shift_buffer DS 512`. The new fields sit
+  after `SPRITE_H`, so the sequence of `POP`s `objects_draw_all` reads a record
+  with is untouched. (A shared buffer came back later, for objects that rotate
+  at draw time -- see [Shift buffers](#shift-buffers).)
 - An `object_record` macro and an `OBJ_MOVABLE` flag, so a record declares its
-  own chaining, movability and buffer rather than being a bare `DW` plus
-  padding.
+  flags, buffer and box rather than being a bare `DW` plus padding. Its `NEXT`
+  and `PREV` start at zero, and the depth list fills them in.
 
 ## Cost
 
 These figures were taken on the **demo scene**, which had three movers walking
-around a stack of cubes. That scene is gone -- the example now draws a static
-Knight Lore room -- and they predate both the 8 x 64 view buffer and mirroring,
-so treat them as a profile of the drawing path rather than of what runs today.
-The current numbers for the room are under "The buffer is 8 x 64" and
-"Mirroring" above.
+around a stack of cubes. That scene is gone -- the example is the whole game
+now -- and they predate the 8 x 64 view buffer, mirroring, the single blitter
+and the rotation arena, so treat them as a profile of the drawing path rather
+than of what runs today.
 
 Measured on a cycle-accurate bus trace of one main-loop iteration, with three
 movers: **95,494 T-states, or 1.37 of a 69,888 T frame.** With two movers it was
@@ -542,102 +562,55 @@ Pre-shifting sprites would remove the rotation entirely, but only for objects
 whose sprite does not change: pre-computing all eight alignments costs eight
 rotations, so it pays only if an animation frame survives more than eight
 movement steps. A character animating every two to four frames would do *more*
-work, not less, regardless of how much memory was available for it.
+work, not less, regardless of how much memory was available for it. What is done
+instead is to remember what a buffer holds, so a move that leaves the graphic,
+the shift and the way round alone rotates nothing.
 
-These timings are **uncontended** — `cpp-core` does not model ULA memory
-contention yet. The correction is small here because everything except the
-screen writes lives above `0x8000`; the stack is explicitly moved to
-`STACK_TOP` at startup for the same reason, since whatever loaded the game
-leaves it where its own stack was -- `0x5D56`, in the `.sna` this used to
-build, inside the contended window.
+These timings are **uncontended** -- `cpp-core` does not model ULA memory
+contention yet. The correction is not nothing: the code and the sprite data are
+above `0x8000`, but the object pool, the view buffer and a little per-turn code
+sit below it. The stack is moved to `STACK_TOP` at startup for the same reason,
+since whatever loaded the game leaves it where its own stack was -- `0x5D56`,
+in the `.sna` this used to build, inside the contended window.
 
-## Collision detection — notes for later
+## Collision
 
-Not implemented. Written down while the profiling was fresh, because the design
-is more constrained than it looks and one piece of it already exists.
+A character or a mover proposes a step, and `object_collide` cuts it down until
+it fits. The shape is Knight Lore's: one axis at a time, Z first and then U and
+then V, each settled before the next is looked at, and each cut by stepping the
+delta a unit towards zero and testing again (`object_clamp`). That one loop gives
+walls, sliding along them, landing on a block and bumping your head on its
+underside, without any of them being written down separately.
 
-### It is already latent in `depth_cmp`
+- **Boxes** are the game's. `SIZE_U` and `SIZE_V` are half-extents about the
+  object's U and V, and `SIZE_Z` is its whole height up from Z.
+  `object_overlaps` tests two of them, U first because most things in a room are
+  somewhere else along the floor, and touching counts as apart, which is what
+  lets a character stand on a block. A character collides as one box for both
+  his records, `COLLIDE_HEIGHT` tall.
+- **The broad phase is in world space.** `collide_gather` collects, once a
+  move, every record whose box meets the box swept by the whole step, and the
+  clamp walks only that list. Screen space would filter nothing: two sprites
+  can overlap on screen while being far apart in the world, and in an isometric
+  view that is the common case.
+- **Contacts** each get a say. `object_shove` hands something loose the step it
+  was hit with, `object_carry` gives a rider the step of whatever it stands on,
+  `object_touched` marks a character that has met something deadly, and
+  `object_landed_on` marks a block that gives way under a weight. Which
+  behaviours are which is the game's to say -- see the behaviour bands in
+  [engine/README.md](engine/README.md).
+- **The room** is the walker's part. `object_collide_room` clamps against the
+  room's edges and its floor as well as what stands in it, and a character in a
+  doorway is let through the edge (`character_collide`).
 
-`depth_cmp` counts separating axes in `B` and returns `ld a,b / dec a`:
+What comes back is `collide_hit`: which axes had to give, the floor and the
+edges included.
 
-| separating axes | `A` | meaning |
-|---|---|---|
-| 0 | `$FF` | **all three axes overlap — the boxes interpenetrate** |
-| 1 | `$00` | the ordering is authoritative |
-| 2 | `$01` | heuristic |
-| 3 | `$02` | heuristic |
-
-So `A = $FF` already uniquely identifies a collision, on exact world-space UVZ
-boxes, and we compute it on every comparison and discard it.
-
-That is not a quirk of this port. Knight Lore's ordering routine dispatches a
-27-entry table on the three axis tests, and index 13 — overlap on all three
-axes — is `objs_coincide` at `$CFE1`, which is exactly where "you walked into a
-pickup" is detected: if either object is a collectable (`$60`..`$66`) it is
-replaced with its collect animation on the spot. Collision falls out of depth
-sorting.
-
-The catch is coverage: `depth_cmp` only runs during a relink, and only against
-the candidates that scan happens to visit. It is a source of free collision
-*hints*, not a collision system.
-
-### Any broad phase must be in WORLD space, not screen space
-
-The obvious optimisation is to bin objects into screen sections, give each a
-bitmask of the sections it touches, and reject pairs whose masks `AND` to zero.
-A mask rather than a section *number*, so that an object straddling a boundary
-sets both bits and `AND` means "share a section".
-
-For collisions that must be binned on **U and V**, not on screen position. Two
-sprites can overlap heavily on screen while being far apart in the world — that
-is the entire point of the projection, and it is the common case — so a
-screen-space mask would pass almost every pair and filter nothing.
-
-### The numbers
-
-Exact two-axis extent overlap, measured from the cull in `objects_draw_all`:
-**75 T** to reject on the first axis, **133 T** having tested both, of which
-about 48 T is list-walk overhead. The pure test is **~90 T**, and it is that
-cheap only because the extents are already in the record and `pop` fetches an
-axis for 10 T; written with `ld a,(iy+d)` instead it is ~140 T.
-
-A mask test, both masks adjacent so one `pop` gets them and our own hoisted
-into immediates the way `depth_cmp_setup` does:
-
-```
-pop bc                10   both masks at once
-ld a,c / and <ourU>   11
-jr z,miss              7   -- rejected for 28 T
-ld a,b / and <ourV>   11
-jr z,miss              7
-```
-
-**~46 T for both axes, ~28 T to reject on the first**, or ~27 T from a packed
-array with no pointer chasing. Maintenance is ~150 T per moved object per frame
-to recompute the masks from the extents.
-
-Break-even is around `3.4 x movers` tests per frame:
-
-- **The existing cull: never worth it.** 13 tests a frame against a rectangle;
-  the upkeep eats the saving.
-- **N-squared collision: comfortably worth it.** 13 objects is 78 pairs — about
-  7,000 T exact against ~3,600 T masked, so ~3,400 T saved for ~450 T of upkeep,
-  and the gap widens quadratically as objects are added.
-
-A mask test is conservative — sharing a section is not overlapping — so it is a
-filter in front of the exact test, never a replacement.
-
-### When it is wanted
-
-1. Split the three interval tests out of `depth_cmp` into a routine that answers
-   only "do these boxes overlap". The arithmetic is already written.
-2. Add world-space U/V section masks as the broad phase in front of it.
-3. Optionally harvest `A = $FF` from the relink scan, remembering it only covers
-   pairs that scan visits.
-
-Deliberately not built yet: there is no consumer, so the upkeep would be pure
-loss, and broad-phase filtering only starts paying once there are enough
-pairwise tests to filter.
+`depth_cmp` takes no part. It once counted separating axes and returned `$FF`
+for none -- interpenetration, the case Knight Lore's own ordering routine hands
+to `objs_coincide` at `$CFE1` to pick up a collectable -- but it only ever ran
+against the candidates a relink happened to visit, and it now answers only
+"certain" or "a guess".
 
 
 ## The menu
@@ -668,7 +641,8 @@ of its notes -- `$16`, `$24` and `$25` -- were not in `tune_notes`, and their
 half periods and beat lengths come from the same frequency table at `$B332` as
 the rest.
 
-The whole thing costs 408 bytes.
+It all comes to 609 bytes, the frame drawn round it included. 0 starts the game
+to `tune_start`.
 
 ## What the player is asking for
 
@@ -732,10 +706,10 @@ pixelAddress:   ld      a,b
                 jp      $22B0       ; PIXEL-ADD, past BASIC's range check
 ```
 
-- **Saves** about 18 bytes of the code region.
+- **Saves** about 22 bytes of the code region: `pixelAddress` is 26.
 - **Same contract** as far as the callers go: C, DE and HL as before, B comes
   back as it went in (it copies A into it). It returns A = x AND 7 where ours
-  leaves A = L; none of the four callers reads A afterwards.
+  leaves A = L; none of the seven call sites reads A afterwards.
 - **Speed** is the same to within the extra jump: a similar number of
   instructions, and the ROM is never contended.
 - **Cost:** the game depends on the 48K ROM's layout. The 128K's 48 BASIC ROM
@@ -760,12 +734,12 @@ would hold both, 1,792 bytes instead of 3,584.
 
 ### Cold code into the room builder's region
 
-`$5B00..$5FFF` holds `room.s` and `glance.s` and has 42 bytes free; the code
-region has 1,029. Both are RAM the same CPU reaches, so anything cold enough not
-to mind contended memory can move down there -- `end_at`, `end_attr_at` and
-`end_seen` are about the right size together. It buys the code region those 42
-bytes and costs nothing but the churn of splitting a file. The tune's timing
-code must NOT go: it counts T-states.
+`$5B00..$5FFF` holds `room_build.s`, `engine/room.s`, `glance.s` and
+`end_at.s`, and has 2 bytes free; the code region has 10. Anything cold enough
+not to mind contended memory can live down there, and `end_at` and
+`end_attr_at` already have. `end_seen` is the one left of that set, and the
+region has no room for it now. The tune's timing code must NOT go: it counts
+T-states.
 
 ### Hand the arena out by what it is worth, not by build order
 
@@ -785,7 +759,9 @@ is worth most to whatever is drawn most:
 | scenery | once per region that reaches it |
 
 The knight is already safe: `character_keep` takes his two buffers once at the
-start and keeps them (see `shift_kept`). The rest are first come, first served.
+start and keeps them (see `shift_kept`). The rest are first come, first served
+-- the collectables' slots, which take a buffer sized for anything a slot can
+show, and the `OBJ_CACHE` copies, which come out of the same arena, included.
 
 A priority pass would mean giving the movers their buffers before the room's
 scenery -- allocating in behaviour order, or letting `room_add` mark a piece as

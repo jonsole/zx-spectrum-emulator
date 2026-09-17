@@ -279,7 +279,7 @@ def emit(out):
     out.pop()
     out.append("; --- room shapes -----------------------------------------------------------")
     out.append(";")
-    out.append("; Three of them, and the index is the top bits of a room's attribute byte.")
+    out.append("; Three of them, and the index is bits 3 and 4 of a room's attribute byte.")
     out.append("; Only the floor changes shape; every room is 128 tall.")
     line("room_size_tbl:", "", "")
     for i, tag in enumerate(("square", "narrow along U", "narrow along V")):
