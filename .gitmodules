@@ -1,3 +1,6 @@
 [submodule "game-disassemblies"]
 	path = game-disassemblies
 	url = https://github.com/jonsole/zx-spectrum-disassemblies.git
+[submodule "examples/zx-tape-loader"]
+	path = examples/zx-tape-loader
+	url = https://github.com/jonsole/zx-tape-loader.git

@@ -44,6 +44,9 @@ zx-spectrum-emulator/
     hello_rom_call/              # tiny original demo, committed
     filmation/                    # isometric masked-sprite engine; multi-file,
                                   #   assembled by its own build.py
+    zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
+                                  #   a fast custom tape loader, and the Python that
+                                  #   renders its tapes to WAV
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels

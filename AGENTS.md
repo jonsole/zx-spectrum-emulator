@@ -110,6 +110,7 @@ changes touch:
 | `vscode-extension/` | Debugger registration, panels, profiler view, Z80 language support |
 | `examples/filmation/` | A real multi-file sjasmplus program, built by its `knightlore/build.py` |
 | `game-disassemblies/` | Submodule: Manic Miner, Fairlight, Atic Atac |
+| `examples/zx-tape-loader/` | Submodule: a fast custom tape loader and the Python that renders its tapes to WAV |
 
 ROM images are not in the repository (`roms/` is gitignored); tests and
 examples that need one skip or say so. `sjasmplus` is at
