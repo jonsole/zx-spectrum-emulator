@@ -114,7 +114,7 @@
       "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
       "problemMatcher": {
         "owner": "sjasmplus",
-        "fileLocation": ["relative", "${workspaceFolder}/examples/filmation"],
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/filmation/knightlore"],
         "pattern": {
           "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
           "file": 1,

@@ -5,7 +5,7 @@
 ; The behaviours themselves are the game's: knightlore/movers.s.
 ;
 ; mover_move comes first on purpose. The game's movers.s ends with a behaviour
-; that falls through into it, and filmation.s includes this file straight
+; that falls through into it, and knightlore.s includes this file straight
 ; after that one.
 ; ---------------------------------------------------------------------------
 

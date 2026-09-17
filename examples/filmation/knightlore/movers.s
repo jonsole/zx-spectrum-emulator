@@ -910,5 +910,5 @@ mover_slide:		ld		a,l
 .step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
 
 					;; NB: fall through into mover_move
-					;; ...which engine/mover.s starts with, and filmation.s includes next
+					;; ...which engine/mover.s starts with, and knightlore.s includes next
 					ASSERT	$ == mover_move

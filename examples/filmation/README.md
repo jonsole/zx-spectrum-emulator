@@ -7,8 +7,8 @@ builds and runs against this emulator.
 
 It comes in two parts: [`engine/`](engine/README.md), an isometric engine
 with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
-built on it. `filmation.s` joins the two -- it lays out memory and includes
-both.
+built on it. `knightlore/knightlore.s` joins the two -- it lays out memory
+and includes both.
 
 Unlike the other examples here it is a real, multi-file program, which is the
 point of it being in the tree: the SLD it produces maps addresses into nearly
@@ -30,9 +30,10 @@ Add `--debug-room` to print the room number in the top-left corner, for
 finding your way about; the ordinary build leaves it out.
 
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
-It writes `output/filmation.z80`, a version 3 snapshot that `build.py` wraps
-round the RAM the `SAVEBIN` at the bottom of `filmation.s` saves, plus the
-`.sld` the debugger maps source lines with and a `.lst` listing. `output/` is gitignored; everything in it is regenerated.
+It writes `output/knightlore.z80`, a version 3 snapshot that `build.py` wraps
+round the RAM the `SAVEBIN` at the bottom of `knightlore/knightlore.s` saves,
+plus the `.sld` the debugger maps source lines with and a `.lst` listing.
+`output/` is gitignored; everything in it is regenerated.
 
 Knight Lore's own data is not in the repository. Take it from your own copy of
 the game once, before the first build:
@@ -49,8 +50,8 @@ The unit tests assemble single files against stubs and run them headless:
 
 ## Source layout
 
-`filmation.s` is the entry point. It holds the memory map and includes the rest
-into it:
+`knightlore/knightlore.s` is the entry point. It holds the memory map and
+includes the rest into it, the engine's files as `../engine/`:
 
 | Region | What goes there |
 |---|---|
@@ -71,6 +72,7 @@ README lists what a game has to supply.
 
 | File | What it does |
 |---|---|
+| `knightlore.s` | The entry source: the memory map and the include list |
 | `main.s` | The main loop: menu, a new game, a turn; the room being played |
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |
@@ -270,9 +272,9 @@ room_B3:            DB      $06, 4, 0
 
 an attribute byte, a scenery count, an object-byte count, and four indices --
 which expand to exactly the 19 objects that used to be pasted into
-`filmation.s`. The attribute byte carries the room's colour in bits 0-2 and its
-shape in bits 3 up; there are three shapes, `64 x 64 x 128` and two narrower
-ones, and only the floor changes.
+`filmation.s`, as the entry source was then. The attribute byte carries the
+room's colour in bits 0-2 and its shape in bits 3 up; there are three shapes,
+`64 x 64 x 128` and two narrower ones, and only the floor changes.
 
 **Scenery** templates carry their own positions, so a piece is
 `sprite, U, V, Z, size U, size V, size Z, flags` -- our object record almost

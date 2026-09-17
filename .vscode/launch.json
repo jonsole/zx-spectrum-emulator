@@ -75,18 +75,19 @@
       // preLaunchTask, so editing any of the .s files and relaunching runs
       // what you just wrote.
       //
-      // `asm` names the ENTRY source only. filmation.s INCLUDEs the engine/
-      // and knightlore/ sources, and the SLD names all of them by their path
-      // from filmation.s's folder -- which is where they are resolved, so
-      // stepping lands in whichever file the code is actually in.
+      // `asm` names the ENTRY source only. knightlore.s INCLUDEs the other
+      // knightlore/ sources and ../engine/'s, and the SLD names the first by
+      // their path from knightlore.s's folder -- which is where they are
+      // resolved -- and the second in full, so stepping lands in whichever
+      // file the code is actually in.
       "name": "ZX Spectrum: Filmation",
       "type": "zxspectrum",
       "request": "launch",
       "debugServer": 4711,
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/examples/filmation/output/filmation.z80",
-      "sld": "${workspaceFolder}/examples/filmation/output/filmation.sld",
-      "asm": "${workspaceFolder}/examples/filmation/filmation.s",
+      "snapshot": "${workspaceFolder}/examples/filmation/output/knightlore.z80",
+      "sld": "${workspaceFolder}/examples/filmation/output/knightlore.sld",
+      "asm": "${workspaceFolder}/examples/filmation/knightlore/knightlore.s",
       "preLaunchTask": "filmation.build-and-start-server"
     },
     {

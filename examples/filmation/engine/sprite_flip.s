@@ -104,7 +104,7 @@ sprite_flip_h:		push	hl
 
 
 ; Every byte with its bits the other way round: the table sprite_flip_h mirrors
-; through, one page long. filmation.s places it, on a page boundary.
+; through, one page long. knightlore/knightlore.s places it, on a page boundary.
 					MACRO	bit_reverse_bytes
 					REPT	256,x
 					DB		((x & 0x01) << 7) | ((x & 0x02) << 5) | ((x & 0x04) << 3) | ((x & 0x08) << 1) | ((x & 0x10) >> 1) | ((x & 0x20) >> 3) | ((x & 0x40) >> 5) | ((x & 0x80) >> 7)

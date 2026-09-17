@@ -318,7 +318,7 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					call	vid_buff_copy
 
 					;; NB: falls through into redraw_hook, the game's -- which
-					;; filmation.s includes straight after this file. It draws
+					;; knightlore.s includes straight after this file. It draws
 					;; whatever the game keeps straight on the screen over a
 					;; region that has just wiped it, and returns.
 redraw_view_end		EQU		$

@@ -1,9 +1,12 @@
-"""Assembles the Filmation engine: sjasmplus -> output/filmation.{z80,sld,lst}.
+"""Assembles Knight Lore on the Filmation engine: sjasmplus, from
+knightlore/knightlore.s -> output/knightlore.{z80,sld,lst}.
 
-sjasmplus writes all 48K of RAM with the SAVEBIN at the bottom of filmation.s,
-the SLD that maps addresses to source lines, and a listing. This wraps the RAM
-as a version 3 .z80 that starts at `start` -- sjasmplus has no .z80 output of
-its own, and its 48K .sna has to push PC into the bottom of the screen.
+sjasmplus writes all 48K of RAM with the SAVEBIN at the bottom of
+knightlore.s, the SLD that maps addresses to source lines, and a listing. It
+runs in knightlore/, so the SLD names every source relative to knightlore.s,
+which is where the debugger resolves them. This wraps the RAM as a version 3
+.z80 that starts at `start` -- sjasmplus has no .z80 output of its own, and its
+48K .sna has to push PC into the bottom of the screen.
 
 sprite_data.s and room_data.s are generated rather than hand-written -- see
 sprites.py and rooms.py -- and are regenerated here whenever their packed
@@ -103,26 +106,28 @@ def generate_sprite_data() -> None:
 def assemble(sjasmplus: str, defines: list[str]) -> None:
     OUT_DIR.mkdir(exist_ok=True)
     # --fullpath so the SLD's records carry a file the debugger can match a
-    # source path against; filmation.s INCLUDEs four other files, and a line
+    # source path against; knightlore.s INCLUDEs some forty other files, and a line
     # number only means something paired with the file it came from.
     subprocess.run(
         [
             sjasmplus,
-            "--sld=output/filmation.sld",
+            "--sld=../output/knightlore.sld",
             "--fullpath",
-            "--lst=output/filmation.lst",
+            "--lst=../output/knightlore.lst",
             *[f"-D{name}" for name in defines],
-            "filmation.s",
+            "knightlore.s",
         ],
-        cwd=HERE,
+        cwd=KNIGHTLORE,
         check=True,
     )
-    ram = (OUT_DIR / "filmation.bin").read_bytes()
-    start = find_label(OUT_DIR / "filmation.sld", "start")
-    (OUT_DIR / "filmation.z80").write_bytes(z80_snapshot(ram, start))
-    # A .sna left from before this build wrote .z80 would be stale.
-    (OUT_DIR / "filmation.sna").unlink(missing_ok=True)
-    print(f"Wrote {OUT_DIR / 'filmation.z80'} (PC {start:04X}) and {OUT_DIR / 'filmation.sld'}")
+    ram = (OUT_DIR / "knightlore.bin").read_bytes()
+    start = find_label(OUT_DIR / "knightlore.sld", "start")
+    (OUT_DIR / "knightlore.z80").write_bytes(z80_snapshot(ram, start))
+    # What the build wrote before the entry source was knightlore.s would be
+    # stale, and loadable by mistake.
+    for old in ("sna", "z80", "bin", "sld", "lst"):
+        (OUT_DIR / f"filmation.{old}").unlink(missing_ok=True)
+    print(f"Wrote {OUT_DIR / 'knightlore.z80'} (PC {start:04X}) and {OUT_DIR / 'knightlore.sld'}")
 
 
 def find_label(sld: Path, name: str) -> int:

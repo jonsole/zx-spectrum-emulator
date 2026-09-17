@@ -619,7 +619,7 @@ everything the relink could change.
 - **Never insert an object that is already in the list.** It compares against
   itself, the two boxes interpenetrate, and the scan can pick the object as its
   own insertion point and link its NEXT to itself. The draw loop then never
-  ends. `start` in filmation.s has a note about this happening after a failed
+  ends. `start` in knightlore/main.s has a note about this happening after a failed
   room build.
 
 - **depth_cmp is only valid after depth_cmp_setup for the object being placed.**

@@ -94,7 +94,7 @@ shift_arena_next:	DW		shift_arena
 SHIFT_SHARED_SIZE	EQU		416
 
 ; Reserved down in the castle's own memory, with the view buffer and the pool
-; -- see the foot of filmation.s. It is written once and read once per
+; -- see the foot of knightlore/knightlore.s. It is written once and read once per
 ; object drawn, so contention costs it almost nothing, and the code region
 ; had run out of room for it.
 

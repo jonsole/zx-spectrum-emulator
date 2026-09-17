@@ -6,7 +6,7 @@ and the collision, character and mover machinery a Filmation game is built
 from. `../knightlore/` is the game built on it.
 
 The engine is not assembled on its own. A game's top-level file (here
-`../filmation.s`) includes these files, lays out memory, and supplies the few
+`../knightlore/knightlore.s`) includes these files, lays out memory, and supplies the few
 names listed under [What the game supplies](#what-the-game-supplies). Every
 call between the two is a plain `CALL` or `JP` to a label, and every setting is
 an `EQU`, so the split costs no bytes and no T-states.
