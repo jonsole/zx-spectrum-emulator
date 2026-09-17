@@ -133,7 +133,7 @@ sources at once.
 |---|---|---|---|
 | `name` | label characters | -- | The sprite's own name, letters, digits and underscores |
 | `group` | label characters | absent | Its group's name; absent when in none |
-| `source` | `memory`, `file`, `selection` | `memory` | Where its bytes were read from |
+| `source` | `memory`, `file`, `selection`, `sheet` | `memory` | Where its bytes were read from. `selection` and `sheet` have nowhere to be read from again, so they carry their `bytes` |
 | `address` | text | `$4000` | For `memory`: the address as typed, a symbol or a sum (`sprite_000+4`). Absent otherwise |
 | `file` | path | -- | For `file`: relative to the atlas when it can be, else absolute. Absent otherwise |
 | `offset` | 0-2147483647 | 0 | For `file`: bytes skipped at the start |
@@ -181,8 +181,8 @@ instead:
   load at.
 - **From any other file:** nothing is added. Its own `file` and `offset` already
   say where the bytes are.
-- **From a selection, or from the ROM:** there is nowhere to point, so those
-  carry their `bytes` whatever the tick box says.
+- **From a selection or a sheet, or from the ROM:** there is nowhere to point,
+  so those carry their `bytes` whatever the tick box says.
 
 Paths are written relative to the atlas when that is possible, so an export
 inside a repository still finds its files from another clone.
@@ -203,13 +203,26 @@ rather than the file:
 - `name` and `group` are reduced to label characters.
 - `bytes` that are not valid base64 are reported, and that sprite comes in with
   none.
-- A sprite whose `source` is `selection` and which carries no bytes is reported:
-  there is nothing to re-read it from.
+- A sprite whose `source` is `selection` or `sheet` and which carries no bytes
+  is reported: there is nothing to re-read it from.
 
 An imported sprite stays tied to where it came from. A `memory` one is re-read
 from the running machine on the next **Refresh** or stop, which is the point of
 importing one -- the atlas says where to look, the machine says what is there
 now.
+
+A `sheet` one is the opposite: it was drawn rather than found, so the bytes in
+the atlas are all there is. That is the source for an atlas written by a tool
+of your own -- `examples/filmation/knightlore/sprite_sheet.py` writes one for
+Knight Lore's artwork -- and the panel never asks the host for its bytes, so
+changing its width or its height re-reads nothing. Only **Grab selection** and
+**Re-read** go back to the host. It is offered in the dialog but cannot be
+chosen: it is what an imported sprite has, not something to make a new one
+from.
+
+**Clear** empties the sheet. It asks first, because a sprite that carries its
+own bytes cannot be read back once it is gone, and it takes the groups with
+it.
 
 ## Using one in a game engine
 
