@@ -1,6 +1,8 @@
 # Connecting VS Code (DAP)
 
-Part of the [zx-spectrum-emulator README](../README.md).
+Part of the [zx-spectrum-emulator README](../README.md). This is the reference:
+how each feature works and why. For a task-by-task introduction, start with the
+[user guide](vscode-user-guide.md).
 
 The repo's `.vscode/` folder is a ready-to-use workspace: `tasks.json` builds
 `cpp-core` and starts `zx_server.exe`, and `launch.json`'s **"ZX Spectrum:

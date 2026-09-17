@@ -195,6 +195,7 @@ The detail lives in [docs/](docs/), one file per topic:
 
 | Document | What's in it |
 |---|---|
+| [VS Code user guide](docs/vscode-user-guide.md) | Using the extension, task by task: the first session, the screen and keyboard, loading software, debugging your own program, watchpoints, stepping backwards, profiling, the graphics viewer and troubleshooting |
 | [Connecting an MCP client](docs/mcp.md) | Pointing an agent at the running server, the full tool list, video and the `profile` tool |
 | [VS Code settings reference](docs/vscode-settings.md) | Every `settings.json` setting, `launch.json` attribute and server-starting task the extension uses, with examples |
 | [Debugging in VS Code](docs/vscode-debugging.md) | The DAP front end: launch configs, live screen viewer, graphics and tape panels, the execution profiler, call stack, source-level debugging of the ROM and of your own programs, and editing Z80 assembly |

@@ -1,5 +1,8 @@
 # ZX Spectrum Debug (VS Code extension)
 
+Using it rather than working on it? Start with the
+[user guide](../docs/vscode-user-guide.md). This page is about how the extension is built.
+
 A handful of things, in one small extension:
 
 1. **Registers the `zxspectrum` debugger type** so `launch.json`'s `debugServer` field can connect
