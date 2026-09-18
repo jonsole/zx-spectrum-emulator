@@ -61,7 +61,13 @@ start:              di
 .again:             ld      (hl),0
                     ld      bc,(room_entry_at)
                     ld      a,(room_entry_z)
-.add:               call    character_add
+.add:               push    af
+                    push    bc
+                    call    flyer_room_enter    ; the two slots for the sky
+                    pop     bc
+                    pop     af
+                    ld      ix,player
+                    call    character_add
 
                     ; player_exit changes room_number when he walks out through
                     ; a doorway, and this notices. Poking it from the debugger
@@ -76,6 +82,7 @@ start:              di
                     ; one taken mid-blit would push a return address into a
                     ; sprite. The keyboard is read directly rather than through
                     ; the ROM's scan, so nothing needs them.
+                    call    flyer_step          ; something from the sky?
                     call    movers_step
                     call    player_step
                     call    redraw_flush        ; whatever the turn left waiting

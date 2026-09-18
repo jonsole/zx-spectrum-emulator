@@ -125,6 +125,7 @@ sprite_end:
 					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
 					INCLUDE "player.s"
+					INCLUDE "flyers.s"
                                                      ; here, not Knight Lore's grid arithmetic
 					INCLUDE "../engine/redraw.s"
 ;					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
@@ -184,7 +185,7 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; expanding every scenery chain and every object entry's repeat count. It is
 ; read from there rather than kept here, so it cannot drift from the data.
 ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
-POOL_SLOTS          EQU     ROOM_SLOTS
+POOL_SLOTS          EQU     ROOM_SLOTS + FLYER_SLOTS ; and two for what falls from the sky
                     ALIGN   32
 room_objects:
                 REPT    POOL_SLOTS

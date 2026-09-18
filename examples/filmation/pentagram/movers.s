@@ -42,17 +42,22 @@ MOVE_PACE_U         EQU     1       ; a platform pacing along U -- graphic 87,
 MOVE_PACE_V         EQU     2       ; ...and along V -- graphic 88, $CEDD
 MOVE_FALLS          EQU     3       ; drops, and cannot be pushed -- graphic 91,
                                     ; $CD75, which zeroes its own U and V step
+MOVE_HOMER          EQU     4       ; what falls from the sky and flies at him --
+                                    ; 48-51 and 160-167, $CC4B. See flyers.s.
 
-MOVE_STILL          EQU     4       ; the first that kills: spiky grass, thorns
+MOVE_STILL          EQU     5       ; the first that kills: spiky grass, thorns
                                     ; and water -- $C285 -- which do nothing else
-MOVE_SPIDER         EQU     5       ; graphic 89, $CF22
-MOVE_PACE_U_DEADLY  EQU     6       ; a dragon's head pacing -- 92, $CEA0
-MOVE_PACE_V_DEADLY  EQU     7       ; ...and along V -- 93, $CEDA
-MOVE_HOPPER         EQU     8       ; a dragon's head bobbing -- 86, $CE9A
-MOVE_CREATURE       EQU     9       ; graphics 16 and 17, $D1F5
-MOVE_PUSHED_DEADLY  EQU     10      ; the thorny bush, which can be shoved and
+MOVE_SPIDER         EQU     6       ; graphic 89, $CF22
+MOVE_PACE_U_DEADLY  EQU     7       ; a dragon's head pacing -- 92, $CEA0
+MOVE_PACE_V_DEADLY  EQU     8       ; ...and along V -- 93, $CEDA
+MOVE_HOPPER         EQU     9       ; a dragon's head bobbing -- 86, $CE9A
+MOVE_CREATURE       EQU     10      ; graphics 16 and 17, $D1F5
+MOVE_FALLER         EQU     11      ; what falls from the sky and roams -- 80
+                                    ; and 81, $D1FD
+MOVE_FALLER4        EQU     12      ; ...in four frames -- 168-171, $D251
+MOVE_PUSHED_DEADLY  EQU     13      ; the thorny bush, which can be shoved and
                                     ; kills -- 28, $CD70. The first LOOSE.
-MOVE_PUSHED         EQU     11      ; stump, cube, table and stone -- 63, 72,
+MOVE_PUSHED         EQU     14      ; stump, cube, table and stone -- 63, 72,
                                     ; 73, 79, $CD7C/$CD81. The first harmless.
 
 BEHAVIOUR_FIRST_TURN    EQU     MOVE_PACE_U
@@ -112,12 +117,15 @@ mover_find:         ld      hl,mover_of
 mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_pace_v        ; MOVE_PACE_V
                     DW      mover_falls         ; MOVE_FALLS
+                    DW      mover_homer         ; MOVE_HOMER
                     DW      mover_still         ; MOVE_STILL
                     DW      mover_spider        ; MOVE_SPIDER
                     DW      mover_pace_u        ; MOVE_PACE_U_DEADLY
                     DW      mover_pace_v        ; MOVE_PACE_V_DEADLY
                     DW      mover_hopper        ; MOVE_HOPPER
                     DW      mover_creature      ; MOVE_CREATURE
+                    DW      mover_faller        ; MOVE_FALLER
+                    DW      mover_faller4       ; MOVE_FALLER4
                     DW      mover_pushed        ; MOVE_PUSHED_DEADLY
                     DW      mover_pushed        ; MOVE_PUSHED
                     ASSERT  ($ - mover_tbl) / 2 == MOVE_PUSHED - MOVE_PACE_U + 1
@@ -294,6 +302,170 @@ mover_creature:     ld      a,(ix+OBJ.FLAGS)
                     jr      .go
 .along_u:           ld      (ix+OBJ.DU),c
                     res     0,(ix+OBJ.GFX)      ; 16: along U
+
+.go:                call    mover_move_always
+                    ld      a,(collide_hit)
+                    ld      (ix+OBJ.MOVE_STATE),a
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; What falls out of the sky and flies at him -- $CC4B, for 48-51 and 160-167.
+; flyers.s drops it.
+;
+; It steers on all three axes at once: each turn it adds three towards him to
+; a velocity it keeps in sixteenths -- towards his legs' U and V and his body's
+; Z -- held between -72 and +56, and moves by that sixteenth, rounded: four a
+; turn at most. Anything that stops it along U or V turns that velocity round,
+; so it bounces off walls rather than sticking to them. It animates through
+; the four graphics of its block, a frame a turn.
+;
+; It is not deadly: $CC4B never calls $C291, and its record carries neither
+; bit. Harmless it may be, but it gets in the way.
+;
+; The original moves it first, with last turn's velocity, and then steers for
+; the next; so does this. The sixteenths live in the two bytes past the end of
+; the record and in MOVE_STATE.
+;   IX -> the record
+HOMER_ACC_U         EQU     30              ; past OBJ, inside the slot
+HOMER_ACC_V         EQU     31
+HOMER_ACC_Z         EQU     OBJ.MOVE_STATE
+                    ASSERT  OBJ <= HOMER_ACC_U && HOMER_ACC_V < ROOM_STRIDE
+HOMER_PULL          EQU     3
+HOMER_MOST          EQU     $38             ; +56
+HOMER_LEAST         EQU     $B8             ; -72
+
+mover_homer:        call    mover_move_always
+
+                    ; Bounce: what stopped it along an axis turns it round there.
+                    ld      a,(collide_hit)
+                    and     COLLIDE_U
+                    jr      z,.u_free
+                    ld      a,(ix+HOMER_ACC_U)
+                    neg
+                    ld      (ix+HOMER_ACC_U),a
+.u_free:            ld      a,(collide_hit)
+                    and     COLLIDE_V
+                    jr      z,.v_free
+                    ld      a,(ix+HOMER_ACC_V)
+                    neg
+                    ld      (ix+HOMER_ACC_V),a
+.v_free:
+                    ; Steer: towards him on each axis.
+                    ld      a,(player + OBJ.U)
+                    sub     (ix+OBJ.U)
+                    ld      a,(ix+HOMER_ACC_U)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_U),a
+                    ld      a,(player + OBJ.V)
+                    sub     (ix+OBJ.V)
+                    ld      a,(ix+HOMER_ACC_V)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_V),a
+                    ld      a,(player + CHARACTER_BODY + OBJ.Z)
+                    sub     (ix+OBJ.Z)
+                    ld      a,(ix+HOMER_ACC_Z)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_Z),a
+
+                    ; ...and the step for next turn, in whole units.
+                    ld      a,(ix+HOMER_ACC_U)
+                    call    homer_whole
+                    ld      (ix+OBJ.DU),a
+                    ld      a,(ix+HOMER_ACC_V)
+                    call    homer_whole
+                    ld      (ix+OBJ.DV),a
+                    ld      a,(ix+HOMER_ACC_Z)
+                    call    homer_whole
+                    ld      (ix+OBJ.DZ),a
+
+                    ; The next frame of its four.
+                    ld      a,(move_tick)
+                    and     3
+                    ld      c,a
+                    ld      a,(ix+OBJ.GFX)
+                    and     $FC
+                    or      c
+                    ld      (ix+OBJ.GFX),a
+                    ret
+
+; Three more towards him, held to the range: carry from the SUB before this
+; means he is below us on that axis. $CD04 and $CD0D.
+;   A - the velocity, in sixteenths
+homer_pull:         jr      c,.down
+                    add     a,HOMER_PULL
+                    ret     m
+                    cp      HOMER_MOST
+                    ret     c
+                    ld      a,HOMER_MOST
+                    ret
+.down:              sub     HOMER_PULL
+                    ret     p
+                    cp      HOMER_LEAST
+                    ret     nc
+                    ld      a,HOMER_LEAST
+                    ret
+
+; Sixteenths to whole units, rounded, sign kept.
+homer_whole:        add     a,8
+                    sra     a
+                    sra     a
+                    sra     a
+                    sra     a
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; What falls out of the sky and then roams -- $D1FD for 80 and 81, $D251 for
+; 168 to 171. Deadly both. It falls under gravity like anything else; along
+; the floor it goes four units a turn along one axis, and when something
+; stops it -- or before it has ever moved -- picks four either way at random,
+; along U if the thing that stopped it was across V, along V otherwise.
+;
+; Its graphic says which way. For 80 and 81, bit 0 is the axis and the mirror
+; tells the two directions on it apart; 168-171 do the same with bit 1, and
+; flip bit 0 every turn besides, which is their animation. Going the negative
+; way flips the axis bit as well -- the original's own sums.
+;   IX -> the record
+FALLER_STEP         EQU     4
+
+mover_faller4:      ld      a,(ix+OBJ.GFX)
+                    xor     1                   ; the frame of the four
+                    ld      (ix+OBJ.GFX),a
+                    ld      c,2                 ; the axis is bit 1
+                    jr      mover_faller_c
+mover_faller:       ld      c,1                 ; ...and bit 0 here
+
+mover_faller_c:     ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.go
+
+                    call    mover_rand
+                    and     FALLER_STEP * 2
+                    sub     FALLER_STEP
+                    ld      b,a
+                    ld      a,(ix+OBJ.MOVE_STATE)
+                    and     COLLIDE_V
+                    jr      nz,.along_u
+
+                    ld      (ix+OBJ.DV),b       ; along V: the axis bit set,
+                    ld      a,(ix+OBJ.GFX)      ; unmirrored
+                    or      c
+                    ld      (ix+OBJ.GFX),a
+                    res     0,(ix+OBJ.FLAGS)
+                    jr      .facing
+.along_u:           ld      (ix+OBJ.DU),b       ; along U: clear, mirrored
+                    ld      a,c
+                    cpl
+                    and     (ix+OBJ.GFX)
+                    ld      (ix+OBJ.GFX),a
+                    set     0,(ix+OBJ.FLAGS)
+                    ASSERT  OBJ_FLIP_H == 1
+.facing:            bit     7,b
+                    jr      z,.go
+                    ld      a,(ix+OBJ.GFX)      ; the negative way
+                    xor     c
+                    ld      (ix+OBJ.GFX),a
 
 .go:                call    mover_move_always
                     ld      a,(collide_hit)

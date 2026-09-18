@@ -73,6 +73,10 @@ GRAPHIC_COUNT = 172
 # Sabreman: legs 32-39 and body 40-47, four frames a block, two blocks. No room
 # names them, so the rooms pass never sees them and walk_character() does.
 CHARACTER_GRAPHICS = set(range(32, 48))
+# What falls out of the sky: the spawner at $CBAB picks one of these from
+# $CC09 into the two slots at $A7EF and $A80F, and they cycle their frames.
+FLYER_GRAPHICS = set(range(48, 52)) | {80, 81} | set(range(160, 172))
+FLYER_SLOTS = (0xA7EF, 0xA80F)
 START_KEY = "0"                 # starts a game from the menu
 TURN_KEY = "Z"                  # turns him a quarter
 WALK_KEY = "A"                  # walks him the way he faces
@@ -309,6 +313,40 @@ def walk_character(found, saw_bit7):
     d.req("disconnect")
 
 
+def watch_flyers(found, saw_bit7):
+    """Wait in a started game for the sky to drop things, and keep it doing so.
+
+    Nothing in a room places them: $CBAB counts a timer down every turn --
+    255 turns the first time -- and then drops one of eight into a free slot
+    of the two it keeps. Two at once and it stops, so each flyer is cleared
+    once it has been watched long enough to show all its frames, which frees
+    the slot for the next.
+    """
+    d = Dap()
+    d.req("initialize", {"adapterID": "zxspectrum"})
+    d.req("launch", {"rom": ROM, "snapshot": GAME})
+    d.req("configurationDone")
+    d.go(1.0)
+    d.req("keyDown", {"key": START_KEY}); d.go(0.3); d.req("keyUp", {"key": START_KEY})
+    age = {}
+    for _ in range(600):
+        if FLYER_GRAPHICS <= {g for g, _ in found}:
+            break
+        d.go(0.3)
+        scan(d, found, saw_bit7, "flyers")
+        for slot in FLYER_SLOTS:
+            if d.read(slot, 1)[0]:
+                age[slot] = age.get(slot, 0) + 1
+                if age[slot] > 12:
+                    d.write(slot, [0])  # watched enough: make room for another
+                    age[slot] = 0
+            else:
+                age[slot] = 0
+    seen = FLYER_GRAPHICS & {g for g, _ in found}
+    print("  flyers: %d of their %d graphics seen" % (len(seen), len(FLYER_GRAPHICS)))
+    d.req("disconnect")
+
+
 def signed(v):
     return v - 256 if v > 127 else v
 
@@ -393,7 +431,8 @@ def main():
 
     found, saw_bit7, forced = harvest(rooms)
     walk_character(found, saw_bit7)
-    reachable = reachable | CHARACTER_GRAPHICS
+    watch_flyers(found, saw_bit7)
+    reachable = reachable | CHARACTER_GRAPHICS | FLYER_GRAPHICS
 
     graphics = {g for g, _ in found}
     print()
@@ -424,8 +463,9 @@ def main():
 
     print()
     print()
-    print("NOTE: this covers the rooms and Sabreman's walk. The movers, the panel")
-    print("      and the menu are named by neither and are NOT harvested here.")
+    print("NOTE: this covers the rooms, Sabreman's walk and what falls from the sky.")
+    print("      The panel and the menu are named by none of them and are NOT")
+    print("      harvested here.")
     print("      64-71 are his appearing and dying frames, caught only when a scan")
     print("      lands mid-animation, and the original moves their nudge frame by")
     print("      frame -- so expect those to vary from run to run.")
