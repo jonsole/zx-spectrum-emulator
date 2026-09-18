@@ -7,9 +7,11 @@
 ; the slot it fills for a write: it is always one of two records it keeps for
 ; the purpose, straight after the player's own.
 ;
-; The timer is one byte for the whole game, not per room, and it is never
-; reset on entering one. It starts at nothing, so the first countdown wraps
-; and runs 255 turns -- "after a while". Once it has run out it is held at one
+; The timer is one byte, and it starts at nothing, so the first countdown
+; wraps and runs 255 turns -- "after a while". The original never resets it on
+; entering a room, so once it has run out every new room drops something
+; almost at once; the remake starts it over in every room instead, so each
+; one gives him the whole 255 turns first. Once it has run out it is held at one
 ; and every turn has a one-in-four chance; a drop sets it back to
 ; (2 + the quest items still to find) * 4, 24 at the start of a game. Two at
 ; once and it stops trying until one goes, which in practice is leaving the
@@ -37,7 +39,7 @@ FLYER_WELL_GFX      EQU     120
 ; What a drop can be, as the original's own table has it.
 flyer_pick:         DB      164, 160, 48, 80, 168, 160, 48, 80
 
-flyer_timer:        DB      0               ; for the whole game, as $A73D is
+flyer_timer:        DB      0               ; $A73D, but started over each room
 flyer_banned:       DB      0               ; this room drops nothing
 flyer_slots:        DW      0               ; the first of the two records
 
@@ -47,9 +49,12 @@ flyer_slots:        DW      0               ; the first of the two records
 ; the room data made, blank until something falls into them. Knight Lore keeps
 ; its collectables' slots the same way -- see special_room_enter.
 ;
-; And whether this room drops anything at all.
+; And whether this room drops anything at all, and the whole wait again
+; before it does.
 ; Corrupts AF, BC, DE, HL, IX.
-flyer_room_enter:   ld      a,(room_object_count)
+flyer_room_enter:   xor     a
+                    ld      (flyer_timer),a     ; wraps to 255 on the first turn
+                    ld      a,(room_object_count)
                     ld      l,a
                     ld      h,0
                     add     hl,hl
@@ -109,10 +114,11 @@ flyer_step:         ld      a,(flyer_banned)
                     dec     (hl)
                     ret     nz
                     ld      (hl),1              ; run out: from now, every turn
-                    call    mover_rand
+                    call    mover_rand          ; (which takes HL)
                     and     3
                     ret     nz                  ; ...a one in four chance
-                    ld      (hl),FLYER_WAIT
+                    ld      a,FLYER_WAIT
+                    ld      (flyer_timer),a
 
                     ld      ix,(flyer_slots)
                     ld      a,(ix+OBJ.GFX)
