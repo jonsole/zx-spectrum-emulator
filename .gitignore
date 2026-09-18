@@ -126,6 +126,23 @@ examples/filmation/knightlore/font.s
 # so that one is committed.
 examples/filmation/knightlore/room_data.s
 
+# Pentagram's sprites and font, on the same line as Knight Lore's above: the
+# artwork is Ultimate's and this repository is public, so none of it is
+# carried, while the packed room tables and the graphic-number table beside
+# them are. Run pg_extract.py once against your own copy of the tape to
+# produce these, and build.py makes the sheets from them when it needs one.
+examples/filmation/pentagram/sprite_data.bin
+examples/filmation/pentagram/sprites.png
+examples/filmation/pentagram/sprites.json
+examples/filmation/pentagram/sprite_data.s
+examples/filmation/pentagram/sprite_table.s
+examples/filmation/pentagram/font.bin
+examples/filmation/pentagram/font.png
+examples/filmation/pentagram/font.json
+examples/filmation/pentagram/font.s
+examples/filmation/pentagram/room_data.s
+examples/filmation/pentagram/output/
+
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:
