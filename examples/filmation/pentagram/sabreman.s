@@ -58,16 +58,19 @@ DOOR_HEIGHT		EQU		13		; Z up to twelve above the arch's floor
 ; knight 8.
 ;
 ; Measured: from a standstill at Z=128 he rises +7, +6, +5, +4, +3, +2, +1 and
-; peaks at 156. That is an initial 7 with gravity of one a turn, and the peak
-; confirms it twice over -- 7+6+5+4+3+2+1 is 28, and 128+28 is exactly the 156
-; observed. Knight Lore's 8 would have summed to 36 and peaked at 164.
-CHARACTER_JUMP_DZ	EQU		7
+; peaks at 156 -- 7+6+5+4+3+2+1 is 28, and 128+28 is exactly the 156 observed.
+; The value here is 8, not 7, because the engine's gravity takes its unit off
+; in the same turn the jump starts, so the first step it takes is one less
+; than this. At 7 the remake rose +6 first and peaked at 149.
+CHARACTER_JUMP_DZ	EQU		8
 
-; INHERITED. The jump above never reached terminal velocity -- he landed first,
-; with the fall still accelerating through -7 -- so this is Knight Lore's
-; figure until a longer drop is measured. A room with a high walkway would do
-; it.
-CHARACTER_FALL_MAX	EQU		-8 & $FF
+; Measured, and it is not Knight Lore's -8. Stepping off the walkway in room 93
+; he falls 176 to 128 at -2, -4, -6, -8, -10, -12 and lands still speeding up,
+; and a held jump comes down through -9. So if the original has a limit at all
+; it is past 12. The highest thing in the room data to fall from is 89 above
+; the floor, which a fall from rest reaches at -18 -- so -18 is no limit for
+; any fall the game can produce, while the engine keeps its bound.
+CHARACTER_FALL_MAX	EQU		-18 & $FF
 
 ; How far he walks in a turn. Measured: holding the walk row, his U moves in
 ; steps of exactly 3, every time.

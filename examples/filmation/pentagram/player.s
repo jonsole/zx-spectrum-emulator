@@ -63,6 +63,20 @@ player_step:        ld      ix,player
 
                     call    input_read
                     ld      ix,player
+
+                    ; The jump key first, because gravity asks about it in the
+                    ; same turn: holding it is what makes the difference between
+                    ; a hop and a full jump. Measured in the original: held, he
+                    ; rises +7 down to +1; let go, +7, +5, +3, +1 -- the engine's
+                    ; gravity, one a turn held and two let go.
+                    ld      a,(input_now)
+                    and     INPUT_JUMP
+                    ld      a,0
+                    jr      z,.no_jump
+                    inc     a
+                    call    character_jump
+.no_jump:           ld      (character_jump_held),a
+
                     call    player_turn
                     jr      nc,.stand
                     push    af
@@ -70,7 +84,7 @@ player_step:        ld      ix,player
                     pop     af
                     call    character_walk      ; A is the facing to walk
                     ld      ix,player           ; the repaint took IX
-                    jr      player_exit
+                    jp      player_exit
 .stand:             ld      a,(ix+CHARACTER_FACING)
                     call    player_body_up
                     jp      character_stand
@@ -114,7 +128,17 @@ player_body_up:     and     2
 ;   IX -> the legs record
 ; Out: carry set and A the facing to walk; carry clear to stand.
 ; Corrupts AF, BC, HL.
-player_turn:        ld      a,(menu_mode)
+player_turn:        ; A jump is a leap. Once he is off the ground he goes on the
+                    ; way he faces, whatever is held, and cannot turn until he
+                    ; is down: in the original, jumping with nothing else held
+                    ; still carries him three units a turn along his facing.
+                    bit     0,(ix+CHARACTER_STATE)  ; CHARACTER_JUMPING
+                    jr      z,.grounded
+                    ld      a,(ix+CHARACTER_FACING)
+                    scf
+                    ret
+
+.grounded:          ld      a,(menu_mode)
                     and     MENU_DIRECTIONAL
                     ld      a,(input_now)
                     jr      nz,.directional
