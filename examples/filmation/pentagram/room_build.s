@@ -126,6 +126,14 @@ room_build:			ld		c,a
 					call	room_shape
 					pop		de
 
+					ld		ix,room_objects	; room_add fills THROUGH IX and moves it on,
+									; so the pool has to be pointed at before
+									; anything is added. Without this it read
+									; the right template and wrote through
+									; whatever IX held, so every record kept
+									; its assembled zeros while the count still
+									; went up -- which looked like a drawing
+									; fault and was not.
 					call	room_scenery
 					call	room_objects_of
 					call		room_show
