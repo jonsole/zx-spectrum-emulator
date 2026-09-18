@@ -52,30 +52,37 @@ MOVE_POOF           EQU     6       ; the puff a bolt or a flyer goes out in --
 MOVE_QUEST          EQU     7       ; a quest item -- 112-119, $CF68. See quest.s.
 MOVE_WELL           EQU     8       ; the well -- 120, $CFD2
 
-MOVE_STILL          EQU     9       ; the first that kills: spiky grass, thorns
+MOVE_SINKS          EQU     9       ; sinks while stood on -- 78, $CDA0. The one
+                                    ; that gives way.
+MOVE_CRUMBLES       EQU     10      ; cracks under him and goes -- 136-139, $D2AD
+MOVE_LIFT           EQU     11      ; carries him up -- 84, $CDBB
+MOVE_CONVEYOR       EQU     12      ; carries what stands on it along -- 140-143,
+                                    ; $B866
+
+MOVE_STILL          EQU     13       ; the first that kills: spiky grass, thorns
                                     ; and water -- $C285 -- which do nothing else
-MOVE_SPIDER         EQU     10       ; graphic 89, $CF22
-MOVE_PACE_U_DEADLY  EQU     11       ; a dragon's head pacing -- 92, $CEA0
-MOVE_PACE_V_DEADLY  EQU     12      ; ...and along V -- 93, $CEDA
-MOVE_HOPPER         EQU     13      ; a dragon's head bobbing -- 86, $CE9A
-MOVE_CREATURE       EQU     14      ; graphics 16 and 17, $D1F5
-MOVE_FALLER         EQU     15      ; what falls from the sky and roams -- 80
+MOVE_SPIDER         EQU     14       ; graphic 89, $CF22
+MOVE_PACE_U_DEADLY  EQU     15       ; a dragon's head pacing -- 92, $CEA0
+MOVE_PACE_V_DEADLY  EQU     16      ; ...and along V -- 93, $CEDA
+MOVE_HOPPER         EQU     17      ; a dragon's head bobbing -- 86, $CE9A
+MOVE_CREATURE       EQU     18      ; graphics 16 and 17, $D1F5
+MOVE_FALLER         EQU     19      ; what falls from the sky and roams -- 80
                                     ; and 81, $D1FD
-MOVE_FALLER4        EQU     16      ; ...in four frames -- 168-171, $D251
-MOVE_PUSHED_DEADLY  EQU     17      ; the thorny bush, which can be shoved and
+MOVE_FALLER4        EQU     20      ; ...in four frames -- 168-171, $D251
+MOVE_PUSHED_DEADLY  EQU     21      ; the thorny bush, which can be shoved and
                                     ; kills -- 28, $CD70. The first LOOSE.
-MOVE_PUSHED         EQU     18      ; stump, cube, table and stone -- 63, 72,
+MOVE_PUSHED         EQU     22      ; stump, cube, table and stone -- 63, 72,
                                     ; 73, 79, $CD7C/$CD81. The first harmless.
-MOVE_COLLECTABLE    EQU     19      ; the five to bring to room 82 -- 144-148,
+MOVE_COLLECTABLE    EQU     23      ; the five to bring to room 82 -- 144-148,
                                     ; $CD16. Shoved about like a stump.
-MOVE_WATER          EQU     20      ; what comes out of the well -- 90, $D0AC
+MOVE_WATER          EQU     24      ; what comes out of the well -- 90, $D0AC
 
 BEHAVIOUR_FIRST_TURN    EQU     MOVE_PACE_U
 BEHAVIOUR_DEADLY        EQU     MOVE_STILL
 BEHAVIOUR_CRUSHING      EQU     MOVE_PUSHED     ; nothing kills one way only,
 BEHAVIOUR_HARMLESS      EQU     MOVE_PUSHED     ; so this range is empty
-BEHAVIOUR_GIVES         EQU     MOVE_PUSHED + 1 ; nothing gives way either:
-BEHAVIOUR_GIVES_LAST    EQU     MOVE_PUSHED     ; last below first, so empty
+BEHAVIOUR_GIVES         EQU     MOVE_SINKS      ; the sinking platform, and
+BEHAVIOUR_GIVES_LAST    EQU     MOVE_SINKS      ; nothing else
 BEHAVIOUR_LOOSE         EQU     MOVE_PUSHED_DEADLY
 
 
@@ -101,6 +108,13 @@ mover_of:           DB      6, MOVE_STILL           ; object_03, spiky grass (23
                     DB      36, MOVE_SPIDER         ; object_18, the spider (89)
                     DB      40, MOVE_CREATURE       ; object_20 (16)
                     DB      38, MOVE_WELL           ; object_19, the well (120)
+                    DB      20, MOVE_SINKS          ; object_10 (78)
+                    DB      24, MOVE_LIFT           ; object_12, the lift (84)
+                    DB      48, MOVE_CRUMBLES       ; object_24 (136-139)
+                    DB      50, MOVE_CONVEYOR       ; object_25 (140)
+                    DB      52, MOVE_CONVEYOR       ; object_26 (141)
+                    DB      54, MOVE_CONVEYOR       ; object_27 (142)
+                    DB      56, MOVE_CONVEYOR       ; object_28 (143)
                     DB      $FF
 
 
@@ -133,6 +147,10 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_poof          ; MOVE_POOF
                     DW      mover_quest         ; MOVE_QUEST
                     DW      mover_well          ; MOVE_WELL
+                    DW      mover_sinks         ; MOVE_SINKS
+                    DW      mover_crumbles      ; MOVE_CRUMBLES
+                    DW      mover_lift          ; MOVE_LIFT
+                    DW      mover_conveyor      ; MOVE_CONVEYOR
                     DW      mover_still         ; MOVE_STILL
                     DW      mover_spider        ; MOVE_SPIDER
                     DW      mover_pace_u        ; MOVE_PACE_U_DEADLY
@@ -701,3 +719,145 @@ object_hide:        call    region_reset
                     call    depth_unlink
                     call    flyer_blank
                     jp      redraw_view
+
+
+; ---------------------------------------------------------------------------
+; Is he standing on this record? His feet on its top or a little above it --
+; a lift gives him his rise before it takes its own, so the two leapfrog --
+; and over it along both floor axes.
+;   IX -> the record
+; Out: zf set if he is. Corrupts AF, C.
+ON_TOP_SLACK        EQU     6
+
+player_on_top:      ld      a,(ix+OBJ.Z)
+                    add     a,(ix+OBJ.SIZE_Z)
+                    ld      c,a
+                    ld      a,(player + OBJ.Z)
+                    sub     c
+                    cp      ON_TOP_SLACK + 1
+                    jr      nc,.off             ; below its top, or well above
+                    ld      a,(player + OBJ.U)
+                    sub     (ix+OBJ.U)
+                    call    character_door_find.abs
+                    ld      c,a
+                    ld      a,(ix+OBJ.SIZE_U)
+                    add     a,CHARACTER_HALF_U
+                    cp      c
+                    jr      c,.off
+                    jr      z,.off
+                    ld      a,(player + OBJ.V)
+                    sub     (ix+OBJ.V)
+                    call    character_door_find.abs
+                    ld      c,a
+                    ld      a,(ix+OBJ.SIZE_V)
+                    add     a,CHARACTER_HALF_V
+                    cp      c
+                    jr      c,.off
+                    jr      z,.off
+                    xor     a                   ; zf: on it
+                    ret
+.off:               or      1                   ; nz: not
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; A platform that sinks while something stands on it, a unit a turn -- $CDA0,
+; which has no gravity of its own and only ever moves by the step whatever
+; lands on it hands it ($B838). Knight Lore's dropping block is the same
+; thing, and the engine's landed-on mark is how it knows.
+;   IX -> the record
+mover_sinks:        bit     3,(ix+OBJ.MOVE_STATE)
+                    ret     z
+                    res     3,(ix+OBJ.MOVE_STATE)
+                    ld      (ix+OBJ.DZ),0       ; one unit, not a fall
+                    jp      mover_move
+
+
+; ---------------------------------------------------------------------------
+; A block that cracks under him and goes -- $D2AD. Every turn he is on it, it
+; is the next graphic of its four, 136 to 139, and on the one after the last
+; it is gone. Only he cracks it: $B890 marks what his legs land on, and
+; nothing else's.
+;   IX -> the record
+CRUMBLE_LAST        EQU     139
+
+mover_crumbles:     call    player_on_top
+                    ret     nz
+                    ld      a,(ix+OBJ.GFX)
+                    cp      CRUMBLE_LAST
+                    jp      z,object_hide
+                    inc     a
+                    ld      (ix+OBJ.GFX),a
+                    call    mover_hover
+                    jp      mover_move_always
+
+
+; ---------------------------------------------------------------------------
+; A lift -- $CDBB. It carries him up: while he stands on it it rises two a turn
+; and gives him three ($A77A), up to Z 176, where it holds; when he is off it,
+; it sinks a unit a turn back to where it stands, and waits for him again. It
+; has no gravity of its own.
+;
+; MOVE_STATE bit 0 is going; bit 1 is on its way back down.
+;   IX -> the record
+LIFT_TOP            EQU     176
+LIFT_RISE           EQU     2
+LIFT_GIVES_HIM      EQU     4                   ; three, and his own gravity's
+
+mover_lift:         bit     0,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.going
+                    call    player_on_top       ; waiting: until he is on it
+                    ret     nz
+                    set     0,(ix+OBJ.MOVE_STATE)
+
+.going:             bit     1,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.down
+                    call    player_on_top
+                    jr      nz,.back            ; he has got off: back down
+                    ld      a,(ix+OBJ.Z)
+                    cp      LIFT_TOP
+                    jr      nc,.hold            ; up: it stays while he does
+                    ld      a,LIFT_GIVES_HIM    ; and he goes up with it
+                    ld      (player + CHARACTER_DZ),a
+                    call    mover_halt
+                    ld      (ix+OBJ.DZ),LIFT_RISE + 1   ; net of gravity
+                    jp      mover_move_always
+.hold:              call    mover_hover
+                    ret
+
+.back:              set     1,(ix+OBJ.MOVE_STATE)
+.down:              call    mover_halt
+                    ld      (ix+OBJ.DZ),0       ; a unit a turn, not a fall
+                    call    mover_move
+                    ld      a,(collide_hit)
+                    and     COLLIDE_Z
+                    ret     z
+                    ld      (ix+OBJ.MOVE_STATE),0   ; down: waiting again
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; A conveyor -- $B866, which pushes whatever stands on it two units every other
+; turn, along the way the bottom two bits of its graphic say ($D30A). The
+; engine already hands a thing standing on a record that record's step
+; (object_carry), so a conveyor simply holds a step of its own -- one a turn,
+; the same pace -- and never moves by it.
+;   IX -> the record
+mover_conveyor:     ld      a,(ix+OBJ.GFX)
+                    and     3
+                    add     a,a
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,conveyor_steps
+                    add     hl,de
+                    ld      a,(hl)
+                    ld      (ix+OBJ.DU),a
+                    inc     hl
+                    ld      a,(hl)
+                    ld      (ix+OBJ.DV),a
+                    ret
+
+conveyor_steps:     DB      1, 0
+                    DB      -1, 0
+                    DB      0, 1
+                    DB      0, -1
