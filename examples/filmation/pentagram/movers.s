@@ -196,9 +196,70 @@ mover_falls:        call    mover_halt
 ; object_shove gives a LOOSE object the shover's step; this spends it, with
 ; gravity, and then forgets it, which is the original clearing +9 to +11
 ; after the move.
+;
+; Whatever is stacked on it goes too: shoot the bottom log of a pile and the
+; original moves the pile. The engine does carry a rider -- object_carry, in
+; the rider's own clamp -- but only if the thing under it still has its step
+; when the rider's turn comes, and this clears its step the moment it has
+; moved; a rider later in the pool found nothing to take. So the step is
+; handed up here instead, before it is forgotten, to anything loose sitting
+; on top. That rider spends it on its own turn and hands it up again, so a
+; stack of any height moves as one.
 ;   IX -> the record
 mover_pushed:       call    mover_move
+                    ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    call    nz,pushed_carry     ; it moved: take the pile with it
                     jp      mover_halt
+
+
+; Give this object's step to everything loose standing on it that has none of
+; its own: the same thing object_carry does, from underneath.
+;   IX -> the record that has just moved, DU and DV what it moved by
+; Corrupts AF, BC, DE, IY.
+pushed_carry:       ld      a,(room_object_count)
+                    ld      b,a
+                    ld      iy,room_objects
+                    ld      a,(ix+OBJ.Z)
+                    add     a,(ix+OBJ.SIZE_Z)
+                    ld      c,a                 ; C - its top
+.next:              ld      a,(iy+OBJ.BEHAVIOUR)
+                    cp      BEHAVIOUR_LOOSE
+                    jr      c,.skip             ; not the sort that rides
+                    ld      a,(iy+OBJ.Z)
+                    cp      c
+                    jr      nz,.skip            ; not sitting on our top
+                    ld      a,(iy+OBJ.DU)
+                    or      (iy+OBJ.DV)
+                    jr      nz,.skip            ; going somewhere already
+
+                    ld      a,(iy+OBJ.U)        ; over us along U?
+                    sub     (ix+OBJ.U)
+                    call    character_door_find.abs
+                    ld      e,a
+                    ld      a,(iy+OBJ.SIZE_U)
+                    add     a,(ix+OBJ.SIZE_U)
+                    cp      e
+                    jr      c,.skip
+                    jr      z,.skip
+                    ld      a,(iy+OBJ.V)        ; ...and along V?
+                    sub     (ix+OBJ.V)
+                    call    character_door_find.abs
+                    ld      e,a
+                    ld      a,(iy+OBJ.SIZE_V)
+                    add     a,(ix+OBJ.SIZE_V)
+                    cp      e
+                    jr      c,.skip
+                    jr      z,.skip
+
+                    ld      a,(ix+OBJ.DU)
+                    ld      (iy+OBJ.DU),a
+                    ld      a,(ix+OBJ.DV)
+                    ld      (iy+OBJ.DV),a
+.skip:              ld      de,ROOM_STRIDE
+                    add     iy,de
+                    djnz    .next
+                    ret
 
 
 ; ---------------------------------------------------------------------------
