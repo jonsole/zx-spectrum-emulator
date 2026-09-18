@@ -136,6 +136,7 @@ examples/filmation/pentagram/sprites.png
 examples/filmation/pentagram/sprites.json
 examples/filmation/pentagram/sprite_data.s
 examples/filmation/pentagram/sprite_table.s
+examples/filmation/pentagram/sprite_adj_gen.s
 examples/filmation/pentagram/font.bin
 examples/filmation/pentagram/font.png
 examples/filmation/pentagram/font.json

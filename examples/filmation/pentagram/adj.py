@@ -1,0 +1,372 @@
+"""Harvest Pentagram's per-graphic pixel adjustments into sprite_adj.s.
+
+Every object the game draws is nudged a few pixels from its logical position
+so that the artwork lines up, and the pair lands in each live object record at
++$12 and +$13. Which pair depends on the graphic and on whether it is
+mirrored, and the choice is made inside the game's per-graphic update routines
+-- it is behaviour, not a table, so there is nothing to read out statically.
+
+So take the values instead of the code. This drives a running Pentagram over
+DAP, forces it through every room, and reads the pairs back out of the live
+records.
+
+    python adj.py           # needs zx_server running on 4711
+
+Expect to re-run it: any change to the sprite numbering invalidates the index,
+and a partial harvest is worse than none, so it always reports its coverage
+and refuses to overwrite a good file with a worse one.
+
+-- how it differs from ../knightlore/adj.py -------------------------------
+
+Knight Lore forces a room by patching the jump that closes its frame loop to
+land one instruction earlier, on the room-entry call, so every frame rebuilds
+the room named at a fixed address. Pentagram has no such call site: nothing
+in the image does a plain CALL or JP to its builder at $C92F, which is reached
+indirectly, so there is no jump to bend.
+
+What works instead is to run the game's own room-entry sequence on demand.
+$C6B6 is a complete one -- LD IX,$A76F, then the three calls that leave the
+old room, build the new one and draw it -- and it is fallen into rather than
+called, so there is nothing to patch. Naming the room in $A777 (the player
+record's own +8) and pointing PC at $C6B6 performs a real room change.
+
+An earlier version stopped at the builder and wrote the room there instead.
+That looked right and was not: the builder is only re-entered when the game
+genuinely changes room, so with the player standing still the breakpoint
+almost never fired again, and it reached half the rooms by luck rather than
+by mechanism. If coverage ever collapses, suspect the forcing before the
+harvest.
+
+Checked by hand before this was written: pointing PC at $C6B6 with 42 in
+$A777 gives a pool whose records carry room 42 and its doorway destination
+58 -- exactly what rooms.json holds for it.
+
+The record layout is Knight Lore's, field for field, which is why the offsets
+below match its own: graphic at +0, flags at +7, and the nudge at +$12/+$13.
+"""
+import base64
+import json
+import socket
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ATLAS = HERE / "rooms.json"
+OUT = HERE / "sprite_adj.s"
+
+ROM = "C:/Users/jonso/zx-spectrum-emulator/roms/48.rom"
+GAME = "C:/Users/jonso/zx-spectrum-emulator/snapshots/Pentagram-clean.sna"
+
+BUILDER = 0xC92F                # room_build's first instruction
+ROOM_AT = 0xA777                # the room wanted: the player record's own +8
+REGISTERS_REF = 1000            # the DAP "Registers" scope
+
+POOL_START = 0xA76F             # the player's own records come first
+POOL_END = 0xAE10
+OBJ_STRIDE = 32
+GFX, FLAGS, ADJ_X, ADJ_Y = 0x00, 0x07, 0x12, 0x13
+
+GAME_MIRROR = 0x40              # in the template, and copied into the record
+GRAPHIC_COUNT = 172
+
+TAB = chr(9)
+
+
+class Dap:
+    def __init__(self):
+        self.sock = socket.create_connection(("127.0.0.1", 4711))
+        self.buf = b""
+        self.seq = 0
+        self.stopped = False
+
+    def _read(self):
+        while b"\r\n\r\n" not in self.buf:
+            self.buf += self.sock.recv(65536)
+        head, rest = self.buf.split(b"\r\n\r\n", 1)
+        n = int([l for l in head.decode().split("\r\n")
+                 if l.lower().startswith("content-length")][0].split(":")[1])
+        while len(rest) < n:
+            rest += self.sock.recv(65536)
+        self.buf = rest[n:]
+        m = json.loads(rest[:n])
+        if m.get("type") == "event" and m.get("event") == "stopped":
+            self.stopped = True
+        return m
+
+    def req(self, command, arguments=None):
+        self.seq += 1
+        body = json.dumps({"seq": self.seq, "type": "request", "command": command,
+                           "arguments": arguments or {}}).encode()
+        self.sock.sendall(b"Content-Length: %d\r\n\r\n" % len(body) + body)
+        while True:
+            m = self._read()
+            if m.get("type") == "response" and m.get("request_seq") == self.seq:
+                return m
+
+    def read(self, addr, n):
+        out = b""
+        while n:
+            take = min(n, 256)
+            out += base64.b64decode(
+                self.req("readMemory", {"memoryReference": hex(addr), "count": take})
+                ["body"]["data"])
+            addr += take
+            n -= take
+        return out
+
+    def write(self, addr, data):
+        self.req("writeMemory", {"memoryReference": hex(addr),
+                                 "data": base64.b64encode(bytes(data)).decode()})
+
+    def go(self, seconds):
+        self.stopped = False
+        self.req("continue", {"threadId": 1})
+        time.sleep(seconds)
+        self.req("pause", {"threadId": 1})
+        time.sleep(0.05)
+
+    def set_pc(self, addr):
+        self.req("setVariable", {"variablesReference": REGISTERS_REF,
+                                 "name": "PC", "value": "0x%04X" % addr})
+
+    def breakpoint_at(self, addr):
+        self.req("setInstructionBreakpoints",
+                 {"breakpoints": [{"instructionReference": hex(addr)}]})
+
+    def no_breakpoints(self):
+        self.req("setInstructionBreakpoints", {"breakpoints": []})
+
+    def run_to_break(self, timeout=4.0):
+        """Continue until the breakpoint stops us. True if it did."""
+        self.stopped = False
+        self.req("continue", {"threadId": 1})
+        deadline = time.time() + timeout
+        self.sock.settimeout(0.25)
+        try:
+            while time.time() < deadline and not self.stopped:
+                try:
+                    self._read()
+                except socket.timeout:
+                    pass
+        finally:
+            self.sock.settimeout(None)
+        if not self.stopped:
+            self.req("pause", {"threadId": 1})
+            time.sleep(0.05)
+        return self.stopped
+
+
+def covering_rooms(atlas):
+    """The fewest rooms that between them use every graphic the rooms reach.
+
+    Only a minority of the game's graphics appear in room data at all -- the
+    rest are the player's own frames, the movers, the panel and the menu, none
+    of which a room names. Visiting all 139 rooms is therefore mostly wasted;
+    a greedy cover gets the same graphics in a dozen.
+    """
+    scenery = {t["name"]: [b["graphic"] for b in t["blocks"]]
+               for t in atlas["sceneryTemplates"]}
+    objects = {t["name"]: [e["graphic"] for e in t["entries"]]
+               for t in atlas["objectTemplates"]}
+    per = {}
+    for r in atlas["rooms"]:
+        g = set()
+        for s_ in r["scenery"]:
+            g |= set(scenery[s_["template"]])
+        for o in r["objects"]:
+            g |= set(objects[o["template"]])
+        per[r["number"]] = g
+
+    reachable = set().union(*per.values())
+    need, cover = set(reachable), []
+    while need:
+        best = max(per, key=lambda r: len(per[r] & need))
+        if not per[best] & need:
+            break
+        cover.append(best)
+        need -= per[best]
+    return cover, reachable
+
+
+def scan(d, found, saw_bit7, where):
+    """Fold one look at the live object pool into `found`."""
+    pool = d.read(POOL_START, POOL_END - POOL_START)
+    seen = 0
+    for i in range(len(pool) // OBJ_STRIDE):
+        r = pool[i * OBJ_STRIDE:(i + 1) * OBJ_STRIDE]
+        if r[GFX] == 0 or r[GFX] >= GRAPHIC_COUNT:
+            continue
+        seen += 1
+        pair = (r[ADJ_X], r[ADJ_Y])
+        if pair == (0, 0):
+            continue                # not updated yet; never store a zero
+        if r[FLAGS] & 0x80:
+            saw_bit7.add(r[GFX])
+        key = (r[GFX], 1 if r[FLAGS] & GAME_MIRROR else 0)
+        if key in found and found[key] != pair:
+            print("  ! %s: graphic %d flip %d gives %s, had %s"
+                  % (where, key[0], key[1], pair, found[key]))
+        found[key] = pair
+    return seen
+
+
+def harvest(rooms):
+    """Visit each room with a fresh game, and let it play untouched.
+
+    The room is forced at the builder's own breakpoint, which is always
+    reached just after the game starts, and then the breakpoint comes off and
+    nothing interferes again. That matters: an earlier version pointed PC at
+    the room-entry sequence instead, which forced every room perfectly and
+    harvested almost nothing, because abandoning whatever the game was doing
+    drifts SP until it returns into the ROM and stops updating anything. If
+    the pairs come back empty, check the game is still running before
+    suspecting the scan.
+    """
+    found, saw_bit7, forced = {}, set(), 0
+    for room in rooms:
+        d = Dap()
+        d.req("initialize", {"adapterID": "zxspectrum"})
+        d.req("launch", {"rom": ROM, "snapshot": GAME})
+        d.req("configurationDone")
+        # Arm the breakpoint before the machine runs AT ALL. The snapshot
+        # resumes straight into the game -- 0.6s after a launch the PC is
+        # already in the main loop at $D6EA -- so any "settle first" wait lets
+        # the one build we care about sail past, and 0 is never even needed.
+        d.breakpoint_at(BUILDER)
+        if not d.run_to_break(timeout=8.0):
+            print("  ! room %d: the builder was never reached after starting" % room)
+            d.no_breakpoints()
+            d.req("disconnect")
+            continue
+        d.write(ROOM_AT, [room])
+        d.no_breakpoints()
+        forced += 1
+
+        seen = 0
+        for _ in range(6):
+            d.go(0.25)
+            seen = max(seen, scan(d, found, saw_bit7, "room %d" % room))
+        print("  room %3d: %2d records, %d pairs known" % (room, seen, len(found)))
+        d.req("disconnect")
+    return found, saw_bit7, forced
+
+
+def signed(v):
+    return v - 256 if v > 127 else v
+
+
+def emit(found):
+    """A pair table, an index into it per graphic, and the few exceptions.
+
+    Listing the pairs once and giving every graphic a seven-bit index into
+    them is much smaller than two flat tables of signed pairs. Bit 7 marks a
+    graphic that wants a different nudge mirrored, and sends the mirrored case
+    to a short exception list.
+    """
+    adj = {}
+    for g in range(GRAPHIC_COUNT):
+        for flip in (0, 1):
+            adj[(g, flip)] = found.get((g, flip)) or found.get((g, 0)) or (0, 0)
+
+    pairs = [(0, 0)]
+    for key in sorted(adj):
+        if adj[key] not in pairs:
+            pairs.append(adj[key])
+    if len(pairs) * 2 > 128:
+        sys.exit("too many distinct nudges for a seven-bit index: %d" % len(pairs))
+
+    index, mirror = [], []
+    for g in range(GRAPHIC_COUNT):
+        plain, flipped = adj[(g, 0)], adj[(g, 1)]
+        b = pairs.index(plain) * 2
+        if flipped != plain:
+            b |= 0x80
+            mirror.append((g, pairs.index(flipped) * 2))
+        index.append(b)
+
+    L = ["; Generated by adj.py from a running Pentagram -- do not edit.",
+         ";",
+         "; The pixel nudge that lines a sprite's artwork up with its logical",
+         "; position. Pentagram picks these inside its per-graphic update",
+         "; routines rather than reading a table, so these are the values its",
+         "; own code produced, read back out of live object records.",
+         ";",
+         "; %d distinct pairs cover all %d graphics both ways round, and %d"
+         % (len(pairs), GRAPHIC_COUNT, len(mirror)),
+         "; want a different one mirrored.",
+         "",
+         "; The pairs, x then y. Entry 0 is no nudge at all, so a graphic",
+         "; nothing knows about indexes to it harmlessly.",
+         "sprite_adj_pairs:"]
+    for n, (x, y) in enumerate(pairs):
+        L.append(TAB * 5 + "DB" + TAB + TAB + "%4d,%4d" % (signed(x), signed(y))
+                 + TAB * 2 + "; %d" % (n * 2))
+
+    L += ["", "; Graphics wanting a different nudge mirrored: the graphic, then",
+          "; its mirrored index. A zero graphic ends the list.",
+          "sprite_adj_mirror:"]
+    for g, b in mirror:
+        L.append(TAB * 5 + "DB" + TAB + TAB + "%4d,%4d" % (g, b))
+    L.append(TAB * 5 + "DB" + TAB + TAB + "   0,   0")
+
+    L += ["", "; One index a graphic, doubled so it reaches the pair directly.",
+          "; Bit 7 says look in the mirror list when the sprite is flipped.",
+          "sprite_adj_index:"]
+    for row in range(0, GRAPHIC_COUNT, 8):
+        chunk = index[row:row + 8]
+        L.append(TAB * 5 + "DB" + TAB + TAB
+                 + ", ".join("$%02X" % b for b in chunk) + TAB + "; $%02X" % row)
+    return L
+
+
+def main():
+    if not ATLAS.is_file():
+        sys.exit("%s is missing -- run rooms.py first" % ATLAS.name)
+    atlas = json.loads(ATLAS.read_text(encoding="utf-8"))
+    rooms, reachable = covering_rooms(atlas)
+    print("%d rooms cover the %d graphics the room data reaches"
+          % (len(rooms), len(reachable)))
+
+    found, saw_bit7, forced = harvest(rooms)
+
+    graphics = {g for g, _ in found}
+    print()
+    print("visited %d of %d rooms" % (forced, len(rooms)))
+    print("%d pairs over %d of the %d reachable graphics, %d distinct nudges"
+          % (len(found), len(graphics & reachable), len(reachable),
+             len({v for v in found.values()})))
+    extra = graphics - reachable
+    if extra:
+        print("...and %d the rooms do not name, picked up anyway: %s"
+              % (len(extra), sorted(extra)[:8]))
+    if saw_bit7:
+        print("NOTE: %d graphics had bit 7 of the flags set at some point." % len(saw_bit7))
+        print("      The mirrored key here is bit 6, the bit the template carries;")
+        print("      $B2EE tests bit 7 of the same field. If mirrored nudges look")
+        print("      wrong, that is the first thing to re-check.")
+
+    missing = reachable - graphics
+    if missing:
+        print("MISSING %d reachable graphics: %s" % (len(missing), sorted(missing)))
+    if not found:
+        sys.exit("nothing harvested -- not writing %s" % OUT.name)
+    if missing:
+        sys.exit("refusing to write %s while any reachable graphic is unseen. "
+                 "A missing nudge is not a blank: that artwork sits visibly "
+                 "wrong, which reads as an engine bug rather than a gap here."
+                 % OUT.name)
+
+    print()
+    print("NOTE: this covers only what the ROOMS reach. The player's own frames,")
+    print("      the movers, the panel and the menu are not named by any room and")
+    print("      are NOT harvested here -- Knight Lore walks and turns its character")
+    print("      for exactly that reason. Pentagram's control keys have not been")
+    print("      worked out yet, so that pass is still to write.")
+
+    OUT.write_text("\n".join(emit(found)) + "\n", encoding="utf-8")
+    print("wrote %s" % OUT.name)
+
+
+if __name__ == "__main__":
+    main()

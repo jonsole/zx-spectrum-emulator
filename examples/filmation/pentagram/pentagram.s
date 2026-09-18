@@ -101,7 +101,7 @@ room_data_end:
 
 					INCLUDE "../engine/sprite.s"
 sprite_start:
-;					INCLUDE "sprite_data.s"          ; needs sprite_adj.s harvested first
+					INCLUDE "sprite_data.s"
 sprite_end:
 					DISPLAY "sprite_data size ", sprite_end - sprite_start
 					INCLUDE "../engine/object.s"
@@ -123,6 +123,14 @@ sprite_end:
 ;					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
                                                      ; must ASSERT $ == redraw_view_end
 					INCLUDE "../engine/vid_buff.s"
+
+; The pixel adjustments. These belong with the rest of the game's data at
+; $6000, and Knight Lore keeps them there -- but Pentagram's room data is a
+; thousand bytes heavier than Knight Lore's, because it carries a destination
+; room against every scenery entry, and that region overflowed by 162 bytes
+; with these in it. The code region has thousands spare, so they come up here.
+; sprite_adj_index is page-aligned either way, which is all the engine asks.
+					INCLUDE "sprite_adj_gen.s"
 
 image_end:
                     ASSERT  $ <= $10000 - STACK_RESERVE
@@ -193,7 +201,7 @@ bit_reverse_table:
 ; names 172 graphics rather than 256, but the table is still 512 bytes -- the
 ; entries past the game's own simply hold zero.
                     ALIGN   512
-;                   INCLUDE "sprite_table.s"        ; generated beside sprite_data.s
+                    INCLUDE "sprite_table.s"
 
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap

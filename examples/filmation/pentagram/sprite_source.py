@@ -302,8 +302,18 @@ def read_adj(harvest):
         mirror[flat[i]] = flat[i + 1]
 
     index = numbers(text.split("sprite_adj_index:")[1])
+    # Pentagram names 172 graphics where Knight Lore names 256, so adj.py
+    # emits an index only that long -- padding it out to 256 would cost 84
+    # bytes in the region with the least room to spare. Graphics past the end
+    # never reach a sprite table entry, so give them the no-nudge pair rather
+    # than running off the list.
+    none = pairs[0]
     plain, flipped = [], []
     for g in range(256):
+        if g >= len(index):
+            plain.append(none)
+            flipped.append(none)
+            continue
         entry = index[g]
         pair = pairs[(entry & 0x7E) // 2]
         plain.append(pair)
@@ -319,7 +329,10 @@ def emit_adj(sprites, facts, harvest):
     plain, flipped = read_adj(harvest)
     gmap = facts["graphicMap"]
     want = []                       # (x, y) and its mirrored twin, per graphic
-    for g in range(256):
+    # As in read_adj: Pentagram's graphic map is 172 long, not 256, and the
+    # tables emitted here are indexed by graphic number, so they end where the
+    # game's graphics do.
+    for g in range(len(gmap)):
         n = gmap[g]
         taken = sprites[n]["trim"] if n is not None else 0
         out = []
@@ -366,8 +379,12 @@ def emit_adj(sprites, facts, harvest):
     out.append("; the address and the lookup needs no arithmetic at all.")
     out.append("\t\t\t\t\tALIGN\t256")
     out.append("sprite_adj_index:")
-    for row in range(0, 256, 8):
-        cells = ", ".join("$%02X" % index[g] for g in range(row, row + 8))
+    # 172 entries, not 256: Pentagram stops at graphic 171, so the page the
+    # ALIGN reserves is only part filled and the 84 bytes that would pad it
+    # go elsewhere. The lookup is unaffected -- no graphic number reaches
+    # past the end of the table.
+    for row in range(0, len(index), 8):
+        cells = ", ".join("$%02X" % b for b in index[row:row + 8])
         out.append("\t\t\t\t\tDB\t\t%s\t\t; %d" % (cells, row))
     return out
 
