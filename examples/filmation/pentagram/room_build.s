@@ -404,6 +404,10 @@ room_objects_of:	ld		a,(room_bytes_left)
 					rrca
 					rrca
 					and		$3E		; an even index into the table
+					push	af
+					call	mover_find		; what drives every one of this group
+					ld		(room_behaviour),a
+					pop		af
 					ld		l,a
 					ld		h,0
 					ld		bc,object_type_tbl

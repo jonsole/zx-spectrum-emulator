@@ -72,7 +72,12 @@ ROOM_DIR_END = 0x696D           # exclusive
 GRAPHIC_TBL_END = 0x6F2F        # exclusive, and the first sprite run starts here
 FONT_START = 0x8355             # character code $30, '0'
 FONT_END = 0x84AD               # exclusive; one past code $5A, 'Z'
-SPRITE_RUNS = ((0x6F2F, 0x8355), (0x8547, 0x9395), (0x9397, 0xA709))
+SPRITE_RUNS = ((0x6F2F, 0x8355), (0x8547, 0x9395), (0x9397, 0xA709),
+               # The spider, alone between the font and the second run --
+               # graphics 16, 17 and 89 point at it. It is walked LAST rather
+               # than in address order so that adding it, which came late,
+               # left every other sprite's number where it was.
+               (0x84AD, 0x853F))
 MIRRORED = 0xE0                 # width-byte flags; bit 7 is the one the game
                                 # toggles in place as it mirrors a sprite
 NO_SPRITE = 255
@@ -139,7 +144,7 @@ def load_tape(path):
 
 
 def sprites(memory):
-    """The game's sprite records, walked in address order through three runs.
+    """The game's sprite records, walked run by run through SPRITE_RUNS.
 
     Each record is a width byte (low five bits; the top three are the flags
     saying which way round it is now) and a height byte, then a mask and a

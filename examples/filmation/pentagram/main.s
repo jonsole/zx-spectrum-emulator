@@ -44,13 +44,24 @@ start:              di
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
                     ld      ix,player
+                    ld      hl,room_again
+                    bit     0,(hl)
+                    jr      nz,.again           ; the room over: where he came in
+
                     ld      b,PLAYER_START_U
                     ld      c,PLAYER_START_V
                     ld      a,(room_floor_z)
                     ld      hl,enter_dir
                     bit     7,(hl)              ; $FF: he did not walk in
                     call    z,player_entry      ; walked in: by the opposite door
-                    call    character_add
+                    ld      (room_entry_at),bc  ; kept for starting the room over
+                    ld      (room_entry_z),a
+                    jr      .add
+
+.again:             ld      (hl),0
+                    ld      bc,(room_entry_at)
+                    ld      a,(room_entry_z)
+.add:               call    character_add
 
                     ; player_exit changes room_number when he walks out through
                     ; a doorway, and this notices. Poking it from the debugger
@@ -69,10 +80,29 @@ start:              di
                     call    player_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    turn_pace
-                    jr      .loop
+
+                    ; Something deadly touched him, this turn or the movers'.
+                    ; There are no lives yet and no death to watch, so for now
+                    ; the room simply starts over, with him back where he came
+                    ; in -- the shape of what the original does once its death
+                    ; has played out.
+                    ld      a,(player_touched)
+                    or      a
+                    jr      z,.loop
+                    xor     a
+                    ld      (player_touched),a
+                    inc     a
+                    ld      (room_again),a
+                    jp      .enter
 
 
 ; Which room is wanted, and which is up. room_build is the only thing that
 ; moves one to the other.
 room_number:        DB      PLAYER_START_ROOM
 room_shown:         DB      PLAYER_START_ROOM
+
+; Whether the room is being started over, and where he stood when he came into
+; it, as .entered found it.
+room_again:         DB      0
+room_entry_at:      DW      0                   ; C - V, B - U, as BC holds them
+room_entry_z:       DB      0
