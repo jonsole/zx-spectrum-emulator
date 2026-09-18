@@ -109,7 +109,7 @@ SPRITE_FORMAT = {
 # this can be handed to sprite_source.py's checks. Until then the sheet lays
 # every sprite out in one band, which is enough to look at them.
 #
-# What still has to be filled in:
+# What still has to be filled in -- ROTATION_BUFFERS is done, below:
 #   ANIMATIONS            frames that must share a rotation buffer's size
 #   WHOLE_SPRITE_GRAPHICS sprites drawn without asking object_update, which
 #                         therefore keep their blank bottom rows
@@ -118,9 +118,23 @@ SPRITE_FORMAT = {
 #                         come from
 #   BLANK_GRAPHIC         the graphic the game draws nothing with, if it has
 #                         one; Knight Lore's is graphic 1
+# Sabreman, as the original was watched wearing him: four frames a block,
+# two blocks a half -- 32-35 walking away from the viewer and 36-39 towards
+# it for his legs, 40-43 and 44-47 for his body. Mirroring makes the other two
+# facings, so there is no third block.
+SABREMAN_LEGS = tuple(range(32, 40))
+SABREMAN_BODY = tuple(range(40, 48))
+
 ANIMATIONS = ()
 WHOLE_SPRITE_GRAPHICS = ()
-ROTATION_BUFFERS = ()
+
+# The two rotation buffers Sabreman keeps for life, sized from these sprites;
+# every frame the matching half can wear has to fit, and sprite_source.py
+# fails the build if one does not.
+ROTATION_BUFFERS = (
+    ("CHARACTER_LARGEST", 66, SABREMAN_LEGS),
+    ("CHARACTER_TALLEST", 61, SABREMAN_BODY),
+)
 
 # Band name (a label, because the panel's groups have to be one), what it is
 # called on the picture, and the graphics it claims. One sweep-up band for now.

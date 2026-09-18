@@ -7,8 +7,8 @@ mirrored, and the choice is made inside the game's per-graphic update routines
 -- it is behaviour, not a table, so there is nothing to read out statically.
 
 So take the values instead of the code. This drives a running Pentagram over
-DAP, forces it through every room, and reads the pairs back out of the live
-records.
+DAP, forces it through every room, then walks Sabreman round every facing,
+and reads the pairs back out of the live records.
 
     python adj.py           # needs zx_server running on 4711
 
@@ -69,6 +69,13 @@ GFX, FLAGS, ADJ_X, ADJ_Y = 0x00, 0x07, 0x12, 0x13
 
 GAME_MIRROR = 0x40              # in the template, and copied into the record
 GRAPHIC_COUNT = 172
+
+# Sabreman: legs 32-39 and body 40-47, four frames a block, two blocks. No room
+# names them, so the rooms pass never sees them and walk_character() does.
+CHARACTER_GRAPHICS = set(range(32, 48))
+START_KEY = "0"                 # starts a game from the menu
+TURN_KEY = "Z"                  # turns him a quarter
+WALK_KEY = "A"                  # walks him the way he faces
 
 TAB = chr(9)
 
@@ -229,12 +236,16 @@ def harvest(rooms):
         d.req("initialize", {"adapterID": "zxspectrum"})
         d.req("launch", {"rom": ROM, "snapshot": GAME})
         d.req("configurationDone")
-        # Arm the breakpoint before the machine runs AT ALL. The snapshot
-        # resumes straight into the game -- 0.6s after a launch the PC is
-        # already in the main loop at $D6EA -- so any "settle first" wait lets
-        # the one build we care about sail past, and 0 is never even needed.
+        # Arm the breakpoint before the machine runs at all, so that no build
+        # can sail past it.
         d.breakpoint_at(BUILDER)
-        if not d.run_to_break(timeout=8.0):
+        # The snapshot sits on the menu, and nothing guarantees it ever leaves
+        # by itself, so start a game: the first build that follows is the one
+        # the breakpoint catches.
+        d.req("keyDown", {"key": START_KEY})
+        reached = d.run_to_break(timeout=8.0)
+        d.req("keyUp", {"key": START_KEY})
+        if not reached:
             print("  ! room %d: the builder was never reached after starting" % room)
             d.no_breakpoints()
             d.req("disconnect")
@@ -243,13 +254,59 @@ def harvest(rooms):
         d.no_breakpoints()
         forced += 1
 
+        # Look early and often first. The room is forced, not walked into, so
+        # Sabreman lands wherever the game had him -- and in room 24 that is
+        # on something deadly: within a fifth of a second he dies, and the
+        # game moves him to another room, taking object_06 and the only
+        # graphic 63 with it. Then slow down, for the animated objects.
         seen = 0
-        for _ in range(6):
-            d.go(0.25)
+        for step in [0.03] * 8 + [0.25] * 8:
+            d.go(step)
             seen = max(seen, scan(d, found, saw_bit7, "room %d" % room))
         print("  room %3d: %2d records, %d pairs known" % (room, seen, len(found)))
         d.req("disconnect")
     return found, saw_bit7, forced
+
+
+def walk_character(found, saw_bit7):
+    """Start a game the ordinary way and walk Sabreman round every facing.
+
+    His records are the first two in the pool, so scan() already reads them;
+    all this adds is making him wear every frame. Each round is a quarter
+    turn and a short walk -- short, because a long one finds something in the
+    room that kills him, and the death frames are not his walk. It stops as
+    soon as all sixteen graphics have been seen.
+    """
+    d = Dap()
+    d.req("initialize", {"adapterID": "zxspectrum"})
+    d.req("launch", {"rom": ROM, "snapshot": GAME})
+    d.req("configurationDone")
+    d.go(1.0)
+    d.req("keyDown", {"key": START_KEY}); d.go(0.3); d.req("keyUp", {"key": START_KEY})
+    for _ in range(12):
+        d.go(0.4)
+        if d.read(POOL_START, 1)[0]:
+            break
+    else:
+        print("  ! the game never started, so no character frames")
+        d.req("disconnect")
+        return
+    d.go(0.6)
+
+    for turn in range(40):          # generous: he dies now and then, and respawns
+        if CHARACTER_GRAPHICS <= {g for g, _ in found}:
+            break
+        d.req("keyDown", {"key": TURN_KEY}); d.go(0.12); d.req("keyUp", {"key": TURN_KEY})
+        d.go(0.3)
+        d.req("keyDown", {"key": WALK_KEY})
+        for _ in range(5):
+            d.go(0.08)
+            scan(d, found, saw_bit7, "walking")
+        d.req("keyUp", {"key": WALK_KEY})
+        d.go(0.1)
+    seen = CHARACTER_GRAPHICS & {g for g, _ in found}
+    print("  Sabreman: %d of his %d graphics seen" % (len(seen), len(CHARACTER_GRAPHICS)))
+    d.req("disconnect")
 
 
 def signed(v):
@@ -267,7 +324,13 @@ def emit(found):
     adj = {}
     for g in range(GRAPHIC_COUNT):
         for flip in (0, 1):
-            adj[(g, flip)] = found.get((g, flip)) or found.get((g, 0)) or (0, 0)
+            # Seen only one way round: use that both ways. Every graphic seen
+            # both ways that could be checked -- Sabreman's 36-39 and 44-47 --
+            # has the same nudge either way, and his 32-35 are only ever worn
+            # mirrored while walking, so without this their plain case would
+            # fall to zero.
+            adj[(g, flip)] = (found.get((g, flip)) or found.get((g, 1 - flip))
+                              or (0, 0))
 
     pairs = [(0, 0)]
     for key in sorted(adj):
@@ -329,6 +392,8 @@ def main():
           % (len(rooms), len(reachable)))
 
     found, saw_bit7, forced = harvest(rooms)
+    walk_character(found, saw_bit7)
+    reachable = reachable | CHARACTER_GRAPHICS
 
     graphics = {g for g, _ in found}
     print()
@@ -358,11 +423,12 @@ def main():
                  % OUT.name)
 
     print()
-    print("NOTE: this covers only what the ROOMS reach. The player's own frames,")
-    print("      the movers, the panel and the menu are not named by any room and")
-    print("      are NOT harvested here -- Knight Lore walks and turns its character")
-    print("      for exactly that reason. Pentagram's control keys have not been")
-    print("      worked out yet, so that pass is still to write.")
+    print()
+    print("NOTE: this covers the rooms and Sabreman's walk. The movers, the panel")
+    print("      and the menu are named by neither and are NOT harvested here.")
+    print("      64-71 are his appearing and dying frames, caught only when a scan")
+    print("      lands mid-animation, and the original moves their nudge frame by")
+    print("      frame -- so expect those to vary from run to run.")
 
     OUT.write_text("\n".join(emit(found)) + "\n", encoding="utf-8")
     print("wrote %s" % OUT.name)

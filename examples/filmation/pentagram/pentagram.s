@@ -97,6 +97,12 @@ room_data_end:
 ; sprite.s, object.s and shift.s reach into each other's code and
 ; sprite_jump_table is computed from the size of a block inside object_update,
 ; so those three go into a build together and in this order.
+; Sabreman walks in four frames, not the knight's six, and his sprites face the
+; other way unmirrored. The engine's walker reads both of these; see
+; ../engine/walker.s.
+                    DEFINE  CHARACTER_SHORT_WALK
+                    DEFINE  CHARACTER_MIRRORED_ART
+
                     ORG     $8000
 
 					INCLUDE "../engine/sprite.s"

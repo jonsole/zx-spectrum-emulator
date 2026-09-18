@@ -11,7 +11,7 @@
 ; ---------------------------------------------------------------------------
 
 PLAYER_LEGS_GFX     EQU     32
-PLAYER_BODY_GFX     EQU     40              ; CHARACTER_BLOCK above the legs
+PLAYER_BODY_GFX     EQU     40              ; two blocks of four above the legs
 PLAYER_FACING       EQU     0
 
                     ALIGN   32

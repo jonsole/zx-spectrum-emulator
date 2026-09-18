@@ -5,7 +5,7 @@
 ; routines rather than reading a table, so these are the values its
 ; own code produced, read back out of live object records.
 ;
-; 15 distinct pairs cover all 172 graphics both ways round, and 12
+; 15 distinct pairs cover all 172 graphics both ways round, and 4
 ; want a different one mirrored.
 
 ; The pairs, x then y. Entry 0 is no nudge at all, so a graphic
@@ -34,14 +34,6 @@ sprite_adj_mirror:
 					DB		   7,   8
 					DB		   8,  12
 					DB		   9,   8
-					DB		  33,  18
-					DB		  34,  18
-					DB		  41,  20
-					DB		  42,  20
-					DB		  64,  20
-					DB		  67,  26
-					DB		  70,  26
-					DB		  93,  14
 					DB		   0,   0
 
 ; One index a graphic, doubled so it reaches the pair directly.
@@ -51,14 +43,14 @@ sprite_adj_index:
 					DB		$8A, $8C, $0E, $0E, $10, $10, $10, $10	; $08
 					DB		$0E, $0E, $00, $00, $00, $00, $00, $0E	; $10
 					DB		$00, $00, $00, $00, $0E, $00, $0E, $00	; $18
-					DB		$00, $80, $80, $00, $00, $00, $00, $00	; $20
-					DB		$00, $80, $80, $00, $00, $00, $00, $00	; $28
-					DB		$00, $00, $00, $00, $10, $16, $16, $16	; $30
+					DB		$12, $12, $12, $12, $12, $12, $12, $12	; $20
+					DB		$14, $14, $14, $14, $14, $14, $14, $14	; $28
+					DB		$12, $12, $12, $12, $10, $16, $16, $16	; $30
 					DB		$16, $18, $00, $00, $00, $00, $00, $0E	; $38
-					DB		$80, $00, $00, $80, $00, $00, $80, $00	; $40
+					DB		$14, $00, $1A, $1A, $1A, $1A, $1A, $00	; $40
 					DB		$0E, $1C, $0E, $0E, $0E, $00, $0E, $0E	; $48
-					DB		$00, $00, $0E, $00, $0E, $00, $0E, $0E	; $50
-					DB		$0E, $0E, $00, $1C, $0E, $80, $00, $00	; $58
+					DB		$0E, $0E, $0E, $00, $0E, $00, $0E, $0E	; $50
+					DB		$0E, $0E, $00, $1C, $0E, $0E, $00, $00	; $58
 					DB		$00, $00, $00, $00, $00, $00, $00, $00	; $60
 					DB		$00, $00, $00, $00, $00, $00, $00, $00	; $68
 					DB		$00, $00, $00, $00, $00, $00, $00, $00	; $70
@@ -67,5 +59,5 @@ sprite_adj_index:
 					DB		$0E, $00, $00, $00, $0E, $00, $0E, $0E	; $88
 					DB		$00, $0E, $0E, $0E, $00, $00, $00, $00	; $90
 					DB		$00, $00, $00, $00, $00, $00, $00, $00	; $98
-					DB		$00, $00, $00, $00, $00, $00, $00, $00	; $A0
-					DB		$00, $00, $00, $00	; $A8
+					DB		$12, $12, $12, $12, $12, $12, $12, $12	; $A0
+					DB		$00, $00, $0E, $0E	; $A8

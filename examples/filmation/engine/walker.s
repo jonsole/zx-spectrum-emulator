@@ -27,8 +27,16 @@
 ; left is right mirrored, which is why there are two blocks and not four.
 
 CHARACTER_BODY		EQU		ROOM_STRIDE		; the body is the slot above the legs
+; A game whose character walks in four frames rather than six -- Pentagram's
+; Sabreman: 32-35 away and 36-39 towards -- says so with DEFINE
+; CHARACTER_SHORT_WALK before this file is included.
+				IFDEF	CHARACTER_SHORT_WALK
+CHARACTER_BLOCK		EQU		4		; graphics per facing block
+CHARACTER_PHASES	EQU		4		; ...all of them the walk
+				ELSE
 CHARACTER_BLOCK		EQU		8		; graphics per facing block
 CHARACTER_PHASES	EQU		6		; ...of which this many are the walk
+				ENDIF
 					; A frame of the cycle every step, because Knight
 					; Lore animates the legs every turn it is walking
 					; -- $C969 falls into animate_human_legs whenever
@@ -130,9 +138,9 @@ CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 6
 					DISPLAY "object record: ", /D, OBJ, " of ", /D, ROOM_STRIDE
 
 					; character_frame works the block out by doubling bit 1 of
-					; the facing twice, so it cannot read this EQU -- which is
-					; what the ASSERT is for.
-					ASSERT	CHARACTER_BLOCK == 8
+					; the facing -- twice for eight, once for four -- so it
+					; cannot take any other size, which is what the ASSERT is for.
+					ASSERT	CHARACTER_BLOCK == 8 || CHARACTER_BLOCK == 4
 
 
 ; Which way each facing goes, as a step in U and V.
@@ -166,7 +174,9 @@ character_steps:	DB		-CHARACTER_STEP, 0		; 0  -U  away, up and left
 character_frame:	ld		a,(ix+CHARACTER_FACING)
 					and		2		; the block: away from the viewer, or
 					add		a		; towards it, as 0 or 2...
+				IF	CHARACTER_BLOCK == 8
 					add		a		; ...* 4, as 0 or CHARACTER_BLOCK
+				ENDIF
 					add		a,(ix+CHARACTER_PHASE)
 					ld		c,a
 					add		a,(ix+CHARACTER_LEGS)
@@ -176,9 +186,16 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
-					; Bit 0 of the facing is the mirror, in both halves.
+					; Bit 0 of the facing is the mirror, in both halves. A game
+					; whose character is drawn facing the other way unmirrored --
+					; Sabreman walks -U mirrored where the knight does not -- says
+					; so with DEFINE CHARACTER_MIRRORED_ART, and the sense flips.
 					ld		a,(ix+CHARACTER_FACING)
-					rrca			; carry: mirrored, and fall into...
+					rrca			; carry: mirrored
+				IFDEF	CHARACTER_MIRRORED_ART
+					ccf
+				ENDIF
+					;; NB: fall through into obj_pair_flip
 
 
 ; Turn a pair of records -- IX and the one ROOM_STRIDE above it -- to face

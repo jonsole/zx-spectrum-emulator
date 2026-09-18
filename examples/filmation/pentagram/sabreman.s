@@ -25,13 +25,10 @@ COLLIDE_HEIGHT		EQU		23
 ; this on every build, so a wrong guess here fails loudly rather than rotating
 ; a buffer past its end into the other.
 ;
-; CAVEAT: these come from the frames he was seen to wear while standing,
-; walking and jumping. If he has a bigger frame for something not exercised --
-; dying, or whatever the CAPS-to-V row does -- the check will catch it and
-; these want raising.
-CHARACTER_LARGEST	EQU		sprite_067		; 3x18: graphic 38, bigger than any
-					; walking frame, which are all 3x15
-CHARACTER_TALLEST	EQU		sprite_057		; 3x27: graphic 41, his body
+; They are declared, with the graphics each half can wear, in ROTATION_BUFFERS
+; in sprite_sheet.py -- change them there and here together.
+CHARACTER_LARGEST	EQU		sprite_066		; 3x18: graphic 36, his legs facing us
+CHARACTER_TALLEST	EQU		sprite_061		; 3x34: graphic 46, his body facing us
 
 CHARACTER_BODY_UP	EQU		12		; how far his body rides above his legs.
 					; Measured: the body record sits at Z 140
