@@ -5,7 +5,7 @@
 ; They all leave the same byte, in this bit order:
 ;
 ;   0  left        1  right        2  forward
-;   3  jump        4  back
+;   3  jump        4  back         5  fire
 ;
 ; Nothing here decides anything: player_turn reads the byte and works out which
 ; way he should face. That split is what lets one reader serve both control
@@ -31,12 +31,21 @@
 ;
 ; -- the keys ----------------------------------------------------------------
 ;
-; Whole half-rows, as the game itself reads them -- it never looks at a single
-; key, which is why any of A to ENTER walks him and why pressing G does the
-; same as pressing A. Measured against the original: the A-to-G and H-to-ENTER
-; rows walk him, the Q-to-P rows jump, and the CAPS-to-V row is its fourth
-; action. The number rows do nothing in the original, so they are free here,
-; and back is put on them.
+; Mostly whole half-rows, as the game itself reads them, which is why any of A
+; to ENTER walks him and pressing G does the same as pressing A. The top row
+; is the exception: the original splits it key by key, alternately, reading
+; each half on its own ($BEC8 and $BEE7) --
+;
+;   Q E T  U O    jump
+;   W R  Y I P    fire
+;
+; so it cannot be read as the one port $DBFE, which ORs the halves together
+; and would give Q and P the same bit. The number rows pick up and put down in
+; the original, which the remake does not have yet; back is put on them.
+;
+; On a joystick the original fires with the button and jumps with down --
+; bit 4 here, "back" -- which player_step takes as a jump while the controls
+; are rotational.
 ; ---------------------------------------------------------------------------
 
 INPUT_LEFT          EQU     1 << 0
@@ -44,12 +53,14 @@ INPUT_RIGHT         EQU     1 << 1
 INPUT_FORWARD       EQU     1 << 2
 INPUT_JUMP          EQU     1 << 3
 INPUT_BACK          EQU     1 << 4              ; only steers while directional
+INPUT_FIRE          EQU     1 << 5
 
 ; The keyboard's half-rows.
 KEY_ROW_SHIFT_V     EQU     $FEFE               ; CAPS, Z, X, C, V
 KEY_ROW_SPACE_B     EQU     $7FFE               ; SPACE, SYM SHIFT, M, N, B
 KEY_ROWS_A_ENTER    EQU     $BDFE               ; A to G and H to ENTER
-KEY_ROWS_Q_P        EQU     $DBFE               ; Q to T and Y to P
+KEY_ROW_Q_T         EQU     $FBFE               ; Q, W, E, R, T
+KEY_ROW_Y_P         EQU     $DFFE               ; P, O, I, U, Y
 KEY_ROWS_1_0        EQU     $E7FE               ; 1 to 5 and 6 to 0
 KEY_STICK_1_5       EQU     $F7FE               ; 1 to 5: the cursor keys' 5, and
                                                 ; Interface II's second stick
@@ -95,7 +106,7 @@ input_interface_ii: ld      e,0
                     set     2,e
 .f2:                bit     4,a                 ; 5 fire
                     jr      z,.first
-                    set     3,e
+                    set     5,e
 
 .first:             ld      bc,KEY_STICK_0_6    ; the first stick
                     in      a,(c)
@@ -114,7 +125,7 @@ input_interface_ii: ld      e,0
                     set     2,e
 .f1:                bit     0,a                 ; 0 fire
                     jp      z,input_store
-                    set     3,e
+                    set     5,e
                     jp      input_store
 
 
@@ -136,7 +147,7 @@ input_kempston:     ld      e,0
                     set     2,e
 .fire:              rra
                     jp      nc,input_store
-                    set     3,e
+                    set     5,e
                     jp      input_store
 
 
@@ -153,7 +164,7 @@ input_cursor:       ld      e,0
                     cpl
                     bit     0,a                 ; 0
                     jr      z,.up
-                    set     3,e
+                    set     5,e
 .up:                bit     3,a                 ; 7
                     jr      z,.right
                     set     2,e
@@ -207,12 +218,28 @@ input_keyboard:     ld      e,0
                     jr      z,.jump
                     set     2,e
 
-.jump:              ld      bc,KEY_ROWS_Q_P     ; any of Q to P
+.jump:              ld      bc,KEY_ROW_Q_T
                     in      a,(c)
                     cpl
-                    and     $1F
-                    jr      z,.back
+                    ld      d,a
+                    and     $15                 ; Q, E, T
+                    jr      z,.fire_wr
                     set     3,e
+.fire_wr:           ld      a,d
+                    and     $0A                 ; W, R
+                    jr      z,.y_p
+                    set     5,e
+.y_p:               ld      bc,KEY_ROW_Y_P
+                    in      a,(c)
+                    cpl
+                    ld      d,a
+                    and     $0A                 ; O, U
+                    jr      z,.fire_piy
+                    set     3,e
+.fire_piy:          ld      a,d
+                    and     $15                 ; P, I, Y
+                    jr      z,.back
+                    set     5,e
 
 .back:              ld      bc,KEY_ROWS_1_0     ; any number
                     in      a,(c)

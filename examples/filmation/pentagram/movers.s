@@ -45,19 +45,23 @@ MOVE_FALLS          EQU     3       ; drops, and cannot be pushed -- graphic 91,
 MOVE_HOMER          EQU     4       ; what falls from the sky and flies at him --
                                     ; 48-51 and 160-167, $CC4B. See flyers.s.
 
-MOVE_STILL          EQU     5       ; the first that kills: spiky grass, thorns
+MOVE_BOLT           EQU     5       ; his bolt -- 149-151, $C1C5. See player.s.
+MOVE_POOF           EQU     6       ; the puff a bolt or a flyer goes out in --
+                                    ; 64-70, $C111
+
+MOVE_STILL          EQU     7       ; the first that kills: spiky grass, thorns
                                     ; and water -- $C285 -- which do nothing else
-MOVE_SPIDER         EQU     6       ; graphic 89, $CF22
-MOVE_PACE_U_DEADLY  EQU     7       ; a dragon's head pacing -- 92, $CEA0
-MOVE_PACE_V_DEADLY  EQU     8       ; ...and along V -- 93, $CEDA
-MOVE_HOPPER         EQU     9       ; a dragon's head bobbing -- 86, $CE9A
-MOVE_CREATURE       EQU     10      ; graphics 16 and 17, $D1F5
-MOVE_FALLER         EQU     11      ; what falls from the sky and roams -- 80
+MOVE_SPIDER         EQU     8       ; graphic 89, $CF22
+MOVE_PACE_U_DEADLY  EQU     9       ; a dragon's head pacing -- 92, $CEA0
+MOVE_PACE_V_DEADLY  EQU     10      ; ...and along V -- 93, $CEDA
+MOVE_HOPPER         EQU     11      ; a dragon's head bobbing -- 86, $CE9A
+MOVE_CREATURE       EQU     12      ; graphics 16 and 17, $D1F5
+MOVE_FALLER         EQU     13      ; what falls from the sky and roams -- 80
                                     ; and 81, $D1FD
-MOVE_FALLER4        EQU     12      ; ...in four frames -- 168-171, $D251
-MOVE_PUSHED_DEADLY  EQU     13      ; the thorny bush, which can be shoved and
+MOVE_FALLER4        EQU     14      ; ...in four frames -- 168-171, $D251
+MOVE_PUSHED_DEADLY  EQU     15      ; the thorny bush, which can be shoved and
                                     ; kills -- 28, $CD70. The first LOOSE.
-MOVE_PUSHED         EQU     14      ; stump, cube, table and stone -- 63, 72,
+MOVE_PUSHED         EQU     16      ; stump, cube, table and stone -- 63, 72,
                                     ; 73, 79, $CD7C/$CD81. The first harmless.
 
 BEHAVIOUR_FIRST_TURN    EQU     MOVE_PACE_U
@@ -118,6 +122,8 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_pace_v        ; MOVE_PACE_V
                     DW      mover_falls         ; MOVE_FALLS
                     DW      mover_homer         ; MOVE_HOMER
+                    DW      mover_bolt          ; MOVE_BOLT
+                    DW      mover_poof          ; MOVE_POOF
                     DW      mover_still         ; MOVE_STILL
                     DW      mover_spider        ; MOVE_SPIDER
                     DW      mover_pace_u        ; MOVE_PACE_U_DEADLY
@@ -471,3 +477,141 @@ mover_faller_c:     ld      a,(ix+OBJ.DU)
                     ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
+
+
+; ---------------------------------------------------------------------------
+; His bolt -- $C1C5. It flies straight on at the velocity it was fired with,
+; eight a turn, a little above the floor -- the original stops it falling
+; below Z 132 -- cycling 151, 150, 149. The only things it hurts are what fell
+; from the sky: it tests the two flyer slots, and not the room ($C206). Hit
+; one and that one goes out in a puff and the bolt is simply gone ($C264);
+; hit anything else across its path and the bolt puffs out itself ($C107).
+;   IX -> the record
+BOLT_DU             EQU     30              ; the velocity it was fired with,
+BOLT_DV             EQU     31              ; past OBJ inside the slot
+BOLT_LOW            EQU     132
+BOLT_FIRST          EQU     149
+BOLT_LAST           EQU     151
+
+mover_bolt:         ld      a,(ix+OBJ.GFX)
+                    dec     a
+                    cp      BOLT_FIRST
+                    jr      nc,.frame
+                    ld      a,BOLT_LAST
+.frame:             ld      (ix+OBJ.GFX),a
+
+                    ld      a,(ix+BOLT_DU)
+                    ld      (ix+OBJ.DU),a
+                    ld      a,(ix+BOLT_DV)
+                    ld      (ix+OBJ.DV),a
+                    ld      a,(ix+OBJ.Z)
+                    cp      BOLT_LOW + 1
+                    jr      nc,.moving          ; above it: let it fall
+                    ld      (ix+OBJ.DZ),1       ; ...down to it: hold it there
+.moving:            call    mover_move_always
+
+                    ; Has it reached something that fell from the sky?
+                    ld      iy,(flyer_slots)
+                    ld      b,FLYER_SLOTS
+.flyer:             call    bolt_hits
+                    jr      c,.hit
+                    ld      de,ROOM_STRIDE
+                    add     iy,de
+                    djnz    .flyer
+
+                    ld      a,(collide_hit)
+                    and     COLLIDE_U | COLLIDE_V
+                    ret     z
+                    jp      mover_poof_start    ; stopped by anything else
+
+.hit:               push    ix
+                    push    iy
+                    pop     ix
+                    call    mover_poof_start    ; the flyer goes out in a puff
+                    pop     ix
+                    jp      object_hide         ; and the bolt is gone
+
+
+; Whether the bolt at IX overlaps the flyer at IY: centres closer on each
+; axis than their two sizes and a little -- $C216. An empty slot, or one
+; already going out, is not hit.
+;   IX -> the bolt, IY -> the slot
+; Out: carry set for a hit. Corrupts AF, C.
+bolt_hits:          ld      a,(iy+OBJ.GFX)
+                    or      a
+                    ret     z                   ; carry clear
+                    ld      a,(iy+OBJ.BEHAVIOUR)
+                    cp      MOVE_POOF
+                    jr      z,.miss
+                    ld      a,(iy+OBJ.U)
+                    sub     (ix+OBJ.U)
+                    call    character_door_find.abs
+                    ld      c,a
+                    ld      a,(iy+OBJ.SIZE_U)
+                    add     a,(ix+OBJ.SIZE_U)
+                    add     a,2
+                    cp      c
+                    jr      c,.miss             ; too far apart along U
+                    jr      z,.miss
+                    ld      a,(iy+OBJ.V)
+                    sub     (ix+OBJ.V)
+                    call    character_door_find.abs
+                    ld      c,a
+                    ld      a,(iy+OBJ.SIZE_V)
+                    add     a,(ix+OBJ.SIZE_V)
+                    add     a,2
+                    cp      c
+                    jr      c,.miss
+                    jr      z,.miss
+                    ld      a,(iy+OBJ.Z)
+                    sub     (ix+OBJ.Z)
+                    call    character_door_find.abs
+                    ld      c,a
+                    ld      a,(iy+OBJ.SIZE_Z)
+                    add     a,(ix+OBJ.SIZE_Z)
+                    cp      c
+                    jr      c,.miss
+                    jr      z,.miss
+                    scf
+                    ret
+.miss:              or      a
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; A puff -- $C107 starts one, $C111 runs it. Graphics 64 to 70, a frame a
+; turn, and then nothing: the slot is emptied. While it plays it neither falls
+; nor blocks nor harms.
+;   IX -> the record
+POOF_FIRST          EQU     64
+POOF_LAST           EQU     70
+
+; Only the passable bit is set: the rest of FLAGS is the engine's own
+; bookkeeping, and OBJ_SHIFTED in particular says the record's sprite pointer
+; is into its rotation buffer. Writing the whole byte cleared that while the
+; pointer still pointed there, and the next draw took what lay before the
+; copy for a sprite header and mirrored it forever.
+mover_poof_start:   ld      (ix+OBJ.GFX),POOF_FIRST
+                    ld      (ix+OBJ.BEHAVIOUR),MOVE_POOF
+                    set     2,(ix+OBJ.FLAGS)
+                    ASSERT  OBJ_PASSABLE == 1 << 2
+                    ret
+
+mover_poof:         ld      a,(ix+OBJ.GFX)
+                    cp      POOF_LAST
+                    jp      nc,object_hide
+                    inc     a
+                    ld      (ix+OBJ.GFX),a
+                    call    mover_hover
+                    jp      mover_move_always
+
+
+; Take a record out of the room: repaint where it was, without it, and leave
+; the slot empty for the next. Knight Lore's special_hide.
+;   IX -> the record
+; Corrupts everything, IX included.
+object_hide:        call    region_reset
+                    call    region_add
+                    call    depth_unlink
+                    call    flyer_blank
+                    jp      redraw_view

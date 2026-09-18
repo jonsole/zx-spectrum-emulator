@@ -28,6 +28,8 @@
 ; ---------------------------------------------------------------------------
 
 FLYER_SLOTS         EQU     2
+BOLT_SLOTS          EQU     2               ; his two bolts' -- see player.s
+EXTRA_SLOTS         EQU     FLYER_SLOTS + BOLT_SLOTS
 FLYER_Z             EQU     216             ; where they drop from
 FLYER_WAIT          EQU     (2 + 4) * 4     ; between drops, with all four
                                             ; quest items still out
@@ -41,13 +43,15 @@ flyer_pick:         DB      164, 160, 48, 80, 168, 160, 48, 80
 
 flyer_timer:        DB      0               ; $A73D, but started over each room
 flyer_banned:       DB      0               ; this room drops nothing
-flyer_slots:        DW      0               ; the first of the two records
+flyer_slots:        DW      0               ; the first of the two records;
+                                            ; the bolts' two follow them
 
 
 ; ---------------------------------------------------------------------------
-; Make the two records a room keeps for flyers: the next two after everything
-; the room data made, blank until something falls into them. Knight Lore keeps
-; its collectables' slots the same way -- see special_room_enter.
+; Make the records a room keeps for flyers and for his bolts: the next four
+; after everything the room data made, blank until something falls or is
+; fired into them. Knight Lore keeps its collectables' slots the same way --
+; see special_room_enter.
 ;
 ; And whether this room drops anything at all, and the whole wait again
 ; before it does.
@@ -83,7 +87,7 @@ flyer_room_enter:   xor     a
                     djnz    .look
 
 .blank:             ld      ix,(flyer_slots)
-                    ld      b,FLYER_SLOTS
+                    ld      b,EXTRA_SLOTS
 .slot:              call    flyer_blank
                     ld      (ix+OBJ.BUF_L),0    ; no buffer yet: the first drop
                     ld      (ix+OBJ.BUF_H),0    ; into it takes one
@@ -93,7 +97,7 @@ flyer_room_enter:   xor     a
                     add     ix,de
                     djnz    .slot
                     ld      a,(room_object_count)
-                    add     a,FLYER_SLOTS
+                    add     a,EXTRA_SLOTS
                     ld      (room_object_count),a
                     ret
 
