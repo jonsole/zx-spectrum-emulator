@@ -63,6 +63,7 @@ new_game:           ld      a,$04
 
 .entered:           ld      a,(room_number)
                     ld      (room_shown),a
+                    call    room_seen           ; for the percentage at the end
                     ld      ix,player
                     ld      hl,room_again
                     bit     0,(hl)
@@ -121,7 +122,7 @@ new_game:           ld      a,$04
                     ld      a,(player_lives)
                     sub     1
                     daa
-                    jp      c,new_game          ; there were none left
+                    jp      c,game_over         ; there were none left
                     ld      (player_lives),a
                     ld      a,1
                     ld      (room_again),a

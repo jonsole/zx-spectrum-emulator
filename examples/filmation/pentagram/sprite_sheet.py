@@ -135,7 +135,11 @@ SABREMAN_POOF = tuple(range(64, 71))    # both halves wear the puff he dies in
 FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
 
 ANIMATIONS = ()
-WHOLE_SPRITE_GRAPHICS = ()
+# Drawn straight onto the screen with screen_sprite, which takes no pixel
+# nudge and so cannot make up for blank rows trimmed off the bottom: the
+# panel's pieces and the little Sabreman by the lives, and the game-over
+# frame, whose 3 and 4 lost four rows each to the trim and drew that low.
+WHOLE_SPRITE_GRAPHICS = (22, 58, 59, 60, 61, 62, 2, 3, 4, 5)
 
 # The two rotation buffers Sabreman keeps for life, sized from these sprites;
 # every frame the matching half can wear has to fit, and sprite_source.py

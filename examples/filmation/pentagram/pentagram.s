@@ -121,6 +121,7 @@ sprite_end:
 					INCLUDE "../engine/sound.s"
 					INCLUDE "../engine/screen.s"
 					INCLUDE "panel.s"
+					INCLUDE "gameover.s"
 					INCLUDE "menu.s"
 					INCLUDE "input.s"
 					INCLUDE "main.s"
