@@ -218,6 +218,12 @@ room_scenery:		ld		a,(room_scenery_left)
 					ld		a,(de)
 					inc		de
 					ld		(room_dest),a	; ...and where it leads
+					ld		a,(room_bytes_left)	; the two bytes this entry took.
+					sub		2			; room_objects_of reads whatever is left,
+					ld		(room_bytes_left),a	; and there is no $FF to stop it --
+									; the scenery count replaced that, so the
+									; body count is the only thing saying
+									; where the objects begin.
 					push	de
 
 					ld		l,c
