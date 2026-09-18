@@ -19,6 +19,7 @@ each table is and what its entries are called.
 Run via build.py, which regenerates when room_data.bin or this script is newer.
 """
 import collections
+import json
 import sys
 from pathlib import Path
 
@@ -422,6 +423,150 @@ def emit(out):
     return table
 
 
+# --- the shared intermediate -------------------------------------------------
+#
+# rooms.json is the same schema Pentagram's rooms.py writes, so one generator
+# can serve both games. The two formats agree more than they differ: the room
+# header is identical (+0 number, +1 length, +2 colour in bits 0-2 and a size
+# index in bits 3-4), both keep three room sizes, both split the body at an
+# $FF, and both encode an object entry as a type and repeat count in one byte
+# followed by one position byte an instance. Where they differ is the scenery
+# entry -- Knight Lore names a template in a single byte, Pentagram follows the
+# index with a second byte -- so `byte` is simply absent here.
+#
+# In both games a template is a chain of fixed-size entries ending in a zero
+# graphic, the graphic is the entry's first byte, and the flags are its last
+# ($40 mirrors it either way round).
+SCENERY_STRIDE, SCENERY_FLAGS_AT = 8, 7
+# Knight Lore's object entries are SIX bytes -- sprite, size U, size V, size Z,
+# flags, offsets -- where Pentagram's are five. The flags sit at index 4 in
+# both. This is exactly the sort of per-game detail a decoder has to own.
+OBJECT_STRIDE, OBJECT_FLAGS_AT, OBJECT_OFFSETS_AT = 6, 4, 5
+GRAPHIC_COUNT = 256
+
+
+def unpack_position(byte):
+    """A packed position byte: U cell in bits 0-2, V in bits 3-5, Z in 6-7.
+
+    Both games pack it the same way. Knight Lore's room emitter documents it;
+    Pentagram's builder unpacks it with rotates -- four RLCAs then AND $70 for
+    U, one for V, two then AND 3 for Z -- which works out to the same fields.
+    """
+    return {"u": byte & 7, "v": (byte >> 3) & 7, "z": (byte >> 6) & 3}
+
+
+def unpack_offsets(byte):
+    """The template's placement nudge: half a cell in U and/or V, and a height.
+
+    room_unpack adds the whole byte into Z and masks $FC off again, which works
+    because level * 12 is always a multiple of four, so one byte carries all
+    three nudges without ever being unpacked. See room_build.s.
+    """
+    return {"offsets": byte,
+            "halfU": bool(byte & 1),
+            "halfV": bool(byte & 2),
+            "raiseZ": byte & 0xFC}
+
+
+def json_entries(entries, flags_at, offsets_at=None):
+    out = []
+    for raw in entries:
+        entry = {
+            "graphic": raw[0],
+            "flags": raw[flags_at],
+            "mirrored": bool(raw[flags_at] & GAME_MIRROR),
+            "bytes": list(raw),
+        }
+        if offsets_at is not None:
+            entry.update(unpack_offsets(raw[offsets_at]))
+        out.append(entry)
+    return out
+
+
+def json_templates(table, count, stride, flags_at, names, prefix, key,
+                   offsets_at=None):
+    out = []
+    for i in range(count):
+        at = w(table + i * 2)
+        out.append({
+            "index": i,
+            "name": "%s_%s" % (prefix, names[i]),
+            "address": "$%04X" % at,
+            key: json_entries(block(at, stride), flags_at, offsets_at),
+        })
+    return out
+
+
+def json_rooms(table, scenery_names, object_names):
+    out = []
+    for number in sorted(table):
+        attr, body = table[number]
+        scenery_ids, object_bytes = split_body(body)
+
+        scenery = [{"template": scenery_names[i]} for i in scenery_ids]
+
+        objects = []
+        i = 0
+        while i < len(object_bytes):
+            entry = object_bytes[i]
+            typ, count = (entry >> 3) & 0x1F, (entry & 7) + 1
+            objects.append({
+                "template": object_names[typ],
+                "positions": [unpack_position(x)
+                              for x in object_bytes[i + 1:i + 1 + count]],
+            })
+            i += 1 + count
+
+        out.append({
+            "number": number,
+            "ink": attr & 7,
+            "size": attr >> 3,
+            "scenery": scenery,
+            "objects": objects,
+        })
+    return out
+
+
+def write_json(table):
+    scenery = json_templates(BG_TYPE_TBL, BG_TYPE_COUNT, SCENERY_STRIDE,
+                             SCENERY_FLAGS_AT, BG_NAMES, "scenery", "blocks")
+    objects = json_templates(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, OBJECT_STRIDE,
+                             OBJECT_FLAGS_AT, FG_NAMES, "object", "entries",
+                             OBJECT_OFFSETS_AT)
+    castle = json_rooms(table,
+                        {t["index"]: t["name"] for t in scenery},
+                        {t["index"]: t["name"] for t in objects})
+
+    named = {s["template"] for r in castle for s in r["scenery"]}
+    named |= {o["template"] for r in castle for o in r["objects"]}
+    for group, key in ((scenery, "blocks"), (objects, "entries")):
+        for t in group:
+            t["used"] = t["name"] in named
+            t["valid"] = all(e["graphic"] < GRAPHIC_COUNT for e in t[key])
+
+    atlas = {
+        "meta": {
+            "version": 1,
+            "game": "knightlore",
+            "comment": "Written by rooms.py from room_data.bin; the same "
+                       "schema Pentagram's rooms.py writes.",
+        },
+        "sizes": [{"index": n,
+                   "u": b(ROOM_SIZE_TBL + n * 3),
+                   "v": b(ROOM_SIZE_TBL + n * 3 + 1),
+                   "z": b(ROOM_SIZE_TBL + n * 3 + 2)} for n in range(3)],
+        "sceneryTemplates": scenery,
+        "objectTemplates": objects,
+        "rooms": castle,
+    }
+    (HERE / "rooms.json").write_text(json.dumps(atlas, indent=1) + "\n",
+                                     encoding="utf-8")
+    placed = sum(len(o["positions"]) for r in castle for o in r["objects"])
+    print("rooms.json: %d rooms, %d scenery entries, %d object entries placing %d objects"
+          % (len(castle), sum(len(r["scenery"]) for r in castle),
+             sum(len(r["objects"]) for r in castle), placed))
+
+
 def main():
     global data
     packed = HERE / "room_data.bin"
@@ -433,6 +578,7 @@ def main():
     table = emit(out)
     (HERE / "room_data.s").write_text("\n".join(out) + "\n", encoding="utf-8")
     print("room_data.s: %d rooms" % len(table))
+    write_json(table)
 
 
 if __name__ == "__main__":

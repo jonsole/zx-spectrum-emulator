@@ -262,8 +262,8 @@ def build_atlas(sprites, bands, graphic_map, size):
     """The atlas the graphics panel reads, with what the build needs alongside.
 
     `frames` and `meta` are the panel's own shape -- see buildAtlas in the
-    extension's graphics_model.js. Everything Knight Lore's build needs beyond
-    that hangs off meta.zx.knightlore, where the panel ignores it.
+    extension's graphics_model.js. Everything the game's build needs beyond
+    that hangs off meta.zx.game, where the panel ignores it.
     """
     band_of = {n: (label, title) for label, title, members in bands for n in members}
     named = {}                          # sprite -> the graphics that name it
@@ -330,7 +330,7 @@ def build_atlas(sprites, bands, graphic_map, size):
                 "version": 1,
                 "groups": groups,
                 "sprites": entries,
-                "knightlore": {
+                "game": {
                     "_comment": "Written by sprite_sheet.py, read by "
                                 "sprite_source.py; the graphics panel ignores "
                                 "it. A sprite's width is in bytes, so it is "

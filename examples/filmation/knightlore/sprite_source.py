@@ -58,9 +58,9 @@ def read_atlas(path):
     """sprites.json -> the sprite entries in sprite order, and our own facts."""
     atlas = json.loads(path.read_text(encoding="utf-8"))
     zx = atlas.get("meta", {}).get("zx", {})
-    if "sprites" not in zx or "knightlore" not in zx:
+    if "sprites" not in zx or "game" not in zx:
         raise SystemExit(f"{path.name} is not a sheet written by sprite_sheet.py")
-    return atlas, zx["sprites"], zx["knightlore"]
+    return atlas, zx["sprites"], zx["game"]
 
 
 def read_sheet(sheet, atlas, entries, palette):
