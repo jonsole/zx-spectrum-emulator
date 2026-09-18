@@ -189,7 +189,10 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; -- room 87 -- and rooms_source.py emits it as ROOM_MAX_OBJECTS, counted by
 ; expanding every scenery chain and every object entry's repeat count. It is
 ; read from there rather than kept here, so it cannot drift from the data.
-ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
+; One more than the fullest room needs, so that even there something can be
+; put down or come out of the well -- the original keeps 48 slots for a room
+; and what persists in it, and the fullest room has 43.
+ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS + 1 ; what room_add may fill
 POOL_SLOTS          EQU     ROOM_SLOTS + EXTRA_SLOTS ; and what falls or is fired
                     ALIGN   32
 room_objects:
