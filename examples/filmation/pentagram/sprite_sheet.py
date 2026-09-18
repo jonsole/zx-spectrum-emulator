@@ -139,7 +139,8 @@ ANIMATIONS = ()
 # nudge and so cannot make up for blank rows trimmed off the bottom: the
 # panel's pieces and the little Sabreman by the lives, and the game-over
 # frame, whose 3 and 4 lost four rows each to the trim and drew that low.
-WHOLE_SPRITE_GRAPHICS = (22, 58, 59, 60, 61, 62, 2, 3, 4, 5)
+WHOLE_SPRITE_GRAPHICS = (22, 58, 59, 60, 61, 62, 2, 3, 4, 5,
+                         90, 144, 145, 146, 147, 148)    # and what he carries
 
 # The two rotation buffers Sabreman keeps for life, sized from these sprites;
 # every frame the matching half can wear has to fit, and sprite_source.py

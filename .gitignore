@@ -142,6 +142,8 @@ examples/filmation/pentagram/font.png
 examples/filmation/pentagram/font.json
 examples/filmation/pentagram/font.s
 examples/filmation/pentagram/room_data.s
+examples/filmation/pentagram/quest.bin
+examples/filmation/pentagram/quest_data.s
 examples/filmation/pentagram/output/
 
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a

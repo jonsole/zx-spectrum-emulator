@@ -151,6 +151,7 @@ room_build:			ld		c,a
 									; fault and was not.
 					call	room_scenery
 					call	room_objects_of
+					call	quest_room_enter	; and what persists that is here
 					call		room_show
 					scf				; built. room_show leaves the flags as it
 					ret				; pleases, so the carry the caller branches

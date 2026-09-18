@@ -6,6 +6,7 @@
 ;
 ;   0  left        1  right        2  forward
 ;   3  jump        4  back         5  fire
+;   6  pick up or put down
 ;
 ; Nothing here decides anything: player_turn reads the byte and works out which
 ; way he should face. That split is what lets one reader serve both control
@@ -54,6 +55,7 @@ INPUT_FORWARD       EQU     1 << 2
 INPUT_JUMP          EQU     1 << 3
 INPUT_BACK          EQU     1 << 4              ; only steers while directional
 INPUT_FIRE          EQU     1 << 5
+INPUT_TAKE          EQU     1 << 6              ; pick up and put down
 
 ; The keyboard's half-rows.
 KEY_ROW_SHIFT_V     EQU     $FEFE               ; CAPS, Z, X, C, V
@@ -124,9 +126,9 @@ input_interface_ii: ld      e,0
                     jr      z,.f1
                     set     2,e
 .f1:                bit     0,a                 ; 0 fire
-                    jp      z,input_store
+                    jp      z,input_stick_take
                     set     5,e
-                    jp      input_store
+                    jp      input_stick_take
 
 
 ; The Kempston's own port, where a bit is set while it is held -- the other way
@@ -146,9 +148,9 @@ input_kempston:     ld      e,0
                     jr      nc,.fire
                     set     2,e
 .fire:              rra
-                    jp      nc,input_store
+                    jp      nc,input_stick_take
                     set     5,e
-                    jp      input_store
+                    jp      input_stick_take
 
 
 ; The cursor keys: 5 left, 8 right, 7 up, 6 down and 0 to fire.
@@ -172,9 +174,9 @@ input_cursor:       ld      e,0
                     jr      z,.down
                     set     1,e
 .down:              bit     4,a                 ; 6
-                    jp      z,input_store
+                    jp      z,input_stick_take
                     set     4,e
-                    jp      input_store
+                    jp      input_stick_take
 
 
 ; The keyboard. Left and right are Z, X, C and V along the bottom row and
@@ -241,15 +243,25 @@ input_keyboard:     ld      e,0
                     jr      z,.back
                     set     5,e
 
-.back:              ld      bc,KEY_ROWS_1_0     ; any number
-                    in      a,(c)
+.back:              ld      bc,KEY_ROWS_1_0     ; any number: pick up or
+                    in      a,(c)               ; put down, as $BF66 reads it
                     cpl
                     and     $1F
                     jr      z,input_store
-                    set     4,e
+                    set     6,e
 
                     ;; NB: fall through into input_store
 
+
+; With a joystick, pick up and put down is on the keyboard's bottom two rows --
+; $BEFD reads Z to V and SYM SHIFT to B together through port $7E -- since
+; the number keys are Interface II's sticks.
+input_stick_take:   ld      a,$7E
+                    in      a,($FE)
+                    cpl
+                    and     $1E
+                    jr      z,input_store
+                    set     6,e
 
 ; Keep what the reader made of it.
 ;   E - the bits

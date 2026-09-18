@@ -122,6 +122,8 @@ sprite_end:
 					INCLUDE "../engine/screen.s"
 					INCLUDE "panel.s"
 					INCLUDE "gameover.s"
+					INCLUDE "quest.s"
+					INCLUDE "quest_data.s"
 					INCLUDE "menu.s"
 					INCLUDE "input.s"
 					INCLUDE "main.s"
@@ -167,6 +169,7 @@ image_end:
                     ORG     $5B00
                     INCLUDE "room_build.s"
                     INCLUDE "../engine/room.s"
+                    INCLUDE "quest_ram.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end

@@ -82,6 +82,14 @@ MIRRORED = 0xE0                 # width-byte flags; bit 7 is the one the game
                                 # toggles in place as it mirrors a sprite
 NO_SPRITE = 255
 
+# The quest's own tables, for quest.bin -- see quest_source.py:
+QUEST_TABLE = 0xD312            # 18 records of 16: the things that persist
+QUEST_TABLE_LEN = 18 * 16       #   between rooms, copied to $D432 each game
+QUEST_SPOTS = 0xD1A5            # 20 spots of room, U, V, Z; $D16F deals the
+QUEST_SPOTS_LEN = 20 * 4        #   five collectables five in a row of them
+QUEST_TARGETS = 0xD562          # where each collectable settles in room 82
+QUEST_TARGETS_LEN = 5 * 2
+
 
 def tape_blocks(path):
     """The data blocks of a .tzx, standard speed (ID $10) and turbo (ID $11).
@@ -218,6 +226,13 @@ def main():
     (HERE / "sprite_data.bin").write_bytes(packed)
     print("sprite_data.bin  %d bytes, %d sprites in %d runs"
           % (len(packed), len(addresses), len(SPRITE_RUNS)))
+
+    quest = (memory[QUEST_TABLE:QUEST_TABLE + QUEST_TABLE_LEN]
+             + memory[QUEST_SPOTS:QUEST_SPOTS + QUEST_SPOTS_LEN]
+             + memory[QUEST_TARGETS:QUEST_TARGETS + QUEST_TARGETS_LEN])
+    (HERE / "quest.bin").write_bytes(quest)
+    print("quest.bin        %d bytes: the persistent objects, the collectables'"
+          " spots and their targets" % len(quest))
 
 
 if __name__ == "__main__":

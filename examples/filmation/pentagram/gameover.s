@@ -87,8 +87,8 @@ game_over_text:     game_over_line 32, 11, $42
 PERCENT_ROW         EQU     96
 PERCENT_COLUMN      EQU     18                  ; x 144
 
-; The rooms he has been in, a bit each -- the original's 31 bytes at $A74F.
-rooms_seen:         DS      32
+; rooms_seen, a bit a room -- the original's 31 bytes at $A74F -- is in
+; quest_ram.s, in the room builder's page.
 
 
 ; ---------------------------------------------------------------------------
@@ -197,18 +197,40 @@ game_over:          call    panel_off           ; nothing puts the panel back
                     cp      ROOMS_PERCENT_MOST
                     jr      c,.capped
                     ld      a,ROOMS_PERCENT_MOST
-.capped:            ld      b,a                 ; to BCD, a unit at a time, as
-                    xor     a                   ; $C718 does it
+.capped:            ld      e,a                 ; and four a quest item done,
+                    ld      a,(quest_done)      ; six a collectable in place
+                    add     a,a
+                    add     a,a
+                    add     a,e
+                    ld      e,a
+                    ld      a,(quest_placed)
+                    add     a,a
+                    ld      d,a
+                    add     a,a
+                    add     a,d
+                    add     a,e
+                    ld      b,a                 ; to BCD, a unit at a time, as
+                    xor     a                   ; $C718 does it, carrying into
+                    ld      c,a                 ; the hundreds
                     inc     b
                     dec     b
                     jr      z,.bcd
 .to_bcd:            add     a,1
                     daa
-                    djnz    .to_bcd
+                    jr      nc,.no_carry
+                    inc     c
+.no_carry:          djnz    .to_bcd
 .bcd:               ld      (game_over_percent),a
-                    ld      hl,game_over_percent
-                    ld      b,PERCENT_ROW
+                    ld      a,c                 ; a hundred: the 1 first, and the
+                    or      a                   ; two digits after it ($C739)
                     ld      c,PERCENT_COLUMN * 8
+                    jr      z,.tens
+                    ld      a,1
+                    ld      b,PERCENT_ROW
+                    call    panel_char
+                    ld      c,(PERCENT_COLUMN + 1) * 8
+.tens:              ld      hl,game_over_percent
+                    ld      b,PERCENT_ROW
                     ld      e,1
                     call    panel_bcd
                     ld      a,$44               ; in the last line's colour
@@ -216,6 +238,8 @@ game_over:          call    panel_off           ; nothing puts the panel back
                     ld      (hl),a
                     inc     hl
                     ld      (hl),a
+                    inc     hl
+                    ld      (hl),a              ; and a third, for a hundred
 
                     ; The pause the original's tune would fill.
                     ld      b,GAME_OVER_WAIT

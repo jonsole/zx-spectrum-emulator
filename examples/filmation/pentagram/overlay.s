@@ -18,6 +18,12 @@ redraw_hook:        ld      a,(view_y_extent+1) ; max, exclusive
                     ret     c                   ; nowhere near the panel
                     call    panel_redraw
                     ld      a,(view_y_extent+1)
+                    cp      CARRY_ROW + 1
+                    jr      c,.words
+                    ld      a,(view_x_extent)
+                    cp      (CARRY_X + 3 * CARRY_STEP) / 8
+                    call    c,quest_carry_show  ; what he carries, bottom left
+.words:             ld      a,(view_y_extent+1)
                     cp      LIVES_ROW + 1
                     ret     c                   ; above the words and numbers
                     call    panel_word

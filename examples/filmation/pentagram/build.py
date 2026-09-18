@@ -137,6 +137,25 @@ def generate_font_data() -> None:
     subprocess.run([sys.executable, str(generator)], cwd=PENTAGRAM, check=True)
 
 
+def generate_quest_data() -> None:
+    """Regenerates quest_data.s from quest.bin when it is missing or older.
+
+    quest.bin is the original's quest tables, which pg_extract.py lifts out
+    of the tape; neither it nor quest_data.s is committed.
+    """
+    packed = PENTAGRAM / "quest.bin"
+    generator = PENTAGRAM / "quest_source.py"
+    generated = PENTAGRAM / "quest_data.s"
+    if not packed.is_file():
+        sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
+                 "own copy of Pentagram to produce it")
+    newest_input = max(f.stat().st_mtime for f in (packed, generator))
+    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+        return
+    print(f"Regenerating {generated.name} from {packed.name}")
+    subprocess.run([sys.executable, str(generator)], cwd=PENTAGRAM, check=True)
+
+
 def assemble(sjasmplus: str, defines: list[str]) -> None:
     OUT_DIR.mkdir(exist_ok=True)
     # --fullpath so the SLD's records carry a file the debugger can match a
@@ -260,6 +279,7 @@ def main() -> None:
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
     generate_font_data()
+    generate_quest_data()
     generate_room_data()
     assemble(sjasmplus, defines)
 

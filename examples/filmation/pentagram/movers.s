@@ -49,20 +49,26 @@ MOVE_BOLT           EQU     5       ; his bolt -- 149-151, $C1C5. See player.s.
 MOVE_POOF           EQU     6       ; the puff a bolt or a flyer goes out in --
                                     ; 64-70, $C111
 
-MOVE_STILL          EQU     7       ; the first that kills: spiky grass, thorns
+MOVE_QUEST          EQU     7       ; a quest item -- 112-119, $CF68. See quest.s.
+MOVE_WELL           EQU     8       ; the well -- 120, $CFD2
+
+MOVE_STILL          EQU     9       ; the first that kills: spiky grass, thorns
                                     ; and water -- $C285 -- which do nothing else
-MOVE_SPIDER         EQU     8       ; graphic 89, $CF22
-MOVE_PACE_U_DEADLY  EQU     9       ; a dragon's head pacing -- 92, $CEA0
-MOVE_PACE_V_DEADLY  EQU     10      ; ...and along V -- 93, $CEDA
-MOVE_HOPPER         EQU     11      ; a dragon's head bobbing -- 86, $CE9A
-MOVE_CREATURE       EQU     12      ; graphics 16 and 17, $D1F5
-MOVE_FALLER         EQU     13      ; what falls from the sky and roams -- 80
+MOVE_SPIDER         EQU     10       ; graphic 89, $CF22
+MOVE_PACE_U_DEADLY  EQU     11       ; a dragon's head pacing -- 92, $CEA0
+MOVE_PACE_V_DEADLY  EQU     12      ; ...and along V -- 93, $CEDA
+MOVE_HOPPER         EQU     13      ; a dragon's head bobbing -- 86, $CE9A
+MOVE_CREATURE       EQU     14      ; graphics 16 and 17, $D1F5
+MOVE_FALLER         EQU     15      ; what falls from the sky and roams -- 80
                                     ; and 81, $D1FD
-MOVE_FALLER4        EQU     14      ; ...in four frames -- 168-171, $D251
-MOVE_PUSHED_DEADLY  EQU     15      ; the thorny bush, which can be shoved and
+MOVE_FALLER4        EQU     16      ; ...in four frames -- 168-171, $D251
+MOVE_PUSHED_DEADLY  EQU     17      ; the thorny bush, which can be shoved and
                                     ; kills -- 28, $CD70. The first LOOSE.
-MOVE_PUSHED         EQU     16      ; stump, cube, table and stone -- 63, 72,
+MOVE_PUSHED         EQU     18      ; stump, cube, table and stone -- 63, 72,
                                     ; 73, 79, $CD7C/$CD81. The first harmless.
+MOVE_COLLECTABLE    EQU     19      ; the five to bring to room 82 -- 144-148,
+                                    ; $CD16. Shoved about like a stump.
+MOVE_WATER          EQU     20      ; what comes out of the well -- 90, $D0AC
 
 BEHAVIOUR_FIRST_TURN    EQU     MOVE_PACE_U
 BEHAVIOUR_DEADLY        EQU     MOVE_STILL
@@ -94,6 +100,7 @@ mover_of:           DB      6, MOVE_STILL           ; object_03, spiky grass (23
                     DB      34, MOVE_PACE_V         ; object_17, a platform (88)
                     DB      36, MOVE_SPIDER         ; object_18, the spider (89)
                     DB      40, MOVE_CREATURE       ; object_20 (16)
+                    DB      38, MOVE_WELL           ; object_19, the well (120)
                     DB      $FF
 
 
@@ -124,6 +131,8 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_homer         ; MOVE_HOMER
                     DW      mover_bolt          ; MOVE_BOLT
                     DW      mover_poof          ; MOVE_POOF
+                    DW      mover_quest         ; MOVE_QUEST
+                    DW      mover_well          ; MOVE_WELL
                     DW      mover_still         ; MOVE_STILL
                     DW      mover_spider        ; MOVE_SPIDER
                     DW      mover_pace_u        ; MOVE_PACE_U_DEADLY
@@ -134,7 +143,9 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_faller4       ; MOVE_FALLER4
                     DW      mover_pushed        ; MOVE_PUSHED_DEADLY
                     DW      mover_pushed        ; MOVE_PUSHED
-                    ASSERT  ($ - mover_tbl) / 2 == MOVE_PUSHED - MOVE_PACE_U + 1
+                    DW      mover_collectable   ; MOVE_COLLECTABLE
+                    DW      mover_water         ; MOVE_WATER
+                    ASSERT  ($ - mover_tbl) / 2 == MOVE_WATER - MOVE_PACE_U + 1
 
 
 ; ---------------------------------------------------------------------------

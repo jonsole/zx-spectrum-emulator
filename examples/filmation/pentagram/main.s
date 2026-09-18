@@ -41,6 +41,9 @@ new_game:           ld      a,$04
                     ld      (player_touched),a
                     dec     a
                     ld      (enter_dir),a       ; he does not walk in
+                    call    quest_new_game
+                    xor     a
+                    ld      (quest_slots),a     ; nothing of the last game's
                     ld      a,r
                     and     3
                     ld      e,a
@@ -52,7 +55,8 @@ new_game:           ld      a,$04
                     cpl
                     ld      (room_shown),a      ; anything but it: build it
 
-.enter:             ld      a,(room_number)
+.enter:             call    quest_room_leave    ; what is lying here, written
+                    ld      a,(room_number)     ; back before the pool goes
                     call    room_build
                     jr      c,.entered
                     ld      a,(room_shown)      ; no such room: stay where we are
@@ -84,12 +88,14 @@ new_game:           ld      a,$04
                     ld      a,(room_entry_z)
 .add:               push    af
                     push    bc
+                    call    quest_room_spares   ; room to put things down
                     call    flyer_room_enter    ; the two slots for the sky
                     pop     bc
                     pop     af
                     ld      ix,player
                     call    character_add
                     call    panel_on            ; and the panel, now it is up
+                    call    quest_carry_show
 
                     ; player_exit changes room_number when he walks out through
                     ; a doorway, and this notices. Poking it from the debugger
@@ -109,6 +115,10 @@ new_game:           ld      a,$04
                     call    player_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    turn_pace
+
+                    ld      a,(quest_won)
+                    or      a
+                    jp      nz,quest_win
 
                     ; His death has played out: a life, and the room built
                     ; again around him where he came in -- or with none left,

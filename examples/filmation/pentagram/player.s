@@ -76,6 +76,7 @@ player_step:        ld      ix,player
                     ; rises +7 down to +1; let go, +7, +5, +3, +1 -- the engine's
                     ; gravity, one a turn held and two let go.
                     call    player_fire
+                    call    quest_take
 
                     ; On a joystick the original jumps with down, which reads
                     ; as back; only while the controls are rotational, as back
