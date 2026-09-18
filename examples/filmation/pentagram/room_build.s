@@ -195,16 +195,14 @@ room_shape:			ld		a,(room_attr)
 					add		hl,de		; * 3
 					ld		de,room_size_tbl
 					add		hl,de
-					ld		a,(hl)
-					srl		a
-					ld		(room_half_u),a
-					inc		hl
-					ld		a,(hl)
-					srl		a
-					ld		(room_half_v),a
-					inc		hl
-					ld		a,(hl)
-					ld		(room_floor_z),a
+					; The table already holds half-extents -- how far the floor
+					; reaches from the room's centre -- and the floor's height, in
+					; the order they are kept in here. Same as Knight Lore's.
+					ASSERT	room_half_v == room_half_u + 1
+					ASSERT	room_floor_z == room_half_u + 2
+					ld		de,room_half_u
+					ld		bc,3
+					ldir
 					ret
 
 
