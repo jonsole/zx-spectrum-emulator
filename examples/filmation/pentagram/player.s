@@ -48,14 +48,29 @@ deadly_touched      EQU     player_touched
 ; A character that is only standing there is repainted all the same -- see
 ; character_stand -- so there is no early out here.
 ; Corrupts AF, BC, DE, HL.
-player_step:        call    input_read
+player_step:        ld      ix,player
+
+                    ; Nobody else is walking about. The movers point this at him
+                    ; so that they bump into him; for his own move it has to be
+                    ; clear, or he would collide with himself.
+                    ld      hl,0
+                    ld      (collide_other),hl
+
+                    ; Whether he is standing in a doorway, worked out before he
+                    ; moves: character_collide lifts the room's edge while it is
+                    ; set, and player_exit asks whether the step took him out.
+                    call    player_door_find
+
+                    call    input_read
                     ld      ix,player
                     call    player_turn
                     jr      nc,.stand
                     push    af
                     call    player_body_up      ; for the facing about to be walked
                     pop     af
-                    jp      character_walk      ; A is the facing to walk
+                    call    character_walk      ; A is the facing to walk
+                    ld      ix,player           ; the repaint took IX
+                    jr      player_exit
 .stand:             ld      a,(ix+CHARACTER_FACING)
                     call    player_body_up
                     jp      character_stand
@@ -169,4 +184,201 @@ player_turn:        ld      a,(menu_mode)
 .go:                ld      a,c
                     ld      (ix+CHARACTER_FACING),a
                     scf
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; Has the step taken him right out through the doorway he was in? Out when the
+; whole of him has passed the wall, not when he touches it -- Knight Lore's
+; test, which this is.
+;
+; Where it leads is where Pentagram differs. Knight Lore's castle is a grid and
+; works the next room out with an add; Pentagram's map is not, so the builder
+; kept each side's destination in room_door_to as the scenery went by, and this
+; reads it. Every doorway in the data but one has a matching door on the
+; opposite side of the room it leads to -- 288 of 289 -- so he comes in by the
+; opposite wall.
+;   IX -> the legs record
+; Corrupts AF, BC, DE, HL.
+player_exit:        ld      a,(ix+CHARACTER_DOOR)
+                    inc     a
+                    ret     z                   ; not in a doorway
+                    dec     a
+                    ld      c,a
+
+                    ld      a,(ix+OBJ.V)        ; north and south cross V
+                    ld      hl,room_half_v
+                    bit     0,c
+                    jr      z,.axis
+                    ld      a,(ix+OBJ.U)        ; east and west cross U
+                    ld      hl,room_half_u
+.axis:              ld      b,(hl)
+                    bit     1,c
+                    jr      nz,.near
+
+                    ; North and east: his trailing edge has to be past the far
+                    ; wall.
+                    sub     CHARACTER_HALF_U
+                    ld      e,a
+                    ld      a,b
+                    add     a,127               ; one below the bound, so
+                    cp      e                   ; carry means he is past it
+                    ret     nc
+                    jr      .out
+
+                    ; South and west: his leading edge below the near wall.
+.near:              add     a,CHARACTER_HALF_U
+                    ld      e,a
+                    ld      a,128
+                    sub     b                   ; the near bound
+                    ld      d,a
+                    ld      a,e
+                    cp      d
+                    ret     nc                  ; not below it yet
+
+.out:               ld      b,0
+                    ld      hl,room_door_to
+                    add     hl,bc
+                    ld      a,(hl)
+                    or      a
+                    ret     z                   ; walled up: nowhere to go
+                    ld      (room_number),a
+                    ld      a,c                 ; he comes in by the opposite
+                    xor     2                   ; wall of the new room
+                    ld      (enter_dir),a
+                    ret
+
+
+; Which side of the next room he walks in by, or $FF when he did not walk in.
+enter_dir:          DB      $FF
+
+
+; ---------------------------------------------------------------------------
+; Is he standing in one of the room's doorways, and which? Sets
+; CHARACTER_DOOR to the side, or $FF.
+;
+; The engine's character_door_find, but measured across the opening from
+; room_door_mid rather than from 128: Pentagram's raised doorways stand off to
+; one side of their wall, and the engine's test would never find him in one.
+; The box is the engine's -- DOOR_ACROSS either side of the centre, DOOR_ALONG
+; either side of the arch, and DOOR_LEVEL below to DOOR_HEIGHT above its floor.
+;   IX -> the legs record
+; Corrupts AF, BC, DE, HL.
+player_door_find:   ld      (ix+CHARACTER_DOOR),$FF
+                    ld      c,0
+
+.side:              ld      b,0
+                    ld      hl,room_door_z
+                    add     hl,bc
+                    ld      a,(hl)
+                    or      a
+                    jr      z,.next             ; no door on this side
+
+                    ld      a,(ix+OBJ.Z)
+                    sub     (hl)
+                    add     a,DOOR_LEVEL - 1
+                    cp      DOOR_LEVEL - 1 + DOOR_HEIGHT
+                    jr      nc,.next            ; the wrong storey
+
+                    ; North and south face along V, east and west along U; the
+                    ; other axis is the one across the opening.
+                    ld      e,(ix+OBJ.U)
+                    ld      a,(ix+OBJ.V)
+                    bit     0,c
+                    jr      z,.along
+                    ld      e,(ix+OBJ.V)
+                    ld      a,(ix+OBJ.U)
+.along:             ld      hl,room_door_at
+                    add     hl,bc
+                    sub     (hl)
+                    call    character_door_find.abs
+                    cp      DOOR_ALONG
+                    jr      nc,.next            ; not up to the wall yet
+
+                    ld      hl,room_door_mid
+                    add     hl,bc
+                    ld      a,e
+                    sub     (hl)
+                    call    character_door_find.abs
+                    cp      DOOR_ACROSS
+                    jr      nc,.next            ; beside it, not in it
+
+                    ld      (ix+CHARACTER_DOOR),c
+                    ret
+
+.next:              inc     c
+                    ld      a,c
+                    cp      4
+                    jr      c,.side
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; Where he stands when he walks into a room: in the doorway he came through,
+; on the line of its wall, at the middle of its opening and the height of its
+; floor. All three are the original's, measured: out of room 92 by the east
+; door he stands in room 93 at U 64, V 96, Z 176 -- the west wall, the middle
+; of its raised doorway, and that doorway's floor -- and out by the west door
+; he stands in room 91 at U 192, its east wall.
+;
+; That is not Knight Lore's rule, which keeps the axis he did not cross and
+; stands him two units inside the wall; Pentagram's doorways are not all in
+; the middle of their walls, so it cannot.
+;
+; One doorway in the data leads to a room with no partner on that side. There
+; he stands on the floor, at the wall, where he was across it.
+;   IX -> the legs record, still holding where he was in the last room
+; Out: B - U, C - V, A - the Z to stand at. (enter_dir) is spent.
+; Corrupts DE, HL.
+player_entry:       ld      a,(enter_dir)
+                    ld      e,a                 ; E - the side he comes in by
+                    ld      b,(ix+OBJ.U)
+                    ld      c,(ix+OBJ.V)
+                    ld      hl,room_door_z
+                    call    .side
+                    ld      a,(hl)
+                    or      a
+                    jr      nz,.door
+                    ld      a,(room_floor_z)    ; no doorway that side
+                    push    af
+                    jr      .wall
+
+.door:              push    af                  ; its floor
+                    ld      hl,room_door_mid
+                    call    .side
+                    ld      a,(hl)              ; the middle of its opening:
+                    bit     0,e
+                    jr      nz,.across_v
+                    ld      b,a                 ; U, in a north or south wall
+                    jr      .wall
+.across_v:          ld      c,a                 ; V, in an east or west one
+
+                    ; On the line of the wall: 128 and the room's half-width,
+                    ; beyond the centre for north and east, short of it for
+                    ; south and west.
+.wall:              ld      hl,room_half_v      ; north and south cross V
+                    bit     0,e
+                    jr      z,.axis
+                    ld      hl,room_half_u      ; east and west cross U
+.axis:              ld      a,(hl)
+                    bit     1,e                 ; south and west are the near
+                    jr      z,.far              ; walls, north and east the far
+                    neg
+.far:               add     a,128
+                    bit     0,e
+                    jr      nz,.u
+                    ld      c,a
+                    jr      .done
+.u:                 ld      b,a
+.done:              ld      a,$FF
+                    ld      (enter_dir),a
+                    pop     af
+                    ret
+
+; HL += E.
+.side:              ld      a,e
+                    add     a,l
+                    ld      l,a
+                    ret     nc
+                    inc     h
                     ret

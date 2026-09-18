@@ -42,6 +42,20 @@ room_dest:			DB		0		; the destination byte of the entry in hand
 ; no way out. Knight Lore has no equivalent because it computes the answer.
 room_door_to:		DS		4
 
+; Where each side's opening is centred along its wall: U for north and south,
+; V for east and west. Knight Lore's are all at 128, the middle of the wall,
+; and the engine's own doorway test assumes so. Pentagram's are not: its third
+; set of doorways, 24-27, is raised to Z 176 on a walkway and stands off to one
+; side, centred on 96 or 160 -- so the player's doorway test, his steering and
+; where he walks in all read the centre from here instead. Only meaningful
+; where room_door_z says there is a door.
+room_door_mid:		DS		4
+
+; A doorway's two pieces stand thirteen either side of its centre, and the
+; first one in the template is on the low side for north and south and the
+; high side for east and west -- true of all twelve doorway templates.
+ROOM_DOOR_HALF		EQU		13
+
 ; A piece, staged in the eight-byte shape room_add wants.
 room_stage:			DS		8
 
@@ -333,6 +347,22 @@ room_door_note:		ld		a,c
 					pop		hl
 					push	hl
 					ld		hl,room_door_at
+					call	.index
+					ld		(hl),a
+					pop		hl
+
+					; And where the opening is centred along the wall.
+					push	hl
+					inc		hl		; -> U, across a north or south wall
+					bit		0,b
+					jr		z,.mid_ns
+					inc		hl		; -> V, across an east or west one
+					ld		a,(hl)
+					sub		ROOM_DOOR_HALF
+					jr		.mid
+.mid_ns:			ld		a,(hl)
+					add		a,ROOM_DOOR_HALF
+.mid:				ld		hl,room_door_mid
 					call	.index
 					ld		(hl),a
 					pop		hl

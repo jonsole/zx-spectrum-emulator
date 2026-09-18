@@ -75,14 +75,79 @@ CHARACTER_STEP		EQU		3
 
 
 ; ---------------------------------------------------------------------------
-; Called with the step in D, E before a walk, and may adjust it. The engine is
-; happy with a plain RET, and Knight Lore uses it to nudge him round an arch's
-; leg so a doorway can be walked through without catching the frame.
+; Called by the engine with the step in D, E before a walk, and may adjust it.
 ;
-; Nothing here yet: whether Pentagram needs the same nudge depends on how its
-; own arches are shaped, which wants him walked into one first.
-;   Corrupts AF, BC, HL.
-character_steer:	ret
+; Walking near a doorway lines him up with it, a unit a turn along its wall,
+; towards the middle of the opening -- the original does it: walking out of
+; room 92 its V went 119, 122, 127 as he reached the east door. This is Knight
+; Lore's character_steer (see ../knightlore/knight.s for the whole account),
+; with one change: the middle of the opening is room_door_mid, not the middle
+; of the wall, because Pentagram's raised doorways stand off to one side.
+;   IX -> the legs record
+;   D, E - the step for his facing, which this may add a unit to
+; Corrupts AF, BC, HL.
+character_steer:	ld		c,0
+.side:				ld		b,0
+					ld		hl,room_door_z
+					add		hl,bc
+					ld		a,(hl)
+					or		a
+					jr		z,.next		; no arch this side
+					sub		(ix+OBJ.Z)
+					call	character_door_find.abs
+					cp		DOOR_LEVEL
+					jr		nc,.next
+
+					ld		hl,room_door_mid
+					add		hl,bc
+					ld		a,(hl)		; where the opening is centred along the wall
+					ld		hl,room_door_at
+					add		hl,bc
+					ld		l,(hl)
+					ld		h,a		; H = its centre U, L = its centre V, for
+					bit		0,c		; north and south, which stand in a wall
+					jr		z,.centred		; across V
+					ld		a,h
+					ld		h,l
+					ld		l,a		; ...and the other way round for east and west
+
+.centred:			ld		a,(ix+OBJ.U)
+					sub		h
+					call	character_door_find.abs
+					cp		DOOR_ALONG
+					jr		nc,.next
+					ld		a,(ix+OBJ.V)
+					sub		l
+					call	character_door_find.abs
+					cp		DOOR_ALONG
+					jr		nc,.next
+
+					bit		0,c
+					jr		z,.along_u
+					ld		a,l		; east or west: V towards its centre
+					cp		(ix+OBJ.V)
+					ret		z
+					ld		a,1
+					jr		nc,.v
+					neg
+.v:					add		a,e
+					ld		e,a
+					ret
+.along_u:			ld		a,h		; north or south: U towards its centre
+					cp		(ix+OBJ.U)
+					ret		z
+					ld		a,1
+					jr		nc,.u
+					neg
+.u:					add		a,d
+					ld		d,a
+					ret
+
+.next:				inc		c
+					ld		a,c
+					cp		4
+					jr		c,.side
+					ret
 
 
 ; ---------------------------------------------------------------------------

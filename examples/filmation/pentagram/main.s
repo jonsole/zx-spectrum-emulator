@@ -37,6 +37,8 @@ start:              di
                     jr      c,.entered
                     ld      a,(room_shown)      ; no such room: stay where we are
                     ld      (room_number),a
+                    ld      a,$FF
+                    ld      (enter_dir),a       ; and nobody walking in
                     jr      .loop
 
 .entered:           ld      a,(room_number)
@@ -45,11 +47,14 @@ start:              di
                     ld      b,PLAYER_START_U
                     ld      c,PLAYER_START_V
                     ld      a,(room_floor_z)
+                    ld      hl,enter_dir
+                    bit     7,(hl)              ; $FF: he did not walk in
+                    call    z,player_entry      ; walked in: by the opposite door
                     call    character_add
 
-                    ; Poke room_number from the debugger and the game moves
-                    ; house, which is the only way to change rooms until
-                    ; player_exit exists to read room_door_to.
+                    ; player_exit changes room_number when he walks out through
+                    ; a doorway, and this notices. Poking it from the debugger
+                    ; works the same way.
 .loop:              ld      a,(room_number)
                     ld      hl,room_shown
                     cp      (hl)
