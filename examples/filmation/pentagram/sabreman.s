@@ -30,7 +30,8 @@ COLLIDE_HEIGHT		EQU		23
 CHARACTER_LARGEST	EQU		sprite_066		; 3x18: graphic 36, his legs facing us
 CHARACTER_TALLEST	EQU		sprite_061		; 3x34: graphic 46, his body facing us
 
-CHARACTER_BODY_UP	EQU		12		; how far his body rides above his legs.
+CHARACTER_BODY_UP	EQU		12		; how far his body rides above his legs facing away
+					; (8 facing towards: CHARACTER_BODY_UP_TOWARDS in pentagram.s).
 					; Measured: the body record sits at Z 140
 					; with the legs at 128. Z is what the depth
 					; sort reads, so the height belongs here and
