@@ -66,6 +66,22 @@ OBJECT_STRIDE = 6               # graphic, size U, size V, size Z, flags, offset
 
 GAME_MIRROR = 0x40
 FLIP_FLAG = 0x01                # OBJ_FLIP_H
+BACKGROUND_FLAG = 0x40          # OBJ_BACKGROUND: drawn first and never sorted
+
+# The scenery nothing can ever be behind: the trees and stone walls along the
+# two back walls -- U 64 and V 192, or U 96 and V 160 for the narrow rooms --
+# which the room's own bounds keep him in front of. Knight Lore marks its
+# walls and trees the same way (BACKGROUND_TEMPLATES there), and for the same
+# reason: they need never be compared with anything. The game's own flags do
+# not say so -- every scenery template carries $10 -- so it is said here, by
+# name, and checked by position below.
+#
+# Not the doorways, which he walks through, and not anything on the front
+# walls (U or V 56-59), which the background run would put behind everything.
+BACKGROUND_TEMPLATES = {"scenery_%02d" % n for n in (8, 9, 10, 11, 12, 13, 14, 15,
+                                                     16, 17, 20, 21)}
+BACK_WALLS_U = (64, 96)
+BACK_WALLS_V = (192, 160)
 
 ROOM_SCN_SHIFT = 5              # the scenery count, above the attribute
 SCN_COUNT_BIAS = 1              # ...stored biased by one, so eight fits in three bits
@@ -118,11 +134,20 @@ def emit_templates(out, templates, key, stride, title, blurb):
         entries = t[key]
         line(out, label_of(t["name"]) + ":", "", "",
              "%d %s" % (len(entries), "entry" if len(entries) == 1 else "entries"))
+        background = t["name"] in BACKGROUND_TEMPLATES
+        if background:
+            # Every piece on a back wall -- the narrow rooms' templates turn
+            # the corner, so one piece of each is on the other wall.
+            for e in entries:
+                assert e["bytes"][1] in BACK_WALLS_U or e["bytes"][2] in BACK_WALLS_V,                     "%s has a piece off the back walls, at U %d V %d"                     % (t["name"], e["bytes"][1], e["bytes"][2])
         for e in entries:
             body = list(e["bytes"])
             while len(body) < stride:
                 body.append(0)              # the offsets byte Pentagram has not got
-            body[stride - 1 if stride == SCENERY_STRIDE else 4] = our_flags(e["flags"])
+            flags = our_flags(e["flags"])
+            if background:
+                flags |= BACKGROUND_FLAG
+            body[stride - 1 if stride == SCENERY_STRIDE else 4] = flags
             note = "mirrored" if e["mirrored"] else ""
             line(out, "", "DB", ", ".join("%3d" % b for b in body), note)
         line(out, "", "DB", "0")
@@ -263,6 +288,7 @@ def main():
     out.append("; The flag bits the templates above were written with, for room.s to check")
     out.append("; against object.s.")
     line(out, "ROOM_FLAG_FLIP", "EQU", "$%02X" % FLIP_FLAG)
+    line(out, "ROOM_FLAG_BACKGROUND", "EQU", "$%02X" % BACKGROUND_FLAG)
     out.append("")
 
     OUT.write_text("\n".join(out) + "\n", encoding="utf-8")
