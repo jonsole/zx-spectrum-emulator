@@ -18,6 +18,16 @@
 PLAYER_LEGS_GFX     EQU     32
 PLAYER_BODY_GFX     EQU     40              ; two blocks of four above the legs
 PLAYER_BODY_UP_TOWARDS EQU  8               ; CHARACTER_BODY_UP is facing away
+
+; How many turns a held turn key waits between quarter turns. The original
+; turns once every 8 frames while the key is held (7 to 9, timed in the
+; emulator), which is about six quarter turns a second. This runs about 35
+; turns a second in a light room, so a quarter turn every sixth turn -- one,
+; then five waited -- is the same pace. Busy rooms run slower and so turn a
+; little slower; the same is true of Knight Lore's PLAYER_TURN_WAIT.
+PLAYER_TURN_WAIT    EQU     5
+
+player_turn_wait:   DB      0
 PLAYER_FACING       EQU     0
 
                     ALIGN   32
@@ -95,7 +105,25 @@ player_turn:        ld      a,(menu_mode)
                     jr      nz,.directional
 
                     ; -- rotational ------------------------------------------
+                    ; A held turn key turns him once, then waits PLAYER_TURN_WAIT
+                    ; turns before the next quarter. Letting go clears the wait,
+                    ; so a tap always turns at once, as it does in the original.
                     ld      b,a
+                    and     INPUT_LEFT | INPUT_RIGHT
+                    ld      hl,player_turn_wait
+                    jr      nz,.turning
+                    ld      (hl),a              ; nothing held: no wait owed
+                    jr      .not_right
+
+.turning:           ld      a,(hl)
+                    or      a
+                    jr      z,.may_turn
+                    dec     (hl)                ; too soon: he stands, turned
+                    xor     a                   ; carry clear
+                    ret
+
+.may_turn:          ld      (hl),PLAYER_TURN_WAIT
+                    ld      a,b
                     and     INPUT_LEFT
                     jr      z,.not_left
                     ld      a,(ix+CHARACTER_FACING)
@@ -105,11 +133,8 @@ player_turn:        ld      a,(menu_mode)
                     or      a                   ; turning is not walking
                     ret                         ; ...and `and 3` left carry clear
 
-.not_left:          ld      a,b
-                    and     INPUT_RIGHT
-                    jr      z,.not_right
-                    ld      a,(ix+CHARACTER_FACING)
-                    inc     a
+.not_left:          ld      a,(ix+CHARACTER_FACING)
+                    inc     a                   ; right, then
                     and     3
                     ld      (ix+CHARACTER_FACING),a
                     or      a
