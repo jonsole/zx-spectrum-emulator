@@ -119,7 +119,8 @@ sprite_end:
 					INCLUDE "movers.s"
 					INCLUDE "../engine/mover.s"		; movers.s falls into it
 					INCLUDE "../engine/sound.s"
-;					INCLUDE "panel.s"
+					INCLUDE "../engine/screen.s"
+					INCLUDE "panel.s"
 					INCLUDE "menu.s"
 					INCLUDE "input.s"
 					INCLUDE "main.s"
@@ -128,7 +129,7 @@ sprite_end:
 					INCLUDE "flyers.s"
                                                      ; here, not Knight Lore's grid arithmetic
 					INCLUDE "../engine/redraw.s"
-;					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
+					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
                                                      ; must ASSERT $ == redraw_view_end
 					INCLUDE "../engine/vid_buff.s"
 

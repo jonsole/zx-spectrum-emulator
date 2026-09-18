@@ -49,6 +49,12 @@ deadly_touched      EQU     player_touched
 ; character_stand -- so there is no early out here.
 ; Corrupts AF, BC, DE, HL.
 player_step:        ld      ix,player
+                    ld      a,(player_state)
+                    or      a
+                    jp      nz,player_dying     ; nothing he asks for counts
+                    ld      a,(player_touched)
+                    or      a
+                    jp      nz,player_die
 
                     ; Nobody else is walking about. The movers point this at him
                     ; so that they bump into him; for his own move it has to be
@@ -530,4 +536,36 @@ player_fire:        ld      a,(input_now)
                     call    redraw_object
 
 .none:              pop     ix
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; Dying. Something deadly has touched him: both halves go out in the puff
+; everything in Pentagram goes out in -- graphics 64 to 70, a frame a turn,
+; $C107 and $C111 -- and then main.s takes a life and puts him back. There is
+; no coming back sparkle, as there is in Knight Lore: he is simply there.
+PLAYER_ALIVE        EQU     0
+PLAYER_DYING        EQU     1
+PLAYER_DEAD         EQU     2               ; played out: main.s's to act on
+
+player_state:       DB      PLAYER_ALIVE
+
+;   IX -> the legs record
+player_die:         ld      a,PLAYER_DYING
+                    ld      (player_state),a
+                    set     2,(ix+OBJ.FLAGS)    ; OBJ_PASSABLE, and nothing else
+                    ld      a,POOF_FIRST
+                    jr      player_dying.frame
+
+player_dying:       ld      a,(ix+OBJ.GFX)
+                    cp      POOF_LAST
+                    jr      nc,.done
+                    inc     a
+.frame:             ld      (ix+OBJ.GFX),a      ; both halves the one frame,
+                    ld      (ix+CHARACTER_BODY+OBJ.GFX),a
+                    ld      de,0                ; repainted where they stand
+                    ld      (ix+OBJ.DZ),0
+                    jp      character_move
+.done:              ld      a,PLAYER_DEAD
+                    ld      (player_state),a
                     ret

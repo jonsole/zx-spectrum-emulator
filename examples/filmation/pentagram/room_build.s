@@ -135,6 +135,7 @@ room_build:			ld		c,a
 					ld		(room_scenery_left),a
 
 					push	de
+					call	panel_off		; no panel until the room is up
 					call	room_wipe
 					call	room_paper
 					call	room_shape

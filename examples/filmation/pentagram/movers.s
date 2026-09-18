@@ -585,10 +585,24 @@ mover_bolt:         ld      a,(ix+OBJ.GFX)
                     ret     z
                     jp      mover_poof_start    ; stopped by anything else
 
-.hit:               push    ix
+.hit:               ; The points, from the flyer's graphic, as $C264 works
+                    ; them: its bits turned round two places for the last byte,
+                    ; three for the one before -- 502 for graphic 160.
+                    ld      a,(iy+OBJ.GFX)
+                    rlca
+                    rlca
+                    ld      c,a
+                    rlca
+                    and     7
+                    ld      b,a
+                    ld      a,c
+                    and     $77
+                    ld      c,a
+                    push    ix
                     push    iy
-                    pop     ix
-                    call    mover_poof_start    ; the flyer goes out in a puff
+                    call    score_add
+                    pop     ix                  ; the flyer
+                    call    mover_poof_start    ; goes out in a puff
                     pop     ix
                     jp      object_hide         ; and the bolt is gone
 

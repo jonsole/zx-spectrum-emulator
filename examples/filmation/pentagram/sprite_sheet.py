@@ -124,6 +124,15 @@ SPRITE_FORMAT = {
 # facings, so there is no third block.
 SABREMAN_LEGS = tuple(range(32, 40))
 SABREMAN_BODY = tuple(range(40, 48))
+SABREMAN_POOF = tuple(range(64, 71))    # both halves wear the puff he dies in
+
+# Nudges the original sets from a constant, every turn, rather than per
+# graphic -- so the harvest, which reads live records, can catch a frame just
+# as it changed and still wearing the last routine's pair. The puff is the
+# case that shows: $C111 calls $C77A on every one of its frames, which is
+# always -12, -4, but the harvest had three different pairs across 64-70 and
+# the puff hopped about as it played. These override sprite_adj.s.
+FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
 
 ANIMATIONS = ()
 WHOLE_SPRITE_GRAPHICS = ()
@@ -132,8 +141,8 @@ WHOLE_SPRITE_GRAPHICS = ()
 # every frame the matching half can wear has to fit, and sprite_source.py
 # fails the build if one does not.
 ROTATION_BUFFERS = (
-    ("CHARACTER_LARGEST", 66, SABREMAN_LEGS),
-    ("CHARACTER_TALLEST", 61, SABREMAN_BODY),
+    ("CHARACTER_LARGEST", 66, SABREMAN_LEGS + SABREMAN_POOF),
+    ("CHARACTER_TALLEST", 61, SABREMAN_BODY + SABREMAN_POOF),
 )
 
 # Band name (a label, because the panel's groups have to be one), what it is
@@ -335,6 +344,7 @@ def build_atlas(sprites, bands, graphic_map, size):
                     "blankGraphic": BLANK_GRAPHIC,
                     "wholeSpriteGraphics": list(WHOLE_SPRITE_GRAPHICS),
                     "animations": [list(frames) for frames in ANIMATIONS],
+                    "fixedNudges": {str(g): list(p) for g, p in FIXED_NUDGES.items()},
                     "rotationBuffers": [
                         {"label": label, "sprite": sprite, "graphics": list(graphics)}
                         for label, sprite, graphics in ROTATION_BUFFERS

@@ -28,9 +28,29 @@ start:              di
                     ld      ix,player
                     call    character_keep
 
-                    ld      a,PLAYER_START_ROOM
+                    ; A new game: four lives on the panel, no score, and one of
+                    ; the four rooms the original starts in, at random -- $C2CE
+                    ; picks from $C2E8 by the random byte.
+new_game:           ld      a,$04
+                    ld      (player_lives),a
+                    xor     a
+                    ld      (score),a
+                    ld      (score + 1),a
+                    ld      (score + 2),a
+                    ld      (player_state),a
+                    ld      (player_touched),a
+                    dec     a
+                    ld      (enter_dir),a       ; he does not walk in
+                    ld      a,r
+                    and     3
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,start_rooms
+                    add     hl,de
+                    ld      a,(hl)
                     ld      (room_number),a
-                    ld      (room_shown),a
+                    cpl
+                    ld      (room_shown),a      ; anything but it: build it
 
 .enter:             ld      a,(room_number)
                     call    room_build
@@ -68,6 +88,7 @@ start:              di
                     pop     af
                     ld      ix,player
                     call    character_add
+                    call    panel_on            ; and the panel, now it is up
 
                     ; player_exit changes room_number when he walks out through
                     ; a doorway, and this notices. Poking it from the debugger
@@ -88,17 +109,21 @@ start:              di
                     call    redraw_flush        ; whatever the turn left waiting
                     call    turn_pace
 
-                    ; Something deadly touched him, this turn or the movers'.
-                    ; There are no lives yet and no death to watch, so for now
-                    ; the room simply starts over, with him back where he came
-                    ; in -- the shape of what the original does once its death
-                    ; has played out.
-                    ld      a,(player_touched)
-                    or      a
-                    jr      z,.loop
+                    ; His death has played out: a life, and the room built
+                    ; again around him where he came in -- or with none left,
+                    ; a new game. $C2EC: DEC, and JP M to the end.
+                    ld      a,(player_state)
+                    cp      PLAYER_DEAD
+                    jr      nz,.loop
                     xor     a
+                    ld      (player_state),a
                     ld      (player_touched),a
-                    inc     a
+                    ld      a,(player_lives)
+                    sub     1
+                    daa
+                    jp      c,new_game          ; there were none left
+                    ld      (player_lives),a
+                    ld      a,1
                     ld      (room_again),a
                     jp      .enter
 
@@ -111,5 +136,8 @@ room_shown:         DB      PLAYER_START_ROOM
 ; Whether the room is being started over, and where he stood when he came into
 ; it, as .entered found it.
 room_again:         DB      0
+
+; Where a game can start: $C2E8.
+start_rooms:        DB      51, 92, 100, 12
 room_entry_at:      DW      0                   ; C - V, B - U, as BC holds them
 room_entry_z:       DB      0

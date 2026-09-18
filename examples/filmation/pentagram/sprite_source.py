@@ -327,6 +327,10 @@ def signed(v):
 
 def emit_adj(sprites, facts, harvest):
     plain, flipped = read_adj(harvest)
+    # Nudges the original sets from a constant, which override the harvest:
+    # see FIXED_NUDGES in sprite_sheet.py.
+    for g, (x, y) in facts.get("fixedNudges", {}).items():
+        plain[int(g)] = flipped[int(g)] = (x & 0xFF, y & 0xFF)
     gmap = facts["graphicMap"]
     want = []                       # (x, y) and its mirrored twin, per graphic
     # As in read_adj: Pentagram's graphic map is 172 long, not 256, and the
