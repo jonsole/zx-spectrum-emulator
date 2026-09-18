@@ -128,7 +128,11 @@ room_build:			ld		c,a
 
 					call	room_scenery
 					call	room_objects_of
-					jp		room_show
+					call		room_show
+					scf				; built. room_show leaves the flags as it
+					ret				; pleases, so the carry the caller branches
+									; on has to be set here rather than carried
+									; through from room_find.
 
 
 ; ---------------------------------------------------------------------------
@@ -344,11 +348,13 @@ room_door_note:		ld		a,c
 room_objects_of:	ld		a,(room_bytes_left)
 					or		a
 					ret		z
+					dec		a		; the group byte about to be read
+					ld		(room_bytes_left),a
 
 					ld		a,(de)
 					inc		de
 					ld		c,a
-					and		3
+					and		7		; the repeat count is bits 0-2...
 					inc		a
 					ld		(room_count_left),a	; the repeat count, plus one
 
@@ -372,6 +378,9 @@ room_objects_of:	ld		a,(room_bytes_left)
 					ld		hl,(room_template)
 					call	room_unpack_place
 					pop		de
+					ld		a,(room_bytes_left)	; the position byte just read
+					dec		a
+					ld		(room_bytes_left),a
 					ld		a,(room_count_left)
 					dec		a
 					ld		(room_count_left),a

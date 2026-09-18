@@ -85,7 +85,7 @@ STACK_RESERVE		EQU		48		; inherited from Knight Lore; NOT measured here
 ; The one buffer every deferred rotation goes through -- see ../engine/shift.s.
 shift_shared:       DS      SHIFT_SHARED_SIZE
 
-;                   INCLUDE "sound_fx.s"            ; needs Pentagram's own effects
+                    INCLUDE "sound_fx.s"
 room_data_end:
                     ASSERT  room_data_end <= $7400      ; clear of the view buffer
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
@@ -109,15 +109,15 @@ sprite_end:
 					INCLUDE "../engine/shift.s"
 					INCLUDE "../engine/walker.s"
 					INCLUDE "sabreman.s"
-;					INCLUDE "movers.s"               ; Pentagram's own behaviours
+					INCLUDE "movers.s"
 					INCLUDE "../engine/mover.s"		; movers.s falls into it
 					INCLUDE "../engine/sound.s"
 ;					INCLUDE "panel.s"
-;					INCLUDE "menu.s"
+					INCLUDE "menu.s"
 					INCLUDE "input.s"
-;					INCLUDE "main.s"
+					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
-;					INCLUDE "player.s"               ; and player_exit, which is a LOOKUP
+					INCLUDE "player.s"
                                                      ; here, not Knight Lore's grid arithmetic
 					INCLUDE "../engine/redraw.s"
 ;					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
