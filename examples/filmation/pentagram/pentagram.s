@@ -108,13 +108,13 @@ sprite_end:
 					INCLUDE "../engine/depth.s"
 					INCLUDE "../engine/shift.s"
 					INCLUDE "../engine/walker.s"
-;					INCLUDE "sabreman.s"             ; his size, step, jump, doorway box
+					INCLUDE "sabreman.s"
 ;					INCLUDE "movers.s"               ; Pentagram's own behaviours
 					INCLUDE "../engine/mover.s"		; movers.s falls into it
 					INCLUDE "../engine/sound.s"
 ;					INCLUDE "panel.s"
 ;					INCLUDE "menu.s"
-;					INCLUDE "input.s"
+					INCLUDE "input.s"
 ;					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
 ;					INCLUDE "player.s"               ; and player_exit, which is a LOOKUP
