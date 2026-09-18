@@ -3,15 +3,21 @@
 ; touches something deadly, and the turn that reads what the player asked for.
 ;
 ; He is two object records moving as one figure -- legs and body -- which the
-; engine's walking_character lays down. The graphic blocks are eight apart and
-; the body rides twelve above the legs, and both of those are confirmed against
-; the original rather than assumed: his legs were seen wearing graphics 32 to
-; 35 and his body 41, which is 40 plus a phase, and his body record sat at
-; Z 140 with his legs at 128.
+; engine's walking_character lays down.
+;
+; His graphics are the original's: legs 32-35 walking away and 36-39 towards,
+; body 40-47 the same way, four frames a block. The engine's generic settings
+; for a four-frame walk and for art drawn facing the other way are set in
+; pentagram.s.
+;
+; His body rides 12 above his legs facing away and 8 facing the viewer,
+; measured in the original. That is his alone, so it is done here rather than
+; in the shared engine: player_body_up puts it there every turn.
 ; ---------------------------------------------------------------------------
 
 PLAYER_LEGS_GFX     EQU     32
 PLAYER_BODY_GFX     EQU     40              ; two blocks of four above the legs
+PLAYER_BODY_UP_TOWARDS EQU  8               ; CHARACTER_BODY_UP is facing away
 PLAYER_FACING       EQU     0
 
                     ALIGN   32
@@ -36,8 +42,29 @@ player_step:        call    input_read
                     ld      ix,player
                     call    player_turn
                     jr      nc,.stand
+                    push    af
+                    call    player_body_up      ; for the facing about to be walked
+                    pop     af
                     jp      character_walk      ; A is the facing to walk
-.stand:             jp      character_stand
+.stand:             ld      a,(ix+CHARACTER_FACING)
+                    call    player_body_up
+                    jp      character_stand
+
+
+; Put his body at the height the original gives it for this facing: 12 above
+; the legs facing away, 8 facing the viewer (bit 1 of the facing, the same bit
+; the engine picks the block with). Jumps and falls move both records by one
+; step, so setting it from the legs each turn keeps it right; and the region
+; the move repaints comes from where he was drawn, not from Z.
+;   IX -> the legs record, A - the facing
+; Corrupts AF.
+player_body_up:     and     2
+                    ld      a,CHARACTER_BODY_UP
+                    jr      z,.away
+                    ld      a,PLAYER_BODY_UP_TOWARDS
+.away:              add     a,(ix+OBJ.Z)
+                    ld      (ix+CHARACTER_BODY+OBJ.Z),a
+                    ret
 
 
 ; ---------------------------------------------------------------------------

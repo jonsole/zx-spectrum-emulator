@@ -186,25 +186,6 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 					add		a,(ix+CHARACTER_BODY_G)
 					ld		(ix+CHARACTER_BODY+OBJ.GFX),a
 
-				IFDEF	CHARACTER_BODY_UP_TOWARDS
-					; A game whose character's body rides at a different height
-					; facing the viewer says how high with this DEFINE. Pentagram's
-					; does: its body record sits 12 above the legs facing away and
-					; 8 facing towards, measured in the original, and at a fixed 12
-					; there is a four-pixel gap at his waist. Jumps and falls move
-					; both halves by the same step, so resetting it from the legs
-					; whenever the frame is picked keeps it right; the region to
-					; repaint comes from where he was drawn, not from Z, so the
-					; change is erased and redrawn like any other.
-					ld		a,(ix+CHARACTER_FACING)
-					and		2		; towards the viewer?
-					ld		a,CHARACTER_BODY_UP
-					jr		z,.body_up
-					ld		a,CHARACTER_BODY_UP_TOWARDS
-.body_up:			add		a,(ix+OBJ.Z)
-					ld		(ix+CHARACTER_BODY+OBJ.Z),a
-				ENDIF
-
 					; Bit 0 of the facing is the mirror, in both halves. A game
 					; whose character is drawn facing the other way unmirrored --
 					; Sabreman walks -U mirrored where the knight does not -- says
