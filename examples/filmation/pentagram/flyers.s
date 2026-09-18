@@ -27,6 +27,11 @@
 ; and 160, 48 and 80 come up twice, so homers are the likelier.
 ; ---------------------------------------------------------------------------
 
+; 1 to skip the wait altogether, so that things drop as soon as a room is up
+; and again as soon as there is a slot: for testing, and for watching a busy
+; screen. 0 is the original's wait.
+FLYER_NOW           EQU     1
+
 FLYER_SLOTS         EQU     2
 BOLT_SLOTS          EQU     2               ; his two bolts' -- see player.s
 EXTRA_SLOTS         EQU     FLYER_SLOTS + BOLT_SLOTS
@@ -56,8 +61,8 @@ flyer_slots:        DW      0               ; the first of the two records;
 ; And whether this room drops anything at all, and the whole wait again
 ; before it does.
 ; Corrupts AF, BC, DE, HL, IX.
-flyer_room_enter:   xor     a
-                    ld      (flyer_timer),a     ; wraps to 255 on the first turn
+flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
+                    ld      (flyer_timer),a     ; turn; 1 runs out on it
                     ld      a,(room_object_count)
                     ld      l,a
                     ld      h,0
@@ -121,7 +126,7 @@ flyer_step:         ld      a,(flyer_banned)
                     call    mover_rand          ; (which takes HL)
                     and     3
                     ret     nz                  ; ...a one in four chance
-                    ld      a,FLYER_WAIT
+                    ld      a,FLYER_WAIT - FLYER_NOW * (FLYER_WAIT - 1)   ; 1 if now
                     ld      (flyer_timer),a
 
                     ld      ix,(flyer_slots)
