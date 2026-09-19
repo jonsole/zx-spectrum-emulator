@@ -88,7 +88,10 @@ BEHAVIOUR_LOOSE		EQU		MOVE_LOOSE		; this and everything above: carried and shove
 MOVE_RISING		EQU		4		; bit 2, as in the game's byte $0D
 
 ; How fast each of them goes, and how high a ball bounces.
-FIRE_STEP			EQU		2
+; The game moves a fire two a frame at about fifteen frames a second; the
+; remake takes a turn at up to thirty-five, so two a turn crossed a room twice
+; as fast. One a turn is the game's speed again.
+FIRE_STEP			EQU		1
 BALL_RISE			EQU		3		; before gravity takes one back
 BALL_RISE_TO		EQU		32
 SPELL_STEP		EQU		4
