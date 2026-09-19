@@ -28,7 +28,7 @@
 ; ---------------------------------------------------------------------------
 
 ; 1 to show a busy room in the border -- red while its monsters take turns
-; (see ROOM_BUSY_OBJECTS in movers.s), black otherwise: for testing.
+; (see busy.s), black otherwise: for testing.
 BUSY_BORDER         EQU     1
 
 ; 1 to skip the wait altogether, so that things drop as soon as a room is up
@@ -79,17 +79,11 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     add     hl,de
                     ld      (flyer_slots),hl
 
-                    ; A room this full is busy: see ROOM_BUSY_OBJECTS.
+                    ; A room starts quiet; busy_check decides from how its turns
+                    ; go.
                     ld      b,a
-                    cp      ROOM_BUSY_OBJECTS
-                    ld      a,0
-                    jr      c,.quiet
-                    inc     a
-.quiet:             ld      (room_busy),a
-                IF      BUSY_BORDER
-                    add     a,a                 ; 1 to red, 0 to black
-                    out     ($FE),a
-                ENDIF
+                    xor     a
+                    call    busy_set
                     ld      a,b
 
                     ; The room's own objects first: is the well among them?

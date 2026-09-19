@@ -114,6 +114,7 @@ new_game:           ld      a,$04
                     call    movers_step
                     call    player_step
                     call    redraw_flush        ; whatever the turn left waiting
+                    call    busy_check          ; before turn_pace resets the count
                     call    turn_pace
 
                     ld      a,(quest_won)

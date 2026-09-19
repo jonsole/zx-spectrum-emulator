@@ -189,7 +189,7 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; ---------------------------------------------------------------------------
 ; Busy rooms: the monsters take turns.
 ;
-; In a room of ROOM_BUSY_OBJECTS or more objects, each monster moves every other
+; While the room is busy -- see busy.s -- each monster moves every other
 ; turn -- the ones in even slots on even turns, odd on odd, so the work is
 ; split evenly -- and, with MONSTER_KEEP_SPEED, twice as far when it does, so
 ; a busy room is no easier than a quiet one. That is what the room's turns
@@ -202,10 +202,9 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; from the room data, and whatever drops from the sky. Not the platforms and
 ; lifts, which he rides and which would throw him off; not the bolts, the
 ; hopper, the pushed things or anything of the quest's.
-ROOM_BUSY_OBJECTS   EQU     24
 MONSTER_KEEP_SPEED  EQU     1               ; 0: half speed in a busy room
 
-room_busy:          DB      0               ; flyer_room_enter sets it
+room_busy:          DB      0               ; busy.s sets it
 
 ; Out: carry set if this monster sits this turn out.
 ;   IX -> the record
