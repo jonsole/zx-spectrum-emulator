@@ -173,7 +173,8 @@ quest_behaviour:    cp      QUEST_GFX_WATER
 ; ---------------------------------------------------------------------------
 ; Put this room's records into the pool, after its own objects and before it
 ; is drawn, so that room_show places and sorts them with everything else --
-; $B097. The pentagram's pieces only once all four quest items are done.
+; $B097. The pentagram's pieces only once all four quest items are done, and as
+; background: they lie flat on the floor, under everything.
 ;
 ; room_add fills through IX, which is where room_objects_of left it.
 ; Corrupts AF, BC, DE, HL; IX moves on past what it added.
@@ -199,20 +200,22 @@ quest_room_enter:   ld      (quest_first),ix
                     ld      a,(hl)
                     and     $F8
                     cp      QUEST_GFX_PIECE
+                    ld      a,0                 ; no flags
                     jr      nz,.add
                     ld      a,(quest_pieces_on)
                     or      a
                     jr      z,.skip             ; the pentagram is not there yet
+                    ld      a,ROOM_FLAG_BACKGROUND ; flat on the floor: under
+                                                ; everything, and never sorted
 
-.add:               ld      a,(room_object_count)
+.add:               ld      (room_stage + 7),a  ; the flags
+                    ld      a,(room_object_count)
                     cp      ROOM_SLOTS
                     jr      nc,.skip            ; no room in the pool
                     push    hl
                     ld      de,room_stage       ; graphic, U, V, Z, sizes
                     ld      bc,7
                     ldir
-                    xor     a
-                    ld      (de),a              ; and no flags
                     pop     hl
                     ld      a,(hl)
                     call    quest_behaviour
