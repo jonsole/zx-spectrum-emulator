@@ -189,10 +189,12 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; ---------------------------------------------------------------------------
 ; Busy rooms: the monsters take turns.
 ;
-; While the room is busy -- see busy.s -- each monster moves every other
-; turn -- the ones in even slots on even turns, odd on odd, so the work is
-; split evenly -- and, with MONSTER_KEEP_SPEED, twice as far when it does, so
-; a busy room is no easier than a quiet one. That is what the room's turns
+; While the room is busy -- see busy.s -- each monster sits out one turn in
+; room_busy: one in four, three or two, however busy the room has got, and
+; not all on the same turn, so the work is split evenly. With
+; MONSTER_KEEP_SPEED it is always one in two, and a monster goes twice as far
+; when it does move, so a busy room is no easier than a quiet one; without,
+; monsters just slow down, more the busier the room. That is what the room's turns
 ; mostly go on: in room 13, the movers were 63% of a turn, and most of that
 ; repainting what they had moved through -- and a mover's repaint costs what
 ; is around it, so it is clutter that makes a room busy, not how many monsters
@@ -204,38 +206,44 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; hopper, the pushed things or anything of the quest's.
 MONSTER_KEEP_SPEED  EQU     1               ; 0: half speed in a busy room
 
-room_busy:          DB      0               ; busy.s sets it
+room_busy:          DB      0               ; 0, or 4, 3 or 2: busy.s sets it
 
-; Out: carry set if this monster sits this turn out.
+; Out: carry set if this monster sits this turn out. The monsters count
+; busy_count down between them, and whichever reaches nought sits out;
+; busy_check starts it one further on each turn, so each has its turn.
 ;   IX -> the record
-; Corrupts AF, C.
+; Corrupts AF.
 monster_sits_out:   ld      a,(room_busy)
                     or      a
                     ret     z                   ; carry is clear
-                    ld      a,ixl               ; the slot's parity: records are
-                    rlca                        ; 32 apart, so bit 5
-                    rlca
-                    rlca
-                    ld      c,a
-                    ld      a,(move_tick)
-                    xor     c
-                    rra                         ; carry: not its turn
+                    ld      a,(busy_count)
+                    dec     a                   ; carry is still clear
+                    jr      nz,.moves
+                    ld      a,(room_busy)
+                    scf
+.moves:             ld      (busy_count),a
                     ret
 
 ; Twice the step for the move, and back to what it keeps afterwards.
 ;   IX -> the record
 ; Corrupts AF.
-monster_double:     ld      a,(room_busy)
-                    and     MONSTER_KEEP_SPEED
+monster_double:
+                IF      MONSTER_KEEP_SPEED
+                    ld      a,(room_busy)
+                    or      a
                     ret     z
                     sla     (ix+OBJ.DU)
                     sla     (ix+OBJ.DV)
+                ENDIF
                     ret
-monster_halve:      ld      a,(room_busy)
-                    and     MONSTER_KEEP_SPEED
+monster_halve:
+                IF      MONSTER_KEEP_SPEED
+                    ld      a,(room_busy)
+                    or      a
                     ret     z
                     sra     (ix+OBJ.DU)
                     sra     (ix+OBJ.DV)
+                ENDIF
                     ret
 
 
