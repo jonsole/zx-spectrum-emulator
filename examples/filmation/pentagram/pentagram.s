@@ -82,6 +82,19 @@ STACK_RESERVE		EQU		48		; inherited from Knight Lore; NOT measured here
                     INCLUDE "room_data.s"
                     INCLUDE "font.s"
 
+; A percent sign, which the original's font has not got: the remake's own, for
+; the game over's percentage. Straight after the font, so it is character 43.
+PERCENT_CHAR        EQU     43
+                    ASSERT  $ == font + PERCENT_CHAR * 8
+                    DB      0b01100010          ; .##...#.
+                    DB      0b01100110          ; .##..##.
+                    DB      0b00001100          ; ....##..
+                    DB      0b00011000          ; ...##...
+                    DB      0b00110000          ; ..##....
+                    DB      0b01100000          ; .##.....
+                    DB      0b11001100          ; ##..##..
+                    DB      0b10001100          ; #...##..
+
 ; The one buffer every deferred rotation goes through -- see ../engine/shift.s.
 shift_shared:       DS      SHIFT_SHARED_SIZE
 

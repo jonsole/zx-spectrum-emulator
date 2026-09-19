@@ -183,13 +183,15 @@ game_over:          ld      a,GAME_OVER_INK
                     ld      b,PERCENT_ROW
                     ld      e,1
                     call    panel_bcd
-                    ld      a,$44               ; in the last line's colour
+                    ld      a,PERCENT_CHAR      ; and a % after them, which the
+                    ld      b,PERCENT_ROW       ; original has not got
+                    call    panel_char
+                    ld      a,$44               ; in the last line's colour: the
                     ld      hl,$5800 + (PERCENT_ROW / 8) * 32 + PERCENT_COLUMN
-                    ld      (hl),a
+                    ld      b,4                 ; digits, a hundred's third, and
+.ink:               ld      (hl),a              ; the %
                     inc     hl
-                    ld      (hl),a
-                    inc     hl
-                    ld      (hl),a              ; and a third, for a hundred
+                    djnz    .ink
 
                     ; Its tune, and then a pause -- $C34A and $C34D.
                     call    sound_tune_over
