@@ -8,11 +8,12 @@
 ; grass standing still; what makes a room slow is what its turns cost, and
 ; turn_work already adds that up for turn_pace, so this reads it just before.
 ;
-; The line is the original's own pace, not turn_pace's: its quiet rooms run
+; The line is set by the original's pace, not turn_pace's: its quiet rooms run
 ; about 20 turns a second, and turn_pace's budget is 35, which nearly every
 ; room with anything moving in it is over -- measured against that, room 92
 ; with two flyers in it was busy all the time, though it runs faster than the
-; original does there. Slower than the original is what taking turns is for.
+; original does there. At 20 itself, rooms that play fine went busy too, so it
+; is 15: only a room that is plainly slow takes turns.
 ;
 ; On after BUSY_HOT_TURNS turns in a row over the line, not at the first: a
 ; room's first turn draws all of it, and a quiet room went busy for it. Off
@@ -23,7 +24,7 @@
 ; In the room builder's page, which has room: the main one has almost none.
 ; ---------------------------------------------------------------------------
 
-BUSY_TURNS_A_SECOND EQU     20
+BUSY_TURNS_A_SECOND EQU     15
 BUSY_LINE_T         EQU     3500000 / BUSY_TURNS_A_SECOND
 BUSY_ON_UNITS       EQU     (BUSY_LINE_T - TURN_BASE_T) / TURN_UNIT_T
 BUSY_OFF_UNITS      EQU     BUSY_ON_UNITS * 3 / 4
