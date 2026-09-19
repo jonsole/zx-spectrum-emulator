@@ -9,13 +9,14 @@
 ;   PERCENTAGE OF QUEST     row 80, from x 48    bright magenta  $43
 ;   COMPLETED  nn           row 96, from x 64    bright green    $44
 ;
-; Then a pause and back to the start. The original plays a tune over the pause
-; ($D6B5) and goes back to its menu; the remake has neither yet, so it is
-; silent, and a new game starts.
+; Then its tune, a pause, and back to the menu.
 ;
 ; The percentage is $C6EA's: half the rooms seen, up to 54, and four for each
 ; quest item and six for each piece of the pentagram -- 54 + 16 + 30, a
-; hundred. The remake has the rooms but not the other two yet.
+; hundred.
+;
+; The menu draws the same frame, so frame_screen is here for both, and
+; screen_wipe under it for the win, which has no frame.
 ; ---------------------------------------------------------------------------
 
 GAME_OVER_INK       EQU     $46                 ; bright yellow on black
@@ -67,8 +68,10 @@ FRAME_PIECES        EQU     ($ - frame_pieces) / 4
 
 ; The lines: the row, the column, the colour, then the characters in the
 ; font's own codes -- a character less $30, and a space the blank at 13 --
-; ending with $FF.
+; ending with $FF. print_lines prints them.
 SPACE_CHAR          EQU     13
+COPYRIGHT_CHAR      EQU     '<' - $30           ; the font's (c), where < would be
+STOP_CHAR           EQU     ':' - $30           ; and its full stop, where : would
                     MACRO   game_over_line row, column, ink
                     DB      row, column, ink
                     ENDM
@@ -119,66 +122,13 @@ room_seen:          ld      c,a
 
 ; ---------------------------------------------------------------------------
 ; The whole screen, then the pause, then a new game.
-game_over:          call    panel_off           ; nothing puts the panel back
+game_over:          ld      a,GAME_OVER_INK
+                    call    frame_screen
 
-                    ld      hl,$4000            ; the screen cleared
-                    ld      de,$4001
-                    ld      bc,6144 - 1
-                    ld      (hl),0
-                    ldir
-                    ld      hl,$5800            ; and all one colour
-                    ld      de,$5801
-                    ld      bc,768 - 1
-                    ld      (hl),GAME_OVER_INK
-                    ldir
-
-                    ; The frame. An upside-down piece is turned over where it
-                    ; lies in the sprite table, drawn, and turned back.
-                    ld      hl,frame_pieces
-                    ld      b,FRAME_PIECES
-.piece:             push    bc
-                    ld      a,(hl)              ; the graphic
-                    ld      (.gfx + 1),a
-                    inc     hl
-                    ld      c,(hl)              ; x, plus one if mirrored
-                    inc     hl
-                    ld      e,(hl)              ; the row below its bottom
-                    inc     hl
-                    ld      a,(hl)              ; upside down?
-                    ld      (game_over_upside + 1),a
-                    inc     hl
-                    push    hl
-                    push    bc
-                    push    de
-                    call    game_over_turn      ; over, if it is to be
-                    pop     de
-                    pop     bc
-                    ld      a,c
-                    and     1
-                    ld      d,a                 ; mirrored
-                    xor     c
-                    ld      c,a                 ; and x without the flag
-.gfx:               ld      a,0                 ; patched: the graphic
-                    call    screen_sprite
-                    call    game_over_turn      ; and back
-                    pop     hl
-                    pop     bc
-                    djnz    .piece
-
-                    ; The lines.
+                    xor     a
+                    ld      (print_flash),a     ; none of it flashes
                     ld      hl,game_over_text
-.line:              ld      a,(hl)
-                    or      a
-                    jr      z,.lines_done
-                    ld      b,a                 ; the row
-                    inc     hl
-                    ld      c,(hl)              ; the column
-                    inc     hl
-                    ld      a,(hl)              ; the colour
-                    inc     hl
-                    call    game_over_print
-                    jr      .line
-.lines_done:
+                    call    print_lines
                     ; The percentage: half the rooms seen, and no more than 54.
                     ld      hl,rooms_seen
                     ld      c,32
@@ -256,7 +206,65 @@ game_over:          call    panel_off           ; nothing puts the panel back
                     ld      bc,32 - 1
                     ld      (hl),0
                     ldir
-                    jp      new_game
+                    jp      new_game            ; by way of the menu
+
+
+; ---------------------------------------------------------------------------
+; The whole screen cleared, one colour, and nothing drawing the panel back
+; over it.
+;   A - the colour
+; Corrupts everything.
+screen_wipe:        push    af
+                    call    panel_off
+                    ld      hl,$4000
+                    ld      de,$4001
+                    ld      bc,6144 - 1
+                    ld      (hl),0
+                    ldir
+                    pop     af
+                    ld      hl,$5800
+                    ld      de,$5801
+                    ld      bc,768 - 1
+                    ld      (hl),a
+                    ldir
+                    ret
+
+; ...and the frame round it -- $BD59. An upside-down piece is turned over
+; where it lies in the sprite table, drawn, and turned back.
+;   A - the colour
+; Corrupts everything.
+frame_screen:       call    screen_wipe
+                    ld      hl,frame_pieces
+                    ld      b,FRAME_PIECES
+.piece:             push    bc
+                    ld      a,(hl)              ; the graphic
+                    ld      (.gfx + 1),a
+                    inc     hl
+                    ld      c,(hl)              ; x, plus one if mirrored
+                    inc     hl
+                    ld      e,(hl)              ; the row below its bottom
+                    inc     hl
+                    ld      a,(hl)              ; upside down?
+                    ld      (game_over_upside + 1),a
+                    inc     hl
+                    push    hl
+                    push    bc
+                    push    de
+                    call    game_over_turn      ; over, if it is to be
+                    pop     de
+                    pop     bc
+                    ld      a,c
+                    and     1
+                    ld      d,a                 ; mirrored
+                    xor     c
+                    ld      c,a                 ; and x without the flag
+.gfx:               ld      a,0                 ; patched: the graphic
+                    call    screen_sprite
+                    call    game_over_turn      ; and back
+                    pop     hl
+                    pop     bc
+                    djnz    .piece
+                    ret
 
 ; Turn the frame piece in hand over, if it is an upside-down one.
 ; Corrupts everything.
@@ -264,11 +272,35 @@ game_over_turn:
 game_over_upside:   ld      a,0                 ; patched: upside down?
                     or      a
                     ret     z
-                    ld      a,(game_over.gfx + 1)
+                    ld      a,(frame_screen.gfx + 1)
                     jp      sprite_flip_v
 
 game_over_percent:  DB      0
 
+
+; Lines from HL, each the row, the column, the colour and the characters to an
+; $FF, until a row of 0. A line flashes if its bit of print_flash is set -- bit
+; 0 the first line, bit 1 the next -- and print_flash turns a bit a line, so
+; eight lines leave it as they found it.
+; Corrupts AF, BC, DE, HL.
+print_lines:        ld      a,(hl)
+                    or      a
+                    ret     z
+                    ld      b,a                 ; the row
+                    inc     hl
+                    ld      c,(hl)              ; the column
+                    inc     hl
+                    ld      a,(print_flash)
+                    rrca
+                    ld      (print_flash),a
+                    ld      a,(hl)              ; the colour
+                    inc     hl
+                    jr      nc,.steady
+                    or      $80                 ; FLASH
+.steady:            call    game_over_print
+                    jr      print_lines
+
+print_flash:        DB      0
 
 ; One line: the characters from HL to an $FF, at row B from column C, and
 ; their cells coloured A.

@@ -1012,30 +1012,13 @@ won_text:           game_over_line 48, 9, $46
                     DB      'E'-$30,$FF
                     DB      0
 
-quest_win:          call    panel_off
-                    ld      hl,$4000
-                    ld      de,$4001
-                    ld      bc,6144 - 1
-                    ld      (hl),0
-                    ldir
-                    ld      hl,$5800
-                    ld      de,$5801
-                    ld      bc,768 - 1
-                    ld      (hl),WON_INK
-                    ldir
+quest_win:          ld      a,WON_INK
+                    call    screen_wipe
+                    xor     a
+                    ld      (print_flash),a
                     ld      hl,won_text
-.line:              ld      a,(hl)
-                    or      a
-                    jr      z,.pause
-                    ld      b,a
-                    inc     hl
-                    ld      c,(hl)
-                    inc     hl
-                    ld      a,(hl)
-                    inc     hl
-                    call    game_over_print
-                    jr      .line
-.pause:             call    sound_tune_win      ; $C320
+                    call    print_lines
+                    call    sound_tune_win      ; $C320
                     ld      b,GAME_OVER_WAIT
 .wait:              ld      hl,$2000
 .spin:              dec     hl

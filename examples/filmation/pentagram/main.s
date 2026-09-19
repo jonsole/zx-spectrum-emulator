@@ -1,16 +1,13 @@
 ; ---------------------------------------------------------------------------
 ; Where it starts, and the turn it goes round.
 ;
-; This is the smallest thing that stands up: it builds one room, puts Sabreman
-; in it, and then loops. There is no menu yet, no lives, no game to win or
-; lose -- what it proves is that the extracted data, the room builder and the
-; shared engine agree with each other well enough to draw a Pentagram room and
-; walk about in it.
+; The menu, then a game: one of the original's four start rooms, Sabreman in
+; it, and the turn round and round until he has no lives left or has won --
+; and then the menu again, as the original goes back to it.
 ;
-; PLAYER_START_ROOM is the room the original itself starts in, which was read
-; off it rather than picked: forcing a build and reading the room number the
-; builder searched for gives 92, and its doorways lead to 91, 93 and 107,
-; which is what rooms.json holds for it.
+; PLAYER_START_ROOM is the room the original starts in most often, 92, read
+; off it: its doorways lead to 91, 93 and 107, which is what rooms.json holds
+; for it.
 ; ---------------------------------------------------------------------------
 
 PLAYER_START_ROOM   EQU     92
@@ -31,7 +28,8 @@ start:              di
                     ; A new game: four lives on the panel, no score, and one of
                     ; the four rooms the original starts in, at random -- $C2CE
                     ; picks from $C2E8 by the random byte.
-new_game:           call    sound_tune_start    ; $AFBC, before anything
+new_game:           call    menu_run            ; $AFB6
+                    call    sound_tune_start    ; $AFBC
                     ld      a,$04
                     ld      (player_lives),a
                     xor     a

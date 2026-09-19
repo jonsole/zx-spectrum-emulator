@@ -146,6 +146,7 @@ examples/filmation/pentagram/quest.bin
 examples/filmation/pentagram/quest_data.s
 examples/filmation/pentagram/sound.bin
 examples/filmation/pentagram/sound_data.s
+examples/filmation/pentagram/sound_title.s
 examples/filmation/pentagram/output/
 
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a

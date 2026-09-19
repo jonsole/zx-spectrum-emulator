@@ -126,7 +126,6 @@ sprite_end:
 					INCLUDE "gameover.s"
 					INCLUDE "quest.s"
 					INCLUDE "quest_data.s"
-					INCLUDE "menu.s"
 					INCLUDE "input.s"
 					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
@@ -144,7 +143,10 @@ sprite_end:
 ; room against every scenery entry, and that region overflowed by 162 bytes
 ; with these in it. The code region has thousands spare, so they come up here.
 ; sprite_adj_index is page-aligned either way, which is all the engine asks.
+					INCLUDE "menu_run.s"             ; cold, in the pad before the index
 					INCLUDE "sprite_adj_gen.s"
+					INCLUDE "menu_text.s"
+					INCLUDE "sound_title.s"
 
 image_end:
                     ASSERT  $ <= $10000 - STACK_RESERVE
@@ -174,6 +176,7 @@ image_end:
                     INCLUDE "quest_ram.s"
                     INCLUDE "busy.s"
                     INCLUDE "sound_fx.s"
+                    INCLUDE "menu.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end

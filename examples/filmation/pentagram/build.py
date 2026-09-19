@@ -165,11 +165,13 @@ def generate_sound_data() -> None:
     packed = PENTAGRAM / "sound.bin"
     generator = PENTAGRAM / "sound_source.py"
     generated = PENTAGRAM / "sound_data.s"
+    title = PENTAGRAM / "sound_title.s"
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
                  "own copy of Pentagram to produce it")
     newest_input = max(f.stat().st_mtime for f in (packed, generator))
-    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+    if all(f.is_file() and f.stat().st_mtime >= newest_input
+           for f in (generated, title)):
         return
     print(f"Regenerating {generated.name} from {packed.name}")
     subprocess.run([sys.executable, str(generator)], cwd=PENTAGRAM, check=True)
