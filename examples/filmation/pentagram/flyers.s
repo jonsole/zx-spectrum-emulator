@@ -27,6 +27,10 @@
 ; and 160, 48 and 80 come up twice, so homers are the likelier.
 ; ---------------------------------------------------------------------------
 
+; 1 to show a busy room in the border -- red while its monsters take turns
+; (see ROOM_BUSY_OBJECTS in movers.s), black otherwise: for testing.
+BUSY_BORDER         EQU     1
+
 ; 1 to skip the wait altogether, so that things drop as soon as a room is up
 ; and again as soon as there is a slot: for testing, and for watching a busy
 ; screen. 0 is the original's wait.
@@ -82,6 +86,10 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     jr      c,.quiet
                     inc     a
 .quiet:             ld      (room_busy),a
+                IF      BUSY_BORDER
+                    add     a,a                 ; 1 to red, 0 to black
+                    out     ($FE),a
+                ENDIF
                     ld      a,b
 
                     ; The room's own objects first: is the well among them?
