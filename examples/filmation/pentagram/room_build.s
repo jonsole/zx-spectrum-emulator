@@ -141,9 +141,10 @@ room_build:			ld		c,a
 					push	de
 					call	panel_off		; no panel until the room is up
 					xor		a
-					call	screen_colour	; black on black, before the wipe,
-					call	room_wipe		; so the old room goes all at once
-					call	room_shape
+					call	screen_colour	; black on black: the old room goes
+					call	room_shape		; at once, and nothing is wiped --
+									; redraw_screen writes every pixel there
+									; is, as Knight Lore's builder says
 					pop		de
 
 					ld		ix,room_objects	; room_add fills THROUGH IX and moves it on,
@@ -162,18 +163,6 @@ room_build:			ld		c,a
 					ret				; pleases, so the carry the caller branches
 									; on has to be set here rather than carried
 									; through from room_find.
-
-
-; ---------------------------------------------------------------------------
-; Wipe the last room off the screen. Only whole rooms are drawn this way --
-; once something moves, redraw_view repaints just the area it disturbed -- so
-; the cost of an LDIR here is paid once per room and buys clarity.
-room_wipe:			ld		hl,16384
-					ld		de,16385
-					ld		bc,6143
-					ld		(hl),0
-					ldir
-					ret
 
 
 ; ---------------------------------------------------------------------------
