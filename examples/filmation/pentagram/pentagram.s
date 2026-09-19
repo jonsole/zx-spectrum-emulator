@@ -160,6 +160,7 @@ sprite_end:
 					INCLUDE "sprite_adj_gen.s"
 					INCLUDE "menu_text.s"
 					INCLUDE "gameover_sabreman.s"
+					INCLUDE "pause.s"
 					INCLUDE "sound_title.s"
 
 image_end:

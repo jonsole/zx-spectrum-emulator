@@ -110,6 +110,7 @@ new_game:           call    menu_run            ; $AFB6
                     ; one taken mid-blit would push a return address into a
                     ; sprite. The keyboard is read directly rather than through
                     ; the ROM's scan, so nothing needs them.
+                    call    game_pause          ; SPACE, as $B042 asks
                     call    sound_jingle        ; a note, if one is playing
                     call    flyer_step          ; something from the sky?
                     call    movers_step

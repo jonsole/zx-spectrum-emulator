@@ -20,8 +20,7 @@
 ;
 ; The original makes no sound as he falls, so sound_z, which the engine calls
 ; for that, is a plain RET. Its space bar pauses the game with a click in and
-; out ($B4E0, $D5D7), and its title screen plays a tune once ($BB91): the
-; remake has neither yet.
+; out -- sound_click, $D5D7; see pause.s.
 ;
 ; The code is here in the room builder's page, but for sound_tune, which is
 ; in sound_tune.s beside the notes and tunes of sound_data.s: the page had no
@@ -128,3 +127,16 @@ sound_jingle_start: ld      (sound_jingle_at),hl
 
 sound_jingle_left:  DB      0
 sound_jingle_at:    DW      sound_jingles
+
+; The pause's click -- $D5D7: twelve cycles, pitched at the jingle's count plus
+; $40, after adding one to it. The count is the jingle's own, so the original
+; plays a note or two of whatever jingle it was on once the game goes on again;
+; so does this.
+; Corrupts AF, BC, HL.
+sound_click:        ld      hl,sound_jingle_left
+                    inc     (hl)
+                    ld      a,(hl)
+                    add     a,$40
+                    ld      b,a
+                    ld      c,12
+                    jp      sound_tone
