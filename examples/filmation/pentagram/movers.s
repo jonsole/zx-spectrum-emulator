@@ -924,14 +924,22 @@ mover_sinks:        bit     3,(ix+OBJ.MOVE_STATE)
 
 
 ; ---------------------------------------------------------------------------
-; A block that cracks under him and goes -- $D2AD. Every turn he is on it, it
-; is the next graphic of its four, 136 to 139, and on the one after the last
-; it is gone. Only he cracks it: $B890 marks what his legs land on, and
+; A block that cracks under him and goes -- $D2AD. While he is on it, it
+; becomes the next graphic of its four, 136 to 139, and on the step after the
+; last it is gone. Only he cracks it: $B890 marks what his legs land on, and
 ; nothing else's.
+;
+; The original takes a step every turn, but at its own 5 to 20 turns a second
+; that is a quarter to most of a second; at the remake's pace it was an eighth,
+; too quick to see. A step every CRUMBLE_EVERY turns puts it back to about half.
 ;   IX -> the record
 CRUMBLE_LAST        EQU     139
+CRUMBLE_EVERY       EQU     4                   ; a power of two
 
 mover_crumbles:     call    player_on_top
+                    ret     nz
+                    ld      a,(move_tick)
+                    and     CRUMBLE_EVERY - 1
                     ret     nz
                     ld      a,(ix+OBJ.GFX)
                     cp      CRUMBLE_LAST

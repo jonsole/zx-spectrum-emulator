@@ -133,6 +133,10 @@ SABREMAN_POOF = tuple(range(64, 71))    # both halves wear the puff he dies in
 # always -12, -4, but the harvest had three different pairs across 64-70 and
 # the puff hopped about as it played. These override sprite_adj.s.
 FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
+# The crumbling blocks and the conveyors: $D2AD-$D2FF all call $C75F, -16, -8,
+# every turn. 137-139 are only ever seen crumbling, so the harvest had them at
+# nothing, and each crack jumped the block sixteen pixels right; 141 likewise.
+FIXED_NUDGES.update({g: (-16, -8) for g in range(136, 144)})
 
 ANIMATIONS = ()
 # Drawn straight onto the screen with screen_sprite, which takes no pixel
