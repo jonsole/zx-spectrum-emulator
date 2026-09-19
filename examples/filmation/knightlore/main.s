@@ -67,7 +67,9 @@ start:              di
                     ld      a,$FF
                     ld      (enter_dir),a       ; and nobody walking in
                     jr      .loop
-.entered:           ld      a,(room_number)
+.entered:           xor     a
+                    call    busy_set            ; every room starts quiet
+                    ld      a,(room_number)
                     ld      (room_shown),a
                     ld      a,(enter_dir)       ; kept for starting the room over
                     ld      (entered_by),a
@@ -115,6 +117,7 @@ start:              di
                 IFDEF   DEBUG_ROOM
                     call    room_keys
                 ENDIF
+                    call    busy_check          ; before turn_pace resets the count
                     call    turn_pace
                     jr      .loop
 

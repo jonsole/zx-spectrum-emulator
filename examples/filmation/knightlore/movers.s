@@ -125,17 +125,19 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
 					DB		FG_GARGOYLE, MOVE_STILL
 					DB		FG_SPIKE, MOVE_STILL
-					DB		FG_SPIKE_HIGH, MOVE_STILL
 					DB		$FF
 
+; The monsters, MOVE_FIRE_U to MOVE_SPIKE_BALL, go through monster_gate, which
+; sits them out by turns in a busy room -- see busy.s -- and otherwise goes on
+; to their own movers.
 mover_tbl:			DW		mover_ball			; MOVE_BALL
-					DW		mover_fire_u		; MOVE_FIRE_U
-					DW		mover_fire_v		; MOVE_FIRE_V
-					DW		mover_guard_u		; MOVE_GUARD_U
-					DW		mover_guard_sq	; MOVE_GUARD_SQ
-					DW		mover_ghost		; MOVE_GHOST
-					DW		mover_bounce		; MOVE_BOUNCE
-					DW		mover_spike_ball	; MOVE_SPIKE_BALL
+					DW		monster_gate		; MOVE_FIRE_U
+					DW		monster_gate		; MOVE_FIRE_V
+					DW		monster_gate		; MOVE_GUARD_U
+					DW		monster_gate		; MOVE_GUARD_SQ
+					DW		monster_gate		; MOVE_GHOST
+					DW		monster_gate		; MOVE_BOUNCE
+					DW		monster_gate		; MOVE_SPIKE_BALL
 					DW		mover_gate			; MOVE_GATE
 					DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_slide_v		; MOVE_SLIDE_V
