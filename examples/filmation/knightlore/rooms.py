@@ -103,6 +103,20 @@ def rooms():
     return out
 
 
+def used_object_types():
+    """The object template numbers some room names -- the only way the game
+    ever reaches one: $D461 looks a room's entry up in the table and nothing
+    else reads it."""
+    used = set()
+    for attr, body in rooms().values():
+        object_bytes = split_body(body)[1]
+        i = 0
+        while i < len(object_bytes):
+            used.add((object_bytes[i] >> 3) & 0x1F)
+            i += 1 + (object_bytes[i] & 7) + 1
+    return used
+
+
 def split_body(body):
     """Scenery indices, then the object bytes that follow the $FF."""
     if 0xFF in body:
@@ -332,7 +346,13 @@ def emit(out):
     out.append("; one entry is an object drawn from several sprites, like a guard.")
     out.append("")
     fg, fg_refs = templates(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, 6, FG_NAMES, "fg")
+    # Two templates no room names -- a fire standing still and the spikes
+    # raised on something -- are in the game but never placed. They are left
+    # out, and their table entries hold 0: nothing looks them up.
+    reached = {fg_refs[i] for i in used_object_types()}
     for addr, label, entries in fg:
+        if label not in reached:
+            continue
         line(label + ":", "", "", "%d sprite%s" % (len(entries), "" if len(entries) == 1 else "s"))
         for e in entries:
             e = our_flags(e, 0, 4, cached)
@@ -341,7 +361,10 @@ def emit(out):
         out.append("")
     line("block_type_tbl:", "", "")
     for i, ref in enumerate(fg_refs):
-        line("", "DW", ref, "$%02X - %s" % (i, FG_NAMES[i]))
+        if ref in reached:
+            line("", "DW", ref, "$%02X - %s" % (i, FG_NAMES[i]))
+        else:
+            line("", "DW", "0", "$%02X - %s: no room names it" % (i, FG_NAMES[i]))
     out.append("")
     for i, name in enumerate(FG_NAMES):
         line("FG_" + name.upper(), "EQU", "$%02X" % i)
