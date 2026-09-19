@@ -204,7 +204,7 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; from the room data, and whatever drops from the sky. Not the platforms and
 ; lifts, which he rides and which would throw him off; not the bolts, the
 ; hopper, the pushed things or anything of the quest's.
-MONSTER_KEEP_SPEED  EQU     1               ; 0: half speed in a busy room
+MONSTER_KEEP_SPEED  EQU     0               ; 1: twice as far, one turn in two
 
 room_busy:          DB      0               ; 0, or 4, 3 or 2: busy.s sets it
 
