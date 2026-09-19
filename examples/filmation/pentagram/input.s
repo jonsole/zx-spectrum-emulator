@@ -41,8 +41,8 @@
 ;   W R  Y I P    fire
 ;
 ; so it cannot be read as the one port $DBFE, which ORs the halves together
-; and would give Q and P the same bit. The number rows pick up and put down in
-; the original, which the remake does not have yet; back is put on them.
+; and would give Q and P the same bit. The number rows pick up and put down,
+; as they do in the original.
 ;
 ; On a joystick the original fires with the button and jumps with down --
 ; bit 4 here, "back" -- which player_step takes as a jump while the controls
@@ -182,7 +182,7 @@ input_cursor:       ld      e,0
 ; The keyboard. Left and right are Z, X, C and V along the bottom row and
 ; SYM SHIFT, M, N and B beside them -- Z, C, M and B turn him one way and
 ; X, V, SYM and N the other. Any letter of the middle row walks him forward,
-; any of the top row jumps, and any number is back.
+; the top row jumps and fires by turns, and any number picks up or puts down.
 input_keyboard:     ld      e,0
 
                     ld      bc,KEY_ROW_SHIFT_V  ; CAPS, Z, X, C, V

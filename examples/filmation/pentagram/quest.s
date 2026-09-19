@@ -420,6 +420,7 @@ quest_take:         ld      a,(input_now)
                     ret     nz                  ; falling
                     bit     7,(ix+CHARACTER_DOOR)
                     ret     z                   ; in a doorway
+                    call    sound_jingle_take   ; something to take or not
 
                     push    ix
                     call    quest_at_feet
@@ -826,8 +827,9 @@ mover_water:        bit     0,(ix+OBJ.MOVE_STATE)
                     jr      z,.there
                     jp      mover_move_always
 
-                    ; Over it and up: it is done.
+                    ; Over it and up: it is done, to a tune ($D0EE).
 .there:             set     0,(iy+OBJ.MOVE_STATE)
+                    call    sound_tune_water
                     xor     a
                     ld      (quest_water_out),a
                     ld      a,QUEST_WATER       ; the creature is no more
@@ -1033,7 +1035,8 @@ quest_win:          call    panel_off
                     inc     hl
                     call    game_over_print
                     jr      .line
-.pause:             ld      b,GAME_OVER_WAIT
+.pause:             call    sound_tune_win      ; $C320
+                    ld      b,GAME_OVER_WAIT
 .wait:              ld      hl,$2000
 .spin:              dec     hl
                     ld      a,h

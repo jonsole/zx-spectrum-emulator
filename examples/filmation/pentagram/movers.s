@@ -858,7 +858,8 @@ mover_poof_start:   ld      (ix+OBJ.GFX),POOF_FIRST
                     ASSERT  OBJ_PASSABLE == 1 << 2
                     ret
 
-mover_poof:         ld      a,(ix+OBJ.GFX)
+mover_poof:         call    sound_poof
+                    ld      a,(ix+OBJ.GFX)
                     cp      POOF_LAST
                     jp      nc,object_hide
                     inc     a

@@ -90,6 +90,13 @@ QUEST_SPOTS_LEN = 20 * 4        #   five collectables five in a row of them
 QUEST_TARGETS = 0xD562          # where each collectable settles in room 82
 QUEST_TARGETS_LEN = 5 * 2
 
+# The sound's tables, for sound.bin -- see sound_source.py:
+SOUND_JINGLES = 0xD615          # the notes $D5F2 plays a turn at a time
+SOUND_JINGLES_LEN = 10
+SOUND_NOTES = 0xD718            # $D6C0's notes, three bytes each, up to
+SOUND_TUNES = 0xD7CF            #   where the first tune begins
+SOUND_TUNES_END = 0xD88F        # the five tunes, each ending $FF
+
 
 def tape_blocks(path):
     """The data blocks of a .tzx, standard speed (ID $10) and turbo (ID $11).
@@ -233,6 +240,12 @@ def main():
     (HERE / "quest.bin").write_bytes(quest)
     print("quest.bin        %d bytes: the persistent objects, the collectables'"
           " spots and their targets" % len(quest))
+
+    sound = (memory[SOUND_JINGLES:SOUND_JINGLES + SOUND_JINGLES_LEN]
+             + memory[SOUND_NOTES:SOUND_TUNES_END])
+    (HERE / "sound.bin").write_bytes(sound)
+    print("sound.bin        %d bytes: the jingles, the note table and the tunes"
+          % len(sound))
 
 
 if __name__ == "__main__":

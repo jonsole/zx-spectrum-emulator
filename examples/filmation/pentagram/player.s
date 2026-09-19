@@ -103,6 +103,7 @@ player_step:        ld      ix,player
                     call    player_body_up      ; for the facing about to be walked
                     pop     af
                     call    character_walk      ; A is the facing to walk
+                    call    sound_step
                     ld      ix,player           ; the repaint took IX
                     jp      player_exit
 .stand:             ld      a,(ix+CHARACTER_FACING)
@@ -535,6 +536,7 @@ player_fire:        ld      a,(input_now)
                     call    object_place
                     call    depth_insert
                     call    redraw_object
+                    call    sound_fire
 
 .none:              pop     ix
                     ret

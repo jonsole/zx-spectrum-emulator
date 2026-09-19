@@ -31,7 +31,8 @@ start:              di
                     ; A new game: four lives on the panel, no score, and one of
                     ; the four rooms the original starts in, at random -- $C2CE
                     ; picks from $C2E8 by the random byte.
-new_game:           ld      a,$04
+new_game:           call    sound_tune_start    ; $AFBC, before anything
+                    ld      a,$04
                     ld      (player_lives),a
                     xor     a
                     ld      (score),a
@@ -96,6 +97,7 @@ new_game:           ld      a,$04
                     call    character_add
                     call    panel_on            ; and the panel, now it is up
                     call    quest_carry_show
+                    call    sound_jingle_room
 
                     ; player_exit changes room_number when he walks out through
                     ; a doorway, and this notices. Poking it from the debugger
@@ -110,6 +112,7 @@ new_game:           ld      a,$04
                     ; one taken mid-blit would push a return address into a
                     ; sprite. The keyboard is read directly rather than through
                     ; the ROM's scan, so nothing needs them.
+                    call    sound_jingle        ; a note, if one is playing
                     call    flyer_step          ; something from the sky?
                     call    movers_step
                     call    player_step

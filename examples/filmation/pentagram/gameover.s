@@ -241,7 +241,8 @@ game_over:          call    panel_off           ; nothing puts the panel back
                     inc     hl
                     ld      (hl),a              ; and a third, for a hundred
 
-                    ; The pause the original's tune would fill.
+                    ; Its tune, and then a pause -- $C34A and $C34D.
+                    call    sound_tune_over
                     ld      b,GAME_OVER_WAIT
 .wait:              ld      hl,$2000
 .spin:              dec     hl

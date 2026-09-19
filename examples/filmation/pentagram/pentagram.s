@@ -85,7 +85,8 @@ STACK_RESERVE		EQU		48		; inherited from Knight Lore; NOT measured here
 ; The one buffer every deferred rotation goes through -- see ../engine/shift.s.
 shift_shared:       DS      SHIFT_SHARED_SIZE
 
-                    INCLUDE "sound_fx.s"
+                    INCLUDE "sound_data.s"
+                    INCLUDE "sound_tune.s"
 room_data_end:
                     ASSERT  room_data_end <= $7400      ; clear of the view buffer
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
@@ -119,6 +120,7 @@ sprite_end:
 					INCLUDE "movers.s"
 					INCLUDE "../engine/mover.s"		; movers.s falls into it
 					INCLUDE "../engine/sound.s"
+					INCLUDE "sound_long.s"
 					INCLUDE "../engine/screen.s"
 					INCLUDE "panel.s"
 					INCLUDE "gameover.s"
@@ -171,6 +173,7 @@ image_end:
                     INCLUDE "../engine/room.s"
                     INCLUDE "quest_ram.s"
                     INCLUDE "busy.s"
+                    INCLUDE "sound_fx.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end
