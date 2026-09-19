@@ -223,8 +223,8 @@ room_shape:			ld		a,(room_attr)
 
 
 ; ---------------------------------------------------------------------------
-; The scenery. Each entry is two bytes: a template index, then the room a
-; doorway leads to. The template's pieces are already in the eight-byte shape
+; The scenery. Each entry is a template index, and a doorway's is followed by
+; the room it leads to -- nothing else has one. The template's pieces are already in the eight-byte shape
 ; room_add wants, so this is a walk and a call.
 ;   DE -> the scenery entries
 ; Leaves DE on the first object byte.
@@ -237,15 +237,18 @@ room_scenery:		ld		a,(room_scenery_left)
 					ld		a,(de)
 					inc		de
 					ld		c,a		; which template, kept for room_door_note
+					ld		b,1		; the bytes this entry takes
+					call	room_is_door
+					jr		nz,.not_door
 					ld		a,(de)
 					inc		de
-					ld		(room_dest),a	; ...and where it leads
-					ld		a,(room_bytes_left)	; the two bytes this entry took.
-					sub		2			; room_objects_of reads whatever is left,
-					ld		(room_bytes_left),a	; and there is no $FF to stop it --
-									; the scenery count replaced that, so the
-									; body count is the only thing saying
-									; where the objects begin.
+					ld		(room_dest),a	; ...and where a doorway leads
+					inc		b
+.not_door:			ld		a,(room_bytes_left)	; room_objects_of reads whatever
+					sub		b			; is left, and there is no $FF to stop
+					ld		(room_bytes_left),a	; it -- the scenery count replaced
+									; that, so the body count is the only
+									; thing saying where the objects begin.
 					push	de
 
 					ld		l,c
@@ -291,6 +294,22 @@ room_scenery_move:	xor		a
 
 
 ; ---------------------------------------------------------------------------
+; Is scenery template C a doorway? Twelve are -- indices 0 to 7 and 24 to 27.
+; Out: Z if it is.
+; Corrupts AF.
+room_is_door:		ld		a,c
+					cp		8
+					jr		c,.yes			; 0-7, the first two sets
+					sub		24
+					cp		4
+					jr		c,.yes			; 24-27
+					or		1			; NZ: A is at least 4
+					ret
+.yes:				xor		a
+					ret
+
+
+; ---------------------------------------------------------------------------
 ; If this piece of scenery is a doorway, remember where it leads.
 ;
 ; Twelve templates are doorways -- indices 0 to 7 and 24 to 27 -- and the side
@@ -303,14 +322,10 @@ room_scenery_move:	xor		a
 ;   C  - the scenery template index
 ;   HL -> the template
 ; Corrupts AF and B. HL comes back where it was.
-room_door_note:		ld		a,c
-					cp		8
-					jr		c,.is_door		; 0-7, the first two sets
-					sub		24
-					cp		4
-					ret		nc		; not 24-27 either, so not a doorway
+room_door_note:		call	room_is_door
+					ret		nz
 
-.is_door:			ld		a,(room_dest)
+					ld		a,(room_dest)
 					or		a
 					ret		z		; the arch is drawn but walled up
 

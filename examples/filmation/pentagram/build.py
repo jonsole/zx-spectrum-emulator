@@ -247,26 +247,34 @@ def z80_snapshot(ram: bytes, pc: int) -> bytes:
 
 
 def generate_room_data() -> None:
-    """Regenerates room_data.s when its inputs have moved on.
+    """Regenerates room_data.s when its inputs have moved on, in two steps.
 
-    rooms.py writes the file itself rather than to stdout, because it is
-    thousands of lines of named templates and commented room records rather
-    than one table.
+    rooms.py decodes room_data.bin into rooms.json, the readable form, and
+    rooms_source.py turns rooms.json into room_data.s. Both write their files
+    themselves rather than to stdout, because they are thousands of lines of
+    named templates and commented room records rather than one table.
     """
-    generator = PENTAGRAM / "rooms.py"
+    decoder = PENTAGRAM / "rooms.py"
+    emitter = PENTAGRAM / "rooms_source.py"
     packed = PENTAGRAM / "room_data.bin"
+    atlas = PENTAGRAM / "rooms.json"
     generated = PENTAGRAM / "room_data.s"
 
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
                  "own copy of Pentagram to produce it")
 
-    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime)
+    newest_input = max(decoder.stat().st_mtime, packed.stat().st_mtime)
+    if not atlas.is_file() or atlas.stat().st_mtime < newest_input:
+        print(f"Regenerating {atlas.name} from {packed.name}")
+        subprocess.run([sys.executable, str(decoder)], cwd=PENTAGRAM, check=True)
+
+    newest_input = max(emitter.stat().st_mtime, atlas.stat().st_mtime)
     if generated.is_file() and generated.stat().st_mtime >= newest_input:
         return
 
-    print(f"Regenerating {generated.name} from {packed.name}")
-    subprocess.run([sys.executable, str(generator)], cwd=PENTAGRAM, check=True)
+    print(f"Regenerating {generated.name} from {atlas.name}")
+    subprocess.run([sys.executable, str(emitter)], cwd=PENTAGRAM, check=True)
 
 
 def main() -> None:

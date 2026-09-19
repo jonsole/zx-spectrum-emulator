@@ -230,8 +230,8 @@ def main():
     out.append(";     skip                  bytes from here to the next record")
     out.append(";     attribute             colour in bits 0-2, room shape in bits 3-4,")
     out.append(";                           and the scenery count LESS ONE in bits 5-7")
-    out.append(";     scenery               two bytes each: the template, then the room")
-    out.append(";                           a doorway leads to, or zero")
+    out.append(";     scenery               the template, and after a doorway's the room")
+    out.append(";                           it leads to, or zero -- nothing else has one")
     out.append(";     object groups         a type-and-count byte, then that many packed")
     out.append(";                           positions: U cell in bits 0-2, V cell in")
     out.append(";                           bits 3-5, Z level in bits 6-7")
@@ -240,14 +240,16 @@ def main():
     out.append("; grid: forty distinct deltas, and thirteen different ones for a single")
     out.append("; doorway direction, so no arithmetic recovers it. The byte is also the")
     out.append("; authority, not the template -- one south doorway is an exit in")
-    out.append("; twenty-eight rooms and blocked in one.")
+    out.append("; twenty-eight rooms and blocked in one. Only the doorways carry it: the")
+    out.append("; other 275 entries had one too, always zero, and that was 275 bytes.")
     out.append("")
 
     biggest = most_objects = 0
     line(out, "room_list:", "", "")
     for r in rooms:
         scn, obs = r["scenery"], r["objects"]
-        body = 2 * len(scn) + sum(1 + len(o["positions"]) for o in obs)
+        body = sum(2 if by_name[s["template"]]["doorway"] else 1 for s in scn)
+        body += sum(1 + len(o["positions"]) for o in obs)
         biggest = max(biggest, body)
         placed = sum(len(by_name[s["template"]]["blocks"]) for s in scn)
         placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]]["entries"])
@@ -264,9 +266,13 @@ def main():
              % (r["ink"], r["size"], len(scn), placed))
         for s in scn:
             dest = s["destination"]
-            line(out, "", "DB", "SCN_%s, $%02X"
-                 % (label_of(s["template"])[4:].upper(), dest),
-                 "-> room %d" % dest if dest else "")
+            name = label_of(s["template"])[4:].upper()
+            if by_name[s["template"]]["doorway"]:
+                line(out, "", "DB", "SCN_%s, $%02X" % (name, dest),
+                     "-> room %d" % dest if dest else "walled up")
+            else:
+                assert dest == 0, (r["number"], s["template"])
+                line(out, "", "DB", "SCN_%s" % name, "")
         for o in obs:
             n = len(o["positions"])
             group = (obj_by_name[o["template"]]["index"] << 2) | (n - 1)
