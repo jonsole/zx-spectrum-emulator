@@ -16,7 +16,7 @@
 ; (2 + the quest items still to find) * 4, 24 at the start of a game. Two at
 ; once and it stops trying until one goes, which in practice is leaving the
 ; room. None falls in a room holding the well, a quest item or a piece of the
-; pentagram ($CB89) -- of which only the well exists here yet.
+; pentagram ($CB89).
 ;
 ; What falls is one of eight, picked at random from $CC09:
 ;
@@ -86,7 +86,8 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     call    busy_set
                     ld      a,b
 
-                    ; The room's own objects first: is the well among them?
+                    ; Is the well among the room's objects, or a quest item or a
+                    ; piece of the pentagram among its records? -- $CB89.
                     xor     a
                     ld      (flyer_banned),a
                     ld      a,b
@@ -96,9 +97,14 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     ld      de,ROOM_STRIDE
 .look:              ld      a,(ix+OBJ.GFX)
                     cp      FLYER_WELL_GFX
-                    jr      nz,.not_well
-                    ld      (flyer_banned),a
-.not_well:          add     ix,de
+                    jr      z,.ban
+                    and     $F8
+                    cp      QUEST_GFX_ITEM      ; 112-119, done or not
+                    jr      z,.ban
+                    cp      QUEST_GFX_PIECE     ; 128-135
+                    jr      nz,.next
+.ban:               ld      (flyer_banned),a    ; none of them is 0
+.next:              add     ix,de
                     djnz    .look
 
 .blank:             ld      ix,(flyer_slots)
