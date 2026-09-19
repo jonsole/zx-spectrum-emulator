@@ -230,6 +230,19 @@ def emit_bitmaps(sprites, animated):
     return out
 
 
+def graphic_top(facts):
+    """One past the highest graphic number anything can name.
+
+    Both per-graphic tables are only ever read by graphic number -- object
+    placement, room_adjust, and the few graphics the code draws by name -- so
+    nothing reads past the last graphic that has a sprite, and the entries
+    after it are dead bytes: 136 in the sprite table, 68 in the nudge index.
+    Each table stops there, rounded up to a whole row of its source."""
+    gmap = facts["graphicMap"]
+    return 1 + max(g for g in range(len(gmap))
+                   if gmap[g] is not None or g == facts["blankGraphic"])
+
+
 def emit_table(sprites, facts):
     # The table is indexed by KNIGHT LORE's graphic number, not by our sprite
     # number. Its own table at $7112 is 256 pointers into sprite memory and
@@ -243,8 +256,9 @@ def emit_table(sprites, facts):
     # single `ld h,high sprite_table` that a 128-entry table allowed.
     gmap = facts["graphicMap"]
     blank = facts["blankGraphic"]
+    top = (graphic_top(facts) + 3) & ~3
     out = ["\t\t\tALIGN\t512", "sprite_table:"]
-    for row in range(0, 256, 4):
+    for row in range(0, top, 4):
         cells = []
         for g in range(row, row + 4):
             n = gmap[g]
@@ -362,7 +376,7 @@ def emit_adj(sprites, facts, harvest):
     out.append("; the address and the lookup needs no arithmetic at all.")
     out.append("\t\t\t\t\tALIGN\t256")
     out.append("sprite_adj_index:")
-    for row in range(0, 256, 8):
+    for row in range(0, (graphic_top(facts) + 7) & ~7, 8):
         cells = ", ".join("$%02X" % index[g] for g in range(row, row + 8))
         out.append("\t\t\t\t\tDB\t\t%s\t\t; %d" % (cells, row))
     return out
