@@ -140,9 +140,9 @@ room_build:			ld		c,a
 					; of being watched as it draws -- as Knight Lore's does.
 					push	de
 					call	panel_off		; no panel until the room is up
-					call	room_wipe
 					xor		a
-					call	screen_colour	; black on black
+					call	screen_colour	; black on black, before the wipe,
+					call	room_wipe		; so the old room goes all at once
 					call	room_shape
 					pop		de
 
