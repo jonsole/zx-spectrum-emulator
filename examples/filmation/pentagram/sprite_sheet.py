@@ -137,6 +137,16 @@ FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
 # every turn. 137-139 are only ever seen crumbling, so the harvest had them at
 # nothing, and each crack jumped the block sixteen pixels right; 141 likewise.
 FIXED_NUDGES.update({g: (-16, -8) for g in range(136, 144)})
+# The quest's things likewise call $C75F: the bucket ($D0AC), the quest items
+# and their done forms ($CF68), the pentagram's pieces ($CF14) and the
+# collectables ($CD16). None is in a room as a new game starts but the
+# collectables, and the harvest found only three of those, so the rest were
+# drawn sixteen pixels right and eight low. A collectable put in its place
+# becomes 152-156, whose routine ($CB4E) sets nothing: it keeps the nudge it
+# had, so they have it too.
+FIXED_NUDGES.update({g: (-16, -8) for g in [90] + list(range(112, 120))
+                     + list(range(128, 136)) + list(range(144, 149))
+                     + list(range(152, 157))})
 
 ANIMATIONS = ()
 # Drawn straight onto the screen with screen_sprite, which takes no pixel
