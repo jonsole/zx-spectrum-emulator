@@ -8,7 +8,7 @@ quest.bin, back to back:
          works on the copy: the four quest items (112-115), the five
          collectables (144-148, all in room 97 until $D16F deals them out),
          the eight pieces of the pentagram in room 82 (128-135), and an empty
-         record the well's creature takes when it comes out.
+         record the well's bucket takes when it comes out.
   $D1A5  20 spots of room, U, V, Z. $D16F deals the five collectables into
          five in a row of them, starting at a random one of the first sixteen.
   $D562  where each collectable settles in room 82, by the bottom three bits

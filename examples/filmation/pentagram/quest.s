@@ -6,15 +6,15 @@
 ;   $D432  eighteen records of everything that persists between rooms --
 ;          four quest items (112-115), five collectables (144-148), the eight
 ;          pieces of the pentagram in room 82 (128-135), and one the well's
-;          creature (90) takes when it comes out. Copied from $D312 at the
+;          bucket (90) takes when it comes out. Copied from $D312 at the
 ;          start of a game; $D16F deals the collectables out to five of the
 ;          spots at $D1A5, at random. quest_data.s has all three tables.
 ;   $B097  entering a room puts its records into the object pool; $B115
 ;          leaving one writes them back.
 ;   $BF79  picking up and putting down, on the number keys.
 ;   $CFD2  the well: shoot it -- thirty-two turns of a bolt touching it -- and
-;          the creature comes out, if it is not out already.
-;   $D0AC  the creature sinks until it finds a quest item in the room, then
+;          a bucket of water comes out, if it is not out already.
+;   $D0AC  the bucket sinks until it finds a quest item in the room, then
 ;          flies up over it, Z 176, and marks it done.
 ;   $CF68  a quest item marked done becomes the next graphic up by four, gives
 ;          a life, and counts; when all four are done ($D13A) the pentagram's
@@ -41,7 +41,7 @@ QR_ROOM             EQU     7
 QR_LEN              EQU     8
 
 QUEST_INDEX         EQU     31              ; in a slot: which record, or $FF
-QUEST_WATER         EQU     17              ; the record the creature takes
+QUEST_WATER         EQU     17              ; the record the bucket takes
 QUEST_CARRIED       EQU     $FF             ; a record's room while he has it
 QUEST_SPARES        EQU     3               ; he carries three
 QUEST_ITEMS         EQU     4
@@ -71,7 +71,7 @@ quest_carry:        DS      QUEST_SPARES    ; records, newest first; $FF none
 quest_done:         DB      0               ; $A74C: quest items done
 quest_placed:       DB      0               ; $A74B: collectables in place
 quest_pieces_on:    DB      0               ; $A70F: the pentagram is there
-quest_water_out:    DB      0               ; $A70E: the creature is out
+quest_water_out:    DB      0               ; $A70E: the bucket is out
 quest_won:          DB      0
 quest_first:        DW      0               ; the room's first record's slot
 quest_slots:        DB      0               ; how many, spares included
@@ -398,7 +398,7 @@ quest_lift:         push    ix
 ; time.
 ;
 ; Only standing on something, and not in a doorway. With something he can
-; take at his feet -- the well's creature or a collectable, which is all $C0D4
+; take at his feet -- the well's bucket or a collectable, which is all $C0D4
 ; allows -- he takes it, and it goes to the front of what he carries; if he
 ; already had three, the oldest is left where the new one was. With nothing
 ; there, he puts the oldest down under himself and stands on it, if there is
@@ -435,7 +435,7 @@ quest_take:         ld      a,(input_now)
                     jp      quest_carry_show
 
 
-; Something he can take, beside or under him: the well's creature or a
+; Something he can take, beside or under him: the well's bucket or a
 ; collectable not yet in its place. Near enough is his own footprint and four
 ; more each way, overlapping him in height with his feet four lower -- $C0D4.
 ;   IX -> the legs record
@@ -711,9 +711,9 @@ quest_carry_show:   ld      hl,quest_carry
 
 
 ; ---------------------------------------------------------------------------
-; The well -- $CFD2. Nothing comes out while the creature is out. Otherwise
+; The well -- $CFD2. Nothing comes out while the bucket is out. Otherwise
 ; every turn one of his bolts is touching it counts, and on the thirty-second
-; the creature comes out beside it, eight along V and at Z 141, into a slot
+; the bucket comes out beside it, eight along V and at Z 141, into a slot
 ; of the room's -- record QUEST_WATER.
 ;   IX -> the well
 WELL_SHOTS          EQU     32
@@ -784,7 +784,7 @@ mover_well:         ld      a,(quest_water_out)
 
 
 ; ---------------------------------------------------------------------------
-; The well's creature -- $D0AC. Until it has a quest item to go to it sinks a
+; The well's bucket of water -- $D0AC. Until it has a quest item to go to it sinks a
 ; unit a turn, looking for one in the room; then it flies to it, a unit a turn
 ; along each floor axis and up to Z 176, and when it has nowhere further to
 ; go it marks the item done and goes out in a puff. The item it is making for
@@ -835,7 +835,7 @@ mover_water:        bit     0,(ix+OBJ.MOVE_STATE)
                     call    sound_tune_water
                     xor     a
                     ld      (quest_water_out),a
-                    ld      a,QUEST_WATER       ; the creature is no more
+                    ld      a,QUEST_WATER       ; the bucket is spent
                     call    quest_record
                     ld      (hl),0
                     ld      de,QR_ROOM
@@ -887,7 +887,7 @@ quest_slot_iy:      ld      iy,(quest_first)
 
 
 ; ---------------------------------------------------------------------------
-; A quest item -- $CF68. It stands where it is; when the creature has marked it
+; A quest item -- $CF68. It stands where it is; when the bucket has marked it
 ; done, it becomes the graphic four on, gives a life and counts, and if that
 ; makes all four the pentagram comes to room 82 ($D13A).
 ;   IX -> the record
