@@ -103,15 +103,29 @@ panel_draw:         ld      (.region + 1),a
 .region:            ld      a,0                 ; patched: 0 for everything
                     or      a
                     jr      z,.draw
-                    ; Rows: none of them is taller than 64, so a region ending
-                    ; above bottom - 64 misses it, and one starting at or below
-                    ; its bottom does too. Columns: none is wider than three.
+                    ; Rows: a region starting at or below its bottom misses it,
+                    ; and so does one ending at or above its top, which its own
+                    ; height gives -- the header's second byte. Assuming the
+                    ; tallest any piece could be redrew pieces nowhere near the
+                    ; region, 3% of a busy room's turn. Columns: none is wider
+                    ; than three.
+                    pop     af
+                    push    af
+                    ld      l,a
+                    ld      h,(high sprite_table) / 2
+                    add     hl,hl
+                    ld      a,(hl)
+                    inc     l                   ; the low byte is even
+                    ld      h,(hl)
+                    ld      l,a
+                    inc     hl
+                    ld      d,(hl)              ; D - its height
                     ld      hl,(view_y_extent)  ; L the first row, H the row after
                     ld      a,l
                     cp      e
                     jr      nc,.skip
                     ld      a,e
-                    sub     64
+                    sub     d                   ; its top
                     cp      h
                     jr      nc,.skip
                     ld      hl,(view_x_extent)

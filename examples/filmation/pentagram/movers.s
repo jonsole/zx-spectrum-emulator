@@ -167,6 +167,23 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
 
 
 ; ---------------------------------------------------------------------------
+; Animation at half the turn rate. The original flips and steps its creatures'
+; frames every turn -- $A715, which it bumps once round its main loop, is a
+; turn counter like move_tick -- but it manages only 5 to 20 turns a second,
+; and the remake 16 to 33. Every other turn keeps the flicker nearer what the
+; original looks like, and each frame not changed is a sprite not re-mirrored
+; and re-rotated: a mover that did not move, and did not change, is not
+; repainted at all.
+;
+; mover_move_anim repaints if this was an animating turn, and only if the
+; thing moved otherwise.
+;   IX -> the record
+mover_move_anim:    ld      a,(move_tick)
+                    rra
+                    jp      nc,mover_move_always ; an even turn: it changed
+                    jp      mover_move
+
+; ---------------------------------------------------------------------------
 ; Spikes, thorns and water: deadly, and nothing more. Their behaviour is what
 ; kills; the turn has nothing to do.
 mover_still:        ret
@@ -321,18 +338,24 @@ mover_spider:       ld      (ix+OBJ.DZ),0
                     sub     SPIDER_STEP
                     ld      (ix+OBJ.DV),a
 
-.go:                ; Mirrored on one turn, not on the next.
+.go:                ; Mirrored for two turns, then not for two -- see
+                    ; mover_move_anim for why two.
                     ld      a,(move_tick)
+                    rrca
                     and     1
                     ld      c,a
                     ld      a,(ix+OBJ.FLAGS)
+                    ld      b,a
                     and     ~OBJ_FLIP_H & $FF
                     or      c
                     ld      (ix+OBJ.FLAGS),a
                     ASSERT  OBJ_FLIP_H == 1
-
-                    call    mover_move_always   ; it changes every turn
-                    ld      a,(collide_hit)
+                    xor     b                   ; did the mirror change?
+                    jr      z,.same
+                    call    mover_move_always
+                    jr      .moved
+.same:              call    mover_move          ; only if it went anywhere
+.moved:             ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
 
@@ -378,9 +401,13 @@ mover_hopper:       call    mover_halt          ; never along the floor
 ;   IX -> the record
 CREATURE_STEP       EQU     4
 
-mover_creature:     ld      a,(ix+OBJ.FLAGS)
+mover_creature:     ld      a,(move_tick)
+                    rra
+                    jr      c,.kept             ; flips on even turns only
+                    ld      a,(ix+OBJ.FLAGS)
                     xor     OBJ_FLIP_H
                     ld      (ix+OBJ.FLAGS),a
+.kept:
 
                     ld      a,(ix+OBJ.DU)
                     or      (ix+OBJ.DV)
@@ -399,7 +426,7 @@ mover_creature:     ld      a,(ix+OBJ.FLAGS)
 .along_u:           ld      (ix+OBJ.DU),c
                     res     0,(ix+OBJ.GFX)      ; 16: along U
 
-.go:                call    mover_move_always
+.go:                call    mover_move_anim
                     ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
@@ -475,8 +502,9 @@ mover_homer:        call    mover_move_always
                     call    homer_whole
                     ld      (ix+OBJ.DZ),a
 
-                    ; The next frame of its four.
+                    ; The next frame of its four, every other turn.
                     ld      a,(move_tick)
+                    rrca
                     and     3
                     ld      c,a
                     ld      a,(ix+OBJ.GFX)
@@ -525,9 +553,13 @@ homer_whole:        add     a,8
 ;   IX -> the record
 FALLER_STEP         EQU     4
 
-mover_faller4:      ld      a,(ix+OBJ.GFX)
-                    xor     1                   ; the frame of the four
+mover_faller4:      ld      a,(move_tick)
+                    rra
+                    jr      c,.kept             ; the frame, on even turns
+                    ld      a,(ix+OBJ.GFX)
+                    xor     1
                     ld      (ix+OBJ.GFX),a
+.kept:
                     ld      c,2                 ; the axis is bit 1
                     jr      mover_faller_c
 mover_faller:       ld      c,1                 ; ...and bit 0 here
@@ -563,7 +595,7 @@ mover_faller_c:     ld      a,(ix+OBJ.DU)
                     xor     c
                     ld      (ix+OBJ.GFX),a
 
-.go:                call    mover_move_always
+.go:                call    mover_move_anim
                     ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
