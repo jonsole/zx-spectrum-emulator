@@ -784,11 +784,16 @@ mover_well:         ld      a,(quest_water_out)
 
 
 ; ---------------------------------------------------------------------------
-; The well's bucket of water -- $D0AC. Until it has a quest item to go to it sinks a
-; unit a turn, looking for one in the room; then it flies to it, a unit a turn
-; along each floor axis and up to Z 176, and when it has nowhere further to
-; go it marks the item done and goes out in a puff. The item it is making for
-; is the slot index at WATER_TARGET.
+; The well's bucket of water -- $D0AC. Until it has a quest item to go to it
+; sinks a unit a turn, looking for one in the room; then it flies to it, a unit
+; a turn along each floor axis and up to Z 176, and when it has nowhere further
+; to go it marks the item done and goes out in a puff. The item it is making
+; for is the slot index at WATER_TARGET.
+;
+; Flying, it goes through whatever is in the way, him included: put down
+; under him, it rises straight up through him in the original rather than
+; carrying him or waiting for him to move. So it moves by mover_paint, which
+; takes the step as it is -- no clamp, and no gravity to allow for.
 ;   IX -> the record
 WATER_TARGET        EQU     30
 WATER_HIGH          EQU     176
@@ -821,14 +826,13 @@ mover_water:        bit     0,(ix+OBJ.MOVE_STATE)
                     ld      b,a
                     ld      a,(ix+OBJ.Z)
                     cp      WATER_HIGH
-                    ld      a,2                 ; up one, net of gravity
+                    ld      a,1                 ; up one
                     jr      c,.rise
                     dec     a                   ; held where it is
 .rise:              ld      (ix+OBJ.DZ),a
-                    dec     a
                     or      b
                     jr      z,.there
-                    jp      mover_move_always
+                    jp      mover_paint         ; through anything in the way
 
                     ; Over it and up: it is done, to a tune ($D0EE).
 .there:             set     0,(iy+OBJ.MOVE_STATE)
