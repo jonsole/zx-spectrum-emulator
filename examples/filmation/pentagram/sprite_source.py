@@ -186,9 +186,13 @@ def check(sprites, facts, animated):
             "would be overrun by a later one" % (frames, sorted(sizes)))
 
 
-def emit_bitmaps(sprites, animated):
+def emit_bitmaps(sprites, animated, used):
     out = []
     for n, sprite in enumerate(sprites):
+        # A sprite no graphic points at is never drawn, so it is not worth
+        # the uncontended memory: two of them, 200 bytes between them.
+        if n not in used:
+            continue
         # ALIGN 4 so the blit can use INC L / DEC L to move between the width,
         # the height and the start of the mask and data.
         out.append("\t\t\tALIGN 4")
@@ -441,7 +445,8 @@ def main():
     trim(sprites, whole)
     check(sprites, facts, animated)
 
-    for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated)),
+    used = {n for n in gmap if n is not None}
+    for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated, used)),
                         ("sprite_table.s", emit_table(sprites, facts)),
                         ("sprite_adj_gen.s", emit_adj(sprites, facts, args.adj))):
         (args.out_dir / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
