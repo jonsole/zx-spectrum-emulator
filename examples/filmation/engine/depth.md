@@ -701,23 +701,24 @@ covers:
   `$B4` stepping forward onto the next block and back off it, with the room's
   own boxes.
 
-[tests/character_sort_tests.s](tests/character_sort_tests.s) runs a
-character's real move against the real sort. walker_tests.s stubs the depth
-routines to count what character_move asks for; this suite assembles walker.s
-and depth.s together instead, so every step goes through the sort as it does in
-the game. It stands the knight on a three-by-three platform of room `$B4`'s
-blocks, walks him across it in all four directions, and after every step
-checks the whole list for a **certain inversion**: an object before one it is
-certainly in front of. Guessed orders are not checked, since the sort is free
-to settle those either way. On the code before the legs-and-body fix it finds
-the inversions in both walks towards the viewer, which is where the legs have
-to move later in the list.
+[tests/pair_sort_tests.s](tests/pair_sort_tests.s) runs the two-part
+figures' real moves against the real sort: the knight through character_move
+and a guard through mover_move_pair. walker_tests.s and mover_tests.s stub the
+depth routines to count what a move asks for; this suite assembles walker.s,
+mover.s and depth.s together instead, so every step goes through the sort as it
+does in the game. It stands the knight, or a guard, on a three-by-three
+platform of room `$B4`'s blocks, walks it across in all four directions, and
+after every step checks the whole list for a **certain inversion**: an object
+before one it is certainly in front of. Guessed orders are not checked, since
+the sort is free to settle those either way. On the code before the
+legs-and-body fix it finds the inversions for both figures in both walks
+towards the viewer, which is where the legs have to move later in the list.
 
 To run them:
 
 ```
 cpp-core/build.ps1 -Release -Target z80_com_runner
-python examples/filmation/engine/tests/run_tests.py depth character_sort
+python examples/filmation/engine/tests/run_tests.py depth pair_sort
 ```
 
 A failure prints the test's name, what was checked, and the value it got
