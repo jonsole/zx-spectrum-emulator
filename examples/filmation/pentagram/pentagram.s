@@ -60,12 +60,14 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ;
 ; Knight Lore's reserve is 48, measured by filling the bytes below the stack
 ; with a pattern, playing through rooms with everything moving, and counting
-; what stayed untouched -- 34 used, 14 spare. Pentagram's call chains are not
-; Knight Lore's, so this figure is inherited, not measured, and wants
-; re-measuring the same way once the game runs. Until then it is a guess with
-; Knight Lore's margin on it.
+; what stayed untouched -- 34 used, 14 spare. Pentagram's, measured the same
+; way on 2026-09-19, is 32: the first room's build, from a fresh game, with the
+; menu and its tune, nine busy rooms walked, jumped and fired in, a death, the
+; pause, the bucket poured, the collectables flying in, the win, the game over
+; and the menu again all no deeper. 16 spare, and whatever the image leaves free
+; above its end besides.
 STACK_TOP			EQU		0x0000
-STACK_RESERVE		EQU		48		; inherited from Knight Lore; NOT measured here
+STACK_RESERVE		EQU		48		; 32 used, measured -- see above
 
 ; ---------------------------------------------------------------------------
 ; The game's data, in contended memory.
