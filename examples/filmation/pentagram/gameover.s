@@ -197,6 +197,8 @@ game_over:          ld      a,GAME_OVER_INK
                     inc     hl
                     djnz    .ink
 
+                    call    game_over_sabreman  ; the remake's own
+
                     ; Its tune, and then a pause -- $C34A and $C34D.
                     call    sound_tune_over
                     ld      b,GAME_OVER_WAIT
@@ -242,6 +244,11 @@ screen_wipe:        push    af
 frame_screen:       call    screen_wipe
                     ld      hl,frame_pieces
                     ld      b,FRAME_PIECES
+
+; B pieces from a table in frame_pieces' shape, drawn straight onto the screen.
+;   HL -> the table
+; Corrupts everything.
+frame_draw:
 .piece:             push    bc
                     ld      a,(hl)              ; the graphic
                     ld      (.gfx + 1),a
@@ -278,7 +285,7 @@ game_over_turn:
 game_over_upside:   ld      a,0                 ; patched: upside down?
                     or      a
                     ret     z
-                    ld      a,(frame_screen.gfx + 1)
+                    ld      a,(frame_draw.gfx + 1)
                     jp      sprite_flip_v
 
 game_over_percent:  DB      0
