@@ -5,30 +5,12 @@
 ; They all leave the same byte, in this bit order:
 ;
 ;   0  left        1  right        2  forward
-;   3  jump        4  back         5  fire
+;   3  jump        4  down         5  fire
 ;   6  pick up or put down
 ;
-; Nothing here decides anything: player_turn reads the byte and works out which
-; way he should face. That split is what lets one reader serve both control
-; schemes.
-;
-; -- directional control, which Pentagram itself does not have ---------------
-;
-; The game is rotational only: left and right turn him, forward walks him the
-; way he is facing. Knight Lore offers directional control as a menu option --
-; each direction names an absolute way to face, and he turns and walks in one
-; -- and this remake offers it too, because it is a better way to play and
-; there is no reason the engine cannot do both.
-;
-; It costs less here than it does in Knight Lore. There, turning directional
-; control on makes "down" a direction, which displaces pick up / put down onto
-; bit 5 and a separate scan of the letter keys -- see the two jobs its bit 4
-; does. Pentagram has nothing to displace: there is no pick up, so bit 4 is
-; free to be "back" whichever scheme is running, and is simply ignored while
-; the controls are rotational.
-;
-; So the toggle changes nothing in this file. It lives in menu_mode bit 3 and
-; player_turn is the only thing that reads it.
+; Nothing here decides anything: player_step and player_turn read the byte.
+; Bit 4 is a stick's down, which is how the original jumps on one; the
+; keyboard never sets it.
 ;
 ; -- the keys ----------------------------------------------------------------
 ;
@@ -45,16 +27,20 @@
 ; as they do in the original.
 ;
 ; On a joystick the original fires with the button and jumps with down --
-; bit 4 here, "back" -- which player_step takes as a jump while the controls
-; are rotational. While they are directional, down is a way to walk, so fire
-; with a direction jumps instead -- see input_stick_take.
+; bit 4 here -- which player_step takes as a jump.
+;
+; The game is rotational only, as the original is: left and right turn him,
+; forward walks him the way he faces. The remake offered directional control
+; for a while, as Knight Lore's does, but a stick has five inputs and the game
+; wants six -- four ways, jump and fire -- and no way of folding the sixth in
+; played well, so it went.
 ; ---------------------------------------------------------------------------
 
 INPUT_LEFT          EQU     1 << 0
 INPUT_RIGHT         EQU     1 << 1
 INPUT_FORWARD       EQU     1 << 2
 INPUT_JUMP          EQU     1 << 3
-INPUT_BACK          EQU     1 << 4              ; only steers while directional
+INPUT_DOWN          EQU     1 << 4              ; a stick's down: it jumps
 INPUT_FIRE          EQU     1 << 5
 INPUT_TAKE          EQU     1 << 6              ; pick up and put down
 
@@ -257,24 +243,7 @@ input_keyboard:     ld      e,0
 ; With a joystick, pick up and put down is on the keyboard's bottom two rows --
 ; $BEFD reads Z to V and SYM SHIFT to B together through port $7E -- since
 ; the number keys are Interface II's sticks.
-;
-; And a stick steering directionally has no down left to jump with, which is
-; how the original jumps on one, so there fire with a direction held jumps --
-; he jumps the way he faces, which is the way the stick is pushed -- and fire
-; on its own shoots.
-input_stick_take:   ld      a,(menu_mode)
-                    and     MENU_DIRECTIONAL
-                    jr      z,.take
-                    ASSERT  INPUT_FIRE == 1 << 5
-                    bit     5,e                 ; INPUT_FIRE
-                    jr      z,.take
-                    ld      a,e
-                    and     INPUT_LEFT | INPUT_RIGHT | INPUT_FORWARD | INPUT_BACK
-                    jr      z,.take
-                    ld      a,e
-                    xor     INPUT_FIRE | INPUT_JUMP ; the one for the other
-                    ld      e,a
-.take:              ld      a,$7E
+input_stick_take:   ld      a,$7E
                     in      a,($FE)
                     cpl
                     and     $1E

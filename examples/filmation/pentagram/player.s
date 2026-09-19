@@ -78,17 +78,12 @@ player_step:        ld      ix,player
                     call    player_fire
                     call    quest_take
 
-                    ; On a joystick the original jumps with down, which reads
-                    ; as back; only while the controls are rotational, as back
-                    ; steers when they are directional.
+                    ; On a joystick the original jumps with down.
                     ld      a,(menu_mode)
-                    and     MENU_DIRECTIONAL | MENU_KEMPSTON | MENU_CURSOR
-                    cp      MENU_KEMPSTON
+                    and     MENU_KEMPSTON | MENU_CURSOR
                     ld      c,INPUT_JUMP
-                    jr      c,.jump_key         ; the keyboard
-                    bit     3,a
-                    jr      nz,.jump_key        ; directional
-                    ld      c,INPUT_JUMP | INPUT_BACK
+                    jr      z,.jump_key         ; the keyboard
+                    ld      c,INPUT_JUMP | INPUT_DOWN
 .jump_key:          ld      a,(input_now)
                     and     c
                     ld      a,0
@@ -128,23 +123,10 @@ player_body_up:     and     2
 
 
 ; ---------------------------------------------------------------------------
-; What the input byte means, which is the whole of the difference between the
-; two control schemes.
-;
-; ROTATIONAL, which is how Pentagram itself plays: left and right turn him a
-; quarter where he stands, forward walks him the way he is already facing.
-; Turning does not move him, so a turn and a step are different turns of the
-; loop -- which is what "turn then walk" means to play.
-;
-; DIRECTIONAL, which the original does not offer and this does: each direction
-; names an absolute facing, and he turns and walks in one. The facing is taken
-; from the input bit and walked the same turn, so holding a direction walks him
-; that way whatever he was facing before.
-;
-; The mapping from the four bits to the four facings is a choice, not a fact:
-; the engine's facings are 0 and 1 walking away from the viewer and 2 and 3
-; towards it, so forward/right/back/left onto 0/1/2/3 puts "forward" away up
-; the screen. If it plays the wrong way round, this is the place to rotate it.
+; Which way he walks: left and right turn him a quarter where he stands,
+; forward walks him the way he is already facing -- rotational, as Pentagram
+; plays. Turning does not move him, so a turn and a step are different turns of
+; the loop, which is what "turn then walk" means to play.
 ;
 ;   IX -> the legs record
 ; Out: carry set and A the facing to walk; carry clear to stand.
@@ -159,12 +141,8 @@ player_turn:        ; A jump is a leap. Once he is off the ground he goes on the
                     scf
                     ret
 
-.grounded:          ld      a,(menu_mode)
-                    and     MENU_DIRECTIONAL
-                    ld      a,(input_now)
-                    jr      nz,.directional
+.grounded:          ld      a,(input_now)
 
-                    ; -- rotational ------------------------------------------
                     ; A held turn key turns him once, then waits PLAYER_TURN_WAIT
                     ; turns before the next quarter. Letting go clears the wait,
                     ; so a tap always turns at once, as it does in the original.
@@ -207,29 +185,6 @@ player_turn:        ; A jump is a leap. Once he is off the ground he goes on the
                     scf
                     ret
 
-                    ; -- directional -----------------------------------------
-                    ; The first bit set wins, so pressing two at once picks one
-                    ; rather than fighting.
-.directional:       ld      b,a
-                    ld      c,0                 ; facing 0: forward
-                    and     INPUT_FORWARD
-                    jr      nz,.go
-                    inc     c                   ; facing 1: right
-                    ld      a,b
-                    and     INPUT_RIGHT
-                    jr      nz,.go
-                    inc     c                   ; facing 2: back
-                    ld      a,b
-                    and     INPUT_BACK
-                    jr      nz,.go
-                    inc     c                   ; facing 3: left
-                    ld      a,b
-                    and     INPUT_LEFT
-                    ret     z                   ; nothing asked for: stand
-.go:                ld      a,c
-                    ld      (ix+CHARACTER_FACING),a
-                    scf
-                    ret
 
 
 ; ---------------------------------------------------------------------------

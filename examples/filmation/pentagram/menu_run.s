@@ -22,8 +22,8 @@ menu_run:           ld      a,MENU_INK
                     ret
 
 
-; Every line, with the way chosen flashing and the toggle too while it is on.
-; A line is printed over itself, so only its colour changes.
+; Every line, with the way chosen flashing. A line is printed over itself, so
+; only its colour changes.
 ; Corrupts everything.
 menu_show:          ld      a,(menu_mode)
                     rrca
@@ -33,12 +33,6 @@ menu_show:          ld      a,(menu_mode)
                     ld      a,1
 .shift:             add     a,a
                     djnz    .shift
-                    ld      b,a
-                    ld      a,(menu_mode)
-                    and     MENU_DIRECTIONAL
-                    jr      z,.flash
-                    set     MENU_TOGGLE_LINE,b
-.flash:             ld      a,b
                     ld      (print_flash),a
                     ld      hl,menu_text
                     jp      print_lines
