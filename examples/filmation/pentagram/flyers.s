@@ -34,7 +34,7 @@ BUSY_BORDER         EQU     1
 ; 1 to skip the wait altogether, so that things drop as soon as a room is up
 ; and again as soon as there is a slot: for testing, and for watching a busy
 ; screen. 0 is the original's wait.
-FLYER_NOW           EQU     1
+FLYER_NOW           EQU     0
 
 FLYER_SLOTS         EQU     2
 BOLT_SLOTS          EQU     2               ; his two bolts' -- see player.s
