@@ -7,7 +7,11 @@
 ;
 ;   GAME OVER               row 32, from x 88    bright red      $42
 ;   PERCENTAGE OF QUEST     row 80, from x 48    bright magenta  $43
-;   COMPLETED  nn           row 96, from x 64    bright green    $44
+;   COMPLETED  nn%          row 96, from x 72    bright green    $44
+;
+; -- all but the last where the original has them: it has no %, and prints
+; COMPLETED from x 64; the remake's line, with its %, starts a character
+; later.
 ;
 ; Then its tune, a pause, and back to the menu.
 ;
@@ -83,12 +87,12 @@ game_over_text:     game_over_line 32, 11, $42
                     DB      'T'-$30,'A'-$30,'G'-$30,'E'-$30,SPACE_CHAR
                     DB      'O'-$30,'F'-$30,SPACE_CHAR
                     DB      'Q'-$30,'U'-$30,'E'-$30,'S'-$30,'T'-$30,$FF
-                    game_over_line 96, 8, $44
+                    game_over_line 96, 9, $44
                     DB      'C'-$30,'O'-$30,'M'-$30,'P'-$30,'L'-$30,'E'-$30
                     DB      'T'-$30,'E'-$30,'D'-$30,$FF
                     DB      0                   ; no more lines
 PERCENT_ROW         EQU     96
-PERCENT_COLUMN      EQU     18                  ; x 144
+PERCENT_COLUMN      EQU     19                  ; x 152
 
 ; rooms_seen, a bit a room -- the original's 31 bytes at $A74F -- is in
 ; quest_ram.s, in the room builder's page.
