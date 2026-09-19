@@ -46,7 +46,8 @@
 ;
 ; On a joystick the original fires with the button and jumps with down --
 ; bit 4 here, "back" -- which player_step takes as a jump while the controls
-; are rotational.
+; are rotational. While they are directional, down is a way to walk, so fire
+; with a direction jumps instead -- see input_stick_take.
 ; ---------------------------------------------------------------------------
 
 INPUT_LEFT          EQU     1 << 0
@@ -256,7 +257,24 @@ input_keyboard:     ld      e,0
 ; With a joystick, pick up and put down is on the keyboard's bottom two rows --
 ; $BEFD reads Z to V and SYM SHIFT to B together through port $7E -- since
 ; the number keys are Interface II's sticks.
-input_stick_take:   ld      a,$7E
+;
+; And a stick steering directionally has no down left to jump with, which is
+; how the original jumps on one, so there fire with a direction held jumps --
+; he jumps the way he faces, which is the way the stick is pushed -- and fire
+; on its own shoots.
+input_stick_take:   ld      a,(menu_mode)
+                    and     MENU_DIRECTIONAL
+                    jr      z,.take
+                    ASSERT  INPUT_FIRE == 1 << 5
+                    bit     5,e                 ; INPUT_FIRE
+                    jr      z,.take
+                    ld      a,e
+                    and     INPUT_LEFT | INPUT_RIGHT | INPUT_FORWARD | INPUT_BACK
+                    jr      z,.take
+                    ld      a,e
+                    xor     INPUT_FIRE | INPUT_JUMP ; the one for the other
+                    ld      e,a
+.take:              ld      a,$7E
                     in      a,($FE)
                     cpl
                     and     $1E
