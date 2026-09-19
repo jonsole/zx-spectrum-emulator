@@ -168,9 +168,8 @@ player_entry:       ld      a,(enter_dir)
 ; wrong here: it runs at six to twelve frames a second and this engine runs at
 ; eighteen to thirty-five, so the same number spins him at eleven quarter
 ; turns a second against the game's three. Eight put ours back on about
-; three, which played too slow to steer by; five, as Pentagram has it, is
-; about five a second.
-PLAYER_TURN_WAIT    EQU     5           ; turns before he will turn again
+; three, which played too slow to steer by; four is about six a second.
+PLAYER_TURN_WAIT    EQU     4           ; turns before he will turn again
 
 player_turn_wait:   DB      0
 
