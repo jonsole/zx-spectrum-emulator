@@ -27,10 +27,6 @@
 ; and 160, 48 and 80 come up twice, so homers are the likelier.
 ; ---------------------------------------------------------------------------
 
-; 1 to show a busy room in the border -- red while its monsters take turns
-; (see busy.s), black otherwise: for testing.
-BUSY_BORDER         EQU     1
-
 ; 1 to skip the wait altogether, so that things drop as soon as a room is up
 ; and again as soon as there is a slot: for testing, and for watching a busy
 ; screen. 0 is the original's wait.

@@ -230,7 +230,6 @@ grep -E "\|F\|room_number$" output/pentagram.sld | cut -d'|' -f6
 | Switch | Where | Does |
 |---|---|---|
 | `FLYER_NOW` | `flyers.s` | 1 drops things at once. For testing only; commit it at 0. |
-| `BUSY_BORDER` | `flyers.s` | 1 colours the border by `room_busy`. Every sound resets it to black. Turn it off for a release. |
 | `MONSTER_KEEP_SPEED` | `movers.s` | 1: busy monsters take double steps. 0: they slow down in stages. |
 
 For timing, make it deterministic: patch `mover_rand`'s `ld a,r` and the `ld

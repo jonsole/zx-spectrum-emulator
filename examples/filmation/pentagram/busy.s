@@ -29,9 +29,6 @@
 ; 20, and back one for every sixteen a little under it. The busier the room,
 ; the slower its monsters, but gradually.
 ;
-; The border shows it when BUSY_BORDER is set: green, magenta, red, for one
-; turn in four, three and two.
-;
 ; In the room builder's page, which has room: the main one has almost none.
 ; ---------------------------------------------------------------------------
 
@@ -120,13 +117,9 @@ busy_check:         ld      a,(room_busy)       ; next turn, the next monster
                     ret
 
 ; How busy: 0 for quiet, or BUSY_LEAST down to BUSY_MOST. Starts the count
-; of turns towards the next change over, and the monsters' turns, and sets
-; the border to say so when BUSY_BORDER is set.
+; of turns towards the next change over, and the monsters' turns.
 ; Corrupts AF.
 busy_set:           ld      (room_busy),a
-                IF      BUSY_BORDER
-                    out     ($FE),a             ; 4 green, 3 magenta, 2 red
-                ENDIF
                     ld      a,1
                     ld      (busy_phase),a
                     xor     a
