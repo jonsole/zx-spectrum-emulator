@@ -75,8 +75,16 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     add     hl,de
                     ld      (flyer_slots),hl
 
-                    ; The room's own objects first: is the well among them?
+                    ; A room this full is busy: see ROOM_BUSY_OBJECTS.
                     ld      b,a
+                    cp      ROOM_BUSY_OBJECTS
+                    ld      a,0
+                    jr      c,.quiet
+                    inc     a
+.quiet:             ld      (room_busy),a
+                    ld      a,b
+
+                    ; The room's own objects first: is the well among them?
                     xor     a
                     ld      (flyer_banned),a
                     ld      a,b

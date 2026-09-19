@@ -178,10 +178,67 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
 ; mover_move_anim repaints if this was an animating turn, and only if the
 ; thing moved otherwise.
 ;   IX -> the record
-mover_move_anim:    ld      a,(move_tick)
+mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
+                    or      a                   ; every time it moves
+                    jp      nz,mover_move_always
+                    ld      a,(move_tick)
                     rra
                     jp      nc,mover_move_always ; an even turn: it changed
                     jp      mover_move
+
+; ---------------------------------------------------------------------------
+; Busy rooms: the monsters take turns.
+;
+; In a room of ROOM_BUSY_OBJECTS or more objects, each monster moves every other
+; turn -- the ones in even slots on even turns, odd on odd, so the work is
+; split evenly -- and, with MONSTER_KEEP_SPEED, twice as far when it does, so
+; a busy room is no easier than a quiet one. That is what the room's turns
+; mostly go on: in room 13, the movers were 63% of a turn, and most of that
+; repainting what they had moved through -- and a mover's repaint costs what
+; is around it, so it is clutter that makes a room busy, not how many monsters
+; it has: no room has more than two.
+;
+; Which count as monsters: the spider, the creature and the deadly pacers
+; from the room data, and whatever drops from the sky. Not the platforms and
+; lifts, which he rides and which would throw him off; not the bolts, the
+; hopper, the pushed things or anything of the quest's.
+ROOM_BUSY_OBJECTS   EQU     24
+MONSTER_KEEP_SPEED  EQU     1               ; 0: half speed in a busy room
+
+room_busy:          DB      0               ; flyer_room_enter sets it
+
+; Out: carry set if this monster sits this turn out.
+;   IX -> the record
+; Corrupts AF, C.
+monster_sits_out:   ld      a,(room_busy)
+                    or      a
+                    ret     z                   ; carry is clear
+                    ld      a,ixl               ; the slot's parity: records are
+                    rlca                        ; 32 apart, so bit 5
+                    rlca
+                    rlca
+                    ld      c,a
+                    ld      a,(move_tick)
+                    xor     c
+                    rra                         ; carry: not its turn
+                    ret
+
+; Twice the step for the move, and back to what it keeps afterwards.
+;   IX -> the record
+; Corrupts AF.
+monster_double:     ld      a,(room_busy)
+                    and     MONSTER_KEEP_SPEED
+                    ret     z
+                    sla     (ix+OBJ.DU)
+                    sla     (ix+OBJ.DV)
+                    ret
+monster_halve:      ld      a,(room_busy)
+                    and     MONSTER_KEEP_SPEED
+                    ret     z
+                    sra     (ix+OBJ.DU)
+                    sra     (ix+OBJ.DV)
+                    ret
+
 
 ; ---------------------------------------------------------------------------
 ; Spikes, thorns and water: deadly, and nothing more. Their behaviour is what
@@ -203,7 +260,12 @@ mover_pace_u:       ld      hl,OBJ.DU * 256 + COLLIDE_U
                     jr      mover_pace
 mover_pace_v:       ld      hl,OBJ.DV * 256 + COLLIDE_V
 
-mover_pace:         ld      a,h
+mover_pace:         ld      a,(ix+OBJ.BEHAVIOUR)
+                    cp      BEHAVIOUR_DEADLY
+                    jr      c,.rides            ; a platform: never sits out
+                    call    monster_sits_out
+                    ret     c
+.rides:             ld      a,h
                     ld      (.step + 2),a       ; LD (IX+d),A is DD 77 d
                     ld      a,l
                     ld      (.which + 1),a      ; the axis, as a mask
@@ -217,6 +279,9 @@ mover_pace:         ld      a,h
 .forward:
 .step:              ld      (ix+OBJ.DU),a       ; patched: DU or DV
 
+                    ld      a,(ix+OBJ.BEHAVIOUR)
+                    cp      BEHAVIOUR_DEADLY
+                    call    nc,monster_double
                     call    mover_move
                     ld      a,(.which + 1)      ; the same bit again
                     ld      c,a
@@ -252,8 +317,40 @@ mover_falls:        call    mover_halt
 ; on top. That rider spends it on its own turn and hands it up again, so a
 ; stack of any height moves as one.
 ;   IX -> the record
-mover_pushed:       call    mover_move
-                    ld      a,(ix+OBJ.DU)
+;
+; At rest it looks to itself only every fourth turn. A pushable's turn is
+; mostly its clamp -- gravity against everything under it -- and a busy room
+; is busy with pushables, not monsters: room 13 has six stumps and two
+; spiders, 9 and 133 eight stumps and one. The original clamps every one of
+; them every turn, which is why it runs room 13 at under five turns a second.
+; A shove is acted on at once, and once it is falling it moves every turn
+; until it lands; only standing still is checked less often -- staggered by
+; slot, so a room's pushables share the turns. A support taken away is
+; noticed within four turns. MOVE_STATE bit 7 is "was falling".
+PUSHED_REST_EVERY   EQU     4                   ; a power of two
+
+mover_pushed:       ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.moves           ; shoved: now
+                    bit     7,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.moves           ; falling: every turn
+                    ld      a,ixl               ; standing: its slot's turn
+                    rlca                        ; of four -- records are 32
+                    rlca                        ; apart, so bits 5 and 6
+                    rlca
+                    ld      c,a
+                    ld      a,(move_tick)
+                    add     a,c
+                    and     PUSHED_REST_EVERY - 1
+                    ret     nz
+
+.moves:             call    mover_move
+                    ld      a,(collide_hit)     ; landed, or still going down?
+                    and     COLLIDE_Z
+                    res     7,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.landed
+                    set     7,(ix+OBJ.MOVE_STATE)
+.landed:            ld      a,(ix+OBJ.DU)
                     or      (ix+OBJ.DV)
                     call    nz,pushed_carry     ; it moved: take the pile with it
                     jp      mover_halt
@@ -321,7 +418,9 @@ pushed_carry:       ld      a,(room_object_count)
 ;   IX -> the record
 SPIDER_STEP         EQU     4
 
-mover_spider:       ld      (ix+OBJ.DZ),0
+mover_spider:       call    monster_sits_out
+                    ret     c
+                    ld      (ix+OBJ.DZ),0
 
                     ld      a,(ix+OBJ.MOVE_STATE)
                     and     COLLIDE_U | COLLIDE_V
@@ -351,11 +450,16 @@ mover_spider:       ld      (ix+OBJ.DZ),0
                     ld      (ix+OBJ.FLAGS),a
                     ASSERT  OBJ_FLIP_H == 1
                     xor     b                   ; did the mirror change?
+                    ld      b,a
+                    call    monster_double
+                    ld      a,b
+                    or      a
                     jr      z,.same
                     call    mover_move_always
                     jr      .moved
 .same:              call    mover_move          ; only if it went anywhere
-.moved:             ld      a,(collide_hit)
+.moved:             call    monster_halve
+                    ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
 
@@ -401,7 +505,9 @@ mover_hopper:       call    mover_halt          ; never along the floor
 ;   IX -> the record
 CREATURE_STEP       EQU     4
 
-mover_creature:     ld      a,(move_tick)
+mover_creature:     call    monster_sits_out
+                    ret     c
+                    ld      a,(move_tick)
                     rra
                     jr      c,.kept             ; flips on even turns only
                     ld      a,(ix+OBJ.FLAGS)
@@ -426,7 +532,9 @@ mover_creature:     ld      a,(move_tick)
 .along_u:           ld      (ix+OBJ.DU),c
                     res     0,(ix+OBJ.GFX)      ; 16: along U
 
-.go:                call    mover_move_anim
+.go:                call    monster_double
+                    call    mover_move_anim
+                    call    monster_halve
                     ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
@@ -458,7 +566,11 @@ HOMER_PULL          EQU     3
 HOMER_MOST          EQU     $38             ; +56
 HOMER_LEAST         EQU     $B8             ; -72
 
-mover_homer:        call    mover_move_always
+mover_homer:        call    monster_sits_out
+                    ret     c
+                    call    monster_double
+                    call    mover_move_always
+                    call    monster_halve
 
                     ; Bounce: what stopped it along an axis turns it round there.
                     ld      a,(collide_hit)
@@ -553,7 +665,9 @@ homer_whole:        add     a,8
 ;   IX -> the record
 FALLER_STEP         EQU     4
 
-mover_faller4:      ld      a,(move_tick)
+mover_faller4:      call    monster_sits_out
+                    ret     c
+                    ld      a,(move_tick)
                     rra
                     jr      c,.kept             ; the frame, on even turns
                     ld      a,(ix+OBJ.GFX)
@@ -562,7 +676,9 @@ mover_faller4:      ld      a,(move_tick)
 .kept:
                     ld      c,2                 ; the axis is bit 1
                     jr      mover_faller_c
-mover_faller:       ld      c,1                 ; ...and bit 0 here
+mover_faller:       call    monster_sits_out
+                    ret     c
+                    ld      c,1                 ; ...and bit 0 here
 
 mover_faller_c:     ld      a,(ix+OBJ.DU)
                     or      (ix+OBJ.DV)
@@ -595,7 +711,9 @@ mover_faller_c:     ld      a,(ix+OBJ.DU)
                     xor     c
                     ld      (ix+OBJ.GFX),a
 
-.go:                call    mover_move_anim
+.go:                call    monster_double
+                    call    mover_move_anim
+                    call    monster_halve
                     ld      a,(collide_hit)
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
