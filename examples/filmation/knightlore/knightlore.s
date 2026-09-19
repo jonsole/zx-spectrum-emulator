@@ -95,6 +95,7 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 ; The sound effects, which only choose what to play -- see sound.s.
                     INCLUDE "sound_fx.s"
                     INCLUDE "monster_gate.s"    ; where the trimmed index left room
+                    INCLUDE "end_knight_body.s"
 room_data_end:
                     ASSERT  room_data_end <= $7400      ; clear of the view buffer
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
@@ -226,6 +227,7 @@ bit_reverse_table:
                     INCLUDE "pickup.s"
                     INCLUDE "../engine/screen.s"         ; pickup.s falls into it
                     INCLUDE "busy.s"            ; where the trimmed sprite table left room
+                    INCLUDE "end_knight.s"
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end

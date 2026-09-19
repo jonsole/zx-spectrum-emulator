@@ -192,7 +192,7 @@ game_over:          di
 
 .tally:             ld      hl,end_lines
                     ld      b,END_LINES
-                    ld      c,0
+                    ld      c,END_KNIGHT_INK    ; the knight's, under the lines' own
                     call    end_show
 
                     ld      a,(days)            ; the day it ended on
@@ -204,7 +204,7 @@ game_over:          di
                     call    end_number
 
                     call    end_percent
-                    call    end_rating
+                    call    end_knight          ; and then end_rating
 
                     ; And the game's own dirge over it, which a key cuts short --
                     ; but only a key pressed for it. Whatever was held when he
