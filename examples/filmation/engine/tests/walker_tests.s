@@ -6,7 +6,7 @@
 ; and the numbers a game gives it are set here -- they are Knight Lore's, so
 ; the expectations read as the knight's, but nothing of the game is assembled.
 ; object_collide reports whatever the test says gave, and can cut the step or
-; add to it the way a ride does; the depth sorts apply the step; placement,
+; add to it the way a ride does; the depth routines apply the step; placement,
 ; the redraw and shift_alloc count their calls and note what they were handed.
 ;
 ; The stubs keep the real routines' contracts: object_place, depth_insert and
@@ -224,13 +224,13 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	coll_dz, 0, "the clamp's DZ: the floor took it"
 					EXPECT_BYTE	defer_calls, 1, "redraw_defer"
 
-					TEST	"move: both halves by the step, legs sorted first"
+					TEST	"move: both halves by the step, the legs first"
 					call	fresh
 					SET		OBJ.DZ, -2
 					STEP	1, 2
 					RUN		character_move
 					EXPECT_BODY	OBJ.DZ, -2 & $FF, "the body's DZ, copied"
-					EXPECT_BYTE	step_calls, 1, "the legs sorted"
+					EXPECT_BYTE	step_calls, 1, "the legs stepped"
 					EXPECT_WORD	step_de, $0102, "...by the step"
 					EXPECT_BYTE	step_a, -2 & $FF, "...and DZ"
 					EXPECT_BYTE	upper_calls, 1, "the body sorted"
@@ -624,7 +624,7 @@ add_step:			ld		b,a
 					ld		(ix+OBJ.Z),a
 					ret
 
-depth_step:			ld		(step_de),de
+depth_add_step:		ld		(step_de),de
 					ld		(step_a),a
 					ld		hl,step_calls
 					inc		(hl)

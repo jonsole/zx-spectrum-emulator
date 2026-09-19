@@ -26,22 +26,6 @@ object_list			DW		0
 sort_head			DW		object_list
 
 
-; Is a moved object still in order? If not, take it out.
-;
-; depth_relink and depth_step_upper both start this way, and differ only in
-; where they scan from afterwards.
-;   IX -> the object, in the list and moved
-; Out: cf = 1  still in order, and nothing done
-;      cf = 0  unlinked: A = 0 it belongs earlier, 1 later, and DE -> where it
-;              came out. depth_unlink leaves the carry clear: its one ADD HL is
-;              on a record address, which cannot carry out of sixteen bits.
-; Corrupts A, BC, DE, HL, IY.
-depth_recheck:		call	depth_cmp_setup
-					call	depth_in_order
-					ret		c		; moved, but not past anyone
-					; NB: fall through
-
-
 ; Take an object out of the list.
 ;
 ; A NEXT field never ends a page, so the pointers here step with INC L. PREV
@@ -109,15 +93,20 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					; bytes as its operand. DE is free there -- the axis's term
 					; loads it straight after -- and it is a byte smaller and two T
 					; quicker than a JR.
+					;
+					; E holds the half-width for the two bounds, read once. Reading
+					; it from the record for each was a byte more an axis, and 11 T
+					; more whenever the first bound does not settle it.
 
 					; U -- nearer as U grows
 					ld		c,(iy+OBJ.U)		; c = their centre
+					ld		e,(iy+OBJ.SIZE_U)		; e = their half-width
 					ld		a,c
-					add		a,(iy+OBJ.SIZE_U)		; a = their max
+					add		a,e		; a = their max
 .u_min:				cp		0		; imm = our min + 1
 					jr		c,.u_near		; their max <= our min: we are nearer
 					ld		a,c
-					sub		(iy+OBJ.SIZE_U)		; a = their min
+					sub		e		; a = their min
 .u_max:				cp		0		; imm = our max
 					jr		c,.u_over		; their min < our max: they overlap
 					set		1,b		; their min >= our max: they are nearer
@@ -134,12 +123,13 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					; V -- FURTHER as V grows, so the operands swap, the term
 					; negates, and so does which of us a separation names
 					ld		c,(iy+OBJ.V)
+					ld		e,(iy+OBJ.SIZE_V)
 					ld		a,c
-					add		a,(iy+OBJ.SIZE_V)
+					add		a,e
 .v_min:				cp		0
 					jr		c,.v_far		; their V is the lower: they are nearer
 					ld		a,c
-					sub		(iy+OBJ.SIZE_V)
+					sub		e
 .v_max:				cp		0
 					jr		c,.v_over
 					set		0,b
@@ -288,63 +278,100 @@ depth_step:			call	depth_add_step
 ;   IX -> the object, in the list
 ; Corrupts A, BC, DE, HL, IY.
 ;
-; An object that has not crossed either of its neighbours costs two depth_cmp
-; calls instead of a scan down the whole list -- and that is the common case:
-; an object creeping a unit per frame changes its place in the order only
-; every several frames.
-depth_relink:		call	depth_recheck
-					ret		c		; moved, but not past anyone
+; The list is furthest first, so an object is still in place if it is not
+; further than the one before it and not nearer than the one after it -- a
+; guess counts either way. That costs two depth_cmp calls instead of a scan
+; down the whole list, and it is the common case: an object creeping a unit
+; per frame changes its place in the order only every several frames.
+;
+; When it has crossed one, it comes out and goes back in, and which neighbour
+; it crossed says where the scan may start:
+;
+; Later, and starting where it already is gives the same answer as starting
+; from the front: everything ahead of it was not-further last time it was
+; placed, and moving nearer cannot have changed that.
+;
+; Earlier is not the mirror of that, and it took a measurement to believe it.
+; Backing up to a point and scanning forward from there loses what the scan
+; learns on the way down -- the insertion point, the last object it was NEARER
+; than -- so it can settle in front of where a scan from the front would put
+; it. It differed on 22 frames of 180. So that half goes the long way round,
+; and only the cheap half is taken cheaply.
+;
+; The check jumps straight to whichever scan it needs. It used to be a routine
+; of its own, depth_in_order, answering 0 or 1 in A for this one to branch on
+; -- which also meant A had to survive depth_unlink in between.
+depth_relink:		call	depth_cmp_setup		; its bounds, for every depth_cmp below
 
-					; It has to be put back, and the list is in order apart from it, so
-					; the search need not always start at the front of the run.
-					;
-					; The scan only ever advances, and where it may start depends on which
-					; way the object has gone. depth_in_order has just said: A is 1 if it
-					; belongs later than it sits, 0 if earlier.
-					;
-					; Later, and starting where it already is gives the same answer as
-					; starting from the front: everything ahead of it was not-further last
-					; time it was placed, and moving nearer cannot have changed that.
-					;
-					; Earlier is not the mirror of that, and it took a measurement to
-					; believe it. Backing up to a point and scanning forward from there
-					; loses what the scan learns on the way down -- the insertion point, the last
-					; object it was NEARER than -- so it can settle in front of where a
-					; scan from the front would put it. It differed on 22 frames of 180.
-					; So that half goes the long way round, and only the cheap half is
-					; taken cheaply.
-					and		a		; depth_recheck left A, and DE where it came out
-					jr		z,depth_insert_placed	; belongs earlier: from the front
-					ex		de,hl		; belongs later: on from where it was
-					jr		depth_insert_from		; the setup above still stands
+					; Against the one before it -- unless that is where the sorted run
+					; starts, and there is nothing sorted ahead of it to cross.
+					ld		l,(ix+OBJ.PREV)
+					ld		h,(ix+OBJ.PREV+1)
+					ld		de,(sort_head)
+					or		a
+					sbc		hl,de
+					add		hl,de		; HL back, and ADD HL leaves Z alone
+					jr		z,.next		; first in the run
+					call	depth_cmp_hl		; PREV is the predecessor itself here
+					jr		c,.earlier		; further than it: it belongs earlier
+
+					; Against the one after it, if any.
+.next:				ld		a,(ix+OBJ.NEXT+1)
+					and		a
+					ret		z		; the tail: nothing to cross
+					ld		h,a
+					ld		l,(ix+OBJ.NEXT)
+					call	depth_cmp_hl
+					ret		c		; still further than it: in order
+
+					call	depth_unlink		; nearer than it: later, so on from
+					ex		de,hl		; where it came out -- the setup above
+					jr		depth_insert_from		; still stands
+
+.earlier:			call	depth_unlink
+					jr		depth_insert_placed		; from the front of the run
 
 
 ; The upper half of a two-part object -- a character's body, a guard's torso --
-; moved by a step, once its lower half has been.
+; moved by a step, and both halves put back in depth order.
 ;
-; The two share U and V and the upper is the nearer, so it can never belong in
-; front of the lower. Everything a scan from the front would compare on its way
-; down to the lower half it answers the same way for the upper, so the scan
-; starts right after the lower half: not a shortcut past the walk, but the rest
-; of it. Head Over Heels does the same, in EnlistAux.
+; The lower half is re-sorted here, with the upper out of the list. Left in, the
+; upper sits right behind the lower, and to the lower it is always certainly in
+; front -- it stands on it. So the lower's look at its next neighbour found its
+; own upper and said "in order", and a scan would have stopped there too. That
+; is where the upper USED to be, not where it is going: the knight stepped
+; forward onto the next block, his legs stayed behind it while his body went
+; past, and the block's top was drawn over his feet until his next step.
 ;
-; The lower half has to be re-sorted first, which is what makes that true.
+; Then the upper goes back in. The two share U and V and the upper is the
+; nearer, so it can never belong in front of the lower. Everything a scan from
+; the front would compare on its way down to the lower half it answers the same
+; way for the upper, so the scan starts right after the lower half: not a
+; shortcut past the walk, but the rest of it. Head Over Heels does the same, in
+; EnlistAux.
 ;
-; And the upper is always re-scanned, never asked depth_recheck's question
-; first. Its neighbours are not what matter: when the lower half moves back
+; And the upper is always re-scanned, never given depth_relink's neighbour
+; check. Its neighbours are not what matter: when the lower half moves back
 ; past something, that something is left between the two halves, and the
 ; upper's own neighbours can still guess it in order. Room $38 did exactly
 ; that -- the knight stepped down off a block, his legs went in front of it,
 ; and his body stayed behind it, drawn in front of a block it was behind.
+;
+; The lower half's own step has to be added before this, and a caller that
+; re-sorts it as well does no harm: it is re-sorted again here, properly.
 ;   IX -> the upper record, in the list
 ;   HL -> the lower record, which is its own NEXT field
 ;   D  - the step in U, E in V, A in Z
 ; Corrupts A, BC, DE, HL, IY.
 depth_step_upper:	call	depth_add_step		; HL comes through this
 					ret		z
-					push	hl
-					call	depth_cmp_setup
-					call	depth_unlink
+					push	hl		; the lower, for the scan that puts us back
+					push	hl		; ...and to be re-sorted now
+					call	depth_unlink		; us, out of its way
+					ex		(sp),ix		; IX the lower, and us kept
+					call	depth_relink		; against the room this time
+					pop		ix		; us
+					call	depth_cmp_setup		; after the lower's: it rewrote them
 					pop		hl
 					jr		depth_insert_from
 
@@ -417,39 +444,6 @@ depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
 					ret		
 
 
-; Is the object still correctly placed relative to the two objects it
-; sits between? The list is furthest-first, so it is: not further than
-; its predecessor, and not nearer than its successor.
-;   IX -> the object, still linked, with its bounds already hoisted into
-;         depth_cmp's immediates
-; Out: cf = 1  still in the right place, leave it alone
-;      cf = 0  it has crossed a neighbour and must be re-inserted
-; Corrupts A, BC, DE, HL, IY.
-depth_in_order:		ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)
-					ld		de,(sort_head)		; the front of the sorted run
-					or		a
-					sbc		hl,de
-					add		hl,de		; HL back, and ADD HL leaves Z alone
-					jr		z,.check_next		; nothing sorted ahead of us
-.have_prev:			call	depth_cmp_hl		; PREV is the predecessor itself here
-					jr		c,.out_of_order_back	; further than it: we must move back
-
-.check_next:		ld		a,(ix+OBJ.NEXT+1)
-					and		a
-					scf				; SCF leaves Z alone
-					ret		z		; we are the tail: in order, nothing to cross
-					ld		h,a
-					ld		l,(ix+OBJ.NEXT)
-					call	depth_cmp_hl
-					ret		c		; still further than it: in order, and cf says so
-
-					; Which side failed decides where the search can start, so say so.
-					; The carry is already clear here, which is what says out of order.
-					ld		a,1		; 1: nearer than it, so later
-					ret
-.out_of_order_back:	xor		a		; 0: it belongs earlier than it is. XOR
-					ret				; clears the carry, which was set
 ; Put an object into the background run: drawn before everything else and
 ; never sorted, so it is permanently behind. Splices in at sort_head --
 ; the same splice depth_insert uses -- and then moves sort_head past us,

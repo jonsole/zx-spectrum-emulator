@@ -405,11 +405,13 @@ character_move_go:	call	region_reset
 					; not the records' DU and DV, which character_settle has spent.
 					; The body shares the legs' DZ: character_move copies it across.
 					;
-					; The legs are re-sorted against the whole run, and the body after
-					; them, which depth_step_upper explains.
+					; The legs only take their step here: depth_step_upper re-sorts
+					; them, with the body out of their way, and then the body after
+					; them. Re-sorting them here as well would compare them with a
+					; body still sitting where it was, and be done again anyway.
 					push	de
 					ld		a,(ix+OBJ.DZ)
-					call	depth_step
+					call	depth_add_step
 					call	character_place
 					push	ix
 					pop		hl		; the legs

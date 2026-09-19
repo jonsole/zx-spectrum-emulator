@@ -55,10 +55,8 @@ Every object is a solid box in world coordinates, held in its record:
 | Z, height | `Z`, `SIZE_Z` | `Z` to `Z + SIZE_Z` |
 
 U and V are **centres with half-widths**. Z is **the base with a height**, so
-`Z = 0` stands on the floor. (The comment above `SIZE_U` in
-[object_struct.s](object_struct.s) still describes the box as `[U, U+SIZE_U)`.
-That is out of date: depth_cmp, collide_box and object_overlaps all use the
-centre and half-width.)
+`Z = 0` stands on the floor. depth_cmp, collide_box and object_overlaps all use
+the box this way.
 
 Two boxes that only **touch** count as apart. A box from 36 to 44 and one from
 44 to 52 do not overlap on that axis. This is what lets a stack of cubes, each
@@ -432,9 +430,10 @@ Its contract:
 - **In:** IX, the object.
 - **Out:** DE points at the field that used to point at the object. That is
   where the object came out, and depth_relink uses it.
-- **A is kept.** depth_relink carries depth_in_order's answer across the call
-  in A. The last-object test is `inc b` / `dec b` rather than `ld a,b` /
-  `or c` for exactly this reason.
+- **A is kept.** Nothing in depth.s needs it any more -- depth_relink used to
+  carry its neighbour check's answer across the call in A -- but it costs
+  nothing: the last-object test is `inc b` / `dec b` rather than `ld a,b` /
+  `or c`.
 - **Corrupts** F, BC and HL.
 
 It steps between the two bytes of a field with `inc l` rather than `inc hl`.
@@ -488,24 +487,23 @@ object_place afterwards, and the flags from the OR are still intact for its
 
 ### Stage 2: is it still between its neighbours?
 
-After depth_cmp_setup, `depth_in_order` checks the object against the two
-objects either side of it. The list is furthest first, so the object is still
-in place if it is not further than the one before it and not nearer than the
-one after it.
+After depth_cmp_setup, depth_relink checks the object against the two objects
+either side of it. The list is furthest first, so the object is still in place
+if it is not further than the one before it and not nearer than the one after
+it.
 
-| Check | Skipped when | Out of order if |
-|---|---|---|
-| against the predecessor | PREV equals sort_head: nothing sorted is ahead | the object is further, certain or guessed |
-| against the successor | NEXT is 0: it is last | the object is nearer, certain or guessed |
+| Check | Skipped when | Out of order if | Then |
+|---|---|---|---|
+| against the predecessor | PREV equals sort_head: nothing sorted is ahead | the object is further, certain or guessed | it belongs earlier |
+| against the successor | NEXT is 0: it is last | the object is nearer, certain or guessed | it belongs later |
 
 When the predecessor check runs, PREV is not sort_head, so it must point at a
 sorted record, and PREV is that record's address.
 
-| Result | Carry | A |
-|---|---|---|
-| still in order | set | whatever depth_cmp left |
-| belongs earlier | clear | 0 |
-| belongs later | clear | 1 |
+Each check jumps straight to the stage 3 it calls for. They used to be a
+routine of their own, `depth_in_order`, which answered 0 or 1 in A for
+depth_relink to branch on. Folded in, the call, the return and the branch go,
+nine bytes with them, and A no longer has to survive depth_unlink.
 
 If it is still in order, depth_relink returns. This is the common case. An
 object creeping one unit a frame only crosses a neighbour every few frames, and
@@ -519,8 +517,8 @@ that.
 
 | Situation | Scan starts at |
 |---|---|
-| belongs later (A = 1) | DE from depth_unlink: where the object came out |
-| belongs earlier (A = 0) | `sort_head`, the front of the sorted run |
+| belongs later | DE from depth_unlink: where the object came out |
+| belongs earlier | `sort_head`, the front of the sorted run |
 
 **Later can start where it was.** Everything ahead of the object was already
 found not-further when it was last placed, and moving nearer cannot change
@@ -541,13 +539,43 @@ two. So the upper half can never belong in front of the lower one, and every
 comparison a scan from the front would make on its way down to the lower half
 would come out the same for the upper.
 
-`depth_step_upper` uses this. It takes the lower half in HL, adds the step,
-checks the upper half against its neighbours, and if it has to move, scans from
-right after the lower half. HL is the lower record's address, which is also its
-NEXT field. Head Over Heels does the same in `EnlistAux`.
+`depth_step_upper` uses this. It takes the lower half in HL, adds the step to
+the upper, and then puts both halves in order:
 
-The lower half has to be re-sorted first, with depth_step or depth_relink, for
-the shortcut to hold. Every caller does the two halves in that order.
+```
+upper.UVZ += step;  if step == 0: return
+unlink(upper)                  the upper out of the lower's way
+relink(lower)                  the lower, against the room
+insert(upper, after lower)     the upper, scanned in from right after it
+```
+
+HL is the lower record's address, which is also its NEXT field, so the scan can
+start from it. Head Over Heels does the same in `EnlistAux`.
+
+**The upper has to be out while the lower is re-sorted.** Left in, it sits
+right behind the lower half, and to the lower half it is always certainly in
+front: it stands on it. Stage 2's look at the next neighbour then finds the
+lower half's own upper and says "in order", and a scan would stop at it too.
+But that is where the upper *was*, not where it is going. The knight stepping
+forward onto the next block showed it: his legs stayed behind the block while
+his body went past it, and the block's top was drawn over his feet until his
+next step, when the block was their neighbour instead.
+
+Sorting the two halves one after the other like any other object does not get
+round it: whichever goes second, the first is still in its way at its old
+place. Legs first fails walking forward, as above, and body first fails walking
+back.
+
+**The upper is always re-scanned**, never given stage 2. Its own neighbours are
+not what matter: when the lower half moves back past something, that thing is
+left between the two halves, and the upper's neighbours can still guess it in
+order. Room `$38` did exactly that.
+
+The lower half's step has to be added before depth_step_upper is called.
+character_move only adds it, with depth_add_step, since depth_step_upper
+re-sorts it anyway. mover_move_pair re-sorts a guard's legs itself as well,
+because when the torso stands still depth_step_upper returns at once, and legs
+snapped somewhere new would not be re-sorted at all.
 
 ## 10. Who calls what
 
@@ -566,8 +594,8 @@ the shortcut to hold. Every caller does the two halves in that order.
 | Caller | Does |
 |---|---|
 | mover_paint | depth_step with DU, DV and DZ, then room_adjust and object_place |
-| a guard's move | the legs: compare and write U and V, depth_relink if they changed. Then the torso: depth_step_upper with its DU, DV and DZ and HL = the legs |
-| character_move_go | the legs: depth_step with D, E and DZ. Then the body: depth_step_upper with the same step and HL = the legs. Each half then goes through character_place |
+| a guard's move | the legs: compare and write U and V, depth_relink if they changed. Then the torso: depth_step_upper with its DU, DV and DZ and HL = the legs, which re-sorts the legs again with the torso out of their way |
+| character_move_go | the legs: depth_add_step with D, E and DZ, which only moves them. Then the body: depth_step_upper with the same step and HL = the legs, which re-sorts both. Each half then goes through character_place |
 | character_place | room_adjust, character_lift and object_place |
 | objects_draw_all | walks the list from object_list and draws |
 
@@ -590,7 +618,6 @@ everything the relink could change.
 
 | Routine | In | Out | Corrupts |
 |---|---|---|---|
-| depth_recheck | IX in the list and moved | carry set: in order, nothing done. Carry clear: unlinked, A = 0 earlier or 1 later, DE = where it came out | A, BC, DE, HL, IY |
 | depth_unlink | IX | DE = the field that pointed at IX. **A kept**, carry clear | F, BC, HL |
 | depth_cmp_setup | IX | the nine operands in depth_cmp | AF, B |
 | depth_cmp | IY = candidate, setup done | carry = further, A = 0 certain | A, BC, DE, HL. Keeps IX, IY |
@@ -598,12 +625,11 @@ everything the relink could change.
 | depth_insert | IX | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_placed | IX, setup done | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_from | IX, HL = the field to start at, setup done | IX linked in | A, BC, DE, HL, IY |
-| depth_in_order | IX in the list, setup done | carry = in order, else A = 0 earlier or 1 later | A, BC, DE, HL, IY |
 | background_insert | IX | IX linked, sort_head moved | A, BC, DE, HL |
 | depth_add_step | IX, D, E, A = the step | Z set if the step was zero | AF, C. Keeps HL, DE, B |
 | depth_step | IX in the list, D, E, A = the step | IX moved, and in order | A, BC, DE, HL, IY |
 | depth_relink | IX in the list and moved | IX in order | A, BC, DE, HL, IY |
-| depth_step_upper | IX = the upper half, HL = the lower half, D, E, A = the step | IX moved, and in order after HL | A, BC, DE, HL, IY |
+| depth_step_upper | IX = the upper half, HL = the lower half with its step already added, D, E, A = the upper's step | both in order, IX after HL | A, BC, DE, HL, IY |
 
 ### State
 
@@ -624,11 +650,15 @@ everything the relink could change.
 
 - **depth_cmp is only valid after depth_cmp_setup for the object being placed.**
   Its bounds live in the code, so any setup for a different object in between
-  silently changes the answers. depth_insert_placed,
-  depth_insert_from and depth_in_order all assume setup has run.
+  silently changes the answers. depth_insert_placed and depth_insert_from
+  assume setup has run. depth_relink and depth_step_upper run it themselves --
+  depth_step_upper twice, because re-sorting the lower half rewrites it.
 
-- **Re-sort the lower half before the upper.** depth_step_upper scans from
-  after the lower half, which is only right once the lower half is in place.
+- **Give the lower half its step before depth_step_upper.** It re-sorts the
+  lower half itself, with the upper out of the way, and then scans the upper in
+  from after it. Re-sorting the lower half first as well does no harm, but it
+  is compared with an upper half still at its old place, so it cannot be
+  relied on to get past anything.
 
 - **Move through depth_step, with the step you really apply.** Changing U, V
   or Z directly skips the re-sort. Passing a zero step when the object did move,
@@ -642,8 +672,6 @@ everything the relink could change.
 - **Keep NEXT at offset 0 of the record.** Both the draw loop's `pop iy` and the
   PREV-points-at-a-field trick depend on it.
 
-- **A must survive depth_unlink.** depth_relink depends on it. See section 8.
-
 - **PREV is a record address only when it is not sort_head.** Otherwise it may
   be `object_list` or a background object, and must not be read as the previous
   sorted object.
@@ -651,7 +679,7 @@ everything the relink could change.
 ## 13. Tests
 
 [tests/depth_tests.s](tests/depth_tests.s) assembles depth.s on its own, with
-no other engine code, and runs 38 tests on the C++ Z80 core. It builds its
+no other engine code, and runs 42 tests on the C++ Z80 core. It builds its
 lists with its own helpers, so no test depends on the code it is testing. It
 covers:
 
@@ -662,13 +690,16 @@ covers:
   agreeing axes, disagreeing axes with either sign, and interpenetration.
 - **depth_insert** into an empty list, before, between and after, and after a
   background object.
-- **depth_in_order** unmoved, moved past either neighbour, and at either end.
+- **depth_relink's neighbour check** unmoved, moved past either neighbour, and
+  at either end.
 - **depth_step** with a zero step on an out-of-order list, the step landing in
   U, V and Z, steps along V alone and Z alone, moving later, moving earlier, a
   move that crosses no one, the tail to the front, and behind a background
   object.
 - **depth_step_upper** scanning from after the lower half, moving later, staying
-  in order, and a zero step.
+  in order, and a zero step; room `$38`; and the knight in Knight Lore's room
+  `$B4` stepping forward onto the next block and back off it, with the room's
+  own boxes.
 
 To run them:
 

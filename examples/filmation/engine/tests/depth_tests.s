@@ -248,49 +248,54 @@ start:				ld		sp,$FE00
 					DW		REC_4, REC_1, 0
 					EXPECT_WORD	sort_head, REC_4, "sort_head"
 
-; --- depth_in_order ----------------------------------------------------------
-; Out: carry set when still in order; otherwise A is 0 for belongs earlier and
-; 1 for belongs later.
+; --- depth_relink's neighbour check ------------------------------------------
+; An object is still in place if it is not further than the one before it and
+; not nearer than the one after it. Otherwise it goes earlier or later.
 
-					TEST	"in order: unmoved"
+					TEST	"relink: unmoved stays"
 					call	three_in_a_row
 					ld		ix,REC_2
-					call	check_order
-					EXPECT_CARRY	1, "carry"
+					call	depth_relink
+					call	expect_list
+					DW		REC_1, REC_2, REC_3, 0
 
-					TEST	"in order: moved past the next"
+					TEST	"relink: past the next, later"
 					call	three_in_a_row
 					ld		ix,REC_2
 					ld		(ix+OBJ.U),80
-					call	check_order
-					EXPECT_CARRY	0, "carry"
-					EXPECT_A	1, "A, belongs later"
+					call	depth_relink
+					call	expect_list
+					DW		REC_1, REC_3, REC_2, 0
 
-					TEST	"in order: moved past the previous"
+					TEST	"relink: past the previous, earlier"
 					call	three_in_a_row
 					ld		ix,REC_2
 					ld		(ix+OBJ.U),8
-					call	check_order
-					EXPECT_CARRY	0, "carry"
-					EXPECT_A	0, "A, belongs earlier"
+					call	depth_relink
+					call	expect_list
+					DW		REC_2, REC_1, REC_3, 0
 
-					TEST	"in order: the head, moved but not past"
+					TEST	"relink: the head, moved but not past"
 					call	three_in_a_row
 					ld		ix,REC_1
 					ld		(ix+OBJ.U),30
-					call	check_order
-					EXPECT_CARRY	1, "carry"
+					call	depth_relink
+					call	expect_list
+					DW		REC_1, REC_2, REC_3, 0
 
-					TEST	"in order: the tail, moved but not past"
+					TEST	"relink: the tail, moved but not past"
 					call	three_in_a_row
 					ld		ix,REC_3
 					ld		(ix+OBJ.U),50
-					call	check_order
-					EXPECT_CARRY	1, "carry"
+					call	depth_relink
+					call	expect_list
+					DW		REC_1, REC_2, REC_3, 0
 
 ; --- depth_step and depth_relink ---------------------------------------------
 ; depth_step adds the step and re-sorts only when it is not zero, falling into
-; depth_relink. depth_step_upper does the same but scans from after HL.
+; depth_relink. depth_step_upper does the same for an upper half: it re-sorts
+; the lower half in HL with the upper out of its way, then scans the upper back
+; in from after it.
 
 					TEST	"step: zero leaves the list alone"
 					call	three_in_a_row
@@ -410,6 +415,46 @@ start:				ld		sp,$FE00
 					call	expect_list
 					DW		REC_1, REC_5, REC_2, REC_3, REC_4, REC_6, 0
 
+					; Knight Lore, as it was drawn wrong: the knight walks along a row
+					; of blocks and steps onto the next. His legs now overlap it and
+					; stand on its top, so they are certainly nearer -- but the one
+					; after them in the list was his own body, which they are always
+					; further than, and that was all the legs were checked against.
+					; The body then went past the block alone, and the block's top
+					; was drawn over his feet. The boxes are the room's own, and the
+					; two halves are stepped as character_move steps them.
+					TEST	"pair: legs step forward onto the next block"
+					BOX		REC_1, 120, 104, 128, 8, 8, 12		; the block he is on
+					BOX		REC_2, 122, 107, 140, 5, 5, 12		; the legs, on its top
+					BOX		REC_3, 122, 107, 152, 5, 5, 11		; the body
+					BOX		REC_4, 136, 104, 128, 8, 8, 12		; the next block along
+					call	make_list
+					DW		REC_1, REC_2, REC_3, REC_4, 0
+					ld		ix,REC_2
+					STEP	4, 0, 0		; U 122 -> 126: onto REC_4's top
+					ld		hl,REC_2
+					ld		ix,REC_3
+					STEP_UPPER	4, 0, 0
+					call	expect_list
+					DW		REC_1, REC_4, REC_2, REC_3, 0
+
+					; ...and back off it, which is the way room $38 went wrong: here it
+					; is the body that has to get back past where the legs were.
+					TEST	"pair: and back off it"
+					BOX		REC_1, 120, 104, 128, 8, 8, 12
+					BOX		REC_2, 126, 107, 140, 5, 5, 12
+					BOX		REC_3, 126, 107, 152, 5, 5, 11
+					BOX		REC_4, 136, 104, 128, 8, 8, 12
+					call	make_list
+					DW		REC_1, REC_4, REC_2, REC_3, 0
+					ld		ix,REC_2
+					STEP	-4, 0, 0		; U 126 -> 122: back onto REC_1 alone
+					ld		hl,REC_2
+					ld		ix,REC_3
+					STEP_UPPER	-4, 0, 0
+					call	expect_list
+					DW		REC_1, REC_2, REC_3, REC_4, 0
+
 					TEST	"upper: zero leaves the list alone"
 					call	four_in_a_row
 					ld		ix,REC_2
@@ -468,9 +513,6 @@ compare_1_with_2:	ld		ix,REC_1
 					jp		snap
 
 ;   IX -> the record
-check_order:		call	depth_cmp_setup
-					call	depth_in_order
-					jp		snap
 
 ; ---------------------------------------------------------------------------
 ; Building and checking lists.

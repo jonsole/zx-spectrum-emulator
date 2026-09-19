@@ -30,9 +30,11 @@ Z:					DS		1
 ; branch. Never dereference it as a record.
 PREV:				DS		2
 
-; The solid box, half-open: [U, U+SIZE_U) and so on. This is the world
-; footprint, not the sprite box -- a sprite w bytes wide sits on a base
-; diamond SIZE_U + SIZE_V pixels across and half that in rows.
+; The solid box: U and V are its centre and SIZE_U and SIZE_V its half-widths,
+; so it covers U - SIZE_U to U + SIZE_U, and Z is its base with SIZE_Z its
+; height. Boxes that only touch count as apart. This is the world footprint,
+; not the sprite box -- a sprite w bytes wide sits on a base diamond
+; SIZE_U + SIZE_V pixels across and half that in rows.
 SIZE_U:				DS		1
 SIZE_V:				DS		1
 SIZE_Z:				DS		1
