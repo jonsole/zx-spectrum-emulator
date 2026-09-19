@@ -192,8 +192,9 @@ and keep `player_lives` up.
 **Game over.** Write 0 to `player_lives` and 1 to `player_touched`. The tally
 screen follows the dying.
 
-**The win.** Set `special_count` to 13 and drop the last wanted charm in the
-pot in room $88. Or set it to 14 and let `special_step` see it.
+**The win.** Set `special_count` to 13, then drop the charm the bubbles are
+showing into the pot in room $88. The count is only checked as a charm goes
+in, so writing 14 on its own does nothing.
 
 **Every room, built in turn.** The comparison script in the scratch work, which
 checks a change didn't alter any room, does this: break at `start.entered`,
