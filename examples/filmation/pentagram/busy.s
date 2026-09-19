@@ -1,9 +1,8 @@
 ; ---------------------------------------------------------------------------
 ; Is the room busy? Measured, not guessed.
 ;
-; A room is busy when its turns cost more than turn_pace's budget -- that is,
-; when it is running below the pace the quiet rooms keep -- and then its
-; monsters take turns (see monster_sits_out in movers.s). Counting objects
+; A room is busy when its turns cost more than a line -- when it is running
+; below the pace the original keeps -- and then its monsters take turns (see monster_sits_out in movers.s). Counting objects
 ; made half the game busy, the start room among them, whose 36 are hedges and
 ; grass standing still; what makes a room slow is what its turns cost, and
 ; turn_work already adds that up for turn_pace, so this reads it just before.
@@ -17,19 +16,34 @@
 ;
 ; On after BUSY_HOT_TURNS turns in a row over the line, not at the first: a
 ; room's first turn draws all of it, and a quiet room went busy for it. Off
-; only after BUSY_CALM_TURNS in a row a quarter under it -- taking turns is
+; only after BUSY_CALM_TURNS in a row well under it -- taking turns is
 ; what brought it down, and a room near the line otherwise flickers between
 ; the two every second or so. Every room starts quiet.
+;
+; All that is for monsters that keep their speed, MONSTER_KEEP_SPEED, going
+; twice as far every other turn: that is jerkier, so it is kept for rooms that
+; need it, and switching back and forth shows. Monsters that go half speed
+; instead move as smoothly as ever, only slower, and switching is hard to see:
+; then the line is the original's 20, and the room only has to be over it for
+; two turns and a little under it for sixteen.
 ;
 ; In the room builder's page, which has room: the main one has almost none.
 ; ---------------------------------------------------------------------------
 
+                IF      MONSTER_KEEP_SPEED
 BUSY_TURNS_A_SECOND EQU     15
-BUSY_LINE_T         EQU     3500000 / BUSY_TURNS_A_SECOND
-BUSY_ON_UNITS       EQU     (BUSY_LINE_T - TURN_BASE_T) / TURN_UNIT_T
-BUSY_OFF_UNITS      EQU     BUSY_ON_UNITS * 3 / 4
+BUSY_OFF_EIGHTHS    EQU     6               ; off a quarter under the line
 BUSY_HOT_TURNS      EQU     4
 BUSY_CALM_TURNS     EQU     64
+                ELSE
+BUSY_TURNS_A_SECOND EQU     20
+BUSY_OFF_EIGHTHS    EQU     7               ; off an eighth under it
+BUSY_HOT_TURNS      EQU     2
+BUSY_CALM_TURNS     EQU     16
+                ENDIF
+BUSY_LINE_T         EQU     3500000 / BUSY_TURNS_A_SECOND
+BUSY_ON_UNITS       EQU     (BUSY_LINE_T - TURN_BASE_T) / TURN_UNIT_T
+BUSY_OFF_UNITS      EQU     BUSY_ON_UNITS * BUSY_OFF_EIGHTHS / 8
 
 busy_calm:          DB      0               ; turns in a row towards changing
 
