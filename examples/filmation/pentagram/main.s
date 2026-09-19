@@ -93,6 +93,7 @@ new_game:           call    menu_run            ; $AFB6
                     pop     af
                     ld      ix,player
                     call    character_add
+                    call    room_paper          ; the room appears, whole
                     call    panel_on            ; and the panel, now it is up
                     call    quest_carry_show
                     call    sound_jingle_room

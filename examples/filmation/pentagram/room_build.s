@@ -134,10 +134,15 @@ room_build:			ld		c,a
 					add		a,ROOM_SCN_BIAS
 					ld		(room_scenery_left),a
 
+					; The screen goes black at once, by its attributes, and the room
+					; is drawn behind that; main.s colours it in with room_paper once
+					; Sabreman is there as well, so a new room appears whole instead
+					; of being watched as it draws -- as Knight Lore's does.
 					push	de
 					call	panel_off		; no panel until the room is up
 					call	room_wipe
-					call	room_paper
+					xor		a
+					call	screen_colour	; black on black
 					call	room_shape
 					pop		de
 
