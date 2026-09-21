@@ -82,7 +82,7 @@ room_add:			ld		a,(room_object_count)
 					ld		a,(hl)
 					inc		hl
 
-					; Already in our layout: rooms.py wrote it that way.
+					; Already in our layout: rooms_source.py wrote it that way.
 					ld		(ix+OBJ.FLAGS),a
 
 					; A rotation buffer belongs to the room, not the object;

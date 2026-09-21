@@ -166,9 +166,21 @@ ROTATION_BUFFERS = (
 
 # Band name (a label, because the panel's groups have to be one), what it is
 # called on the picture, and the graphics it claims. One sweep-up band for now.
+# A band is (name, what it is called on the picture, the graphics it claims),
+# and a fourth element makes it a parent: its children hang their names off its
+# own, so a sprite is named by the path to its group and then which one it is
+# within that group -- sprites.1, or knight.legs.1 in Knight Lore's, whose
+# sprite_sheet.py does the same.
+#
+# Pentagram's pieces have not been identified, so there is one group and the
+# names are its index. Splitting it is a matter of writing the tree here.
 BANDS = (
     ("sprites", "sprites", ()),
 )
+
+# What separates a group from its parent, and from the sprite's own name.
+NAME_SEPARATOR = "."
+
 
 # Pentagram names 170 graphics; twenty-nine of them resolve to no sprite at
 # all, in runs at 14-15, 22-25, 81, 87, 92-109 and 155-157. Whether one of
@@ -213,11 +225,28 @@ def read_sprites(packed):
     return sprites
 
 
+def flatten(bands, prefix=""):
+    """BANDS as a flat list, each band's name being its whole path.
+
+    Depth first and in written order, so the picture and the atlas read the way
+    the tree does. ../knightlore/sprite_sheet.py does the same.
+    """
+    out = []
+    for band in bands:
+        name, title, graphics = band[0], band[1], band[2]
+        children = band[3] if len(band) > 3 else ()
+        path = prefix + name
+        if graphics or not children:
+            out.append((path, title, graphics))
+        out.extend(flatten(children, path + NAME_SEPARATOR))
+    return out
+
+
 def bands_of(sprites, graphic_map):
     """The band each sprite belongs to, by the first one that names it."""
-    bands = []                          # (label, title, [sprite index, ...])
+    bands = []                          # (path, title, [sprite index, ...])
     placed = set()
-    for label, title, graphics in BANDS:
+    for label, title, graphics in flatten(BANDS):
         members = []
         for graphic in graphics:
             n = graphic_map[graphic]
@@ -292,10 +321,17 @@ def build_atlas(sprites, bands, graphic_map, size):
         if n != NO_SPRITE:
             named.setdefault(n, []).append(graphic)
 
-    # The panel prefixes a sprite's label with its group's, so that two groups
-    # can each have a "walk". The assembler label stays the plain `name`.
+    # Where a sprite is: the path to its group, then which one it is within that
+    # group, counting from one. Within the group rather than across the sheet,
+    # so adding one does not renumber everything after it -- rooms.json names
+    # its graphics by these.
+    within = {}
+    for _label, _title, members in bands:
+        for i, n in enumerate(members):
+            within[n] = i + 1
+
     def label_of(n):
-        return band_of[n][0] + "_" + sprites[n]["name"]
+        return band_of[n][0] + NAME_SEPARATOR + str(within[n])
 
     frames = {}
     for label, title, members in bands:  # picture order, so the file reads like it

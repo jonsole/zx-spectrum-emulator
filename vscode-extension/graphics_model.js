@@ -228,8 +228,14 @@ function fileLeafOf(path) {
 // to be a valid label: letters, digits and underscores, not starting with a
 // digit.
 
+// A dot is kept because a sprite's name is a path: its group, its parent's
+// group before that, and which one it is within the group -- knight.legs.1,
+// as sprite_sheet.py writes them. Flattening those to underscores here would
+// quietly rename every sprite on a round trip through this viewer, and
+// examples/filmation's rooms.json names its graphics by them.
 function sanitizeLabel(text) {
-  let label = String(text || '').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  let label = String(text || '').replace(/[^A-Za-z0-9_.]+/g, '_')
+    .replace(/^[_.]+|[_.]+$/g, '');
   if (/^[0-9]/.test(label)) {
     label = '_' + label;
   }

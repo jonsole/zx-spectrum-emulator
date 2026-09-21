@@ -32,7 +32,7 @@ OBJ_SHIFTED			EQU		0x20
 ; of them cost 85% of a turn.
 ;
 ; Which pieces those are is fixed by the room data, not discovered here:
-; rooms.py works out the graphics some room wants both ways, nominates one
+; rooms_source.py works out the graphics some room wants both ways, nominates one
 ; orientation of each, and sets this bit on every piece wearing it. Only the
 ; nominated ones spend a buffer; everything else goes on sharing.
 OBJ_CACHE			EQU		0x10

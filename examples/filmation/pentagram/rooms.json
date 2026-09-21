@@ -2,7 +2,12 @@
  "meta": {
   "version": 1,
   "game": "pentagram",
-  "comment": "Written by rooms.py from room_data.bin; see its docstring for the format. Template names are placeholders until the pieces are identified."
+  "comment": "Written by rooms.py from room_data.bin; see its docstring for the format. Template names are placeholders until the pieces are identified.",
+  "sprites": {
+   "sheet": "sprites.png",
+   "atlas": "sprites.json",
+   "adjust": "sprite_adj.s"
+  }
  },
  "sizes": [
   {
@@ -33,34 +38,32 @@
    "side": "n",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -74,34 +77,32 @@
    "side": "e",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      197,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.74",
+     "u": 197,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      6,
-      197,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.73",
+     "u": 197,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -115,34 +116,32 @@
    "side": "s",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -156,34 +155,32 @@
    "side": "w",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      59,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.74",
+     "u": 59,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      6,
-      59,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.73",
+     "u": 59,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -197,34 +194,32 @@
    "side": "n",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      9,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.85",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.86",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -238,34 +233,32 @@
    "side": "e",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      9,
-      197,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.85",
+     "u": 197,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      197,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.86",
+     "u": 197,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -279,34 +272,32 @@
    "side": "s",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      9,
-      115,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.85",
+     "u": 115,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      141,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.86",
+     "u": 141,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -320,34 +311,32 @@
    "side": "w",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      9,
-      59,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.85",
+     "u": 59,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      59,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.86",
+     "u": 59,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -361,124 +350,116 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      64,
-      120,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.79",
+     "u": 64,
+     "v": 120,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      64,
-      136,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.76",
+     "u": 64,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      64,
-      72,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.76",
+     "u": 64,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      64,
-      88,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 64,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      64,
-      104,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 64,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      64,
-      168,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 64,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      64,
-      184,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.79",
+     "u": 64,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -492,124 +473,116 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      120,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.79",
+     "u": 120,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      136,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.76",
+     "u": 136,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      72,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.76",
+     "u": 72,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      88,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 88,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      152,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 152,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      168,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 168,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      184,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.79",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -623,94 +596,88 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      64,
-      72,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.76",
+     "u": 64,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      64,
-      88,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 64,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      64,
-      104,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 64,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      64,
-      168,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 64,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      64,
-      184,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.79",
+     "u": 64,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -724,94 +691,88 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      72,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.76",
+     "u": 72,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      88,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 88,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      152,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 152,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      168,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 168,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      184,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.79",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -825,124 +786,116 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 52,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      52,
-      64,
-      120,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.82",
+     "u": 64,
+     "v": 120,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      53,
-      64,
-      136,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.81",
+     "u": 64,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 57,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      57,
-      64,
-      72,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.87",
+     "u": 64,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      64,
-      88,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 64,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 56,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      56,
-      64,
-      104,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.84",
+     "u": 64,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      54,
-      64,
-      168,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.80",
+     "u": 64,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      53,
-      64,
-      184,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.81",
+     "u": 64,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -956,124 +909,116 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 55,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      55,
-      120,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.83",
+     "u": 120,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 56,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      56,
-      136,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.84",
+     "u": 136,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      72,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 72,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      53,
-      88,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.81",
+     "u": 88,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 52,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      52,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.82",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      152,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 152,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      55,
-      168,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.83",
+     "u": 168,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 57,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      57,
-      184,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.87",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1087,94 +1032,88 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 57,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      57,
-      64,
-      72,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.87",
+     "u": 64,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      64,
-      88,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 64,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 56,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      56,
-      64,
-      104,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.84",
+     "u": 64,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      54,
-      64,
-      168,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.80",
+     "u": 64,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      53,
-      64,
-      184,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.81",
+     "u": 64,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1188,94 +1127,88 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      72,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 72,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      53,
-      88,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.81",
+     "u": 88,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 52,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      52,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.82",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      152,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 152,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      55,
-      168,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.83",
+     "u": 168,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 57,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      57,
-      184,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.87",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1289,139 +1222,130 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      96,
-      120,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.79",
+     "u": 96,
+     "v": 120,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      96,
-      136,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.76",
+     "u": 96,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      96,
-      72,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.76",
+     "u": 96,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      96,
-      88,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 96,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      96,
-      104,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 96,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      96,
-      152,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 96,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      14,
-      96,
-      168,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.78",
+     "u": 96,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      96,
-      184,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.79",
+     "u": 96,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1435,139 +1359,130 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      120,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.79",
+     "u": 120,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      136,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.76",
+     "u": 136,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      72,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.76",
+     "u": 72,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      88,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 88,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      104,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 104,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      152,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.77",
+     "u": 152,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      168,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.78",
+     "u": 168,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      184,
-      160,
-      128,
-      8,
-      0,
-      24,
-      16
-     ]
+     "graphic": "sprites.79",
+     "u": 184,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      13,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      80
-     ]
+     "graphic": "sprites.77",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1581,154 +1496,144 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 173,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      173,
-      105,
-      190,
-      105,
-      207,
-      105,
-      224,
-      105
-     ]
+     "graphic": "gfx_AD",
+     "u": 105,
+     "v": 190,
+     "z": 105,
+     "sizeU": 207,
+     "sizeV": 105,
+     "sizeZ": 224,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 241,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      241,
-      105,
-      2,
-      106,
-      19,
-      106,
-      36,
-      106
-     ]
+     "graphic": "gfx_F1",
+     "u": 105,
+     "v": 2,
+     "z": 106,
+     "sizeU": 19,
+     "sizeV": 106,
+     "sizeZ": 36,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 189,
-     "flags": 107,
-     "mirrored": true,
-     "bytes": [
-      189,
-      106,
-      254,
-      106,
-      205,
-      106,
-      14,
-      107
-     ]
+     "graphic": "gfx_BD",
+     "u": 106,
+     "v": 254,
+     "z": 106,
+     "sizeU": 205,
+     "sizeV": 106,
+     "sizeZ": 14,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 43
+     }
     },
     {
-     "graphic": 209,
-     "flags": 108,
-     "mirrored": true,
-     "bytes": [
-      209,
-      107,
-      18,
-      108,
-      225,
-      107,
-      34,
-      108
-     ]
+     "graphic": "gfx_D1",
+     "u": 107,
+     "v": 18,
+     "z": 108,
+     "sizeU": 225,
+     "sizeV": 107,
+     "sizeZ": 34,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 44
+     }
     },
     {
-     "graphic": 63,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      63,
-      107,
-      136,
-      107,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "sprites.37.g63",
+     "u": 107,
+     "v": 136,
+     "z": 107,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 83,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      83,
-      108,
-      156,
-      108,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "gfx_53",
+     "u": 108,
+     "v": 156,
+     "z": 108,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 53,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      53,
-      106,
-      70,
-      106,
-      87,
-      106,
-      104,
-      106
-     ]
+     "graphic": "sprites.81",
+     "u": 106,
+     "v": 70,
+     "z": 106,
+     "sizeU": 87,
+     "sizeV": 106,
+     "sizeZ": 104,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 121,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      121,
-      106,
-      138,
-      106,
-      155,
-      106,
-      172,
-      106
-     ]
+     "graphic": "sprites.41.g121",
+     "u": 106,
+     "v": 138,
+     "z": 106,
+     "sizeU": 155,
+     "sizeV": 106,
+     "sizeZ": 172,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": false,
@@ -1742,154 +1647,144 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 173,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      173,
-      105,
-      190,
-      105,
-      207,
-      105,
-      224,
-      105
-     ]
+     "graphic": "gfx_AD",
+     "u": 105,
+     "v": 190,
+     "z": 105,
+     "sizeU": 207,
+     "sizeV": 105,
+     "sizeZ": 224,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 241,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      241,
-      105,
-      2,
-      106,
-      19,
-      106,
-      36,
-      106
-     ]
+     "graphic": "gfx_F1",
+     "u": 105,
+     "v": 2,
+     "z": 106,
+     "sizeU": 19,
+     "sizeV": 106,
+     "sizeZ": 36,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 189,
-     "flags": 107,
-     "mirrored": true,
-     "bytes": [
-      189,
-      106,
-      254,
-      106,
-      205,
-      106,
-      14,
-      107
-     ]
+     "graphic": "gfx_BD",
+     "u": 106,
+     "v": 254,
+     "z": 106,
+     "sizeU": 205,
+     "sizeV": 106,
+     "sizeZ": 14,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 43
+     }
     },
     {
-     "graphic": 209,
-     "flags": 108,
-     "mirrored": true,
-     "bytes": [
-      209,
-      107,
-      18,
-      108,
-      225,
-      107,
-      34,
-      108
-     ]
+     "graphic": "gfx_D1",
+     "u": 107,
+     "v": 18,
+     "z": 108,
+     "sizeU": 225,
+     "sizeV": 107,
+     "sizeZ": 34,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 44
+     }
     },
     {
-     "graphic": 63,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      63,
-      107,
-      136,
-      107,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "sprites.37.g63",
+     "u": 107,
+     "v": 136,
+     "z": 107,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 83,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      83,
-      108,
-      156,
-      108,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "gfx_53",
+     "u": 108,
+     "v": 156,
+     "z": 108,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 53,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      53,
-      106,
-      70,
-      106,
-      87,
-      106,
-      104,
-      106
-     ]
+     "graphic": "sprites.81",
+     "u": 106,
+     "v": 70,
+     "z": 106,
+     "sizeU": 87,
+     "sizeV": 106,
+     "sizeZ": 104,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 121,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      121,
-      106,
-      138,
-      106,
-      155,
-      106,
-      172,
-      106
-     ]
+     "graphic": "sprites.41.g121",
+     "u": 106,
+     "v": 138,
+     "z": 106,
+     "sizeU": 155,
+     "sizeV": 106,
+     "sizeZ": 172,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": false,
@@ -1903,139 +1798,130 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 52,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      52,
-      96,
-      120,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.82",
+     "u": 96,
+     "v": 120,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      53,
-      96,
-      136,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.81",
+     "u": 96,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 57,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      57,
-      96,
-      72,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.87",
+     "u": 96,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      96,
-      88,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 96,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      54,
-      96,
-      104,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.80",
+     "u": 96,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      96,
-      152,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.83",
+     "u": 96,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      53,
-      96,
-      168,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.81",
+     "u": 96,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 52,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      52,
-      96,
-      184,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.82",
+     "u": 96,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      104,
-      192,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2049,139 +1935,130 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 52,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      52,
-      120,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.82",
+     "u": 120,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      55,
-      136,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.83",
+     "u": 136,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      72,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 72,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      53,
-      88,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.81",
+     "u": 88,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      54,
-      104,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.80",
+     "u": 104,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 55,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      55,
-      152,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.83",
+     "u": 152,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 53,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      53,
-      168,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.81",
+     "u": 168,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 57,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      57,
-      184,
-      160,
-      128,
-      8,
-      0,
-      24,
-      80
-     ]
+     "graphic": "sprites.87",
+     "u": 184,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 54,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      54,
-      64,
-      152,
-      128,
-      0,
-      8,
-      24,
-      16
-     ]
+     "graphic": "sprites.80",
+     "u": 64,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": false,
@@ -2195,154 +2072,144 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 173,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      173,
-      105,
-      190,
-      105,
-      207,
-      105,
-      224,
-      105
-     ]
+     "graphic": "gfx_AD",
+     "u": 105,
+     "v": 190,
+     "z": 105,
+     "sizeU": 207,
+     "sizeV": 105,
+     "sizeZ": 224,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 241,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      241,
-      105,
-      2,
-      106,
-      19,
-      106,
-      36,
-      106
-     ]
+     "graphic": "gfx_F1",
+     "u": 105,
+     "v": 2,
+     "z": 106,
+     "sizeU": 19,
+     "sizeV": 106,
+     "sizeZ": 36,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 189,
-     "flags": 107,
-     "mirrored": true,
-     "bytes": [
-      189,
-      106,
-      254,
-      106,
-      205,
-      106,
-      14,
-      107
-     ]
+     "graphic": "gfx_BD",
+     "u": 106,
+     "v": 254,
+     "z": 106,
+     "sizeU": 205,
+     "sizeV": 106,
+     "sizeZ": 14,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 43
+     }
     },
     {
-     "graphic": 209,
-     "flags": 108,
-     "mirrored": true,
-     "bytes": [
-      209,
-      107,
-      18,
-      108,
-      225,
-      107,
-      34,
-      108
-     ]
+     "graphic": "gfx_D1",
+     "u": 107,
+     "v": 18,
+     "z": 108,
+     "sizeU": 225,
+     "sizeV": 107,
+     "sizeZ": 34,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 44
+     }
     },
     {
-     "graphic": 63,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      63,
-      107,
-      136,
-      107,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "sprites.37.g63",
+     "u": 107,
+     "v": 136,
+     "z": 107,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 83,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      83,
-      108,
-      156,
-      108,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "gfx_53",
+     "u": 108,
+     "v": 156,
+     "z": 108,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 53,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      53,
-      106,
-      70,
-      106,
-      87,
-      106,
-      104,
-      106
-     ]
+     "graphic": "sprites.81",
+     "u": 106,
+     "v": 70,
+     "z": 106,
+     "sizeU": 87,
+     "sizeV": 106,
+     "sizeZ": 104,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 121,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      121,
-      106,
-      138,
-      106,
-      155,
-      106,
-      172,
-      106
-     ]
+     "graphic": "sprites.41.g121",
+     "u": 106,
+     "v": 138,
+     "z": 106,
+     "sizeU": 155,
+     "sizeV": 106,
+     "sizeZ": 172,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": false,
@@ -2356,154 +2223,144 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 173,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      173,
-      105,
-      190,
-      105,
-      207,
-      105,
-      224,
-      105
-     ]
+     "graphic": "gfx_AD",
+     "u": 105,
+     "v": 190,
+     "z": 105,
+     "sizeU": 207,
+     "sizeV": 105,
+     "sizeZ": 224,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 241,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      241,
-      105,
-      2,
-      106,
-      19,
-      106,
-      36,
-      106
-     ]
+     "graphic": "gfx_F1",
+     "u": 105,
+     "v": 2,
+     "z": 106,
+     "sizeU": 19,
+     "sizeV": 106,
+     "sizeZ": 36,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 189,
-     "flags": 107,
-     "mirrored": true,
-     "bytes": [
-      189,
-      106,
-      254,
-      106,
-      205,
-      106,
-      14,
-      107
-     ]
+     "graphic": "gfx_BD",
+     "u": 106,
+     "v": 254,
+     "z": 106,
+     "sizeU": 205,
+     "sizeV": 106,
+     "sizeZ": 14,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 43
+     }
     },
     {
-     "graphic": 209,
-     "flags": 108,
-     "mirrored": true,
-     "bytes": [
-      209,
-      107,
-      18,
-      108,
-      225,
-      107,
-      34,
-      108
-     ]
+     "graphic": "gfx_D1",
+     "u": 107,
+     "v": 18,
+     "z": 108,
+     "sizeU": 225,
+     "sizeV": 107,
+     "sizeZ": 34,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 44
+     }
     },
     {
-     "graphic": 63,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      63,
-      107,
-      136,
-      107,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "sprites.37.g63",
+     "u": 107,
+     "v": 136,
+     "z": 107,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 83,
-     "flags": 105,
-     "mirrored": true,
-     "bytes": [
-      83,
-      108,
-      156,
-      108,
-      109,
-      105,
-      109,
-      105
-     ]
+     "graphic": "gfx_53",
+     "u": 108,
+     "v": 156,
+     "z": 108,
+     "sizeU": 109,
+     "sizeV": 105,
+     "sizeZ": 109,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 41
+     }
     },
     {
-     "graphic": 53,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      53,
-      106,
-      70,
-      106,
-      87,
-      106,
-      104,
-      106
-     ]
+     "graphic": "sprites.81",
+     "u": 106,
+     "v": 70,
+     "z": 106,
+     "sizeU": 87,
+     "sizeV": 106,
+     "sizeZ": 104,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 121,
-     "flags": 106,
-     "mirrored": true,
-     "bytes": [
-      121,
-      106,
-      138,
-      106,
-      155,
-      106,
-      172,
-      106
-     ]
+     "graphic": "sprites.41.g121",
+     "u": 106,
+     "v": 138,
+     "z": 106,
+     "sizeU": 155,
+     "sizeV": 106,
+     "sizeZ": 172,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 42
+     }
     },
     {
-     "graphic": 7,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      7,
-      115,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.74",
+     "u": 115,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 6,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      6,
-      141,
-      197,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.73",
+     "u": 141,
+     "v": 197,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": false,
@@ -2517,34 +2374,32 @@
    "side": "n",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      9,
-      147,
-      197,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.85",
+     "u": 147,
+     "v": 197,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      173,
-      197,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.86",
+     "u": 173,
+     "v": 197,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2558,34 +2413,32 @@
    "side": "e",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      9,
-      197,
-      173,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.85",
+     "u": 197,
+     "v": 173,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      197,
-      147,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.86",
+     "u": 197,
+     "v": 147,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2599,34 +2452,32 @@
    "side": "s",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      9,
-      83,
-      59,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.85",
+     "u": 83,
+     "v": 59,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      109,
-      59,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "sprites.86",
+     "u": 109,
+     "v": 59,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2640,34 +2491,32 @@
    "side": "w",
    "blocks": [
     {
-     "graphic": 9,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      9,
-      59,
-      109,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.85",
+     "u": 59,
+     "v": 109,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      59,
-      83,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "sprites.86",
+     "u": 59,
+     "v": 83,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2681,34 +2530,32 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      152,
-      200,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 152,
+     "v": 200,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      168,
-      200,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 168,
+     "v": 200,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2722,34 +2569,32 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      200,
-      152,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 200,
+     "v": 152,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      200,
-      168,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 200,
+     "v": 168,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2763,34 +2608,32 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      88,
-      57,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 88,
+     "v": 57,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      104,
-      57,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 104,
+     "v": 57,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2804,34 +2647,32 @@
    "side": null,
    "blocks": [
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      56,
-      88,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 56,
+     "v": 88,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      56,
-      104,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "sprites.41.g11",
+     "u": 56,
+     "v": 104,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -2845,20 +2686,20 @@
    "address": "$6D29",
    "entries": [
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g11",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2870,20 +2711,20 @@
    "address": "$6D3B",
    "entries": [
     {
-     "graphic": 10,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      10,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.75.g10",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2895,20 +2736,20 @@
    "address": "$6D41",
    "entries": [
     {
-     "graphic": 48,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      48,
-      5,
-      5,
-      5,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.27.g48",
+     "sizeU": 5,
+     "sizeV": 5,
+     "sizeZ": 5,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": false,
@@ -2920,20 +2761,20 @@
    "address": "$6D47",
    "entries": [
     {
-     "graphic": 23,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      23,
-      7,
-      7,
-      10,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.39.g23",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 10,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2945,20 +2786,20 @@
    "address": "$6D4D",
    "entries": [
     {
-     "graphic": 72,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      72,
-      8,
-      8,
-      12,
-      20
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.75.g72",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2970,20 +2811,20 @@
    "address": "$6D53",
    "entries": [
     {
-     "graphic": 30,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      30,
-      7,
-      7,
-      10,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.38.g30",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 10,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2995,20 +2836,20 @@
    "address": "$6D59",
    "entries": [
     {
-     "graphic": 63,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      63,
-      8,
-      8,
-      12,
-      20
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.37.g63",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3020,20 +2861,20 @@
    "address": "$6D5F",
    "entries": [
     {
-     "graphic": 73,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      73,
-      8,
-      14,
-      12,
-      20
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.47",
+     "sizeU": 8,
+     "sizeV": 14,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3045,20 +2886,20 @@
    "address": "$6D65",
    "entries": [
     {
-     "graphic": 76,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      76,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.75.g76",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3070,20 +2911,20 @@
    "address": "$6D23",
    "entries": [
     {
-     "graphic": 91,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      91,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g91",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3095,20 +2936,20 @@
    "address": "$6D6B",
    "entries": [
     {
-     "graphic": 78,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      78,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g78",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3120,20 +2961,20 @@
    "address": "$6D71",
    "entries": [
     {
-     "graphic": 79,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      79,
-      8,
-      8,
-      12,
-      20
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g79",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3145,20 +2986,20 @@
    "address": "$6D77",
    "entries": [
     {
-     "graphic": 84,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      84,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g84",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3170,20 +3011,20 @@
    "address": "$6D2F",
    "entries": [
     {
-     "graphic": 74,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      74,
-      12,
-      12,
-      1,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.9",
+     "sizeU": 12,
+     "sizeV": 12,
+     "sizeZ": 1,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3195,20 +3036,20 @@
    "address": "$6D7D",
    "entries": [
     {
-     "graphic": 28,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      28,
-      7,
-      7,
-      11,
-      20
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.39.g28",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 11,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3220,20 +3061,20 @@
    "address": "$6D83",
    "entries": [
     {
-     "graphic": 86,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      86,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.14.g86",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3245,20 +3086,20 @@
    "address": "$6D89",
    "entries": [
     {
-     "graphic": 87,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      87,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g87",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3270,20 +3111,20 @@
    "address": "$6D8F",
    "entries": [
     {
-     "graphic": 88,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      88,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g88",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3295,20 +3136,20 @@
    "address": "$6D95",
    "entries": [
     {
-     "graphic": 89,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      89,
-      8,
-      8,
-      10,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.88.g89",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 10,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3320,20 +3161,20 @@
    "address": "$6DA7",
    "entries": [
     {
-     "graphic": 120,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      120,
-      10,
-      10,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.48",
+     "sizeU": 10,
+     "sizeV": 10,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3345,20 +3186,20 @@
    "address": "$6DAD",
    "entries": [
     {
-     "graphic": 16,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      16,
-      8,
-      8,
-      10,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.88.g16",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 10,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3370,20 +3211,20 @@
    "address": "$6D35",
    "entries": [
     {
-     "graphic": 75,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      75,
-      12,
-      12,
-      1,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.10",
+     "sizeU": 12,
+     "sizeV": 12,
+     "sizeZ": 1,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3395,20 +3236,20 @@
    "address": "$6D23",
    "entries": [
     {
-     "graphic": 91,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      91,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g91",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": false,
@@ -3420,20 +3261,20 @@
    "address": "$6DB3",
    "entries": [
     {
-     "graphic": 82,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      82,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.37.g82",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3445,20 +3286,20 @@
    "address": "$6DB9",
    "entries": [
     {
-     "graphic": 136,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      136,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g136",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3470,20 +3311,20 @@
    "address": "$6DBF",
    "entries": [
     {
-     "graphic": 140,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      140,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g140",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3495,20 +3336,20 @@
    "address": "$6DC5",
    "entries": [
     {
-     "graphic": 141,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      141,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g141",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": false,
@@ -3520,20 +3361,20 @@
    "address": "$6DCB",
    "entries": [
     {
-     "graphic": 142,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      142,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g142",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3545,20 +3386,20 @@
    "address": "$6DD1",
    "entries": [
     {
-     "graphic": 143,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      143,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.41.g143",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3570,20 +3411,20 @@
    "address": "$6D9B",
    "entries": [
     {
-     "graphic": 92,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      92,
-      8,
-      8,
-      12,
-      16
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.14.g92",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -3595,20 +3436,20 @@
    "address": "$6DA1",
    "entries": [
     {
-     "graphic": 93,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      93,
-      8,
-      8,
-      12,
-      80
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "sprites.14.g93",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,

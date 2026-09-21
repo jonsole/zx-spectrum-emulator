@@ -2,7 +2,12 @@
  "meta": {
   "version": 1,
   "game": "knightlore",
-  "comment": "Written by rooms.py from room_data.bin; the same schema Pentagram's rooms.py writes."
+  "comment": "Written by rooms.py from room_data.bin; the same schema Pentagram's rooms.py writes.",
+  "sprites": {
+   "sheet": "sprites.png",
+   "atlas": "sprites.json",
+   "adjust": "sprite_adj.s"
+  }
  },
  "sizes": [
   {
@@ -31,34 +36,32 @@
    "address": "$6D12",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      2,
-      141,
-      196,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.24",
+     "u": 141,
+     "v": 196,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      3,
-      115,
-      196,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.25",
+     "u": 115,
+     "v": 196,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -70,34 +73,32 @@
    "address": "$6D23",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      2,
-      196,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.24",
+     "u": 196,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      3,
-      196,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.25",
+     "u": 196,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -109,34 +110,32 @@
    "address": "$6D45",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      2,
-      141,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.24",
+     "u": 141,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      3,
-      115,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.25",
+     "u": 115,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -148,34 +147,32 @@
    "address": "$6D67",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      2,
-      59,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.24",
+     "u": 59,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      3,
-      59,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.25",
+     "u": 59,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -187,34 +184,32 @@
    "address": "$6D78",
    "blocks": [
     {
-     "graphic": 4,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      4,
-      141,
-      196,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.9",
+     "u": 141,
+     "v": 196,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 5,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      5,
-      115,
-      196,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.10",
+     "u": 115,
+     "v": 196,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -226,34 +221,32 @@
    "address": "$6D89",
    "blocks": [
     {
-     "graphic": 4,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      4,
-      196,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.9",
+     "u": 196,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 5,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      5,
-      196,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.10",
+     "u": 196,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -265,34 +258,32 @@
    "address": "$6D9A",
    "blocks": [
     {
-     "graphic": 4,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      4,
-      141,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.9",
+     "u": 141,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 5,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      5,
-      115,
-      59,
-      128,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.10",
+     "u": 115,
+     "v": 59,
+     "z": 128,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -304,34 +295,32 @@
    "address": "$6DAB",
    "blocks": [
     {
-     "graphic": 4,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      4,
-      59,
-      115,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.9",
+     "u": 59,
+     "v": 115,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 5,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      5,
-      59,
-      141,
-      128,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.10",
+     "u": 59,
+     "v": 141,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -343,19 +332,18 @@
    "address": "$6DBC",
    "blocks": [
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      128,
-      190,
-      160,
-      12,
-      1,
-      32,
-      80
-     ]
+     "graphic": "ghost_spell_gate.5.g8",
+     "u": 128,
+     "v": 190,
+     "z": 160,
+     "sizeU": 12,
+     "sizeV": 1,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -367,19 +355,18 @@
    "address": "$6DC5",
    "blocks": [
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      190,
-      128,
-      160,
-      1,
-      12,
-      32,
-      16
-     ]
+     "graphic": "ghost_spell_gate.5.g8",
+     "u": 190,
+     "v": 128,
+     "z": 160,
+     "sizeU": 1,
+     "sizeV": 12,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -391,19 +378,18 @@
    "address": "$6DCE",
    "blocks": [
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      128,
-      65,
-      160,
-      12,
-      1,
-      32,
-      80
-     ]
+     "graphic": "ghost_spell_gate.5.g8",
+     "u": 128,
+     "v": 65,
+     "z": 160,
+     "sizeU": 12,
+     "sizeV": 1,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -415,19 +401,18 @@
    "address": "$6DD7",
    "blocks": [
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      65,
-      128,
-      160,
-      1,
-      12,
-      32,
-      16
-     ]
+     "graphic": "ghost_spell_gate.5.g8",
+     "u": 65,
+     "v": 128,
+     "z": 160,
+     "sizeU": 1,
+     "sizeV": 12,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -439,199 +424,186 @@
    "address": "$6DE0",
    "blocks": [
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      63,
-      184,
-      128,
-      0,
-      8,
-      40,
-      16
-     ]
+     "graphic": "scenery.22",
+     "u": 63,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      71,
-      192,
-      128,
-      8,
-      0,
-      40,
-      16
-     ]
+     "graphic": "scenery.23",
+     "u": 71,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      63,
-      73,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 63,
+     "v": 73,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      184,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      63,
-      73,
-      172,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 63,
+     "v": 73,
+     "z": 172,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      184,
-      192,
-      172,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 184,
+     "v": 192,
+     "z": 172,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      10,
-      92,
-      192,
-      128,
-      20,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.29",
+     "u": 92,
+     "v": 192,
+     "z": 128,
+     "sizeU": 20,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      63,
-      92,
-      152,
-      0,
-      12,
-      20,
-      16
-     ]
+     "graphic": "scenery.30",
+     "u": 63,
+     "v": 92,
+     "z": 152,
+     "sizeU": 0,
+     "sizeV": 12,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      63,
-      160,
-      152,
-      0,
-      12,
-      12,
-      16
-     ]
+     "graphic": "scenery.31",
+     "u": 63,
+     "v": 160,
+     "z": 152,
+     "sizeU": 0,
+     "sizeV": 12,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      11,
-      164,
-      192,
-      152,
-      12,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.30",
+     "u": 164,
+     "v": 192,
+     "z": 152,
+     "sizeU": 12,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      10,
-      63,
-      109,
-      177,
-      0,
-      20,
-      20,
-      16
-     ]
+     "graphic": "scenery.29",
+     "u": 63,
+     "v": 109,
+     "z": 177,
+     "sizeU": 0,
+     "sizeV": 20,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      96,
-      192,
-      160,
-      12,
-      0,
-      12,
-      80
-     ]
+     "graphic": "scenery.31",
+     "u": 96,
+     "v": 192,
+     "z": 160,
+     "sizeU": 12,
+     "sizeV": 0,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      10,
-      144,
-      192,
-      176,
-      20,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.29",
+     "u": 144,
+     "v": 192,
+     "z": 176,
+     "sizeU": 20,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -643,214 +615,200 @@
    "address": "$6E49",
    "blocks": [
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      63,
-      152,
-      128,
-      0,
-      8,
-      40,
-      16
-     ]
+     "graphic": "scenery.22",
+     "u": 63,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      71,
-      160,
-      128,
-      8,
-      0,
-      40,
-      16
-     ]
+     "graphic": "scenery.23",
+     "u": 71,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      63,
-      99,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 63,
+     "v": 99,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      184,
-      160,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 184,
+     "v": 160,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      63,
-      99,
-      172,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 63,
+     "v": 99,
+     "z": 172,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      184,
-      160,
-      172,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 184,
+     "v": 160,
+     "z": 172,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      63,
-      152,
-      168,
-      0,
-      8,
-      40,
-      16
-     ]
+     "graphic": "scenery.22",
+     "u": 63,
+     "v": 152,
+     "z": 168,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      71,
-      160,
-      168,
-      8,
-      0,
-      40,
-      16
-     ]
+     "graphic": "scenery.23",
+     "u": 71,
+     "v": 160,
+     "z": 168,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      184,
-      160,
-      208,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 184,
+     "v": 160,
+     "z": 208,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      10,
-      128,
-      160,
-      128,
-      20,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.29",
+     "u": 128,
+     "v": 160,
+     "z": 128,
+     "sizeU": 20,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      10,
-      63,
-      126,
-      176,
-      0,
-      20,
-      20,
-      16
-     ]
+     "graphic": "scenery.29",
+     "u": 63,
+     "v": 126,
+     "z": 176,
+     "sizeU": 0,
+     "sizeV": 20,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      11,
-      96,
-      160,
-      144,
-      12,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.30",
+     "u": 96,
+     "v": 160,
+     "z": 144,
+     "sizeU": 12,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      10,
-      96,
-      160,
-      184,
-      20,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.29",
+     "u": 96,
+     "v": 160,
+     "z": 184,
+     "sizeU": 20,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      12,
-      160,
-      160,
-      176,
-      12,
-      0,
-      12,
-      80
-     ]
+     "graphic": "scenery.31",
+     "u": 160,
+     "v": 160,
+     "z": 176,
+     "sizeU": 12,
+     "sizeV": 0,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -862,214 +820,200 @@
    "address": "$6EBA",
    "blocks": [
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      95,
-      184,
-      128,
-      0,
-      8,
-      40,
-      16
-     ]
+     "graphic": "scenery.22",
+     "u": 95,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      103,
-      192,
-      128,
-      8,
-      0,
-      40,
-      16
-     ]
+     "graphic": "scenery.23",
+     "u": 103,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      95,
-      72,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 95,
+     "v": 72,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      157,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 157,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 13,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      13,
-      95,
-      184,
-      168,
-      0,
-      8,
-      40,
-      16
-     ]
+     "graphic": "scenery.22",
+     "u": 95,
+     "v": 184,
+     "z": 168,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 14,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      14,
-      103,
-      192,
-      168,
-      8,
-      0,
-      40,
-      16
-     ]
+     "graphic": "scenery.23",
+     "u": 103,
+     "v": 192,
+     "z": 168,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      95,
-      72,
-      172,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 95,
+     "v": 72,
+     "z": 172,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      15,
-      157,
-      192,
-      172,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.26",
+     "u": 157,
+     "v": 192,
+     "z": 172,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 15,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      15,
-      95,
-      72,
-      208,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.26",
+     "u": 95,
+     "v": 72,
+     "z": 208,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      10,
-      95,
-      144,
-      128,
-      0,
-      20,
-      20,
-      16
-     ]
+     "graphic": "scenery.29",
+     "u": 95,
+     "v": 144,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 20,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      10,
-      132,
-      192,
-      176,
-      20,
-      0,
-      20,
-      80
-     ]
+     "graphic": "scenery.29",
+     "u": 132,
+     "v": 192,
+     "z": 176,
+     "sizeU": 20,
+     "sizeV": 0,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 11,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      11,
-      95,
-      96,
-      144,
-      0,
-      12,
-      20,
-      16
-     ]
+     "graphic": "scenery.30",
+     "u": 95,
+     "v": 96,
+     "z": 144,
+     "sizeU": 0,
+     "sizeV": 12,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 10,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      10,
-      95,
-      104,
-      184,
-      0,
-      20,
-      20,
-      16
-     ]
+     "graphic": "scenery.29",
+     "u": 95,
+     "v": 104,
+     "z": 184,
+     "sizeU": 0,
+     "sizeV": 20,
+     "sizeZ": 20,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 12,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      12,
-      95,
-      160,
-      176,
-      0,
-      12,
-      12,
-      16
-     ]
+     "graphic": "scenery.31",
+     "u": 95,
+     "v": 160,
+     "z": 176,
+     "sizeU": 0,
+     "sizeV": 12,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1081,184 +1025,172 @@
    "address": "$6F2B",
    "blocks": [
     {
-     "graphic": 128,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      128,
-      63,
-      73,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.19",
+     "u": 63,
+     "v": 73,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      129,
-      63,
-      88,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.20",
+     "u": 63,
+     "v": 88,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 130,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      130,
-      63,
-      104,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.21",
+     "u": 63,
+     "v": 104,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 128,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      128,
-      63,
-      152,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.19",
+     "u": 63,
+     "v": 152,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      129,
-      63,
-      168,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.20",
+     "u": 63,
+     "v": 168,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 130,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      130,
-      63,
-      184,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.21",
+     "u": 63,
+     "v": 184,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 128,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      128,
-      72,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.19",
+     "u": 72,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      129,
-      88,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.20",
+     "u": 88,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 130,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      130,
-      104,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.21",
+     "u": 104,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 128,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      128,
-      152,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.19",
+     "u": 152,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      129,
-      168,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.20",
+     "u": 168,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 130,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      130,
-      184,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.21",
+     "u": 184,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1270,34 +1202,32 @@
    "address": "$6F8C",
    "blocks": [
     {
-     "graphic": 128,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      128,
-      63,
-      120,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.19",
+     "u": 63,
+     "v": 120,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      129,
-      63,
-      136,
-      128,
-      0,
-      8,
-      44,
-      16
-     ]
+     "graphic": "scenery.20",
+     "u": 63,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 8,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1309,34 +1239,32 @@
    "address": "$6F9D",
    "blocks": [
     {
-     "graphic": 128,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      128,
-      120,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.19",
+     "u": 120,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 129,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      129,
-      136,
-      192,
-      128,
-      8,
-      0,
-      44,
-      80
-     ]
+     "graphic": "scenery.20",
+     "u": 136,
+     "v": 192,
+     "z": 128,
+     "sizeU": 8,
+     "sizeV": 0,
+     "sizeZ": 44,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1348,34 +1276,32 @@
    "address": "$6FAE",
    "blocks": [
     {
-     "graphic": 158,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      158,
-      152,
-      104,
-      128,
-      5,
-      5,
-      24,
-      16
-     ]
+     "graphic": "torsos_and_wizard.3",
+     "u": 152,
+     "v": 104,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 5,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 144,
-     "flags": 18,
-     "mirrored": false,
-     "bytes": [
-      144,
-      160,
-      96,
-      128,
-      5,
-      5,
-      0,
-      18
-     ]
+     "graphic": "knight.legs.1.g144",
+     "u": 160,
+     "v": 96,
+     "z": 128,
+     "sizeU": 5,
+     "sizeV": 5,
+     "sizeZ": 0,
+     "flags": {
+      "mirrored": false,
+      "passable": true,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1387,34 +1313,32 @@
    "address": "$6FBF",
    "blocks": [
     {
-     "graphic": 141,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      141,
-      128,
-      128,
-      128,
-      10,
-      10,
-      24,
-      16
-     ]
+     "graphic": "scenery.27",
+     "u": 128,
+     "v": 128,
+     "z": 128,
+     "sizeU": 10,
+     "sizeV": 10,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 142,
-     "flags": 18,
-     "mirrored": false,
-     "bytes": [
-      142,
-      128,
-      136,
-      128,
-      0,
-      0,
-      0,
-      18
-     ]
+     "graphic": "scenery.28",
+     "u": 128,
+     "v": 136,
+     "z": 128,
+     "sizeU": 0,
+     "sizeV": 0,
+     "sizeZ": 0,
+     "flags": {
+      "mirrored": false,
+      "passable": true,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1426,34 +1350,32 @@
    "address": "$6D34",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      2,
-      196,
-      115,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.24",
+     "u": 196,
+     "v": 115,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      3,
-      196,
-      141,
-      176,
-      5,
-      3,
-      40,
-      16
-     ]
+     "graphic": "scenery.25",
+     "u": 196,
+     "v": 141,
+     "z": 176,
+     "sizeU": 5,
+     "sizeV": 3,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1465,34 +1387,32 @@
    "address": "$6D56",
    "blocks": [
     {
-     "graphic": 2,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      2,
-      141,
-      59,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.24",
+     "u": 141,
+     "v": 59,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 3,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      3,
-      115,
-      59,
-      176,
-      3,
-      5,
-      40,
-      80
-     ]
+     "graphic": "scenery.25",
+     "u": 115,
+     "v": 59,
+     "z": 176,
+     "sizeU": 3,
+     "sizeV": 5,
+     "sizeZ": 40,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1504,34 +1424,32 @@
    "address": "$6FD0",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      200,
-      120,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "scenery.7.g7",
+     "u": 200,
+     "v": 120,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      200,
-      136,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "scenery.7.g7",
+     "u": 200,
+     "v": 136,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1543,34 +1461,32 @@
    "address": "$6FE1",
    "blocks": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      120,
-      56,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "scenery.7.g7",
+     "u": 120,
+     "v": 56,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     },
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      136,
-      56,
-      164,
-      8,
-      8,
-      12,
-      16
-     ]
+     "graphic": "scenery.7.g7",
+     "u": 136,
+     "v": 56,
+     "z": 164,
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     }
     }
    ],
    "used": true,
@@ -1584,21 +1500,20 @@
    "address": "$6C0B",
    "entries": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g7",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1610,21 +1525,20 @@
    "address": "$6C3C",
    "entries": [
     {
-     "graphic": 176,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      176,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "fires.1.g176",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": false,
@@ -1636,21 +1550,20 @@
    "address": "$6C43",
    "entries": [
     {
-     "graphic": 178,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      178,
-      7,
-      7,
-      12,
-      16,
-      2
-     ],
-     "offsets": 2,
-     "halfU": false,
-     "halfV": true,
-     "raiseZ": 0
+     "graphic": "balls.1.g178",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": true,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1662,21 +1575,20 @@
    "address": "$6C66",
    "entries": [
     {
-     "graphic": 6,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      6,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.3",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1688,21 +1600,20 @@
    "address": "$6C6D",
    "entries": [
     {
-     "graphic": 22,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      22,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.4",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1714,21 +1625,20 @@
    "address": "$6C74",
    "entries": [
     {
-     "graphic": 23,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      23,
-      6,
-      6,
-      12,
-      80,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.1",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1740,21 +1650,20 @@
    "address": "$6C90",
    "entries": [
     {
-     "graphic": 85,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      85,
-      9,
-      6,
-      12,
-      20,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.17",
+     "sizeU": 9,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1766,21 +1675,20 @@
    "address": "$6C97",
    "entries": [
     {
-     "graphic": 84,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      84,
-      6,
-      10,
-      12,
-      20,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.18",
+     "sizeU": 6,
+     "sizeV": 10,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1792,38 +1700,36 @@
    "address": "$6C9E",
    "entries": [
     {
-     "graphic": 150,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      150,
-      6,
-      6,
-      24,
-      16,
-      2
-     ],
-     "offsets": 2,
-     "halfU": false,
-     "halfV": true,
-     "raiseZ": 0
+     "graphic": "torsos_and_wizard.1.g150",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": true,
+      "raiseZ": 0
+     }
     },
     {
-     "graphic": 144,
-     "flags": 18,
-     "mirrored": false,
-     "bytes": [
-      144,
-      6,
-      6,
-      0,
-      18,
-      2
-     ],
-     "offsets": 2,
-     "halfU": false,
-     "halfV": true,
-     "raiseZ": 0
+     "graphic": "knight.legs.1.g144",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 0,
+     "flags": {
+      "mirrored": false,
+      "passable": true,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": true,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1835,21 +1741,20 @@
    "address": "$6CB8",
    "entries": [
     {
-     "graphic": 82,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      82,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "ghost_spell_gate.3",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1861,21 +1766,20 @@
    "address": "$6CBF",
    "entries": [
     {
-     "graphic": 181,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      181,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "fires.2.g181",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1887,21 +1791,20 @@
    "address": "$6C12",
    "entries": [
     {
-     "graphic": 7,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      7,
-      8,
-      8,
-      12,
-      16,
-      48
-     ],
-     "offsets": 48,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 48
+     "graphic": "scenery.7.g7",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 48
+     }
     }
    ],
    "used": true,
@@ -1913,21 +1816,20 @@
    "address": "$6C4A",
    "entries": [
     {
-     "graphic": 178,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      178,
-      7,
-      7,
-      12,
-      16,
-      3
-     ],
-     "offsets": 3,
-     "halfU": true,
-     "halfV": true,
-     "raiseZ": 0
+     "graphic": "balls.1.g178",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": true,
+      "halfV": true,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1939,38 +1841,36 @@
    "address": "$6CAB",
    "entries": [
     {
-     "graphic": 30,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      30,
-      6,
-      6,
-      24,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "torsos_and_wizard.1.g30",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 24,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     },
     {
-     "graphic": 144,
-     "flags": 18,
-     "mirrored": false,
-     "bytes": [
-      144,
-      6,
-      6,
-      0,
-      18,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "knight.legs.1.g144",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 0,
+     "flags": {
+      "mirrored": false,
+      "passable": true,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -1982,21 +1882,20 @@
    "address": "$6C19",
    "entries": [
     {
-     "graphic": 54,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      54,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g54",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2008,21 +1907,20 @@
    "address": "$6C20",
    "entries": [
     {
-     "graphic": 55,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      55,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g55",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2034,21 +1932,20 @@
    "address": "$6C27",
    "entries": [
     {
-     "graphic": 62,
-     "flags": 20,
-     "mirrored": false,
-     "bytes": [
-      62,
-      8,
-      8,
-      12,
-      20,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g62",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 20
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2060,21 +1957,20 @@
    "address": "$6C7B",
    "entries": [
     {
-     "graphic": 23,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      23,
-      6,
-      6,
-      12,
-      80,
-      48
-     ],
-     "offsets": 48,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 48
+     "graphic": "scenery.1",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 48
+     }
     }
    ],
    "used": false,
@@ -2086,21 +1982,20 @@
    "address": "$6C82",
    "entries": [
     {
-     "graphic": 63,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      63,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.2",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2112,21 +2007,20 @@
    "address": "$6C89",
    "entries": [
     {
-     "graphic": 63,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      63,
-      6,
-      6,
-      12,
-      16,
-      48
-     ],
-     "offsets": 48,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 48
+     "graphic": "scenery.2",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 48
+     }
     }
    ],
    "used": true,
@@ -2138,21 +2032,20 @@
    "address": "$6CC6",
    "entries": [
     {
-     "graphic": 86,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      86,
-      6,
-      6,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "fires.1.g86",
+     "sizeU": 6,
+     "sizeV": 6,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2164,21 +2057,20 @@
    "address": "$6C2E",
    "entries": [
     {
-     "graphic": 91,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      91,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g91",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2190,21 +2082,20 @@
    "address": "$6C35",
    "entries": [
     {
-     "graphic": 143,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      143,
-      8,
-      8,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "scenery.7.g143",
+     "sizeU": 8,
+     "sizeV": 8,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2216,21 +2107,20 @@
    "address": "$6C5F",
    "entries": [
     {
-     "graphic": 182,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      182,
-      7,
-      7,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "balls.1.g182",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2242,21 +2132,20 @@
    "address": "$6C51",
    "entries": [
     {
-     "graphic": 178,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      178,
-      7,
-      7,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "balls.1.g178",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2268,21 +2157,20 @@
    "address": "$6CCD",
    "entries": [
     {
-     "graphic": 164,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      164,
-      5,
-      5,
-      12,
-      16,
-      0
-     ],
-     "offsets": 0,
-     "halfU": false,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "knight.legs.17.g164",
+     "sizeU": 5,
+     "sizeV": 5,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2294,21 +2182,20 @@
    "address": "$6CD4",
    "entries": [
     {
-     "graphic": 8,
-     "flags": 80,
-     "mirrored": true,
-     "bytes": [
-      8,
-      12,
-      1,
-      32,
-      80,
-      1
-     ],
-     "offsets": 1,
-     "halfU": true,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "ghost_spell_gate.5.g8",
+     "sizeU": 12,
+     "sizeV": 1,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": true,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": true,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2320,21 +2207,20 @@
    "address": "$6CDB",
    "entries": [
     {
-     "graphic": 8,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      8,
-      1,
-      12,
-      32,
-      16,
-      2
-     ],
-     "offsets": 2,
-     "halfU": false,
-     "halfV": true,
-     "raiseZ": 0
+     "graphic": "ghost_spell_gate.5.g8",
+     "sizeU": 1,
+     "sizeV": 12,
+     "sizeZ": 32,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": false,
+      "halfV": true,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,
@@ -2346,21 +2232,20 @@
    "address": "$6C58",
    "entries": [
     {
-     "graphic": 178,
-     "flags": 16,
-     "mirrored": false,
-     "bytes": [
-      178,
-      7,
-      7,
-      12,
-      16,
-      1
-     ],
-     "offsets": 1,
-     "halfU": true,
-     "halfV": false,
-     "raiseZ": 0
+     "graphic": "balls.1.g178",
+     "sizeU": 7,
+     "sizeV": 7,
+     "sizeZ": 12,
+     "flags": {
+      "mirrored": false,
+      "passable": false,
+      "rest": 16
+     },
+     "offsets": {
+      "halfU": true,
+      "halfV": false,
+      "raiseZ": 0
+     }
     }
    ],
    "used": true,

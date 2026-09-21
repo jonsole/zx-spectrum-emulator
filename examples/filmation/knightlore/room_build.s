@@ -11,7 +11,7 @@
 ; template serves every block in the castle -- so their positions come from the
 ; room, one packed byte each, unpacked in room_unpack below.
 ;
-; See room_data.s, which rooms.py generates, for the data itself.
+; See room_data.s, which rooms_source.py generates, for the data itself.
 ; ---------------------------------------------------------------------------
 
 
@@ -27,7 +27,7 @@ room_template:		DW		0
 room_packed:		DB		0
 
 
-; rooms.py writes every template's flags byte in OBJ.FLAGS' own layout, so
+; rooms_source.py writes every template's flags byte in OBJ.FLAGS' own layout, so
 ; room_add copies it straight in. These are what it wrote them with.
 					ASSERT	ROOM_FLAG_FLIP == OBJ_FLIP_H
 					ASSERT	ROOM_FLAG_PASSABLE == OBJ_PASSABLE
@@ -54,7 +54,7 @@ room_group_move:	DB		0
 ;
 ; Each record says how far it is to the next, so a step is one add. And it
 ; never has to ask whether the list has ended: the records are in ascending
-; order and the last one is room $FF -- rooms.py asserts both -- so the walk
+; order and the last one is room $FF -- rooms_source.py asserts both -- so the walk
 ; always reaches a number at least the one it wants, and stops there.
 ;
 ;   C  - the room wanted
@@ -242,7 +242,7 @@ room_scenery:		ld		a,(room_scenery_left)
 					ld		l,a
 					ld		h,0
 					; Which pieces are background -- walls and trees -- is in their
-					; flags already: see rooms.py.
+					; flags already: see rooms_source.py.
 
 					add		hl,hl
 					ld		de,background_type_tbl

@@ -15,7 +15,8 @@ It writes five files next to itself, and those are what the build uses
 
   room_data.bin    $6248-$6FF1, 2,986 bytes: the room size table, every room
                    definition, and the scenery and object templates they are
-                   built from. rooms.py turns this into room_data.s.
+                   built from. rooms.py turns this into rooms.json, and
+                   rooms_source.py turns that into room_data.s.
 
   sprite_data.bin  $728C-$AF6B less six empty records, 15,572 bytes: the 103
                    sprites, in the game's own format and address order.

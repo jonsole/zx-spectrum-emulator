@@ -33,6 +33,12 @@ runs what you just wrote. To build it by hand:
 Add `--debug-room` to print the room number in the top-left corner, for
 finding your way about; the ordinary build leaves it out.
 
+The rooms themselves are edited in the room designer rather than by hand --
+see [docs/room-designer.md](../../docs/room-designer.md). Each game's
+`rooms.json` is the editable form of its castle, and `build.py` turns it into
+`room_data.s`; open it in VS Code, or serve it with
+`python scripts/room_designer.py`.
+
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
 It writes `knightlore/output/knightlore.z80`, a version 3 snapshot that
 `build.py` wraps round the RAM the `SAVEBIN` at the bottom of

@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Filmation Room Designer</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px var(--vscode-font-family, system-ui, sans-serif);
+           color: var(--vscode-foreground, #ccc);
+           background: var(--vscode-editor-background, #1e1e1e);
+           padding: 16px 20px; box-sizing: border-box; overflow: auto; }
+    h1 { font-size: 19px; font-weight: 600; margin: 0 0 2px; }
+    h2 { font-size: 12px; font-weight: normal; opacity: .7; margin: 0 0 14px;
+         font-variant-numeric: tabular-nums; }
+    h3 { font-size: 12px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase;
+         letter-spacing: .06em; opacity: .75; display: flex; align-items: center; gap: 8px; }
+    h3 .spacer { flex: 1 1 auto; }
+    h3 .note { font-weight: normal; opacity: .7; text-transform: none; letter-spacing: 0; }
+
+    button { font: inherit; padding: 4px 12px; border: 0; border-radius: 2px; cursor: pointer;
+             color: var(--vscode-button-secondaryForeground, #ccc);
+             background: var(--vscode-button-secondaryBackground, #3a3d41); }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+    button.primary { color: var(--vscode-button-foreground, #fff);
+                     background: var(--vscode-button-background, #0e639c); }
+    button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #1177bb); }
+    button.small { padding: 1px 8px; font-size: 11px; }
+    button:disabled { opacity: .4; cursor: default; }
+    select, input[type=text], input[type=number] {
+      font: inherit; padding: 2px 6px; border-radius: 2px;
+      color: var(--vscode-input-foreground, #ccc);
+      background: var(--vscode-input-background, #3c3c3c);
+      border: 1px solid var(--vscode-input-border, transparent); }
+    input[type=number] { width: 48px; }
+
+    header { display: flex; align-items: flex-start; gap: 16px; }
+    header .spacer { flex: 1 1 auto; }
+    header .buttons { display: flex; gap: 8px; align-items: center; }
+    header .state { opacity: .7; font-size: 12px; }
+
+    .layout { display: flex; gap: 18px; align-items: flex-start; }
+    .rail { flex: none; width: 296px; }
+    /* The room takes whatever is left, and the canvas is sized to it in JS --
+       which is why this one grows and the other two do not. */
+    .middle { flex: 1 1 auto; min-width: 0; }
+    .sidebar { flex: 0 0 340px; min-width: 300px; }
+    .card { background: var(--vscode-editorWidget-background, #252526);
+            border: 1px solid var(--vscode-editorWidget-border, #333);
+            border-radius: 4px; padding: 12px 14px; margin-bottom: 14px; }
+
+    /* --- the map --- */
+    #grid { display: grid; gap: 2px; }
+    #grid .cell { aspect-ratio: 1; border-radius: 2px; font-size: 8px; line-height: 1;
+                  display: flex; align-items: center; justify-content: center;
+                  background: var(--vscode-input-background, #3c3c3c); opacity: .35;
+                  cursor: default; color: inherit; border: 1px solid transparent; padding: 0;
+                  min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; }
+    #grid .cell.real { opacity: 1; cursor: pointer; }
+    #grid .cell.real:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+    #grid .cell.here { background: var(--vscode-button-background, #0e639c); color: #fff; }
+    #grid .cell.linked { background: var(--vscode-textLink-foreground, #3794ff); opacity: .55; }
+
+    .exits { margin-top: 12px; }
+    .exit { display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+            font-variant-numeric: tabular-nums; }
+    .exit .way { width: 14px; flex: none; opacity: .7; text-transform: uppercase; }
+    .exit .to { flex: 1 1 auto; min-width: 0; white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+    .exit.broken .to { color: var(--vscode-errorForeground, #f48771); }
+
+    /* --- the stage --- */
+    #stage { position: relative; line-height: 0; }
+    #view { display: block; image-rendering: pixelated; background: #000;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .45); border-radius: 2px; cursor: crosshair; }
+    #stagebar { display: flex; gap: 12px; align-items: center; margin-top: 10px;
+                flex-wrap: wrap; font-size: 12px; }
+    #stagebar label { display: flex; gap: 5px; align-items: center; opacity: .85; }
+    .swatches { display: flex; gap: 3px; }
+    .swatch { width: 18px; height: 18px; border-radius: 2px; cursor: pointer;
+              border: 2px solid transparent; padding: 0; }
+    .swatch.on { border-color: var(--vscode-focusBorder, #007fd4); }
+
+    /* --- lists --- */
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tabs button.on { color: var(--vscode-button-foreground, #fff);
+                      background: var(--vscode-button-background, #0e639c); }
+    .row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 3px;
+           font-variant-numeric: tabular-nums; }
+    .row:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+    .row.on { background: var(--vscode-list-activeSelectionBackground, #094771);
+              color: var(--vscode-list-activeSelectionForeground, #fff); }
+    .row .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .dim { opacity: .6; font-size: 11px; }
+    .group { margin-bottom: 8px; }
+    .group > .head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+    .group > .head .name { flex: 1 1 auto; font-weight: 600; }
+    .spots { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 6px; }
+    .spot { font-size: 11px; padding: 1px 6px; border-radius: 2px; cursor: pointer;
+            background: var(--vscode-input-background, #3c3c3c);
+            font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+    .spot.on { background: var(--vscode-button-background, #0e639c); color: #fff; }
+    .adder { display: flex; gap: 6px; margin-top: 8px; }
+    .preview { margin-top: 8px; display: flex; gap: 10px; align-items: flex-start; }
+    .preview canvas { image-rendering: pixelated; background: #000; border-radius: 2px;
+                      flex: none; }
+    .preview .what { font-size: 11px; opacity: .7; line-height: 1.5;
+                     font-variant-numeric: tabular-nums; }
+    .adder select { flex: 1 1 auto; min-width: 0; }
+
+    table.bytes { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    table.bytes th { font-weight: normal; opacity: .6; font-size: 11px; padding: 0 4px 3px;
+                     text-align: left; }
+    table.bytes td { padding: 1px 2px; }
+    table.bytes input { width: 44px; }
+
+    .checks .problem { display: flex; gap: 8px; padding: 2px 0; }
+    .checks .where { opacity: .6; width: 62px; flex: none; font-variant-numeric: tabular-nums; }
+    .checks .error { color: var(--vscode-errorForeground, #f48771); }
+    .checks .warning { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .empty { opacity: .5; font-style: italic; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 id="title">Room designer</h1>
+      <h2 id="subtitle">&nbsp;</h2>
+    </div>
+    <div class="spacer"></div>
+    <div class="buttons">
+      <span class="state" id="state"></span>
+      <select id="game" hidden title="which game's rooms to edit"></select>
+      <button id="load" hidden title="load that game, or re-read this one from disk">Load</button>
+      <button id="undo" hidden title="undo (ctrl+Z)">Undo</button>
+      <button id="redo" hidden title="redo (ctrl+shift+Z)">Redo</button>
+      <button id="save" class="primary" hidden>Save</button>
+      <button id="build" hidden>Build</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail">
+      <div class="card">
+        <h3>The castle <span class="spacer"></span><span class="note" id="mapnote"></span></h3>
+        <div id="grid"></div>
+        <div class="exits" id="exits"></div>
+      </div>
+    </aside>
+
+    <main class="middle">
+      <div class="card">
+        <div id="stage"><canvas id="view" width="256" height="192"></canvas></div>
+        <div id="stagebar">
+          <label>Ink <span class="swatches" id="inks"></span></label>
+          <label>Shape <select id="shape"></select></label>
+          <label><input type="checkbox" id="showgrid" checked> Floor</label>
+          <label><input type="checkbox" id="showboxes"> Boxes</label>
+          <label><input type="checkbox" id="showscenery" checked> Scenery</label>
+          <label>Zoom <select id="zoom"></select></label>
+          <span class="spacer"></span>
+          <span id="poolnote" class="note"></span>
+        </div>
+      </div>
+      <div class="card checks" id="checks"></div>
+    </main>
+
+    <aside class="sidebar">
+      <div class="card">
+        <div class="tabs">
+          <button data-tab="objects" class="on">Objects</button>
+          <button data-tab="scenery">Scenery</button>
+          <button data-tab="templates">Templates</button>
+        </div>
+        <div id="panel"></div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+/*@room_model.js@*/
+/*@room_render.js@*/
+/*@host@*/
+
+// The room designer's page. It is the same page in the editor and in a browser:
+// everything that differs between the two arrives through `roomHost`, which the
+// host injects above -- the file to work on, the artwork to draw it with, and
+// where a change goes when it is made.
+//
+// The two files inlined above it are the whole of what it knows: room_model.js
+// says what a room is and how to change one, room_render.js says where each
+// piece lands and in what order. Nothing here does arithmetic either of them
+// already does.
+(function () {
+  'use strict';
+
+  const host = window.roomHost;
+  // Replaced when another game is loaded, so it cannot be const.
+  let boot = host.boot;
+
+  // The bright half of the Spectrum's palette. The room builder ORs $40 into
+  // every attribute it writes, so a room is always drawn bright.
+  const PALETTE = ['#000000', '#0000ff', '#ff0000', '#ff00ff',
+                   '#00ff00', '#00ffff', '#ffff00', '#ffffff'];
+  const SHAPES = ['square', 'narrow along U', 'narrow along V'];
+
+  // How solid an object standing in front of the selected one is drawn. Half
+  // is enough to read both: the sprites are ink on black, so a nearer one at
+  // half strength still reads as itself while the one behind shows through.
+  const IN_FRONT_ALPHA = 0.5;
+  // How many screen pixels a Spectrum pixel is drawn as. The canvas itself
+  // stays 256 x 192 whatever happens and the browser scales it, so zooming
+  // costs nothing and redraws nothing.
+  //
+  // "Fit" is the default and is not a whole number: a window is whatever width
+  // it is, and rounding down to the next whole step throws away up to a third
+  // of it. image-rendering: pixelated still gives hard edges at a fractional
+  // scale -- the pixels come out a row or column uneven, which at these sizes
+  // is not worth a third of the window.
+  const ZOOMS = [1, 2, 3, 4];
+  const FIT = 'fit';
+  const DEFAULT_ZOOM = FIT;
+  const MIN_FIT = 1;
+  const MAX_FIT = 6;
+  // What sits under the canvas and must still be on screen: the stage bar, the
+  // card's padding and a look at the checks below it.
+  const BELOW_STAGE = 210;
+
+  // object_place's Y origin is written 40, which is 296 less a whole byte --
+  // the origin Knight Lore itself uses. The engine wraps and so does
+  // room_render's project(); the floor grid below is the designer's own
+  // overlay and nothing draws it, so it uses the unwrapped 296 and gets a
+  // continuous diamond instead of one that folds at the far corner.
+  const TRUE_Y_ORIGIN = 296;
+
+  // The undo stack, which only exists when the host has none of its own. In
+  // the editor every change is a WorkspaceEdit and undo is the text editor's,
+  // and a second stack here would fight it; in a browser there is nothing else
+  // to do the job. Whole serialised copies rather than a list of changes: the
+  // file is the model, a copy of it is what Save writes anyway, and a castle
+  // is small enough that keeping a few dozen costs nothing worth saving.
+  const UNDO_DEPTH = 60;
+  const past = [];
+  const future = [];
+  let currentText = null;       // what the atlas says right now
+  let savedText = null;         // ...and what is actually on disk
+
+  let atlas = boot.atlas;
+  let room = null;
+  let sheet = boot.sheet;
+  let adj = boot.adjText ? parseSpriteAdj(boot.adjText) : null;
+  let index = sheetIndex(sheet);
+  // Name to graphic number, off the sheet, exactly as graphics.py does it for
+  // the build. Without a sheet there are no numbers and nothing can be drawn.
+  let numbers = graphicNumbers(sheet);
+  let selection = null;          // {kind:'object', ref, slot} or {kind:'scenery', ref}
+  let tab = 'objects';
+  let templatePick = null;       // {kind, name} while the Templates tab is open
+  let lastDrawList = [];
+  let dirty = false;
+
+  // The sheet, once per ink colour. Its pixels are white for ink, black for
+  // paper and clear elsewhere (sprite_sheet.py writes it that way), so a tint
+  // is a recolour of the white and nothing else.
+  const tinted = new Map();
+  let sheetImage = null;
+  let sheetPixels = null;
+
+  const el = {};
+  for (const id of ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'exits',
+                    'mapnote', 'view', 'inks', 'shape', 'showgrid', 'showboxes',
+                    'showscenery', 'zoom', 'poolnote', 'checks', 'panel',
+                    'game', 'load', 'undo', 'redo']) {
+    el[id] = document.getElementById(id);
+  }
+  const ctx = el.view.getContext('2d');
+  let zoom = DEFAULT_ZOOM;
+
+  // The scale that fills the space the layout has given the middle column,
+  // without pushing what is under the canvas off the bottom of the window.
+  function fittedScale() {
+    const room = el.view.parentElement.clientWidth;
+    const top = el.view.getBoundingClientRect().top;
+    const height = window.innerHeight - top - BELOW_STAGE;
+    const scale = Math.min(room / SCREEN_WIDTH, height / SCREEN_ROWS);
+    return Math.max(MIN_FIT, Math.min(MAX_FIT, scale));
+  }
+
+  function applyZoom() {
+    const scale = zoom === FIT ? fittedScale() : zoom;
+    el.view.style.width = (SCREEN_WIDTH * scale) + 'px';
+    el.view.style.height = (SCREEN_ROWS * scale) + 'px';
+  }
+
+  // --- the artwork ---------------------------------------------------------
+
+  function loadSheet(done) {
+    if (!boot.sheetPng) { done(); return; }
+    const image = new Image();
+    image.onload = function () {
+      sheetImage = image;
+      const scratch = document.createElement('canvas');
+      scratch.width = image.width;
+      scratch.height = image.height;
+      const c = scratch.getContext('2d');
+      c.drawImage(image, 0, 0);
+      try {
+        sheetPixels = c.getImageData(0, 0, image.width, image.height);
+      } catch (err) {
+        sheetPixels = null;     // a tainted canvas; hit testing falls back on rects
+      }
+      done();
+    };
+    image.onerror = function () { done(); };
+    image.src = boot.sheetPng;
+  }
+
+  function sheetFor(ink) {
+    if (!sheetImage) return null;
+    if (tinted.has(ink)) return tinted.get(ink);
+    const canvas = document.createElement('canvas');
+    canvas.width = sheetImage.width;
+    canvas.height = sheetImage.height;
+    const c = canvas.getContext('2d');
+    c.drawImage(sheetImage, 0, 0);
+    if (sheetPixels) {
+      const out = c.createImageData(sheetImage.width, sheetImage.height);
+      const src = sheetPixels.data;
+      const dst = out.data;
+      const colour = PALETTE[ink & 7];
+      const red = parseInt(colour.slice(1, 3), 16);
+      const green = parseInt(colour.slice(3, 5), 16);
+      const blue = parseInt(colour.slice(5, 7), 16);
+      for (let i = 0; i < src.length; i += 4) {
+        dst[i + 3] = src[i + 3];
+        if (!src[i + 3]) continue;
+        // White is ink and takes the room's colour; everything else is the
+        // sprite's own paper and stays black, so a mask still masks.
+        const isInk = src[i] > 127 && src[i + 1] > 127 && src[i + 2] > 127;
+        dst[i] = isInk ? red : 0;
+        dst[i + 1] = isInk ? green : 0;
+        dst[i + 2] = isInk ? blue : 0;
+      }
+      c.putImageData(out, 0, 0);
+    }
+    tinted.set(ink, canvas);
+    return canvas;
+  }
+
+  // --- the floor -----------------------------------------------------------
+
+  // A world point on the floor, unwrapped. See TRUE_Y_ORIGIN.
+  function floorPoint(u, v, z) {
+    return { x: u + v - WORLD_X_ORIGIN, y: TRUE_Y_ORIGIN - (((v - u + WORLD_V_BIAS) >> 1) + z) };
+  }
+
+  // The four corners of one cell, at a height. A cell is CELL units across and
+  // its centre is CELL_ORIGIN + cell * CELL, so its near corner is half a cell
+  // back from that.
+  function cellQuad(cu, cv, z) {
+    const u0 = CELL_ORIGIN - HALF_CELL + cu * CELL;
+    const v0 = CELL_ORIGIN - HALF_CELL + cv * CELL;
+    return [floorPoint(u0, v0, z), floorPoint(u0 + CELL, v0, z),
+            floorPoint(u0 + CELL, v0 + CELL, z), floorPoint(u0, v0 + CELL, z)];
+  }
+
+  // A cell-sized diamond centred on a world point, rather than on a cell.
+  function footprint(u, v, z) {
+    return [floorPoint(u - HALF_CELL, v - HALF_CELL, z),
+            floorPoint(u + HALF_CELL, v - HALF_CELL, z),
+            floorPoint(u + HALF_CELL, v + HALF_CELL, z),
+            floorPoint(u - HALF_CELL, v + HALF_CELL, z)];
+  }
+
+  function inside(quad, x, y) {
+    let hit = false;
+    for (let i = 0, j = quad.length - 1; i < quad.length; j = i++) {
+      const a = quad[i];
+      const b = quad[j];
+      if ((a.y > y) !== (b.y > y) &&
+          x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) {
+        hit = !hit;
+      }
+    }
+    return hit;
+  }
+
+  // Which cell a point on the floor is in, at a given Z level.
+  function cellAt(x, y, level) {
+    const z = sizeOf(atlas, room).z + level * LEVEL_Z;
+    for (let cv = 0; cv < CELLS; cv++) {
+      for (let cu = 0; cu < CELLS; cu++) {
+        if (inside(cellQuad(cu, cv, z), x, y)) return { u: cu, v: cv, z: level };
+      }
+    }
+    return null;
+  }
+
+  // --- drawing -------------------------------------------------------------
+
+  function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 256, 192);
+    if (!room) return;
+
+    const size = sizeOf(atlas, room);
+    if (el.showgrid.checked) drawFloor(size);
+
+    const pieces = expandRoom(atlas, room, numbers).filter(function (piece) {
+      return el.showscenery.checked || piece.kind !== 'scenery';
+    });
+    lastDrawList = drawList(pieces, sheet, adj);
+
+    // Anything nearer than the selected object is drawn see-through, so the
+    // thing being moved is not lost behind it. The list is furthest first, so
+    // "nearer" is simply "later", and the last selected item is the mark --
+    // an object can be drawn from several sprites and they all count as it.
+    let inFront = -1;
+    if (selection && selection.kind === 'object') {
+      for (let i = 0; i < lastDrawList.length; i++) {
+        if (isSelected(lastDrawList[i])) inFront = i;
+      }
+    }
+
+    const art = sheetFor(room.ink);
+    for (let i = 0; i < lastDrawList.length; i++) {
+      const item = lastDrawList[i];
+      if (!item.sprite || !art) continue;
+      const rect = item.sprite.rect;
+      ctx.save();
+      if (inFront >= 0 && i > inFront) ctx.globalAlpha = IN_FRONT_ALPHA;
+      if (item.mirrored) {
+        // sprite_flip_h mirrors the bitmap where it lies, so the flipped copy
+        // occupies the same rectangle on screen.
+        ctx.translate(item.x + item.width, item.y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(art, rect.x, rect.y, rect.w, rect.h, 0, 0, item.width, item.height);
+      } else {
+        ctx.drawImage(art, rect.x, rect.y, rect.w, rect.h,
+                      item.x, item.y, item.width, item.height);
+      }
+      ctx.restore();
+    }
+
+    if (el.showboxes.checked) drawBoxes();
+    drawSelection();
+  }
+
+  function drawFloor(size) {
+    const bounds = roomBounds(size);
+    ctx.lineWidth = 1;
+    // The cells, faint...
+    ctx.strokeStyle = 'rgba(255,255,255,.10)';
+    for (let cv = 0; cv < CELLS; cv++) {
+      for (let cu = 0; cu < CELLS; cu++) {
+        const quad = cellQuad(cu, cv, size.z);
+        const centre = CELL_ORIGIN + cu * CELL;
+        const centreV = CELL_ORIGIN + cv * CELL;
+        // ...and the ones outside this room's shape not at all: a narrow room
+        // reaches fewer cells, and dropping an object there puts it in a wall.
+        if (centre < bounds.minU || centre > bounds.maxU ||
+            centreV < bounds.minV || centreV > bounds.maxV) continue;
+        ctx.beginPath();
+        ctx.moveTo(quad[0].x + .5, quad[0].y + .5);
+        for (let i = 1; i < quad.length; i++) ctx.lineTo(quad[i].x + .5, quad[i].y + .5);
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+    // ...and the room's own bounds, which is what the walker clamps against.
+    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+    const corners = [
+      floorPoint(bounds.minU, bounds.minV, size.z),
+      floorPoint(bounds.maxU, bounds.minV, size.z),
+      floorPoint(bounds.maxU, bounds.maxV, size.z),
+      floorPoint(bounds.minU, bounds.maxV, size.z)
+    ];
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x + .5, corners[0].y + .5);
+    for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x + .5, corners[i].y + .5);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawBoxes() {
+    ctx.strokeStyle = 'rgba(0,200,255,.5)';
+    ctx.lineWidth = 1;
+    for (const item of lastDrawList) {
+      ctx.strokeRect(item.x + .5, item.y + .5, item.width - 1, item.height - 1);
+    }
+  }
+
+  function drawSelection() {
+    const chosen = lastDrawList.filter(isSelected);
+    if (!chosen.length) return;
+    drawFooting();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 2]);
+    for (const item of chosen) {
+      ctx.strokeRect(item.x - .5, item.y - .5, item.width + 1, item.height + 1);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Where the selected object actually stands. A sprite drawn high up the
+  // screen is ambiguous -- it could be far away on the floor or near and in
+  // the air, because the projection sends V up the screen and Z up it too --
+  // so this marks the floor cell it is over and draws the riser between the
+  // two. That pair is what makes its place readable at a glance.
+  function drawFooting() {
+    if (!selection || selection.kind !== 'object') return;
+    const group = room.objects[selection.ref];
+    const position = group && group.positions[selection.slot];
+    if (!position) return;
+
+    // Where the piece really stands, which is not always the middle of the
+    // cell its position names: a template carries a nudge of half a cell in U
+    // and V, and object_ball_ud_xy uses both, so the ball it places sits on
+    // the corner BETWEEN four cells. Marking the raw cell instead would put
+    // the marker half a cell from the thing it is meant to be under.
+    const standing = lastDrawList.filter(isSelected)[0];
+    const floorZ = sizeOf(atlas, room).z;
+    const middleU = standing ? standing.piece.u : CELL_ORIGIN + position.u * CELL;
+    const middleV = standing ? standing.piece.v : CELL_ORIGIN + position.v * CELL;
+    const quad = footprint(middleU, middleV, floorZ);
+    ctx.beginPath();
+    ctx.moveTo(quad[0].x + .5, quad[0].y + .5);
+    for (let i = 1; i < quad.length; i++) ctx.lineTo(quad[i].x + .5, quad[i].y + .5);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 255, 255, .17)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, .7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // The riser, from the middle of that cell up to the height it stands at.
+    // The projection puts Z on the screen's Y alone, so this is a plain
+    // vertical line however far across the room the cell is.
+    if (!position.z) return;
+    const foot = floorPoint(middleU, middleV, floorZ);
+    const head = floorPoint(middleU, middleV, floorZ + position.z * LEVEL_Z);
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(foot.x + .5, foot.y + .5);
+    ctx.lineTo(head.x + .5, head.y + .5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function isSelected(item) {
+    if (!selection) return false;
+    const piece = item.piece;
+    if (selection.kind === 'object') {
+      return piece.kind === 'object' && piece.ref === selection.ref &&
+             piece.slot === selection.slot;
+    }
+    return piece.kind === 'scenery' && piece.ref === selection.ref;
+  }
+
+  // --- picking -------------------------------------------------------------
+
+  function pointIn(event) {
+    // Measured, not the zoom setting: a fitted canvas is whatever width the
+    // window left it, and clicking has to agree with what is on screen.
+    const box = el.view.getBoundingClientRect();
+    const scale = box.width / SCREEN_WIDTH;
+    return {
+      x: Math.floor((event.clientX - box.left) / scale),
+      y: Math.floor((event.clientY - box.top) / scale)
+    };
+  }
+
+  // The topmost piece under a point, which is the LAST one drawn: the list is
+  // furthest first, so walking it backwards finds what the eye sees. A sprite
+  // is mostly transparent, so the source pixel decides rather than the rect.
+  function pieceAt(x, y) {
+    for (let i = lastDrawList.length - 1; i >= 0; i--) {
+      const item = lastDrawList[i];
+      if (!item.sprite) continue;
+      if (x < item.x || x >= item.x + item.width) continue;
+      if (y < item.y || y >= item.y + item.height) continue;
+      if (sheetPixels) {
+        let sx = x - item.x;
+        if (item.mirrored) sx = item.width - 1 - sx;
+        const px = item.sprite.rect.x + sx;
+        const py = item.sprite.rect.y + (y - item.y);
+        const at = (py * sheetPixels.width + px) * 4 + 3;
+        if (!sheetPixels.data[at]) continue;
+      }
+      return item;
+    }
+    return null;
+  }
+
+  // --- the views -----------------------------------------------------------
+
+  function refresh() {
+    renderHeader();
+    renderMap();
+    renderStageBar();
+    renderPanel();
+    renderChecks();
+    draw();
+  }
+
+  function renderHeader() {
+    const game = gameOf(atlas);
+    el.title.textContent = (game === 'knightlore' ? 'Knight Lore' :
+                            game === 'pentagram' ? 'Pentagram' : game) + ' rooms';
+    if (!room) { el.subtitle.textContent = ''; return; }
+    const used = poolUsed(atlas, room);
+    const needed = poolNeeded(atlas);
+    el.subtitle.textContent =
+      'room $' + hex(room.number) + ' (' + room.number + ') of ' + atlas.rooms.length +
+      ' — ' + room.scenery.length + ' scenery, ' +
+      room.objects.length + ' object group' + (room.objects.length === 1 ? '' : 's') +
+      ', ' + used + ' records';
+    el.poolnote.textContent = 'pool ' + needed.slots + ' (room $' + hex(needed.room) + ')';
+    // Only where this page is what saves. In the editor the tab carries its
+    // own dirty mark, and a second one here would say "unsaved" over a
+    // document that had just been saved with ctrl+S.
+    el.state.textContent = dirty && boot.showSave ? 'unsaved' : '';
+    if (boot.ownUndo) {
+      el.undo.disabled = !past.length;
+      el.redo.disabled = !future.length;
+    }
+  }
+
+  function hex(n) {
+    return n === null || n === undefined ? '--'
+      : n.toString(16).toUpperCase().padStart(2, '0');
+  }
+
+  function renderMap() {
+    const game = gameOf(atlas);
+    const numbers = new Set(atlas.rooms.map(function (r) { return r.number; }));
+    const map = roomMap(atlas);
+    const neighbours = new Set();
+    if (room) {
+      for (const link of map.links) {
+        if (link.from === room.number) neighbours.add(link.to);
+      }
+    }
+
+    el.grid.innerHTML = '';
+    // Knight Lore's number IS a place: a row and a column of a sixteen by
+    // sixteen grid, with north a row on. So it is laid out as the castle, north
+    // at the top. Pentagram's numbers mean nothing of the sort -- its map is
+    // the destination bytes -- so they are simply listed in order.
+    const grid = game === 'knightlore';
+    el.grid.style.gridTemplateColumns = 'repeat(' + (grid ? 16 : 12) + ', 1fr)';
+    el.mapnote.textContent = grid ? '16 x 16, north up' : atlas.rooms.length + ' rooms';
+
+    const cells = [];
+    if (grid) {
+      for (let row = 15; row >= 0; row--) {
+        for (let column = 0; column < 16; column++) cells.push((row << 4) | column);
+      }
+    } else {
+      for (const r of atlas.rooms) cells.push(r.number);
+    }
+
+    for (const number of cells) {
+      const cell = document.createElement('button');
+      cell.className = 'cell' + (numbers.has(number) ? ' real' : '') +
+                       (room && number === room.number ? ' here' :
+                        neighbours.has(number) ? ' linked' : '');
+      cell.textContent = hex(number);
+      cell.title = 'room $' + hex(number) + ' (' + number + ')';
+      if (numbers.has(number)) {
+        cell.addEventListener('click', function () { goTo(number); });
+      }
+      el.grid.appendChild(cell);
+    }
+
+    renderExits(map);
+  }
+
+  function renderExits(map) {
+    el.exits.innerHTML = '';
+    if (!room) return;
+    const scenery = byName(atlas.sceneryTemplates);
+    const mine = map.links.filter(function (l) { return l.from === room.number; });
+    const head = document.createElement('h3');
+    head.textContent = 'Ways out';
+    el.exits.appendChild(head);
+    if (!mine.length) {
+      el.exits.appendChild(note('none — nothing leads out of this room'));
+      return;
+    }
+    const editable = gameOf(atlas) === 'pentagram';
+    for (const link of mine) {
+      const line = document.createElement('div');
+      line.className = 'exit' + (link.exists ? '' : ' broken');
+      const way = document.createElement('span');
+      way.className = 'way';
+      way.textContent = link.side;
+      line.appendChild(way);
+      const to = document.createElement('span');
+      to.className = 'to';
+      if (editable) {
+        // Pentagram's byte is the authority -- one south doorway is an exit in
+        // twenty-eight rooms and blocked in one -- so it is what you change.
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = 0; input.max = 255;
+        input.value = link.to;
+        input.addEventListener('change', function () {
+          room.scenery[link.ref].destination = clamp(Number(input.value), 0, 255);
+          changed('doorway');
+        });
+        to.appendChild(input);
+      } else {
+        // Knight Lore's is arithmetic and cannot be anything else.
+        to.textContent = '→ $' + hex(link.to) + (link.exists ? '' : ' (no such room)');
+      }
+      line.appendChild(to);
+      const go = document.createElement('button');
+      go.className = 'small';
+      go.textContent = 'go';
+      go.disabled = !link.exists;
+      go.addEventListener('click', function () { goTo(link.to); });
+      line.appendChild(go);
+      el.exits.appendChild(line);
+      line.title = link.template;
+    }
+  }
+
+  function renderStageBar() {
+    el.inks.innerHTML = '';
+    for (let ink = 0; ink < 8; ink++) {
+      const swatch = document.createElement('button');
+      swatch.className = 'swatch' + (room && room.ink === ink ? ' on' : '');
+      swatch.style.background = PALETTE[ink];
+      swatch.title = 'ink ' + ink;
+      swatch.addEventListener('click', function () {
+        if (!room) return;
+        room.ink = ink;
+        changed('ink');
+      });
+      el.inks.appendChild(swatch);
+    }
+    el.shape.innerHTML = '';
+    atlas.sizes.forEach(function (size, i) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = (SHAPES[i] || ('shape ' + i)) +
+                           ' (' + size.u + ' x ' + size.v + ')';
+      el.shape.appendChild(option);
+    });
+    if (room) el.shape.value = String(room.size);
+  }
+
+  function note(text) {
+    const div = document.createElement('div');
+    div.className = 'empty';
+    div.textContent = text;
+    return div;
+  }
+
+  function renderPanel() {
+    el.panel.innerHTML = '';
+    if (!room) return;
+    if (tab === 'objects') renderObjects();
+    else if (tab === 'scenery') renderScenery();
+    else renderTemplates();
+  }
+
+  function renderObjects() {
+    const templates = byName(atlas.objectTemplates);
+    if (!room.objects.length) el.panel.appendChild(note('no objects in this room'));
+
+    room.objects.forEach(function (group, ref) {
+      const block = document.createElement('div');
+      block.className = 'group';
+      const head = document.createElement('div');
+      head.className = 'head';
+
+      const pick = document.createElement('select');
+      for (const template of atlas.objectTemplates) {
+        const option = document.createElement('option');
+        option.value = template.name;
+        option.textContent = template.name;
+        pick.appendChild(option);
+      }
+      pick.value = group.template;
+      pick.addEventListener('change', function () {
+        group.template = pick.value;
+        changed('template');
+      });
+      head.appendChild(pick);
+
+      const count = document.createElement('span');
+      count.className = 'dim';
+      const entries = templates.get(group.template);
+      count.textContent = group.positions.length + '/' + GROUP_LIMIT +
+                          (entries ? ' × ' + entries.entries.length + ' sprite' +
+                                     (entries.entries.length === 1 ? '' : 's') : '');
+      head.appendChild(count);
+      block.appendChild(head);
+
+      const spots = document.createElement('div');
+      spots.className = 'spots';
+      group.positions.forEach(function (position, slot) {
+        const spot = document.createElement('button');
+        const on = selection && selection.kind === 'object' &&
+                   selection.ref === ref && selection.slot === slot;
+        spot.className = 'spot' + (on ? ' on' : '');
+        spot.textContent = position.u + ',' + position.v + ',' + position.z;
+        spot.addEventListener('click', function () {
+          selection = { kind: 'object', ref: ref, slot: slot };
+          refresh();
+        });
+        spots.appendChild(spot);
+      });
+      block.appendChild(spots);
+      el.panel.appendChild(block);
+    });
+
+    if (selection && selection.kind === 'object') renderSpotEditor();
+
+    const adder = document.createElement('div');
+    adder.className = 'adder';
+    const pick = document.createElement('select');
+    for (const template of atlas.objectTemplates) {
+      const option = document.createElement('option');
+      option.value = template.name;
+      option.textContent = template.name + (template.used ? '' : ' (unused)');
+      pick.appendChild(option);
+    }
+    adder.appendChild(pick);
+    const add = document.createElement('button');
+    add.textContent = 'Place';
+    add.addEventListener('click', function () {
+      // In the middle of the floor, where it can be seen and dragged from.
+      selection = Object.assign({ kind: 'object' },
+        addObject(room, pick.value, { u: 3, v: 3, z: 0 }));
+      changed('place');
+    });
+    adder.appendChild(add);
+    el.panel.appendChild(adder);
+
+    // What Place would put in, drawn the same way the room is. A template is a
+    // number in the file and a shape on the screen, and the name alone does not
+    // say which -- Pentagram's are object_00 to object_30 until somebody works
+    // out what they are.
+    const preview = document.createElement('div');
+    preview.className = 'preview';
+    el.panel.appendChild(preview);
+    const show = function () { renderTemplatePreview(preview, 'object', pick.value); };
+    pick.addEventListener('change', show);
+    show();
+  }
+
+  // One template, object or scenery, drawn on its own: the same expansion and
+  // the same projection the room uses, with a throwaway room around it so
+  // nothing here needs to know how a template becomes pieces.
+  //
+  // An object is placed on a cell, because its position comes from the room. A
+  // piece of scenery carries its own world coordinates and takes nothing from
+  // the room, so it lands where it always lands -- which is why a wall shows
+  // as the long run it is rather than as a tile.
+  const PREVIEW_ZOOM = 2;
+  const PREVIEW_MAX = 148;
+
+  function renderTemplatePreview(host, kind, templateName) {
+    host.innerHTML = '';
+    const scenery = kind === 'scenery';
+    const list = scenery ? atlas.sceneryTemplates : atlas.objectTemplates;
+    const template = byName(list).get(templateName);
+    if (!template) return;
+    const parts = scenery ? template.blocks : template.entries;
+
+    const ghost = {
+      number: room.number, ink: room.ink, size: room.size,
+      scenery: scenery ? [{ template: templateName, destination: 0 }] : [],
+      objects: scenery ? [] : [{ template: templateName, positions: [{ u: 3, v: 3, z: 0 }] }]
+    };
+    const items = drawList(expandRoom(atlas, ghost, numbers), sheet, adj)
+      .filter(function (item) { return item.sprite; });
+
+    const what = document.createElement('div');
+    what.className = 'what';
+    if (!items.length) {
+      what.textContent = parts.length
+        ? 'nothing to draw: its graphics are below two'
+        : 'an empty template';
+      host.appendChild(what);
+      return;
+    }
+
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    for (const item of items) {
+      left = Math.min(left, item.x);
+      right = Math.max(right, item.x + item.width);
+      top = Math.min(top, item.base - item.height);
+      bottom = Math.max(bottom, item.base);
+    }
+    const wide = Math.max(1, right - left);
+    const tall = Math.max(1, bottom - top);
+    // Whole steps while it fits, so pixel art stays pixel art, and a plain
+    // shrink past that -- a run of wall is two hundred pixels across and would
+    // otherwise push the panel open.
+    const step = Math.max(1, Math.min(PREVIEW_ZOOM,
+                                      Math.floor(PREVIEW_MAX / Math.max(wide, tall))));
+    const shown = Math.min(wide * step, PREVIEW_MAX);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = wide;
+    canvas.height = tall;
+    canvas.style.width = shown + 'px';
+    canvas.style.height = Math.round(tall * (shown / wide)) + 'px';
+    const paint = canvas.getContext('2d');
+    const art = sheetFor(room.ink);
+    if (art) {
+      for (const item of items) {
+        const rect = item.sprite.rect;
+        const x = item.x - left;
+        const y = item.base - item.height - top;
+        paint.save();
+        if (item.mirrored) {
+          paint.translate(x + item.width, y);
+          paint.scale(-1, 1);
+          paint.drawImage(art, rect.x, rect.y, rect.w, rect.h, 0, 0, item.width, item.height);
+        } else {
+          paint.drawImage(art, rect.x, rect.y, rect.w, rect.h, x, y, item.width, item.height);
+        }
+        paint.restore();
+      }
+    }
+    host.appendChild(canvas);
+
+    // A line each: what it is drawn from, how big the artwork is, and the box
+    // the collision and the depth sort actually see -- which is not the same
+    // thing, since a piece can be drawn far larger than the space it occupies.
+    const first = parts[0];
+    const graphics = items.map(function (i) { return i.piece.graphicName; });
+    const lines = [
+      parts.length + (scenery ? ' piece' : ' sprite') + (parts.length === 1 ? '' : 's') +
+        ', graphic ' + (graphics.length > 6
+          ? graphics.slice(0, 6).join(', ') + '...' : graphics.join(', ')),
+      wide + ' × ' + tall + ' pixels'
+    ];
+    if (scenery) {
+      // Scenery is absolute, so where it stands is the useful fact, not a box.
+      lines.push('stands at U ' + first.u + ', V ' + first.v + ', Z ' + first.z);
+      const side = doorwayOf(atlas, template);
+      if (side) lines.push('a doorway, facing ' + side);
+      if (isBackgroundTemplate(gameOf(atlas), template.name)) {
+        lines.push('background: drawn first, never sorted');
+      }
+    } else {
+      lines.push('box ' + first.sizeU + ', ' + first.sizeV + ', ' + first.sizeZ);
+    }
+    if (!template.used) lines.push('no room uses it yet');
+    for (const line of lines) {
+      const row = document.createElement('div');
+      row.textContent = line;
+      what.appendChild(row);
+    }
+    host.appendChild(what);
+  }
+
+  function renderSpotEditor() {
+    const group = room.objects[selection.ref];
+    if (!group) return;
+    const position = group.positions[selection.slot];
+    if (!position) return;
+
+    const card = document.createElement('div');
+    card.style.marginTop = '10px';
+    const head = document.createElement('h3');
+    head.textContent = 'Selected';
+    card.appendChild(head);
+
+    const line = document.createElement('div');
+    line.className = 'row';
+    for (const axis of ['u', 'v', 'z']) {
+      const label = document.createElement('label');
+      label.style.marginRight = '8px';
+      label.textContent = axis.toUpperCase() + ' ';
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = 0;
+      input.max = axis === 'z' ? LEVELS - 1 : CELLS - 1;
+      input.value = position[axis];
+      input.addEventListener('change', function () {
+        position[axis] = clamp(Number(input.value), 0, Number(input.max));
+        changed('move');
+      });
+      label.appendChild(input);
+      line.appendChild(label);
+    }
+    const remove = document.createElement('button');
+    remove.className = 'small';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', function () {
+      removeObject(room, selection.ref, selection.slot);
+      selection = null;
+      changed('remove');
+    });
+    line.appendChild(remove);
+    card.appendChild(line);
+
+    // Where it actually ends up, which is not the cell above whenever its
+    // template carries a nudge -- half a cell along U or V, and a raise in Z.
+    // That nudge belongs to the TEMPLATE, so it is not editable from here: it
+    // would move every object drawn from that template, in every room. The
+    // Templates tab is where it is changed, with the count of what it moves.
+    const template = byName(atlas.objectTemplates).get(group.template);
+    const entry = template && template.entries[0];
+    const standing = lastDrawList.filter(isSelected)[0];
+    if (standing) {
+      const at = document.createElement('div');
+      at.className = 'row';
+      at.style.paddingLeft = '0';
+      at.textContent = 'stands at U ' + standing.piece.u +
+                       ', V ' + standing.piece.v +
+                       ', Z ' + standing.piece.z;
+      card.appendChild(at);
+    }
+    const nudge = (entry && entry.offsets) || {};
+    if (nudge.halfU || nudge.halfV || nudge.raiseZ) {
+      const said = [];
+      if (nudge.halfU && nudge.halfV) said.push('half a cell along U and V');
+      else if (nudge.halfU) said.push('half a cell along U');
+      else if (nudge.halfV) said.push('half a cell along V');
+      if (nudge.raiseZ) {
+        said.push('raised ' + nudge.raiseZ +
+                  (nudge.raiseZ % LEVEL_Z === 0
+                    ? ' (' + (nudge.raiseZ / LEVEL_Z) + ' levels)'
+                    : ' units'));
+      }
+      const usage = templateUsage(atlas, group.template);
+      card.appendChild(note(group.template + ' is ' + said.join(' and ') +
+                            ' by its template, which ' + usage.placements +
+                            ' placement' + (usage.placements === 1 ? '' : 's') +
+                            ' in ' + usage.rooms + ' room' +
+                            (usage.rooms === 1 ? '' : 's') + ' share'));
+    }
+    card.appendChild(note('drag it on the picture; arrows nudge it a cell, ' +
+                          'ctrl with up and down changes its level'));
+    el.panel.appendChild(card);
+  }
+
+  function renderScenery() {
+    const templates = byName(atlas.sceneryTemplates);
+    if (!room.scenery.length) el.panel.appendChild(note('no scenery in this room'));
+
+    room.scenery.forEach(function (ref, i) {
+      const line = document.createElement('div');
+      const on = selection && selection.kind === 'scenery' && selection.ref === i;
+      line.className = 'row' + (on ? ' on' : '');
+
+      const pick = document.createElement('select');
+      pick.className = 'name';
+      for (const template of atlas.sceneryTemplates) {
+        const option = document.createElement('option');
+        option.value = template.name;
+        option.textContent = template.name;
+        pick.appendChild(option);
+      }
+      pick.value = ref.template;
+      pick.addEventListener('change', function () {
+        ref.template = pick.value;
+        changed('scenery');
+      });
+      line.appendChild(pick);
+
+      const template = templates.get(ref.template);
+      const dim = document.createElement('span');
+      dim.className = 'dim';
+      const side = template ? doorwayOf(atlas, template) : null;
+      dim.textContent = (template ? template.blocks.length + ' pieces' : '?') +
+                        (side ? ' · door ' + side : '') +
+                        (template && isBackgroundTemplate(gameOf(atlas), template.name)
+                          ? ' · background' : '');
+      line.appendChild(dim);
+
+      const remove = document.createElement('button');
+      remove.className = 'small';
+      remove.textContent = '×';
+      remove.title = 'remove';
+      remove.addEventListener('click', function () {
+        removeScenery(room, i);
+        selection = null;
+        changed('scenery');
+      });
+      line.appendChild(remove);
+      line.addEventListener('click', function (event) {
+        if (event.target === remove || event.target === pick) return;
+        selection = { kind: 'scenery', ref: i };
+        refresh();
+      });
+      el.panel.appendChild(line);
+    });
+
+    const adder = document.createElement('div');
+    adder.className = 'adder';
+    const pick = document.createElement('select');
+    for (const template of atlas.sceneryTemplates) {
+      const option = document.createElement('option');
+      option.value = template.name;
+      option.textContent = template.name;
+      pick.appendChild(option);
+    }
+    adder.appendChild(pick);
+    const add = document.createElement('button');
+    add.textContent = 'Add';
+    add.addEventListener('click', function () {
+      addScenery(atlas, room, pick.value, 0);
+      changed('scenery');
+    });
+    adder.appendChild(add);
+    el.panel.appendChild(adder);
+
+    // What Add would put in, drawn the same way the room is -- and for scenery
+    // that is the whole run, in the place it will occupy, since it carries its
+    // own coordinates rather than taking a cell.
+    const preview = document.createElement('div');
+    preview.className = 'preview';
+    el.panel.appendChild(preview);
+    const show = function () { renderTemplatePreview(preview, 'scenery', pick.value); };
+    pick.addEventListener('change', show);
+    show();
+  }
+
+  // The templates themselves: the bytes every room that names one is built
+  // from. A change here moves every room in the game, which is why the count
+  // is spelled out beside it.
+  function renderTemplates() {
+    // What each kind of entry is made of. The numbers are plain fields; the
+    // flags and the nudge are named bits, and the graphic is a name out of the
+    // castle's own table rather than anything typed.
+    const kinds = [
+      { kind: 'scenery', key: 'blocks', list: atlas.sceneryTemplates,
+        numbers: ['u', 'v', 'z', 'sizeU', 'sizeV', 'sizeZ'],
+        bits: ['flags.mirrored', 'flags.passable'] },
+      { kind: 'object', key: 'entries', list: atlas.objectTemplates,
+        numbers: ['sizeU', 'sizeV', 'sizeZ'],
+        bits: ['flags.mirrored', 'flags.passable', 'offsets.halfU', 'offsets.halfV'] }
+    ];
+
+    const pick = document.createElement('select');
+    for (const kind of kinds) {
+      const group = document.createElement('optgroup');
+      group.label = kind.kind;
+      for (const template of kind.list) {
+        const option = document.createElement('option');
+        option.value = kind.kind + ':' + template.name;
+        option.textContent = template.name + (template.used ? '' : ' (unused)');
+        group.appendChild(option);
+      }
+      pick.appendChild(group);
+    }
+    if (!templatePick) templatePick = 'scenery:' + atlas.sceneryTemplates[0].name;
+    pick.value = templatePick;
+    pick.addEventListener('change', function () {
+      templatePick = pick.value;
+      renderPanel();
+    });
+    el.panel.appendChild(pick);
+
+    const cut = templatePick.indexOf(':');
+    const kind = kinds.find(function (k) { return k.kind === templatePick.slice(0, cut); });
+    const name = templatePick.slice(cut + 1);
+    const template = kind && byName(kind.list).get(name);
+    if (!template) { el.panel.appendChild(note('no such template')); return; }
+
+    const users = atlas.rooms.filter(function (r) {
+      const refs = kind.kind === 'scenery' ? r.scenery : r.objects;
+      return refs.some(function (ref) { return ref.template === name; });
+    }).length;
+
+    const head = document.createElement('h3');
+    head.style.marginTop = '12px';
+    head.textContent = 'Name';
+    el.panel.appendChild(head);
+
+    const rename = document.createElement('div');
+    rename.className = 'adder';
+    const field = document.createElement('input');
+    field.type = 'text';
+    field.value = template.name;
+    field.style.flex = '1 1 auto';
+    rename.appendChild(field);
+    const apply = document.createElement('button');
+    apply.textContent = 'Rename';
+    apply.addEventListener('click', function () {
+      const moved = renameTemplate(atlas, template.name, field.value.trim());
+      if (moved === null) { field.value = template.name; return; }
+      templatePick = kind.kind + ':' + field.value.trim();
+      changed('rename');
+    });
+    rename.appendChild(apply);
+    el.panel.appendChild(rename);
+    el.panel.appendChild(note('index $' + hex(template.index) + ', from ' +
+                              template.address + ', named by ' + users +
+                              ' room' + (users === 1 ? '' : 's')));
+
+    const names = Array.from(numbers.keys());
+    template[kind.key].forEach(function (entry, row) {
+      const block = document.createElement('div');
+      block.className = 'group';
+      block.style.marginTop = '10px';
+
+      const head = document.createElement('div');
+      head.className = 'head';
+      const which = document.createElement('span');
+      which.className = 'dim';
+      which.textContent = (kind.kind === 'scenery' ? 'piece ' : 'sprite ') + row;
+      head.appendChild(which);
+      // The graphic is picked, not typed: only a name the table has a number
+      // for can be built, and the list is every graphic the game has.
+      const pick = document.createElement('select');
+      pick.className = 'name';
+      for (const name of names) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        pick.appendChild(option);
+      }
+      pick.value = entry.graphic;
+      pick.addEventListener('change', function () {
+        setTemplateGraphic(numbers, template, kind.key, row, pick.value);
+        changed('graphic');
+      });
+      head.appendChild(pick);
+      block.appendChild(head);
+
+      const table = document.createElement('table');
+      table.className = 'bytes';
+      const header = document.createElement('tr');
+      const values = document.createElement('tr');
+      for (const field of kind.numbers) {
+        const th = document.createElement('th');
+        th.textContent = field;
+        header.appendChild(th);
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = 0; input.max = 255;
+        input.value = entry[field];
+        input.addEventListener('change', function () {
+          setTemplateField(template, kind.key, row, field,
+                           clamp(Number(input.value), 0, 255));
+          changed('template field');
+        });
+        td.appendChild(input);
+        values.appendChild(td);
+      }
+      table.appendChild(header);
+      table.appendChild(values);
+      block.appendChild(table);
+
+      const flags = document.createElement('div');
+      flags.className = 'spots';
+      flags.style.marginTop = '4px';
+      for (const field of kind.bits) {
+        const label = document.createElement('label');
+        label.style.marginRight = '10px';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        const group = field.slice(0, field.indexOf('.'));
+        const name = field.slice(field.indexOf('.') + 1);
+        box.checked = !!((entry[group] || {})[name]);
+        box.addEventListener('change', function () {
+          setTemplateField(template, kind.key, row, field, box.checked);
+          changed('template flag');
+        });
+        label.appendChild(box);
+        label.appendChild(document.createTextNode(' ' + name));
+        flags.appendChild(label);
+      }
+      // The raise is added into Z and masked with $FC, so it moves in fours.
+      if (kind.kind === 'object') {
+        const label = document.createElement('label');
+        label.textContent = 'raiseZ ';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = 0; input.max = 252; input.step = 4;
+        input.value = (entry.offsets || {}).raiseZ || 0;
+        input.addEventListener('change', function () {
+          setTemplateField(template, kind.key, row, 'offsets.raiseZ',
+                           clamp(Number(input.value), 0, 252));
+          changed('template raise');
+        });
+        label.appendChild(input);
+        flags.appendChild(label);
+      }
+      block.appendChild(flags);
+
+      // What is left of the game's own flags byte: bits nobody has decoded,
+      // carried through untouched rather than guessed at.
+      const rest = (entry.flags || {}).rest;
+      if (rest) {
+        const note2 = document.createElement('div');
+        note2.className = 'dim';
+        note2.textContent = 'flags.rest $' + rest.toString(16).toUpperCase() +
+                            ' -- the game\u2019s own bits, kept as they were';
+        block.appendChild(note2);
+      }
+      el.panel.appendChild(block);
+    });
+    el.panel.appendChild(note('a change here moves every room that names it'));
+  }
+
+  function renderChecks() {
+    el.checks.innerHTML = '';
+    const head = document.createElement('h3');
+    el.checks.appendChild(head);
+    const problems = checkAtlas(atlas, numbers);
+    const errors = problems.filter(function (p) { return p.severity === 'error'; });
+    head.textContent = 'Checks';
+    const summary = document.createElement('span');
+    summary.className = 'note';
+    summary.textContent = errors.length
+      ? errors.length + ' would stop the build'
+      : 'nothing would stop the build';
+    head.appendChild(summary);
+
+    // This room's first, then the rest: a designer cares about what is under
+    // the cursor before what is three hundred rooms away.
+    const here = room ? problems.filter(function (p) { return p.room === room.number; }) : [];
+    const elsewhere = problems.filter(function (p) { return here.indexOf(p) < 0; });
+    const shown = here.concat(elsewhere).slice(0, 12);
+    if (!shown.length) {
+      el.checks.appendChild(note('nothing to say'));
+      return;
+    }
+    for (const problem of shown) {
+      const line = document.createElement('div');
+      line.className = 'problem';
+      const where = document.createElement('span');
+      where.className = 'where';
+      where.textContent = problem.room === null ? '—' : '$' + hex(problem.room);
+      line.appendChild(where);
+      const text = document.createElement('span');
+      text.className = problem.severity;
+      text.textContent = problem.text;
+      line.appendChild(text);
+      el.checks.appendChild(line);
+    }
+    if (problems.length > shown.length) {
+      el.checks.appendChild(note('and ' + (problems.length - shown.length) + ' more'));
+    }
+  }
+
+  // --- changes -------------------------------------------------------------
+
+  function clamp(value, low, high) {
+    if (Number.isNaN(value)) return low;
+    return Math.max(low, Math.min(high, value));
+  }
+
+  // Everything that edits the atlas ends here: the usage flags are brought
+  // back into step, the page is redrawn, and the whole file goes to the host,
+  // which is what owns undo and the dirty mark.
+  function changed(what) {
+    refreshUsage(atlas);
+    if (boot.ownUndo && currentText !== null) {
+      past.push(currentText);
+      if (past.length > UNDO_DEPTH) past.shift();
+      future.length = 0;        // a new change ends the redo line
+    }
+    currentText = serializeAtlas(atlas, boot.eol);
+    dirty = currentText !== savedText;
+    refresh();
+    host.save(currentText, what);
+  }
+
+  // Undo and redo are the same move in opposite directions: swap the text we
+  // are on for one off the other stack. The room being looked at is kept if it
+  // still exists, because losing your place is worse than the change was.
+  function step(from, to) {
+    if (!from.length) return;
+    const was = room ? room.number : null;
+    to.push(currentText);
+    currentText = from.pop();
+    atlas = parseAtlas(currentText);
+    refreshUsage(atlas);
+    selection = null;
+    room = byNumber(atlas.rooms).get(was) || atlas.rooms[0] || null;
+    dirty = currentText !== savedText;
+    refresh();
+    host.save(currentText, 'undo');
+  }
+
+  function goTo(number) {
+    const found = byNumber(atlas.rooms).get(number);
+    if (!found) return;
+    room = found;
+    selection = null;
+    // So that a reload -- an undo, or the file changing under us -- comes back
+    // to the room being looked at rather than the first one.
+    if (host.roomChanged) host.roomChanged(number);
+    refresh();
+  }
+
+  // --- the picture as a control -------------------------------------------
+
+  let dragging = null;
+
+  el.view.addEventListener('mousedown', function (event) {
+    if (!room) return;
+    const at = pointIn(event);
+    const item = pieceAt(at.x, at.y);
+    if (!item) { selection = null; refresh(); return; }
+    const piece = item.piece;
+    selection = piece.kind === 'object'
+      ? { kind: 'object', ref: piece.ref, slot: piece.slot }
+      : { kind: 'scenery', ref: piece.ref };
+    if (piece.kind === 'object') {
+      dragging = { ref: piece.ref, slot: piece.slot, level: piece.cell.z, moved: false };
+    }
+    refresh();
+  });
+
+  window.addEventListener('mousemove', function (event) {
+    if (!dragging) return;
+    const at = pointIn(event);
+    const cell = cellAt(at.x, at.y, dragging.level);
+    if (!cell) return;
+    const group = room.objects[dragging.ref];
+    if (!group) return;
+    const position = group.positions[dragging.slot];
+    if (!position || (position.u === cell.u && position.v === cell.v)) return;
+    position.u = cell.u;
+    position.v = cell.v;
+    dragging.moved = true;
+    refresh();
+  });
+
+  window.addEventListener('mouseup', function () {
+    if (dragging && dragging.moved) changed('drag');
+    dragging = null;
+  });
+
+  window.addEventListener('keydown', function (event) {
+    if (!room || !selection || selection.kind !== 'object') return;
+    if (event.target && /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
+    const group = room.objects[selection.ref];
+    const position = group && group.positions[selection.slot];
+    if (!position) return;
+    // Ctrl with the up and down arrows lifts and lowers. An arrow on its own
+    // has to mean the floor, because that is what a drag moves and what most
+    // of a nudge is for; Z is the other thing those two arrows could mean, so
+    // it gets the modifier rather than a key somewhere else on the board.
+    const lift = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0;
+    let handled = true;
+    if (lift && (event.ctrlKey || event.metaKey)) {
+      position.z = clamp(position.z + lift, 0, LEVELS - 1);
+    }
+    else if (event.key === '[') position.z = clamp(position.z - 1, 0, LEVELS - 1);
+    else if (event.key === ']') position.z = clamp(position.z + 1, 0, LEVELS - 1);
+    else if (event.key === 'ArrowLeft') position.u = clamp(position.u - 1, 0, CELLS - 1);
+    else if (event.key === 'ArrowRight') position.u = clamp(position.u + 1, 0, CELLS - 1);
+    else if (event.key === 'ArrowUp') position.v = clamp(position.v + 1, 0, CELLS - 1);
+    else if (event.key === 'ArrowDown') position.v = clamp(position.v - 1, 0, CELLS - 1);
+    else if (event.key === 'Delete' || event.key === 'Backspace') {
+      removeObject(room, selection.ref, selection.slot);
+      selection = null;
+    } else handled = false;
+    if (!handled) return;
+    event.preventDefault();
+    changed('key');
+  });
+
+  // --- wiring --------------------------------------------------------------
+
+  el.shape.addEventListener('change', function () {
+    if (!room) return;
+    room.size = Number(el.shape.value);
+    changed('shape');
+  });
+  for (const id of ['showgrid', 'showboxes', 'showscenery']) {
+    el[id].addEventListener('change', draw);
+  }
+  const fit = document.createElement('option');
+  fit.value = FIT;
+  fit.textContent = 'Fit';
+  el.zoom.appendChild(fit);
+  for (const step of ZOOMS) {
+    const option = document.createElement('option');
+    option.value = step;
+    option.textContent = step + '×';
+    el.zoom.appendChild(option);
+  }
+  el.zoom.value = String(zoom);
+  el.zoom.addEventListener('change', function () {
+    zoom = el.zoom.value === FIT ? FIT : Number(el.zoom.value);
+    applyZoom();
+  });
+  window.addEventListener('resize', function () {
+    if (zoom === FIT) applyZoom();
+  });
+  applyZoom();
+  for (const button of document.querySelectorAll('.tabs button')) {
+    button.addEventListener('click', function () {
+      tab = button.dataset.tab;
+      for (const other of document.querySelectorAll('.tabs button')) {
+        other.classList.toggle('on', other === button);
+      }
+      renderPanel();
+    });
+  }
+  // Loading another game, or this one again off the disk. Only the browser
+  // host offers it: in the editor you open the file.
+  function wireLoad() {
+    if (!host.open || !host.games || !host.games.length) return;
+    el.game.hidden = false;
+    el.load.hidden = false;
+    el.game.innerHTML = '';
+    for (const name of host.games) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      el.game.appendChild(option);
+    }
+    el.game.value = boot.game || host.games[0];
+  }
+
+  if (host.open) {
+    el.load.addEventListener('click', function () {
+      const same = el.game.value === boot.game;
+      if (host.unsaved && host.unsaved() &&
+          !confirm('There are unsaved changes, which loading throws away. Go on?')) {
+        return;
+      }
+      el.load.disabled = true;
+      host.open(el.game.value).then(function (next) {
+        applyBoot(next);
+        el.load.disabled = false;
+      }).catch(function (err) {
+        el.load.disabled = false;
+        alert(String(err));
+      });
+    });
+  }
+  if (boot.ownUndo) {
+    el.undo.hidden = false;
+    el.redo.hidden = false;
+    el.undo.addEventListener('click', function () { step(past, future); });
+    el.redo.addEventListener('click', function () { step(future, past); });
+    window.addEventListener('keydown', function (event) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      event.preventDefault();
+      if (key === 'y' || event.shiftKey) step(future, past);
+      else step(past, future);
+    });
+  }
+
+  if (host.save && boot.showSave) {
+    el.save.hidden = false;
+    // The host clears the dirty mark through onSaved, once the write has
+    // actually landed -- saying "saved" before it has is how you lose work.
+    el.save.addEventListener('click', function () {
+      host.save(serializeAtlas(atlas, boot.eol), 'save', true);
+    });
+  }
+  if (host.build) {
+    el.build.hidden = false;
+    el.build.textContent = boot.buildLabel || 'Build';
+    el.build.addEventListener('click', function () { host.build(); });
+  }
+
+  // The host has a new version of the file -- an undo, an edit in the text
+  // editor, or the generator having rewritten it. Keep the room we were on if
+  // it is still there.
+  // A whole new document: the host reloaded it under us, or Load fetched
+  // another game. Either way the undo stack belonged to the old one.
+  function applyBoot(next, keepRoom) {
+    const was = keepRoom && room ? room.number : next.room;
+    boot = next;
+    atlas = next.atlas;
+    if (next.sheet) {
+      sheet = next.sheet;
+      index = sheetIndex(sheet);
+      numbers = graphicNumbers(sheet);
+    }
+    if (next.sheetPng !== undefined) {
+      tinted.clear();
+      sheetImage = null;
+      sheetPixels = null;
+    }
+    past.length = 0;
+    future.length = 0;
+    refreshUsage(atlas);
+    currentText = serializeAtlas(atlas, boot.eol);
+    savedText = currentText;
+    dirty = false;
+    selection = null;
+    room = byNumber(atlas.rooms).get(was) || atlas.rooms[0] || null;
+    wireLoad();
+    loadSheet(function () { refresh(); });
+  }
+
+  if (host.onReload) {
+    host.onReload(function (next) { applyBoot(next, true); });
+  }
+  if (host.onSaved) {
+    host.onSaved(function () {
+      savedText = currentText;
+      dirty = false;
+      renderHeader();
+    });
+  }
+
+  refreshUsage(atlas);
+  currentText = serializeAtlas(atlas, boot.eol);
+  savedText = currentText;
+  wireLoad();
+  room = byNumber(atlas.rooms).get(boot.room) || atlas.rooms[0] || null;
+  loadSheet(function () {
+    if (!sheetImage) {
+      el.poolnote.textContent = 'no sprite sheet: run the game’s build.py once';
+    }
+    refresh();
+  });
+})();
+</script>
+</body>
+</html>

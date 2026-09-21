@@ -285,7 +285,20 @@ def generate_room_data() -> None:
         sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
                  "own copy of Pentagram to produce it")
 
-    newest_input = max(decoder.stat().st_mtime, packed.stat().st_mtime)
+    # The sprite sheet is an input too: rooms.json names its graphics after the
+    # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
+    # been regenerated or renamed leaves those names stale, and rooms_source.py
+    # would stop on a name it could not place.
+    inputs = [decoder.stat().st_mtime, packed.stat().st_mtime]
+    # ...and the naming rule itself, which lives one directory up and is what
+    # turns a graphic number into the name rooms.json carries.
+    namer = PENTAGRAM.parent / "graphics.py"
+    if namer.is_file():
+        inputs.append(namer.stat().st_mtime)
+    sheet = PENTAGRAM / "sprites.json"
+    if sheet.is_file():
+        inputs.append(sheet.stat().st_mtime)
+    newest_input = max(inputs)
     if not atlas.is_file() or atlas.stat().st_mtime < newest_input:
         print(f"Regenerating {atlas.name} from {packed.name}")
         subprocess.run([sys.executable, str(decoder)], cwd=PENTAGRAM, check=True)

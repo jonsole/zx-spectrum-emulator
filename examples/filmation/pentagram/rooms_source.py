@@ -57,6 +57,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import graphics as gfx                                          # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 ATLAS = HERE / "rooms.json"
 OUT = HERE / "room_data.s"
@@ -87,6 +90,54 @@ ROOM_SCN_SHIFT = 5              # the scenery count, above the attribute
 SCN_COUNT_BIAS = 1              # ...stored biased by one, so eight fits in three bits
 
 TAB = chr(9)
+
+
+def resolve_graphics(atlas):
+    """Turn every named graphic back into the number the game knows it by.
+
+    Done once, in place, so everything below works in the game's terms, which
+    is what it is emitting. The names came out of the sprite sheet and go back
+    through it -- graphics.py is the one rule, so the two cannot disagree.
+    ../knightlore/rooms_source.py does the same.
+    """
+    known = gfx.numbers(HERE)
+    if not known:
+        sys.exit("%s is missing, so the graphics cannot be named back to the "
+                 "numbers room_data.s needs -- run build.py, which unpacks it "
+                 "from sprite_data.bin." % gfx.SHEET)
+    for group, key in ((atlas["sceneryTemplates"], "blocks"),
+                       (atlas["objectTemplates"], "entries")):
+        for template in group:
+            for entry in template[key]:
+                entry["graphic"] = gfx.number_of(known, entry["graphic"],
+                                                 template["name"])
+    return known
+
+
+def game_flags(entry):
+    """The flags byte as the game had it, from the bits rooms.py named."""
+    said = entry["flags"]
+    return ((GAME_MIRROR if said["mirrored"] else 0)
+            | (said.get("rest", 0) & 0xFF))
+
+
+def record_of(entry, scenery):
+    """One template entry as the bytes room_add reads.
+
+    Scenery is eight -- graphic, its own U, V and Z, three half-sizes and the
+    flags. An object is six here even though Pentagram's own are five: the
+    sixth is the placement nudge its room_build.s reads and its data never
+    uses, and emitting a zero keeps the capability rather than losing it.
+    """
+    if scenery:
+        return [entry["graphic"], entry["u"], entry["v"], entry["z"],
+                entry["sizeU"], entry["sizeV"], entry["sizeZ"], game_flags(entry)]
+    said = entry.get("offsets") or {}
+    nudge = ((1 if said.get("halfU") else 0)
+             | (2 if said.get("halfV") else 0)
+             | (said.get("raiseZ", 0) & 0xFC))
+    return [entry["graphic"], entry["sizeU"], entry["sizeV"], entry["sizeZ"],
+            game_flags(entry), nudge]
 
 
 def line(out, label, mnemonic, operands, comment=""):
@@ -139,16 +190,15 @@ def emit_templates(out, templates, key, stride, title, blurb):
             # Every piece on a back wall -- the narrow rooms' templates turn
             # the corner, so one piece of each is on the other wall.
             for e in entries:
-                assert e["bytes"][1] in BACK_WALLS_U or e["bytes"][2] in BACK_WALLS_V,                     "%s has a piece off the back walls, at U %d V %d"                     % (t["name"], e["bytes"][1], e["bytes"][2])
+                assert e["u"] in BACK_WALLS_U or e["v"] in BACK_WALLS_V,                     "%s has a piece off the back walls, at U %d V %d"                     % (t["name"], e["u"], e["v"])
         for e in entries:
-            body = list(e["bytes"])
-            while len(body) < stride:
-                body.append(0)              # the offsets byte Pentagram has not got
-            flags = our_flags(e["flags"])
+            body = record_of(e, stride == SCENERY_STRIDE)
+            assert len(body) == stride, (t["name"], body)
+            flags = our_flags(game_flags(e))
             if background:
                 flags |= BACKGROUND_FLAG
             body[stride - 1 if stride == SCENERY_STRIDE else 4] = flags
-            note = "mirrored" if e["mirrored"] else ""
+            note = "mirrored" if e["flags"]["mirrored"] else ""
             line(out, "", "DB", ", ".join("%3d" % b for b in body), note)
         line(out, "", "DB", "0")
         out.append("")
@@ -162,6 +212,7 @@ def main():
     if atlas.get("meta", {}).get("game") != "pentagram":
         sys.exit("%s is not Pentagram's" % ATLAS.name)
 
+    resolve_graphics(atlas)
     scenery = atlas["sceneryTemplates"]
     objects = atlas["objectTemplates"]
     rooms = atlas["rooms"]

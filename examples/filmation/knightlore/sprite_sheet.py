@@ -134,14 +134,29 @@ ROTATION_BUFFERS = (
     ("CHARACTER_TALLEST", 92, KNIGHT_BODY),
 )
 
-# Band name (a label, because the panel's groups have to be one), what it is
-# called on the picture, and the graphics it claims.
+# The groups a sprite can be in, and what they claim.
+#
+# A band is (name, what it is called on the picture, the graphics it claims),
+# and a fourth element makes it a parent: its children are bands in their own
+# right and their names hang off its own. So the tree below names a sprite
+# knight.legs.1 -- the path to its group, then which one it is within that
+# group, counting from one.
+#
+# Nesting is only about the name and the picture's headings. Everything
+# downstream sees the flattened list, in the order written here, which is the
+# order the picture is laid out in and the order the atlas reads.
+#
+# A sprite belongs to the FIRST band that claims it, so the order matters where
+# two would claim the same one -- and the last leaf sweeps up whatever no band
+# asked for.
 BANDS = (
-    ("knight_legs", "knight legs", KNIGHT_LEGS),
-    ("knight_body", "knight body", KNIGHT_BODY),
+    ("knight", "the knight", (), (
+        ("legs", "knight legs", KNIGHT_LEGS),
+        ("body", "knight body", KNIGHT_BODY),
+    )),
     # A guard's legs are the knight's own -- graphics 144 to 157 name sprites
-    # 55 to 62, which the band above has already taken -- so they have no band
-    # of their own, and editing the knight's walk changes theirs with it.
+    # 55 to 62, which knight.legs has already taken -- so they have no band of
+    # their own, and editing the knight's walk changes theirs with it.
     ("torsos_and_wizard", "torsos and the wizard", (150, 151, 30, 31, 158, 159)),
     ("fires", "fires", (176, 177, 180, 181, 86, 87)),
     ("balls", "balls", (178, 179, 182, 183)),
@@ -150,6 +165,11 @@ BANDS = (
     ("panel_and_menu", "panel, menu, sun and moon", WHOLE_SPRITE_GRAPHICS),
     ("scenery", "scenery", ()),         # and the sweep-up
 )
+
+# What separates a group from its parent, and from the sprite's own name. Dots
+# rather than underscores because a name already has underscores in it, and
+# because the path is what this is: knight.legs.1.
+NAME_SEPARATOR = "."
 
 # Graphic 1 is Knight Lore's way of drawing nothing: its own table has no
 # bitmap for it, and ours points at a sprite that covers nothing instead.
@@ -192,11 +212,29 @@ def read_sprites(packed):
     return sprites
 
 
+def flatten(bands, prefix=""):
+    """BANDS as a flat list, each band's name being its whole path.
+
+    Depth first and in written order, so the picture and the atlas read the way
+    the tree does. A parent that claims graphics of its own keeps them, and
+    comes before its children.
+    """
+    out = []
+    for band in bands:
+        name, title, graphics = band[0], band[1], band[2]
+        children = band[3] if len(band) > 3 else ()
+        path = prefix + name
+        if graphics or not children:
+            out.append((path, title, graphics))
+        out.extend(flatten(children, path + NAME_SEPARATOR))
+    return out
+
+
 def bands_of(sprites, graphic_map):
     """The band each sprite belongs to, by the first one that names it."""
-    bands = []                          # (label, title, [sprite index, ...])
+    bands = []                          # (path, title, [sprite index, ...])
     placed = set()
-    for label, title, graphics in BANDS:
+    for label, title, graphics in flatten(BANDS):
         members = []
         for graphic in graphics:
             n = graphic_map[graphic]
@@ -271,10 +309,20 @@ def build_atlas(sprites, bands, graphic_map, size):
         if n != NO_SPRITE:
             named.setdefault(n, []).append(graphic)
 
-    # The panel prefixes a sprite's label with its group's, so that two groups
-    # can each have a "walk". The assembler label stays the plain `name`.
+    # Where a sprite is: the path to its group, then which one it is within
+    # that group, counting from one. So the knight's first pair of legs is
+    # knight.legs.1, and two groups can each have a "walk" without clashing.
+    #
+    # Within the group rather than across the sheet, so that adding a sprite to
+    # one group does not renumber every sprite after it -- examples/filmation's
+    # rooms.json names its graphics by these, and would all have to be rewritten.
+    within = {}
+    for _label, _title, members in bands:
+        for i, n in enumerate(members):
+            within[n] = i + 1
+
     def label_of(n):
-        return band_of[n][0] + "_" + sprites[n]["name"]
+        return band_of[n][0] + NAME_SEPARATOR + str(within[n])
 
     frames = {}
     for label, title, members in bands:  # picture order, so the file reads like it
@@ -298,6 +346,9 @@ def build_atlas(sprites, bands, graphic_map, size):
 
     entries = []
     for n, sprite in enumerate(sprites):
+        # `name` is the ASSEMBLER label -- sprite_030 and the rest, which the
+        # game's own source calls by name -- and stays what it has always been.
+        # `label` below is the atlas frame's name, which is the dotted path.
         entry = {"name": sprite["name"], "group": band_of[n][0]}
         entry.update(SPRITE_FORMAT)
         entry.update({

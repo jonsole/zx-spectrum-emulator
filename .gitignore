@@ -121,9 +121,12 @@ examples/filmation/knightlore/font.s
 
 # Likewise the assembly form of examples/filmation/knightlore/room_data.bin: every room
 # in Knight Lore, the templates they are built from, and the tables that index
-# them. rooms.py regenerates it, so only the packed file is carried. Note that
-# sprite_adj.s is NOT here -- adj.py can only produce it from a running game,
-# so that one is committed.
+# them. rooms_source.py regenerates it from rooms.json, which rooms.py decodes
+# out of the packed file -- so the packed file and rooms.json are both carried
+# and this one is not. rooms.json is the editable form: edit it, by hand or in
+# the room designer, and the build picks the change up. Note that sprite_adj.s
+# is NOT here -- adj.py can only produce it from a running game, so that one is
+# committed.
 examples/filmation/knightlore/room_data.s
 
 # Pentagram's sprites and font, on the same line as Knight Lore's above: the

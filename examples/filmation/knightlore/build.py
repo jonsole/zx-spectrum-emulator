@@ -9,9 +9,9 @@ knightlore.s, which is where the debugger resolves them. This wraps the RAM as a
 48K .sna has to push PC into the bottom of the screen.
 
 sprite_data.s, font.s and room_data.s are generated rather than hand-written
--- see sprite_source.py, font_source.py and rooms.py -- and are regenerated
-here whenever their inputs or their generators are newer, which is the one
-build step beyond calling the assembler.
+-- see sprite_source.py, font_source.py, and rooms.py with rooms_source.py --
+and are regenerated here whenever their inputs or their generators are newer,
+which is the one build step beyond calling the assembler.
 
 The sprites and the font each come from a sheet -- sprites.png with
 sprites.json, font.png with font.json -- which is where that artwork lives:
@@ -228,26 +228,52 @@ def z80_snapshot(ram: bytes, pc: int) -> bytes:
 
 
 def generate_room_data() -> None:
-    """Regenerates room_data.s when its inputs have moved on.
+    """Regenerates room_data.s when its inputs have moved on, in two steps.
 
-    rooms.py writes the file itself rather than to stdout, because it is
-    thousands of lines of named templates and commented room records rather
-    than one table.
+    rooms.py decodes room_data.bin into rooms.json, the readable form, and
+    rooms_source.py turns rooms.json into room_data.s. Both write their files
+    themselves rather than to stdout, because they are thousands of lines of
+    named templates and commented room records rather than one table.
+
+    The two steps are timed separately on purpose. rooms.json is the editable
+    form -- by hand, or in the room designer -- so it is only re-decoded when
+    room_data.bin or the decoder is newer than it, and an edit to the castle
+    reaches the build without being overwritten by the game's own rooms.
     """
-    generator = KNIGHTLORE / "rooms.py"
+    decoder = KNIGHTLORE / "rooms.py"
+    emitter = KNIGHTLORE / "rooms_source.py"
     packed = KNIGHTLORE / "room_data.bin"
+    atlas = KNIGHTLORE / "rooms.json"
     generated = KNIGHTLORE / "room_data.s"
 
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run kl_extract.py against your "
                  "own copy of Knight Lore to produce it")
 
-    newest_input = max(generator.stat().st_mtime, packed.stat().st_mtime)
+    # The sprite sheet is an input too: rooms.json names its graphics after the
+    # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
+    # been regenerated or renamed leaves those names stale, and rooms_source.py
+    # would stop on a name it could not place.
+    inputs = [decoder.stat().st_mtime, packed.stat().st_mtime]
+    # ...and the naming rule itself, which lives one directory up and is what
+    # turns a graphic number into the name rooms.json carries.
+    namer = KNIGHTLORE.parent / "graphics.py"
+    if namer.is_file():
+        inputs.append(namer.stat().st_mtime)
+    sheet = KNIGHTLORE / "sprites.json"
+    if sheet.is_file():
+        inputs.append(sheet.stat().st_mtime)
+    newest_input = max(inputs)
+    if not atlas.is_file() or atlas.stat().st_mtime < newest_input:
+        print(f"Regenerating {atlas.name} from {packed.name}")
+        subprocess.run([sys.executable, str(decoder)], cwd=KNIGHTLORE, check=True)
+
+    newest_input = max(emitter.stat().st_mtime, atlas.stat().st_mtime)
     if generated.is_file() and generated.stat().st_mtime >= newest_input:
         return
 
-    print(f"Regenerating {generated.name} from {packed.name}")
-    subprocess.run([sys.executable, str(generator)], cwd=KNIGHTLORE, check=True)
+    print(f"Regenerating {generated.name} from {atlas.name}")
+    subprocess.run([sys.executable, str(emitter)], cwd=KNIGHTLORE, check=True)
 
 
 def main() -> None:

@@ -64,6 +64,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import graphics as gfx                                          # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 PACKED = HERE / "room_data.bin"
 OUT = HERE / "rooms.json"
@@ -134,7 +137,24 @@ def sizes():
     return out
 
 
-def scenery_templates():
+# The graphics this castle names. graphics.py is the one place the number and
+# the name meet, so rooms_source.py puts the numbers back by exactly the rule
+# that took them out.
+def json_flags(byte):
+    """The game's flags byte, named where we know what a bit means.
+
+    Only the mirror bit is acted on downstream. $04 (mobile) and $10 (selected
+    into the list built at $B547) are understood but not mapped -- see
+    rooms_source.py -- so they stay in `rest` rather than being guessed at.
+    """
+    return {
+        "mirrored": bool(byte & FLAG_MIRROR),
+        "passable": False,      # Pentagram's own bit for this is not known
+        "rest": byte & ~FLAG_MIRROR & 0xFF,
+    }
+
+
+def scenery_templates(known):
     """Each scenery template: its chain of 8-byte blocks.
 
     The game copies a block, then looks at the byte after it and copies another
@@ -148,10 +168,10 @@ def scenery_templates():
         while b(p):
             raw = [b(p + i) for i in range(SCENERY_BLOCK)]
             blocks.append({
-                "graphic": raw[SCENERY_GRAPHIC],
-                "flags": raw[SCENERY_FLAGS],
-                "mirrored": bool(raw[SCENERY_FLAGS] & FLAG_MIRROR),
-                "bytes": raw,
+                "graphic": gfx.name_of(known, raw[SCENERY_GRAPHIC]),
+                "u": raw[1], "v": raw[2], "z": raw[3],
+                "sizeU": raw[4], "sizeV": raw[5], "sizeZ": raw[6],
+                "flags": json_flags(raw[SCENERY_FLAGS]),
             })
             p += SCENERY_BLOCK
         if n in DOOR_INDICES:
@@ -172,7 +192,7 @@ def scenery_templates():
     return out
 
 
-def object_templates():
+def object_templates(known):
     """Each object template: its chain of 5-byte entries.
 
     The five bytes of an entry are spread into an object record's fields +0,
@@ -190,20 +210,16 @@ def object_templates():
         while b(p):
             raw = [b(p + i) for i in range(OBJECT_BLOCK)]
             entries.append({
-                "graphic": raw[OBJECT_GRAPHIC],
-                "flags": raw[OBJECT_FLAGS],
-                "mirrored": bool(raw[OBJECT_FLAGS] & FLAG_MIRROR),
-                "bytes": raw,
-                # Reserved. Pentagram's own entries are five bytes and carry no
-                # placement nudge, so this is zero everywhere -- but Knight Lore
-                # has a sixth byte that offsets a template half a cell in U or V
-                # and lifts it in Z, and the remake keeps that capability rather
-                # than losing it to an accident of which game came first. See
-                # unpack_offsets in ../knightlore/rooms.py.
-                "offsets": 0,
-                "halfU": False,
-                "halfV": False,
-                "raiseZ": 0,
+                "graphic": gfx.name_of(known, raw[OBJECT_GRAPHIC]),
+                "sizeU": raw[1], "sizeV": raw[2], "sizeZ": raw[3],
+                "flags": json_flags(raw[OBJECT_FLAGS]),
+                # Pentagram's own entries are five bytes and carry no placement
+                # nudge, so this is nothing everywhere -- but Knight Lore has a
+                # sixth byte that offsets a template half a cell in U or V and
+                # lifts it in Z, its room_build.s reads one too, and the remake
+                # keeps the capability rather than losing it to an accident of
+                # which game came first.
+                "offsets": {"halfU": False, "halfV": False, "raiseZ": 0},
             })
             p += OBJECT_BLOCK
         out.append({
@@ -295,8 +311,12 @@ def main():
                  "the tape to produce it" % PACKED.name)
     data = PACKED.read_bytes()
 
-    scenery = scenery_templates()
-    objects = object_templates()
+    known = gfx.names(HERE)
+    if not known:
+        print("  no %s: graphics will be named by number until the sheet is "
+              "unpacked" % gfx.SHEET)
+    scenery = scenery_templates(known)
+    objects = object_templates(known)
     scenery_names = {t["index"]: t["name"] for t in scenery}
     object_names = {t["index"]: t["name"] for t in objects}
 
@@ -326,11 +346,11 @@ def main():
     for group, key in ((scenery, "blocks"), (objects, "entries")):
         for t in group:
             t["used"] = t["name"] in named
-            graphics = [e["graphic"] for e in t[key]]
-            t["valid"] = all(g < GRAPHIC_COUNT for g in graphics)
+            drawable = set(known.values())
+            t["valid"] = all(e["graphic"] in drawable for e in t[key])
             if t["used"] and not t["valid"]:
-                sys.exit("%s is used by a room but names a graphic past %d"
-                         % (t["name"], GRAPHIC_COUNT - 1))
+                sys.exit("%s is used by a room but names a graphic the table "
+                         "has no number for" % t["name"])
 
     atlas = {
         "meta": {
@@ -339,6 +359,16 @@ def main():
             "comment": "Written by rooms.py from room_data.bin; see its "
                        "docstring for the format. Template names are "
                        "placeholders until the pieces are identified.",
+            # The artwork this castle is drawn with. A template carries a
+            # GRAPHIC NUMBER, which is the game's own index and means nothing
+            # without a sheet numbered the same way -- so the file says which
+            # one rather than leaving whatever opens it to assume. The paths
+            # are relative to this file.
+            "sprites": {
+                "sheet": "sprites.png",
+                "atlas": "sprites.json",
+                "adjust": "sprite_adj.s",
+            },
         },
         "sizes": sizes(),
         "sceneryTemplates": scenery,

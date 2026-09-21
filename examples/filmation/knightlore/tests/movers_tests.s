@@ -2,7 +2,16 @@
 ; engine/tests/run_tests.py.
 ;
 ; movers.s is assembled with the engine's mover framework, engine/mover.s, and
-; nothing else. Everything they call out to -- the collision clamp, the depth
+; knightlore/monster_gate.s. That last one is here rather than stubbed because
+; it is not something movers.s calls, it is where mover_tbl SENDS the monsters:
+; every behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL is dispatched through it.
+; Stubbing it would mean writing that dispatch a second time, and a table
+; pointing at a stub proves nothing about where a monster's turn really goes.
+; What is stubbed instead is busy.s's two bytes, which fresh zeroes -- so every
+; test runs in a quiet room and the gate passes the monster straight on to its
+; own mover.
+;
+; Everything else they call out to -- the collision clamp, the depth
 ; sort, placement, the redraw regions, the pair flip -- is a stub below that
 ; counts its calls and writes down what it was handed. So what is tested is
 ; each mover's own decision: the step it puts in the record, the graphic and
@@ -28,7 +37,7 @@
 REC					EQU		$C000		; the record under test; a guard's legs follow
 ROOMS				EQU		$C100		; room_objects, for movers_step
 
-; What the engine gives movers.s. The template numbers are rooms.py's to choose;
+; What the engine gives movers.s. The template numbers are rooms.json's to choose;
 ; these only have to be different from each other.
 COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
@@ -108,7 +117,7 @@ start:				ld		sp,$FE00
 
 					TEST	"find: the last in the table"
 					call	fresh
-					ld		a,FG_SPIKE_HIGH
+					ld		a,FG_SPIKE		; the entry before the $FF
 					call	mover_find
 					call	snap
 					EXPECT_A	MOVE_STILL, "the behaviour"
@@ -174,13 +183,57 @@ start:				ld		sp,$FE00
 
 ; --- mover_fire ----------------------------------------------------------------
 
-					TEST	"fire U: two forward, flickering"
+; --- monster_gate --------------------------------------------------------------
+; Where mover_tbl sends every behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL. In a
+; quiet room it is a detour on the way to the monster's own mover; in a busy one
+; it counts busy_count down and sits one monster out per turn -- see busy.s. The
+; step is cleared when it does, because a ghost carries what is standing on it
+; and a carried thing must not move without it.
+
+					TEST	"gate: a quiet room goes straight on to the mover"
+					call	fresh
+					ld		ix,REC
+					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
+					SET		OBJ.MOVE_STATE, COLLIDE_U	; going forward, so the step is +1
+					RUN		monster_gate
+					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_fire_u ran"
+					EXPECT_BYTE	busy_count, 0, "busy_count, untouched"
+
+					TEST	"gate: a busy room sits the one that reaches nought out"
+					call	fresh
+					ld		a,4
+					ld		(room_busy),a
+					ld		a,1		; this one is its turn to sit out
+					ld		(busy_count),a
+					ld		ix,REC
+					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
+					SET		OBJ.DU, 7
+					SET		OBJ.DV, 7
+					RUN		monster_gate
+					EXPECT_FIELD	OBJ.DU, 0, "DU: the step is cleared"
+					EXPECT_FIELD	OBJ.DV, 0, "DV: and so is this one"
+					EXPECT_BYTE	busy_count, 4, "busy_count, counting from room_busy again"
+
+					TEST	"gate: a busy room lets the rest through"
+					call	fresh
+					ld		a,4
+					ld		(room_busy),a
+					ld		a,3		; not this one
+					ld		(busy_count),a
+					ld		ix,REC
+					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
+					SET		OBJ.MOVE_STATE, COLLIDE_U
+					RUN		monster_gate
+					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_fire_u ran anyway"
+					EXPECT_BYTE	busy_count, 2, "busy_count, one nearer its turn"
+
+					TEST	"fire U: one forward, flickering"
 					call	fresh
 					SET		OBJ.GFX, 87
 					SET		OBJ.MOVE_STATE, COLLIDE_U
 					SET		OBJ.DV, 7
 					RUN		mover_fire_u
-					EXPECT_FIELD	OBJ.DU, 2, "DU"
+					EXPECT_FIELD	OBJ.DU, 1, "DU"		; FIRE_STEP: one a turn, as the game moves one
 					EXPECT_FIELD	OBJ.DV, 0, "DV"
 					EXPECT_BYTE	clamp_dz, 0, "DZ, held up against gravity"
 					EXPECT_FIELD	OBJ.GFX, 86, "the graphic"
@@ -192,7 +245,7 @@ start:				ld		sp,$FE00
 					ld		a,COLLIDE_U | COLLIDE_Z
 					ld		(stub_hit),a
 					RUN		mover_fire_u
-					EXPECT_BYTE	clamp_de + 1, -2 & $FF, "D, the step clamped"
+					EXPECT_BYTE	clamp_de + 1, -1 & $FF, "D, the step clamped"
 					EXPECT_FIELD	OBJ.GFX, 87, "the graphic"
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_U, "MOVE_STATE, turned"
 
@@ -203,7 +256,7 @@ start:				ld		sp,$FE00
 					ld		(stub_hit),a
 					RUN		mover_fire_v
 					EXPECT_FIELD	OBJ.DU, 0, "DU"
-					EXPECT_FIELD	OBJ.DV, 2, "DV"
+					EXPECT_FIELD	OBJ.DV, 1, "DV"
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_V, "MOVE_STATE"
 
 					TEST	"fire V: stopped along V turns it"
@@ -894,6 +947,11 @@ room_floor_z:		DB		0
 room_shown:			DB		0
 room_object_count:	DB		0
 
+; busy.s's, for monster_gate. Zeroed by fresh like the rest of this block, so
+; a monster's turn is never sat out and the gate always reaches its mover.
+room_busy:			DB		0
+busy_count:			DB		0
+
 stub_hit:			DB		0		; what the clamp says gave
 stub_block:			DB		0		; non-zero: the clamp takes the whole step
 
@@ -1039,5 +1097,6 @@ sound_take:
 sound_sparkle:		ret
 
 
+					INCLUDE	"../monster_gate.s"
 					INCLUDE	"../movers.s"
 					INCLUDE	"../../engine/mover.s"
