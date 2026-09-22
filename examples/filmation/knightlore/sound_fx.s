@@ -26,6 +26,15 @@ sound_z:            ld      a,(ix+OBJ.Z)        ; audio_B451: falling things
                     jr      sound_pitch
 sound_u:            ld      a,(ix+OBJ.U)        ; audio_B45D: along U
                     jr      sound_pitch
+
+; A fire's hum, along whichever axis it paces -- engine/movers.s's mover_pacer
+; calls it with L the axis's collide bit. upd_86_87 plays sound_u, and
+; upd_180_181 sound_v.
+pacer_sound:        bit     1,l                 ; COLLIDE_V
+                    jr      z,sound_u
+                    ASSERT  COLLIDE_V == 2
+                    ;; NB: fall through into sound_v
+
 sound_v:            ld      a,(ix+OBJ.V)        ; audio_B462: along V
                     jr      sound_pitch
 sound_uvz:          ld      a,(ix+OBJ.U)        ; audio_B467: ghosts, gates, things shoved
@@ -117,6 +126,16 @@ sound_sparkle:      cpl
                     ld      bc,$FF02
                     ld      d,b
                     jr      sound_noise
+
+; Something paced has turned round -- engine/movers.s's mover_turn_if_hit
+; calls it with A the axis's bit. A fire turning on V bounces off what stopped
+; it, as upd_180_181 has it; nothing else here turns on V. Fires jammed
+; against each other turn every turn, so it is a continuous sound here.
+mover_turned:       cp      COLLIDE_V
+                    ret     nz
+                    call    sound_take
+                    ret     z
+                    ;; NB: fall through into sound_bounce
 
 ; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
 ; are DI, XOR A and LD DE,$FFFF, with the top two bits set.

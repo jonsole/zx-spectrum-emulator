@@ -1,7 +1,7 @@
 # Plan: a shared library of movers
 
-Status: **decided; stage 1 done and uncommitted, stage 2 not started**
-(2026-09-22). This file is the brief
+Status: **decided; stage 1 committed (69d7d6e), stage 2 done and
+uncommitted** (2026-09-22). This file is the brief
 for the session that does the work. It records what was found, what is
 proposed, and what the user decided.
 
@@ -48,6 +48,62 @@ proposed, and what the user decided.
   `pentagram/movers` runs one.
 - **Not done in stage 1:** `mover_collapsing`/`mover_crumbles` (stood-on-then-
   gone) is a stage 2 family, and both still sit in their games.
+
+## Stage 2: done, uncommitted (2026-09-22)
+
+- **The pacer.** `mover_pacer_u`/`_v` fall into `mover_pacer`, which falls
+  into `mover_turn_if_hit`. Those are Knight Lore's fires and Pentagram's
+  platforms and pacing dragon's heads. The axis is still patched in, as both
+  games had it. The game supplies `PACER_STEP`, `pacer_sound` (called with L
+  the axis), `pacer_frame`, `pacer_move` and `mover_turned` (A the axis).
+  Knight Lore's guard still uses `mover_turn_if_hit` from its own movers.
+  Pentagram's dragon's heads go through `mover_pace_u_deadly`/`_v_deadly`,
+  which sit a turn out in a busy room and then jump to the pacer, so the
+  platforms no longer test their behaviour on every turn.
+- **The hopper.** `mover_hopper_claim` falls into `mover_hopper`. Those are
+  Knight Lore's balls and Pentagram's bobbing dragon's head. The claim is
+  Knight Lore's "first ball sets the room's top" rule, and Pentagram never
+  names it. The game supplies `hopper_top` (a byte), `HOPPER_RISE`,
+  `HOPPER_ABOVE` (claim only), `hopper_frame`, `hopper_sound`, `hopper_move`
+  and `hopper_landed`. The two games tested the top the other way round:
+  Knight Lore rises while Z is at most the top, and Pentagram stops at Z 176
+  or more. So Pentagram's `hopper_top` is 175, which gives the same stopping
+  point. Pentagram's rising bit moved from MOVE_STATE bit 0 to bit 2,
+  `HOPPER_RISING`, which is Knight Lore's and the originals'. Nothing else
+  reads it.
+- **Each game's names are in its own `shared_movers.s`,** included between
+  engine/mover.s and engine/movers.s. An EQU of a label still to come takes
+  the previous pass's value, and IFUSED moves code between the early passes,
+  so sjasmplus warned (4 warnings) until they moved after mover.s. Most are
+  EQUs to a routine the game already has (`mover_flicker`,
+  `mover_move_always`, `sound_z`, `sound_bounce`) or to Pentagram's
+  `mover_still`, a RET. Knight Lore's two pieces of real glue, `pacer_sound`
+  and `mover_turned`, are in sound_fx.s and fall into `sound_v` and
+  `sound_bounce`.
+- **Bytes.** Knight Lore's code region went from 4 free to 14. Its `$6000`
+  region, where sound_fx.s is, went from 21 to 10. Pentagram's code grew 22
+  bytes, from the dragon's heads' wrappers, `pacer_move` and hook calls that
+  reach a RET. The player's `ALIGN 32` record moved another 10, so the pad
+  before `sprite_adj_index` went from 73 to 41.
+- **Tests.** The engine suite has 11 new tests (28 in all): the pacer's step,
+  sound, frame, turn and "no turn", and the hopper's claim, fall, landing and
+  both edges of the top. Pentagram's suite has 10 new ones (22): table entries,
+  a platform never sitting out, a dragon's head sitting out and pacing, and
+  the bobbing head at 174 to 175 and 175 to 176. Knight Lore's 63 run through
+  the shared routines unchanged. All 226 pass, and both games build with no
+  warnings.
+- **Left in the games, on purpose:**
+  - **Stood-on-then-gone.** Knight Lore's collapsing block is set off by
+    anything landing on it, goes on once started, jumps straight to its last
+    graphic, sparkles and is gone the next turn. Pentagram's crumbling block
+    is set off only by the player standing on it, steps 136 to 139 every
+    fourth turn only while he stays, and is silent. Only the "gone" is shared,
+    and that is `object_hide` already. One routine would be all hooks, and it
+    would cost Knight Lore about 11 bytes it does not have.
+  - **Straight until blocked, then re-pick** (the ghost, spider, creature and
+    faller). Each re-picks differently: both axes or one, how far, which way it
+    faces, and its frames. The shared part is "if stopped or still, pick; then
+    move", which is a few instructions. As the brief allowed, they stay.
 
 ## The goal
 

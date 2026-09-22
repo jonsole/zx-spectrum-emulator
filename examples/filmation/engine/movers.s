@@ -13,6 +13,11 @@
 ; README.md -- with no default in here, so that one a game forgot is an
 ; assembly error and not a silent guess.
 ;
+; A routine the game supplies is usually one it already has, named by EQU:
+; hopper_move EQU mover_move costs nothing, and a game that wants nothing done
+; points the name at any RET it has. Only what a game does that no routine of
+; its own already does needs code of its own.
+;
 ; Where two behaviours differ only by a call at the start, the one with the
 ; call is a second entry that falls into the other, and an ASSERT holds the
 ; two together. The ASSERT names the second label, which is also what makes
@@ -172,5 +177,148 @@ object_hide:		call	region_reset
 object_blank:		ld		(ix+OBJ.GFX),0
 					ld		(ix+OBJ.BEHAVIOUR),0
 					ld		(ix+OBJ.FLAGS),OBJ_PASSABLE
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Pacing to and fro along one axis, turning round whenever something stops it
+; -- Knight Lore's fires, upd_86_87 and upd_180_181, and Pentagram's platforms
+; and dragon's heads, $CEA3 and $CEDD. Both games wrote it as one routine with
+; the axis patched in, because (IX+d) takes its displacement as an immediate,
+; and so does this.
+;
+; The neat part is Knight Lore's: the bit of MOVE_STATE that says which way it
+; is going is numbered by axis, and so is the bit collide_hit sets for the axis
+; the clamp had to cut, so the same mask does both and the turn is an XOR.
+; From rest -- the bit clear -- it goes the negative way first, as both do.
+; It does not fall: mover_hover holds it up for the turn.
+;
+; What the game supplies:
+;   PACER_STEP    how far it goes a turn
+;   pacer_sound   called first, with L the axis's collide bit, and H the
+;                 step's offset in the record. Knight Lore hums along U or V.
+;   pacer_frame   called once the step is cleared and the thing held up; may
+;                 change the graphic. Knight Lore's fires flicker.
+;   pacer_move    moves it by the step now in the record: mover_move, or
+;                 mover_move_always for one whose graphic changes every turn.
+;   mover_turned  see mover_turn_if_hit.
+; Each may corrupt anything but IX.
+;   IX -> the record
+					IFUSED	mover_pacer_u
+mover_pacer_u:		ld		hl,OBJ.DU * 256 + COLLIDE_U
+					jr		mover_pacer
+					ENDIF
+
+					IFUSED	mover_pacer_v
+mover_pacer_v:		ld		hl,OBJ.DV * 256 + COLLIDE_V
+					ASSERT	$ == mover_pacer
+					ENDIF
+
+					IFUSED	mover_pacer
+mover_pacer:		ld		a,h
+					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
+					ld		a,l
+					ld		(.which + 1),a		; the axis, as a mask
+					call	pacer_sound
+					call	mover_hover		; it does not fall
+					call	pacer_frame
+
+					ld		a,(ix+OBJ.MOVE_STATE)
+.which:				and		0		; patched: the axis bit
+					ld		a,PACER_STEP
+					jr		nz,.forward
+					neg
+.forward:
+.step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
+
+					call	pacer_move
+					ld		a,(.which + 1)		; the same bit again
+					ASSERT	$ == mover_turn_if_hit
+					ENDIF
+
+
+; Turn round if the move just made was stopped along the axis in A: flip that
+; bit of MOVE_STATE, which is numbered by axis the same way collide_hit is,
+; and tell the game's mover_turned, with the bit in A. Knight Lore's fires
+; bounce off whatever stops them along V; Pentagram's paced things are silent.
+;   A  - the axis's bit
+;   IX -> the record
+; Corrupts AF, C, and whatever mover_turned does.
+					IFUSED	mover_turn_if_hit
+mover_turn_if_hit:	ld		c,a
+					ld		a,(collide_hit)
+					and		c
+					ret		z		; nothing in the way
+					ld		a,(ix+OBJ.MOVE_STATE)
+					xor		c
+					ld		(ix+OBJ.MOVE_STATE),a
+					ld		a,c
+					jp		mover_turned
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Bouncing on the spot: it falls, and on landing climbs again until it is
+; above hopper_top, and then falls again -- Knight Lore's balls, upd_178_179,
+; and Pentagram's bobbing dragon's head, $CE31.
+;
+; Falling needs no code: mover_clamp's DEC is the gravity, and the clamp stops
+; it on the floor or on whatever it lands on. Climbing sets DZ to HOPPER_RISE,
+; which the same DEC takes one off. MOVE_STATE bit HOPPER_RISING says it is
+; on the way up -- the game's own bit 2 of $0D, in Knight Lore.
+;
+; mover_hopper_claim is Knight Lore's odd rule, and worth saying twice. The
+; room's top is one variable, zeroed when the room is built, and if it is
+; still zero -- which it is until the first ball of the room takes its turn --
+; that ball fills it in from its own Z plus HOPPER_ABOVE. Every other ball in
+; the room then bounces to THAT height, wherever it sits itself; whichever the
+; object walk reaches first decides for all of them ($5BBD). Pentagram's top
+; is fixed, and its hopper starts at mover_hopper.
+;
+; What the game supplies:
+;   hopper_top     a byte: it rises until its Z is past this. Pentagram's is
+;                  one below Z 176, where it stops.
+;   HOPPER_RISE    the DZ it climbs with, before gravity takes one back
+;   HOPPER_ABOVE   for mover_hopper_claim only: how far above the first one
+;   hopper_frame   called first; must clear DU and DV -- mover_halt, or
+;                  mover_flicker for one that flickers as it goes
+;   hopper_sound   called every turn after that
+;   hopper_move    moves it while it falls: mover_move, or mover_move_always
+;                  for one whose graphic changes every turn
+;   hopper_landed  jumped to on the turn it lands
+; Each may corrupt anything but IX.
+;   IX -> the record
+HOPPER_RISING		EQU		2		; the bit of MOVE_STATE
+
+					IFUSED	mover_hopper_claim
+mover_hopper_claim:	ld		a,(hopper_top)
+					or		a
+					jr		nz,mover_hopper		; somebody has claimed it
+					ld		a,(ix+OBJ.Z)
+					add		a,HOPPER_ABOVE
+					ld		(hopper_top),a
+					ASSERT	$ == mover_hopper
+					ENDIF
+
+					IFUSED	mover_hopper
+mover_hopper:		call	hopper_frame
+					call	hopper_sound
+					bit		HOPPER_RISING,(ix+OBJ.MOVE_STATE)
+					jr		nz,.rising
+
+					call	hopper_move		; DZ is whatever gravity left it
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still in the air
+					set		HOPPER_RISING,(ix+OBJ.MOVE_STATE)	; landed: up again
+					jp		hopper_landed
+
+.rising:			ld		(ix+OBJ.DZ),HOPPER_RISE
+					call	mover_move_always
+					ld		a,(hopper_top)
+					cp		(ix+OBJ.Z)
+					ret		nc		; not past it yet
+					res		HOPPER_RISING,(ix+OBJ.MOVE_STATE)
 					ret
 					ENDIF

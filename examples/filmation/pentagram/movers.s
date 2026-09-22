@@ -120,10 +120,12 @@ mover_of:           DB      6, MOVE_STILL           ; object_03, spiky grass (23
 
 ; One DW per behaviour from BEHAVIOUR_FIRST_TURN up. Each gets IX pointing at
 ; its record, may corrupt anything, must leave the stack balanced, and returns.
-; mover_falls and mover_sinks are the engine's, shared with Knight Lore: see
-; ../engine/movers.s, which has mover_find, player_on_top and object_hide too.
-mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
-                    DW      mover_pace_v        ; MOVE_PACE_V
+; The pacers, mover_falls, mover_sinks and mover_hopper are the engine's,
+; shared with Knight Lore: see ../engine/movers.s, which has mover_find,
+; player_on_top and object_hide too, and shared_movers.s for what Pentagram
+; gives them.
+mover_tbl:          DW      mover_pacer_u       ; MOVE_PACE_U: engine/movers.s
+                    DW      mover_pacer_v       ; MOVE_PACE_V: engine/movers.s
                     DW      mover_falls         ; MOVE_FALLS: $CD75
                     DW      mover_homer         ; MOVE_HOMER
                     DW      mover_bolt          ; MOVE_BOLT
@@ -136,9 +138,9 @@ mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_conveyor      ; MOVE_CONVEYOR
                     DW      mover_still         ; MOVE_STILL
                     DW      mover_spider        ; MOVE_SPIDER
-                    DW      mover_pace_u        ; MOVE_PACE_U_DEADLY
-                    DW      mover_pace_v        ; MOVE_PACE_V_DEADLY
-                    DW      mover_hopper        ; MOVE_HOPPER
+                    DW      mover_pace_u_deadly ; MOVE_PACE_U_DEADLY
+                    DW      mover_pace_v_deadly ; MOVE_PACE_V_DEADLY
+                    DW      mover_hopper        ; MOVE_HOPPER: engine/movers.s
                     DW      mover_creature      ; MOVE_CREATURE
                     DW      mover_faller        ; MOVE_FALLER
                     DW      mover_faller4       ; MOVE_FALLER4
@@ -238,50 +240,28 @@ mover_still:        ret
 
 ; ---------------------------------------------------------------------------
 ; Pacing to and fro along one axis, two units a turn, turning round whenever
-; something stops it -- $CEA3 for U and $CEDD for V. It does not fall: the
+; something stops it -- $CEA3 for U and $CEDD for V: engine/movers.s's
+; mover_pacer_u and _v, shared with Knight Lore's fires. It does not fall: the
 ; original moves it with $B97C, which skips the gravity $B979 applies, and
-; mover_hover is the engine's way of saying the same. Which way it is going is
-; MOVE_STATE's axis bit, numbered as collide_hit numbers the axes, so the turn
-; is one XOR. From rest it goes the negative way first, as the original does.
+; mover_hover is the engine's way of saying the same. A platform goes to them
+; straight from mover_tbl; what Pentagram gives them is in shared_movers.s.
+;
+; A dragon's head paces the same way, but it is a monster: in a busy room it
+; sits turns out, and with MONSTER_KEEP_SPEED goes twice as far when it does
+; move. A platform never sits out -- he rides it, and it would throw him off.
 ;   IX -> the record
-PACE_STEP           EQU     2
-
-mover_pace_u:       ld      hl,OBJ.DU * 256 + COLLIDE_U
-                    jr      mover_pace
-mover_pace_v:       ld      hl,OBJ.DV * 256 + COLLIDE_V
-
-mover_pace:         ld      a,(ix+OBJ.BEHAVIOUR)
-                    cp      BEHAVIOUR_DEADLY
-                    jr      c,.rides            ; a platform: never sits out
-                    call    monster_sits_out
+mover_pace_u_deadly: call   monster_sits_out
                     ret     c
-.rides:             ld      a,h
-                    ld      (.step + 2),a       ; LD (IX+d),A is DD 77 d
-                    ld      a,l
-                    ld      (.which + 1),a      ; the axis, as a mask
-                    call    mover_hover         ; it does not fall
+                    jp      mover_pacer_u
+mover_pace_v_deadly: call   monster_sits_out
+                    ret     c
+                    jp      mover_pacer_v
 
-                    ld      a,(ix+OBJ.MOVE_STATE)
-.which:             and     0                   ; patched: the axis bit
-                    ld      a,PACE_STEP
-                    jr      nz,.forward
-                    neg
-.forward:
-.step:              ld      (ix+OBJ.DU),a       ; patched: DU or DV
-
-                    ld      a,(ix+OBJ.BEHAVIOUR)
+; mover_pacer's move, with its step now in the record.
+pacer_move:         ld      a,(ix+OBJ.BEHAVIOUR)
                     cp      BEHAVIOUR_DEADLY
                     call    nc,monster_double
-                    call    mover_move
-                    ld      a,(.which + 1)      ; the same bit again
-                    ld      c,a
-                    ld      a,(collide_hit)
-                    and     c
-                    ret     z                   ; nothing in the way
-                    ld      a,(ix+OBJ.MOVE_STATE)
-                    xor     c
-                    ld      (ix+OBJ.MOVE_STATE),a
-                    ret
+                    jp      mover_move
 
 
 ; ---------------------------------------------------------------------------
@@ -447,35 +427,17 @@ mover_spider:       call    monster_sits_out
 
 
 ; ---------------------------------------------------------------------------
-; A dragon's head that bobs -- $CE31, which graphic 86 reaches through $CE9A.
-; On the ground it waits for gravity to settle it; the turn it lands it
-; launches, rising a unit a turn -- with no gravity, as $B97C moves it -- until
-; it is up at Z 176, and then it falls again under gravity.
+; A dragon's head that bobs -- $CE31, which graphic 86 reaches through $CE9A:
+; engine/movers.s's mover_hopper, shared with Knight Lore's balls. On the
+; ground it waits for gravity to settle it; the turn it lands it launches,
+; rising a unit a turn -- with no gravity, as $B97C moves it -- until it is up
+; at Z 176, and then it falls again under gravity.
 ;
-; MOVE_STATE bit 0 says it is on the way up, the original's bit 2 of +$0D.
-;   IX -> the record
+; The library rises until its Z is past hopper_top, and the original until it
+; is at 176 or above, so the top is one below. It never changes: Pentagram's
+; hopper starts at mover_hopper, not mover_hopper_claim.
 HOPPER_TOP          EQU     176
-
-mover_hopper:       call    mover_halt          ; never along the floor
-                    bit     0,(ix+OBJ.MOVE_STATE)
-                    jr      z,.falling
-
-                    ; Up a unit. mover_clamp takes one off DZ for gravity, so
-                    ; two is one.
-                    ld      (ix+OBJ.DZ),2
-                    call    mover_move_always
-                    ld      a,(ix+OBJ.Z)
-                    cp      HOPPER_TOP
-                    ret     c
-                    res     0,(ix+OBJ.MOVE_STATE)   ; high enough: come down
-                    ret
-
-.falling:           call    mover_move
-                    ld      a,(collide_hit)
-                    and     COLLIDE_Z
-                    ret     z                   ; still in the air
-                    set     0,(ix+OBJ.MOVE_STATE)   ; landed: up again
-                    ret
+hopper_top:         DB      HOPPER_TOP - 1
 
 
 ; ---------------------------------------------------------------------------

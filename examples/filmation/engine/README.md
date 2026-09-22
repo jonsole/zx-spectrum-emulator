@@ -29,7 +29,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `room.s` | The room: bounds, doorways, the object count, and `room_add` → `room_show` |
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
-| `movers.s` | The behaviours more than one game has, each assembled only if the game names it (`IFUSED`): `mover_find`, `mover_falls`, `mover_falls_noisy`, `mover_sinks`, `player_on_top`, `object_hide`, `object_blank`. Included after `mover.s` |
+| `movers.s` | The behaviours more than one game has, each assembled only if the game names it (`IFUSED`): `mover_find`, `mover_falls`, `mover_falls_noisy`, `mover_sinks`, `mover_pacer_u`/`_v` and `mover_turn_if_hit`, `mover_hopper` and `mover_hopper_claim`, `player_on_top`, `object_hide`, `object_blank`. Included after `mover.s`, with the game's names for it in between |
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
 | `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the games' |
 
@@ -86,6 +86,8 @@ The engine names nothing else of the game's.
 | `walker_player` | label | mover.s, movers.s | The character, which is not in the pool, so movers collide with it explicitly; `player_on_top` asks whether it is standing on a record |
 | `mover_of` | table | movers.s | For `mover_find`: pairs of (template, behaviour), ended by `$FF` |
 | `sound_falls` | routine | movers.s | For `mover_falls_noisy`: played every turn before it falls. Preserves IX |
+| `PACER_STEP`; `pacer_sound`, `pacer_frame`, `pacer_move`, `mover_turned` | EQU; routines | movers.s | For `mover_pacer_u`/`_v`: how far it goes a turn; a sound, with L the axis's collide bit; a frame change once it is held up; the move itself (`mover_move` or `mover_move_always`); and what to do when it turns, with A the axis. See the header of `mover_pacer` |
+| `hopper_top`, `HOPPER_RISE`, `HOPPER_ABOVE`; `hopper_frame`, `hopper_sound`, `hopper_move`, `hopper_landed` | byte, EQU; routines | movers.s | For `mover_hopper`: the height it climbs past, the DZ it climbs with, and (for `mover_hopper_claim` only) how far above the first one the room's top is claimed; clearing the step (`mover_halt` or `mover_flicker`), a sound, the falling move, and what to do on landing |
 | `walker_glance` | routine | walker.s | A = block + phase in, the body frame to show out; IX → legs. Corrupts C. Return A unchanged for no glance |
 | `sound_jump`, `sound_z` | routines | walker.s, movers.s | A jump starting; a fall faster than two units a turn, and `mover_sinks` going down |
 | `CHARACTER_STEP`, `CHARACTER_HALF_U/V`, `CHARACTER_BODY_UP`, `CHARACTER_JUMP_DZ`, `CHARACTER_FALL_MAX` | EQU | walker.s, movers.s | How far a character walks, how wide it is, how high its body rides, how it jumps and falls |
@@ -96,8 +98,13 @@ The engine names nothing else of the game's.
 
 A name that only `movers.s` uses is needed only if the game uses the routine
 that asks for it: `mover_of` for a game that calls `mover_find`, `sound_falls`
-for one whose table names `mover_falls_noisy`. None of them has a default, so
-one that is missing is an assembly error.
+for one whose table names `mover_falls_noisy`, and so on. None of them has a
+default, so one that is missing is an assembly error. Most are an `EQU` to a
+routine the game already has, or to any `RET` where it wants nothing done, and
+cost no bytes. A game states them in a file of its own included between
+`mover.s` and `movers.s` (both games call it `shared_movers.s`): an `EQU` of a
+label still to come takes the previous pass's value, and `IFUSED` moves code
+about between the early passes, so sjasmplus warns.
 
 The top-level file also provides `VIEW_BUF_WIDTH`, `VIEW_BUF_ROWS`,
 `view_buffer`, `shift_shared` and `bit_reverse_table`, as laid out above.

@@ -133,7 +133,7 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 ; The monsters, MOVE_FIRE_U to MOVE_SPIKE_BALL, go through monster_gate, which
 ; sits them out by turns in a busy room -- see busy.s -- and otherwise goes on
 ; to their own movers.
-mover_tbl:			DW		mover_ball			; MOVE_BALL
+mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		monster_gate		; MOVE_FIRE_U
 					DW		monster_gate		; MOVE_FIRE_V
 					DW		monster_gate		; MOVE_GUARD_U
@@ -169,116 +169,6 @@ mover_ball_top:	DB		0
 ; up there, which clears it.
 spike_ball_falling:	DB		0
 spike_ball_held:	DB		0
-
-
-; What the moveable block plays every turn it falls or rides. mover_falls_noisy,
-; in engine/movers.s, calls it: the chirp upd_62 makes, every frame.
-sound_falls			EQU		sound_chirp
-
-
-; ---------------------------------------------------------------------------
-; A fire that paces to and fro along one axis, two units a turn, turning round
-; whenever something stops it.
-;
-; Knight Lore's, from upd_86_87 and upd_180_181 -- two routines that are the
-; same routine with the axis changed, which is why this is one with the axis
-; patched. The neat part is theirs: the bit that says which way it is going is
-; numbered by axis, and so is the bit that says which axis the clamp had to
-; cut, so the same mask does both and the turn is an XOR.
-;
-; It animates as it goes, between its graphic and the one below it. The
-; template names the taller of the two -- 181 of 180/181, 87 of 86/87 -- so
-; the rotation buffer the first frame takes from the arena fits the second.
-;   IX -> the record
-mover_fire_u:		call	sound_u		; and a fire's, the same
-					ld		hl,OBJ.DU * 256 + COLLIDE_U
-					jr		mover_fire
-mover_fire_v:		call	sound_v
-					ld		hl,OBJ.DV * 256 + COLLIDE_V
-
-mover_fire:			ld		a,h
-					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
-					ld		a,l
-					ld		(.which + 1),a		; the axis, as a mask
-
-					call	mover_hover		; it does not fall
-					call	mover_flicker
-
-					ld		a,(ix+OBJ.MOVE_STATE)
-.which:				and		0		; patched: the axis bit
-					ld		a,FIRE_STEP
-					jr		nz,.forward
-					neg
-.forward:
-.step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
-
-					call	mover_move_always
-					ld		a,(.which + 1)		; the same bit again
-
-					;; NB: fall through into mover_turn_if_hit
-
-
-; Turn round if the move just made was stopped along the axis in A: flip that
-; bit of MOVE_STATE, which is numbered by axis the same way collide_hit is.
-;   A  - the axis's bit
-;   IX -> the record
-; Corrupts AF, C.
-mover_turn_if_hit:	ld		c,a
-					ld		a,(collide_hit)
-					and		c
-					ret		z		; nothing in the way
-					ld		a,(ix+OBJ.MOVE_STATE)
-					xor		c
-					ld		(ix+OBJ.MOVE_STATE),a
-					ld		a,c		; a fire turning on V bounces off
-					cp		COLLIDE_V		; it, as upd_180_181 has it; nothing
-					ret		nz		; else here turns on V. Fires jammed
-					call	sound_take		; against each other turn every turn,
-					ret		z		; so it is a continuous sound here
-					jp		sound_bounce
-
-
-; ---------------------------------------------------------------------------
-; A ball that bounces on the spot: falls, and on landing climbs again until it
-; is BALL_RISE_TO above where the room's first ball started.
-;
-; That last part is the game's and it is odd enough to be worth saying twice.
-; upd_178_179 reads $5BBD, and if it is still zero -- which it is until the
-; first ball of the room takes its turn -- fills it in from its own Z plus 32.
-; Every other ball in the room then bounces to THAT height, wherever it sits
-; itself. Whichever ball the object walk reaches first decides for all of them.
-;
-; Falling needs no code: mover_clamp's DEC is the gravity, and the clamp stops
-; it on the floor or on whatever it lands on. Climbing sets DZ to three, which
-; the same DEC turns into two.
-;   IX -> the record
-mover_ball:			ld		a,(mover_ball_top)
-					or		a
-					jr		nz,.have_top
-					ld		a,(ix+OBJ.Z)
-					add		a,BALL_RISE_TO
-					ld		(mover_ball_top),a
-.have_top:			call	mover_flicker		; and it bounces where it stands
-					call	sound_z		; humming as it goes, upd_178_179
-
-					ASSERT	MOVE_RISING == 1 << 2
-					bit		2,(ix+OBJ.MOVE_STATE)
-					jr		nz,.rising
-
-					call	mover_move_always		; DZ is whatever gravity left it
-					ld		a,(collide_hit)
-					and		COLLIDE_Z
-					ret		z		; still in the air
-					set		2,(ix+OBJ.MOVE_STATE)		; it has landed: up again
-					jp		sound_bounce
-
-.rising:			ld		(ix+OBJ.DZ),BALL_RISE
-					call	mover_move_always
-					ld		a,(mover_ball_top)
-					cp		(ix+OBJ.Z)
-					ret		nc		; not up to it yet
-					res		2,(ix+OBJ.MOVE_STATE)
-					ret
 
 
 ; ---------------------------------------------------------------------------

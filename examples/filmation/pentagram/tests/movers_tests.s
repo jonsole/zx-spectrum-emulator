@@ -13,8 +13,9 @@
 ; knightlore/tests/movers_tests.s stubs them. Every test runs in a quiet room:
 ; fresh zeroes room_busy.
 ;
-; For now this covers what moved into the library, and the two of
-; Pentagram's movers built on it: the crumbling block and the lift.
+; This covers what moved into the library -- the table's entries, the pacers
+; and the bobbing head as Pentagram sets them up -- and the two of Pentagram's
+; own movers built on it: the crumbling block and the lift.
 
 					ORG		$0100
 					INCLUDE	"../../engine/tests/harness.s"
@@ -123,6 +124,88 @@ start:				ld		sp,$FE00
 					EXPECT_WORD	clamp_de, 0, "the step clamped"
 					EXPECT_BYTE	ROOMS + OBJ.DU, 0, "DU after"
 
+; --- the pacers ---------------------------------------------------------------
+; Two a turn. A platform goes straight to the library and never sits out; a
+; dragon's head goes through monster_sits_out first. busy_count at one is the
+; turn a monster would sit out.
+
+					TEST	"table: the pacers and the hopper"
+					EXPECT_TBL	MOVE_PACE_U, mover_pacer_u, "MOVE_PACE_U"
+					EXPECT_TBL	MOVE_PACE_V, mover_pacer_v, "MOVE_PACE_V"
+					EXPECT_TBL	MOVE_PACE_U_DEADLY, mover_pace_u_deadly, "MOVE_PACE_U_DEADLY"
+					EXPECT_TBL	MOVE_PACE_V_DEADLY, mover_pace_v_deadly, "MOVE_PACE_V_DEADLY"
+					EXPECT_TBL	MOVE_HOPPER, mover_hopper, "MOVE_HOPPER"
+
+					TEST	"platform: two a turn, and never sits out"
+					call	fresh
+					call	busy_and_due
+					SET		OBJ.BEHAVIOUR, MOVE_PACE_U
+					SET		OBJ.MOVE_STATE, COLLIDE_U
+					RUN		mover_pacer_u
+					EXPECT_WORD	clamp_de, $0200, "the step clamped"
+					EXPECT_BYTE	busy_count, 1, "busy_count, untouched"
+
+					TEST	"platform: from rest along V, back two"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_PACE_V
+					RUN		mover_pacer_v
+					EXPECT_WORD	clamp_de, $00FE, "the step clamped"
+
+					TEST	"platform: stopped along its axis, turns"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_PACE_U
+					SET		OBJ.MOVE_STATE, COLLIDE_U
+					ld		a,COLLIDE_U
+					ld		(stub_hit),a
+					RUN		mover_pacer_u
+					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE, turned"
+
+					TEST	"dragon's head: sits its turn out in a busy room"
+					call	fresh
+					call	busy_and_due
+					SET		OBJ.BEHAVIOUR, MOVE_PACE_U_DEADLY
+					RUN		mover_pace_u_deadly
+					EXPECT_BYTE	clamp_calls, 0, "clamps"
+					EXPECT_BYTE	busy_count, 4, "busy_count, from room_busy again"
+
+					TEST	"dragon's head: paces in a quiet room"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_PACE_V_DEADLY
+					SET		OBJ.MOVE_STATE, COLLIDE_V
+					RUN		mover_pace_v_deadly
+					EXPECT_WORD	clamp_de, $0002, "the step clamped"
+
+; --- the bobbing head ------------------------------------------------------------
+; It climbs a unit a turn, net of gravity, and comes down once it is at 176.
+
+					TEST	"bobbing head: its top is one below 176"
+					EXPECT_BYTE	hopper_top, 175, "hopper_top"
+
+					TEST	"bobbing head: lands, and is to rise"
+					call	fresh
+					ld		a,COLLIDE_Z
+					ld		(stub_hit),a
+					SET		OBJ.DU, 3
+					RUN		mover_hopper
+					EXPECT_WORD	clamp_de, 0, "the step, never along the floor"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1 << HOPPER_RISING, "MOVE_STATE"
+
+					TEST	"bobbing head: 174 to 175, still rising"
+					call	fresh
+					SET		OBJ.Z, 174
+					SET		OBJ.MOVE_STATE, 1 << HOPPER_RISING
+					RUN		mover_hopper
+					EXPECT_FIELD	OBJ.Z, 175, "Z"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1 << HOPPER_RISING, "MOVE_STATE"
+
+					TEST	"bobbing head: 175 to 176, down again"
+					call	fresh
+					SET		OBJ.Z, 175
+					SET		OBJ.MOVE_STATE, 1 << HOPPER_RISING
+					RUN		mover_hopper
+					EXPECT_FIELD	OBJ.Z, 176, "Z"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
+
 ; --- mover_crumbles ----------------------------------------------------------------
 ; The block stands at Z 128 and is 8 high, so he is on it at Z 136. It steps a
 ; frame on turns that are a multiple of CRUMBLE_EVERY, which is four.
@@ -221,6 +304,13 @@ zero:				ld		(hl),0
 					jr		nz,zero
 					ret
 
+; A busy room, and this monster the one due to sit out.
+busy_and_due:		ld		a,4
+					ld		(room_busy),a
+					ld		a,1
+					ld		(busy_count),a
+					ret
+
 one_in_the_room:	ld		a,1
 					ld		(room_object_count),a
 					ret
@@ -275,6 +365,7 @@ collide_other:		DW		0
 room_object_count:	DB		0
 
 z_calls:			DB		0
+stub_hit:			DB		0		; what the clamp says gave
 clamp_calls:		DB		0
 clamp_de:			DW		0		; D, E as the clamp was handed them
 clamp_dz:			DB		0		; DZ as the clamp saw it, gravity taken
@@ -283,14 +374,14 @@ unlink_calls:		DB		0
 s_ix:				DW		0
 STUBS_SIZE			EQU		$ - stubs
 
-; Nothing in the way, ever.
+; Nothing in the way, unless stub_hit says so; the step is never cut.
 object_collide_room:
 					ld		(clamp_de),de
 					ld		a,(ix+OBJ.DZ)
 					ld		(clamp_dz),a
 					ld		hl,clamp_calls
 					inc		(hl)
-					xor		a
+					ld		a,(stub_hit)
 					ld		(collide_hit),a
 					ret
 
@@ -340,4 +431,5 @@ character_door_find:
 
 					INCLUDE	"../movers.s"
 					INCLUDE	"../../engine/mover.s"
+					INCLUDE	"../shared_movers.s"
 					INCLUDE	"../../engine/movers.s"

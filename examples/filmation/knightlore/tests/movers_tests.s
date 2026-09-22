@@ -184,7 +184,7 @@ start:				ld		sp,$FE00
 					RUN		mover_slide_u
 					EXPECT_FIELD	OBJ.DU, -1 & $FF, "DU at this one"
 
-; --- mover_fire ----------------------------------------------------------------
+; --- mover_pacer, the fires ---------------------------------------------------
 
 ; --- monster_gate --------------------------------------------------------------
 ; Where mover_tbl sends every behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL. In a
@@ -199,7 +199,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
 					SET		OBJ.MOVE_STATE, COLLIDE_U	; going forward, so the step is +1
 					RUN		monster_gate
-					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_fire_u ran"
+					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_pacer_u ran"
 					EXPECT_BYTE	busy_count, 0, "busy_count, untouched"
 
 					TEST	"gate: a busy room sits the one that reaches nought out"
@@ -227,7 +227,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
 					SET		OBJ.MOVE_STATE, COLLIDE_U
 					RUN		monster_gate
-					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_fire_u ran anyway"
+					EXPECT_FIELD	OBJ.DU, 1, "DU: mover_pacer_u ran anyway"
 					EXPECT_BYTE	busy_count, 2, "busy_count, one nearer its turn"
 
 					TEST	"fire U: one forward, flickering"
@@ -235,7 +235,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.GFX, 87
 					SET		OBJ.MOVE_STATE, COLLIDE_U
 					SET		OBJ.DV, 7
-					RUN		mover_fire_u
+					RUN		mover_pacer_u
 					EXPECT_FIELD	OBJ.DU, 1, "DU"		; FIRE_STEP: one a turn, as the game moves one
 					EXPECT_FIELD	OBJ.DV, 0, "DV"
 					EXPECT_BYTE	clamp_dz, 0, "DZ, held up against gravity"
@@ -247,7 +247,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.GFX, 86
 					ld		a,COLLIDE_U | COLLIDE_Z
 					ld		(stub_hit),a
-					RUN		mover_fire_u
+					RUN		mover_pacer_u
 					EXPECT_BYTE	clamp_de + 1, -1 & $FF, "D, the step clamped"
 					EXPECT_FIELD	OBJ.GFX, 87, "the graphic"
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_U, "MOVE_STATE, turned"
@@ -257,7 +257,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, COLLIDE_V
 					ld		a,COLLIDE_U
 					ld		(stub_hit),a
-					RUN		mover_fire_v
+					RUN		mover_pacer_v
 					EXPECT_FIELD	OBJ.DU, 0, "DU"
 					EXPECT_FIELD	OBJ.DV, 1, "DV"
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_V, "MOVE_STATE"
@@ -267,10 +267,10 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, COLLIDE_V | COLLIDE_U
 					ld		a,COLLIDE_V
 					ld		(stub_hit),a
-					RUN		mover_fire_v
+					RUN		mover_pacer_v
 					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_U, "MOVE_STATE, only V turned"
 
-; --- mover_ball ----------------------------------------------------------------
+; --- mover_hopper_claim, the balls --------------------------------------------
 
 					TEST	"ball: the first one sets the room's top"
 					call	fresh
@@ -278,7 +278,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.GFX, 178
 					SET		OBJ.DU, 3
 					SET		OBJ.DV, 3
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_BYTE	mover_ball_top, 128 + BALL_RISE_TO, "mover_ball_top"
 					EXPECT_FIELD	OBJ.GFX, 179, "the graphic"
 					EXPECT_WORD	clamp_de, 0, "the step clamped"
@@ -288,7 +288,7 @@ start:				ld		sp,$FE00
 					ld		a,200
 					ld		(mover_ball_top),a
 					SET		OBJ.Z, 128
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_BYTE	mover_ball_top, 200, "mover_ball_top"
 
 					TEST	"ball: falling, and nothing under it yet"
@@ -296,7 +296,7 @@ start:				ld		sp,$FE00
 					ld		a,200
 					ld		(mover_ball_top),a
 					SET		OBJ.DZ, -2
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_BYTE	clamp_dz, -3 & $FF, "DZ, gravity on top"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
 
@@ -306,7 +306,7 @@ start:				ld		sp,$FE00
 					ld		(mover_ball_top),a
 					ld		a,COLLIDE_Z
 					ld		(stub_hit),a
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_FIELD	OBJ.MOVE_STATE, MOVE_RISING, "MOVE_STATE"
 
 					TEST	"ball: rises three, less gravity"
@@ -315,7 +315,7 @@ start:				ld		sp,$FE00
 					ld		(mover_ball_top),a
 					SET		OBJ.Z, 128
 					SET		OBJ.MOVE_STATE, MOVE_RISING | 1
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_BYTE	clamp_dz, BALL_RISE - 1, "DZ"
 					EXPECT_FIELD	OBJ.Z, 128 + BALL_RISE - 1, "Z"
 					EXPECT_FIELD	OBJ.MOVE_STATE, MOVE_RISING | 1, "MOVE_STATE"
@@ -326,7 +326,7 @@ start:				ld		sp,$FE00
 					ld		(mover_ball_top),a
 					SET		OBJ.Z, 128
 					SET		OBJ.MOVE_STATE, MOVE_RISING | 1
-					RUN		mover_ball
+					RUN		mover_hopper_claim
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, only RISING cleared"
 
 ; --- mover_guard_face ----------------------------------------------------------
@@ -1101,10 +1101,13 @@ sound_step:
 sound_bounce:
 sound_gate:
 sound_take:
-sound_sparkle:		ret
+sound_sparkle:
+pacer_sound:
+mover_turned:		ret		; sound_fx.s's, which only choose a sound
 
 
 					INCLUDE	"../monster_gate.s"
 					INCLUDE	"../movers.s"
 					INCLUDE	"../../engine/mover.s"
+					INCLUDE	"../shared_movers.s"
 					INCLUDE	"../../engine/movers.s"

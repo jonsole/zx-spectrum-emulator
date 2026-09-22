@@ -9,7 +9,9 @@
 ; the way engine/tests/mover_tests.s stubs it. Each game's own suite checks
 ; that its mover_tbl reaches these; this one checks what they do.
 ;
-; Every routine here is used by this suite, so IFUSED keeps them all.
+; Every routine here is used by this suite, so IFUSED keeps them all. The
+; names the pacer and the hopper call are counting stubs, and the three that
+; name mover.s routines follow its INCLUDE.
 
 					ORG		$0100
 					INCLUDE	"harness.s"
@@ -223,6 +225,123 @@ start:				ld		sp,$FE00
 					RUN		player_on_top
 					EXPECT_ZF	0, "zf, +9"
 
+; --- mover_pacer_u, mover_pacer_v, mover_turn_if_hit ------------------------------
+; PACER_STEP is three here, so a step of one or two is somebody else's.
+
+					TEST	"pacer U: its bit set, forward along U"
+					call	fresh
+					SET		OBJ.U, 100
+					SET		OBJ.MOVE_STATE, COLLIDE_U
+					SET		OBJ.DV, 7
+					SET		OBJ.DZ, -4
+					RUN		mover_pacer_u
+					EXPECT_BYTE	sound_calls, 1, "pacer_sound"
+					EXPECT_BYTE	sound_l, COLLIDE_U, "...with L the axis"
+					EXPECT_BYTE	frame_calls, 1, "pacer_frame"
+					EXPECT_WORD	frame_duv, 0, "...with the step cleared"
+					EXPECT_BYTE	frame_dz, 1, "...and held up"
+					EXPECT_WORD	clamp_de, $0300, "the step clamped"
+					EXPECT_BYTE	clamp_dz, 0, "DZ, held up against gravity"
+					EXPECT_FIELD	OBJ.U, 103, "U"
+					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_U, "MOVE_STATE"
+					EXPECT_BYTE	turned_calls, 0, "mover_turned"
+
+					TEST	"pacer U: from rest, the negative way"
+					call	fresh
+					RUN		mover_pacer_u
+					EXPECT_WORD	clamp_de, $FD00, "the step clamped"
+
+					TEST	"pacer V: stopped along V turns, and says so"
+					call	fresh
+					SET		OBJ.MOVE_STATE, COLLIDE_V | COLLIDE_U
+					ld		a,COLLIDE_V
+					ld		(stub_hit),a
+					RUN		mover_pacer_v
+					EXPECT_BYTE	sound_l, COLLIDE_V, "pacer_sound's L"
+					EXPECT_WORD	clamp_de, $0003, "the step clamped"
+					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_U, "MOVE_STATE, only V turned"
+					EXPECT_BYTE	turned_calls, 1, "mover_turned"
+					EXPECT_BYTE	turned_a, COLLIDE_V, "...with A the axis"
+
+					TEST	"pacer V: stopped along U does not turn it"
+					call	fresh
+					SET		OBJ.MOVE_STATE, COLLIDE_V
+					ld		a,COLLIDE_U
+					ld		(stub_hit),a
+					RUN		mover_pacer_v
+					EXPECT_FIELD	OBJ.MOVE_STATE, COLLIDE_V, "MOVE_STATE"
+					EXPECT_BYTE	turned_calls, 0, "mover_turned"
+
+; --- mover_hopper_claim, mover_hopper -------------------------------------------
+; HOPPER_RISE is four and HOPPER_ABOVE twenty. It climbs while its Z after the
+; move is no more than hopper_top.
+
+					TEST	"hopper claim: the first sets the top"
+					call	fresh
+					SET		OBJ.Z, 100
+					SET		OBJ.DU, 3
+					RUN		mover_hopper_claim
+					EXPECT_BYTE	hopper_top, 120, "hopper_top"
+					EXPECT_WORD	clamp_de, 0, "the step, cleared by hopper_frame"
+					EXPECT_BYTE	hsound_calls, 1, "hopper_sound"
+
+					TEST	"hopper claim: a top already claimed stays"
+					call	fresh
+					ld		a,50
+					ld		(hopper_top),a
+					SET		OBJ.Z, 100
+					RUN		mover_hopper_claim
+					EXPECT_BYTE	hopper_top, 50, "hopper_top"
+
+					TEST	"hopper: falling, nothing under it yet"
+					call	fresh
+					SET		OBJ.DZ, -2
+					RUN		mover_hopper
+					EXPECT_BYTE	clamp_dz, -3 & $FF, "DZ, gravity on top"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
+					EXPECT_BYTE	landed_calls, 0, "hopper_landed"
+					EXPECT_BYTE	hopper_top, 0, "hopper_top, unclaimed"
+
+					TEST	"hopper: lands, and is to rise"
+					call	fresh
+					SET		OBJ.MOVE_STATE, 1
+					ld		a,COLLIDE_Z
+					ld		(stub_hit),a
+					RUN		mover_hopper
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1 | (1 << HOPPER_RISING), "MOVE_STATE"
+					EXPECT_BYTE	landed_calls, 1, "hopper_landed"
+
+					TEST	"hopper: rising, four less gravity"
+					call	fresh
+					ld		a,110
+					ld		(hopper_top),a
+					SET		OBJ.Z, 100
+					SET		OBJ.MOVE_STATE, 1 << HOPPER_RISING
+					RUN		mover_hopper
+					EXPECT_BYTE	clamp_dz, 3, "DZ"
+					EXPECT_FIELD	OBJ.Z, 103, "Z"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1 << HOPPER_RISING, "MOVE_STATE"
+
+					TEST	"hopper: up to the top exactly, still rising"
+					call	fresh
+					ld		a,110
+					ld		(hopper_top),a
+					SET		OBJ.Z, 107
+					SET		OBJ.MOVE_STATE, 1 << HOPPER_RISING
+					RUN		mover_hopper
+					EXPECT_FIELD	OBJ.Z, 110, "Z"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1 << HOPPER_RISING, "MOVE_STATE"
+
+					TEST	"hopper: past the top, falls again"
+					call	fresh
+					ld		a,110
+					ld		(hopper_top),a
+					SET		OBJ.Z, 108
+					SET		OBJ.MOVE_STATE, 1 | (1 << HOPPER_RISING)
+					RUN		mover_hopper
+					EXPECT_FIELD	OBJ.Z, 111, "Z"
+					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, only its bit cleared"
+
 ; --- object_hide ---------------------------------------------------------------
 
 					TEST	"hide: repainted, unlinked, and the slot emptied"
@@ -306,6 +425,41 @@ sound_falls:		ld		hl,falls_calls
 					inc		(hl)
 					ret
 
+; The pacer's and the hopper's. The ones that are routines count their calls
+; and write down what they were handed.
+PACER_STEP			EQU		3
+HOPPER_RISE			EQU		4
+HOPPER_ABOVE		EQU		20
+
+pacer_sound:		ld		a,l
+					ld		(sound_l),a
+					ld		hl,sound_calls
+					inc		(hl)
+					ret
+
+pacer_frame:		ld		a,(ix+OBJ.DU)
+					ld		(frame_duv),a
+					ld		a,(ix+OBJ.DV)
+					ld		(frame_duv + 1),a
+					ld		a,(ix+OBJ.DZ)
+					ld		(frame_dz),a
+					ld		hl,frame_calls
+					inc		(hl)
+					ret
+
+mover_turned:		ld		(turned_a),a
+					ld		hl,turned_calls
+					inc		(hl)
+					ret
+
+hopper_sound:		ld		hl,hsound_calls
+					inc		(hl)
+					ret
+
+hopper_landed:		ld		hl,landed_calls
+					inc		(hl)
+					ret
+
 
 ; ---------------------------------------------------------------------------
 ; The engine around them.
@@ -330,6 +484,16 @@ unlink_calls:		DB		0
 unlink_ix:			DW		0
 unlink_gfx:			DB		0
 view_calls:			DB		0
+sound_calls:		DB		0
+sound_l:			DB		0
+frame_calls:		DB		0
+frame_duv:			DW		0		; DU, DV as pacer_frame saw them
+frame_dz:			DB		0
+turned_calls:		DB		0
+turned_a:			DB		0
+hsound_calls:		DB		0
+landed_calls:		DB		0
+hopper_top:			DB		0
 s_ix:				DW		0
 STUBS_SIZE			EQU		$ - stubs
 
@@ -407,4 +571,8 @@ character_door_find:
 
 
 					INCLUDE	"../mover.s"
+; Named after mover.s, so that each is the value its label has in this pass.
+pacer_move			EQU		mover_move
+hopper_frame		EQU		mover_halt
+hopper_move			EQU		mover_move
 					INCLUDE	"../movers.s"

@@ -96,7 +96,8 @@ README lists what a game has to supply.
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |
 | `glance.s` | His top half looking about as he goes |
-| `movers.s` | Its behaviours: slides, fires, balls, guards, gates, the ghost, blocks, spells. The ones Pentagram has too are the engine's, in `engine/movers.s` |
+| `movers.s` | Its behaviours: slides, guards, gates, the ghost, blocks, spells. The ones Pentagram has too -- fires, balls, falling and sinking blocks -- are the engine's, in `engine/movers.s` |
+| `shared_movers.s` | What it gives `engine/movers.s`: the step, sounds and frames that make a pacer a fire and a hopper a ball |
 | `special.s`, `pickup.s` | The collectables and the cauldron; picking up, putting down, the carried objects |
 | `room_build.s` | Decoding a room from the castle's templates; printing the day and lives |
 | `sun.s`, `clock.s` | The sun and moon window, and day and night |
@@ -104,7 +105,7 @@ README lists what a game has to supply.
 | `panel.s`, `panel_data.s` | The status panel |
 | `menu.s`, `input.s` | The menu, and keyboard and joystick reading |
 | `end.s`, `end_at.s` | Game over, the tunes, and the percentage of the castle seen |
-| `sound_fx.s` | The sound effects: which tone to play, and when |
+| `sound_fx.s` | The sound effects: which tone to play, and when -- including a fire's hum and its bounce, for the shared pacer |
 | `tests/` | Unit tests for the movers and the arch nudge, run by `engine/tests/run_tests.py` |
 
 The generated files and the scripts that make them are in `knightlore/` too --
