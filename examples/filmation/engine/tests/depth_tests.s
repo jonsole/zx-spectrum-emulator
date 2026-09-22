@@ -22,7 +22,7 @@ REC_6				EQU		$C160
 ; Where every test box stands on the axes it is not being tested on: V and Z
 ; the same for all of them, so that only U separates.
 ;
-; depth_cmp compares unsigned, as the castle's coordinates never come near
+; The scan compares unsigned, as the castle's coordinates never come near
 ; either end of a byte. So no box here reaches below 0 or past 255 either: a
 ; box at U = 0 with a half-width of 4 would have its low edge at $FC.
 V0					EQU		50
@@ -113,8 +113,10 @@ start:				ld		sp,$FE00
 					EXPECT_WORD	s_de, object_list, "DE, the field that named it"
 					EXPECT_A	$C3, "A"
 
-; --- depth_cmp -------------------------------------------------------------
-; Out: carry set when the object in IX is NEARER than the one in IY. The first
+; --- the comparison ----------------------------------------------------------
+; It lives inside depth_insert_from's loop now, so it is asked the only way it
+; can be: REC_1 is inserted into a list holding REC_2 alone, and compare_1_with_2
+; sets the carry if it went AFTER REC_2 -- which is what nearer means. The first
 ; axis that separates the two boxes decides it, in the order U, V, Z, and the
 ; rest are never looked at -- so these check which axis got asked as much as
 ; what it answered.
@@ -528,12 +530,20 @@ four_in_a_row:		BOX_U	REC_1, 20
 					DW		REC_1, REC_2, REC_3, REC_4, 0
 					ret
 
-; REC_1 against REC_2, with the results in s_af.
-compare_1_with_2:	ld		ix,REC_1
-					call	depth_cmp_setup
-					ld		iy,REC_2
-					call	depth_cmp
-					jp		snap
+; REC_1 sorted in against REC_2 alone, with the answer in s_af: carry set when
+; REC_1 came out after REC_2, i.e. nearer.
+compare_1_with_2:	call	make_list
+					DW		REC_2, 0
+					ld		ix,REC_1
+					call	depth_insert
+					ld		hl,(object_list)
+					ld		de,REC_1
+					or		a
+					sbc		hl,de		; Z: REC_1 is first, so it went before REC_2
+					scf				; SCF leaves Z alone
+					jr		nz,.snap		; after: nearer
+					ccf				; before: not
+.snap:				jp		snap
 
 ;   IX -> the record
 

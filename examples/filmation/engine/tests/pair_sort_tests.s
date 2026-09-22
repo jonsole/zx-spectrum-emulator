@@ -18,9 +18,9 @@
 ; it in the list -- and it is what any mistake of that kind would look like,
 ; whichever half and whichever way.
 ;
-; Only certain relationships are checked. Where the axes disagree, depth_cmp
-; guesses, and isometric boxes are not transitive, so the order a guess picks is
-; not something a test can hold the sort to.
+; Only certain relationships are checked. Where the axes disagree the sort
+; settles it by whichever axis was asked first, and isometric boxes are not
+; transitive, so the order it picks is not something a test can hold it to.
 ;
 ; And room $A3's corner, where the knight stands still and something else moves:
 ; the moveable block, carried in under his feet by the hunting ball. That tests
@@ -489,8 +489,8 @@ votes:				DB		0
 ; than something it comes before is an inversion: counted, and the first kept
 ; with the step it turned up on.
 ;
-; "Certainly" is this file's own reading of the two boxes, not depth_cmp's.
-; depth_cmp answers from the first axis that separates the pair and has no
+; "Certainly" is this file's own reading of the two boxes, not the sort's.
+; The scan answers from the first axis that separates the pair and has no
 ; notion of how sure it is; what a picture can be wrong about is narrower --
 ; a pair that EVERY separating axis agrees on. Where the axes disagree the
 ; sort may settle it either way and no test should hold it to one, so this

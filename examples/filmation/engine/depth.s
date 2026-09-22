@@ -9,7 +9,7 @@
 
 
 ; Head of the depth-sorted list. Empty until start: inserts everything --
-; draw order is derived from U/V/Z, never authored. See depth_cmp below.
+; draw order is derived from U/V/Z, never authored. See depth_insert_from.
 object_list			DW		0
 
 ; Where the SORTED part of the list begins. Everything before it is
@@ -73,145 +73,37 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 					ret
 
 
-; Compare the object being placed against the candidate in IY.
-;
-; The FIRST axis that separates the two boxes decides, and the rest are never
-; looked at. An axis where the boxes overlap says nothing about depth, so it
-; hands the question on; three overlapping axes is interpenetration, and the
-; answer there is arbitrary by definition.
-;
-; The order is U, then V, then Z, and it is not arbitrary:
-;
-; U first because almost everything in a room is somewhere else along U --
-; the same fact collide_gather's sweep is built on -- so it is the axis most
-; likely to answer, and answering here is what makes the scan cheap.
-;
-; Z last because when a floor axis and Z disagree the floor is what the eye
-; goes by. The knight pushing a table from behind is the case: his body's box
-; starts at the table's top, so Z says the body is nearer by twelve while U
-; says it is further by eleven, and letting Z decide drew the body over the
-; table.
-;
-; U before V costs nothing, because the two can never disagree on a pair you
-; can see. If U separates with us nearer then our U exceeds theirs by at least
-; SIZE_U + SIZE_U, and if V separates the other way then our V exceeds theirs
-; by at least SIZE_V + SIZE_V; screenX is U + V, so the two sprites are at
-; least (SIZE_U + SIZE_V) + (SIZE_U + SIZE_V) apart across, which is exactly
-; the width at which they stop overlapping. Their order still matters to a
-; third object standing between them, but no picture shows the pair itself.
-;
-; The SIGNS are ours. object_place sends +U down the screen and +V up it, so
-; the projection's null direction -- which for an orthographic projection IS
-; the depth axis -- is (1,-1,1), and depth grows with U, falls with V and
-; grows with Z. Change object_place and this must follow.
-;
-; There is deliberately no "how certain is this?" answer any more. It existed
-; for one reader: the insertion scan, deciding whether it might stop early.
-; The scan walks the whole run now, so both ways of being further do the same
-; thing, and the votes, the running difference and the dispatch that read them
-; all went with it. That is also what lets this return from the first axis.
-;
-;   IY -> the candidate; depth_cmp_setup has run for the object being placed
-; Out: cf = 1  the placed object is NEARER than the candidate
-;
-; Nearer and not further, because the carry then falls out of CP already
-; right on two axes of the three and has to be flipped only on V -- see
-; there. The scan is the only caller and reads it either way round.
-;
-; Corrupts A, C, E. IX, IY, B, D, HL and the shadow set are untouched.
-;
-; depth_cmp_hl takes the candidate in HL instead, and leaves it in IY -- which
-; is where every caller wants it afterwards.
-depth_cmp_hl:		push	hl
-					pop		iy
-					; NB: fall through
-
-					; On the floor axes E holds the half-width for both bounds,
-					; read once. That is a byte less than reading it from the
-					; record twice, and 11 T quicker whenever the first bound does
-					; not settle the axis, against 4 T more when it does.
-depth_cmp:			ld		c,(iy+OBJ.U)		; c = their centre
-					ld		e,(iy+OBJ.SIZE_U)		; e = their half-width
-					ld		a,c
-					add		a,e		; a = their max
-.u_min:				cp		0		; imm = our min + 1
-					ret		c		; their max <= our min: we are nearer
-					ld		a,c
-					sub		e		; a = their min
-.u_max:				cp		0		; imm = our max
-					ret		nc		; their min >= our max: they are nearer
-
-					; V -- FURTHER as V grows, so its two answers are the only
-					; ones CP leaves the wrong way round, and the only ones that
-					; pay two bytes and 15 T for a flip. That is why the carry
-					; means NEARER rather than further: it puts the flip on the
-					; axis asked least often and lets U and Z return where they
-					; stand.
-					ld		c,(iy+OBJ.V)
-					ld		e,(iy+OBJ.SIZE_V)
-					ld		a,c
-					add		a,e
-.v_min:				cp		0
-					jr		c,.flip		; their V is the lower: they are nearer
-					ld		a,c
-					sub		e
-.v_max:				cp		0
-					jr		nc,.flip		; their V is the higher: we are nearer
-
-					; Z -- nearer as Z grows, and the odd one out in shape: the
-					; coordinate is the box's base and SIZE_Z its height, so the
-					; minimum is Z itself and there is nothing to subtract.
-					ld		a,(iy+OBJ.Z)
-					ld		c,a
-					add		a,(iy+OBJ.SIZE_Z)
-.z_min:				cp		0		; imm = our Z + 1
-					ret		c		; their top is at or below our base: we are nearer
-					ld		a,c
-
-					; The last test needs no condition on its RET, because both
-					; ways out want the carry exactly as CP leaves it. Clear is
-					; their base at or above our top, so they are the nearer. Set
-					; is Z overlapping -- and with U and V overlapping too that is
-					; interpenetration, where no order is right and "nearer" is
-					; what the scan would have settled on anyway. One instruction,
-					; both answers.
-.z_max:				cp		0		; imm = our Z + SIZE_Z
-					ret
-
-.flip:				ccf
-					ret
-
-
-; Hoist the placed object's bounds into depth_cmp's immediates. Six stores
-; once per insert, against six (ix+d) reads and their adds per candidate if
-; they stayed in the record -- it pays for itself after about three of them.
+; Hoist the placed object's bounds into the scan's immediates -- the six CP
+; operands inside depth_insert_from. Six stores once per insert, against six
+; (ix+d) reads and their adds per candidate if they stayed in the record: it
+; pays for itself after about three candidates.
 ;   IX -> the object
 ; Corrupts AF, B.
 depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 											; back down past it to the min
 					ld		b,(ix+OBJ.SIZE_U)
 					add		a,b
-					ld		(depth_cmp.u_max+1),a
+					ld		(depth_insert_from.u_max+1),a
 					sub		b
 					sub		b
 					inc		a
-					ld		(depth_cmp.u_min+1),a
+					ld		(depth_insert_from.u_min+1),a
 
 					ld		a,(ix+OBJ.V)
 					ld		b,(ix+OBJ.SIZE_V)
 					add		a,b
-					ld		(depth_cmp.v_max+1),a
+					ld		(depth_insert_from.v_max+1),a
 					sub		b
 					sub		b
 					inc		a
-					ld		(depth_cmp.v_min+1),a
+					ld		(depth_insert_from.v_min+1),a
 
 					ld		a,(ix+OBJ.Z)
 					inc		a
-					ld		(depth_cmp.z_min+1),a
+					ld		(depth_insert_from.z_min+1),a
 					dec		a		; Z again
 					add		a,(ix+OBJ.SIZE_Z)
-					ld		(depth_cmp.z_max+1),a
+					ld		(depth_insert_from.z_max+1),a
 					ret		
 
 
@@ -220,7 +112,17 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 ;   D  - the step in U, E in V, A in Z
 ; Out: Z set if the step was zero, and so moved nothing
 ; Corrupts AF, C. HL, DE and B come through.
+;
+; The step is ORed together before anything is added, so a step of nothing
+; costs 27 T rather than the 148 of three read-add-writes it does not need. It
+; is ORed again on the way out because the flags of the last ADD are no use: a
+; coordinate can wrap to zero.
 depth_add_step:		ld		c,a
+					ld		a,d
+					or		e
+					or		c
+					ret		z		; nothing to add, and Z says so
+					ld		a,c
 					add		a,(ix+OBJ.Z)
 					ld		(ix+OBJ.Z),a
 					ld		a,(ix+OBJ.U)
@@ -229,7 +131,7 @@ depth_add_step:		ld		c,a
 					ld		a,(ix+OBJ.V)
 					add		a,e
 					ld		(ix+OBJ.V),a
-					ld		a,d
+					ld		a,d		; NZ: it moved
 					or		e
 					or		c
 					ret
@@ -267,7 +169,7 @@ depth_step:			call	depth_add_step
 ; every time, however little it moved.
 ;
 ; It used to look at its neighbours first and do nothing if it still sat
-; between them: two depth_cmp calls against a walk down the whole run, and
+; between them: two comparisons against a walk down the whole run, and
 ; almost always enough, since an object creeping a unit a frame crosses
 ; someone only every several frames. What that check could not do is be
 ; right. It is sound only if the order is transitive, and isometric boxes
@@ -280,7 +182,7 @@ depth_step:			call	depth_add_step
 ; A full scan has no such hole, and it is what makes the rest of this file
 ; small. Nothing needs to know how sure a comparison was -- that answer had
 ; exactly one reader, the scan deciding whether it might stop early -- so
-; depth_cmp returns from its first separating axis and the scan has one
+; the comparison returns from its first separating axis and the scan has one
 ; branch. Between them that paid for the extra walking in bytes twice over.
 ;
 ; It is also self-repairing, which the neighbour check never was. Two
@@ -356,24 +258,102 @@ depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 					; NB: fall through
 
 ; ...and the same, starting at the NEXT field HL names instead of at the front.
-; Every field this steps across is a NEXT field or a record's PREV, so INC L is
-; enough -- see depth_unlink for why neither can end a page.
 ;   IX -> the object, HL -> where to start looking
-depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
-					ld		a,(hl)		; kept on the stack for the length of the scan
-					inc		l
-					ld		h,(hl)
-					ld		l,a		; the first sorted object, or none
-.scan:				ld		a,h
+;
+; The comparison is written out inside the loop rather than called. This is its
+; only caller, and the CALL, the RET and the PUSH HL / POP IY that handed it
+; the candidate were 53 T of the ~140 the loop spent around each one. Written
+; out, every answer is a CP and a JR straight to where the loop goes next, and
+; the axis that runs the other way round simply jumps to the other target: no
+; carry to flip on the way out, and no convention about what it would mean.
+;
+; The candidate is in IY; the placed object's bounds are the six immediates
+; depth_cmp_setup patched in below. On each axis the two boxes are in one of
+; three states -- their max at or below our min, their min at or above our
+; max, or overlapping -- and the first two answer, we are the nearer or they
+; are, while the third says nothing and hands the question on. The first axis
+; that separates the boxes decides, and the ones after it are never read.
+;
+; U is asked first because it is the axis most likely to answer: almost
+; everything in a room is somewhere else along U -- the same fact
+; collide_gather's sweep is built on -- so most candidates cost two loads and
+; one CP. Z is asked last because when a floor axis and Z disagree the floor is
+; what the eye goes by: the knight pushing a table from behind has his body's
+; box starting at the table's top, so Z calls the body nearer by twelve while U
+; calls it further by eleven, and asking Z first drew the body over the table.
+; U before V costs nothing, because the two floor axes can never disagree about
+; a pair you can see: if U separates with us nearer and V with them nearer, the
+; sprites are at least (SIZE_U + SIZE_V) apart for each of them along screenX,
+; which is exactly the width at which they stop overlapping. Their order still
+; matters to a third object between them -- room $B3.
+;
+; Boxes that only touch count as apart, which is what lets a stack of cubes
+; each SIZE_Z above the last separate cleanly on Z. Three overlapping axes is
+; interpenetration: no order is right, and the loop falls out of the bottom to
+; "nearer", which is where it would have left the object anyway.
+;
+; The insertion point -- the NEXT field the object will be linked after -- is
+; the field the scan started from, and is kept on the stack for its length.
+; That field is read like any candidate's NEXT: IY is put on it and the loop
+; entered at .advance, which is what loads the first candidate.
+depth_insert_from:	push	hl		; the insertion point
+					push	hl
+					pop		iy		; and IY on the same field, for .advance to read
+					jr		.advance
+
+					; U -- nearer as U grows. E holds their half-width for both
+					; bounds, read once: a byte less than reading it twice, and 11 T
+					; quicker whenever the first bound does not settle the axis.
+.each:				ld		c,(iy+OBJ.U)		; c = their centre
+					ld		e,(iy+OBJ.SIZE_U)		; e = their half-width
+					ld		a,c
+					add		a,e		; a = their max
+.u_min:				cp		0		; imm = our min + 1
+					jr		c,.nearer		; their max <= our min: we are nearer
+					ld		a,c
+					sub		e		; a = their min
+.u_max:				cp		0		; imm = our max
+					jr		nc,.advance		; their min >= our max: they are nearer
+
+					; V -- FURTHER as V grows, so the same two tests go the other way
+					ld		c,(iy+OBJ.V)
+					ld		e,(iy+OBJ.SIZE_V)
+					ld		a,c
+					add		a,e
+.v_min:				cp		0
+					jr		c,.advance		; their V is the lower: they are nearer
+					ld		a,c
+					sub		e
+.v_max:				cp		0
+					jr		nc,.nearer		; their V is the higher: we are nearer
+
+					; Z -- nearer as Z grows, and the odd one out in shape: the
+					; coordinate is the box's base and SIZE_Z its height, so the
+					; minimum is Z itself and there is nothing to subtract.
+					ld		a,(iy+OBJ.Z)
+					ld		c,a
+					add		a,(iy+OBJ.SIZE_Z)
+.z_min:				cp		0		; imm = our Z + 1
+					jr		c,.nearer		; their top at or below our base: we are nearer
+					ld		a,c
+.z_max:				cp		0		; imm = our Z + SIZE_Z
+					jr		nc,.advance		; their base at or above our top: they are nearer
+					; nothing separates them: interpenetrating, and nearer it is
+
+.nearer:			pop		de		; we go after this one, so it is the
+					push	iy		; insertion point now
+
+					; On to the candidate this one's NEXT names, straight into IY --
+					; no round trip through HL and the stack -- with the end-of-list
+					; test taken on the high byte on the way past. No record lives in
+					; page 0, so a high byte of zero is the end and nothing else.
+.advance:			ld		a,(iy+OBJ.NEXT+1)
 					and		a
-					jr		z,.commit		; ran off the end: commit
-					call	depth_cmp_hl		; the candidate is in IY from here
-					jr		nc,.advance		; not nearer: it is not our place
-					pop		de		; nearer: we go after this one, so it is
-					push	iy		; the insertion point now
-.advance:			ld		l,(iy+OBJ.NEXT)
-					ld		h,(iy+OBJ.NEXT+1)
-					jr		.scan
+					jr		z,.commit		; ran off the end
+					ld		c,(iy+OBJ.NEXT)
+					ld		iyh,a
+					ld		iyl,c		; IY -> the next candidate
+					jr		.each
 .commit:			pop		hl
 					; NB: fall through
 

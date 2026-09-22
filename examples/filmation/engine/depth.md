@@ -17,7 +17,7 @@ sort, and nothing keeps a score.
 1. [The problem](#1-the-problem)
 2. [Boxes, and which way is nearer](#2-boxes-and-which-way-is-nearer)
 3. [The list](#3-the-list)
-4. [Comparing two objects: depth_cmp](#4-comparing-two-objects-depth_cmp)
+4. [Comparing two objects](#4-comparing-two-objects)
 5. [Why there is no sort](#5-why-there-is-no-sort)
 6. [Putting an object in: depth_insert](#6-putting-an-object-in-depth_insert)
 7. [The background run: background_insert](#7-the-background-run-background_insert)
@@ -51,7 +51,7 @@ only later checked against its code. Its test at `$CEF8` sorts each axis into
 the same three states this one does -- we are clear of them, they are clear of
 us, or the boxes overlap -- and folds the three into a base-3 index into a
 27-entry jump table at `$CF69`. Decoded, that table carves the 27 cases up
-exactly as [section 4](#4-comparing-two-objects-depth_cmp) does, and its near
+exactly as [section 4](#4-comparing-two-objects) does, and its near
 direction is `+X, -Y, +Z`: the same signs. (Addresses from tcdev's disassembly
 as converted by Michael R. Cook; facts and credit only, nothing copied.)
 
@@ -70,7 +70,7 @@ Every object is a solid box in world coordinates, held in its record:
 | Z, height | `Z`, `SIZE_Z` | `Z` to `Z + SIZE_Z` |
 
 U and V are **centres with half-widths**. Z is **the base with a height**, so
-`Z = 0` stands on the floor. depth_cmp, collide_box and object_overlaps all
+`Z = 0` stands on the floor. The scan, collide_box and object_overlaps all
 read the box this way.
 
 Two boxes that only **touch** count as apart. A box from 36 to 44 and one from
@@ -93,7 +93,7 @@ thing lands on screen is the direction you are looking along, and here that is
 
 Head Over Heels has `U + V + Z`, because its projection sends both floor axes
 down the screen. The signs here belong to this engine's projection, and if
-`object_place` changes, depth_cmp has to change with it.
+`object_place` changes, the scan's axes have to change with it.
 
 One consequence: `U+1, V-1, Z+1` is a move straight along the line of sight. It
 changes depth but not the picture. That is why "has it moved?" is asked of the
@@ -179,12 +179,16 @@ starting inside the room that had just gone.
 
 ---
 
-## 4. Comparing two objects: depth_cmp
+## 4. Comparing two objects
 
-depth_cmp compares **the object being placed** -- whose bounds depth_cmp_setup
-has hoisted into its immediates -- with **a candidate in IY**. It answers one
-question: is the placed object nearer than the candidate? **Carry set means
-nearer.** That is the only thing it returns.
+The comparison is the inner loop of `depth_insert_from`, written out in place
+rather than a routine of its own: it has one caller, and the `CALL`, the `RET`
+and the `PUSH HL`/`POP IY` that handed the candidate over were 53 T-states of
+the ~140 the loop spent around each one. It compares **the object being
+placed** -- whose bounds depth_cmp_setup has hoisted into the loop's
+immediates -- with **the candidate in IY**, and answers one question: is the
+placed object nearer than the candidate? Each answer is a `JR` straight to
+where the loop goes next.
 
 ### The first axis that separates decides
 
@@ -192,15 +196,16 @@ On each axis the two boxes are in one of three states:
 
 | State | Test on U | Means |
 |---|---|---|
-| We are nearer | their max <= our min | answer: carry set |
-| They are nearer | their min >= our max | answer: carry clear |
+| We are nearer | their max <= our min | answer: `jr .nearer` |
+| They are nearer | their min >= our max | answer: `jr .advance` |
 | They overlap | neither | this axis says nothing: ask the next |
 
-The moment an axis separates the two, depth_cmp returns; the axes after it are
+The moment an axis separates the two, the loop moves on; the axes after it are
 never read. On V the first two rows swap, because V grows away from the viewer.
 
-If all three overlap the boxes interpenetrate, no order is right, and it
-returns "nearer" -- which is where the scan would have left the object anyway.
+If all three overlap the boxes interpenetrate, no order is right, and the loop
+falls out of the bottom to "nearer" -- which is where it would have left the
+object anyway.
 
 ### Why U, then V, then Z
 
@@ -237,43 +242,36 @@ stop overlapping. Two floor axes can never disagree about a pair you can see.
 Their order still matters, but only through a third object standing between
 them. Room `$B3` is that case, and [section 13](#13-tests) has it.
 
-### The exits, and why the carry means nearer
+### The exits
 
-Every answer is a `CP` away, so the only question at each exit is whether the
-carry `CP` leaves is the one to return. On U and Z it is. On V it is not,
-because V runs nearer as it *falls*, so its two answers come out reversed:
+Every answer is a `CP` and a conditional `JR` to one of the loop's two
+continuations. On V the two go the other way round, because V runs nearer as
+it *falls*:
 
 ```
 .u_min:   cp   <our min + 1>
-          ret  c              ; their max <= our min: we are nearer
+          jr   c,.nearer          ; their max <= our min: we are nearer
 .u_max:   cp   <our max>
-          ret  nc             ; their min >= our max: they are nearer
+          jr   nc,.advance        ; their min >= our max: they are nearer
 
 .v_min:   cp   <our min + 1>
-          jr   c,.flip        ; their V is the lower, so THEY are nearer
+          jr   c,.advance         ; their V is the lower, so THEY are nearer
 .v_max:   cp   <our max>
-          jr   nc,.flip
+          jr   nc,.nearer
 
-.flip:    ccf
-          ret
-```
-
-That is what fixes the polarity. Returning "nearer" puts the single `CCF` on V,
-which is only reached when U could not answer. Returning "further" would have
-put it on U and Z, the two asked most, at two bytes and 15 T-states each time.
-
-Z's last test then needs no condition on its `RET` at all, because both ways
-out want the carry exactly as `CP` left it:
-
-```
 .z_max:   cp   <our Z + SIZE_Z>
-          ret
+          jr   nc,.advance        ; their base at or above our top
+          ; fall through: interpenetrating, and nearer it is
+.nearer:  pop  de
+          push iy                 ; the insertion point is this candidate now
+.advance: ...
 ```
 
-Carry clear is their base at or above our top, so they are the nearer. Carry
-set is Z overlapping -- and since U and V have already overlapped to get this
-far, that is interpenetration, where "nearer" is the answer anyway. One
-instruction, both answers.
+When the comparison was a routine the same answers had to come back in the
+carry, and which way round it meant was decided by where `CP` leaves it: right
+on U and Z, reversed on V, which cost V a `CCF`. Written out, there is no carry
+to flip and no convention about what it means -- the mirrored axis simply
+jumps to the other target.
 
 ### Worked examples
 
@@ -309,10 +307,10 @@ Z, which would have called the body nearer by twelve, is never reached.
 ### The patched immediates and depth_cmp_setup
 
 The placed object is the same for every candidate in a scan, so its bounds are
-worked out once. depth_cmp_setup writes them straight into the operands of
-depth_cmp's own instructions:
+worked out once. depth_cmp_setup writes them straight into the operands of the
+loop's own `CP` instructions:
 
-| Label in depth_cmp | Instruction | Operand written by setup |
+| Label in depth_insert_from | Instruction | Operand written by setup |
 |---|---|---|
 | `.u_min` | `cp n` | our U - SIZE_U + 1 |
 | `.u_max` | `cp n` | our U + SIZE_U |
@@ -322,7 +320,9 @@ depth_cmp's own instructions:
 | `.z_max` | `cp n` | our Z + SIZE_Z |
 
 So the `cp 0`s in the source are placeholders; the labels exist only to give
-setup an address to write to, one byte past each.
+setup an address to write to, one byte past each. They are local to
+`depth_insert_from`, so setup names them as `depth_insert_from.u_min` and so
+on.
 
 The `+ 1` on the mins turns "their max <= our min" into a single compare: CP
 sets the carry for "less than", so `cp our_min + 1` sets it for "less than or
@@ -333,9 +333,6 @@ instead would be at least 3 bytes and 19 T, before redoing the add or subtract
 for every candidate. Setup's six stores pay for themselves after about three
 candidates.
 
-depth_cmp reads nothing but the candidate in IY and those six bytes. It leaves
-IX, HL, B and D alone, which is why the insertion scan can hold its cursor
-across the call.
 
 ---
 
@@ -368,10 +365,10 @@ the cycle is the only thing that order is wrong about. It is *not* harmless to
 a scan that stops at the first candidate it is behind, because stopping is
 exactly an appeal to transitivity -- everything after this must be nearer too.
 
-**depth_cmp needs no notion of how sure it is.** It used to have one, and the
-only thing that ever read it was a scan deciding whether it might stop. With no
-early exit there is nothing to tell: both ways of being further mean the same
-thing, keep walking. That is what lets depth_cmp return from its first
+**The comparison needs no notion of how sure it is.** It used to have one, and
+the only thing that ever read it was a scan deciding whether it might stop.
+With no early exit there is nothing to tell: both ways of being further mean
+the same thing, keep walking. That is what lets it leave from its first
 separating axis rather than weighing all three.
 
 So the order the list holds is not "sorted". It is an order in which the
@@ -399,6 +396,12 @@ Two positions are kept: **the cursor**, in IY, the candidate being compared;
 and **the insertion point**, the NEXT field the object will be linked after,
 held on the stack for the length of the scan and starting as the field the scan
 began from.
+
+The cursor is advanced by loading the candidate's NEXT straight into IY with
+`ld iyh,a` / `ld iyl,c`, testing the high byte for the end of the list on the
+way past -- no record lives in page 0. The scan enters that same code first,
+with IY sitting on the field it starts from: that field is a NEXT field like
+any other, so reading it as one loads the first candidate.
 
 ```
 at     = start
@@ -502,10 +505,13 @@ torso moves through depth_step, and a guard's legs call depth_relink directly.
 
 ### Did the step move it at all?
 
-depth_step takes the step in D, E and A, for U, V and Z, adds it to the record,
-and ORs the three together. A zero step leaves the object where it was, so the
-routine returns. A non-zero step changes at least one coordinate, so it falls
-into depth_relink.
+depth_step takes the step in D, E and A, for U, V and Z. depth_add_step ORs
+the three together first: a zero step leaves the object where it was, so it
+returns before touching the record, at 27 T-states rather than the 148 of
+three read-add-writes. A non-zero step is added and changes at least one
+coordinate, so depth_step falls into depth_relink. (The OR is repeated on the
+way out, because the flags of the last ADD are no use -- a coordinate can
+wrap to zero.)
 
 The question is asked of the step, at the one moment the step is known, rather
 than by saving the position and comparing it later.
@@ -639,9 +645,7 @@ everything the relink could change.
 |---|---|---|---|
 | depth_reset | -- (a macro) | an empty list | HL |
 | depth_unlink | IX | DE = the field that pointed at IX. **A kept**, carry clear | F, BC, HL |
-| depth_cmp_setup | IX | the six operands in depth_cmp | AF, B |
-| depth_cmp | IY = candidate, setup done | carry = nearer | A, C, E. Keeps IX, IY, B, D, HL |
-| depth_cmp_hl | HL = candidate, setup done | as depth_cmp, with IY = the candidate | A, C, E, IY. Keeps IX, B, D, HL |
+| depth_cmp_setup | IX | the six operands in depth_insert_from | AF, B |
 | depth_insert | IX | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_placed | IX, setup done | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_from | IX, HL = the field to start at, setup done | IX linked in | A, BC, DE, HL, IY |
@@ -660,9 +664,9 @@ everything the relink could change.
 | `sort_head` | depth.s | the NEXT field that starts the sorted run |
 | `depth_reset` | depth.s, a macro | sets both back to an empty list |
 | the insertion point | the stack, during a scan | the NEXT field the object will be linked after |
-| six operands | inside depth_cmp | the placed object's bounds, from depth_cmp_setup |
+| six operands | inside depth_insert_from | the placed object's bounds, from depth_cmp_setup |
 
-The whole module is 264 bytes, four of them the two variables above.
+The whole module is 267 bytes, four of them the two variables above.
 
 ---
 
@@ -674,7 +678,7 @@ The whole module is 264 bytes, four of them the two variables above.
   ends. `start` in knightlore/main.s has a note about this happening after a
   failed room build.
 
-- **depth_cmp is only valid after depth_cmp_setup for the object being placed.**
+- **The scan is only valid after depth_cmp_setup for the object being placed.**
   Its bounds live in the code, so any setup for a different object in between
   silently changes the answers. depth_insert_placed and depth_insert_from
   assume setup has run; depth_relink gets it from the depth_insert it jumps to,
@@ -713,9 +717,10 @@ covers:
 - **depth_unlink** from the middle, the head, the tail and a list of one,
   including DE and A on the way out. The records sit either side of a page
   boundary.
-- **depth_cmp** on every axis in both directions -- which checks which axis got
-  asked as much as what it answered, since a later axis answering at all would
-  mean an earlier one had wrongly separated. Plus a zero-height box on top, two
+- **the comparison**, by inserting one record into a list holding another and
+  seeing which side it lands: on every axis in both directions -- which checks
+  which axis got asked as much as what it answered, since a later axis
+  answering at all would mean an earlier one had wrongly separated. Plus a zero-height box on top, two
   agreeing axes, the floor axes disagreeing either way round, room `$B3`'s pair
   both ways, above-and-behind, and interpenetration.
 - **depth_insert** into an empty list, before, between and after, and after a
@@ -747,7 +752,7 @@ step checks the whole list for a **certain inversion**: an object before one
 that every separating axis agrees it is in front of.
 
 That "certain" is the suite's own reading of the two boxes, in
-`certainly_nearer`, and deliberately not depth_cmp's. depth_cmp answers from
+`certainly_nearer`, and deliberately not the sort's. The scan answers from
 the first axis that separates the pair and has no notion of how sure it is;
 what a picture can be wrong about is narrower -- a pair that *every* separating
 axis agrees on. Where the axes disagree the sort may settle it either way and
@@ -817,7 +822,10 @@ break. All of that existed for the scan's early exit, and went with it.
 | depth_insert_from | 28 B | 26 B |
 | the module | 375 B | **264 B** |
 
-Knight Lore's build went from 10 bytes free below the stack to 121.
+Knight Lore's build went from 10 bytes free below the stack to 121. Writing
+the comparison out inside the loop and testing a step before adding it then
+put 3 back (`depth_insert_from` 77 B with the comparison inside it,
+`depth_add_step` 30 B, the module 267 B) for the speed below.
 
 ### What it costs
 
@@ -848,3 +856,27 @@ runs.
 
 For scale, in those same rooms `sprite_blit` and `objects_draw_all` between
 them account for the bulk of a turn, and a turn takes 2.5 to 3.5 frames.
+
+### Writing the comparison into the loop
+
+The same five rooms again, entered in the same order on both builds -- which
+matters, since a room's movers are in a different phase depending on where the
+knight came from, and the first attempt at this table compared two different
+games. Busy time per turn agrees to within a few percent between the two runs,
+which is the check that they are the same scene.
+
+| room | called | inlined | |
+|---|---|---|---|
+| `$BF` | 5,763 | 4,762 | -17% |
+| `$A3` | 9,383 | 8,239 | -12% |
+| `$8C` | 9,833 | 7,626 | -22% |
+| `$43` | 5,284 | 4,397 | -17% |
+| `$E3` | 4,177 | 3,407 | -18% |
+
+Mean **-17%** on depth's T-states per turn, from about 3.4% of a turn to 2.8%,
+for +3 bytes -- against a price of -19% worked out from the listing. What went:
+the `CALL` and `RET` around the comparison, the `PUSH HL`/`POP IY` that handed
+it the candidate, the `CCF` on V, and the `HL` round trip when advancing, which
+now loads NEXT straight into IY with `ld iyh,a`/`ld iyl,c`. `depth_add_step`'s
+early return for a zero step is the rest, and is why `$E3`, whose seventeen
+movers mostly sit out a turn, gains more than its scan alone would give.
