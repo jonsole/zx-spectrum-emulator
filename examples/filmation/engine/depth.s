@@ -294,13 +294,15 @@ depth_relink:		call	depth_unlink
 ; The upper half of a two-part object -- a character's body, a guard's torso --
 ; moved by a step, and both halves put back in depth order.
 ;
-; The lower half is re-sorted here, with the upper out of the list. Left in, the
-; upper sits right behind the lower, and to the lower it is always certainly in
-; front -- it stands on it. So the lower's look at its next neighbour found its
-; own upper and said "in order", and a scan would have stopped there too. That
-; is where the upper USED to be, not where it is going: the knight stepped
-; forward onto the next block, his legs stayed behind it while his body went
-; past, and the block's top was drawn over his feet until his next step.
+; The upper comes out of the list before the lower is re-sorted. That was once
+; load-bearing: when depth_relink only looked at its neighbours, the lower found
+; its own upper sitting behind it, called that "in order" and never re-sorted at
+; all -- the knight stepped forward onto the next block, his legs stayed behind
+; it while his body went past, and the block's top was drawn over his feet. A
+; full scan cannot be fooled that way: the upper is always the nearer of the
+; two, so the scan never takes it as somewhere to go after. The order is kept
+; because both halves have to come out regardless and it costs nothing --
+; re-sorting the lower first passes both suites.
 ;
 ; Then the upper goes back in. The two share U and V and the upper is the
 ; nearer, so it can never belong in front of the lower. Everything a scan from
@@ -309,12 +311,10 @@ depth_relink:		call	depth_unlink
 ; shortcut past the walk, but the rest of it. Head Over Heels does the same, in
 ; EnlistAux.
 ;
-; And the upper is always re-scanned, never given depth_relink's neighbour
-; check. Its neighbours are not what matter: when the lower half moves back
-; past something, that something is left between the two halves, and the
-; upper's own neighbours can still guess it in order. Room $38 did exactly
-; that -- the knight stepped down off a block, his legs went in front of it,
-; and his body stayed behind it, drawn in front of a block it was behind.
+; The upper is re-scanned every turn, never assumed to be in place. Room $38 is
+; why that has to be so: the knight stepped down off a block, the lower half
+; moved back past it, and the block was left sitting between his two halves --
+; his body drawn in front of something it was behind.
 ;
 ; The lower half's own step has to be added before this, and a caller that
 ; re-sorts it as well does no harm: it is re-sorted again here, properly.
@@ -349,8 +349,9 @@ depth_step_upper:	call	depth_add_step		; HL comes through this
 ; true. Walking on costs the rest of the run and is never wrong about more
 ; than the cycle itself.
 depth_insert:		call	depth_cmp_setup
-					; NB: depth_insert_placed assumes depth_cmp_setup has already run for
-					; this object -- depth_relink calls it once and then uses both.
+					; NB: the two entries below assume depth_cmp_setup has already run for
+					; this object. depth_step_upper is what relies on that -- it runs setup
+					; itself for the upper half and then enters at depth_insert_from.
 depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 					; NB: fall through
 

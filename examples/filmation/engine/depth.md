@@ -1,14 +1,16 @@
 # How depth sorting works
 
-This is a walk through [depth.s](depth.s): what problem it solves, the data it
-keeps, how two objects are compared, and how an object gets into the list, out
-of it, and back into it after it moves. It ends with who calls what, the
-register contracts, and the traps.
+A walk through [depth.s](depth.s): what problem it solves, the data it keeps,
+how two objects are compared, and how an object gets into the list, out of it,
+and back into it after it moves. It ends with who calls what, the register
+contracts, the traps, and an appendix on what the current design replaced.
 
-The short version: the engine keeps every object in one linked list, furthest
-first, and never sorts it. The list is put in order once, when a room is built.
-After that an object that moves is taken out and put back in the right place,
-and an object whose step is zero costs one OR.
+The short version, in four sentences. Every object in the room is on one linked
+list, furthest first, and the draw loop just walks it. Two objects are compared
+by their boxes, one axis at a time, and the first axis that separates them
+decides. An object that moves comes out of the list and is scanned back in
+against the whole run; an object that has not moved costs one `OR`. There is no
+sort, and nothing keeps a score.
 
 ## Contents
 
@@ -16,7 +18,7 @@ and an object whose step is zero costs one OR.
 2. [Boxes, and which way is nearer](#2-boxes-and-which-way-is-nearer)
 3. [The list](#3-the-list)
 4. [Comparing two objects: depth_cmp](#4-comparing-two-objects-depth_cmp)
-5. [There is no "certain" any more](#5-there-is-no-certain-any-more)
+5. [Why there is no sort](#5-why-there-is-no-sort)
 6. [Putting an object in: depth_insert](#6-putting-an-object-in-depth_insert)
 7. [The background run: background_insert](#7-the-background-run-background_insert)
 8. [Taking an object out: depth_unlink](#8-taking-an-object-out-depth_unlink)
@@ -25,6 +27,7 @@ and an object whose step is zero costs one OR.
 11. [Register contracts and state](#11-register-contracts-and-state)
 12. [Traps](#12-traps)
 13. [Tests](#13-tests)
+14. [Appendix: what this replaced](#14-appendix-what-this-replaced)
 
 ---
 
@@ -36,21 +39,23 @@ object drawn later covers an object drawn earlier. For the picture to be right,
 anything that should appear in front of something else has to come after it in
 the list. The list is therefore kept **furthest first**.
 
-Knight Lore worked out this order afresh every frame, in
-`calc_display_order_and_render` at `$CEBB`. It scanned its objects for one
-that nothing else hides, drew it, and started the scan again -- O(n²) at best,
-with an eight-entry list at `$D01A` to catch the cycles that scan can fall
-into. This engine follows Head Over Heels instead: the order is a standing
-property of the list, repaired one object at a time when that object moves.
+Knight Lore worked the order out afresh every frame, in
+`calc_display_order_and_render` at `$CEBB`: it scanned its objects for one that
+nothing else hides, drew it, and started the scan again -- O(n²) at best, with
+an eight-entry list at `$D01A` to break the cycles that scan can fall into.
+This engine follows Head Over Heels instead. The order is a standing property
+of the list, repaired one object at a time, when that object moves.
 
-The *comparison* is Knight Lore's, though, arrived at here independently and
+The *comparison*, though, is Knight Lore's, arrived at here independently and
 only later checked against its code. Its test at `$CEF8` sorts each axis into
-the same three states this one does -- we are clear of them, they are clear
-of us, or the boxes overlap -- and folds the three into a base-3 index into a
+the same three states this one does -- we are clear of them, they are clear of
+us, or the boxes overlap -- and folds the three into a base-3 index into a
 27-entry jump table at `$CF69`. Decoded, that table carves the 27 cases up
 exactly as [section 4](#4-comparing-two-objects-depth_cmp) does, and its near
-direction is `+X, -Y, +Z`: the same signs. (Addresses from tcdev's
-disassembly as converted by Michael R. Cook; facts only, nothing copied.)
+direction is `+X, -Y, +Z`: the same signs. (Addresses from tcdev's disassembly
+as converted by Michael R. Cook; facts and credit only, nothing copied.)
+
+---
 
 ## 2. Boxes, and which way is nearer
 
@@ -65,25 +70,20 @@ Every object is a solid box in world coordinates, held in its record:
 | Z, height | `Z`, `SIZE_Z` | `Z` to `Z + SIZE_Z` |
 
 U and V are **centres with half-widths**. Z is **the base with a height**, so
-`Z = 0` stands on the floor. depth_cmp, collide_box and object_overlaps all use
-the box this way.
+`Z = 0` stands on the floor. depth_cmp, collide_box and object_overlaps all
+read the box this way.
 
 Two boxes that only **touch** count as apart. A box from 36 to 44 and one from
-44 to 52 do not overlap on that axis. This is what lets a stack of cubes, each
-exactly `SIZE_Z` above the last, sort cleanly on Z.
+44 to 52 do not overlap on that axis. That is what lets a stack of cubes, each
+exactly `SIZE_Z` above the last, separate cleanly on Z, and what lets a box of
+no height separate from the one it stands on.
 
 ### Which way is nearer
 
 `object_place` sends +U down the screen and +V up it, and Z up. For an
-orthographic projection, the direction you can move in without changing where a
-thing lands on screen is the direction you are looking along. Here that is
-`(1, -1, 1)`. So the depth of a point is
-
-```
-depth = U - V + Z
-```
-
-and bigger is nearer the viewer:
+orthographic projection the direction you can move in without changing where a
+thing lands on screen is the direction you are looking along, and here that is
+`(1, -1, 1)`. So depth grows with U, falls with V and grows with Z:
 
 | Moving | Gets |
 |---|---|
@@ -91,13 +91,15 @@ and bigger is nearer the viewer:
 | V up | further |
 | Z up | nearer |
 
-Head Over Heels uses `U + V + Z`, because its projection sends both floor axes
+Head Over Heels has `U + V + Z`, because its projection sends both floor axes
 down the screen. The signs here belong to this engine's projection, and if
 `object_place` changes, depth_cmp has to change with it.
 
 One consequence: `U+1, V-1, Z+1` is a move straight along the line of sight. It
-changes depth but not the picture. That is why the "has it moved?" question is
-asked of the step in world coordinates, and never of the screen extents.
+changes depth but not the picture. That is why "has it moved?" is asked of the
+step in world coordinates, and never of the screen extents.
+
+---
 
 ## 3. The list
 
@@ -117,8 +119,8 @@ address. For the first object it does not: its PREV points at `object_list`.
 
 `object_list` is a two-byte variable, and the trick is that it looks exactly
 like a NEXT field. Everything that writes "the field that points at me" can
-write through PREV without asking whether the object is first in the list. That
-removes the "am I the head?" branch from both unlink and insert.
+write through PREV without asking whether the object is first in the list,
+which removes the "am I the head?" branch from both unlink and insert.
 
 ```
  object_list          record A              record B              record C
@@ -133,18 +135,18 @@ removes the "am I the head?" branch from both unlink and insert.
    drawn first                                                  drawn last
 ```
 
-The list is doubly linked so that taking an object out is a constant-time job.
-Nothing walks it backwards: PREV exists only so depth_unlink can splice an
-object out without first finding what points at it.
+Nothing walks the list backwards. PREV exists only so that depth_unlink can
+splice an object out in constant time without first hunting for what points
+at it.
 
 The draw loop fixes where `NEXT` has to be. `objects_draw_all` points SP at a
 record and pops: NEXT, then the Y extent, the X extent, the flags and blit
-index, and the sprite address. So offsets 0 to 9 are claimed. PREV just has to
-be somewhere after that.
+index, and the sprite address. So offsets 0 to 9 are claimed, and PREV only has
+to be somewhere after that.
 
 ### The background run and sort_head
 
-Some objects are scenery that is always behind everything: walls and trees,
+Some objects are scenery that is always behind everything -- walls and trees,
 flagged `OBJ_BACKGROUND` in the room data. There is no point comparing anything
 against them, so they sit in a run at the front of the list and are never
 sorted.
@@ -166,21 +168,23 @@ itself when there is no background.
 ```
 
 The draw loop knows nothing about this. It walks one chain from `object_list`,
-and the background simply comes out first.
+and the background simply comes out first. Head Over Heels does the same thing
+with a separate "far" list that `DrawCore` blits before the sorted one.
+
+The `depth_reset` macro sets both variables back to an empty list. It is a
+macro rather than a routine because neither game had the bytes for a CALL, and
+it lives here so that no game has to know `sort_head` exists -- one that
+emptied `object_list` and forgot `sort_head` would leave the sorted run
+starting inside the room that had just gone.
+
+---
 
 ## 4. Comparing two objects: depth_cmp
 
-depth_cmp compares **the object being placed** with **a candidate in IY**, and
-answers one question: is the placed object nearer than the candidate? Carry
-set means nearer.
-
-Nearer rather than further, which looks like the wrong way round for a list
-kept furthest first, because of where the carry lands. See
-[the exits](#the-exits-and-why-the-carry-means-nearer).
-
-It used to answer a second one -- *and how sure are you?* -- which is gone.
-[Section 5](#5-there-is-no-certain-any-more) is why, because it is the change
-the rest of this file hangs off.
+depth_cmp compares **the object being placed** -- whose bounds depth_cmp_setup
+has hoisted into its immediates -- with **a candidate in IY**. It answers one
+question: is the placed object nearer than the candidate? **Carry set means
+nearer.** That is the only thing it returns.
 
 ### The first axis that separates decides
 
@@ -192,66 +196,25 @@ On each axis the two boxes are in one of three states:
 | They are nearer | their min >= our max | answer: carry clear |
 | They overlap | neither | this axis says nothing: ask the next |
 
-The moment an axis separates them depth_cmp returns, and the axes after it are
+The moment an axis separates the two, depth_cmp returns; the axes after it are
 never read. On V the first two rows swap, because V grows away from the viewer.
-
-Two boxes that only **touch** count as apart. That is what lets a stack of
-cubes, each exactly `SIZE_Z` above the last, sort cleanly on Z, and what lets a
-box of no height separate from the one it stands on.
 
 If all three overlap the boxes interpenetrate, no order is right, and it
 returns "nearer" -- which is where the scan would have left the object anyway.
 
-### The exits, and why the carry means nearer
-
-Every answer is a `CP` away, so the only question at each exit is whether the
-carry `CP` leaves is the one to return. On U and Z it is; on V it is not,
-because V runs nearer as it *falls* and its two answers come out reversed.
-
-```
-.u_min:   cp   <our min + 1>
-          ret  c              ; their max <= our min: we are nearer
-.u_max:   cp   <our max>
-          ret  nc             ; their min >= our max: they are nearer
-
-.v_min:   cp   <our min + 1>
-          jr   c,.flip        ; their V is lower, so THEY are nearer
-.v_max:   cp   <our max>
-          jr   nc,.flip
-
-.flip:    ccf
-          ret
-```
-
-That is what fixes the polarity. Returning "nearer" puts the flip on V, which
-is only reached when U could not answer; returning "further" would have put it
-on U and Z, the two asked most, at two bytes and 15 T-states each time.
-
-Z's last test then needs no condition on its `RET` at all, because both ways
-out want the carry exactly as `CP` left it:
-
-```
-.z_max:   cp   <our Z + SIZE_Z>
-          ret
-```
-
-Carry clear is their base at or above our top, so they are the nearer. Carry
-set is Z overlapping -- and since U and V have already overlapped to get here,
-that is interpenetration, where "nearer" is the answer anyway. One
-instruction, both answers.
-
 ### Why U, then V, then Z
 
-**U first because it is the one most likely to answer.** Almost everything in a
-room is somewhere else along U -- the same fact `collide_gather`'s sweep is
-built on -- so most comparisons return from the first test, about 57 T-states
-in. That is what makes it affordable for every moving object to walk the whole
-run, which is what section 6 does.
+**U first because it is the axis most likely to answer.** Almost everything in
+a room is somewhere else along U -- the same fact `collide_gather`'s sweep is
+built on -- so most comparisons return from the very first test, 64
+T-states in. That is what makes it affordable for every moving object to walk
+the whole run, which is what [section 6](#6-putting-an-object-in-depth_insert)
+does.
 
-**Z last because when a floor axis and Z disagree, the floor is what the eye
+**Z last, because when a floor axis and Z disagree the floor is what the eye
 goes by.** The knight pushing a table from behind is the case: his body's box
 starts at the table's top, so Z says the body is nearer by twelve while U says
-it is further by eleven. Ask Z first and the body draws over the table.
+it is further by eleven. Ask Z first and the body is drawn over the table.
 
 **U before V costs nothing**, which is worth showing because it looks as though
 it should. Suppose U separates with us nearer and V separates the other way:
@@ -272,7 +235,45 @@ apart across the screen. A box's half-width in screenX is exactly
 stop overlapping. Two floor axes can never disagree about a pair you can see.
 
 Their order still matters, but only through a third object standing between
-them. Room `$B3` is that case, and section 13 has it.
+them. Room `$B3` is that case, and [section 13](#13-tests) has it.
+
+### The exits, and why the carry means nearer
+
+Every answer is a `CP` away, so the only question at each exit is whether the
+carry `CP` leaves is the one to return. On U and Z it is. On V it is not,
+because V runs nearer as it *falls*, so its two answers come out reversed:
+
+```
+.u_min:   cp   <our min + 1>
+          ret  c              ; their max <= our min: we are nearer
+.u_max:   cp   <our max>
+          ret  nc             ; their min >= our max: they are nearer
+
+.v_min:   cp   <our min + 1>
+          jr   c,.flip        ; their V is the lower, so THEY are nearer
+.v_max:   cp   <our max>
+          jr   nc,.flip
+
+.flip:    ccf
+          ret
+```
+
+That is what fixes the polarity. Returning "nearer" puts the single `CCF` on V,
+which is only reached when U could not answer. Returning "further" would have
+put it on U and Z, the two asked most, at two bytes and 15 T-states each time.
+
+Z's last test then needs no condition on its `RET` at all, because both ways
+out want the carry exactly as `CP` left it:
+
+```
+.z_max:   cp   <our Z + SIZE_Z>
+          ret
+```
+
+Carry clear is their base at or above our top, so they are the nearer. Carry
+set is Z overlapping -- and since U and V have already overlapped to get this
+far, that is interpenetration, where "nearer" is the answer anyway. One
+instruction, both answers.
 
 ### Worked examples
 
@@ -280,14 +281,14 @@ them. Room `$B3` is that case, and section 13 has it.
 Nearer along U.  Placed at U 60, candidate at U 40, both half-width 5.
 
   U: their max = 40 + 5 = 45,  our min = 60 - 5 = 55
-     45 <= 55, so we are nearer  ->  carry clear, and V and Z are never read
+     45 <= 55, so we are nearer  ->  carry set, and V and Z are never read
 ```
 
 ```
 The floor axes disagreeing.  Placed at U 70 V 90, candidate at U 40 V 50,
 all half-widths 5.
 
-  U: their max 45 <= our min 65  ->  we are nearer, carry clear, done.
+  U: their max 45 <= our min 65  ->  we are nearer, carry set, done.
 
 V would have said the opposite. It is never asked -- and the two sprites are
 (70 + 90) - (40 + 50) = 70 apart across a screen where each is 10 half-wide,
@@ -300,7 +301,7 @@ the table he is pushing at U 112 Z 128 (half 6, height 12).
 
   U: their max = 118, our min + 1 = 97.   118 < 97?   no.
      their min = 106, our max = 106.      106 < 106?  no.
-     So their min >= our max: they are nearer  ->  carry set.
+     So their min >= our max: they are nearer  ->  carry clear.
 
 Z, which would have called the body nearer by twelve, is never reached.
 ```
@@ -323,7 +324,7 @@ depth_cmp's own instructions:
 So the `cp 0`s in the source are placeholders; the labels exist only to give
 setup an address to write to, one byte past each.
 
-The `+ 1` on the mins turns "their max <= our min" into a single compare. CP
+The `+ 1` on the mins turns "their max <= our min" into a single compare: CP
 sets the carry for "less than", so `cp our_min + 1` sets it for "less than or
 equal".
 
@@ -338,28 +339,15 @@ across the call.
 
 ---
 
-## 5. There is no "certain" any more
+## 5. Why there is no sort
 
-depth_cmp used to return a second answer in A: whether every separating axis
-agreed, or whether they disagreed and the ordering was only a guess. It summed
-the separating axes into HL as it went, voted in B, and dispatched on the two
-together.
+A sort needs a total order: if A is behind B and B is behind C, then A is
+behind C. Isometric boxes do not promise that.
 
-All of that had **exactly one reader**: the insertion scan, deciding whether it
-was entitled to stop early. Once the scan was changed to walk the whole run
-every time (section 6), both ways of being further came to mean the same thing
--- keep going -- and the votes, the running difference, the one-unit Z
-tie-break and the dispatch that read them were all dead. Removing them is what
-lets depth_cmp return from its first separating axis, and took it from 100
-bytes to 50.
-
-What makes that a repair rather than a loss is that the flag was never sound
-enough to lean on. A sort needs a total order: if A is behind B and B is behind
-C, then A is behind C. Isometric boxes do not promise that. Three long bars
-laid out like a pinwheel can each be partly in front of the next, so A is in
-front of B, B in front of C, and C in front of A, and **no list order draws all
-three correctly**. Overlap is not transitive either, so one long object can be
-undecided against two that are themselves separated:
+Three long bars laid out like a pinwheel can each be partly in front of the
+next, so A is in front of B, B in front of C, and C in front of A. **No list
+order draws all three correctly.** And overlap is not transitive either, so one
+long object can be undecided against two that are themselves separated:
 
 ```
 A  block   U  92..108   V  92..108
@@ -371,21 +359,30 @@ B vs C:  U overlaps, V separates  ->  B nearer
 A vs C:  U separates              ->  C nearer      ... a cycle
 ```
 
-A cycle is harmless to a scan that never stops early: the object lands after
-the last candidate it was nearer than, and the cycle is the only thing that
-order is wrong about. It is *not* harmless to a scan that stops at the first
-candidate it is behind, which is what the certainty flag was propping up, and
-what section 9 used to need two list walks for.
+Two things follow, and between them they are why the rest of this file is as
+small as it is.
 
-So the order the list holds is not "sorted" in the usual sense. It is an order
-in which the comparison was asked about every pair on the way past, and
-resolved as far as anything can resolve it.
+**The scan must not stop early.** A cycle is harmless to a scan that walks the
+whole run: the object lands after the last candidate it was nearer than, and
+the cycle is the only thing that order is wrong about. It is *not* harmless to
+a scan that stops at the first candidate it is behind, because stopping is
+exactly an appeal to transitivity -- everything after this must be nearer too.
+
+**depth_cmp needs no notion of how sure it is.** It used to have one, and the
+only thing that ever read it was a scan deciding whether it might stop. With no
+early exit there is nothing to tell: both ways of being further mean the same
+thing, keep walking. That is what lets depth_cmp return from its first
+separating axis rather than weighing all three.
+
+So the order the list holds is not "sorted". It is an order in which the
+comparison was asked about every pair on the way past, and resolved as far as
+anything can resolve it.
 
 ---
 
 ## 6. Putting an object in: depth_insert
 
-There are three entry points, which fall through into each other:
+Three entry points, which fall through into each other:
 
 | Entry | Does | Then |
 |---|---|---|
@@ -398,22 +395,10 @@ never reads them.
 
 ### The scan
 
-The scan keeps two positions:
-
-- **The cursor, in IY**, the candidate being compared.
-- **The insertion point**, the NEXT field the object will be linked after. It
-  is kept on the stack for the length of the scan, and starts as the field the
-  scan began from.
-
-For each candidate:
-
-| depth_cmp says | Then |
-|---|---|
-| we are nearer | move the insertion point to this candidate, and move on |
-| we are further | move on, and leave the insertion point where it is |
-| (no candidate left) | link at the insertion point |
-
-In pseudo-code:
+Two positions are kept: **the cursor**, in IY, the candidate being compared;
+and **the insertion point**, the NEXT field the object will be linked after,
+held on the stack for the length of the scan and starting as the field the scan
+began from.
 
 ```
 at     = start
@@ -425,14 +410,9 @@ while cursor != 0:
 link the placed object after at
 ```
 
-The object ends up just after **the last candidate it was nearer than**. The
-whole run is walked, always.
-
-There is no early exit, and that is deliberate. Stopping at the first candidate
-the object is behind would be trusting the relation to be transitive, which
-section 5 shows it is not. It is also what pays for the rest: with nothing to
-decide about stopping, the scan has one branch and depth_cmp has no verdict to
-compute.
+The object ends up just after **the last candidate it was nearer than**, and
+the whole run is always walked. One branch, no early exit --
+[section 5](#5-why-there-is-no-sort) is why.
 
 ### Worked example
 
@@ -468,7 +448,6 @@ background_insert calls the same splice.
 
 ---
 
-
 ## 7. The background run: background_insert
 
 background_insert links IX at `sort_head` without comparing it with anything,
@@ -478,6 +457,8 @@ background run.
 Each background object therefore goes in after the previous one, in room order,
 and the sorted run always starts after the newest. Background objects are walls
 and trees, which never move, so nothing relinks them.
+
+---
 
 ## 8. Taking an object out: depth_unlink
 
@@ -497,39 +478,37 @@ work whether the object was first, in the middle, or last.
 Its contract:
 
 - **In:** IX, the object.
-- **Out:** DE points at the field that used to point at the object. That is
-  where the object came out, and depth_relink uses it.
-- **A is kept**, which nothing needs any more: depth_relink used to carry an
-  answer across the call in A. It costs nothing to keep -- the last-object
-  test is `inc b` / `dec b` rather than `ld a,b` / `or c` -- so it stays.
+- **Out:** DE points at the field that used to point at the object.
+- **A is kept**, which nothing needs any more -- depth_relink used to carry an
+  answer across the call in A. It costs nothing to keep, since the last-object
+  test is `inc b` / `dec b` rather than `ld a,b` / `or c`, so it stays.
 - **Corrupts** F, BC and HL.
 
 It steps between the two bytes of a field with `inc l` rather than `inc hl`.
-That is safe because a NEXT field never starts on the last byte of a page. It is
-either at offset 0 of a record, whose low byte is a multiple of 32, or it is
+That is safe because a NEXT field never starts on the last byte of a page: it
+is either at offset 0 of a record, whose low byte is a multiple of 32, or it is
 `object_list`, and an ASSERT checks that `object_list` does not end in `$FF`. A
 record's own PREV, at offset 15, is well inside its 32-byte slot.
 
 Unlinking does not clear the object's own NEXT and PREV. They are stale
 afterwards, and insert overwrites them.
 
+---
+
 ## 9. Moving an object: depth_step and depth_relink
 
 This is the code that runs all the time. Every mover, character half and guard
 torso moves through depth_step, and a guard's legs call depth_relink directly.
-There are two stages: did it move, and if so, out and back in.
 
-### Stage 1: did the step move it at all?
+### Did the step move it at all?
 
-depth_step takes the step in D, E and A, for U, V and Z, and adds it to the
-record. It then ORs the three together. A zero step leaves the object where it
-was, so the routine returns. A non-zero step changes at least one coordinate, so
-it falls into depth_relink.
+depth_step takes the step in D, E and A, for U, V and Z, adds it to the record,
+and ORs the three together. A zero step leaves the object where it was, so the
+routine returns. A non-zero step changes at least one coordinate, so it falls
+into depth_relink.
 
 The question is asked of the step, at the one moment the step is known, rather
-than by saving the position and comparing it later. That is what an earlier
-version did, with `extent_save` and `prev_u`, `prev_v` and `prev_z`. Asking
-the step instead removed 76 bytes.
+than by saving the position and comparing it later.
 
 **It has to be the step the caller really applies.** That is not always what
 the record's DU and DV hold:
@@ -543,17 +522,17 @@ the record's DU and DV hold:
 
 The legs are the exception. The wizard's two records start eight units apart,
 and mover_move_pair snaps the legs onto the torso every turn, so the legs can
-move when the torso's step is zero. mover_move_pair compares the legs' new U and
-V with their current ones before writing them, and calls depth_relink only if
-either differs.
+move when the torso's step is zero. mover_move_pair compares the legs' new U
+and V with their current ones before writing them, and calls depth_relink only
+if either differs.
 
 **The step runs before the screen position is worked out.** Nothing in depth.s
-reads the screen extents, and room_adjust, character_lift and object_place
-don't write U, V, Z or the sizes. So callers run depth_step first and
+reads the screen extents, and room_adjust, character_lift and object_place do
+not write U, V, Z or the sizes. So callers run depth_step first and
 object_place afterwards, and the flags from the OR are still intact for its
 `ret z`.
 
-### Stage 2: out, and back in from the front
+### Out, and back in from the front
 
 ```
 depth_relink:   call depth_unlink
@@ -561,63 +540,25 @@ depth_relink:   call depth_unlink
 ```
 
 That is the whole routine: five bytes. However little the object moved, it
-comes out of the list and is scanned back in from the front of the sorted run.
+comes out of the list and is scanned back in against the whole sorted run.
 
-**What used to be here.** depth_relink was 62 bytes and had a stage of its own
-in between. It compared the object with the neighbour before it and the
-neighbour after it, and if it was still between the two it returned without
-touching the list -- two depth_cmp calls instead of a walk down the whole run,
-and it was the common case, since an object creeping a unit a frame crosses
-somebody only every several frames. When the check did find a crossing it
-unlinked and re-scanned, from `sort_head` if the object belonged earlier and
-from where it came out if it belonged later.
+**It is self-repairing**, and that is the property worth having. Two objects
+that both stood still cannot have come to need a different order between them,
+and anything that moved is placed against the whole run again. An error cannot
+outlive the frame that made it, so nothing needs a separate pass to go looking
+for one.
 
-It was taken out because it cannot be made right. The check is sound only if
-the order is transitive, and [section 5](#5-there-is-no-certain-any-more) shows
-it is not: the neighbours either side can both be content while something
-further along the list is certainly on the wrong side of you.
+The obvious cheaper thing -- check the neighbours either side first and do
+nothing if the object still sits between them -- is what used to be here, and
+it cannot be made right: it is sound only if the order is transitive, which
+[section 5](#5-why-there-is-no-sort) shows it is not. See
+[the appendix](#14-appendix-what-this-replaced) for the scene that settled it,
+and for what walking the whole run actually costs.
 
-Room `$A3` is the case that made it, and `pair_sort_tests.s` still holds the
-scene. The moveable block there rides the hunting ball. The knight stood still
-on a stack beside it, and the block was ahead of him in the list, which was
-right -- side by side, their boxes disagree by axis. Then the ball carried the
-block in under his feet, where he is certainly the nearer. Between the two in
-the list lay a spike and a spiked ball that the block could only guess about,
-so its look at its neighbours said "in order"; the knight had taken no step, so
-nothing re-sorted him either; and the block's top stayed drawn over his legs
-until something else moved. It had already been patched once, to walk past a
-neighbour it was unsure of rather than stop at it, and that patch is what a
-full scan does by construction.
+### Two-part objects: depth_step_upper
 
-**What the full scan buys back.** Three things, and together they more than
-pay for the extra walking:
-
-- Nothing needs to know how sure a comparison was, so depth_cmp lost its votes,
-  its running sum and its dispatch, and returns from the first axis that
-  separates -- 100 bytes down to 50.
-- depth_relink lost both walks and the two scan-start cases: 62 bytes down to 5.
-- The scan lost its early exit and its certainty test.
-
-That is 111 bytes for the module as a whole, against maybe two or three
-thousand T-states a frame -- and the object count is what makes it affordable.
-There are only a handful of things moving in a room at once.
-
-**And it is self-repairing**, which the neighbour check could never be. Two
-objects that both stood still cannot have come to need a different order
-between them, and anything that moved is placed against the whole run again.
-An error cannot outlive the frame that made it, so there is no need for a
-separate pass to go looking for one.
-
-### depth_step_upper: two-part objects
-
-A character is two records, legs and body, and a guard is a torso over legs.
-The two halves share U and V, and the upper half is always the nearer of the
-two. So the upper half can never belong in front of the lower one, and every
-comparison a scan from the front would make on its way down to the lower half
-would come out the same for the upper.
-
-`depth_step_upper` uses this. It takes the lower half in HL, adds the step to
-the upper, and then puts both halves in order:
+A character is two records, legs and body; a guard is a torso over legs. The
+two halves share U and V, and the upper half is always the nearer of the two.
 
 ```
 upper.UVZ += step;  if step == 0: return
@@ -626,44 +567,38 @@ relink(lower)                  the lower, against the room
 insert(upper, after lower)     the upper, scanned in from right after it
 ```
 
-HL is the lower record's address, which is also its NEXT field, so the scan can
-start from it. Head Over Heels does the same in `EnlistAux`.
+**The upper's scan starts after the lower** rather than at `sort_head`. That is
+not a shortcut past the walk but the rest of it: since the two share U and V
+and the upper is the nearer, every comparison a scan from the front would make
+on its way down to the lower half comes out the same for the upper. Head Over
+Heels does the same, in `EnlistAux`.
 
-**The upper has to be out while the lower is re-sorted.** Left in, it sits
-right behind the lower half, and to the lower half it is always in front: it
-stands on it. The lower's own scan would then take its upper as the last
-thing it was nearer than and settle right in front of it -- which is where
-the upper *was*, not where it is going. The knight stepping forward onto the
-next block showed it: his legs stayed behind the block while his body went
-past it, and the block's top was drawn over his feet until his next step.
+**The upper is re-scanned every turn**, never assumed to be in place. Room `$38`
+is why: the knight stepped down off a block, the lower half moved back past it,
+and the block was left sitting between his two halves -- his body drawn in
+front of something it was behind.
 
-Sorting the two halves one after the other like any other object does not get
-round it: whichever goes second, the first is still in its way at its old
-place. Legs first fails walking forward, as above, and body first fails walking
-back.
+**The upper comes out before the lower is re-sorted.** That ordering used to be
+load-bearing, back when depth_relink only looked at its neighbours: the lower
+found its own upper sitting behind it, called that "in order" and never
+re-sorted at all. A full scan cannot be fooled that way, because the upper is
+always the nearer of the two and the scan never takes it as somewhere to go
+after -- re-sorting the lower first passes both suites. The order is kept
+because both halves have to come out regardless and it costs nothing.
 
-**The upper is always re-scanned**, from right after the lower half rather
-than from `sort_head`. That is not a shortcut past the walk but the rest of
-it: the two halves share U and V and the upper is the nearer, so every
-comparison a scan from the front would have made on its way down to the lower
-half comes out the same for the upper. Room `$38` is what proves the scan is
-needed at all -- when the lower half moves back past something, that thing is
-left sitting between the two halves.
-
-The lower half's step has to be added before depth_step_upper is called.
+**The lower half's step has to be added before depth_step_upper is called.**
 character_move only adds it, with depth_add_step, since depth_step_upper
 re-sorts it anyway. mover_move_pair re-sorts a guard's legs itself as well,
 because when the torso stands still depth_step_upper returns at once, and legs
 snapped somewhere new would not be re-sorted at all.
 
+---
+
 ## 10. Who calls what
 
 ### When a room is built
 
-1. **room_build** empties the list with the `depth_reset` macro, which is what
-   sets `object_list` to 0 and `sort_head` back to `object_list`. It is a macro
-   because neither game has the bytes for a CALL; it lives here so that no game
-   has to know `sort_head` exists.
+1. **room_build** empties the list with the `depth_reset` macro.
 2. **room_show** places every object first, so every comparison sees real
    coordinates. Then it inserts each one: `background_insert` if it has
    `OBJ_BACKGROUND`, otherwise `depth_insert`. Only then does it draw anything.
@@ -694,12 +629,15 @@ An object's place in the list only affects the pixels it covers, so repainting
 the union of its old and new extents, which the movers already do, covers
 everything the relink could change.
 
+---
+
 ## 11. Register contracts and state
 
 ### Routines
 
 | Routine | In | Out | Corrupts |
 |---|---|---|---|
+| depth_reset | -- (a macro) | an empty list | HL |
 | depth_unlink | IX | DE = the field that pointed at IX. **A kept**, carry clear | F, BC, HL |
 | depth_cmp_setup | IX | the six operands in depth_cmp | AF, B |
 | depth_cmp | IY = candidate, setup done | carry = nearer | A, C, E. Keeps IX, IY, B, D, HL |
@@ -707,8 +645,8 @@ everything the relink could change.
 | depth_insert | IX | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_placed | IX, setup done | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_from | IX, HL = the field to start at, setup done | IX linked in | A, BC, DE, HL, IY |
-| background_insert | IX | IX linked, sort_head moved | A, BC, DE, HL |
 | depth_link | IX, HL = the NEXT field to follow | IX spliced in after it | A, BC, DE, HL |
+| background_insert | IX | IX linked, sort_head moved | A, BC, DE, HL |
 | depth_add_step | IX, D, E, A = the step | Z set if the step was zero | AF, C. Keeps HL, DE, B |
 | depth_step | IX in the list, D, E, A = the step | IX moved, and in order | A, BC, DE, HL, IY |
 | depth_relink | IX in the list and moved | IX in order | A, BC, DE, HL, IY |
@@ -724,33 +662,35 @@ everything the relink could change.
 | the insertion point | the stack, during a scan | the NEXT field the object will be linked after |
 | six operands | inside depth_cmp | the placed object's bounds, from depth_cmp_setup |
 
+The whole module is 264 bytes, four of them the two variables above.
+
+---
+
 ## 12. Traps
 
 - **Never insert an object that is already in the list.** It compares against
   itself, the two boxes interpenetrate, and the scan can pick the object as its
   own insertion point and link its NEXT to itself. The draw loop then never
-  ends. `start` in knightlore/main.s has a note about this happening after a failed
-  room build.
+  ends. `start` in knightlore/main.s has a note about this happening after a
+  failed room build.
 
 - **depth_cmp is only valid after depth_cmp_setup for the object being placed.**
   Its bounds live in the code, so any setup for a different object in between
   silently changes the answers. depth_insert_placed and depth_insert_from
-  assume setup has run. depth_relink gets it from the depth_insert it jumps
-  to; depth_step_upper runs it a second time itself, because re-sorting the
+  assume setup has run; depth_relink gets it from the depth_insert it jumps to,
+  and depth_step_upper runs it a second time itself, because re-sorting the
   lower half rewrites it.
 
 - **Give the lower half its step before depth_step_upper.** It re-sorts the
   lower half itself, with the upper out of the way, and then scans the upper in
-  from after it. Re-sorting the lower half first as well does no harm, but it
-  is compared with an upper half still at its old place, so it cannot be
-  relied on to get past anything.
+  from after it.
 
-- **Move through depth_step, with the step you really apply.** Changing U, V
-  or Z directly skips the re-sort. Passing a zero step when the object did move,
+- **Move through depth_step, with the step you really apply.** Changing U, V or
+  Z directly skips the re-sort. Passing a zero step when the object did move,
   as the record's DU and DV would be for a character, skips it too.
 
 - **Keep boxes inside the byte.** All the bounds are unsigned 8-bit. A box whose
-  low edge would go below 0, such as U = 2 with SIZE_U = 4, wraps to $FE and
+  low edge would go below 0, such as U = 2 with SIZE_U = 4, wraps to `$FE` and
   compares as far away. The castle never puts anything near either end of the
   range, and the tests keep clear of it too.
 
@@ -761,21 +701,23 @@ everything the relink could change.
   be `object_list` or a background object, and must not be read as the previous
   sorted object.
 
+---
+
 ## 13. Tests
 
 [tests/depth_tests.s](tests/depth_tests.s) assembles depth.s on its own, with
-no other engine code, and runs 42 tests on the C++ Z80 core. It builds its
+no other engine code, and runs 44 tests on the C++ Z80 core. It builds its
 lists with its own helpers, so no test depends on the code it is testing. It
 covers:
 
 - **depth_unlink** from the middle, the head, the tail and a list of one,
   including DE and A on the way out. The records sit either side of a page
   boundary.
-- **depth_cmp** on every axis in both directions -- which checks which axis
-  got asked as much as what it answered, since a later axis answering at all
-  would mean an earlier one had wrongly separated. Plus a zero-height box on
-  top, two agreeing axes, the floor axes disagreeing either way round, room
-  `$B3`'s pair both ways, above-and-behind, and interpenetration.
+- **depth_cmp** on every axis in both directions -- which checks which axis got
+  asked as much as what it answered, since a later axis answering at all would
+  mean an earlier one had wrongly separated. Plus a zero-height box on top, two
+  agreeing axes, the floor axes disagreeing either way round, room `$B3`'s pair
+  both ways, above-and-behind, and interpenetration.
 - **depth_insert** into an empty list, before, between and after, and after a
   background object.
 - **depth_relink** on an object that has not moved, one moved past either
@@ -789,31 +731,35 @@ covers:
   `$B4` stepping forward onto the next block and back off it, with the room's
   own boxes.
 
-[tests/pair_sort_tests.s](tests/pair_sort_tests.s) runs the two-part
-figures' real moves against the real sort: the knight through character_move
-and a guard through mover_move_pair. walker_tests.s and mover_tests.s stub the
-depth routines to count what a move asks for; this suite assembles walker.s,
-mover.s and depth.s together instead, so every step goes through the sort as it
-does in the game. It stands the knight, or a guard, on a three-by-three
-platform of room `$B4`'s blocks, walks it across in all four directions, and
-after every step checks the whole list for a **certain inversion**: an object
-before one that every separating axis agrees it is in front of.
+Room `$B3` is the pair worth knowing about: a spike and a block, 16 apart along
+U and 16 along V, with a ball between them that is certainly nearer than the
+spike and certainly further than the block. Get those two the wrong way round
+and the ball has nowhere in the list it can go.
+
+[tests/pair_sort_tests.s](tests/pair_sort_tests.s) runs the two-part figures'
+real moves against the real sort: the knight through character_move and a guard
+through mover_move_pair. walker_tests.s and mover_tests.s stub the depth
+routines to count what a move asks for; this suite assembles walker.s, mover.s
+and depth.s together instead, so every step goes through the sort as it does in
+the game. It stands the knight, or a guard, on a three-by-three platform of
+room `$B4`'s blocks, walks it across in all four directions, and after every
+step checks the whole list for a **certain inversion**: an object before one
+that every separating axis agrees it is in front of.
 
 That "certain" is the suite's own reading of the two boxes, in
 `certainly_nearer`, and deliberately not depth_cmp's. depth_cmp answers from
 the first axis that separates the pair and has no notion of how sure it is;
-what a picture can be wrong about is narrower -- a pair that *every*
-separating axis agrees on. Where the axes disagree the sort may settle it
-either way and no test should hold it to one. Asking the boxes rather than
-the code under test is also what lets the suite survive a change to the
-comparison, which is exactly what it had to do.
+what a picture can be wrong about is narrower -- a pair that *every* separating
+axis agrees on. Where the axes disagree the sort may settle it either way and
+no test should hold it to one. Asking the boxes rather than the code under test
+is also what let the suite survive a change to the comparison, which is exactly
+what it had to do.
 
 On the code before the legs-and-body fix it finds inversions for both figures
-in both walks towards the viewer, which is where the legs have to move later
-in the list. It also sets up room `$A3`'s corner: the knight standing still on
-a stack, and the moveable block stepping in under his feet along V, checked
-after every step -- the scene that retired depth_relink's neighbour check,
-where it found 12 inversions, the first on the block's first step.
+in both walks towards the viewer, which is where the legs have to move later in
+the list. It also sets up room `$A3`'s corner -- the knight standing still on a
+stack, and the moveable block stepping in under his feet along V, checked after
+every step.
 
 To run them:
 
@@ -824,3 +770,81 @@ python examples/filmation/engine/tests/run_tests.py depth pair_sort
 
 A failure prints the test's name, what was checked, and the value it got
 against the one it wanted. The runner exits with the number of failures.
+
+---
+
+## 14. Appendix: what this replaced
+
+The design in sections 4 to 6 arrived in three steps, and the middle one threw
+a lot of machinery away. This is what that machinery was, and what going
+without it cost -- kept here rather than in the explanation, because none of it
+is needed to read the code.
+
+### The neighbour check
+
+depth_relink was 62 bytes. Before touching the list it compared the object with
+the neighbour before it and the neighbour after it, and if it was still between
+the two it returned -- two depth_cmp calls instead of a walk down the whole
+run, and it was the common case, since an object creeping a unit a frame
+crosses somebody only every several frames. When it did find a crossing it
+unlinked and re-scanned: from `sort_head` if the object belonged earlier, and
+from where it came out if it belonged later.
+
+Room `$A3` is the scene that retired it, and `pair_sort_tests.s` still holds it.
+The moveable block there rides the hunting ball. The knight stood still on a
+stack beside it, and the block was ahead of him in the list, which was right --
+side by side, their boxes disagree by axis. Then the ball carried the block in
+under his feet, where he is certainly the nearer. Between the two in the list
+lay a spike and a spiked ball that the block could only guess about, so its
+look at its neighbours said "in order"; the knight had taken no step, so
+nothing re-sorted him either; and the block's top stayed drawn over his legs
+until something else moved. It had already been patched once, to walk past a
+neighbour it was unsure of rather than stop at it, and a full scan is that
+patch taken to its conclusion.
+
+### What came off with it
+
+depth_cmp used to answer a second question in A: whether every separating axis
+agreed, or whether they disagreed and the ordering was only a guess. It summed
+the separating axes into HL as it went, voted in B, and dispatched on the two
+together, with a one-unit Z tie-break for the ties the floor terms could not
+break. All of that existed for the scan's early exit, and went with it.
+
+| | before | after |
+|---|---|---|
+| depth_cmp | 102 B | 50 B |
+| depth_relink | 62 B | 5 B |
+| depth_insert_from | 28 B | 26 B |
+| the module | 375 B | **264 B** |
+
+Knight Lore's build went from 10 bytes free below the stack to 121.
+
+### What it costs
+
+Measured on the real game rather than estimated: both versions built from the
+same tree with only depth.s swapped, driven from a breakpoint at `start.loop`
+so that a turn is exactly one `run`, 300 turns a room, knight walking,
+`idle: ["turn_pace"]`.
+
+| room | sorted | movers | old T/turn | new T/turn | |
+|---|---|---|---|---|---|
+| `$BF` | 25 | 2 | 13,254 | 14,572 | +10% |
+| `$A3` | 24 | 6 | 10,720 | 9,876 | -8% |
+| `$8C` | 22 | 3 | 8,674 | 9,519 | +10% |
+| `$43` | 23 | 1 | 5,341 | 5,284 | -1% |
+| `$E3` | 23 | 17 | 6,124 | 5,067 | -17% |
+
+The mean over the five worst rooms is **+0.5%**, and depth sorting is about
+4.2% of a turn either way. The two effects very nearly cancel: a comparison got
+roughly twice as cheap, and roughly twice as many of them happen.
+
+The spread goes the way the design says it should. `$E3`, with 17 movers, got
+17% *faster* -- with that many objects moving, the neighbour check kept failing
+and falling through to a full scan anyway, so it paid for both. `$BF`, with
+two, got 10% slower, because there the check usually succeeded in two
+comparisons. Rooms whose movers are gated out by `monster_gate` come out
+identical on both, at about 300 T a turn: nothing but the zero-step early-outs
+runs.
+
+For scale, in those same rooms `sprite_blit` and `objects_draw_all` between
+them account for the bulk of a turn, and a turn takes 2.5 to 3.5 frames.
