@@ -22,7 +22,7 @@
 //     one LDIR.
 //
 // No DOM and no vscode API, so it runs under plain Node for the tests
-// (node vscode-extension/tests/specials_model_test.js). The page gets it
+// (node examples/filmation/vscode/tests/specials_model_test.js). The page gets it
 // inlined as source, which is why nothing here may use require() and why the
 // export at the bottom is guarded.
 

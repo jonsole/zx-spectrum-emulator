@@ -1,15 +1,15 @@
 """Serve the Filmation room designer as a web page, outside VS Code.
 
-The designer is one page, vscode-extension/room_view.html, and it runs the same
+The designer is one page, examples/filmation/vscode/room_view.html, and it runs the same
 way in both places: everything that differs between a VS Code webview and a
 browser arrives through a `roomHost` object the host injects into it. This is
-the browser half. The editor half is vscode-extension/room_view.js, and the two
+the browser half. The editor half is examples/filmation/vscode/room_view.js, and the two
 inject the same shape, so the page itself has no idea which it is in.
 
-    python scripts/room_designer.py                 Knight Lore
-    python scripts/room_designer.py pentagram
-    python scripts/room_designer.py path/to/rooms.json
-    python scripts/room_designer.py --port 8900 --no-browser
+    python examples/filmation/vscode/room_designer.py                 Knight Lore
+    python examples/filmation/vscode/room_designer.py pentagram
+    python examples/filmation/vscode/room_designer.py path/to/rooms.json
+    python examples/filmation/vscode/room_designer.py --port 8900 --no-browser
 
 It edits examples/filmation/<game>/rooms.json in place, which is the game's
 rooms in their editable form: rooms.py decodes room_data.bin into it and
@@ -37,9 +37,10 @@ import webbrowser
 from base64 import b64encode
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-FILMATION = REPO / "examples" / "filmation"
-EXTENSION = REPO / "vscode-extension"
+# This script sits in the designer's own extension, beside the page it serves,
+# and that sits in examples/filmation beside the games it edits.
+EXTENSION = Path(__file__).resolve().parent
+FILMATION = EXTENSION.parent
 PAGE = EXTENSION / "room_view.html"
 
 # The two pure files the page inlines, in the order it names them.
@@ -92,7 +93,7 @@ def data_uri(path):
 
 # What a castle is drawn with, when its own meta.sprites does not say. These
 # are the names every rooms.json used before that field existed, and the same
-# fallback vscode-extension/room_model.js keeps -- change one, change both.
+# fallback examples/filmation/vscode/room_model.js keeps -- change one, change both.
 SPRITE_FILES = {
     "sheet": "sprites.png",
     "atlas": "sprites.json",
@@ -117,10 +118,10 @@ def beside(game_dir, name):
 
 
 def sprite_files(atlas, game_dir):
-    """The two artwork files, as the castle names them.
-
-    The atlas carries the pixel nudges as well, under meta.zx.game.graphics, so
-    the page needs nothing else to draw a room the way the game would.
+    """The artwork files, as the castle names them: the picture, where each
+    sprite is in it, and graphics.json -- which sprite each graphic number draws
+    and the pixel nudge that lines it up, so the page needs nothing else to
+    draw a room the way the game would.
     """
     said = (atlas.get("meta") or {}).get("sprites") or {}
     return {key: beside(game_dir, said.get(key) or fallback)

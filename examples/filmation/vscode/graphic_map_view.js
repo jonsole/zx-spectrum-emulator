@@ -24,7 +24,7 @@ const path = require('path');
 const crypto = require('crypto');
 const model = require('./graphic_map_model');
 
-const VIEW_TYPE = 'zxspectrum.graphicMap';
+const VIEW_TYPE = 'filmation.graphicMap';
 
 // The one pure file the page inlines, in the order its markers name it.
 const INLINED = ['sheet_model.js', 'graphic_map_model.js'];
@@ -199,7 +199,7 @@ function activateGraphicMap(context) {
       webviewOptions: { retainContextWhenHidden: true },
       supportsMultipleEditorsPerDocument: false
     }),
-    vscode.commands.registerCommand('zxspectrum.openGraphicMap', async (uri) => {
+    vscode.commands.registerCommand('filmation.openGraphicMap', async (uri) => {
       const file = uri || await pickMap();
       if (!file) return;
       await vscode.commands.executeCommand('vscode.openWith', file, VIEW_TYPE);

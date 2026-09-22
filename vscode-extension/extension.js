@@ -26,9 +26,6 @@ const { activateRewind } = require('./rewind_view');
 const { activateWatchpoints } = require('./watchpoint_view');
 const { activateServer, deactivateServer, ports: serverPorts } = require('./server_view');
 const { activatePrograms } = require('./program_view');
-const { activateRoomDesigner } = require('./room_view');
-const { activateGraphicMap } = require('./graphic_map_view');
-const { activateTemplatesEditor } = require('./templates_view');
 const graphicsModel = require('./graphics_model');
 const {
   FILTERS,
@@ -133,9 +130,6 @@ function activate(context) {
   audioVolumeBeforeMute = clampPercent(volumeState.get(VOLUME_BEFORE_MUTE_KEY, 100), 100) || 100;
   activateServer(context);
   activatePrograms(context);
-  activateRoomDesigner(context);
-  activateGraphicMap(context);
-  activateTemplatesEditor(context);
   activateAsmLanguage(context);
   activateProfile(context, zxDebugSession);
   activateRewind(context, zxDebugSession);

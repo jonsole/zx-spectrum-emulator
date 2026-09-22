@@ -13,7 +13,7 @@
 // file -- is pushed back to the page, which reopens on the room it was on.
 //
 // The page itself, room_view.html, is the same page the browser gets from
-// scripts/room_designer.py. Everything that differs between the two arrives
+// examples/filmation/vscode/room_designer.py. Everything that differs between the two arrives
 // through a `roomHost` object injected into it, and the two hosts inject the
 // same shape, so the page has no idea which it is in.
 //
@@ -29,7 +29,7 @@ const crypto = require('crypto');
 const model = require('./room_model');
 const { openTemplatesOf } = require('./templates_view');
 
-const VIEW_TYPE = 'zxspectrum.roomDesign';
+const VIEW_TYPE = 'filmation.roomDesign';
 
 // The two pure files the page inlines, in the order its markers name them.
 const INLINED = ['sheet_model.js', 'room_model.js', 'room_render.js',
@@ -316,10 +316,10 @@ class RoomSession {
     }
     const python = pythonFor(here);
     vscode.tasks.executeTask(new vscode.Task(
-      { type: 'zxspectrum-rooms', design: this.document.uri.fsPath },
+      { type: 'filmation-build', design: this.document.uri.fsPath },
       vscode.TaskScope.Workspace,
       'Build ' + path.basename(here),
-      'zxspectrum',
+      'filmation',
       new vscode.ShellExecution(python, ['build.py'], { cwd: here })
     ));
   }
@@ -372,19 +372,19 @@ function activateRoomDesigner(context) {
       webviewOptions: { retainContextWhenHidden: true },
       supportsMultipleEditorsPerDocument: false
     }),
-    vscode.commands.registerCommand('zxspectrum.openRoomDesigner', async (uri) => {
+    vscode.commands.registerCommand('filmation.openRoomDesigner', async (uri) => {
       const file = uri || await pickRooms();
       if (!file) return;
       await vscode.commands.executeCommand('vscode.openWith', file, VIEW_TYPE);
     }),
     // The castle's templates, from the palette, in a window of their own.
-    vscode.commands.registerCommand('zxspectrum.openRoomTemplates', async (uri) => {
+    vscode.commands.registerCommand('filmation.openRoomTemplates', async (uri) => {
       const file = uri || await pickRooms();
       if (file) await openTemplatesOf(file);
     }),
     // A room clicked in the templates editor: the designer on it, opening one
     // if none is, or moving the one already open.
-    vscode.commands.registerCommand('zxspectrum.showRoomOf', async (uri, number) => {
+    vscode.commands.registerCommand('filmation.showRoomOf', async (uri, number) => {
       let session = sessions.get(uri.toString());
       if (!session) {
         await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);

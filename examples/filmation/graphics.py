@@ -23,8 +23,8 @@ different bitmap is not a rename.
 
 The sheet is gitignored and made by build.py from the packed sprite data, which
 is also gitignored -- so a tree that can build the game has one, and a tree that
-cannot has no room data to emit either. vscode-extension/room_render.js derives
-the same names for the designer, and tests/room_model_test.js holds the two
+cannot has no room data to emit either. vscode/room_render.js derives
+the same names for the designer, and vscode/tests/room_model_test.js holds the two
 together.
 """
 import json

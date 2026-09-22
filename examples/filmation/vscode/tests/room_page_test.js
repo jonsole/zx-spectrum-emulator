@@ -1,6 +1,6 @@
 // The room designer's page as its two hosts assemble it.
 //
-//   node vscode-extension/tests/room_page_test.js
+//   node examples/filmation/vscode/tests/room_page_test.js
 //
 // room_view.js cannot be required here -- it opens with require('vscode') --
 // so this does what both hosts do to the page and checks the result. The point
@@ -21,7 +21,7 @@ const vm = require('vm');
 
 const EXT = path.join(__dirname, '..');
 const GAMES = ['knightlore', 'pentagram'];
-const FILMATION = path.join(EXT, '..', 'examples', 'filmation');
+const FILMATION = path.join(EXT, '..');
 
 let failures = 0;
 let skipped = 0;
@@ -118,7 +118,7 @@ test('the page names exactly the files the hosts inline', () => {
   // whose script refers to something that is not there.
   const editor = fs.readFileSync(path.join(EXT, 'room_view.js'), 'utf8');
   const browser = fs.readFileSync(
-    path.join(EXT, '..', 'scripts', 'room_designer.py'), 'utf8');
+    path.join(EXT, 'room_designer.py'), 'utf8');
   for (const name of INLINED) {
     assert.ok(editor.includes("'" + name + "'"),
               'room_view.js does not inline ' + name);

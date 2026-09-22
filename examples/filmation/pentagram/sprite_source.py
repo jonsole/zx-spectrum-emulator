@@ -8,11 +8,10 @@ is the other half of that round trip: what it writes is what the assembler
 sees, so editing the PNG is how the game's artwork changes. build.py runs it
 whenever the sheet, this script or the harvested adjustments have moved on.
 
-The picture is what counts. sprites.json is an atlas in the shape the ZX
-Spectrum extension's graphics panel reads, and the panel takes a sprite's
-bytes from the atlas rather than from the picture, so every sprite carries a
-base64 copy of its own record; this rewrites those copies from the pixels each
-time it runs, and the atlas therefore never falls behind the sheet.
+The picture is what counts: sprites.json says where each sprite is in it and
+what its colours mean, and every sprite's one-pixel frame is checked against
+those rectangles before a byte is read -- see ../sheet.py, which reads the
+sheet for both games.
 
 Three files, because the two halves of the output go to different places in
 the image. The table has to be ALIGNed to its own 512 bytes, and when it comes
@@ -25,147 +24,28 @@ nothing after them that has to be aligned.
     sprite_data.s       the sprites, bottom row first, mask and data
                         interleaved, with the blank bottom rows trimmed off
     sprite_table.s      256 pointers, indexed by Pentagram's graphic number
-    sprite_adj_gen.s    the pixel nudges from graphic_map.json, with the rows this
-                        script trimmed folded in
+    sprite_adj_gen.s    the pixel nudges from graphics.json
 
-graphic_map.json is the other input, and is not generated here: adj.py harvested
-it from a running Pentagram, and it is committed and never edited.
+graphics.json is the other input, and is not generated here: it says which
+sprite each graphic number draws, and carries the nudges adj.py harvested from
+a running Pentagram. The rows the sheet trimmed off are already folded into
+those, by sprite_sheet.py, once as the sheet was made, and so are the nudges
+the game sets from a constant.
 """
 
 import argparse
-import base64
-import json
+import sys
 from pathlib import Path
 
-from PIL import Image
+# The engine's own facts about this game -- what keeps its blank rows, the
+# rotation buffers -- are hand-written constants beside sprite_sheet.py's own
+# use of them.
+import sprite_sheet as game
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sheet                                                    # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-
-# How many graphic numbers the game has, and so how wide its table is.
-GRAPHIC_COUNT = 172
-
-# How a pixel's colour in the sheet becomes the two bits the Z80 wants: does
-# the sprite cover the screen here, and what does it put down if it does. The
-# names are the contract with sprite_sheet.py; the colours themselves come out
-# of the atlas, so only that script decides what the sheet looks like.
-PIXEL_BITS = {
-    "transparent": (0, 0),
-    "paper": (1, 0),
-    "ink": (1, 1),
-    "stray": (0, 1),                    # a data bit under a hole in the mask
-}
-OPAQUE = 128                            # alpha at or above this is a colour
-
-
-def read_atlas(path):
-    """sprites.json -> the sprite entries in sprite order, and our own facts."""
-    atlas = json.loads(path.read_text(encoding="utf-8"))
-    zx = atlas.get("meta", {}).get("zx", {})
-    if "sprites" not in zx or "game" not in zx:
-        raise SystemExit(f"{path.name} is not a sheet written by sprite_sheet.py")
-    facts = zx["game"]
-    if "graphics" not in facts:
-        raise SystemExit(
-            f"{path.name} has no meta.zx.game.graphics -- it was written by an "
-            "older sprite_sheet.py, before the graphic table moved into the "
-            "sheet. Delete it and run sprite_sheet.py once to rebuild it.")
-    # The file keys the table by graphic number and leaves the unused numbers
-    # out, which is what makes it readable. Everything below indexes by graphic
-    # number, so the list is filled back out here -- one table, presented two
-    # ways, rather than two tables that can disagree.
-    gmap = [None] * GRAPHIC_COUNT
-    for number, entry in facts["graphics"].items():
-        number = int(number)
-        if 0 <= number < GRAPHIC_COUNT and isinstance(entry.get("sprite"), int):
-            gmap[number] = entry["sprite"]
-    facts["graphicMap"] = gmap
-    return atlas, zx["sprites"], facts
-
-
-def read_sheet(sheet, atlas, entries, palette):
-    """The sheet's pixels, as (mask, data) byte rows a sprite, top row first."""
-    image = Image.open(sheet).convert("RGBA")
-    colours = {tuple(rgba[:3]): PIXEL_BITS[name] for name, rgba in palette.items()}
-    pixels = image.load()
-
-    sprites = []
-    for entry in entries:
-        width, height = entry["width"], entry["height"]
-        box = atlas["frames"][entry["frames"][0]]["frame"]
-        if box["x"] + width * 8 > image.width or box["y"] + height > image.height:
-            raise SystemExit(f"{entry['name']} runs off {sheet.name}, which is "
-                             f"{image.width}x{image.height}")
-        mask_rows, data_rows = [], []
-        for row in range(height):
-            mask, data = bytearray(width), bytearray(width)
-            for byte in range(width):
-                for bit in range(8):
-                    r, g, b, a = pixels[box["x"] + byte * 8 + bit, box["y"] + row]
-                    if a < OPAQUE:
-                        continue        # anything see-through is a hole
-                    if (r, g, b) not in colours:
-                        raise SystemExit(
-                            f"{entry['name']} has a colour the sheet has no "
-                            f"meaning for at ({byte * 8 + bit}, {row}): "
-                            f"#{r:02X}{g:02X}{b:02X}")
-                    m, d = colours[(r, g, b)]
-                    mask[byte] |= m << (7 - bit)
-                    data[byte] |= d << (7 - bit)
-            mask_rows.append(mask)
-            data_rows.append(data)
-        sprites.append({
-            "name": entry["name"],
-            "w": width,
-            "h": height,
-            "flag": entry.get("flag", 0),
-            "mask": mask_rows,
-            "data": data_rows,
-        })
-    return sprites
-
-
-def packed_record(sprite):
-    """A sprite as sprite_data.bin holds it, which is what the atlas carries.
-
-    The header the game shipped -- its width with its own flag bit, and the
-    untrimmed height -- then a row at a time, mask byte then data byte, bottom
-    row first.
-    """
-    record = bytearray((sprite["w"] | sprite["flag"], len(sprite["rows"])))
-    for mask, data in reversed(sprite["rows"]):
-        for byte in range(sprite["w"]):
-            record.append(mask[byte])
-            record.append(data[byte])
-    return bytes(record)
-
-
-def trim(sprites, whole):
-    """Take the blank bottom rows off every sprite that can spare them.
-
-    Rows at the bottom that cover nothing are 88 rows across 40 of the
-    sprites -- 524 bytes, 536 once the alignment that follows them falls in
-    too -- and every one of them is walked by the blit, by the rotation and by
-    the region the object disturbs. They come off here -- and because a sprite
-    hangs from its bottom row, every graphic drawn with it has that many added
-    to its pixel nudge, which is what the adjustments below do. At least one
-    row always stays: a sprite of none would draw 256.
-    """
-    for n, sprite in enumerate(sprites):
-        # What the atlas carries is the whole sprite, blank rows and all --
-        # the picture's own rows, before any of this.
-        sprite["rows"] = list(zip(sprite["mask"], sprite["data"]))
-        taken = 0
-        while (n not in whole
-               and len(sprite["mask"]) - taken > 1
-               and not any(sprite["mask"][-1 - taken])
-               and not any(sprite["data"][-1 - taken])):
-            taken += 1
-        if taken:
-            sprite["mask"] = sprite["mask"][:-taken]
-            sprite["data"] = sprite["data"][:-taken]
-        sprite["trim"] = taken
-        sprite["h"] = len(sprite["mask"])
-
 
 def check(sprites, facts, animated):
     """The facts about the trimmed set that the engine relies on."""
@@ -254,12 +134,11 @@ def emit_bitmaps(sprites, animated, used):
 
 
 def emit_table(sprites, facts):
-    # The table is indexed by KNIGHT LORE's graphic number, not by our sprite
-    # number. Its own table at $7112 is 256 pointers into sprite memory and
-    # several graphic numbers share a bitmap -- 186 valid graphics across 103
+    # The table is indexed by PENTAGRAM's graphic number, not by our sprite
+    # number. Several graphic numbers share a bitmap -- 144 graphics across 88
     # sprites -- so the room templates can name sprites directly only if we
-    # number them its way. graphic_map.json holds that mapping; see
-    # pg_extract.py, and sprites.json carries it from there.
+    # number them its way. graphics.json holds that mapping, by name; it came
+    # out of that table, which pg_extract.py reads.
     #
     # 256 entries is 512 bytes, so the table is ALIGNed to its own size and
     # object_update reaches it by doubling a pre-halved base, rather than the
@@ -284,7 +163,7 @@ def emit_table(sprites, facts):
 # ---------------------------------------------------------------------------
 # The pixel adjustments, with the trimmed rows folded in.
 #
-# graphic_map.json holds what adj.py harvested from a running Pentagram: the
+# graphics.json holds what adj.py harvested from a running Pentagram: the
 # nudge its own code gives each graphic, beside the sprite that graphic draws,
 # and the handful whose mirror image wants a different one. Those are the
 # harvest and are never edited; the pair table, the index and the exception
@@ -299,7 +178,7 @@ def emit_table(sprites, facts):
 # values rather than patched.
 
 def read_adj(facts):
-    """graphic_map.json -> the nudge (x, y) for every graphic, and mirrored.
+    """graphics.json -> the nudge (x, y) for every graphic, and mirrored.
 
     The harvest is data, so it is kept as data. A graphic the file does not
     mention is not nudged, and `mirrored` is only there where the other way
@@ -308,8 +187,10 @@ def read_adj(facts):
     """
     said = facts["graphics"]
     plain, flipped = [], []
+    # Keyed by NUMBER: read_sheet_files has already turned the file's names
+    # into the numbers the game knows them by.
     for g in range(256):
-        entry = said.get(str(g)) or {}
+        entry = said.get(g) or {}
         pair = (entry.get("x", 0), entry.get("y", 0))
         other = entry.get("mirrored")
         plain.append(pair)
@@ -323,10 +204,6 @@ def signed(v):
 
 def emit_adj(sprites, facts):
     plain, flipped = read_adj(facts)
-    # Nudges the original sets from a constant, which override the harvest:
-    # see FIXED_NUDGES in sprite_sheet.py.
-    for g, (x, y) in facts.get("fixedNudges", {}).items():
-        plain[int(g)] = flipped[int(g)] = (x & 0xFF, y & 0xFF)
     gmap = facts["graphicMap"]
     want = []                       # (x, y) and its mirrored twin, per graphic
     # As in read_adj: Pentagram's graphic map is 172 long, not 256, and the
@@ -354,7 +231,7 @@ def emit_adj(sprites, facts):
     assert len(pairs) * 2 <= 128, "more pairs than an index byte can name"
 
     out = []
-    out.append("; Generated by sprite_source.py from graphic_map.json -- do not edit.")
+    out.append("; Generated by sprite_source.py from graphics.json -- do not edit.")
     out.append(";")
     out.append("; The pixel nudge that lines a sprite's artwork up with its logical")
     out.append("; position: what adj.py harvested from a running Pentagram, plus the")
@@ -389,50 +266,35 @@ def emit_adj(sprites, facts):
     return out
 
 
-def refresh_atlas(path, atlas, entries, sprites):
-    """Put the picture's own bytes back in the atlas, if they have moved on.
-
-    The graphics panel reads a sprite's bytes from here, not from the picture,
-    so an edited PNG would otherwise still open as the artwork it replaced.
-    Only `bytes` and `length` change; everything else in the file is left
-    exactly as it was written.
-    """
-    changed = False
-    for entry, sprite in zip(entries, sprites):
-        record = packed_record(sprite)
-        packed = base64.b64encode(record).decode("ascii")
-        if entry.get("bytes") != packed or entry.get("length") != len(record):
-            entry["bytes"] = packed
-            entry["length"] = len(record)
-            changed = True
-    if changed:
-        path.write_text(json.dumps(atlas, indent=1) + "\n", encoding="utf-8")
-    return changed
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Turn the sprite sheet into the game's sprite sources.")
     parser.add_argument("--sheet", type=Path, default=HERE / "sprites.png",
                         help="the sprite sheet PNG (default: sprites.png)")
     parser.add_argument("--json", type=Path, default=HERE / "sprites.json",
-                        help="the atlas that describes it (default: sprites.json)")
+                        help="what is in it (default: sprites.json)")
+    parser.add_argument("--graphics", type=Path, default=HERE / "graphics.json",
+                        help="the graphic table (default: graphics.json)")
     parser.add_argument("--out-dir", type=Path, default=HERE,
                         help="where the .s files go (default: beside this script)")
     args = parser.parse_args()
 
-    for needed in (args.sheet, args.json):
+    for needed in (args.sheet, args.json, args.graphics):
         if not needed.is_file():
-            raise SystemExit(f"{needed} is missing -- run sprite_sheet.py to make "
-                             "the sheet from sprite_data.bin")
+            raise SystemExit(f"{needed} is missing -- run sprite_sheet.py once "
+                             "against your own copy of the game to make it")
 
-    atlas, entries, facts = read_atlas(args.json)
+    _sheet, entries, facts = sheet.read_sheet_files(game, args.json, args.graphics)
     gmap = facts["graphicMap"]
-    whole = {gmap[g] for g in facts["wholeSpriteGraphics"]}
-    animated = {gmap[g] for frames in facts["animations"] for g in frames}
+    whole = {gmap[g] for g in facts["wholeSpriteGraphics"] if gmap[g] is not None}
+    animated = {gmap[g] for frames in facts["animations"] for g in frames
+                if gmap[g] is not None}
 
-    sprites = read_sheet(args.sheet, atlas, entries, facts["palette"])
-    trim(sprites, whole)
+    sprites = sheet.read_sheet(args.sheet, entries, facts["palette"])
+    # The sheet is trimmed already -- sprite_sheet.py does it as it draws -- so
+    # this finds nothing to take. It stays as the check that that is true, and
+    # to work out the rows each sprite ended up with.
+    sheet.trim(sprites, whole)
     check(sprites, facts, animated)
 
     used = {n for n in gmap if n is not None}
@@ -441,10 +303,6 @@ def main():
                         ("sprite_adj_gen.s", emit_adj(sprites, facts))):
         (args.out_dir / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"Wrote {name}")
-
-    if refresh_atlas(args.json, atlas, entries, sprites):
-        print(f"Brought {args.json.name}'s copy of the bytes back in step with "
-              f"{args.sheet.name}")
 
 
 if __name__ == "__main__":

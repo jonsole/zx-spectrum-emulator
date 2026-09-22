@@ -2,10 +2,10 @@
 // nudge and the sprite sheet lookup. Plain Node, no vscode API and no test
 // framework:
 //
-//   node vscode-extension/tests/room_render_test.js
+//   node examples/filmation/vscode/tests/room_render_test.js
 //
 // (No node on the path? VS Code's own will do:
-//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" vscode-extension/tests/room_render_test.js)
+//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" examples/filmation/vscode/tests/room_render_test.js)
 //
 // room_render.js is a second implementation of what the engine already does,
 // so these hold it to the original rather than to itself. The projection's
@@ -22,7 +22,7 @@ const path = require('path');
 const r = require('../room_render');
 const m = require('../room_model');
 
-const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
+const FILMATION = path.join(__dirname, '..', '..');
 const GAMES = ['knightlore', 'pentagram'];
 
 let failures = 0;

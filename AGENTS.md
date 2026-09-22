@@ -59,14 +59,19 @@ node vscode-extension\tests\asm_index_test.js
 node vscode-extension\tests\profile_model_test.js
 ```
 
-There is one a topic; `vscode-extension\tests\` is the list. Two of them --
-`room_page_test.js` and `graphic_map_page_test.js` -- assemble a webview page
-the way its host does and run it against a fake DOM, which is worth knowing
-before changing one: those pages are built by string replacement, so a mistake
-is a syntax error in a file that exists only at runtime. The JSON schemas under
-`vscode-extension\schemas\` are checked from Python instead, because
+There is one a topic; `vscode-extension\tests\` is the list.
+
+The Filmation designer -- the room, templates and graphic-map editors -- is a
+second extension, `examples\filmation\vscode\`, independent of the emulator's
+and installed beside it the same way (see `examples\filmation\room-designer.md`).
+Its tests are in its own `tests\`, run the same way. Three of them --
+`room_page_test.js`, `templates_page_test.js` and `graphic_map_page_test.js` --
+assemble a webview page the way its host does and run it against a fake DOM,
+which is worth knowing before changing one: those pages are built by string
+replacement, so a mistake is a syntax error in a file that exists only at
+runtime. Its JSON schemas are checked from Python instead, because
 `jsonschema` is in the venv:
-`.venv-win\Scripts\python.exe vscode-extension\tests\schemas_test.py`.
+`.venv-win\Scripts\python.exe examples\filmation\vscode\tests\schemas_test.py`.
 
 No `node` on PATH? VS Code's own works:
 `$env:ELECTRON_RUN_AS_NODE=1; & "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe" <script>`.
@@ -118,6 +123,7 @@ changes touch:
 | `cpp-core/src/rewind.cpp` | Stepping backwards: checkpoints, the input log, replay |
 | `vscode-extension/` | Debugger registration, panels, profiler view, Z80 language support |
 | `examples/filmation/` | A real multi-file sjasmplus program, built by its `knightlore/build.py` |
+| `examples/filmation/vscode/` | The Filmation designer: a second VS Code extension, independent of the emulator's -- room, templates and graphic-map editors |
 | `game-disassemblies/` | Submodule: Manic Miner, Fairlight, Atic Atac |
 | `examples/zx-tape-loader/` | Submodule: a fast custom tape loader and the Python that renders its tapes to WAV |
 

@@ -2,10 +2,10 @@
 // and what would stop it building. Plain Node, no vscode API and no test
 // framework:
 //
-//   node vscode-extension/tests/room_model_test.js
+//   node examples/filmation/vscode/tests/room_model_test.js
 //
 // (No node on the path? VS Code's own will do:
-//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" vscode-extension/tests/room_model_test.js)
+//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" examples/filmation/vscode/tests/room_model_test.js)
 //
 // The arithmetic tests stand on their own: the expected world coordinates are
 // worked out from room_unpack in knightlore/room_build.s, not read back out of
@@ -23,7 +23,7 @@ const path = require('path');
 const m = require('../room_model');
 const sheetModel = require('../sheet_model');
 
-const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
+const FILMATION = path.join(__dirname, '..', '..');
 const GAMES = ['knightlore', 'pentagram'];
 
 let failures = 0;

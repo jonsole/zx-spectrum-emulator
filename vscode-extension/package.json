@@ -27,13 +27,7 @@
     "onCommand:zxspectrum.serverLog",
     "onCommand:zxspectrum.runProgram",
     "onCommand:zxspectrum.debugProgram",
-    "onCustomEditor:zxspectrum.program",
-    "onCustomEditor:zxspectrum.roomDesign",
-    "onCommand:zxspectrum.openRoomDesigner",
-    "onCustomEditor:zxspectrum.roomTemplates",
-    "onCommand:zxspectrum.openRoomTemplates",
-    "onCustomEditor:zxspectrum.graphicMap",
-    "onCommand:zxspectrum.openGraphicMap"
+    "onCustomEditor:zxspectrum.program"
   ],
   "contributes": {
     "customEditors": [
@@ -47,61 +41,6 @@
           { "filenamePattern": "*.tzx" }
         ],
         "priority": "default"
-      },
-      {
-        "viewType": "zxspectrum.graphicMap",
-        "displayName": "Filmation Graphic Map",
-        "selector": [
-          { "filenamePattern": "**/examples/filmation/*/graphics.json" }
-        ],
-        "priority": "default"
-      },
-      {
-        "viewType": "zxspectrum.roomTemplates",
-        "displayName": "Filmation Room Templates",
-        "selector": [
-          { "filenamePattern": "**/examples/filmation/*/templates.json" }
-        ],
-        "priority": "default"
-      },
-      {
-        "viewType": "zxspectrum.roomDesign",
-        "displayName": "Filmation Room Designer",
-        "selector": [
-          { "filenamePattern": "**/examples/filmation/*/rooms.json" }
-        ],
-        "priority": "default"
-      }
-    ],
-    "jsonValidation": [
-      {
-        "fileMatch": "**/examples/filmation/*/rooms.json",
-        "url": "./schemas/rooms.schema.json"
-      },
-      {
-        "fileMatch": "**/examples/filmation/*/templates.json",
-        "url": "./schemas/templates.schema.json"
-      },
-      {
-        "fileMatch": "**/examples/filmation/*/sprites.json",
-        "url": "./schemas/sprites.schema.json"
-      },
-      {
-        "fileMatch": "**/examples/filmation/*/graphics.json",
-        "url": "./schemas/graphics.schema.json"
-      },
-      {
-        "fileMatch": "**/examples/filmation/*/specials.json",
-        "url": "./schemas/specials.schema.json"
-      }
-    ],
-    "taskDefinitions": [
-      {
-        "type": "zxspectrum-rooms",
-        "required": ["design"],
-        "properties": {
-          "design": { "type": "string", "description": "The rooms.json whose game to build" }
-        }
       }
     ],
     "languages": [
@@ -240,18 +179,6 @@
       }
     ],
     "commands": [
-      {
-        "command": "zxspectrum.openRoomDesigner",
-        "title": "ZX Spectrum: Design Filmation Rooms..."
-      },
-      {
-        "command": "zxspectrum.openRoomTemplates",
-        "title": "ZX Spectrum: Edit Filmation Room Templates..."
-      },
-      {
-        "command": "zxspectrum.openGraphicMap",
-        "title": "ZX Spectrum: Open Filmation Graphic Map..."
-      },
       {
         "command": "zxspectrum.serverStart",
         "title": "ZX Spectrum: Start Emulator"

@@ -396,7 +396,7 @@ player_entry:       ld      a,(enter_dir)
 BOLT_STEP           EQU     8
 BOLT_UP             EQU     4
 BOLT_START_GFX      EQU     150
-BOLT_LARGEST        EQU     sprite_030      ; 3x17: the largest of its frames
+BOLT_LARGEST        EQU     sprite_sprites_31 ; 3x17: the largest of its frames
                                             ; and its puff's
 
 fire_held:          DB      0

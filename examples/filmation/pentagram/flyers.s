@@ -38,7 +38,7 @@ EXTRA_SLOTS         EQU     FLYER_SLOTS + BOLT_SLOTS
 FLYER_Z             EQU     216             ; where they drop from
 FLYER_WAIT          EQU     (2 + 4) * 4     ; between drops, with all four
                                             ; quest items still out
-FLYER_LARGEST       EQU     sprite_018      ; 4x24: the largest frame any
+FLYER_LARGEST       EQU     sprite_sprites_19 ; 4x24: the largest frame any
                                             ; flyer wears, which sizes the
                                             ; one buffer each slot keeps
 FLYER_WELL_GFX      EQU     120

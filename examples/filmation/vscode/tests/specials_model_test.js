@@ -1,7 +1,7 @@
 // Tests for specials_model.js -- where Knight Lore's collectables start, what
 // the game will actually place, and what an edit does. Plain Node:
 //
-//   node vscode-extension/tests/specials_model_test.js
+//   node examples/filmation/vscode/tests/specials_model_test.js
 //
 // The constants are checked against knightlore/special.s rather than repeated
 // from memory: they are the game's, and a model that disagreed with them would
@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const m = require('../specials_model');
 
-const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
+const FILMATION = path.join(__dirname, '..', '..');
 const KNIGHTLORE = path.join(FILMATION, 'knightlore');
 
 let failures = 0;

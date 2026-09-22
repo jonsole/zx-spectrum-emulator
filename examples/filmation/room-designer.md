@@ -100,7 +100,7 @@ which described a game this file long ago stopped being a copy of. Two
 templates whose pieces are identical *are* one block, which is what sharing an
 address used to mean.
 
-[castle.py](../examples/filmation/castle.py) holds that shape for the build and
+[castle.py](castle.py) holds that shape for the build and
 `room_model.js` for the editors, and the two lay both files out identically:
 `tests/room_model_test.js` requires both games' real files to come back out of
 the JavaScript writers byte for byte, so saving one room in the designer does
@@ -134,7 +134,7 @@ name**, and the sheet is what turns one into the other:
 ]
 ```
 
-[graphics.py](../examples/filmation/graphics.py) is the one place the number
+[graphics.py](graphics.py) is the one place the number
 and the name meet: `rooms.py` names them on the way into `rooms.json` and
 `rooms_source.py` puts the numbers back on the way out, both games, so the rule
 cannot drift between the four of them and leave a castle built out of the wrong
@@ -208,7 +208,7 @@ keep theirs for the same reason. Those six entries are the only ones in either
 game that override; everything else takes its box from the graphic.
 
 The rule is written twice, as the naming rule is: `box_of` in
-[graphics.py](../examples/filmation/graphics.py) for the build, `boxOf` in
+[graphics.py](graphics.py) for the build, `boxOf` in
 `sheet_model.js` for the designer, and `tests/room_model_test.js` runs both
 over every template entry in both games and requires them to agree. A
 disagreement would draw a room whose pieces sort and collide differently from
@@ -229,11 +229,19 @@ the built game's.
 and a graphic is resolved through them:
 
 ```
-rooms.json     names the graphic "balls.1"
-graphics.json  graphics["178"] -> { "sprite": "balls.1", "size": {...}, ... }
-sprites.json   group.balls.sprites["1"] -> { x: 0, y: 177, w: 24, h: 19 }
+rooms.json     names the graphic "balls.1.g178"
+graphics.json  graphics["balls.1.g178"] -> { "number": 178, "sprite": "balls.1", ... }
+sprites.json   group.balls.sprites["1"] -> { x: 1, y: 383, w: 24, h: 19 }
 sprites.png    that rectangle
 ```
+
+Every rectangle in `sprites.png` has a one-pixel frame just outside it, in the
+colour `sprites.json` names `border` (magenta). It shows whoever paints on the
+picture where each sprite ends, and `sprite_source.py` checks it on every
+build: if a rectangle no longer sits on its own picture, or artwork has been
+painted over the edge, the frame is broken and the build stops, naming the
+sprite and the pixel, rather than reading the wrong bytes into the game.
+Both games' sheets are made and read by the same code, `sheet.py`.
 
 `graphics.json` is the only part that is the *game's* own. `kl_extract.py`
 reads Knight Lore's table of 256 sprite pointers at `$7112` and resolves each
@@ -288,7 +296,7 @@ that climbs out of its directory or is absolute: the file is data, and data
 does not get to point the designer at the rest of the disk. A file written
 before the field existed has no `meta.sprites`, and the three names above are
 what it falls back to, one key at a time -- see `spriteFilesOf` in
-`room_model.js`, and the same table in `scripts/room_designer.py`.
+`room_model.js`, and the same table in `examples/filmation/vscode/room_designer.py`.
 
 None of this reaches the build. `rooms_source.py` reads the rooms and ignores
 `meta` entirely, so naming a different sheet changes what the designer draws
@@ -296,8 +304,23 @@ and not one byte of the game.
 
 ## Opening it
 
+**Installing.** The designer is a VS Code extension of its own,
+`examples/filmation/vscode/`, apart from the emulator's: it needs nothing from
+the emulator and the emulator nothing from it. It has no build step and no
+dependencies; install it by linking the folder into VS Code's extensions, then
+**Developer: Reload Window**:
+
+```powershell
+# from the repo root; a junction needs no elevated shell
+$dest = "$env:USERPROFILE\.vscode\extensions\jonsole.filmation-designer-0.0.1"
+New-Item -ItemType Junction -Path $dest -Target (Resolve-Path .\examples\filmation\vscode)
+```
+
+The folder name is `<publisher>.<name>-<version>` from its `package.json`.
+Linked rather than copied, a change to it takes effect on the next reload.
+
 **In VS Code.** Open `examples/filmation/<game>/rooms.json`, or run
-**ZX Spectrum: Design Filmation Rooms...** from the Command Palette, which
+**Filmation: Design Rooms...** from the Command Palette, which
 offers the games it can find. The document is the model: every change goes in
 through a `WorkspaceEdit`, so undo, the dirty mark and Save are the editor's
 own, and an edit from anywhere else -- an undo, the text editor, `rooms.py`
@@ -307,9 +330,9 @@ To read the file as text instead, reopen it with **Text Editor**.
 **Outside it.**
 
 ```powershell
-python scripts/room_designer.py                 # Knight Lore
-python scripts/room_designer.py pentagram
-python scripts/room_designer.py --port 8900 --no-browser
+python examples/filmation/vscode/room_designer.py                 # Knight Lore
+python examples/filmation/vscode/room_designer.py pentagram
+python examples/filmation/vscode/room_designer.py --port 8900 --no-browser
 ```
 
 It serves on localhost only and its **Build** button runs the game's own
@@ -422,7 +445,7 @@ job from the room tabs, and has a file of its own, `templates.json`, with an
 editor of its own. Opening the file opens the editor; **Templates…** in the
 room designer's header opens it in a separate window -- one of VS Code's
 auxiliary windows, which can be moved anywhere, resized or put on another
-monitor -- and so does **ZX Spectrum: Edit Filmation Room Templates...** Where
+monitor -- and so does **Filmation: Edit Room Templates...** Where
 VS Code cannot open a window of its own, it opens beside the designer instead.
 
 Being a real editor on its own file is the point: **Ctrl+Z**, redo, the dirty
@@ -526,7 +549,7 @@ things the engine already does, and that is the risk it carries:
 Each of those is held to the original rather than to itself.
 `tests/room_render_test.js` works the projection out from `object_place`'s
 eight instructions by hand and takes its depth tests -- numbers and outcomes
-both -- from the worked examples in [engine/depth.md](../examples/filmation/engine/depth.md).
+both -- from the worked examples in [engine/depth.md](engine/depth.md).
 `tests/room_model_test.js` reads the generated `room_data.s` back and requires
 the model to agree with what `rooms_source.py` wrote: the background flag
 especially, which is decided by template name in Python and has to be decided
@@ -538,10 +561,10 @@ screen. A room in the designer is the room as `room_build` leaves it, plus the
 collectables `special_room_enter` adds to it.
 
 ```powershell
-node vscode-extension/tests/room_model_test.js
-node vscode-extension/tests/room_render_test.js
-node vscode-extension/tests/specials_model_test.js
-node vscode-extension/tests/room_page_test.js
+node examples/filmation/vscode/tests/room_model_test.js
+node examples/filmation/vscode/tests/room_render_test.js
+node examples/filmation/vscode/tests/specials_model_test.js
+node examples/filmation/vscode/tests/room_page_test.js
 ```
 
 The last one opens the assembled page against the real castle in a fake DOM.
@@ -594,7 +617,7 @@ half of it.
 
 `graphics.json` opens as a picture too, for the same reason: it is numbers
 pointing at names, and nothing in it says what graphic 30 looks like or that
-150 draws the same bitmap. Open it, or run **ZX Spectrum: Open Filmation
+150 draws the same bitmap. Open it, or run **Filmation: Open
 Graphic Map...** `sprites.json` is read alongside, for the pictures and the
 rectangles they come out of, and is not edited here.
 
@@ -624,10 +647,10 @@ interchangeable, because the nudge is per number -- and it is right there in
 the same entry, which is how you can see that 30 and 150 sit four rows apart.
 
 ```powershell
-node vscode-extension/tests/graphic_map_model_test.js
-node vscode-extension/tests/graphic_map_page_test.js
-node vscode-extension/tests/templates_page_test.js
-node vscode-extension/tests/template_refs_test.js
+node examples/filmation/vscode/tests/graphic_map_model_test.js
+node examples/filmation/vscode/tests/graphic_map_page_test.js
+node examples/filmation/vscode/tests/templates_page_test.js
+node examples/filmation/vscode/tests/template_refs_test.js
 ```
 
 ## Editing the files as text
@@ -638,11 +661,11 @@ squiggle under a value the build would reject:
 
 | File | Schema |
 |---|---|
-| `rooms.json` | `vscode-extension/schemas/rooms.schema.json` |
-| `templates.json` | `vscode-extension/schemas/templates.schema.json` |
-| `graphics.json` | `vscode-extension/schemas/graphics.schema.json` |
-| `sprites.json` | `vscode-extension/schemas/sprites.schema.json` |
-| `specials.json` | `vscode-extension/schemas/specials.schema.json` |
+| `rooms.json` | `examples/filmation/vscode/schemas/rooms.schema.json` |
+| `templates.json` | `examples/filmation/vscode/schemas/templates.schema.json` |
+| `graphics.json` | `examples/filmation/vscode/schemas/graphics.schema.json` |
+| `sprites.json` | `examples/filmation/vscode/schemas/sprites.schema.json` |
+| `specials.json` | `examples/filmation/vscode/schemas/specials.schema.json` |
 
 `sprites.schema.json` still describes the sheet as it was before the group
 tree, so it is **not** in the test below: it would pass every file vacuously
@@ -652,32 +675,32 @@ back in when it is rewritten for the sheet's own shape.
 To read a file that has a designer as text instead, reopen it with **Text
 Editor**.
 
-`vscode-extension/tests/schemas_test.py` holds each schema against every real
+`examples/filmation/vscode/tests/schemas_test.py` holds each schema against every real
 file it claims to describe, and then against a deliberately broken copy of
 each, which must fail it. A schema that merely looks plausible is worse than
 none: it puts errors on a file that is actually right, and you learn to ignore
 them.
 
 ```powershell
-.venv-win\Scripts\python.exe vscode-extension/tests/schemas_test.py
+.venv-win\Scripts\python.exe examples/filmation/vscode/tests/schemas_test.py
 ```
 
 ## Where the pieces are
 
 | File | What |
 |---|---|
-| `vscode-extension/room_model.js` | What a castle is: the schema, the cell-to-world arithmetic, the map, the checks, and the edits |
-| `vscode-extension/room_render.js` | What it looks like: the projection, the depth list, the nudge table and the sprite-sheet lookup |
-| `vscode-extension/room_view.html` | The page, the same in both hosts |
-| `vscode-extension/room_view.js` | The editor's host: the custom editor, `WorkspaceEdit`s, and the build task |
-| `scripts/room_designer.py` | The browser's host: a localhost server that serves the page and writes the file |
+| `examples/filmation/vscode/room_model.js` | What a castle is: the schema, the cell-to-world arithmetic, the map, the checks, and the edits |
+| `examples/filmation/vscode/room_render.js` | What it looks like: the projection, the depth list, the nudge table and the sprite-sheet lookup |
+| `examples/filmation/vscode/room_view.html` | The page, the same in both hosts |
+| `examples/filmation/vscode/room_view.js` | The editor's host: the custom editor, `WorkspaceEdit`s, and the build task |
+| `examples/filmation/vscode/room_designer.py` | The browser's host: a localhost server that serves the page and writes the file |
 | `examples/filmation/<game>/rooms.py` | `room_data.bin` → `rooms.json`, once, for someone who has extracted their own |
 | `examples/filmation/<game>/rooms_source.py` | `rooms.json` → `room_data.s` |
-| `vscode-extension/specials_model.js` | What a collectable is: the game's own limits, and the edits |
-| `vscode-extension/graphic_map_model.js` | What a graphic map says, what it hides, and how to re-point one |
-| `vscode-extension/graphic_map_view.html` | The graphic map's page |
-| `vscode-extension/graphic_map_view.js` | Its editor host |
-| `vscode-extension/schemas/` | The four JSON schemas, for editing any of it as text |
+| `examples/filmation/vscode/specials_model.js` | What a collectable is: the game's own limits, and the edits |
+| `examples/filmation/vscode/graphic_map_model.js` | What a graphic map says, what it hides, and how to re-point one |
+| `examples/filmation/vscode/graphic_map_view.html` | The graphic map's page |
+| `examples/filmation/vscode/graphic_map_view.js` | Its editor host |
+| `examples/filmation/vscode/schemas/` | The five JSON schemas, for editing any of it as text |
 | `examples/filmation/<game>/sprites.json` | the graphics: the sprites, their names, which sprite each graphic number draws and the nudge that lines it up |
 | `examples/filmation/knightlore/specials.json` | where the collectables start and the order the wizard wants them, → `specials_gen.s` |
 | `examples/filmation/knightlore/specials_source.py` | `specials.json` → `specials_gen.s` |

@@ -1,0 +1,123 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Filmation sprite sheet",
+ "description": "A remake's sprites: where each sits in sprites.png, what the picture's colours mean, and how a sprite's bytes are laid out for the game. Written ONCE by sprite_sheet.py out of the extraction; after that it and the picture are the authoritative source the game's sprite data is built from, and are meant to be edited. Which sprite each graphic number draws is not here but in graphics.json.",
+ "type": "object",
+ "required": ["sheet", "bytes", "group"],
+ "additionalProperties": false,
+ "properties": {
+  "sheet": {
+   "type": "object",
+   "description": "The picture this describes, and what its colours mean.",
+   "required": ["file", "colours"],
+   "additionalProperties": false,
+   "properties": {
+    "file": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9_.-]+[.]png$",
+     "description": "The PNG beside this file."
+    },
+    "colours": {
+     "type": "object",
+     "description": "Each colour the picture uses, as [red, green, blue, alpha]. Four are a sprite pixel's two bits -- a mask bit (does it cover the screen) and a data bit (what it puts down): ink (1,1), paper (1,0), transparent (0,0) and stray (0,1, the screen inverted under a hole). The fifth, border, is never a sprite pixel: it is the one-pixel frame just outside every sprite's rectangle, which the build checks each rectangle against.",
+     "required": ["ink", "paper", "transparent", "stray", "border"],
+     "additionalProperties": false,
+     "properties": {
+      "ink": { "$ref": "#/definitions/colour" },
+      "paper": { "$ref": "#/definitions/colour" },
+      "transparent": { "$ref": "#/definitions/colour" },
+      "stray": { "$ref": "#/definitions/colour" },
+      "border": { "$ref": "#/definitions/colour" }
+     }
+    }
+   }
+  },
+  "bytes": {
+   "type": "object",
+   "description": "How the game lays a sprite's bytes out, which the build writes them in.",
+   "required": ["header", "rows", "interleaved", "first", "maskBit"],
+   "additionalProperties": false,
+   "properties": {
+    "header": {
+     "type": "array",
+     "items": { "enum": ["width", "height"] },
+     "uniqueItems": true,
+     "description": "The bytes before the rows: the width in bytes and the height in rows, in this order."
+    },
+    "rows": {
+     "enum": ["bottom-up", "top-down"],
+     "description": "Which row of the picture comes first."
+    },
+    "interleaved": {
+     "type": "boolean",
+     "description": "true: each row is its mask and data bytes in turn; false: all the mask, then all the data."
+    },
+    "first": {
+     "enum": ["mask", "data"],
+     "description": "Which of a mask/data pair comes first."
+    },
+    "maskBit": {
+     "enum": ["covers", "hole"],
+     "description": "What a set mask bit means."
+    }
+   }
+  },
+  "group": {
+   "description": "The sprites, in named groups that may nest. A sprite's name is its path, joined by dots: sabreman.legs.1. The order here is the order they are laid out and emitted in.",
+   "$ref": "#/definitions/groups"
+  },
+  "animations": {
+   "type": "object",
+   "description": "Named animations: the sprite names, in playing order. A sprite may appear more than once.",
+   "additionalProperties": {
+    "type": "array",
+    "minItems": 1,
+    "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]+([.][A-Za-z0-9_-]+)*$" }
+   }
+  }
+ },
+ "definitions": {
+  "colour": {
+   "type": "array",
+   "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+   "minItems": 4,
+   "maxItems": 4
+  },
+  "groups": {
+   "type": "object",
+   "propertyNames": { "pattern": "^[A-Za-z0-9_-]+$" },
+   "additionalProperties": { "$ref": "#/definitions/node" }
+  },
+  "node": {
+   "type": "object",
+   "description": "A group: its own sprites, and groups inside it.",
+   "additionalProperties": false,
+   "minProperties": 1,
+   "properties": {
+    "sprites": {
+     "type": "object",
+     "propertyNames": { "pattern": "^[A-Za-z0-9_-]+$" },
+     "additionalProperties": { "$ref": "#/definitions/sprite" }
+    },
+    "group": { "$ref": "#/definitions/groups" }
+   }
+  },
+  "sprite": {
+   "type": "object",
+   "description": "Where the sprite is in the picture, in pixels. The rectangle is the sprite itself; its frame is the ring of pixels just outside it.",
+   "required": ["x", "y", "w", "h"],
+   "additionalProperties": false,
+   "properties": {
+    "x": { "type": "integer", "minimum": 1, "description": "At least 1: the frame needs the column to its left." },
+    "y": { "type": "integer", "minimum": 1, "description": "At least 1: the frame needs the row above." },
+    "w": { "type": "integer", "minimum": 8, "multipleOf": 8, "description": "A whole number of bytes: the game draws a byte, eight pixels, at a time." },
+    "h": { "type": "integer", "minimum": 1 },
+    "trim": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "Blank rows taken off the sprite as extracted. Already folded into the graphics' nudges in graphics.json; kept so the extraction can be traced."
+    }
+   }
+  }
+ }
+}

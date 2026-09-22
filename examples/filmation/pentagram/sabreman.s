@@ -27,8 +27,8 @@ COLLIDE_HEIGHT		EQU		23
 ;
 ; They are declared, with the graphics each half can wear, in ROTATION_BUFFERS
 ; in sprite_sheet.py -- change them there and here together.
-CHARACTER_LARGEST	EQU		sprite_066		; 3x18: graphic 36, his legs facing us
-CHARACTER_TALLEST	EQU		sprite_061		; 3x34: graphic 46, his body facing us
+CHARACTER_LARGEST	EQU		sprite_sprites_67	; 3x18: graphic 36, his legs facing us
+CHARACTER_TALLEST	EQU		sprite_sprites_62	; 3x34: graphic 46, his body facing us
 
 CHARACTER_BODY_UP	EQU		12		; how far his body rides above his legs facing away
 					; (8 facing towards: PLAYER_BODY_UP_TOWARDS in player.s).

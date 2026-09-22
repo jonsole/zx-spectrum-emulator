@@ -191,32 +191,11 @@ they are opened* (`zxspectrum.program.runOnOpen`) skips the page.
 
 ## Designing Filmation rooms
 
-`examples/filmation/<game>/rooms.json` -- a Filmation game's castle in its
-editable form -- opens in the room designer rather than as text: the room drawn
-as the engine would draw it, the castle's map beside it, and the scenery,
-objects and shared templates listed to the right. **ZX Spectrum: Design
-Filmation Rooms...** in the Command Palette finds them; **Reopen with > Text
-Editor** goes back to the JSON.
-
-The document is the model. Every change is a `WorkspaceEdit` replacing the
-whole file, so undo, the dirty mark and Save are the editor's own, and an edit
-from anywhere else -- an undo, the text editor, `rooms.py` having rewritten the
-file -- reloads the page on the room you were looking at. **Build** runs the
-game's own `build.py` as a task, so its output lands in the terminal panel.
-
-Knight Lore's collectables are in a table of their own, `specials.json`, so
-the designer opens that too and gives them a tab of their own. The templates
-rooms are built from are `templates.json`, beside `rooms.json` and named by it,
-with an editor of its own -- **Templates...** in the designer, or just opening
-the file. `graphics.json` -- which sprite each graphic number draws, and its
-box -- opens as its own picture, from **ZX Spectrum: Open Filmation Graphic
-Map...** or by opening the file. Each of the Filmation JSON files has a schema, so editing one as text gives completion, hover
-documentation and a squiggle under a value the build would reject.
-
-The same page runs outside VS Code, served by `scripts/room_designer.py`.
-[docs/room-designer.md](room-designer.md) has the whole of it: what a room is
-made of, what can be edited, and how the preview is held to the engine's own
-projection and depth sort.
+The Filmation remakes' room designer, templates editor and graphic map are not
+part of this extension: they are an extension of their own, in
+`examples/filmation/vscode/`, which needs nothing from the emulator.
+[room-designer.md](../examples/filmation/room-designer.md) says how to install
+it and has the whole of it.
 
 ## Attaching to a running emulator
 

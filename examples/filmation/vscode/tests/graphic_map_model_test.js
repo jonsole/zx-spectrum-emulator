@@ -2,10 +2,10 @@
 // hides, and what an edit to one does. Plain Node, no vscode API and no
 // framework:
 //
-//   node vscode-extension/tests/graphic_map_model_test.js
+//   node examples/filmation/vscode/tests/graphic_map_model_test.js
 //
 // (No node on the path? VS Code's own will do:
-//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" vscode-extension/tests/graphic_map_model_test.js)
+//   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" examples/filmation/vscode/tests/graphic_map_model_test.js)
 //
 // The document is examples/filmation/<game>/graphics.json -- which sprite each
 // graphic number draws, the nudge that lines it up, and the box it occupies.
@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const m = require('../graphic_map_model');
 
-const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
+const FILMATION = path.join(__dirname, '..', '..');
 const GAMES = ['knightlore', 'pentagram'];
 
 let failures = 0;
@@ -305,7 +305,7 @@ for (const game of GAMES) {
 
 test('knightlore: the documented figures are what the files hold', () => {
   // 186 valid graphics over 103 sprites is quoted in README.md, in
-  // docs/room-designer.md and in the files' own comments.
+  // examples/filmation/room-designer.md and in the files' own comments.
   const sums = m.summary(graphicsFor('knightlore'), sheetFor('knightlore'));
   assert.strictEqual(sums.used, 186);
   assert.strictEqual(sums.sprites, 103);

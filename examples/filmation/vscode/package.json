@@ -1,0 +1,96 @@
+{
+  "name": "filmation-designer",
+  "displayName": "Filmation Designer",
+  "description": "Editors for the Filmation remakes in examples/filmation: the room designer on rooms.json, the templates the rooms are built from, the graphic map, and JSON schemas for every file a remake is built from. Independent of the emulator extension.",
+  "version": "0.0.1",
+  "publisher": "jonsole",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCustomEditor:filmation.roomDesign",
+    "onCommand:filmation.openRoomDesigner",
+    "onCustomEditor:filmation.roomTemplates",
+    "onCommand:filmation.openRoomTemplates",
+    "onCustomEditor:filmation.graphicMap",
+    "onCommand:filmation.openGraphicMap"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "filmation.graphicMap",
+        "displayName": "Filmation Graphic Map",
+        "selector": [
+          { "filenamePattern": "**/examples/filmation/*/graphics.json" }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "filmation.roomTemplates",
+        "displayName": "Filmation Room Templates",
+        "selector": [
+          { "filenamePattern": "**/examples/filmation/*/templates.json" }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "filmation.roomDesign",
+        "displayName": "Filmation Room Designer",
+        "selector": [
+          { "filenamePattern": "**/examples/filmation/*/rooms.json" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "**/examples/filmation/*/rooms.json",
+        "url": "./schemas/rooms.schema.json"
+      },
+      {
+        "fileMatch": "**/examples/filmation/*/templates.json",
+        "url": "./schemas/templates.schema.json"
+      },
+      {
+        "fileMatch": "**/examples/filmation/*/sprites.json",
+        "url": "./schemas/sprites.schema.json"
+      },
+      {
+        "fileMatch": "**/examples/filmation/*/graphics.json",
+        "url": "./schemas/graphics.schema.json"
+      },
+      {
+        "fileMatch": "**/examples/filmation/*/specials.json",
+        "url": "./schemas/specials.schema.json"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "filmation-build",
+        "required": ["design"],
+        "properties": {
+          "design": { "type": "string", "description": "The rooms.json whose game to build" }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "filmation.openRoomDesigner",
+        "title": "Filmation: Design Rooms..."
+      },
+      {
+        "command": "filmation.openRoomTemplates",
+        "title": "Filmation: Edit Room Templates..."
+      },
+      {
+        "command": "filmation.openGraphicMap",
+        "title": "Filmation: Open Graphic Map..."
+      }
+    ]
+  }
+}

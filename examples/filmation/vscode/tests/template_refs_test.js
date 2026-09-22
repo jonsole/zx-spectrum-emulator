@@ -1,6 +1,6 @@
 // Which templates the games' own code depends on, read from the real sources.
 //
-//   node vscode-extension/tests/template_refs_test.js
+//   node examples/filmation/vscode/tests/template_refs_test.js
 //
 // The templates panel warns before a rename breaks the build. This checks the
 // warnings are the right ones: Knight Lore's movers.s gives particular object
@@ -12,7 +12,7 @@ const path = require('path');
 const { codeReferences } = require('../template_refs');
 const m = require('../room_model');
 
-const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
+const FILMATION = path.join(__dirname, '..', '..');
 
 let failures = 0;
 let skipped = 0;

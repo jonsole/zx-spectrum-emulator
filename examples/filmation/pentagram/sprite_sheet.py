@@ -1,111 +1,56 @@
-"""Pentagram's artwork as a sprite sheet: sprite_data.bin -> sprites.png
-and sprites.json, beside this script.
+"""Pentagram's artwork as a sprite sheet: sprite_data.bin -> sprites.png,
+sprites.json and graphics.json, beside this script.
 
     python sprite_sheet.py
 
-sprite_data.bin is what pg_extract.py lifts out of a real Pentagram: 103
+sprite_data.bin is what pg_extract.py lifts out of a real Pentagram: 88
 sprites, each two header bytes then mask and data bytes interleaved, bottom
 row first. That is a fine shape for a Z80 to draw from and a poor one to look
 at or to edit, so this unpacks it once into a picture and a description:
 
-    sprites.png     every sprite the right way up, laid out in bands of
-                    related frames -- the knight, then each thing that
-                    animates, then the panel, then the scenery
-    sprites.json    an atlas: where each sprite sits in that picture, how its
-                    bytes are arranged, and the facts about the set that the
-                    assembler source is generated from
+    sprites.png     every sprite the right way up, each in a one-pixel
+                    magenta frame -- one band of them for now, until
+                    Pentagram's are worked out and grouped
+    sprites.json    what the picture's colours mean, and where each sprite
+                    sits in it
+    graphics.json   which sprite each graphic number draws, its pixel nudge
+                    and its box -- names, boxes and the harvested nudges are
+                    kept from the file already there
 
-sprites.json is in the shape the ZX Spectrum extension's graphics panel
-writes and reads -- TexturePacker's "JSON (Hash)" layout, which Aseprite also
-writes, with everything Spectrum-shaped under `zx` keys. So the sheet opens in
-"ZX Spectrum: Show Graphics" as 103 sprites in their bands, ready to be
-looked at a pixel at a time. The panel reads a sprite's bytes out of the
-atlas rather than out of the picture, which is why every sprite carries a
-base64 copy of its own record; sprite_source.py rewrites those from the
-picture whenever it builds, so the two halves never drift apart.
+sprite_source.py turns them back into sprite_data.s, sprite_table.s and
+sprite_adj_gen.s on every build, checking each sprite's frame as it goes. The
+round trip is exact, so the files are the artwork's home from here on: edit
+the PNG, rebuild, and the game changes. sprite_data.bin is only ever the
+seed, and running this again overwrites edits to the picture.
 
-sprite_source.py turns the pair back into sprite_data.s, sprite_table.s and
-sprite_adj_gen.s. The round trip is exact, so the pair is the artwork's home
-from here on: edit the PNG, rebuild, and the game changes. sprite_data.bin is
-only ever the seed, and running this again overwrites those edits.
-
-Four colours carry the two bits a Filmation pixel has -- a mask bit that says
-whether the sprite covers the screen there, and a data bit that says what it
-puts down if it does. sprite_blit composites a row as `and mask : xor data`:
-
-    black           mask 1, data 0   paper
-    white           mask 1, data 1   ink
-    clear           mask 0, data 0   the screen shows through
-    red             mask 0, data 1   the screen is inverted there
-
-The last of those is nine pixels across six sprites -- artwork of Ultimate's
-own that the blit turns into an XOR rather than a hole -- and the graphics
-panel, which knows only the three ordinary states, draws them clear. They
-keep a colour of their own here so that what comes back out of the picture is
-the game's own bytes to the bit.
+What the sheet looks like and how it is written are ../sheet.py's, shared with
+Knight Lore. What is here is what only Pentagram knows.
 """
 
-import base64
-import json
+import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sheet                                                    # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-PACKED = HERE / "sprite_data.bin"
-# What the extraction left: which sprite each graphic number draws. Only
-# read when sprites.json is first built -- after that the atlas is the
-# authoritative copy and this file is not needed again.
-GRAPHIC_MAP = HERE / "graphic_map.json"
+TITLE = "Pentagram"
+EXTRACTOR = "pg_extract.py"
 # How many graphic numbers the game has, and so how wide the table is.
 GRAPHIC_COUNT = 172
-SHEET = HERE / "sprites.png"
-ATLAS = HERE / "sprites.json"
 
-# What each of the four pixel states looks like. The first three are the
-# graphics panel's own: PALETTE[15] on PALETTE[0], which is what INK and PAPER
-# below ask it for, so three quarters of this picture is exactly what the
-# panel would draw. sprite_source.py reads these out of the atlas rather than
-# knowing them itself, so the sheet's colours can change here alone.
-PALETTE = {
-    "transparent": (0, 0, 0, 0),
-    "paper": (0, 0, 0, 255),
-    "ink": (255, 255, 255, 255),
-    "stray": (255, 0, 0, 255),
-}
-INK, PAPER = 15, 0                      # into the panel's own ULA palette
-
-SHEET_WIDTH = 640               # wide enough for sixteen of the widest sprite
-GAP = 2                         # between sprites, and between bands
-LABEL_HEIGHT = 12               # the strip a band's name is written in
-LABEL_COLOUR = (96, 96, 96, 255)
-
-# How the graphics panel should read a sprite's bytes: two header bytes, then
-# a row at a time, mask byte then data byte, bottom row first, and a mask
-# whose set bits mean "covers" where the panel's mean "hole".
-SPRITE_FORMAT = {
-    # "sheet" is the panel's source for a sprite whose bytes travel with it:
-    # ours were drawn into a picture, not found at an address or an offset in
-    # a file, so there is nowhere for the panel to read them from again.
-    "source": "sheet",
-    "format": "sprite",
-    "count": 1,
-    "columns": 1,
-    "header": 2,
-    "first": 32,
-    "interleave": "md",
-    "invertMask": True,
-    "bottomUp": True,
-    "ink": INK,
-    "paper": PAPER,
-}
+# What a sprite or an animation is called, where a number will not do. Knight
+# Lore's are filled in; Pentagram's pieces have not been identified yet, so
+# every sprite is numbered within its group and nothing is named.
+SPRITE_NAMES = {}
+ANIMATION_NAMES = {}
 
 # Pentagram's graphic numbers, gathered into the bands the sheet is laid out
-# in, and the groups the graphics panel shows. A sprite goes in the first band
+# in, and the groups sprites.json names them by. A sprite goes in the first band
 # that names it and is drawn once, so the later bands hold only what the
 # earlier ones left; the last one sweeps up everything no band asked for.
-# Several of these are the same groupings the atlas goes on to record for the
-# checks in sprite_source.py -- the knight's frames and the animations --
+# Several of these are the same groupings sprite_source.py checks -- the
+# knight's frames and the animations --
 # because seeing an animation's frames side by side is exactly what makes a
 # sheet worth having.
 # None of Pentagram's groupings are known yet. Knight Lore's were worked out
@@ -136,7 +81,8 @@ SABREMAN_POOF = tuple(range(64, 71))    # both halves wear the puff he dies in
 # as it changed and still wearing the last routine's pair. The puff is the
 # case that shows: $C111 calls $C77A on every one of its frames, which is
 # always -12, -4, but the harvest had three different pairs across 64-70 and
-# the puff hopped about as it played. These override graphic_map.json's nudges.
+# the puff hopped about as it played. These are written into graphics.json in
+# place of whatever was harvested.
 FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
 # The crumbling blocks and the conveyors: $D2AD-$D2FF all call $C75F, -16, -8,
 # every turn. 137-139 are only ever seen crumbling, so the harvest had them at
@@ -169,9 +115,7 @@ ROTATION_BUFFERS = (
     ("CHARACTER_TALLEST", 61, SABREMAN_BODY + SABREMAN_POOF),
 )
 
-# Band name (a label, because the panel's groups have to be one), what it is
-# called on the picture, and the graphics it claims. One sweep-up band for now.
-# A band is (name, what it is called on the picture, the graphics it claims),
+# One sweep-up band for now. A band is (name, what it is called on the picture, the graphics it claims),
 # and a fourth element makes it a parent: its children hang their names off its
 # own, so a sprite is named by the path to its group and then which one it is
 # within that group -- sprites.1, or knight.legs.1 in Knight Lore's, whose
@@ -183,390 +127,15 @@ BANDS = (
     ("sprites", "sprites", ()),
 )
 
-# What separates a group from its parent, and from the sprite's own name.
-NAME_SEPARATOR = "."
-
-
 # Pentagram names 170 graphics; twenty-nine of them resolve to no sprite at
 # all, in runs at 14-15, 22-25, 81, 87, 92-109 and 155-157. Whether one of
 # those is the game's own "draw nothing" is not yet established, so nothing
 # is claimed here.
 BLANK_GRAPHIC = None
-NO_SPRITE = 0xFF                        # a graphic number the game does not use
-
-
-def read_sprites(packed):
-    """sprite_data.bin -> one dict a sprite, the right way up.
-
-    Each sprite is two header bytes -- a width in bytes with a flag of the
-    game's own in the top bits, and a height -- then mask and data bytes
-    interleaved, a row at a time, bottom row first. `record` keeps the whole
-    thing as it was read, which is what the atlas hands the graphics panel.
-    """
-    sprites = []
-    at = 0
-    while at < len(packed):
-        flag, height = packed[at] & ~0x1F, packed[at + 1]
-        width = packed[at] & 0x1F
-        count = width * height * 2
-        record = packed[at:at + 2 + count]
-        body = record[2:]
-        rows = [body[i:i + width * 2] for i in range(0, count, width * 2)]
-        mask = [row[0::2] for row in rows]
-        data = [row[1::2] for row in rows]
-        mask.reverse()                  # stored bottom row first, as Ultimate did
-        data.reverse()
-        sprites.append({
-            "name": "sprite_%03d" % len(sprites),
-            "w": width,
-            "h": height,
-            "flag": flag,
-            "at": at,
-            "record": record,
-            "mask": mask,
-            "data": data,
-        })
-        at += 2 + count
-    return sprites
-
-
-def flatten(bands, prefix=""):
-    """BANDS as a flat list, each band's name being its whole path.
-
-    Depth first and in written order, so the picture and the atlas read the way
-    the tree does. ../knightlore/sprite_sheet.py does the same.
-    """
-    out = []
-    for band in bands:
-        name, title, graphics = band[0], band[1], band[2]
-        children = band[3] if len(band) > 3 else ()
-        path = prefix + name
-        if graphics or not children:
-            out.append((path, title, graphics))
-        out.extend(flatten(children, path + NAME_SEPARATOR))
-    return out
-
-
-def read_graphics(path, atlas):
-    """The graphic table: which sprite each number draws, and its pixel nudge.
-
-    Two sources, because the two halves come from different places. The sprite
-    comes from the extraction, in graphic_map.json, which kl_extract.py writes
-    out of the game's own table of sprite pointers. The nudge comes from adj.py
-    and a RUNNING game, and cannot be rebuilt from anything -- so it is taken
-    from the sprites.json already here, if there is one, and only falls back on
-    the extraction file.
-
-    That order is what makes this safe to run twice. sprites.json is the
-    authoritative form once it exists; re-running this rebuilds the picture and
-    the layout without throwing the harvest away.
-    """
-    table = {}
-
-    said = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    for number, entry in (said.get("graphics") or {}).items():
-        table[int(number)] = dict(entry)
-
-    if atlas.is_file():
-        try:
-            known = json.loads(atlas.read_text(encoding="utf-8"))
-            known = known["meta"]["zx"]["game"]["graphics"]
-        except (ValueError, OSError, KeyError):
-            known = {}
-        for number, entry in (known or {}).items():
-            spot = table.setdefault(int(number), {})
-            for key in ("x", "y", "mirrored", "note"):
-                if key in entry:
-                    spot[key] = entry[key]
-                else:
-                    spot.pop(key, None)
-
-    return table
-
-
-def sprite_list(table, count):
-    """...and the sprite half of it as a plain list, NO_SPRITE in the gaps.
-
-    The band logic below indexes by graphic number, so it wants a list; the
-    file is keyed and leaves the unused numbers out, which is what makes it
-    readable.
-    """
-    out = [NO_SPRITE] * count
-    for number, entry in table.items():
-        if 0 <= number < count and isinstance(entry.get("sprite"), int):
-            out[number] = entry["sprite"]
-    return out
-
-
-def bands_of(sprites, graphic_map):
-    """The band each sprite belongs to, by the first one that names it."""
-    bands = []                          # (path, title, [sprite index, ...])
-    placed = set()
-    for label, title, graphics in flatten(BANDS):
-        members = []
-        for graphic in graphics:
-            n = graphic_map[graphic]
-            if n != NO_SPRITE and n not in placed:
-                placed.add(n)
-                members.append(n)
-        bands.append((label, title, members))
-    # Whatever no band asked for goes in the last one, in sprite order.
-    bands[-1][2].extend(n for n in range(len(sprites)) if n not in placed)
-    return bands
-
-
-def trim_blank_rows(sprites, graphic_map):
-    """Take the blank rows off the bottom of every sprite that may lose them.
-
-    A sprite hangs from its bottom row, so blank rows there cost bytes in the
-    image and buy nothing -- 38 of Knight Lore's 103 have some, and they are
-    776 bytes. This is done HERE, as the sheet is made, so the picture and the
-    rectangles in it are already the sprite the game draws. It used to happen
-    later, when the sheet was assembled, which left sprites.json describing
-    something the build then quietly changed.
-
-    WHOLE_SPRITE_GRAPHICS is what may not lose them: four places draw a sprite
-    without asking object_update how tall it is, so each knows its own height
-    and a trim would move what it draws.
-
-    The rows taken are kept on the sprite. Nothing downstream needs them -- the
-    nudges in the graphic table are already right for the trimmed sprite -- but
-    adj.py does, because it harvests against the ORIGINAL game, where the
-    sprite still has them.
-    """
-    keep = {graphic_map[g] for g in WHOLE_SPRITE_GRAPHICS
-            if graphic_map[g] != NO_SPRITE}
-    for n, sprite in enumerate(sprites):
-        taken = 0
-        # One row always stays: a sprite of none would draw 256.
-        while (n not in keep
-               and len(sprite["mask"]) - taken > 1
-               and not any(sprite["mask"][-1 - taken])
-               and not any(sprite["data"][-1 - taken])):
-            taken += 1
-        if taken:
-            sprite["mask"] = sprite["mask"][:-taken]
-            sprite["data"] = sprite["data"][:-taken]
-        sprite["trim"] = taken
-        sprite["h"] = len(sprite["mask"])
-
-
-def lay_out(sprites, bands):
-    """Give every sprite a place on the sheet. Returns the sheet's size."""
-    y = 0
-    for label, title, members in bands:
-        if not members:
-            continue
-        y += LABEL_HEIGHT
-        x, tallest = 0, 0
-        for n in members:
-            sprite = sprites[n]
-            pixels = sprite["w"] * 8
-            if x and x + pixels > SHEET_WIDTH:
-                x, y, tallest = 0, y + tallest + GAP, 0
-            sprite["x"], sprite["y"] = x, y
-            x += pixels + GAP
-            tallest = max(tallest, sprite["h"])
-        y += tallest + GAP
-    return SHEET_WIDTH, y
-
-
-def draw(sprites, bands, size):
-    sheet = Image.new("RGBA", size, PALETTE["transparent"])
-    pixels = sheet.load()
-    for sprite in sprites:
-        for row, (mask, data) in enumerate(zip(sprite["mask"], sprite["data"])):
-            for byte in range(sprite["w"]):
-                m, d = mask[byte], data[byte]
-                for bit in range(8):
-                    covers = m & (0x80 >> bit)
-                    set_bit = d & (0x80 >> bit)
-                    if covers:
-                        colour = PALETTE["ink"] if set_bit else PALETTE["paper"]
-                    elif set_bit:
-                        colour = PALETTE["stray"]
-                    else:
-                        continue
-                    pixels[sprite["x"] + byte * 8 + bit, sprite["y"] + row] = colour
-    # The band names sit in the strip above each band, clear of every sprite.
-    # Nothing reads them back -- both the atlas and the panel go by the
-    # rectangles -- they are there for whoever opens the picture to paint on.
-    pen = ImageDraw.Draw(sheet)
-    font = ImageFont.load_default()
-    for label, title, members in bands:
-        if members:
-            top = min(sprites[n]["y"] for n in members)
-            pen.text((0, top - LABEL_HEIGHT), title, font=font, fill=LABEL_COLOUR)
-    return sheet
-
-
-# A graphic's NAME, which rooms.json refers to it by.
-#
-# It is seeded from the sprite that draws it -- with the graphic number added
-# when several graphics share one bitmap, because they are not interchangeable
-# -- and then it is STORED. That is the whole point: once written it belongs to
-# the graphic, not to the mapping, so re-pointing a graphic at a different
-# sprite changes what it draws and leaves every castle that names it alone.
-#
-# Derived names were the alternative and they do not work. A castle names
-# graphics; if the name is recomputed from the map, then moving one graphic
-# renames it and every room that placed it dangles, for a change that was only
-# ever meant to say "draw this with a different bitmap".
-def named_graphics(table, label_of, named):
-    out = {}
-    for number in sorted(table):
-        entry = dict(table[number])
-        if not entry:
-            continue
-        if "name" not in entry:
-            n = entry.get("sprite")
-            if isinstance(n, int):
-                entry["name"] = (label_of(n) if len(named.get(n, ())) == 1
-                                 else "%s.g%d" % (label_of(n), number))
-        # Name first, because it is what a reader wants first.
-        out[str(number)] = {key: entry[key] for key in
-                            ("name", "sprite", "x", "y", "mirrored", "note")
-                            if key in entry}
-    return out
-
-
-def build_atlas(sprites, bands, graphic_map, table, size):
-    """The atlas the graphics panel reads, with what the build needs alongside.
-
-    `frames` and `meta` are the panel's own shape -- see buildAtlas in the
-    extension's graphics_model.js. Everything the game's build needs beyond
-    that hangs off meta.zx.game, where the panel ignores it.
-    """
-    band_of = {n: (label, title) for label, title, members in bands for n in members}
-    named = {}                          # sprite -> the graphics that name it
-    for graphic, n in enumerate(graphic_map):
-        if n != NO_SPRITE:
-            named.setdefault(n, []).append(graphic)
-
-    # Where a sprite is: the path to its group, then which one it is within that
-    # group, counting from one. Within the group rather than across the sheet,
-    # so adding one does not renumber everything after it -- rooms.json names
-    # its graphics by these.
-    within = {}
-    for _label, _title, members in bands:
-        for i, n in enumerate(members):
-            within[n] = i + 1
-
-    def label_of(n):
-        return band_of[n][0] + NAME_SEPARATOR + str(within[n])
-
-    frames = {}
-    for label, title, members in bands:  # picture order, so the file reads like it
-        for n in members:
-            sprite = sprites[n]
-            box = {"x": sprite["x"], "y": sprite["y"],
-                   "w": sprite["w"] * 8, "h": sprite["h"]}
-            frames[label_of(n)] = {
-                "frame": dict(box),
-                "rotated": False,
-                "trimmed": False,
-                "spriteSourceSize": {"x": 0, "y": 0, "w": box["w"], "h": box["h"]},
-                "sourceSize": {"w": box["w"], "h": box["h"]},
-                "zx": {"sprite": label_of(n), "item": 0, "offset": 0, "group": label},
-            }
-
-    groups = [{"name": label,
-               "sprites": [label_of(n) for n in members],
-               "frames": [label_of(n) for n in members]}
-              for label, title, members in bands if members]
-
-    entries = []
-    for n, sprite in enumerate(sprites):
-        entry = {"name": sprite["name"], "group": band_of[n][0]}
-        entry.update(SPRITE_FORMAT)
-        entry.update({
-            "width": sprite["w"],
-            "height": sprite["h"],
-            "origin": "%s +$%04X" % (PACKED.name, sprite["at"]),
-            "label": label_of(n),
-            "frames": [label_of(n)],
-            "length": len(sprite["record"]),
-            "bytes": base64.b64encode(sprite["record"]).decode("ascii"),
-            # Ours, past what the panel reads: the flag the game's own width
-            # byte carries, and which of its 256 graphic numbers name this
-            # sprite. sprite_source.py recomputes the flag it emits, so this
-            # one is here to keep `bytes` the record the game shipped.
-            "flag": sprite["flag"],
-            "graphics": named.get(n, []),
-        })
-        entries.append(entry)
-
-    return {
-        "frames": frames,
-        "meta": {
-            "app": "ZX Spectrum emulator graphics viewer",
-            "version": "1.0",
-            "image": SHEET.name,
-            "format": "RGBA8888",
-            "size": {"w": size[0], "h": size[1]},
-            "scale": "1",
-            "zx": {
-                "version": 1,
-                "groups": groups,
-                "sprites": entries,
-                "game": {
-                    "_comment": "The build's half of the atlas; the "
-                                "graphics panel ignores it. sprite_sheet.py "
-                                "writes this file ONCE, out of the extraction, "
-                                "and nothing regenerates it afterwards: it is "
-                                "the authoritative source the game is built "
-                                "from, and is meant to be edited. A sprite's "
-                                "width is in bytes, so it is width * 8 pixels "
-                                "wide.",
-                    "palette": {name: list(colour)
-                                for name, colour in PALETTE.items()},
-                    # The whole graphic table, keyed by number: what the
-                    # graphic is CALLED, which sprite draws it, and the pixel
-                    # nudge that lines that bitmap up. This is the
-                    # authoritative copy -- nothing regenerates sprites.json
-                    # once it exists, so an edit here is what the build reads.
-                    # How many graphic numbers the game HAS, which is
-                    # not how many it uses: sprite_table has to be
-                    # this long or a room naming a graphic past the
-                    # end would read off it.
-                    "graphicCount": GRAPHIC_COUNT,
-                    "graphics": named_graphics(table, label_of, named),
-                    "blankGraphic": BLANK_GRAPHIC,
-                    "wholeSpriteGraphics": list(WHOLE_SPRITE_GRAPHICS),
-                    "animations": [list(frames) for frames in ANIMATIONS],
-                    # Numeric keys, in numeric order: JavaScript reorders
-                    # integer-like keys that way whatever order they went
-                    # in, so writing them sorted is what lets the designer
-                    # save this file back without churning it.
-                    "fixedNudges": {str(g): list(FIXED_NUDGES[g])
-                                    for g in sorted(FIXED_NUDGES)},
-                    "rotationBuffers": [
-                        {"label": label, "sprite": sprite, "graphics": list(graphics)}
-                        for label, sprite, graphics in ROTATION_BUFFERS
-                    ],
-                },
-            },
-        },
-    }
 
 
 def main():
-    if not PACKED.is_file():
-        raise SystemExit(f"{PACKED.name} is missing -- run pg_extract.py against "
-                         "your own copy of Pentagram to produce it")
-    sprites = read_sprites(PACKED.read_bytes())
-    table = read_graphics(GRAPHIC_MAP, ATLAS)
-    graphic_map = sprite_list(table, GRAPHIC_COUNT)
-    trim_blank_rows(sprites, graphic_map)
-    bands = bands_of(sprites, graphic_map)
-    size = lay_out(sprites, bands)
-    draw(sprites, bands, size).save(SHEET)
-    ATLAS.write_text(
-        json.dumps(build_atlas(sprites, bands, graphic_map, table, size),
-                   indent=1) + "\n",
-        encoding="utf-8")
-    print(f"Wrote {SHEET.name} ({size[0]}x{size[1]}, {len(sprites)} sprites) "
-          f"and {ATLAS.name}")
+    sheet.make(sys.modules[__name__])
 
 
 if __name__ == "__main__":

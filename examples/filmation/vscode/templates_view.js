@@ -27,7 +27,7 @@ const crypto = require('crypto');
 const model = require('./room_model');
 const { codeReferences } = require('./template_refs');
 
-const VIEW_TYPE = 'zxspectrum.roomTemplates';
+const VIEW_TYPE = 'filmation.roomTemplates';
 
 // The pure files the page inlines, in the order its markers name them.
 const INLINED = ['sheet_model.js', 'room_model.js', 'room_render.js'];
@@ -206,7 +206,7 @@ class TemplatesSession {
     if (message.type === 'save') this.write(message.text);
     else if (message.type === 'rename') this.rename(message.templates, message.rooms);
     else if (message.type === 'room') {
-      vscode.commands.executeCommand('zxspectrum.showRoomOf',
+      vscode.commands.executeCommand('filmation.showRoomOf',
                                      vscode.Uri.file(this.roomsFile), message.room);
     }
   }

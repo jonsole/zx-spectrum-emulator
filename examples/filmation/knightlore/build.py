@@ -105,6 +105,10 @@ def generate_sprite_data() -> None:
     # than a change to the artwork: the nudges, the boxes and the GFX_* labels
     # all come out of it.
     table = KNIGHTLORE / "graphics.json"
+    # ...and so is the code that reads the sheet and the game's facts about it:
+    # the frame check and the pixel colours are sheet.py's, and what animates
+    # and what keeps its blank rows are sprite_sheet.py's.
+    code = [KNIGHTLORE.parent / "sheet.py", KNIGHTLORE / "sprite_sheet.py"]
     generated = [KNIGHTLORE / name for name in
                  ("sprite_data.s", "sprite_table.s", "graphics_gen.s",
                   "sprite_adj_gen.s")]
@@ -118,7 +122,7 @@ def generate_sprite_data() -> None:
                  f"After that they are yours to edit and nothing overwrites them.")
 
     newest_input = max(f.stat().st_mtime
-                       for f in (generator, sheet, atlas, table) if f.is_file())
+                       for f in [generator, sheet, atlas, table] + code if f.is_file())
     if all(f.is_file() and f.stat().st_mtime >= newest_input for f in generated):
         return
 

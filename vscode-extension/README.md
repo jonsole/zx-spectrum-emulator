@@ -55,32 +55,11 @@ A handful of things, in one small extension:
    carries it. `graphics_model.js` (tested by `node tests/graphics_model_test.js`) does the
    decoding, the packing and the three export formats, and is inlined into the page as source.
    See [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
-6. **A Filmation room designer.** `examples/filmation/<game>/rooms.json` -- a game's castle
-   in the form its build assembles from -- opens in a custom editor (`room_view.js`,
-   `room_view.html`) that draws the room the way the engine would: the castle's map, the
-   room on a canvas you can drag objects about on, and its scenery, objects and shared
-   templates. The document is the model, edited through `WorkspaceEdit`s, so undo, the
-   dirty mark and Save are the text editor's own. `room_model.js` (what a castle is) and
-   `room_render.js` (the projection, the depth sort and the sprite sheet) are the pure
-   halves, inlined into the page the way `graphics_model.js` is, and tested by
-   `node tests/room_model_test.js` and `node tests/room_render_test.js` -- which hold them
-   to `object_place`, `depth_cmp` and the generated `room_data.s` rather than to
-   themselves. The same page runs outside VS Code, served by `scripts/room_designer.py`.
-   Knight Lore's collectables are a table of their own, so `specials.json` opens alongside
-   it as a tab (`specials_model.js`) and is saved as its own document. The templates the
-   rooms are built from are `templates.json`, with a custom editor of its own
-   (`templates_view.js`, `templates_view.html`) that shows a template on its own, on a
-   room's floor or in a room that places it. `graphics.json` -- which sprite each graphic
-   number draws, and its box -- has one too (`graphic_map_view.js`,
-   `graphic_map_model.js`), because as text that table is numbers pointing at numbers.
-   Each Filmation JSON file has a schema under `schemas/`, so editing one as text
-   gives completion, hover documentation and a squiggle under a value the build would
-   reject. See [docs/room-designer.md](../docs/room-designer.md).
-7. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
+6. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
-8. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
+7. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
    and the worst frames in the debug sidebar. See "Execution profile" below.
-9. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
+8. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
    hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
 ## Settings

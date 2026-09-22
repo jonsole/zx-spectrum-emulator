@@ -1,6 +1,6 @@
 // The graphic-map page as the host assembles it.
 //
-//   node vscode-extension/tests/graphic_map_page_test.js
+//   node examples/filmation/vscode/tests/graphic_map_page_test.js
 //
 // graphic_map_view.js cannot be required here -- it opens with
 // require('vscode'), which only exists inside the editor -- so this does what
@@ -18,7 +18,7 @@ const vm = require('vm');
 const model = require('../graphic_map_model');
 
 const EXT = path.join(__dirname, '..');
-const FILMATION = path.join(EXT, '..', 'examples', 'filmation');
+const FILMATION = path.join(EXT, '..');
 
 let failures = 0;
 let skipped = 0;

@@ -1,4 +1,4 @@
-"""Harvest Pentagram's per-graphic pixel adjustments into sprites.json.
+"""Harvest Pentagram's per-graphic pixel adjustments into graphics.json.
 
 Every object the game draws is nudged a few pixels from its logical position
 so that the artwork lines up, and the pair lands in each live object record at
@@ -52,11 +52,22 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ATLAS = HERE / "rooms.json"
-# Where the harvest goes: beside the sprite each graphic number draws, because
-# the two are halves of one fact -- how that number is drawn. Only this half
-# needs a running game, so emit() merges rather than replacing.
-OUT = HERE / "sprites.json"
+sys.path.insert(0, str(HERE.parent))
+import castle                                                   # noqa: E402
+import graphics as gfx                                          # noqa: E402
+import sheet                                                    # noqa: E402
+
+# The nudges the game sets from a constant rather than per graphic. A harvest
+# can catch one of those mid-change, so they are written as the constant.
+from sprite_sheet import FIXED_NUDGES                           # noqa: E402
+
+# Where the harvest goes: into the graphic table, beside the sprite each
+# number draws and the box it occupies, because they are all facts about how
+# that number is drawn. Only this half needs a running game, so emit() merges
+# rather than replacing.
+OUT = HERE / "graphics.json"
+# The sheet beside it, for the blank rows each sprite lost -- see emit().
+SHEET = HERE / "sprites.json"
 
 ROM = "C:/Users/jonso/zx-spectrum-emulator/roms/48.rom"
 GAME = "C:/Users/jonso/zx-spectrum-emulator/snapshots/Pentagram-clean.sna"
@@ -178,18 +189,24 @@ def covering_rooms(atlas):
     rest are the player's own frames, the movers, the panel and the menu, none
     of which a room names. Visiting all 139 rooms is therefore mostly wasted;
     a greedy cover gets the same graphics in a dozen.
+
+    The castle names its graphics; the game, and so the harvest, numbers them.
+    graphics.json says which is which.
     """
-    scenery = {t["name"]: [b["graphic"] for b in t["blocks"]]
-               for t in atlas["sceneryTemplates"]}
-    objects = {t["name"]: [e["graphic"] for e in t["entries"]]
-               for t in atlas["objectTemplates"]}
+    said = json.loads(OUT.read_text(encoding="utf-8")) if OUT.is_file() else {}
+    known = {name: entry["number"]
+             for name, entry in (said.get("graphics") or {}).items()}
+    uses = {}
+    for group, name, _index, piece in castle.placements(atlas):
+        number = gfx.number_of(known, piece["graphic"], "%s %s" % (group, name))
+        uses.setdefault((group, name), set()).add(number)
     per = {}
     for r in atlas["rooms"]:
         g = set()
         for s_ in r["scenery"]:
-            g |= set(scenery[s_["template"]])
+            g |= uses.get(("sceneryTemplates", s_["template"]), set())
         for o in r["objects"]:
-            g |= set(objects[o["template"]])
+            g |= uses.get(("objectTemplates", o["template"]), set())
         per[r["number"]] = g
 
     reachable = set().union(*per.values())
@@ -201,7 +218,6 @@ def covering_rooms(atlas):
         cover.append(best)
         need -= per[best]
     return cover, reachable
-
 
 def scan(d, found, saw_bit7, where):
     """Fold one look at the live object pool into `found`."""
@@ -355,20 +371,22 @@ def signed(v):
 
 
 def emit(found):
-    """The nudge for every graphic that has one, as data.
+    """The harvest, written back into graphics.json.
 
-    It used to be written as assembler -- a table of distinct pairs, an index a
-    graphic long and a short exception list -- which is how the GAME wants it,
-    not how a harvest is best kept. sprite_source.py packs it that way now, out
-    of this, and the room designer reads the same file without having to parse
-    assembly to do it. ../knightlore/adj.py writes the same shape.
+    The nudges share a file with the sprite each graphic number draws and the
+    box it occupies, because they are all facts about that number. Only the
+    nudges need a running game, so this MERGES: everything else the file says
+    about a graphic is kept, and only its nudge is rewritten.
 
-    This MERGES into sprites.json rather than replacing it: the sheet is the
-    authoritative form of the graphics, and everything else it says about a
-    graphic -- its name, the sprite that draws it -- is kept.
+    What comes off a running Pentagram is for the sprite as the GAME holds it,
+    blank rows and all; the file's nudge is for the sprite as the sheet holds
+    it, trimmed. So each sprite's trim, which sprites.json records, is folded
+    in here, the way sprite_sheet.py folds it when it makes the sheet. And a
+    graphic the game nudges from a constant gets the constant -- see
+    FIXED_NUDGES in sprite_sheet.py.
 
-    A graphic with no nudge is left out, and `mirrored` is given only where the
-    other way round wants a different pair.
+    A graphic with no nudge gets no x or y, and `mirrored` is given only where
+    the other way round wants a different pair.
     """
     adj = {}
     for g in range(GRAPHIC_COUNT):
@@ -378,40 +396,53 @@ def emit(found):
             # has the same nudge either way, and his 32-35 are only ever worn
             # mirrored while walking, so without this their plain case would
             # fall to zero.
-            adj[(g, flip)] = (found.get((g, flip)) or found.get((g, 1 - flip))
-                              or (0, 0))
+            pair = (found.get((g, flip)) or found.get((g, 1 - flip)) or (0, 0))
+            adj[(g, flip)] = (signed(pair[0]), signed(pair[1]))
+        if g in FIXED_NUDGES:
+            adj[(g, 0)] = adj[(g, 1)] = FIXED_NUDGES[g]
 
     if not OUT.is_file():
         raise SystemExit("%s is missing -- it is what the nudges belong in; "
                          "run sprite_sheet.py once to make it" % OUT.name)
     said = json.loads(OUT.read_text(encoding="utf-8"))
-    table = said["meta"]["zx"]["game"]["graphics"]
+    # Keyed by name in the file; keyed by number here, because that is what a
+    # harvest is keyed by. Put back under the same names at the end.
+    table = {e["number"]: dict(e, graphic=n)
+             for n, e in (said.get("graphics") or {}).items()}
+    trims = sheet.recorded_trims(SHEET)
 
+    unlisted = []
     for g in range(GRAPHIC_COUNT):
         plain, flipped = adj[(g, 0)], adj[(g, 1)]
-        entry = dict(table.get(str(g)) or {})
+        if g not in table:
+            # A number the table has no entry for draws nothing, so a nudge
+            # for it has nothing to line up. Said, rather than invented.
+            if plain != (0, 0) or flipped != (0, 0):
+                unlisted.append(g)
+            continue
+        entry = table[g]
+        fell = trims.get(entry.get("sprite"), 0)
+        plain = (plain[0], plain[1] + fell)
+        flipped = (flipped[0], flipped[1] + fell)
         # Out with the old nudge, whatever it was, and in with this run's --
-        # but the sprite, and anything else the entry carries, stays.
+        # but the sprite, the box and the name stay.
         for key in ("x", "y", "mirrored"):
             entry.pop(key, None)
         if plain != (0, 0):
-            entry["x"], entry["y"] = signed(plain[0]), signed(plain[1])
+            entry["x"], entry["y"] = plain
         if flipped != plain:
-            entry["mirrored"] = {"x": signed(flipped[0]), "y": signed(flipped[1])}
-        if entry:
-            table[str(g)] = entry
-        else:
-            table.pop(str(g), None)
+            entry["mirrored"] = {"x": flipped[0], "y": flipped[1]}
+    if unlisted:
+        print("NOTE: nudges seen for graphics %s, which %s has no entry for; "
+              "left out" % (unlisted, OUT.name))
 
-    said["meta"]["zx"]["game"]["graphics"] = {
-        k: table[k] for k in sorted(table, key=int)}
-    return json.dumps(said, indent=1) + "\n"
-
+    # Written in graphics.py's layout, a graphic to a line, because that is
+    # what the file already is and what the graphic-map panel writes too.
+    return gfx.format_table({v.pop("graphic"): v for v in table.values()},
+                            said.get("sprites", SHEET.name))
 
 def main():
-    if not ATLAS.is_file():
-        sys.exit("%s is missing -- run rooms.py first" % ATLAS.name)
-    atlas = json.loads(ATLAS.read_text(encoding="utf-8"))
+    atlas = castle.read_castle(HERE)
     rooms, reachable = covering_rooms(atlas)
     print("%d rooms cover the %d graphics the room data reaches"
           % (len(rooms), len(reachable)))
@@ -457,7 +488,7 @@ def main():
     print("      lands mid-animation, and the original moves their nudge frame by")
     print("      frame -- so expect those to vary from run to run.")
 
-    OUT.write_text("\n".join(emit(found)) + "\n", encoding="utf-8")
+    OUT.write_text(emit(found), encoding="utf-8")
     print("wrote %s" % OUT.name)
 
 

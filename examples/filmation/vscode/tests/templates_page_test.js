@@ -1,6 +1,6 @@
 // The templates panel as its host assembles it.
 //
-//   node vscode-extension/tests/templates_page_test.js
+//   node examples/filmation/vscode/tests/templates_page_test.js
 //
 // templates_view.js opens with require('vscode'), so this does what it does to
 // the page and runs the result against a fake DOM and both games' real
@@ -19,7 +19,7 @@ const vm = require('vm');
 const m = require('../room_model');
 
 const EXT = path.join(__dirname, '..');
-const FILMATION = path.join(EXT, '..', 'examples', 'filmation');
+const FILMATION = path.join(EXT, '..');
 const GAMES = ['knightlore', 'pentagram'];
 const INLINED = ['sheet_model.js', 'room_model.js', 'room_render.js'];
 

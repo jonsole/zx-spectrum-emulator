@@ -34,12 +34,13 @@ Add `--debug-room` to print the room number in the top-left corner, for
 finding your way about; the ordinary build leaves it out.
 
 The rooms themselves are edited in the room designer rather than by hand --
-see [docs/room-designer.md](../../docs/room-designer.md). Each game's
+see [room-designer.md](room-designer.md). The designer is a VS Code extension
+of its own, in [vscode/](vscode/), installed as that page describes. Each game's
 `rooms.json` and `templates.json` are the editable form of its castle -- the
 rooms, and the castle-wide templates they place -- and `build.py` turns the two
 into `room_data.s`. Open `rooms.json` in VS Code for the room designer and
 `templates.json` for the templates editor, or serve the rooms with
-`python scripts/room_designer.py`.
+`python examples/filmation/vscode/room_designer.py`.
 
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
 It writes `knightlore/output/knightlore.z80`, a version 3 snapshot that
@@ -381,6 +382,7 @@ Nothing here is hand-written:
 | `knightlore/rooms.py` | `room_data.bin` -> `rooms.json` and `templates.json`, and folds each piece's box into `graphics.json`; reports the fullest room, which sizes the object pool |
 | `knightlore/rooms_source.py` | `rooms.json` + `templates.json` -> `room_data.s` |
 | `knightlore/specials_source.py` | `specials.json` -> `specials_gen.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `specials.bin` twice |
+| `sheet.py` | the sprite sheet for both games: how `sprites.png` is laid out and framed, how `sprites.json` and `graphics.json` are written, and how the build reads the picture back and checks every sprite's frame. Each game's `sprite_sheet.py` is only what that game knows -- its groups, names, animations and fixed nudges |
 | `knightlore/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.json` -> `sprites.png` and `sprites.json`, the artwork's home, and `graphics.json`, the table saying which sprite each graphic number draws; it reads the nudges back out of `graphics.json` rather than trusting the extraction, so remaking the sheet never costs a harvest |
 | `knightlore/sprite_source.py` | `sprites.png` + `sprites.json` + `graphics.json` -> `sprite_data.s`, `sprite_table.s`, `sprite_adj_gen.s` and `graphics_gen.s` (a `GFX_*` EQU a graphic, so the sources name graphics instead of numbering them) |
 | `knightlore/font_sheet.py` | `font.bin` -> `font.png` and `font.json`, the font sheet: forty 8x8 characters, the digits and letters given to the panel as fonts so it labels each cell with what it draws |
@@ -401,7 +403,9 @@ which no other file can give, since `sprites.json` is in the group tree's order
 again whenever you re-extract.
 
 Each of those files is one thing. `sprites.json` is the artwork: where every
-sprite sits in `sprites.png`, in a tree of named groups. `graphics.json` is the
+sprite sits in `sprites.png`, in a tree of named groups. Each sprite in the
+picture has a one-pixel magenta frame just outside its rectangle, which the
+build checks the rectangles against. `graphics.json` is the
 table the game indexes by: for each graphic number, which sprite draws it, the
 pixel nudge that lines that bitmap up, and the box it occupies in the world.
 `rooms.json` is the rooms and `templates.json` the castle-wide pieces they place; both name graphics rather than numbering them. A

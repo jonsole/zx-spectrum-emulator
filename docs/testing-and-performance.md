@@ -89,13 +89,14 @@ tape is, including the repo's own, which ROM it gets, the launch configuration
 it makes, telling a `.z80` source file from a snapshot, and finding the screen
 in a `.sna`, a compressed `.z80` and a tape's loading screen).
 
-The Filmation designers have four of their own, described in
-[room-designer.md](room-designer.md):
-`node vscode-extension/tests/room_model_test.js` and `room_render_test.js` (what
+The Filmation designer is an extension of its own, in `examples/filmation/vscode/`,
+with tests of its own, described in
+[room-designer.md](../examples/filmation/room-designer.md):
+`node examples/filmation/vscode/tests/room_model_test.js` and `room_render_test.js` (what
 a room expands to and where each piece lands),
-`node vscode-extension/tests/specials_model_test.js` (Knight Lore's
+`node examples/filmation/vscode/tests/specials_model_test.js` (Knight Lore's
 collectables, with the game's own constants read out of `special.s` rather than
-repeated here), `node vscode-extension/tests/graphic_map_model_test.js` (which
+repeated here), `node examples/filmation/vscode/tests/graphic_map_model_test.js` (which
 sprite each graphic number draws, held against what `sprite_sheet.py` carried
 into the sheet), and `room_page_test.js` with `graphic_map_page_test.js`, which
 assemble each page the way its hosts do and open it against the real files --
@@ -104,7 +105,7 @@ error in a file that exists only at runtime and nothing else would catch it.
 
 The JSON schemas the extension registers for those files are checked from
 Python, because `jsonschema` is in the repo's venv:
-`.venv-win\Scripts\python.exe vscode-extension/tests/schemas_test.py`. It holds
+`.venv-win\Scripts\python.exe examples/filmation/vscode/tests/schemas_test.py`. It holds
 each schema against every real file it describes and then against a
 deliberately broken copy, which must fail it -- a schema that merely looks
 plausible puts errors on a file that is right, and you learn to ignore them.

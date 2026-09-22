@@ -1,6 +1,6 @@
 """The JSON schemas against the real files they describe.
 
-    .venv-win\\Scripts\\python.exe vscode-extension/tests/schemas_test.py
+    .venv-win\\Scripts\\python.exe examples/filmation/vscode/tests/schemas_test.py
 
 A schema that is merely plausible is worse than none: VS Code shows its
 complaints as errors in a file that is actually correct, and you learn to
@@ -22,8 +22,7 @@ import jsonschema
 
 HERE = Path(__file__).resolve().parent
 EXT = HERE.parent
-ROOT = EXT.parent
-FILMATION = ROOT / "examples" / "filmation"
+FILMATION = EXT.parent
 
 # schema, the files it describes, and a mangling that must break each one.
 #
@@ -87,10 +86,22 @@ CASES = [
       ("the rooms put in with the templates", lambda d: d.__setitem__("rooms", [])),
       ("no word of which rooms they belong to", lambda d: d["meta"].pop("rooms"))]),
 
-    # sprites.schema.json is NOT here. It still describes the sheet as it was
-    # before the group tree, so it would pass every file vacuously and prove
-    # nothing -- which is exactly what this test exists to stop. It goes back
-    # in when it is rewritten for the sheet's own shape.
+    ("sprites.schema.json",
+     ["knightlore/sprites.json", "pentagram/sprites.json"],
+     [("no border colour", lambda d: d["sheet"]["colours"].pop("border")),
+      ("a colour with no alpha",
+       lambda d: d["sheet"]["colours"].__setitem__("ink", [255, 255, 255])),
+      ("a width that is not a whole byte",
+       lambda d: first_sprite(d).__setitem__("w", 20)),
+      ("a sprite whose frame is off the edge",
+       lambda d: first_sprite(d).__setitem__("x", 0)),
+      ("a sprite name with a dot in it, which its path already uses",
+       lambda d: first_group(d)["sprites"].__setitem__("1.5", dict(first_sprite(d)))),
+      ("a group with a misspelt key",
+       lambda d: first_group(d).__setitem__("sprite", {})),
+      ("rows in an order there is no such thing as",
+       lambda d: d["bytes"].__setitem__("rows", "sideways"))]),
+
     ("graphics.schema.json",
      ["knightlore/graphics.json", "pentagram/graphics.json"],
      [("sprite 255, which means 'none' in the packed form",
@@ -124,6 +135,22 @@ CASES = [
       ("a collectable with no room", lambda d: d["collectables"][0].pop("room"))]),
 
 ]
+
+
+def first_group(said):
+    """The first group in the sheet that holds sprites of its own."""
+    nodes = list(said["group"].values())
+    while nodes:
+        node = nodes.pop(0)
+        if node.get("sprites"):
+            return node
+        nodes = list((node.get("group") or {}).values()) + nodes
+    raise KeyError("sprites")
+
+
+def first_sprite(said):
+    """The first sprite's rectangle."""
+    return next(iter(first_group(said)["sprites"].values()))
 
 
 def first_template(said):

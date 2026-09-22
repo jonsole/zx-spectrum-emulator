@@ -14,7 +14,7 @@
 // whole of it testable under plain Node with no canvas.
 //
 // No DOM and no vscode API, so it runs under plain Node for the tests
-// (node vscode-extension/tests/room_render_test.js). The page gets it inlined
+// (node examples/filmation/vscode/tests/room_render_test.js). The page gets it inlined
 // as source, which is why nothing here may use require() and why the export at
 // the bottom is guarded.
 

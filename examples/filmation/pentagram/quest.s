@@ -64,7 +64,7 @@ QUEST_DROP_SIZE_Z   EQU     12
 ; out of the well, the settled collectables, and the puff -- which sizes the one
 ; rotation buffer the slot keeps. The quest items never go into one: they are
 ; never carried.
-QUEST_LARGEST       EQU     sprite_055     ; 3x24
+QUEST_LARGEST       EQU     sprite_sprites_56 ; 3x24
 
 ; quest_table itself is in quest_ram.s, in the room builder's page.
 quest_carry:        DS      QUEST_SPARES    ; records, newest first; $FF none

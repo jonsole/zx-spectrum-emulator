@@ -20,7 +20,7 @@ font.bin, and this makes one the first time it finds none. It never remakes
 one that is already there, because that is where your edits to the artwork
 live -- run the unpacking script by hand to go back to the game's own.
 
-graphic_map.json is an input rather than something generated here. It says
+graphics.json is an input rather than something generated here. It says
 which sprite each graphic number draws and the pixel nudge that lines it up;
 the first half pg_extract.py reads out of a snapshot, but the second can only
 be harvested by adj.py from a RUNNING Pentagram, so the file is committed and
@@ -96,6 +96,13 @@ def generate_sprite_data() -> None:
     generator = PENTAGRAM / "sprite_source.py"
     sheet = PENTAGRAM / "sprites.png"
     atlas = PENTAGRAM / "sprites.json"
+    # The graphic table is an input too: the nudges come out of it, and which
+    # sprite each graphic number draws.
+    table = PENTAGRAM / "graphics.json"
+    # ...and so is the code that reads the sheet and the game's facts about it:
+    # the frame check and the pixel colours are sheet.py's, and what keeps its
+    # blank rows and the rotation buffers are sprite_sheet.py's.
+    code = [PENTAGRAM.parent / "sheet.py", PENTAGRAM / "sprite_sheet.py"]
     generated = [PENTAGRAM / name for name in
                  ("sprite_data.s", "sprite_table.s", "sprite_adj_gen.s")]
 
@@ -107,7 +114,8 @@ def generate_sprite_data() -> None:
                  f"    python sprite_sheet.py\n"
                  f"After that they are yours to edit and nothing overwrites them.")
 
-    newest_input = max(f.stat().st_mtime for f in (generator, sheet, atlas))
+    newest_input = max(f.stat().st_mtime
+                       for f in [generator, sheet, atlas, table] + code if f.is_file())
     if all(f.is_file() and f.stat().st_mtime >= newest_input for f in generated):
         return
 
