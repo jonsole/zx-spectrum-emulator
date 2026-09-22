@@ -13,6 +13,7 @@ emulator side: `../pentagram/driving.md`.
 4. [The remake](#4-the-remake)
 5. [Setting things up in the remake](#5-setting-things-up-in-the-remake)
 6. [Pitfalls](#6-pitfalls)
+7. [Profiling a turn](#7-profiling-a-turn)
 
 ---
 
@@ -213,3 +214,77 @@ The 128th record is the $FF end marker.
 - **Memory is nearly full:** about 1 byte in the main area, 2 in the $5B00
   page, 20 in the pool area and 21 in the data area. The sprite table and the
   nudge index already stop at the last graphic (187).
+
+## 7. Profiling a turn
+
+The emulator's profiler (`profile` over MCP, or the VS Code profile view)
+counts every instruction's clock while the machine runs. What makes it useful
+on this game is measuring the right unit and stopping at the right place.
+
+**The unit is a turn.** The game loop does not wait for the raster -- a turn is
+2.5 to 3.5 frames in a busy room -- and it paces itself in `turn_pace`, a busy
+loop, so interrupts are never accepted: `set_break_on_interrupt` never fires,
+and a plain `run` has no natural end. A breakpoint on `start.loop`, the top of
+the loop in main.s, makes each `run` exactly one turn. Sample sizes are then a
+count, and every figure is T-states per turn.
+
+`profile_turns.py`, beside this file, does all of the below. By hand, the calls
+are:
+
+1. `pause`, `load_snapshot` with `output/knightlore.z80` (base64 -- 45 KB, so
+   from a script), `load_debug_info` with the SLD and `knightlore.s`, and
+   `set_speed uncapped`.
+2. **Clear every breakpoint** `get_state` reports. Anything left from an
+   earlier session or another build stops the run somewhere it should not --
+   and a previous build's `start.loop` is an address in the middle of some
+   other routine in this one, which stops every turn part way and halves every
+   figure. Two runs came out wrong this way before the script learnt to sweep.
+3. Into the game: breakpoint `start.entered`, `key_down 0`, `run`, `key_up 0`,
+   clear it, then breakpoint `start.loop`. From here on one `run` is one turn.
+4. Into a room: write `room_number`, `run` a turn at a time until `room_shown`
+   matches, then a dozen more to settle. Poke `player_touched` to 0 and
+   `player_lives` up every twenty turns or so, and hold `A` so he walks:
+   standing still nothing re-sorts and nothing of his is redrawn, and the
+   sort's cost reads as zero.
+5. `profile {action: "start", idle: ["turn_pace"], period: "frame"}`, then N
+   `run`s, then `profile {action: "stop", lines: 0, routines: 0,
+   tree_min_percent: 100}`. The report's `routines` carry a `path`, so a
+   file's cost is the sum over its routines; `busy_tstates / N` is the turn's
+   work. Ask for `lines` only when a routine is being taken apart: a full
+   report with lines and the frame strip is over a megabyte.
+6. `clear_breakpoint start.loop` and `set_speed realtime` before handing the
+   machine back to a person.
+
+**Comparing two builds.** Snapshot the tree twice, change only the file under
+test, build both, and profile them over the same rooms *in the same order*.
+Where the knight came from decides what phase a room's movers are in; entering
+`$BF` from `$44` and from `$E3` are different scenes, and one attempt at a
+before-and-after table compared two of them. Busy T-states per turn agreeing
+to within a few percent between the two runs is the check that they saw the
+same thing.
+
+**The worst rooms** for the sort, the drawing and the rotation alike are
+`$BF $A3 $8C $43 $E3`, ranked from rooms.json by sorted-object count and then
+confirmed by measuring; `$88` and `$46` are next. Rooms whose movers are gated
+out by `monster_gate` show almost nothing moving, `$46` among them.
+
+**Pitfalls the profiler has.** `step` with a tick count moves the machine but
+records nothing -- only `run` is counted. `routines: 20`, the default, is
+enough to lose a whole small file. The profile view's numbers are the same
+counters, so a `start` from either side resets both.
+
+**Where a turn goes**, as of the sort rewrite (commit `3c81ca2`), walking in
+the five rooms above:
+
+| | share of a turn |
+|---|---|
+| `sprite_blit` | 14–21% |
+| `object_update` — all of it the sprite rotation | 9–21% |
+| `redraw_view` clear + `vid_buff` copy | 8.5%, flat |
+| `objects_draw_all` | 4–6% |
+| depth sorting | 2–3% |
+| `sprite_flip_h` | 0–2.5% |
+
+Each of those was read against its profile and is at the floor of its own
+algorithm; what is left is the game's choices -- three-pixel steps, how many
+things move at once, region sizes.
