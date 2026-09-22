@@ -73,163 +73,101 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 					ret
 
 
-; Compare the object being placed, in IX -- whose bounds depth_cmp_setup has
-; hoisted into the immediates below -- against the candidate in IY.
+; Compare the object being placed against the candidate in IY.
 ;
-; On any axis where the two boxes do NOT overlap, that axis's coordinate
-; is part of the key; where they DO overlap the axis says nothing and
-; contributes nothing. Summed, that is exactly Head Over Heels' seven-
-; case dispatch table -- their key is always the sum over the non-
-; overlapping axes -- with no dispatch at all. Three axes overlapping is
-; interpenetration and gives the empty sum, which is the right
-; degenerate answer for free. (Z is the exception: it votes, but its term
-; is left out of the sum -- see there.)
+; The FIRST axis that separates the two boxes decides, and the rest are never
+; looked at. An axis where the boxes overlap says nothing about depth, so it
+; hands the question on; three overlapping axes is interpenetration, and the
+; answer there is arbitrary by definition.
 ;
-; The SIGNS are ours, not theirs. object_place sends +U down the screen
-; and +V up it, so the projection's null direction -- which for an
-; orthographic projection IS the depth axis -- is (1,-1,1), and depth is
-; U - V + Z. Head Over Heels' U + V + Z comes from a projection where
-; both floor axes descend. Change object_place and this must follow.
+; The order is U, then V, then Z, and it is not arbitrary:
 ;
+; U first because almost everything in a room is somewhere else along U --
+; the same fact collide_gather's sweep is built on -- so it is the axis most
+; likely to answer, and answering here is what makes the scan cheap.
+;
+; Z last because when a floor axis and Z disagree the floor is what the eye
+; goes by. The knight pushing a table from behind is the case: his body's box
+; starts at the table's top, so Z says the body is nearer by twelve while U
+; says it is further by eleven, and letting Z decide drew the body over the
+; table.
+;
+; U before V costs nothing, because the two can never disagree on a pair you
+; can see. If U separates with us nearer then our U exceeds theirs by at least
+; SIZE_U + SIZE_U, and if V separates the other way then our V exceeds theirs
+; by at least SIZE_V + SIZE_V; screenX is U + V, so the two sprites are at
+; least (SIZE_U + SIZE_V) + (SIZE_U + SIZE_V) apart across, which is exactly
+; the width at which they stop overlapping. Their order still matters to a
+; third object standing between them, but no picture shows the pair itself.
+;
+; The SIGNS are ours. object_place sends +U down the screen and +V up it, so
+; the projection's null direction -- which for an orthographic projection IS
+; the depth axis -- is (1,-1,1), and depth grows with U, falls with V and
+; grows with Z. Change object_place and this must follow.
+;
+; There is deliberately no "how certain is this?" answer any more. It existed
+; for one reader: the insertion scan, deciding whether it might stop early.
+; The scan walks the whole run now, so both ways of being further do the same
+; thing, and the votes, the running difference and the dispatch that read them
+; all went with it. That is also what lets this return from the first axis.
+;
+;   IY -> the candidate; depth_cmp_setup has run for the object being placed
 ; Out: cf = 1  the placed object is FURTHER than the candidate
-;      a  = 0  every axis that separates them agrees, so that is certain;
-;              any other value and the ordering is only a guess
-;      zf = 1  the same thing: certain. The scans test Z rather than A, so
-;              the certain answers must keep coming from XOR A and the
-;              guess must keep ending in INC A.
-; Corrupts A, BC, DE, HL. IX, IY and the shadow set are untouched. IX is read
-; for the two centres -- once per separating floor axis, which is seldom enough
-; that hoisting them too cost six bytes of setup to save twelve T a time.
+; Corrupts A, C, E. IX, IY, B, D, HL and the shadow set are untouched.
 ;
 ; depth_cmp_hl takes the candidate in HL instead, and leaves it in IY -- which
 ; is where every caller wants it afterwards.
 depth_cmp_hl:		push	hl
 					pop		iy
 					; NB: fall through
-depth_cmp:			ld		hl,0		; running difference, signed
-					ld		b,l		; which of us the separating axes name
 
-					; Each axis votes with one of two SETs, and the first of them
-					; hops the second with a $11: LD DE,nn takes the SET's two
-					; bytes as its operand. DE is free there -- the axis's term
-					; loads it straight after -- and it is a byte smaller and two T
-					; quicker than a JR.
-					;
-					; E holds the half-width for the two bounds, read once. Reading
-					; it from the record for each was a byte more an axis, and 11 T
-					; more whenever the first bound does not settle it.
-
-					; U -- nearer as U grows
-					ld		c,(iy+OBJ.U)		; c = their centre
+					; On the floor axes E holds the half-width for both bounds,
+					; read once. That is a byte less than reading it from the
+					; record twice, and 11 T quicker whenever the first bound does
+					; not settle the axis, against 4 T more when it does.
+depth_cmp:			ld		c,(iy+OBJ.U)		; c = their centre
 					ld		e,(iy+OBJ.SIZE_U)		; e = their half-width
 					ld		a,c
 					add		a,e		; a = their max
 .u_min:				cp		0		; imm = our min + 1
-					jr		c,.u_near		; their max <= our min: we are nearer
+					jr		c,.nearer		; their max <= our min: we are nearer
 					ld		a,c
 					sub		e		; a = their min
 .u_max:				cp		0		; imm = our max
-					jr		c,.u_over		; their min < our max: they overlap
-					set		1,b		; their min >= our max: they are nearer
-					DB		$11		; ld de,nn: over the SET
-.u_near:			set		0,b
-.u_term:								ld		a,(ix+OBJ.U)		; our U
-					sub		c
-					ld		e,a
-					sbc		a,a		; sign-extend the borrow
-					ld		d,a
-					add		hl,de
-.u_over:			
+					jr		nc,.further		; their min >= our max: they are nearer
 
-					; V -- FURTHER as V grows, so the operands swap, the term
-					; negates, and so does which of us a separation names
+					; V -- FURTHER as V grows, so the same two tests send us the
+					; other way
 					ld		c,(iy+OBJ.V)
 					ld		e,(iy+OBJ.SIZE_V)
 					ld		a,c
 					add		a,e
 .v_min:				cp		0
-					jr		c,.v_far		; their V is the lower: they are nearer
+					jr		c,.further		; their V is the lower: they are nearer
 					ld		a,c
 					sub		e
 .v_max:				cp		0
-					jr		c,.v_over
-					set		0,b
-					DB		$11		; ld de,nn: over the SET
-.v_far:				set		1,b
-.v_term:			ld		a,c		; a = their V
-					sub		(ix+OBJ.V)		; theirV - ourV
-					ld		e,a
-					sbc		a,a
-					ld		d,a
-					add		hl,de
-.v_over:			
+					jr		nc,.nearer
 
-					; Z -- nearer as Z grows, the same shape as U, but its term is
-					; one unit and no more, whatever the height between them. The
-					; sum is only read when the separating axes disagree, and when
-					; one of them is Z that is something above and behind
-					; something else -- the knight's body over the top of a table
-					; he is pushing, whose box starts where the table's ends.
-					; Counting the whole of Z there put the body in front by a
-					; unit, twelve up against eleven back; the floor is what the
-					; eye goes by, and any floor term at all outvotes this one.
-					;
-					; A single unit still breaks a tie, which is what it is for.
-					; Room $B3 has a spike and a block whose floor terms cancel
-					; exactly, and a ball that is certainly nearer than the spike
-					; and certainly further than the block: order those two by a
-					; coin toss and the ball has nowhere in the list it can go.
+					; Z -- nearer as Z grows, and the odd one out in shape: the
+					; coordinate is the box's base and SIZE_Z its height, so the
+					; minimum is Z itself and there is nothing to subtract.
 					ld		a,(iy+OBJ.Z)
 					ld		c,a
 					add		a,(iy+OBJ.SIZE_Z)
-.z_min:				cp		0
-					jr		c,.z_near
+.z_min:				cp		0		; imm = our Z + 1
+					jr		c,.nearer
 					ld		a,c
-.z_max:				cp		0
-					jr		c,.z_over
-					set		1,b
-					dec		hl		; and the one unit of tie-break above
-					jr		.z_over
-.z_near:			set		0,b
-					inc		hl
-.z_over:
+.z_max:				cp		0		; imm = our Z + SIZE_Z
+					jr		nc,.further
 
-					; What decides it is not how MANY axes separate the two but
-					; whether they agree. Two axes that both say the same object
-					; is in front are more certain than one, not less -- this
-					; used to count them and call anything but a single axis a
-					; guess, and a guess does not stop the scan, so a guard with
-					; a spike to its east and below it walked straight past the
-					; spike in the list and drew in front of it.
-					;
-					; Only b = 3 is genuinely ambiguous: one axis saying we are
-					; in front while another says they are, which is the
-					; non-transitive case the lagging insertion point exists for.
-					; b = 0 is interpenetration, and just as unanswerable.
-					;
-					; The direction comes from b and not from the sum, because a
-					; separating axis can still give a zero term: a box of no
-					; height sits at the same Z as the one standing on it, and
-					; the two are disjoint all the same.
-					;
-					; So b - 1 == 0 is the first, b - 2 == 0 the second, and every
-					; other value -- 0 and 3 -- falls out of the bottom to the guess.
-					xor		a		; a = 0 and cf clear, and DEC B leaves both alone
-					dec		b
-					ret		z		; b was 1: nearer, and cf already says so
-					dec		b
-					jr		nz,.guess		; b was 0 or 3: nothing certain to go on
-					scf
-					ret				; b was 2: further
-.guess:				sla		h		; cf = sign of the difference, which is
-					inc		a		; the best guess there is. INC leaves cf alone
+					; Nothing separates them: the boxes interpenetrate and no
+					; order is right. Nearer puts us after the candidate, which
+					; is where the scan would leave us anyway.
+.nearer:			or		a		; cf = 0
 					ret
-
-					; Each DB $11 above is LD DE,nn eating the two bytes of the SET that
-					; follows it. Put a third byte there and it would eat half of it, so
-					; the assembler is made to check the length rather than a reader.
-					ASSERT	depth_cmp.u_term - depth_cmp.u_near == 2
-					ASSERT	depth_cmp.v_term - depth_cmp.v_far == 2
+.further:			scf
+					ret
 
 
 ; Hoist the placed object's bounds into depth_cmp's immediates. Six stores
@@ -313,81 +251,32 @@ depth_step:			call	depth_add_step
 ;   IX -> the object, in the list
 ; Corrupts A, BC, DE, HL, IY.
 ;
-; The list is furthest first, so an object is still in place if it is not
-; further than the ones before it and not nearer than the ones after it -- a
-; guess counts either way. Usually the neighbours settle it: a certain answer
-; from each costs two depth_cmp calls instead of a scan down the whole list,
-; and it is the common case: an object creeping a unit per frame changes its
-; place in the order only every several frames.
+; It comes out and goes back in, scanned from the front of the sorted run --
+; every time, however little it moved.
 ;
-; But a neighbour that can only guess settles nothing, and the check walks on
-; past it, back and forward, until an answer is certain -- the way the
-; insertion scan walks on past a guess. Stopping at the neighbour missed room
-; $A3: the moveable block rides the hunting ball, which carried it in under the
-; feet of a knight standing still beside it. The two had been guessed apart
-; and he was ahead of it in the list, rightly; under his feet he is certainly
-; the nearer, but between the two lay a spike and a spiked ball that the block
-; could only guess about, so its look at its neighbours said "in order", he
-; took no step to be re-sorted by, and the block's top stayed drawn over his
-; legs.
+; It used to look at its neighbours first and do nothing if it still sat
+; between them: two depth_cmp calls against a walk down the whole run, and
+; almost always enough, since an object creeping a unit a frame crosses
+; someone only every several frames. What that check could not do is be
+; right. It is sound only if the order is transitive, and isometric boxes
+; are not. Room $A3 made the case: the moveable block rides the hunting
+; ball, which carried it in under the feet of a knight standing still
+; beside it; between the two lay a spike and a spiked ball the block could
+; only guess about, so its look either side said "in order" while its top
+; stayed drawn over his legs.
 ;
-; When it has crossed one, it comes out and goes back in, and which neighbour
-; it crossed says where the scan may start:
+; A full scan has no such hole, and it is what makes the rest of this file
+; small. Nothing needs to know how sure a comparison was -- that answer had
+; exactly one reader, the scan deciding whether it might stop early -- so
+; depth_cmp returns from its first separating axis and the scan has one
+; branch. Between them that paid for the extra walking in bytes twice over.
 ;
-; Later, and starting where it already is gives the same answer as starting
-; from the front: everything ahead of it was not-further last time it was
-; placed, and moving nearer cannot have changed that.
-;
-; Earlier is not the mirror of that, and it took a measurement to believe it.
-; Backing up to a point and scanning forward from there loses what the scan
-; learns on the way down -- the insertion point, the last object it was NEARER
-; than -- so it can settle in front of where a scan from the front would put
-; it. It differed on 22 frames of 180. So that half goes the long way round,
-; and only the cheap half is taken cheaply.
-;
-; The check jumps straight to whichever scan it needs. It used to be a routine
-; of its own, depth_in_order, answering 0 or 1 in A for this one to branch on
-; -- which also meant A had to survive depth_unlink in between.
-depth_relink:		call	depth_cmp_setup		; its bounds, for every depth_cmp below
-
-					; Against the ones before it, back to where the sorted run starts:
-					; there is nothing sorted ahead of that to cross. Each walk starts
-					; with IY on the object itself, and steps from it.
-					;
-					; depth_cmp's Z says whether it was certain: its two certain answers
-					; come from XOR A, and its guess ends with INC A.
-					push	ix
-					pop		iy
-.back:				ld		l,(iy+OBJ.PREV)
-					ld		h,(iy+OBJ.PREV+1)
-					ld		de,(sort_head)
-					or		a
-					sbc		hl,de
-					add		hl,de		; HL back, and ADD HL leaves Z alone
-					jr		z,.next		; the front of the run
-					call	depth_cmp_hl		; PREV is the record itself here
-					jr		c,.earlier		; further than it: it belongs earlier
-					jr		nz,.back		; only guessed nearer: and the one before?
-
-					; Against the ones after it, to the tail.
-.next:				push	ix
-					pop		iy
-.on:				ld		l,(iy+OBJ.NEXT)
-					ld		h,(iy+OBJ.NEXT+1)
-					ld		a,h
-					and		a
-					ret		z		; the tail: nothing to cross
-					call	depth_cmp_hl
-					jr		nc,.later		; nearer than it: it belongs later
-					ret		z		; certainly further: in order
-					jr		.on		; only guessed further: and the one after?
-
-.later:				call	depth_unlink		; later, so on from
-					ex		de,hl		; where it came out -- the setup above
-					jr		depth_insert_from		; still stands
-
-.earlier:			call	depth_unlink
-					jr		depth_insert_placed		; from the front of the run
+; It is also self-repairing, which the neighbour check never was. Two
+; objects that both stood still cannot have come to need a different order,
+; and anything that moved is placed against the whole run again, so a
+; mistake cannot outlive the frame that made it.
+depth_relink:		call	depth_unlink
+					jr		depth_insert		; which does depth_cmp_setup for us
 
 
 ; The upper half of a two-part object -- a character's body, a guard's torso --
@@ -439,12 +328,14 @@ depth_step_upper:	call	depth_add_step		; HL comes through this
 ;   IX -> the object
 ; Corrupts A, BC, DE, HL, IY.
 ;
-; The insertion point LAGS the scan cursor: an ordering we are only
-; guessing at moves the cursor on but is not trusted enough to commit to.
-; Isometric depth is genuinely non-transitive -- A in front of B in front
-; of C in front of A is constructible -- so there is no total order to
-; sort by, and this is why the scan needs the authoritative flag to know
-; when it may stop.
+; The scan walks the whole sorted run and leaves the object after the LAST
+; candidate it was nearer than. It never stops early, and that is the point:
+; isometric depth is not transitive -- A in front of B in front of C in front
+; of A is constructible from three long boxes -- so an order that is right
+; about every pair does not exist, and a scan that stopped at the first
+; candidate it was behind would be trusting exactly the thing that is not
+; true. Walking on costs the rest of the run and is never wrong about more
+; than the cycle itself.
 depth_insert:		call	depth_cmp_setup
 					; NB: depth_insert_placed assumes depth_cmp_setup has already run for
 					; this object -- depth_relink calls it once and then uses both.
@@ -464,14 +355,12 @@ depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
 					and		a
 					jr		z,.commit		; ran off the end: commit
 					call	depth_cmp_hl		; the candidate is in IY from here
-					jr		c,.further
-					pop		de		; we are nearer: we go after this one,
-					push	iy		; so it is the insertion point now
+					jr		c,.advance		; further than it: it is not our place
+					pop		de		; nearer: we go after this one, so it is
+					push	iy		; the insertion point now
 .advance:			ld		l,(iy+OBJ.NEXT)
 					ld		h,(iy+OBJ.NEXT+1)
 					jr		.scan
-.further:			jr		nz,.advance		; only a guess: keep looking -- depth_cmp's
-										; Z is whether it was certain
 .commit:			pop		hl
 					; NB: fall through
 

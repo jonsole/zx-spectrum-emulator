@@ -390,9 +390,112 @@ guard_walk:			push	bc
 					djnz	guard_walk
 					ret
 
+; One axis. Everything is a box edge, so the caller works out the four of them
+; and this only compares.
+;   B = their minimum, C = their maximum, D = our minimum + 1, E = our maximum
+; Out: A = 1 we are nearer, 2 they are nearer, 0 the two overlap
+; Corrupts AF.
+;
+; LD A,n leaves the flags alone, so each RET C still reads its own CP.
+axis_vote:			ld		a,c		; their max
+					cp		d
+					ld		a,1
+					ret		c		; their max <= our min: we are nearer
+					ld		a,b		; their min
+					cp		e
+					ld		a,0
+					ret		c		; their min < our max: they overlap
+					ld		a,2
+					ret
+
+; Does every axis that separates the two boxes say IX is the nearer?
+;   IX, IY -> the two records
+; Out: cf set when IX is certainly nearer than IY
+; Corrupts AF, BC, DE. Keeps HL, IX and IY.
+;
+; V needs no separate case: it runs nearer as it FALLS, so handing axis_vote
+; our edges where U handed it theirs asks the mirrored question and the two
+; answers keep their meanings.
+certainly_nearer:	push	hl
+					xor		a
+					ld		(votes),a
+
+					ld		a,(iy+OBJ.U)
+					sub		(iy+OBJ.SIZE_U)
+					ld		b,a
+					ld		a,(iy+OBJ.U)
+					add		a,(iy+OBJ.SIZE_U)
+					ld		c,a		; theirs
+					ld		a,(ix+OBJ.U)
+					sub		(ix+OBJ.SIZE_U)
+					inc		a
+					ld		d,a
+					ld		a,(ix+OBJ.U)
+					add		a,(ix+OBJ.SIZE_U)
+					ld		e,a		; ours
+					call	axis_vote
+					call	.cast
+
+					ld		a,(ix+OBJ.V)		; ours, in the their slots
+					sub		(ix+OBJ.SIZE_V)
+					ld		b,a
+					ld		a,(ix+OBJ.V)
+					add		a,(ix+OBJ.SIZE_V)
+					ld		c,a
+					ld		a,(iy+OBJ.V)		; theirs, in the our slots
+					sub		(iy+OBJ.SIZE_V)
+					inc		a
+					ld		d,a
+					ld		a,(iy+OBJ.V)
+					add		a,(iy+OBJ.SIZE_V)
+					ld		e,a
+					call	axis_vote
+					call	.cast
+
+					ld		b,(iy+OBJ.Z)		; Z is a base and a height, so
+					ld		a,b		; the minimum is Z itself
+					add		a,(iy+OBJ.SIZE_Z)
+					ld		c,a
+					ld		a,(ix+OBJ.Z)
+					ld		d,a
+					inc		d
+					add		a,(ix+OBJ.SIZE_Z)
+					ld		e,a
+					call	axis_vote
+					call	.cast
+
+					; Only 1 -- some axis said we are nearer and none said
+					; otherwise -- is certain. 0 is interpenetration, 2 is
+					; certainly further, 3 is the axes disagreeing.
+					ld		a,(votes)
+					pop		hl
+					dec		a
+					jr		nz,.no
+					scf
+					ret
+.no:				or		a		; a is not zero here, so this only clears cf
+					ret
+
+					; A is 0, 1 or 2, which is already the bit this vote sets.
+.cast:				ld		hl,votes
+					or		(hl)
+					ld		(hl),a
+					ret
+
+votes:				DB		0
+
+
 ; Every sorted object against every one after it. One that is CERTAINLY nearer
 ; than something it comes before is an inversion: counted, and the first kept
 ; with the step it turned up on.
+;
+; "Certainly" is this file's own reading of the two boxes, not depth_cmp's.
+; depth_cmp answers from the first axis that separates the pair and has no
+; notion of how sure it is; what a picture can be wrong about is narrower --
+; a pair that EVERY separating axis agrees on. Where the axes disagree the
+; sort may settle it either way and no test should hold it to one, so this
+; asks the narrower question, and asks it of the boxes rather than of the
+; code under test.
 check:				ld		hl,(sort_head)
 					ld		a,(hl)
 					inc		hl
@@ -403,15 +506,15 @@ check:				ld		hl,(sort_head)
 					ret		z
 					push	hl
 					pop		ix		; this one...
-					call	depth_cmp_setup
 					ld		l,(ix+OBJ.NEXT)
 					ld		h,(ix+OBJ.NEXT+1)
 .inner:				ld		a,h
 					or		l
 					jr		z,.next
-					call	depth_cmp_hl		; ...against each after it, in IY
-					jr		c,.fine		; further than it: as it should be
-					jr		nz,.fine		; nearer, but only a guess
+					push	hl
+					pop		iy		; ...against each after it
+					call	certainly_nearer
+					jr		nc,.fine		; not certainly nearer: nothing to say
 					ld		hl,inversions
 					inc		(hl)
 					ld		a,(hl)
