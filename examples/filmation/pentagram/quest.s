@@ -254,7 +254,7 @@ quest_room_spares:  ld      b,QUEST_SPARES
                     add     hl,de
                     push    hl
                     pop     ix
-                    call    flyer_blank
+                    call    object_blank
                     ld      (ix+OBJ.BUF_L),0
                     ld      (ix+OBJ.BUF_H),0
                     ld      (ix+OBJ.NEXT),0

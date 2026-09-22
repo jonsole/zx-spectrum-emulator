@@ -133,7 +133,8 @@ sprite_end:
 					INCLUDE "../engine/walker.s"
 					INCLUDE "sabreman.s"
 					INCLUDE "movers.s"
-					INCLUDE "../engine/mover.s"		; movers.s falls into it
+					INCLUDE "../engine/mover.s"
+					INCLUDE "../engine/movers.s"		; the behaviours shared with Knight Lore
 					INCLUDE "../engine/sound.s"
 					INCLUDE "sound_long.s"
 					INCLUDE "../engine/screen.s"

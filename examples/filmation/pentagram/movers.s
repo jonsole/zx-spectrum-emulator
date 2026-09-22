@@ -118,36 +118,19 @@ mover_of:           DB      6, MOVE_STILL           ; object_03, spiky grass (23
                     DB      $FF
 
 
-; What drives a template, or MOVE_NONE.
-;   A  - the template index
-; Out: A - the behaviour. Preserves DE.
-mover_find:         ld      hl,mover_of
-.next:              ld      c,(hl)
-                    inc     c                   ; $FF ends the list
-                    jr      z,.none
-                    dec     c
-                    cp      c
-                    inc     hl
-                    jr      z,.found
-                    inc     hl
-                    jr      .next
-.found:             ld      a,(hl)
-                    ret
-.none:              xor     a
-                    ret
-
-
 ; One DW per behaviour from BEHAVIOUR_FIRST_TURN up. Each gets IX pointing at
 ; its record, may corrupt anything, must leave the stack balanced, and returns.
+; mover_falls and mover_sinks are the engine's, shared with Knight Lore: see
+; ../engine/movers.s, which has mover_find, player_on_top and object_hide too.
 mover_tbl:          DW      mover_pace_u        ; MOVE_PACE_U
                     DW      mover_pace_v        ; MOVE_PACE_V
-                    DW      mover_falls         ; MOVE_FALLS
+                    DW      mover_falls         ; MOVE_FALLS: $CD75
                     DW      mover_homer         ; MOVE_HOMER
                     DW      mover_bolt          ; MOVE_BOLT
                     DW      mover_poof          ; MOVE_POOF
                     DW      mover_quest         ; MOVE_QUEST
                     DW      mover_well          ; MOVE_WELL
-                    DW      mover_sinks         ; MOVE_SINKS
+                    DW      mover_sinks         ; MOVE_SINKS: $CDA0
                     DW      mover_crumbles      ; MOVE_CRUMBLES
                     DW      mover_lift          ; MOVE_LIFT
                     DW      mover_conveyor      ; MOVE_CONVEYOR
@@ -299,14 +282,6 @@ mover_pace:         ld      a,(ix+OBJ.BEHAVIOUR)
                     xor     c
                     ld      (ix+OBJ.MOVE_STATE),a
                     ret
-
-
-; ---------------------------------------------------------------------------
-; Something that drops and cannot be shoved -- $CD75 clears its own U and V
-; step before it moves, so all that is left to it is gravity.
-;   IX -> the record
-mover_falls:        call    mover_halt
-                    jp      mover_move
 
 
 ; ---------------------------------------------------------------------------
@@ -866,69 +841,6 @@ mover_poof:         call    sound_poof
                     ld      (ix+OBJ.GFX),a
                     call    mover_hover
                     jp      mover_move_always
-
-
-; Take a record out of the room: repaint where it was, without it, and leave
-; the slot empty for the next. Knight Lore's special_hide.
-;   IX -> the record
-; Corrupts everything, IX included.
-object_hide:        call    region_reset
-                    call    region_add
-                    call    depth_unlink
-                    call    flyer_blank
-                    jp      redraw_view
-
-
-; ---------------------------------------------------------------------------
-; Is he standing on this record? His feet on its top or a little above it --
-; a lift gives him his rise before it takes its own, so the two leapfrog --
-; and over it along both floor axes.
-;   IX -> the record
-; Out: zf set if he is. Corrupts AF, C.
-ON_TOP_SLACK        EQU     6
-
-player_on_top:      ld      a,(ix+OBJ.Z)
-                    add     a,(ix+OBJ.SIZE_Z)
-                    ld      c,a
-                    ld      a,(player + OBJ.Z)
-                    sub     c
-                    cp      ON_TOP_SLACK + 1
-                    jr      nc,.off             ; below its top, or well above
-                    ld      a,(player + OBJ.U)
-                    sub     (ix+OBJ.U)
-                    call    character_door_find.abs
-                    ld      c,a
-                    ld      a,(ix+OBJ.SIZE_U)
-                    add     a,CHARACTER_HALF_U
-                    cp      c
-                    jr      c,.off
-                    jr      z,.off
-                    ld      a,(player + OBJ.V)
-                    sub     (ix+OBJ.V)
-                    call    character_door_find.abs
-                    ld      c,a
-                    ld      a,(ix+OBJ.SIZE_V)
-                    add     a,CHARACTER_HALF_V
-                    cp      c
-                    jr      c,.off
-                    jr      z,.off
-                    xor     a                   ; zf: on it
-                    ret
-.off:               or      1                   ; nz: not
-                    ret
-
-
-; ---------------------------------------------------------------------------
-; A platform that sinks while something stands on it, a unit a turn -- $CDA0,
-; which has no gravity of its own and only ever moves by the step whatever
-; lands on it hands it ($B838). Knight Lore's dropping block is the same
-; thing, and the engine's landed-on mark is how it knows.
-;   IX -> the record
-mover_sinks:        bit     3,(ix+OBJ.MOVE_STATE)
-                    ret     z
-                    res     3,(ix+OBJ.MOVE_STATE)
-                    ld      (ix+OBJ.DZ),0       ; one unit, not a fall
-                    jp      mover_move
 
 
 ; ---------------------------------------------------------------------------

@@ -1,16 +1,18 @@
 """Assembles and runs the Filmation example's Z80 unit tests.
 
-The engine's suites are here, beside this script, and the game's are in
-knightlore/tests; the game's use the harness from here. Every *_tests.s is a
-self-contained program: it INCLUDEs the file it tests, checks it, and returns
-its failure count in A. sjasmplus turns each into a .com under
-examples/filmation/output/tests, and cpp-core's z80_com_runner runs it on the
-C++ Z80 core and exits with that count.
+The engine's suites are here, beside this script, and the games' are in
+knightlore/tests and pentagram/tests; the games' use the harness from here.
+Every *_tests.s is a self-contained program: it INCLUDEs the file it tests,
+checks it, and returns its failure count in A. sjasmplus turns each into a
+.com under examples/filmation/output/tests/<engine or game>, and cpp-core's
+z80_com_runner runs it on the C++ Z80 core and exits with that count.
 
     python examples/filmation/engine/tests/run_tests.py [name ...]
 
 With no names it runs them all, the engine's first; `depth` runs
-depth_tests.s, wherever it is. The runner has to have been built first:
+depth_tests.s, wherever it is, and `movers` every movers_tests.s there is --
+the engine's and each game's. `pentagram/movers` names one of them. The runner
+has to have been built first:
 
     cpp-core/build.ps1 -Release -Target z80_com_runner
 """
@@ -24,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 FILMATION = HERE.parent.parent
 REPO = FILMATION.parent.parent
 OUT_DIR = FILMATION / "output" / "tests"
-SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests"]
+SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests", FILMATION / "pentagram" / "tests"]
 
 # The same search knightlore/build.py makes, kept here so that the engine's
 # tests do not reach into the game's build.
@@ -59,9 +61,17 @@ def find_runner() -> Path:
     sys.exit("z80_com_runner not built -- run: cpp-core/build.ps1 -Release -Target z80_com_runner")
 
 
+def owner(source: Path) -> str:
+    """engine, knightlore or pentagram: the folder above the suite's tests/."""
+    return source.parent.parent.name
+
+
 def run_suite(source: Path, sjasmplus: str, runner: Path) -> bool:
-    com = OUT_DIR / (source.stem + ".com")
-    lst = OUT_DIR / (source.stem + ".lst")
+    # A folder each, because two of them may have a suite of the same name.
+    out = OUT_DIR / owner(source)
+    out.mkdir(parents=True, exist_ok=True)
+    com = out / (source.stem + ".com")
+    lst = out / (source.stem + ".lst")
     assembled = subprocess.run(
         [sjasmplus, "--nologo", "--fullpath", f"--raw={com}", f"--lst={lst}", source.name],
         cwd=source.parent,
@@ -80,18 +90,22 @@ def main() -> None:
     names = sys.argv[1:]
     everything = [s for d in SUITE_DIRS for s in sorted(d.glob("*_tests.s"))]
     if names:
-        by_name = {s.stem: s for s in everything}
-        missing = [f"{n}_tests.s" for n in names if f"{n}_tests" not in by_name]
+        sources = []
+        missing = []
+        for n in names:
+            found = [s for s in everything
+                     if f"{n}_tests" in (s.stem, f"{owner(s)}/{s.stem}")]
+            if not found:
+                missing.append(f"{n}_tests.s")
+            sources += found
         if missing:
             sys.exit("no such suite: " + ", ".join(missing))
-        sources = [by_name[f"{n}_tests"] for n in names]
     else:
         sources = everything
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     sjasmplus = find_sjasmplus()
     runner = find_runner()
-    failed = [s.stem for s in sources if not run_suite(s, sjasmplus, runner)]
+    failed = [f"{owner(s)}/{s.stem}" for s in sources if not run_suite(s, sjasmplus, runner)]
     if failed:
         sys.exit("failed: " + ", ".join(failed))
 

@@ -57,8 +57,8 @@ the game once, before the first build:
 ```
 
 The unit tests assemble single files against stubs and run them headless --
-the engine's in `engine/tests`, the game's in `knightlore/tests`, and one
-command for all of them:
+the engine's in `engine/tests`, the games' in `knightlore/tests` and
+`pentagram/tests`, and one command for all of them:
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\filmation\engine\tests\run_tests.py
@@ -96,7 +96,7 @@ README lists what a game has to supply.
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |
 | `glance.s` | His top half looking about as he goes |
-| `movers.s` | Every behaviour: slides, fires, balls, guards, gates, the ghost, blocks, spells |
+| `movers.s` | Its behaviours: slides, fires, balls, guards, gates, the ghost, blocks, spells. The ones Pentagram has too are the engine's, in `engine/movers.s` |
 | `special.s`, `pickup.s` | The collectables and the cauldron; picking up, putting down, the carried objects |
 | `room_build.s` | Decoding a room from the castle's templates; printing the day and lives |
 | `sun.s`, `clock.s` | The sun and moon window, and day and night |

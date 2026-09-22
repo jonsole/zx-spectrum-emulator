@@ -2,7 +2,8 @@
 ; The mover framework. Every object in the room's pool whose behaviour is
 ; BEHAVIOUR_FIRST_TURN or above gets a turn, through the game's mover_tbl --
 ; one address a behaviour -- and these are the routines a turn is built from.
-; The behaviours themselves are the game's: knightlore/movers.s.
+; The behaviours themselves are the game's own movers.s, and those more than
+; one game has are in movers.s beside this file.
 ;
 ; mover_move comes first on purpose. The game's movers.s ends with a behaviour
 ; that falls through into it, and knightlore.s includes this file straight

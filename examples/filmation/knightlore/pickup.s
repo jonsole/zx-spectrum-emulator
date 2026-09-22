@@ -214,7 +214,7 @@ special_pickup:		xor		a		; and a room's spiked balls may drop now,
 					call	region_add
 					call	redraw_view
 					jr		special_shift
-.gone:				call	special_hide
+.gone:				call	object_hide
 
 					;; NB: fall through into special_shift
 

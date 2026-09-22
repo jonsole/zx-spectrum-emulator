@@ -29,8 +29,9 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `room.s` | The room: bounds, doorways, the object count, and `room_add` → `room_show` |
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
+| `movers.s` | The behaviours more than one game has, each assembled only if the game names it (`IFUSED`): `mover_find`, `mover_falls`, `mover_falls_noisy`, `mover_sinks`, `player_on_top`, `object_hide`, `object_blank`. Included after `mover.s` |
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
-| `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the game's |
+| `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the games' |
 
 ## Laying out memory
 
@@ -82,14 +83,21 @@ The engine names nothing else of the game's.
 | `BEHAVIOUR_FIRST_TURN` | EQU | mover.s | The lowest behaviour that gets a turn |
 | `mover_tbl` | table | mover.s | One `DW` per behaviour from `BEHAVIOUR_FIRST_TURN` up. Each gets `IX` → its record, may corrupt anything but must leave the stack balanced, and returns |
 | `deadly_touched` | byte | object.s | Set to 1 when a character touches something deadly |
-| `walker_player` | label | mover.s | The character, which is not in the pool, so movers collide with it explicitly |
+| `walker_player` | label | mover.s, movers.s | The character, which is not in the pool, so movers collide with it explicitly; `player_on_top` asks whether it is standing on a record |
+| `mover_of` | table | movers.s | For `mover_find`: pairs of (template, behaviour), ended by `$FF` |
+| `sound_falls` | routine | movers.s | For `mover_falls_noisy`: played every turn before it falls. Preserves IX |
 | `walker_glance` | routine | walker.s | A = block + phase in, the body frame to show out; IX → legs. Corrupts C. Return A unchanged for no glance |
-| `sound_jump`, `sound_z` | routines | walker.s | A jump starting; a fall faster than two units a turn |
-| `CHARACTER_STEP`, `CHARACTER_HALF_U/V`, `CHARACTER_BODY_UP`, `CHARACTER_JUMP_DZ`, `CHARACTER_FALL_MAX` | EQU | walker.s | How far a character walks, how wide it is, how high its body rides, how it jumps and falls |
+| `sound_jump`, `sound_z` | routines | walker.s, movers.s | A jump starting; a fall faster than two units a turn, and `mover_sinks` going down |
+| `CHARACTER_STEP`, `CHARACTER_HALF_U/V`, `CHARACTER_BODY_UP`, `CHARACTER_JUMP_DZ`, `CHARACTER_FALL_MAX` | EQU | walker.s, movers.s | How far a character walks, how wide it is, how high its body rides, how it jumps and falls |
 | `CHARACTER_LARGEST`, `CHARACTER_TALLEST` | EQU | walker.s | Sprites sizing the two rotation buffers `character_keep` takes for good |
 | `DOOR_ACROSS`, `DOOR_ALONG`, `DOOR_LEVEL`, `DOOR_HEIGHT` | EQU | walker.s | The box around a doorway that counts as standing in it |
 | `character_steer` | routine | walker.s | Called with the step in D, E before a walk; may adjust it. Corrupts AF, BC, HL. A plain `RET` will do |
 | `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/sprite_source.py` |
+
+A name that only `movers.s` uses is needed only if the game uses the routine
+that asks for it: `mover_of` for a game that calls `mover_find`, `sound_falls`
+for one whose table names `mover_falls_noisy`. None of them has a default, so
+one that is missing is an assembly error.
 
 The top-level file also provides `VIEW_BUF_WIDTH`, `VIEW_BUF_ROWS`,
 `view_buffer`, `shift_shared` and `bit_reverse_table`, as laid out above.

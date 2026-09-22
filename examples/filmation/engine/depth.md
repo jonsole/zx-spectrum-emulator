@@ -601,8 +601,8 @@ snapped somewhere new would not be re-sorted at all.
 
 ### When something leaves
 
-**special_hide** calls `depth_unlink` when a collectable is taken out of the
-room, then repaints where it was.
+**object_hide**, in `movers.s`, calls `depth_unlink` when something is taken
+out of the room, such as a collectable, then repaints where it was.
 
 ### Why no extra repainting is needed
 

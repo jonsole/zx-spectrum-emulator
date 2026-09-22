@@ -146,9 +146,9 @@ mover_tbl:			DW		mover_ball			; MOVE_BALL
 					DW		mover_slide_v		; MOVE_SLIDE_V
 					DW		mover_spell		; MOVE_SPELL
 					DW		mover_cauldron	; MOVE_CAULDRON
-					DW		mover_dropping	; MOVE_DROPPING
+					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
-					DW		mover_carried		; MOVE_CARRIED
+					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
 					DW		mover_pushed		; MOVE_PUSHED
 					DW		mover_move		; MOVE_SLIDING: see mover_sliding
 					DW		mover_special	; MOVE_SPECIAL
@@ -171,23 +171,9 @@ spike_ball_falling:	DB		0
 spike_ball_held:	DB		0
 
 
-; What drives a template, or MOVE_NONE.
-;   A  - the template index
-; Out: A - the behaviour. Preserves DE.
-mover_find:			ld		hl,mover_of
-.next:				ld		c,(hl)
-					inc		c		; $FF ends the list
-					jr		z,.none
-					dec		c
-					cp		c
-					inc		hl
-					jr		z,.found
-					inc		hl
-					jr		.next
-.found:				ld		a,(hl)
-					ret		
-.none:				xor		a
-					ret		
+; What the moveable block plays every turn it falls or rides. mover_falls_noisy,
+; in engine/movers.s, calls it: the chirp upd_62 makes, every frame.
+sound_falls			EQU		sound_chirp
 
 
 ; ---------------------------------------------------------------------------
@@ -544,23 +530,6 @@ mover_gate:			call	mover_halt		; it only ever moves in Z
 
 
 ; ---------------------------------------------------------------------------
-; A block that goes wherever whatever it is standing on goes.
-;
-; upd_62, and it is barely anything: clear the step, then fall. Everything else
-; happens inside the clamp, where object_carry hands it the step of whatever
-; stopped its fall. Clearing DU and DV every turn is what makes that safe --
-; the ride is the only thing that ever writes them, so it can never accumulate.
-;
-; It is worth noticing that this needs no notion of "standing on" at all. The
-; block is always falling a little and always landing, and landing is where the
-; question gets asked.
-;   IX -> the record
-mover_carried:		call	sound_chirp		; and chirps, every frame, as upd_62 does
-					call	mover_halt
-					jp		mover_move		; DZ is left to gravity
-
-
-; ---------------------------------------------------------------------------
 ; A ghost, which drifts until something stops it and then picks a new way to
 ; go -- upd_80_to_83.
 ;
@@ -829,27 +798,13 @@ mover_spike_ball:	ld		a,(spike_ball_held)
 
 
 ; ---------------------------------------------------------------------------
-; A block that sinks a unit every turn something is standing on it -- upd_91.
-; object_landed_on leaves the mark, when whatever is on top comes down on it in
-; its own clamp; the game does the same at $CC6C.
-;   IX -> the record
-mover_dropping:		bit		3,(ix+OBJ.MOVE_STATE)
-					ret		z
-					res		3,(ix+OBJ.MOVE_STATE)
-					ld		(ix+OBJ.DZ),0		; one unit, not a fall
-					call	mover_move
-					ld		a,(collide_hit)		; sounding if it went down
-					and		COLLIDE_Z
-					jp		z,sound_z
-					ret
-
-
 ; A block that crumbles away when something lands on it -- upd_143. The game
 ; turns it into graphic 184 and steps it straight on to 185, draws that for a
-; turn, and then takes it out of the room.
+; turn, and then takes it out of the room. The dropping block, which sinks
+; under the same mark instead, is engine/movers.s's mover_sinks.
 ;   IX -> the record
 mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
-					jp		nz,special_hide		; crumbled last turn: gone
+					jp		nz,object_hide		; crumbled last turn: gone
 					bit		3,(ix+OBJ.MOVE_STATE)
 					ret		z
 					ld		(ix+OBJ.MOVE_STATE),$10

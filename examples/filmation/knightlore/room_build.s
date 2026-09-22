@@ -690,7 +690,7 @@ special_room_enter:	xor		a
 					push	hl
 					pop		ix
 					ld		b,SPECIAL_SLOTS
-.blank:				call	special_blank
+.blank:				call	object_blank
 					ld		(ix+OBJ.BUF_L),0
 					ld		(ix+OBJ.BUF_H),0
 					ld		(ix+OBJ.NEXT),0		; not in the list, which the

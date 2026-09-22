@@ -105,7 +105,7 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
 
 .blank:             ld      ix,(flyer_slots)
                     ld      b,EXTRA_SLOTS
-.slot:              call    flyer_blank
+.slot:              call    object_blank
                     ld      (ix+OBJ.BUF_L),0    ; no buffer yet: the first drop
                     ld      (ix+OBJ.BUF_H),0    ; into it takes one
                     ld      (ix+OBJ.NEXT),0     ; and in no list
@@ -116,12 +116,6 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     ld      a,(room_object_count)
                     add     a,EXTRA_SLOTS
                     ld      (room_object_count),a
-                    ret
-
-; A slot with nothing in it: no graphic, no behaviour, and nothing collides.
-flyer_blank:        ld      (ix+OBJ.GFX),0
-                    ld      (ix+OBJ.BEHAVIOUR),0
-                    ld      (ix+OBJ.FLAGS),OBJ_PASSABLE
                     ret
 
 

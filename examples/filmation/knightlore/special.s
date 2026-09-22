@@ -100,7 +100,7 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 					inc		(hl)
 					call	sound_pickup
 					call	special_row_gone
-					jp		special_hide
+					jp		object_hide
 
 					; upd_104_to_110: a unit a turn along each axis towards the middle
 					; of the room, rising to the top of the pot and hanging there
@@ -158,7 +158,7 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 .wrong:				xor		a
 					ld		(special_busy),a
 					call	special_row_gone
-					jp		special_hide
+					jp		object_hide
 
 					; A unit towards 128, or nothing when it is there. The sign of the
 					; difference, as the game takes it.
@@ -195,7 +195,7 @@ mover_cauldron:		ld		a,(ix+OBJ.GFX)
 					sub		16
 					cp		64
 					jp		c,mover_spell
-					jp		special_hide
+					jp		object_hide
 
 .shown:				ld		(ix+OBJ.GFX),SPECIAL_BUBBLES
 					jr		.still
@@ -203,7 +203,7 @@ mover_cauldron:		ld		a,(ix+OBJ.GFX)
 .bubbles:			ld		iy,(special_slots)
 					ld		a,(iy+OBJ.GFX)
 					or		a
-					jp		nz,special_hide
+					jp		nz,object_hide
 
 					ld		a,(ix+OBJ.FLAGS)
 					or		OBJ_PASSABLE
@@ -346,22 +346,6 @@ special_row_gone:	ld		a,(ix+OBJ.MOVE_STATE)
 					ld		hl,special_gfx
 					add		hl,de
 					ld		(hl),0
-					ret
-
-
-; Take a slot's object out of the room: repaint where it was, without it.
-; The game gives it graphic 1, which the next draw wipes and turns to 0.
-;   IX -> the record
-; Corrupts everything, IX included.
-special_hide:		call	region_reset
-					call	region_add
-					call	depth_unlink
-					call	special_blank
-					jp		redraw_view
-
-special_blank:		ld		(ix+OBJ.GFX),0
-					ld		(ix+OBJ.BEHAVIOUR),0
-					ld		(ix+OBJ.FLAGS),OBJ_PASSABLE
 					ret
 
 

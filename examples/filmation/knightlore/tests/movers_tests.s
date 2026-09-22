@@ -1,7 +1,10 @@
 ; Unit tests for knightlore/movers.s, in Z80, run on the C++ core by
 ; engine/tests/run_tests.py.
 ;
-; movers.s is assembled with the engine's mover framework, engine/mover.s, and
+; movers.s is assembled with the engine's mover framework, engine/mover.s; the
+; shared behaviours its mover_tbl points at, engine/movers.s -- so what is
+; checked of those here is that Knight Lore's table reaches them, and the
+; routines themselves are engine/tests/movers_tests.s's; and
 ; knightlore/monster_gate.s. That last one is here rather than stubbed because
 ; it is not something movers.s calls, it is where mover_tbl SENDS the monsters:
 ; every behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL is dispatched through it.
@@ -537,7 +540,7 @@ start:				ld		sp,$FE00
 					call	fresh
 					SET		OBJ.DU, 3
 					SET		OBJ.DV, 3
-					RUN		mover_carried
+					RUN		mover_falls_noisy
 					EXPECT_WORD	clamp_de, 0, "the step clamped"
 					EXPECT_BYTE	clamp_dz, -1 & $FF, "DZ, gravity"
 
@@ -761,18 +764,18 @@ start:				ld		sp,$FE00
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE"
 					EXPECT_BYTE	spike_ball_falling, 0, "spike_ball_falling"
 
-; --- mover_dropping, mover_collapsing ----------------------------------------------
+; --- mover_sinks, mover_collapsing -----------------------------------------------
 
 					TEST	"dropping: nothing on it, nothing"
 					call	fresh
-					RUN		mover_dropping
+					RUN		mover_sinks
 					EXPECT_BYTE	clamp_calls, 0, "clamps"
 
 					TEST	"dropping: landed on, sinks a unit"
 					call	fresh
 					SET		OBJ.MOVE_STATE, 8 | 1
 					SET		OBJ.DZ, 5
-					RUN		mover_dropping
+					RUN		mover_sinks
 					EXPECT_BYTE	clamp_dz, -1 & $FF, "DZ"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, the mark taken"
 					EXPECT_BYTE	step_calls, 1, "depth_step"
@@ -781,7 +784,7 @@ start:				ld		sp,$FE00
 					call	fresh
 					RUN		mover_collapsing
 					EXPECT_BYTE	reset_calls, 0, "region_reset"
-					EXPECT_BYTE	hide_calls, 0, "special_hide"
+					EXPECT_BYTE	hide_calls, 0, "object_hide"
 
 					TEST	"collapsing: landed on, crumbles"
 					call	fresh
@@ -802,11 +805,11 @@ start:				ld		sp,$FE00
 					call	fresh
 					SET		OBJ.MOVE_STATE, $10
 					RUN		mover_collapsing
-					EXPECT_BYTE	hide_calls, 1, "special_hide"
+					EXPECT_BYTE	hide_calls, 1, "object_hide"
 					EXPECT_WORD	hide_ix, REC, "...of it"
 
 					call	finish
-					DB		"movers_tests", 0
+					DB		"movers_tests (knightlore)", 0
 
 
 ; ---------------------------------------------------------------------------
@@ -1068,10 +1071,14 @@ obj_pair_flip:		ld		a,0
 					inc		(hl)
 					ret
 
-special_hide:		ld		(hide_ix),ix
+; engine/movers.s's object_hide is the real one; this is what it unlinks with,
+; which is where a hide is counted.
+depth_unlink:		ld		(hide_ix),ix
 					ld		hl,hide_calls
 					inc		(hl)
 					ret
+
+redraw_view:		ret
 
 mover_cauldron:		ret
 mover_special:		ret
@@ -1100,3 +1107,4 @@ sound_sparkle:		ret
 					INCLUDE	"../monster_gate.s"
 					INCLUDE	"../movers.s"
 					INCLUDE	"../../engine/mover.s"
+					INCLUDE	"../../engine/movers.s"
