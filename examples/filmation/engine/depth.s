@@ -112,7 +112,12 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 ; all went with it. That is also what lets this return from the first axis.
 ;
 ;   IY -> the candidate; depth_cmp_setup has run for the object being placed
-; Out: cf = 1  the placed object is FURTHER than the candidate
+; Out: cf = 1  the placed object is NEARER than the candidate
+;
+; Nearer and not further, because the carry then falls out of CP already
+; right on two axes of the three and has to be flipped only on V -- see
+; there. The scan is the only caller and reads it either way round.
+;
 ; Corrupts A, C, E. IX, IY, B, D, HL and the shadow set are untouched.
 ;
 ; depth_cmp_hl takes the candidate in HL instead, and leaves it in IY -- which
@@ -130,24 +135,28 @@ depth_cmp:			ld		c,(iy+OBJ.U)		; c = their centre
 					ld		a,c
 					add		a,e		; a = their max
 .u_min:				cp		0		; imm = our min + 1
-					jr		c,.nearer		; their max <= our min: we are nearer
+					ret		c		; their max <= our min: we are nearer
 					ld		a,c
 					sub		e		; a = their min
 .u_max:				cp		0		; imm = our max
-					jr		nc,.further		; their min >= our max: they are nearer
+					ret		nc		; their min >= our max: they are nearer
 
-					; V -- FURTHER as V grows, so the same two tests send us the
-					; other way
+					; V -- FURTHER as V grows, so its two answers are the only
+					; ones CP leaves the wrong way round, and the only ones that
+					; pay two bytes and 15 T for a flip. That is why the carry
+					; means NEARER rather than further: it puts the flip on the
+					; axis asked least often and lets U and Z return where they
+					; stand.
 					ld		c,(iy+OBJ.V)
 					ld		e,(iy+OBJ.SIZE_V)
 					ld		a,c
 					add		a,e
 .v_min:				cp		0
-					jr		c,.further		; their V is the lower: they are nearer
+					jr		c,.flip		; their V is the lower: they are nearer
 					ld		a,c
 					sub		e
 .v_max:				cp		0
-					jr		nc,.nearer
+					jr		nc,.flip		; their V is the higher: we are nearer
 
 					; Z -- nearer as Z grows, and the odd one out in shape: the
 					; coordinate is the box's base and SIZE_Z its height, so the
@@ -156,17 +165,20 @@ depth_cmp:			ld		c,(iy+OBJ.U)		; c = their centre
 					ld		c,a
 					add		a,(iy+OBJ.SIZE_Z)
 .z_min:				cp		0		; imm = our Z + 1
-					jr		c,.nearer
+					ret		c		; their top is at or below our base: we are nearer
 					ld		a,c
-.z_max:				cp		0		; imm = our Z + SIZE_Z
-					jr		nc,.further
 
-					; Nothing separates them: the boxes interpenetrate and no
-					; order is right. Nearer puts us after the candidate, which
-					; is where the scan would leave us anyway.
-.nearer:			or		a		; cf = 0
+					; The last test needs no condition on its RET, because both
+					; ways out want the carry exactly as CP leaves it. Clear is
+					; their base at or above our top, so they are the nearer. Set
+					; is Z overlapping -- and with U and V overlapping too that is
+					; interpenetration, where no order is right and "nearer" is
+					; what the scan would have settled on anyway. One instruction,
+					; both answers.
+.z_max:				cp		0		; imm = our Z + SIZE_Z
 					ret
-.further:			scf
+
+.flip:				ccf
 					ret
 
 
@@ -355,7 +367,7 @@ depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
 					and		a
 					jr		z,.commit		; ran off the end: commit
 					call	depth_cmp_hl		; the candidate is in IY from here
-					jr		c,.advance		; further than it: it is not our place
+					jr		nc,.advance		; not nearer: it is not our place
 					pop		de		; nearer: we go after this one, so it is
 					push	iy		; the insertion point now
 .advance:			ld		l,(iy+OBJ.NEXT)

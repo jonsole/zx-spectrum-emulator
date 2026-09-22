@@ -171,8 +171,12 @@ and the background simply comes out first.
 ## 4. Comparing two objects: depth_cmp
 
 depth_cmp compares **the object being placed** with **a candidate in IY**, and
-answers one question: is the placed object further than the candidate? Carry
-set means further.
+answers one question: is the placed object nearer than the candidate? Carry
+set means nearer.
+
+Nearer rather than further, which looks like the wrong way round for a list
+kept furthest first, because of where the carry lands. See
+[the exits](#the-exits-and-why-the-carry-means-nearer).
 
 It used to answer a second one -- *and how sure are you?* -- which is gone.
 [Section 5](#5-there-is-no-certain-any-more) is why, because it is the change
@@ -184,8 +188,8 @@ On each axis the two boxes are in one of three states:
 
 | State | Test on U | Means |
 |---|---|---|
-| We are nearer | their max <= our min | answer: carry clear |
-| They are nearer | their min >= our max | answer: carry set |
+| We are nearer | their max <= our min | answer: carry set |
+| They are nearer | their min >= our max | answer: carry clear |
 | They overlap | neither | this axis says nothing: ask the next |
 
 The moment an axis separates them depth_cmp returns, and the axes after it are
@@ -197,6 +201,44 @@ box of no height separate from the one it stands on.
 
 If all three overlap the boxes interpenetrate, no order is right, and it
 returns "nearer" -- which is where the scan would have left the object anyway.
+
+### The exits, and why the carry means nearer
+
+Every answer is a `CP` away, so the only question at each exit is whether the
+carry `CP` leaves is the one to return. On U and Z it is; on V it is not,
+because V runs nearer as it *falls* and its two answers come out reversed.
+
+```
+.u_min:   cp   <our min + 1>
+          ret  c              ; their max <= our min: we are nearer
+.u_max:   cp   <our max>
+          ret  nc             ; their min >= our max: they are nearer
+
+.v_min:   cp   <our min + 1>
+          jr   c,.flip        ; their V is lower, so THEY are nearer
+.v_max:   cp   <our max>
+          jr   nc,.flip
+
+.flip:    ccf
+          ret
+```
+
+That is what fixes the polarity. Returning "nearer" puts the flip on V, which
+is only reached when U could not answer; returning "further" would have put it
+on U and Z, the two asked most, at two bytes and 15 T-states each time.
+
+Z's last test then needs no condition on its `RET` at all, because both ways
+out want the carry exactly as `CP` left it:
+
+```
+.z_max:   cp   <our Z + SIZE_Z>
+          ret
+```
+
+Carry clear is their base at or above our top, so they are the nearer. Carry
+set is Z overlapping -- and since U and V have already overlapped to get here,
+that is interpenetration, where "nearer" is the answer anyway. One
+instruction, both answers.
 
 ### Why U, then V, then Z
 
@@ -309,7 +351,7 @@ every time (section 6), both ways of being further came to mean the same thing
 -- keep going -- and the votes, the running difference, the one-unit Z
 tie-break and the dispatch that read them were all dead. Removing them is what
 lets depth_cmp return from its first separating axis, and took it from 100
-bytes to 56.
+bytes to 50.
 
 What makes that a repair rather than a loss is that the flag was never sound
 enough to lean on. A sort needs a total order: if A is behind B and B is behind
@@ -552,11 +594,11 @@ pay for the extra walking:
 
 - Nothing needs to know how sure a comparison was, so depth_cmp lost its votes,
   its running sum and its dispatch, and returns from the first axis that
-  separates -- 100 bytes down to 56.
+  separates -- 100 bytes down to 50.
 - depth_relink lost both walks and the two scan-start cases: 62 bytes down to 5.
 - The scan lost its early exit and its certainty test.
 
-That is 105 bytes for the module as a whole, against maybe two or three
+That is 111 bytes for the module as a whole, against maybe two or three
 thousand T-states a frame -- and the object count is what makes it affordable.
 There are only a handful of things moving in a room at once.
 
@@ -660,7 +702,7 @@ everything the relink could change.
 |---|---|---|---|
 | depth_unlink | IX | DE = the field that pointed at IX. **A kept**, carry clear | F, BC, HL |
 | depth_cmp_setup | IX | the six operands in depth_cmp | AF, B |
-| depth_cmp | IY = candidate, setup done | carry = further | A, C, E. Keeps IX, IY, B, D, HL |
+| depth_cmp | IY = candidate, setup done | carry = nearer | A, C, E. Keeps IX, IY, B, D, HL |
 | depth_cmp_hl | HL = candidate, setup done | as depth_cmp, with IY = the candidate | A, C, E, IY. Keeps IX, B, D, HL |
 | depth_insert | IX | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_placed | IX, setup done | IX linked in | A, BC, DE, HL, IY |

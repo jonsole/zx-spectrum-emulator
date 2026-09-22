@@ -114,7 +114,7 @@ start:				ld		sp,$FE00
 					EXPECT_A	$C3, "A"
 
 ; --- depth_cmp -------------------------------------------------------------
-; Out: carry set when the object in IX is further than the one in IY. The first
+; Out: carry set when the object in IX is NEARER than the one in IY. The first
 ; axis that separates the two boxes decides it, in the order U, V, Z, and the
 ; rest are never looked at -- so these check which axis got asked as much as
 ; what it answered.
@@ -123,39 +123,39 @@ start:				ld		sp,$FE00
 					BOX_U	REC_1, 40
 					BOX_U	REC_2, 20
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 					TEST	"cmp: further along U"
 					BOX_U	REC_1, 20
 					BOX_U	REC_2, 40
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry"
+					EXPECT_CARRY	0, "carry"
 
 					; U overlaps, so V is asked
 					TEST	"cmp: nearer for a lower V"
 					BOX		REC_1, 40, 20, Z0, HALF, HALF, TALL
 					BOX		REC_2, 40, 40, Z0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 					TEST	"cmp: further for a higher V"
 					BOX		REC_1, 40, 40, Z0, HALF, HALF, TALL
 					BOX		REC_2, 40, 20, Z0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry"
+					EXPECT_CARRY	0, "carry"
 
 					; Both floor axes overlap, so Z is asked
 					TEST	"cmp: nearer standing on top"
 					BOX		REC_1, 40, V0, 20, HALF, HALF, TALL
 					BOX		REC_2, 40, V0, 0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 					TEST	"cmp: further underneath"
 					BOX		REC_1, 40, V0, 0, HALF, HALF, TALL
 					BOX		REC_2, 40, V0, 20, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry"
+					EXPECT_CARRY	0, "carry"
 
 					; A box of no height still separates from the one it stands
 					; on: its base is that one's top, and touching counts as apart.
@@ -163,13 +163,13 @@ start:				ld		sp,$FE00
 					BOX		REC_1, 40, V0, 10, HALF, HALF, 0
 					BOX		REC_2, 40, V0, 0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 					TEST	"cmp: two axes agreeing"
 					BOX		REC_1, 40, V0, 20, HALF, HALF, TALL
 					BOX		REC_2, 20, V0, 0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 					; The two floor axes separating opposite ways. U is asked
 					; first, so U wins -- and the pair is 100 apart across the
@@ -181,13 +181,13 @@ start:				ld		sp,$FE00
 					BOX		REC_1, 60, 100, Z0, HALF, HALF, TALL	; U +40, V +60
 					BOX		REC_2, 20, 40, Z0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry: U says nearer"
+					EXPECT_CARRY	1, "carry: U says nearer"
 
 					TEST	"cmp: floor axes disagreeing the other way"
 					BOX		REC_1, 20, 40, Z0, HALF, HALF, TALL
 					BOX		REC_2, 60, 100, Z0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry: U says further"
+					EXPECT_CARRY	0, "carry: U says further"
 
 					; The knight's body over a table he is pushing: above it by
 					; twelve and behind it by eleven. Z last is what makes the
@@ -197,7 +197,7 @@ start:				ld		sp,$FE00
 					BOX		REC_1, 101, 112, 140, 5, 5, 11		; U -11, Z +12
 					BOX		REC_2, 112, 106, 128, 6, 10, 12
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry"
+					EXPECT_CARRY	0, "carry"
 
 					; Room $B3: a spike on the floor and a block up and away from
 					; it, 16 apart along U and 16 along V. Under the old rule
@@ -210,13 +210,13 @@ start:				ld		sp,$FE00
 					BOX		REC_1, 136, 136, 128, 6, 6, 12
 					BOX		REC_2, 152, 152, 164, 8, 8, 12
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry: the lower one is further"
+					EXPECT_CARRY	0, "carry: the lower one is further"
 
 					TEST	"cmp: the same pair the other way round"
 					BOX		REC_1, 152, 152, 164, 8, 8, 12
 					BOX		REC_2, 136, 136, 128, 6, 6, 12
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry: the higher one is nearer"
+					EXPECT_CARRY	1, "carry: the higher one is nearer"
 
 					; Nothing separates them on any axis. No order is right, and
 					; the answer is the one the scan would have reached anyway.
@@ -224,7 +224,7 @@ start:				ld		sp,$FE00
 					BOX_U	REC_1, 40
 					BOX_U	REC_2, 42
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry"
+					EXPECT_CARRY	1, "carry"
 
 
 ; --- depth_insert and background_insert ------------------------------------
