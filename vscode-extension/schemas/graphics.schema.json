@@ -1,0 +1,105 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Filmation graphic table",
+ "description": "The table a Filmation game indexes by. A template entry carries a GRAPHIC NUMBER, and this says what that number is: which sprite draws it, the pixel nudge that lines that bitmap up, and the box it occupies in the world. Written once by sprite_sheet.py and rooms.py out of the extraction; nothing regenerates it, so it is the authoritative source the game is built from and is meant to be edited.",
+ "type": "object",
+ "required": [
+  "graphics"
+ ],
+ "properties": {
+  "sprites": {
+   "type": "string",
+   "description": "The sheet the names below come from, relative to this file."
+  },
+  "graphics": {
+   "type": "object",
+   "description": "Keyed by the graphic's NAME, which is what rooms.json refers to it by. The name is seeded from the sprite when the table is first written and is the file's own after that -- rename a key and the castles that place it, and the GFX_* label the build generates follows. Several graphics may draw one sprite and they are NOT interchangeable: the nudge is per graphic, so two can put the same bitmap four rows apart. A graphic number is a STATE as well as a picture -- one collectable graphic is it lying in a room, another the same one in flight, another the one the bubbles ask for.",
+   "propertyNames": {
+    "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "properties": {
+     "number": {
+      "$ref": "#/definitions/byte",
+      "description": "The graphic number the GAME knows it by: sprite_table, the nudge table and every template record are indexed by it, and parts of the numbering are arithmetic, so it cannot be chosen freely. The name is free; this is not."
+     },
+     "sprite": {
+      "type": "string",
+      "description": "Which sprite draws it, by the path its group tree gives it in sprites.json -- sabreman.legs.1. Absent where the number draws nothing of its own.",
+      "pattern": "^[A-Za-z0-9_]+([.][A-Za-z0-9_]+)*$"
+     },
+     "size": {
+      "type": "object",
+      "description": "The box this graphic occupies: half-widths along the two ground axes and a height, which is what the engine sorts and collides with. Stored UNMIRRORED -- mirroring reflects a piece across the isometric axis, so U and V trade places and the height stays put. Every doorway in the game is placed both ways round, which is why it cannot be stated as drawn.",
+      "required": [
+       "u",
+       "v",
+       "z"
+      ],
+      "properties": {
+       "u": {
+        "$ref": "#/definitions/byte",
+        "description": "Half-width along U, towards the viewer."
+       },
+       "v": {
+        "$ref": "#/definitions/byte",
+        "description": "Half-width along V, away from the viewer."
+       },
+       "z": {
+        "$ref": "#/definitions/byte",
+        "description": "Height, measured up from the piece's own z."
+       }
+      },
+      "additionalProperties": false
+     },
+     "x": {
+      "type": "integer",
+      "description": "Pixel nudge across, added when the sprite is drawn. Harvested by adj.py from a RUNNING game and recoverable no other way, so it is never thrown out on the strength of a click. Absent means none.",
+      "minimum": -128,
+      "maximum": 127
+     },
+     "y": {
+      "type": "integer",
+      "description": "Pixel nudge down. The trim taken off the sprite's blank bottom rows is already folded in.",
+      "minimum": -128,
+      "maximum": 127
+     },
+     "mirrored": {
+      "type": "object",
+      "description": "The nudge to use instead when the piece is drawn mirrored. Only the few graphics that need a different one have it.",
+      "required": [
+       "x",
+       "y"
+      ],
+      "properties": {
+       "x": {
+        "type": "integer",
+        "minimum": -128,
+        "maximum": 127
+       },
+       "y": {
+        "type": "integer",
+        "minimum": -128,
+        "maximum": 127
+       }
+      },
+      "additionalProperties": false
+     }
+    },
+    "additionalProperties": false,
+    "required": [
+     "number"
+    ]
+   }
+  }
+ },
+ "additionalProperties": false,
+ "definitions": {
+  "byte": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 255
+  }
+ }
+}

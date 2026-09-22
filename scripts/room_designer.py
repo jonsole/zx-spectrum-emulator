@@ -43,7 +43,8 @@ EXTENSION = REPO / "vscode-extension"
 PAGE = EXTENSION / "room_view.html"
 
 # The two pure files the page inlines, in the order it names them.
-INLINED = ("room_model.js", "room_render.js")
+INLINED = ("sheet_model.js", "room_model.js", "room_render.js",
+           "specials_model.js")
 
 DEFAULT_PORT = 8760
 
@@ -95,7 +96,7 @@ def data_uri(path):
 SPRITE_FILES = {
     "sheet": "sprites.png",
     "atlas": "sprites.json",
-    "adjust": "sprite_adj.s",
+    "graphics": "graphics.json",
 }
 
 
@@ -116,10 +117,32 @@ def beside(game_dir, name):
 
 
 def sprite_files(atlas, game_dir):
-    """The three artwork files, as the castle names them."""
+    """The two artwork files, as the castle names them.
+
+    The atlas carries the pixel nudges as well, under meta.zx.game.graphics, so
+    the page needs nothing else to draw a room the way the game would.
+    """
     said = (atlas.get("meta") or {}).get("sprites") or {}
     return {key: beside(game_dir, said.get(key) or fallback)
             for key, fallback in SPRITE_FILES.items()}
+
+
+# Knight Lore's collectables. Not part of the castle -- the game keeps them in
+# a table of its own -- so they are a second file, held and saved beside it.
+SPECIALS = "specials.json"
+
+
+def templates_leaf(text):
+    """Which file a rooms.json keeps its templates in, from its own meta.
+
+    Nothing is assumed: a rooms.json that does not say is refused, and so is
+    one that names a file outside its own directory.
+    """
+    said = (json.loads(text).get("meta") or {}).get("templates")
+    if not isinstance(said, str) or not said or "/" in said or "\\" in said:
+        raise SystemExit("rooms.json does not say where its templates are, in "
+                         "meta.templates")
+    return said
 
 
 def boot_for(rooms_json):
@@ -136,8 +159,15 @@ def boot_for(rooms_json):
         "sheet": json.loads(sheet.read_text(encoding="utf-8"))
                  if sheet and sheet.is_file() else None,
         "sheetPng": data_uri(art["sheet"]) if art["sheet"] else None,
-        "adjText": art["adjust"].read_text(encoding="utf-8")
-                   if art["adjust"] and art["adjust"].is_file() else None,
+        "graphics": json.loads(art["graphics"].read_text(encoding="utf-8"))
+                    if art["graphics"] and art["graphics"].is_file() else None,
+        # The templates the rooms place, which are a file of their own. The
+        # designer draws with them but never edits them -- that is the
+        # templates editor's -- so Save here still writes rooms.json alone.
+        "templates": json.loads((game_dir / templates_leaf(text)).read_text(encoding="utf-8"))
+                     if (game_dir / templates_leaf(text)).is_file() else None,
+        "specials": json.loads((game_dir / SPECIALS).read_text(encoding="utf-8"))
+                    if (game_dir / SPECIALS).is_file() else None,
         "room": None,
         "showSave": True,
         "buildLabel": "Build " + game_dir.name,
@@ -162,9 +192,20 @@ HOST_SHIM = """
 window.roomHost = (function () {
   const boot = __BOOT__;
   let pending = null;          // what Save would write, or null when in step
+  let pendingSpecials = null;  // ...and the collectables, when they were touched
   let saved = null;
+
+  function put(name, text) {
+    return fetch(name, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: text
+    }).then(function (response) {
+      if (!response.ok) throw new Error('could not save ' + name + ': ' + response.status);
+    });
+  }
   window.addEventListener('beforeunload', function (event) {
-    if (pending === null) return;
+    if (pending === null && pendingSpecials === null) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -173,22 +214,20 @@ window.roomHost = (function () {
     save: function (text, what, now) {
       pending = text;
       if (!now) return;
-      fetch('rooms.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: text
-      }).then(function (response) {
-        if (!response.ok) {
-          console.error('save failed: ' + response.status);
-          alert('Could not save: ' + response.status);
-          return;
-        }
+      const writes = [put('rooms.json', text)];
+      if (pendingSpecials !== null) writes.push(put('specials.json', pendingSpecials));
+      Promise.all(writes).then(function () {
         pending = null;
+        pendingSpecials = null;
         if (saved) saved();
       }).catch(function (err) { console.error(err); alert(String(err)); });
     },
+    // Held the same way, and written by the same Save. Two files, one button:
+    // they are edited in one page and there is nothing useful about saving
+    // half of it.
+    saveSpecials: function (text) { pendingSpecials = text; },
     onSaved: function (fn) { saved = fn; },
-    unsaved: function () { return pending !== null; },
+    unsaved: function () { return pending !== null || pendingSpecials !== null; },
     games: boot.games || [],
     open: function (game) {
       return fetch('open', {
@@ -285,7 +324,11 @@ class Designer(http.server.SimpleHTTPRequestHandler):
         self._send(404, "no such thing here")
 
     def do_PUT(self):
-        if self.path.split("?")[0] != "/rooms.json":
+        route = self.path.split("?")[0]
+        if route == "/specials.json":
+            self.put_specials()
+            return
+        if route != "/rooms.json":
             self._send(404, "no such thing here")
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -294,7 +337,8 @@ class Designer(http.server.SimpleHTTPRequestHandler):
             # Refuse to write something that is not a castle: a truncated or
             # mangled body would otherwise overwrite the game's rooms.
             atlas = json.loads(body.decode("utf-8"))
-            for key in ("sizes", "sceneryTemplates", "objectTemplates", "rooms"):
+            for key in ("roomDimensions", "sceneryTemplates",
+                        "objectTemplates", "rooms"):
                 if not isinstance(atlas.get(key), list):
                     raise ValueError("no %s array" % key)
         except Exception as err:                            # noqa: BLE001
@@ -303,6 +347,31 @@ class Designer(http.server.SimpleHTTPRequestHandler):
         # Written with newline="" so the page's own line endings survive: it
         # sends back whatever the file had.
         self.rooms_json.write_text(body.decode("utf-8"), encoding="utf-8", newline="")
+        self._send(200, "saved %d bytes" % len(body))
+
+    def put_specials(self):
+        """The collectables, checked the same way the castle is.
+
+        A truncated or mangled body would otherwise overwrite the game's own
+        table, and the build would stop on a table that is not 32 rows rather
+        than on anything that says what happened.
+        """
+        path = self.rooms_json.parent / SPECIALS
+        if not path.is_file():
+            self._send(404, "no %s beside this castle" % SPECIALS)
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length)
+        try:
+            said = json.loads(body.decode("utf-8"))
+            if not isinstance(said.get("collectables"), list):
+                raise ValueError("no collectables array")
+            if not isinstance(said.get("wanted"), list):
+                raise ValueError("no wanted array")
+        except Exception as err:                            # noqa: BLE001
+            self._send(400, "not a %s: %s" % (SPECIALS, err))
+            return
+        path.write_text(body.decode("utf-8"), encoding="utf-8", newline="")
         self._send(200, "saved %d bytes" % len(body))
 
     def do_POST(self):

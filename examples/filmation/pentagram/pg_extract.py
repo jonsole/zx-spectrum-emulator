@@ -27,10 +27,9 @@ tape itself is never needed again and is not in this repository:
                    Note the region holds executable code as well as these
                    tables, so this file is not pure data.
 
-  graphic_map.bin  172 bytes, one per Pentagram graphic number, giving the
-                   index of the sprite in sprite_data.bin that holds its
-                   bitmap, or 255 for the graphic numbers the game does not
-                   use. The game's own table at $6DD7 is 172 pointers into
+  graphic_map.json the sprite each Pentagram graphic number draws, keyed by
+                   number, leaving out the ones the game does not use. The
+                   game's own table at $6DD7 is 172 pointers into
                    sprite memory, reached as graphic * 2 + $6DD7; several
                    graphic numbers share a bitmap, and the rest point at a
                    record whose width byte is zero, which is how the game says
@@ -55,6 +54,7 @@ tape itself is never needed again and is not in this repository:
                    land exactly on its end, which is the check that the walk
                    stayed in step.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -208,6 +208,57 @@ def graphic_map(memory, addresses):
     return bytes(out), resolved
 
 
+def write_graphic_map(gmap):
+    """Which sprite each graphic number draws, merged into graphic_map.json.
+
+    The file holds two halves of one fact: which bitmap a graphic number draws,
+    which is what this writes, and the pixel nudge that lines it up, which
+    adj.py harvests from a RUNNING game and nothing else can produce. So this
+    MERGES -- the nudges already in the file are kept, and only the sprites are
+    rewritten. Re-extracting from a fresh snapshot therefore costs nothing.
+
+    The game's own table is 172 pointers and most of them go nowhere; only the
+    numbers that resolve are written, so the file says what the game actually
+    draws rather than burying it in a run of 255s.
+    """
+    path = HERE / "graphic_map.json"
+    said = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    table = said.get("graphics") or {}
+
+    for number, sprite in enumerate(gmap):
+        entry = dict(table.get(str(number)) or {})
+        if sprite == NO_SPRITE:
+            entry.pop("sprite", None)
+        else:
+            entry["sprite"] = sprite
+        if entry:
+            table[str(number)] = entry
+        else:
+            table.pop(str(number), None)
+
+    drawn = {k: v for k, v in table.items() if "sprite" in v}
+    said["comment"] = ("How each of %s's graphic numbers is drawn: `sprite` is which "
+            "bitmap, out of the game's own table of sprite pointers, and "
+            "`x`/`y` are the pixel nudge that lines that bitmap up with the "
+            "piece's logical position. A graphic number that is not here is "
+            "one the game does not use. The two come from different places "
+            "and only one can be rebuilt: %s reads the sprite pointers "
+            "out of a snapshot, while the nudges are harvested by adj.py "
+            "from a RUNNING game, because %s picks them inside its "
+            "per-graphic update routines rather than reading a table. So "
+            "re-running %s keeps whatever nudges are already here. "
+            "`mirrored` is the pair to use when the piece is drawn the other "
+            "way round, and is given only where it differs. Several graphic "
+            "numbers can share one sprite -- that is the game's own doing -- "
+            "and they are still not interchangeable, because the nudge is "
+            "per graphic number."
+        % ("Pentagram", "pg_extract.py", "Pentagram", "pg_extract.py"))
+    said["game"] = "pentagram"
+    said["count"] = len(gmap)
+    said["graphics"] = {k: table[k] for k in sorted(table, key=int)}
+    path.write_text(json.dumps(said, indent=1) + "\n", encoding="utf-8")
+    return len(drawn), len({v["sprite"] for v in drawn.values()})
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -221,9 +272,9 @@ def main():
     packed, addresses = sprites(memory)
 
     gmap, resolved = graphic_map(memory, addresses)
-    (HERE / "graphic_map.bin").write_bytes(gmap)
-    print("graphic_map.bin  %d bytes, %d graphic numbers resolved to %d sprites"
-          % (len(gmap), resolved, len(set(gmap) - {NO_SPRITE})))
+    used, sprites_used = write_graphic_map(gmap)
+    print("graphic_map.json %d graphic numbers resolved to %d sprites"
+          % (used, sprites_used))
 
     font = memory[FONT_START:FONT_END]
     (HERE / "font.bin").write_bytes(font)

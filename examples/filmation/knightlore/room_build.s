@@ -791,7 +791,7 @@ special_fill:		ld		(ix+OBJ.GFX),a
 					ld		a,(ix+OBJ.BUF_H)
 					or		a
 					jr		nz,.buffered
-					ld		hl,sprite_035
+					ld		hl,sprite_collectable_6
 					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
 .buffered:			call	room_adjust
 					call	object_place

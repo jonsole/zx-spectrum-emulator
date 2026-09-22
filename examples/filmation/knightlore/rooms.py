@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import castle as castle_fmt                                     # noqa: E402
 import graphics as gfx                                          # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -147,6 +148,13 @@ def unpack_offsets(byte):
 # The graphics this castle names. graphics.py is the one place the number and
 # the name meet, so rooms_source.py puts the numbers back by exactly the rule
 # that took them out.
+# The three floor shapes, in the order the game's own table holds them --
+# bits 3 and 4 of a room's attribute byte are an index into it, so the order is
+# the game's and cannot be rearranged. rooms.json names them instead, because
+# "square" says what a room is and "0" does not.
+SHAPE_NAMES = ("square", "narrowU", "narrowV")
+
+
 def json_flags(byte):
     """The game's flags byte, named where we know what a bit means.
 
@@ -190,17 +198,20 @@ def json_entries(entries, flags_at, known, offsets_at=None):
     return out
 
 
-def json_templates(table, count, stride, flags_at, labels, prefix, key,
+def json_templates(table, count, stride, flags_at, labels, prefix,
                    known, offsets_at=None):
-    out = []
+    """The templates, keyed by the name rooms call them by.
+
+    A template IS its pieces. It used to be a record carrying its own name, its
+    index and the address it sat at in the original; the name is the key now,
+    the index was only that key's position, and the address described a game
+    this file long ago stopped being a copy of.
+    """
+    out = {}
     for i in range(count):
         at = w(table + i * 2)
-        out.append({
-            "index": i,
-            "name": "%s_%s" % (prefix, labels[i]),
-            "address": "$%04X" % at,
-            key: json_entries(block(at, stride), flags_at, known, offsets_at),
-        })
+        out["%s_%s" % (prefix, labels[i])] = json_entries(
+            block(at, stride), flags_at, known, offsets_at)
     return out
 
 
@@ -227,7 +238,7 @@ def json_rooms(table, scenery_names, object_names):
         out.append({
             "number": number,
             "ink": attr & 7,
-            "size": attr >> 3,
+            "dimensions": SHAPE_NAMES[attr >> 3],
             "scenery": scenery,
             "objects": objects,
         })
@@ -240,21 +251,28 @@ def write_json(table):
         print("  no %s: graphics will be named by number until the sheet is "
               "unpacked" % gfx.SHEET)
     scenery = json_templates(BG_TYPE_TBL, BG_TYPE_COUNT, SCENERY_STRIDE,
-                             SCENERY_FLAGS_AT, BG_NAMES, "scenery", "blocks",
-                             known)
+                             SCENERY_FLAGS_AT, BG_NAMES, "scenery", known)
     objects = json_templates(BLOCK_TYPE_TBL, BLOCK_TYPE_COUNT, OBJECT_STRIDE,
-                             OBJECT_FLAGS_AT, FG_NAMES, "object", "entries",
-                             known, OBJECT_OFFSETS_AT)
-    castle = json_rooms(table,
-                        {t["index"]: t["name"] for t in scenery},
-                        {t["index"]: t["name"] for t in objects})
+                             OBJECT_FLAGS_AT, FG_NAMES, "object", known,
+                             OBJECT_OFFSETS_AT)
+    # A room names a template by its index into the game's own table, which is
+    # where that name sits in the file: the key order is the table's order.
+    castle = json_rooms(table, dict(enumerate(scenery)),
+                        dict(enumerate(objects)))
 
+    # A template a room uses has to be drawable. Checked rather than recorded:
+    # it is worked out from the rest of the file, so a "used" or "valid" field
+    # would only be something to fall out of date -- and the designer works the
+    # first out for itself anyway.
     named = {s["template"] for r in castle for s in r["scenery"]}
     named |= {o["template"] for r in castle for o in r["objects"]}
-    for group, key in ((scenery, "blocks"), (objects, "entries")):
-        for t in group:
-            t["used"] = t["name"] in named
-            t["valid"] = all(e["graphic"] in set(known.values()) for e in t[key])
+    drawable = set(known.values())
+    for group in (scenery, objects):
+        for name, pieces in group.items():
+            if name in named and not all(p["graphic"] in drawable
+                                         for p in pieces):
+                sys.exit("%s is used by a room but names a graphic the sheet "
+                         "has no number for" % name)
 
     atlas = {
         "meta": {
@@ -270,23 +288,34 @@ def write_json(table):
             "sprites": {
                 "sheet": "sprites.png",
                 "atlas": "sprites.json",
-                "adjust": "sprite_adj.s",
+                "graphics": "graphics.json",
             },
+            # ...and the file its templates are in, which is a file of its own:
+            # a template is castle-wide, not part of a room.
+            "templates": castle_fmt.TEMPLATES,
         },
-        "sizes": [{"index": n,
-                   "u": b(ROOM_SIZE_TBL + n * 3),
-                   "v": b(ROOM_SIZE_TBL + n * 3 + 1),
-                   "z": b(ROOM_SIZE_TBL + n * 3 + 2)} for n in range(3)],
+        "roomDimensions": {
+            SHAPE_NAMES[n]: {"u": b(ROOM_SIZE_TBL + n * 3),
+                             "v": b(ROOM_SIZE_TBL + n * 3 + 1),
+                             "z": b(ROOM_SIZE_TBL + n * 3 + 2)}
+            for n in range(3)},
         "sceneryTemplates": scenery,
         "objectTemplates": objects,
         "rooms": castle,
     }
-    (HERE / "rooms.json").write_text(json.dumps(atlas, indent=1) + "\n",
-                                     encoding="utf-8")
+    # The box each piece occupies belongs to the graphic, not to the template
+    # that places one, so it goes into graphics.json and leaves rooms.json
+    # saying only where the exceptions are. graphics.py has the rule.
+    kept = gfx.fold_sizes(HERE, atlas)
+
+    # Two files, one job each: the rooms, and the templates they place.
+    castle_fmt.write_castle(HERE, atlas)
     placed = sum(len(o["positions"]) for r in castle for o in r["objects"])
     print("rooms.json: %d rooms, %d scenery entries, %d object entries placing %d objects"
           % (len(castle), sum(len(r["scenery"]) for r in castle),
              sum(len(r["objects"]) for r in castle), placed))
+    print("graphics.json: %d graphics given a size; %d template entries keep "
+          "a box of their own" % (len(gfx.sizes(HERE)), len(kept)))
 
 
 def main():

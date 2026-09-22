@@ -27,18 +27,30 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const model = require('./room_model');
+const { openTemplatesOf } = require('./templates_view');
 
 const VIEW_TYPE = 'zxspectrum.roomDesign';
 
 // The two pure files the page inlines, in the order its markers name them.
-const INLINED = ['room_model.js', 'room_render.js'];
+const INLINED = ['sheet_model.js', 'room_model.js', 'room_render.js',
+                 'specials_model.js'];
+
+// Knight Lore's collectables, which are not in rooms.json because they are not
+// in the room data: the game keeps them in a table of its own. Pentagram has
+// none, and then the designer simply never offers the tab.
+//
+// It is a second document, so an edit to it is a WorkspaceEdit on that file
+// and it gets its own dirty mark and its own undo. That is the honest shape --
+// two files changed is two files to save -- and it is why the page sends
+// collectables back through a message of their own rather than with the
+// castle.
+const SPECIALS = 'specials.json';
 
 // What a game keeps beside its rooms.json, which the file itself names in
 // meta.sprites -- room_model.js's spriteFilesOf, with the names it always used
-// as the fallback. All three are gitignored except the adjustments: the
-// artwork is Ultimate's, and build.py unpacks it from the packed file the
-// first time it runs. Without it the page still opens and still edits, and
-// says it has no sheet rather than drawing an empty room.
+// as the fallback. The atlas carries the pixel nudges too, so there is no
+// third file to find. Without a sheet the page still opens and still edits,
+// and says it has no sheet rather than drawing an empty room.
 //
 // A named path is relative to the rooms.json, and may not climb out of its
 // directory: the file is data, and data does not get to point the editor at
@@ -48,6 +60,30 @@ function beside(here, name) {
   const inside = path.relative(here, full);
   if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return null;
   return full;
+}
+
+// ...and the ones that are JSON, which is most of them now.
+function readJsonIfThere(file) {
+  const text = readIfThere(file);
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// The castle's templates, which are a file of their own: from the open
+// document if the templates editor has it -- unsaved edits and all, so the
+// room is drawn from what is being edited -- or else from the disk.
+function templatesOf(file) {
+  const open = vscode.workspace.textDocuments.find(
+    (doc) => doc.uri.fsPath.toLowerCase() === file.toLowerCase());
+  const text = open ? open.getText() : readIfThere(file);
+  try {
+    return text ? model.parseTemplates(text) : null;
+  } catch (err) {
+    return null;                        // mid-keystroke in the text editor
+  }
 }
 
 function readIfThere(file) {
@@ -81,16 +117,34 @@ function bootFor(document, room) {
     return { error: String(err && err.message ? err.message : err) };
   }
   const named = model.spriteFilesOf(atlas);
+  // The templates, wherever rooms.json says they are -- and they have to say
+  // they are these rooms' own. Neither file is left to be guessed.
+  const templatesName = model.templatesFileOf(atlas);
+  const templatesFile = templatesName && beside(here, templatesName);
+  if (!templatesFile) {
+    return { error: path.basename(document.uri.fsPath) + ' does not say where its ' +
+                    'templates are, in meta.templates' };
+  }
+  const templates = templatesOf(templatesFile);
+  if (!templates) {
+    return { error: templatesName + ', which it names as its templates, is missing ' +
+                    'or not readable' };
+  }
+  const mismatch = model.pairProblem(path.basename(document.uri.fsPath), atlas,
+                                     path.basename(templatesFile), templates);
+  if (mismatch) return { error: mismatch };
   const atlasFile = beside(here, named.atlas);
   const sheetFile = beside(here, named.sheet);
-  const adjustFile = beside(here, named.adjust);
+  const graphicsFile = beside(here, named.graphics);
   const sheet = atlasFile && readIfThere(atlasFile);
   return {
     atlas: atlas,
     eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
     sheet: sheet ? JSON.parse(sheet) : null,
     sheetPng: sheetFile && imageUri(sheetFile),
-    adjText: adjustFile && readIfThere(adjustFile),
+    graphics: graphicsFile && readJsonIfThere(graphicsFile),
+    templates: templates,
+    specials: readJsonIfThere(path.join(here, SPECIALS)),
     room: room === undefined ? null : room,
     // The editor saves the document, so the page needs no Save of its own.
     showSave: false,
@@ -116,14 +170,19 @@ function pageHtml(document, room) {
   const bootJs = 'window.roomHost = (function () {\n' +
     '  const vscode = acquireVsCodeApi();\n' +
     '  let reload = null;\n' +
+    '  let goto = null;\n' +
     '  window.addEventListener("message", function (event) {\n' +
     '    if (event.data && event.data.type === "reload" && reload) reload(event.data.boot);\n' +
+    '    if (event.data && event.data.type === "goto" && goto) goto(event.data.room);\n' +
     '  });\n' +
     '  return {\n' +
     '    boot: ' + JSON.stringify(boot).replace(/</g, '\\u003c') + ',\n' +
     '    save: function (text, what) { vscode.postMessage({ type: "save", text: text, what: what }); },\n' +
+    '    saveSpecials: function (text) { vscode.postMessage({ type: "specials", text: text }); },\n' +
     '    onReload: function (fn) { reload = fn; },\n' +
     '    roomChanged: function (n) { vscode.postMessage({ type: "room", room: n }); },\n' +
+    '    openTemplates: function () { vscode.postMessage({ type: "templates" }); },\n' +
+    '    onGoto: function (fn) { goto = fn; },\n' +
     '    build: function () { vscode.postMessage({ type: "build" }); }\n' +
     '  };\n' +
     '})();\n';
@@ -156,10 +215,15 @@ function brokenHtml(document, why) {
 // document cannot: which room the page is looking at, and which text this
 // side wrote -- so that the document's own change event can tell an edit the
 // page made from one that came from anywhere else.
+// The open designers, by document, so the templates panel opened from the
+// command palette can still steer the one that is showing that castle.
+const sessions = new Map();
+
 class RoomSession {
   constructor(document, panel) {
     this.document = document;
     this.panel = panel;
+    sessions.set(document.uri.toString(), this);
     this.room = null;
     this.written = null;
     this.disposables = [];
@@ -176,8 +240,34 @@ class RoomSession {
   fromPage(message) {
     if (!message) return;
     if (message.type === 'save') this.write(message.text);
+    else if (message.type === 'specials') this.writeSpecials(message.text);
     else if (message.type === 'build') this.build();
     else if (message.type === 'room') this.room = message.room;
+    else if (message.type === 'templates') openTemplatesOf(this.document.uri);
+  }
+
+  // The collectables, into their own file. Opening it as a document rather
+  // than writing the bytes is what gives the change an undo and a dirty mark
+  // of its own -- the same bargain the castle gets, and the reason moving a
+  // collectable does not quietly rewrite a file you were not looking at.
+  //
+  // `written` is not tracked for this one: the page is not reloaded from it,
+  // so an edit coming back cannot loop.
+  async writeSpecials(text) {
+    const file = path.join(path.dirname(this.document.uri.fsPath), SPECIALS);
+    if (!fs.existsSync(file)) return;
+    const uri = vscode.Uri.file(file);
+    let document;
+    try {
+      document = await vscode.workspace.openTextDocument(uri);
+    } catch (err) {
+      vscode.window.showErrorMessage('Could not open ' + SPECIALS + ': ' + err.message);
+      return;
+    }
+    if (document.getText() === text) return;
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(uri, new vscode.Range(0, 0, document.lineCount, 0), text);
+    await vscode.workspace.applyEdit(edit);
   }
 
   // The whole document, replaced. It is a big file and this is a big edit, but
@@ -197,6 +287,12 @@ class RoomSession {
   }
 
   documentChanged(event) {
+    const theirs = event.document.uri.fsPath.toLowerCase();
+    if (theirs === this.templatesFile()) {
+      const boot = bootFor(this.document, this.room);
+      if (!boot.error) this.panel.webview.postMessage({ type: 'reload', boot: boot });
+      return;
+    }
     if (event.document.uri.toString() !== this.document.uri.toString()) return;
     const text = this.document.getText();
     if (text === this.written) return;      // our own edit coming back
@@ -228,9 +324,31 @@ class RoomSession {
     ));
   }
 
+  // Where this castle's templates are, from what rooms.json says now.
+  templatesFile() {
+    let named = null;
+    try {
+      named = model.templatesFileOf(JSON.parse(this.document.getText()));
+    } catch (err) {
+      named = null;
+    }
+    const file = named && beside(path.dirname(this.document.uri.fsPath), named);
+    return file ? file.toLowerCase() : null;
+  }
+
+  // The templates panel asked for a room: bring this panel forward on it.
+  goto(number) {
+    this.room = number;
+    this.panel.reveal(undefined, true);
+    this.panel.webview.postMessage({ type: 'goto', room: number });
+  }
+
   dispose() {
     for (const item of this.disposables) item.dispose();
     this.disposables = [];
+    if (sessions.get(this.document.uri.toString()) === this) {
+      sessions.delete(this.document.uri.toString());
+    }
   }
 }
 
@@ -258,6 +376,21 @@ function activateRoomDesigner(context) {
       const file = uri || await pickRooms();
       if (!file) return;
       await vscode.commands.executeCommand('vscode.openWith', file, VIEW_TYPE);
+    }),
+    // The castle's templates, from the palette, in a window of their own.
+    vscode.commands.registerCommand('zxspectrum.openRoomTemplates', async (uri) => {
+      const file = uri || await pickRooms();
+      if (file) await openTemplatesOf(file);
+    }),
+    // A room clicked in the templates editor: the designer on it, opening one
+    // if none is, or moving the one already open.
+    vscode.commands.registerCommand('zxspectrum.showRoomOf', async (uri, number) => {
+      let session = sessions.get(uri.toString());
+      if (!session) {
+        await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+        session = sessions.get(uri.toString());
+      }
+      if (session) session.goto(number);
     })
   );
 }

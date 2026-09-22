@@ -1,0 +1,71 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Knight Lore collectables",
+ "description": "Where each of the thirty-two collectables lies when a game starts, and the order the wizard asks for them in. specials_source.py turns this into specials_gen.s, which knightlore.s INCLUDEs.",
+ "type": "object",
+ "required": ["collectables", "wanted"],
+ "properties": {
+  "comment": {
+   "type": "string",
+   "description": "Prose for whoever opens the file. Nothing reads it."
+  },
+  "wantedComment": {
+   "type": "string",
+   "description": "Prose about `wanted`, kept beside it. Nothing reads it."
+  },
+  "game": {
+   "type": "string",
+   "description": "Which game this belongs to. Only Knight Lore has a collectables table."
+  },
+  "collectables": {
+   "type": "array",
+   "description": "The thirty-two rows of special_where_start, in the game's own order. special_init copies the whole table over special_where in one LDIR at the start of every game, so it is a fixed length -- adding or removing a row changes what the game reads, and specials_source.py stops rather than emit a short table.",
+   "minItems": 32,
+   "maxItems": 32,
+   "items": {
+    "type": "object",
+    "required": ["room", "u", "v", "z"],
+    "properties": {
+     "room": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "The room it starts in. Knight Lore's map is a 16 x 16 grid and the number is a row and a column, so $6D is row 6, column 13."
+     },
+     "u": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "World U, towards the viewer. A room's floor is centred on 128."
+     },
+     "v": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "World V, away from the viewer. A room's floor is centred on 128."
+     },
+     "z": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "World Z, up. The floor of a room is at its size's floorZ, so a collectable resting on the floor sits at that height, not at 0."
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  "wanted": {
+   "type": "array",
+   "description": "The fourteen kinds the wizard asks for, in order. special_init turns the list round four to seven places before a game, so this is only where the turning starts. SPECIAL_WANTED in the game is 14 and the two have to agree.",
+   "minItems": 14,
+   "maxItems": 14,
+   "items": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 7,
+    "description": "A kind, 0 to 7 -- special.s matches it against a collectable's graphic AND 7."
+   }
+  }
+ },
+ "additionalProperties": false
+}

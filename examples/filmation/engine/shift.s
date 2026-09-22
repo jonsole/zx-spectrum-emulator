@@ -88,7 +88,7 @@ shift_arena_next:	DW		shift_arena
 ; exactly how Head Over Heels does all of its rotation, with a single Buffer at
 ; $BF20.
 ;
-; Sized for the largest rotated form in the sprite set: sprite_071, the arch
+; Sized for the largest rotated form in the sprite set: door.castle.1, the arch
 ; leaf, three bytes wide and 52 rows, which rotates to four columns of mask and
 ; data -- 416 bytes. Like the arena, this wants re-measuring if the artwork
 ; grows, and like the arena it will not say so itself.

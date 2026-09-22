@@ -13,7 +13,7 @@
 // the depth tests are the worked examples in engine/depth.md, numbers and
 // outcomes as that document states them -- not captured from this code.
 //
-// The last group runs against the real sprite_adj.s and sprites.json. The
+// The last group runs against the two games' real sprites.json. The
 // sheet is gitignored and only exists after a build, so those skip without it.
 
 const assert = require('assert');
@@ -47,6 +47,13 @@ function skip(why) {
   const err = new Error(why);
   err.skip = true;
   throw err;
+}
+
+// A castle is its rooms and the templates they place, merged the way both
+// editors merge them.
+function castleOf(game) {
+  return m.withTemplates(m.parseAtlas(fileIn(game, 'rooms.json')),
+                         m.parseTemplates(fileIn(game, 'templates.json')));
 }
 
 function fileIn(game, name) {
@@ -250,50 +257,51 @@ test('depthOrder: the background run comes first, in room order', function () {
 // --- the per-graphic nudge ------------------------------------------------
 
 for (const game of GAMES) {
-  test(game + ': sprite_adj.s reads back the way room_adjust reads it', function () {
-    const adj = r.parseSpriteAdj(fileIn(game, 'sprite_adj.s'));
-    // The table is page-aligned and indexed by the graphic number itself, but
-    // it is only as long as the game has graphics -- Knight Lore's covers all
-    // 256, Pentagram's stops at 172. What has to hold is that it reaches every
-    // graphic the rooms actually draw.
-    const atlas = m.parseAtlas(fileIn(game, 'rooms.json'));
-    let highest = 0;
+  test(game + ': the sheet\'s nudges read back the way room_adjust reads them', function () {
+    const adj = r.readSpriteAdj(graphicsFor(game));
+    const atlas = castleOf(game);
+    const numbers = m.graphicNumbers(sheetFor(game), graphicsFor(game));
+    const boxes = m.graphicBoxes(sheetFor(game), graphicsFor(game));
+
+    // Every graphic a room actually draws has to have an answer, even if that
+    // answer is no nudge at all -- a missing one would put the piece out by up
+    // to twenty pixels.
+    let nudged = 0;
     for (const room of atlas.rooms) {
-      for (const piece of m.expandRoom(atlas, room, m.graphicNumbers(sheetFor(game)))) {
-        if (piece.graphic > highest) highest = piece.graphic;
+      for (const piece of m.expandRoom(atlas, room, numbers, boxes)) {
+        const at = r.adjFor(adj, piece.graphic, piece.mirrored);
+        assert.strictEqual(typeof at.x, 'number', 'graphic ' + piece.graphic);
+        assert.strictEqual(typeof at.y, 'number', 'graphic ' + piece.graphic);
+        if (at.x || at.y) nudged++;
       }
     }
-    assert.ok(adj.index.length > highest,
-      'the index stops at ' + adj.index.length + ', but a room draws graphic ' + highest);
-    // "Entry 0 is no nudge at all, so a graphic nothing knows about indexes to
-    // it harmlessly."
-    assert.strictEqual(adj.pairs[0], 0);
-    assert.strictEqual(adj.pairs[1], 0);
-    assert.ok(adj.pairs.length >= 2 && adj.pairs.length % 2 === 0,
-      'the pairs table is whole pairs');
-    assert.ok(adj.mirror.size > 0, 'some graphics want a different nudge mirrored');
+    assert.ok(nudged > 20, 'only ' + nudged + ' pieces are nudged at all');
 
-    // A graphic no game uses indexes to entry 0 and so is not nudged at all.
-    const unused = adj.index.indexOf(0);
-    assert.ok(unused >= 0, 'some graphic indexes to entry 0');
-    assert.deepStrictEqual(r.adjFor(adj, unused, false), { x: 0, y: 0 });
-    // ...and so does one past the end of a short table, rather than throwing.
+    // A graphic the harvest never saw is not nudged, rather than throwing.
     assert.deepStrictEqual(r.adjFor(adj, 255, false), { x: 0, y: 0 });
+    assert.deepStrictEqual(r.adjFor(adj, 255, true), { x: 0, y: 0 });
   });
 
-  test(game + ': bit 7 only changes the nudge when the piece is mirrored', function () {
-    const adj = r.parseSpriteAdj(fileIn(game, 'sprite_adj.s'));
-    let differs = null;
-    for (const graphic of adj.mirror.keys()) {
-      if (adj.index[graphic] & r.ADJ_MIRROR_DIFFERS) { differs = graphic; break; }
+  test(game + ': only the four that differ have a mirrored pair', function () {
+    const sheet = sheetFor(game);
+    const graphics = graphicsFor(game);
+    const said = graphics.graphics;
+    const adj = r.readSpriteAdj(graphics);
+    let differ = 0;
+    // Keyed by name in the file, by the number the game knows it by here.
+    for (const name of Object.keys(said)) {
+      const g = said[name].number;
+      const plain = r.adjFor(adj, g, false);
+      const flipped = r.adjFor(adj, g, true);
+      if (plain.x !== flipped.x || plain.y !== flipped.y) differ++;
+      else {
+        assert.deepStrictEqual(flipped, plain,
+          'graphic ' + g + ' should read the same either way round');
+      }
     }
-    assert.ok(differs !== null, 'found a graphic whose mirror differs');
-    const plain = r.adjFor(adj, differs, false);
-    const flipped = r.adjFor(adj, differs, true);
-    // The plain way round masks bit 7 off and uses the index as it stands.
-    const at = adj.index[differs] & 0x7F;
-    assert.deepStrictEqual(plain, { x: adj.pairs[at], y: adj.pairs[at + 1] });
-    assert.notDeepStrictEqual(flipped, plain, 'mirrored takes the other pair');
+    // Both games harvested exactly four, which is what let the game pack the
+    // rest behind one index.
+    assert.strictEqual(differ, 4, 'graphics whose mirror wants a different nudge');
   });
 }
 
@@ -303,15 +311,23 @@ function sheetFor(game) {
   return JSON.parse(fileIn(game, 'sprites.json'));
 }
 
+function graphicsFor(game) {
+  const file = path.join(FILMATION, game, 'graphics.json');
+  if (!fs.existsSync(file)) skip(game + '/graphics.json is not here');
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
 for (const game of GAMES) {
   test(game + ': every graphic a room draws is on the sheet', function () {
-    const atlas = m.parseAtlas(fileIn(game, 'rooms.json'));
+    const atlas = castleOf(game);
     const sheet = sheetFor(game);
-    const index = r.sheetIndex(sheet);
-    const numbers = m.graphicNumbers(sheet);
+    const graphics = graphicsFor(game);
+    const index = r.sheetIndex(sheet, graphics);
+    const numbers = m.graphicNumbers(sheet, graphics);
+    const boxes = m.graphicBoxes(sheet, graphics);
     const missing = new Set();
     for (const room of atlas.rooms) {
-      for (const piece of m.expandRoom(atlas, room, numbers)) {
+      for (const piece of m.expandRoom(atlas, room, numbers, boxes)) {
         if (!r.spriteFor(index, piece.graphic)) missing.add(piece.graphic);
       }
     }
@@ -320,31 +336,41 @@ for (const game of GAMES) {
 
   test(game + ': a sprite is as wide as its width in bytes says', function () {
     const sheet = sheetFor(game);
-    const index = r.sheetIndex(sheet);
+    const graphics = graphicsFor(game);
+    const index = r.sheetIndex(sheet, graphics);
     let checked = 0;
     for (let graphic = 0; graphic < 256; graphic++) {
       const art = r.spriteFor(index, graphic);
       if (!art) continue;
-      const sprite = index.sprites[index.graphicMap[graphic]];
-      assert.strictEqual(art.width, sprite.width * 8,
-        'graphic ' + graphic + ': ' + sprite.label);
-      assert.strictEqual(art.height, sprite.height);
+      // The rectangle the sheet gives it is the sprite's own, so these
+      // agree by construction -- what this checks is that spriteFor found the
+      // right sprite for the graphic, through two files rather than one.
+      const sprite = index.byName.get(art.sprite);
+      assert.ok(sprite, 'graphic ' + graphic + ' -> ' + art.sprite);
+      assert.strictEqual(art.width, sprite.w, 'graphic ' + graphic);
+      assert.strictEqual(art.height, sprite.h);
+      assert.strictEqual(sprite.w % 8, 0,
+        'a sprite is a whole number of bytes wide: ' + art.sprite);
       checked++;
     }
     assert.ok(checked > 50, 'checked ' + checked + ' graphics');
   });
 
   test(game + ': a real room draws every piece it expands to', function () {
-    const atlas = m.parseAtlas(fileIn(game, 'rooms.json'));
+    const atlas = castleOf(game);
     const sheet = sheetFor(game);
-    const adj = r.parseSpriteAdj(fileIn(game, 'sprite_adj.s'));
+    const graphics = graphicsFor(game);
+    const adj = r.readSpriteAdj(graphicsFor(game));
+    const index = r.sheetIndex(sheet, graphics);
     // The busiest room in the game, which is the one worth looking at.
     let busiest = atlas.rooms[0];
     for (const room of atlas.rooms) {
       if (m.poolUsed(atlas, room) > m.poolUsed(atlas, busiest)) busiest = room;
     }
-    const pieces = m.expandRoom(atlas, busiest, m.graphicNumbers(sheet));
-    const list = r.drawList(pieces, sheet, adj);
+    const pieces = m.expandRoom(atlas, busiest,
+                                m.graphicNumbers(sheet, graphics),
+                                m.graphicBoxes(sheet, graphics));
+    const list = r.drawList(pieces, index, adj);
 
     assert.strictEqual(list.length, pieces.length, 'nothing is dropped');
     for (const item of list) {
@@ -367,11 +393,44 @@ test('knightlore: the arch over a doorway is drawn behind what walks through it'
     // An arch is scenery the knight passes behind, so it is NOT background: it
     // keeps its place in the sort. A block standing in the doorway, nearer
     // along U, has to come out after it.
-    const atlas = m.parseAtlas(fileIn('knightlore', 'rooms.json'));
-    const arch = atlas.sceneryTemplates[0];         // scenery_arch_n
-    assert.ok(!m.isBackgroundTemplate('knightlore', arch.name),
+    const atlas = castleOf('knightlore');
+    assert.ok(atlas.sceneryTemplates.scenery_arch_n, 'the arch is there');
+    assert.ok(!m.isBackgroundTemplate('knightlore', 'scenery_arch_n'),
       'an arch is not background');
   });
+
+// --- the floor --------------------------------------------------------------
+
+test('the floor lines up with what stands on it', () => {
+  // A sprite at floor height is placed by project(), which wraps as the engine
+  // does; the floor is drawn unwrapped so it does not fold. For anything on a
+  // floor the two are the same point.
+  for (const z of [128, 140, 176]) {
+    for (const [u, v] of [[64, 64], [128, 128], [192, 64], [72, 184], [100, 150]]) {
+      const sprite = r.project({ u: u, v: v, z: z }, null);
+      const floor = r.floorPoint(u, v, z);
+      assert.strictEqual(floor.x & 0xFF, sprite.x, 'x at ' + [u, v, z]);
+      assert.strictEqual(floor.y & 0xFF, sprite.y, 'y at ' + [u, v, z]);
+    }
+  }
+});
+
+test('a floor reaches the cells its room does', () => {
+  const grid = { cell: m.CELL, origin: m.CELL_ORIGIN, count: m.CELLS, half: m.HALF_CELL };
+  assert.strictEqual(r.floorCells({ u: 64, v: 64, z: 128 }, grid).length, 64, 'square');
+  assert.strictEqual(r.floorCells({ u: 32, v: 64, z: 128 }, grid).length, 32, 'narrow along U');
+  assert.strictEqual(r.floorCells({ u: 64, v: 32, z: 128 }, grid).length, 32, 'narrow along V');
+  const outline = r.floorOutline({ u: 64, v: 64, z: 128 });
+  assert.strictEqual(outline.length, 4);
+  // A diamond: U + V across, so the corners where one axis is at its least
+  // and the other at its most sit on the room's centre line, one above the
+  // other, and the other two are its left and right points.
+  assert.strictEqual(outline[1].x, 128);
+  assert.strictEqual(outline[3].x, 128);
+  assert.ok(outline[1].y !== outline[3].y);
+  assert.strictEqual(outline[0].x, 0);
+  assert.strictEqual(outline[2].x, 256);
+});
 
 if (failures) {
   console.log(failures + ' failed');

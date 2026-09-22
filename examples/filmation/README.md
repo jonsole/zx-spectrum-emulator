@@ -35,8 +35,10 @@ finding your way about; the ordinary build leaves it out.
 
 The rooms themselves are edited in the room designer rather than by hand --
 see [docs/room-designer.md](../../docs/room-designer.md). Each game's
-`rooms.json` is the editable form of its castle, and `build.py` turns it into
-`room_data.s`; open it in VS Code, or serve it with
+`rooms.json` and `templates.json` are the editable form of its castle -- the
+rooms, and the castle-wide templates they place -- and `build.py` turns the two
+into `room_data.s`. Open `rooms.json` in VS Code for the room designer and
+`templates.json` for the templates editor, or serve the rooms with
 `python scripts/room_designer.py`.
 
 That needs `sjasmplus` — `tools/sjasmplus/sjasmplus.exe`, or anywhere on PATH.
@@ -323,7 +325,7 @@ template's offsets byte.
 The templates name Knight Lore's graphic numbers, so `sprite_table` is indexed
 by those rather than by our own: 256 entries, several of which point at the
 same bitmap. The game's table at `$7112` maps 186 valid graphics onto the 103
-sprites we hold, and `graphic_map.bin` carries that mapping. At 512 bytes the
+sprites we hold, and `graphics.json` carries that mapping. At 512 bytes the
 table no longer fits the `ld h,high sprite_table` a 128-entry one allowed, so
 `object_update` doubles a pre-halved base instead -- the same trick the view
 buffer's row address uses, and it needs the same `ALIGN 512`.
@@ -339,9 +341,18 @@ routine loads a fixed pair, `adj.py` has that from the code too (`FROM_CODE`),
 and every graphic both read from the code and harvested agrees. The few body
 facings the game never shows borrow their other side's (`STANDS_IN`).
 
-The harvest is `sprite_adj.s`, committed because it cannot be rebuilt without
-the game. `sprite_source.py` folds in the blank rows it takes off the bottom of
-each sprite and writes `sprite_adj_gen.s`, which is what the build includes.
+The harvest goes into `graphics.json`, beside the sprite each graphic number
+draws and the box it occupies: all facts about that number, all keyed by it.
+The nudge is the one that cannot be rebuilt, which is why the file is carried
+and why `adj.py` merges into it rather than replacing it -- a graphic no
+session saw drawn keeps the nudge it had.
+
+The blank rows the sheet takes off the bottom of a sprite are folded into the
+nudge there too, once, by `sprite_sheet.py` as the sheet is written. So
+`adj.py` adds them when it writes a fresh harvest and takes them off when it
+reads the last one back, using the `trim` each sprite carries in
+`sprites.json`; `sprite_source.py` just emits what it finds and writes
+`sprite_adj_gen.s`, which is what the build includes.
 
 Forcing a room needs no register writes: the frame loop ends with `JP $AFBD` at
 `$B085`, one instruction past the room-entry call, so pointing it at `$AFBA`
@@ -366,13 +377,39 @@ Nothing here is hand-written:
 
 | | |
 |---|---|
-| `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin`, `graphic_map.bin`, `font.bin` and `specials.bin` (where the collectables start, and the order the wizard wants them) |
-| `knightlore/rooms.py` | `room_data.bin` -> `room_data.s`, and reports the fullest room, which sizes the object pool |
-| `knightlore/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.bin` -> `sprites.png` and `sprites.json`, the sprite sheet: an atlas the extension's graphics panel opens, and the artwork's home |
-| `knightlore/sprite_source.py` | `sprites.png` + `sprites.json` -> `sprite_data.s` and `sprite_table.s`; with `sprite_adj.s`, -> `sprite_adj_gen.s` |
+| `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin` and `font.bin` packed as the game holds them, and `graphic_map.json` and `specials.json` (where the collectables start, and the order the wizard wants them) as data |
+| `knightlore/rooms.py` | `room_data.bin` -> `rooms.json` and `templates.json`, and folds each piece's box into `graphics.json`; reports the fullest room, which sizes the object pool |
+| `knightlore/rooms_source.py` | `rooms.json` + `templates.json` -> `room_data.s` |
+| `knightlore/specials_source.py` | `specials.json` -> `specials_gen.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `specials.bin` twice |
+| `knightlore/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.json` -> `sprites.png` and `sprites.json`, the artwork's home, and `graphics.json`, the table saying which sprite each graphic number draws; it reads the nudges back out of `graphics.json` rather than trusting the extraction, so remaking the sheet never costs a harvest |
+| `knightlore/sprite_source.py` | `sprites.png` + `sprites.json` + `graphics.json` -> `sprite_data.s`, `sprite_table.s`, `sprite_adj_gen.s` and `graphics_gen.s` (a `GFX_*` EQU a graphic, so the sources name graphics instead of numbering them) |
 | `knightlore/font_sheet.py` | `font.bin` -> `font.png` and `font.json`, the font sheet: forty 8x8 characters, the digits and letters given to the panel as fonts so it labels each cell with what it draws |
 | `knightlore/font_source.py` | `font.png` + `font.json` -> `font.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `font.bin` |
-| `knightlore/adj.py` | a running game -> `sprite_adj.s` (committed: it cannot be rebuilt without the game) |
+| `knightlore/adj.py` | a running game -> the nudges in `graphics.json` (merged in, and carried: they cannot be rebuilt without the game) |
+
+The repository carries no `.bin` at all. What `kl_extract.py` pulls out in the
+game's own packed form is decoded into JSON -- `rooms.json`, `templates.json`, `sprites.json`,
+`graphics.json`, `specials.json` -- and that JSON is what is carried, what the
+build reads, and what you edit.
+
+`sprite_data.bin`, `room_data.bin`, `font.bin` and `graphic_map.json` are
+`kl_extract.py`'s own and are gitignored. None is needed to build: a tree with
+none of them assembles the game byte for byte. `graphic_map.json` is the one
+that looks like it might be -- it holds the graphic to *packed* sprite index,
+which no other file can give, since `sprites.json` is in the group tree's order
+-- but it is wanted only to remake the sheet, and `kl_extract.py` writes it
+again whenever you re-extract.
+
+Each of those files is one thing. `sprites.json` is the artwork: where every
+sprite sits in `sprites.png`, in a tree of named groups. `graphics.json` is the
+table the game indexes by: for each graphic number, which sprite draws it, the
+pixel nudge that lines that bitmap up, and the box it occupies in the world.
+`rooms.json` is the rooms and `templates.json` the castle-wide pieces they place; both name graphics rather than numbering them. A
+box is the graphic's, so it is stated once in `graphics.json` rather than on
+every template entry that places one -- stored unmirrored, because mirroring
+swaps a piece's U and V. The packed files stay on the machine that
+extracted them and are never needed again: a fresh checkout builds both games
+byte for byte without one.
 
 `build.py` runs `rooms.py`, `sprite_source.py` and `font_source.py` whenever
 their inputs change, and the matching `*_sheet.py` the first time it finds no

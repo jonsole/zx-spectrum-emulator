@@ -53,7 +53,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 PACKED = HERE / "sprite_data.bin"
-GRAPHIC_MAP = HERE / "graphic_map.bin"
+# What the extraction left: which sprite each graphic number draws. Only
+# read when sprites.json is first built -- after that the atlas is the
+# authoritative copy and this file is not needed again.
+GRAPHIC_MAP = HERE / "graphic_map.json"
+# How many graphic numbers the game has, and so how wide the table is.
+GRAPHIC_COUNT = 172
 SHEET = HERE / "sprites.png"
 ATLAS = HERE / "sprites.json"
 
@@ -131,7 +136,7 @@ SABREMAN_POOF = tuple(range(64, 71))    # both halves wear the puff he dies in
 # as it changed and still wearing the last routine's pair. The puff is the
 # case that shows: $C111 calls $C77A on every one of its frames, which is
 # always -12, -4, but the harvest had three different pairs across 64-70 and
-# the puff hopped about as it played. These override sprite_adj.s.
+# the puff hopped about as it played. These override graphic_map.json's nudges.
 FIXED_NUDGES = {g: (-12, -4) for g in range(64, 72)}    # $C77A
 # The crumbling blocks and the conveyors: $D2AD-$D2FF all call $C75F, -16, -8,
 # every turn. 137-139 are only ever seen crumbling, so the harvest had them at
@@ -187,7 +192,7 @@ NAME_SEPARATOR = "."
 # those is the game's own "draw nothing" is not yet established, so nothing
 # is claimed here.
 BLANK_GRAPHIC = None
-NO_SPRITE = 0xFF                        # what graphic_map.bin puts in the gaps
+NO_SPRITE = 0xFF                        # a graphic number the game does not use
 
 
 def read_sprites(packed):
@@ -242,6 +247,57 @@ def flatten(bands, prefix=""):
     return out
 
 
+def read_graphics(path, atlas):
+    """The graphic table: which sprite each number draws, and its pixel nudge.
+
+    Two sources, because the two halves come from different places. The sprite
+    comes from the extraction, in graphic_map.json, which kl_extract.py writes
+    out of the game's own table of sprite pointers. The nudge comes from adj.py
+    and a RUNNING game, and cannot be rebuilt from anything -- so it is taken
+    from the sprites.json already here, if there is one, and only falls back on
+    the extraction file.
+
+    That order is what makes this safe to run twice. sprites.json is the
+    authoritative form once it exists; re-running this rebuilds the picture and
+    the layout without throwing the harvest away.
+    """
+    table = {}
+
+    said = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    for number, entry in (said.get("graphics") or {}).items():
+        table[int(number)] = dict(entry)
+
+    if atlas.is_file():
+        try:
+            known = json.loads(atlas.read_text(encoding="utf-8"))
+            known = known["meta"]["zx"]["game"]["graphics"]
+        except (ValueError, OSError, KeyError):
+            known = {}
+        for number, entry in (known or {}).items():
+            spot = table.setdefault(int(number), {})
+            for key in ("x", "y", "mirrored", "note"):
+                if key in entry:
+                    spot[key] = entry[key]
+                else:
+                    spot.pop(key, None)
+
+    return table
+
+
+def sprite_list(table, count):
+    """...and the sprite half of it as a plain list, NO_SPRITE in the gaps.
+
+    The band logic below indexes by graphic number, so it wants a list; the
+    file is keyed and leaves the unused numbers out, which is what makes it
+    readable.
+    """
+    out = [NO_SPRITE] * count
+    for number, entry in table.items():
+        if 0 <= number < count and isinstance(entry.get("sprite"), int):
+            out[number] = entry["sprite"]
+    return out
+
+
 def bands_of(sprites, graphic_map):
     """The band each sprite belongs to, by the first one that names it."""
     bands = []                          # (path, title, [sprite index, ...])
@@ -257,6 +313,42 @@ def bands_of(sprites, graphic_map):
     # Whatever no band asked for goes in the last one, in sprite order.
     bands[-1][2].extend(n for n in range(len(sprites)) if n not in placed)
     return bands
+
+
+def trim_blank_rows(sprites, graphic_map):
+    """Take the blank rows off the bottom of every sprite that may lose them.
+
+    A sprite hangs from its bottom row, so blank rows there cost bytes in the
+    image and buy nothing -- 38 of Knight Lore's 103 have some, and they are
+    776 bytes. This is done HERE, as the sheet is made, so the picture and the
+    rectangles in it are already the sprite the game draws. It used to happen
+    later, when the sheet was assembled, which left sprites.json describing
+    something the build then quietly changed.
+
+    WHOLE_SPRITE_GRAPHICS is what may not lose them: four places draw a sprite
+    without asking object_update how tall it is, so each knows its own height
+    and a trim would move what it draws.
+
+    The rows taken are kept on the sprite. Nothing downstream needs them -- the
+    nudges in the graphic table are already right for the trimmed sprite -- but
+    adj.py does, because it harvests against the ORIGINAL game, where the
+    sprite still has them.
+    """
+    keep = {graphic_map[g] for g in WHOLE_SPRITE_GRAPHICS
+            if graphic_map[g] != NO_SPRITE}
+    for n, sprite in enumerate(sprites):
+        taken = 0
+        # One row always stays: a sprite of none would draw 256.
+        while (n not in keep
+               and len(sprite["mask"]) - taken > 1
+               and not any(sprite["mask"][-1 - taken])
+               and not any(sprite["data"][-1 - taken])):
+            taken += 1
+        if taken:
+            sprite["mask"] = sprite["mask"][:-taken]
+            sprite["data"] = sprite["data"][:-taken]
+        sprite["trim"] = taken
+        sprite["h"] = len(sprite["mask"])
 
 
 def lay_out(sprites, bands):
@@ -308,7 +400,37 @@ def draw(sprites, bands, size):
     return sheet
 
 
-def build_atlas(sprites, bands, graphic_map, size):
+# A graphic's NAME, which rooms.json refers to it by.
+#
+# It is seeded from the sprite that draws it -- with the graphic number added
+# when several graphics share one bitmap, because they are not interchangeable
+# -- and then it is STORED. That is the whole point: once written it belongs to
+# the graphic, not to the mapping, so re-pointing a graphic at a different
+# sprite changes what it draws and leaves every castle that names it alone.
+#
+# Derived names were the alternative and they do not work. A castle names
+# graphics; if the name is recomputed from the map, then moving one graphic
+# renames it and every room that placed it dangles, for a change that was only
+# ever meant to say "draw this with a different bitmap".
+def named_graphics(table, label_of, named):
+    out = {}
+    for number in sorted(table):
+        entry = dict(table[number])
+        if not entry:
+            continue
+        if "name" not in entry:
+            n = entry.get("sprite")
+            if isinstance(n, int):
+                entry["name"] = (label_of(n) if len(named.get(n, ())) == 1
+                                 else "%s.g%d" % (label_of(n), number))
+        # Name first, because it is what a reader wants first.
+        out[str(number)] = {key: entry[key] for key in
+                            ("name", "sprite", "x", "y", "mirrored", "note")
+                            if key in entry}
+    return out
+
+
+def build_atlas(sprites, bands, graphic_map, table, size):
     """The atlas the graphics panel reads, with what the build needs alongside.
 
     `frames` and `meta` are the panel's own shape -- see buildAtlas in the
@@ -388,18 +510,36 @@ def build_atlas(sprites, bands, graphic_map, size):
                 "groups": groups,
                 "sprites": entries,
                 "game": {
-                    "_comment": "Written by sprite_sheet.py, read by "
-                                "sprite_source.py; the graphics panel ignores "
-                                "it. A sprite's width is in bytes, so it is "
-                                "width * 8 pixels wide.",
+                    "_comment": "The build's half of the atlas; the "
+                                "graphics panel ignores it. sprite_sheet.py "
+                                "writes this file ONCE, out of the extraction, "
+                                "and nothing regenerates it afterwards: it is "
+                                "the authoritative source the game is built "
+                                "from, and is meant to be edited. A sprite's "
+                                "width is in bytes, so it is width * 8 pixels "
+                                "wide.",
                     "palette": {name: list(colour)
                                 for name, colour in PALETTE.items()},
-                    "graphicMap": [None if n == NO_SPRITE else n
-                                   for n in graphic_map],
+                    # The whole graphic table, keyed by number: what the
+                    # graphic is CALLED, which sprite draws it, and the pixel
+                    # nudge that lines that bitmap up. This is the
+                    # authoritative copy -- nothing regenerates sprites.json
+                    # once it exists, so an edit here is what the build reads.
+                    # How many graphic numbers the game HAS, which is
+                    # not how many it uses: sprite_table has to be
+                    # this long or a room naming a graphic past the
+                    # end would read off it.
+                    "graphicCount": GRAPHIC_COUNT,
+                    "graphics": named_graphics(table, label_of, named),
                     "blankGraphic": BLANK_GRAPHIC,
                     "wholeSpriteGraphics": list(WHOLE_SPRITE_GRAPHICS),
                     "animations": [list(frames) for frames in ANIMATIONS],
-                    "fixedNudges": {str(g): list(p) for g, p in FIXED_NUDGES.items()},
+                    # Numeric keys, in numeric order: JavaScript reorders
+                    # integer-like keys that way whatever order they went
+                    # in, so writing them sorted is what lets the designer
+                    # save this file back without churning it.
+                    "fixedNudges": {str(g): list(FIXED_NUDGES[g])
+                                    for g in sorted(FIXED_NUDGES)},
                     "rotationBuffers": [
                         {"label": label, "sprite": sprite, "graphics": list(graphics)}
                         for label, sprite, graphics in ROTATION_BUFFERS
@@ -415,12 +555,15 @@ def main():
         raise SystemExit(f"{PACKED.name} is missing -- run pg_extract.py against "
                          "your own copy of Pentagram to produce it")
     sprites = read_sprites(PACKED.read_bytes())
-    graphic_map = GRAPHIC_MAP.read_bytes()
+    table = read_graphics(GRAPHIC_MAP, ATLAS)
+    graphic_map = sprite_list(table, GRAPHIC_COUNT)
+    trim_blank_rows(sprites, graphic_map)
     bands = bands_of(sprites, graphic_map)
     size = lay_out(sprites, bands)
     draw(sprites, bands, size).save(SHEET)
     ATLAS.write_text(
-        json.dumps(build_atlas(sprites, bands, graphic_map, size), indent=1) + "\n",
+        json.dumps(build_atlas(sprites, bands, graphic_map, table, size),
+                   indent=1) + "\n",
         encoding="utf-8")
     print(f"Wrote {SHEET.name} ({size[0]}x{size[1]}, {len(sprites)} sprites) "
           f"and {ATLAS.name}")

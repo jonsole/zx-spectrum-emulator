@@ -21,6 +21,7 @@ const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const m = require('../room_model');
+const sheetModel = require('../sheet_model');
 
 const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation');
 const GAMES = ['knightlore', 'pentagram'];
@@ -49,10 +50,16 @@ function skip(why) {
   throw err;
 }
 
+// A castle is two files: the rooms, and the templates they place. Both
+// editors work on the two merged, and so do these tests.
 function atlasFor(game) {
-  const file = path.join(FILMATION, game, 'rooms.json');
-  if (!fs.existsSync(file)) skip(game + '/rooms.json is not here');
-  return m.parseAtlas(fs.readFileSync(file, 'utf8'));
+  return m.withTemplates(m.parseAtlas(textFor(game)), m.parseTemplates(templatesText(game)));
+}
+
+function templatesText(game) {
+  const file = path.join(FILMATION, game, 'templates.json');
+  if (!fs.existsSync(file)) skip(game + '/templates.json is not here');
+  return fs.readFileSync(file, 'utf8');
 }
 
 function textFor(game) {
@@ -64,6 +71,12 @@ function textFor(game) {
 function sheetFor(game) {
   const file = path.join(FILMATION, game, 'sprites.json');
   if (!fs.existsSync(file)) skip(game + '/sprites.json has not been unpacked');
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function graphicsFor(game) {
+  const file = path.join(FILMATION, game, 'graphics.json');
+  if (!fs.existsSync(file)) skip(game + '/graphics.json is not here');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
@@ -79,10 +92,19 @@ function sourceFor(game) {
 // newline, and will rewrite it whenever room_data.bin moves on. If the
 // designer wrote a different shape, every save would rewrite the whole file and
 // the two generators would fight over it.
+// ...and templates.json, the same way.
+for (const game of GAMES) {
+  test(game + ': writing the templates back gives the same bytes', function () {
+    const text = templatesText(game);
+    const atlas = m.withTemplates(m.parseAtlas(textFor(game)), m.parseTemplates(text));
+    assert.strictEqual(m.serializeTemplates(atlas, m.eolOf(text)), text);
+  });
+}
+
 for (const game of GAMES) {
   test(game + ': writing it back gives the same bytes', function () {
     const text = textFor(game);
-    const again = m.serializeAtlas(m.parseAtlas(text), m.eolOf(text));
+    const again = m.serializeAtlas(atlasFor(game), m.eolOf(text));
     if (again === text) return;
     // Twelve thousand lines is no use in a failure, so say where they part.
     const was = text.split(/\r?\n/);
@@ -111,16 +133,22 @@ const TEST_NUMBERS = new Map([['a_graphic', 7], ['drawn_by_something_else', 1]])
 function unpack(entry, position, floorZ) {
   const atlas = {
     meta: { game: 'knightlore' },
-    sizes: [{ index: 0, u: 64, v: 64, z: floorZ }],
-    sceneryTemplates: [],
-    objectTemplates: [{ index: 0, name: 'object_test', entries: [entry] }],
+    roomDimensions: { square: { u: 64, v: 64, z: floorZ } },
+    sceneryTemplates: {},
+    objectTemplates: { object_test: [entry] },
     rooms: []
   };
-  const room = { number: 0, ink: 0, size: 0, scenery: [], objects: [
+  const room = { number: 0, ink: 0, dimensions: 'square',
+    scenery: [], objects: [
     { template: 'object_test', positions: [position] }
   ] };
-  return m.expandRoom(atlas, room, TEST_NUMBERS)[0];
+  return m.expandRoom(atlas, room, TEST_NUMBERS, TEST_BOXES)[0];
 }
+
+// The entry below states a box of its own, which is the override an entry may
+// carry -- so these tests need no graphics.json behind them. An empty map is
+// what "the graphic says nothing" looks like.
+const TEST_BOXES = new Map();
 
 // The entry those tests place, with whatever nudge they are about.
 function anEntry(nudge) {
@@ -208,7 +236,7 @@ for (const game of GAMES) {
     const rooms = atlas.rooms.filter(function (r) {
       return r.scenery.length > 0;
     });
-    const first = m.expandRoom(atlas, rooms[0], m.graphicNumbers(sheetFor(game)))
+    const first = m.expandRoom(atlas, rooms[0], m.graphicNumbers(sheetFor(game), graphicsFor(game)))
       .filter(function (p) { return p.kind === 'scenery'; });
     assert.ok(first.length > 0, 'the first room has scenery');
     for (const piece of first) {
@@ -318,19 +346,20 @@ for (const game of GAMES) {
     const atlas = atlasFor(game);
     const blocks = templatesFromSource(sourceFor(game));
     let checked = 0;
-    for (const template of atlas.sceneryTemplates) {
+    for (const name of Object.keys(atlas.sceneryTemplates)) {
+      const pieces = atlas.sceneryTemplates[name];
       // rooms_source.py labels them bg_ (Knight Lore) or scn_ (Pentagram).
-      const stem = template.name.replace(/^scenery_/, '');
+      const stem = name.replace(/^scenery_/, '');
       const rows = blocks.get('bg_' + stem) || blocks.get('scn_' + stem) ||
-                   blocks.get(template.name);
+                   blocks.get(name);
       if (!rows) continue;                  // a shared template, emitted once
-      const wanted = m.isBackgroundTemplate(game, template.name);
-      for (let i = 0; i < rows.length && i < template.blocks.length; i++) {
+      const wanted = m.isBackgroundTemplate(game, name);
+      for (let i = 0; i < rows.length && i < pieces.length; i++) {
         const flags = rows[i][rows[i].length - 1];
         assert.strictEqual(!!(flags & BACKGROUND_FLAG), wanted,
-          template.name + ' piece ' + i + ': background');
-        assert.strictEqual(!!(flags & FLIP_FLAG), template.blocks[i].flags.mirrored,
-          template.name + ' piece ' + i + ': flip');
+          name + ' piece ' + i + ': background');
+        assert.strictEqual(!!(flags & FLIP_FLAG), pieces[i].flags.mirrored,
+          name + ' piece ' + i + ': flip');
         checked++;
       }
     }
@@ -356,14 +385,15 @@ for (const game of GAMES) {
 // --- changing a room ------------------------------------------------------
 
 function knightLoreAtlas() {
-  return m.parseAtlas(textFor('knightlore'));
+  return atlasFor('knightlore');
 }
 
 test('addObject: fills a group of the same template before starting another',
   function () {
     // A group holds one template and up to eight positions, because the repeat
     // count is the bottom three bits of the group byte.
-    const room = { number: 0, ink: 0, size: 0, scenery: [], objects: [] };
+    const room = { number: 0, ink: 0, dimensions: 'square',
+      scenery: [], objects: [] };
     for (let i = 0; i < m.GROUP_LIMIT; i++) {
       m.addObject(room, 'object_block', { u: i, v: 0, z: 0 });
     }
@@ -437,38 +467,47 @@ test('renameTemplate: refuses a name already taken', function () {
 test('setTemplateField: edits a field, and refuses one that is not there',
   function () {
     const atlas = knightLoreAtlas();
-    const template = atlas.sceneryTemplates[0];
-    const was = template.blocks[0].flags.mirrored;
+    const template = atlas.sceneryTemplates.scenery_arch_n;
+    const was = template[0].flags.mirrored;
 
     m.setTemplateField(template, 'blocks', 0, 'flags.mirrored', !was);
-    assert.strictEqual(template.blocks[0].flags.mirrored, !was);
-    m.setTemplateField(template, 'blocks', 0, 'sizeU', 9);
-    assert.strictEqual(template.blocks[0].sizeU, 9);
+    assert.strictEqual(template[0].flags.mirrored, !was);
+    m.setTemplateField(template, 'blocks', 0, 'u', 9);
+    assert.strictEqual(template[0].u, 9);
 
     // The raise is added into Z and masked with $FC, so it only ever holds
     // multiples of four however it is asked for.
-    const object = atlas.objectTemplates[0];
+    const object = atlas.objectTemplates.object_block;
     m.setTemplateField(object, 'entries', 0, 'offsets.raiseZ', 50);
-    assert.strictEqual(object.entries[0].offsets.raiseZ, 48);
+    assert.strictEqual(object[0].offsets.raiseZ, 48);
 
     assert.strictEqual(m.setTemplateField(template, 'blocks', 0, 'nonsense', 1), null);
     assert.strictEqual(m.setTemplateField(template, 'blocks', 0, 'flags.nope', 1), null);
-    assert.strictEqual(m.setTemplateField(template, 'blocks', 9, 'sizeU', 1), null);
+    assert.strictEqual(m.setTemplateField(template, 'blocks', 9, 'u', 1), null);
+
+    // The box belongs to the GRAPHIC and lives in graphics.json, so it is not
+    // a field of the entry any more -- asking to set one here would quietly
+    // give this template an override of its own.
+    assert.strictEqual(m.setTemplateField(template, 'blocks', 0, 'sizeU', 9), null);
+    assert.strictEqual(template[0].sizeU, undefined);
+    assert.strictEqual(
+      m.setTemplateField(atlas.objectTemplates.object_block, 'entries', 0,
+                         'sizeZ', 9), null);
   });
 
 test('setTemplateGraphic: only a name the table has a number for', function () {
   const atlas = knightLoreAtlas();
-  const template = atlas.objectTemplates[0];
-  const numbers = m.graphicNumbers(sheetFor('knightlore'));
+  const template = atlas.objectTemplates.object_block;
+  const numbers = m.graphicNumbers(sheetFor('knightlore'), graphicsFor('knightlore'));
   const names = Array.from(numbers.keys());
 
   assert.ok(m.setTemplateGraphic(numbers, template, 'entries', 0, names[3]));
-  assert.strictEqual(template.entries[0].graphic, names[3]);
+  assert.strictEqual(template[0].graphic, names[3]);
   // A graphic with no number cannot be built, so it is refused rather than
   // written and discovered at the next build.
   assert.strictEqual(
     m.setTemplateGraphic(numbers, template, 'entries', 0, 'no_such_graphic'), null);
-  assert.strictEqual(template.entries[0].graphic, names[3], 'left alone');
+  assert.strictEqual(template[0].graphic, names[3], 'left alone');
 });
 
 test('checkAtlas: catches what the emitters assert', function () {
@@ -492,13 +531,16 @@ test('checkAtlas: catches what the emitters assert', function () {
 
 test('refreshUsage: says which templates no room names', function () {
   const atlas = knightLoreAtlas();
-  m.refreshUsage(atlas);
-  const unused = atlas.objectTemplates.filter(function (t) { return !t.used; });
+  // Worked out from the rooms rather than read off a flag in the file: a
+  // template is its pieces now, and `used` was only something to fall out of
+  // date with the rest of the castle.
+  const named = m.refreshUsage(atlas);
+  const unused = Object.keys(atlas.objectTemplates).filter(function (name) {
+    return !named.has(name);
+  });
   // Two are in the game and never placed: a fire standing still, and the
   // spikes raised on something. rooms_source.py leaves both out.
-  assert.strictEqual(unused.length, 2, unused.map(function (t) {
-    return t.name;
-  }).join(', '));
+  assert.strictEqual(unused.length, 2, unused.join(', '));
 });
 
 // --- the artwork a castle names -------------------------------------------
@@ -537,6 +579,232 @@ test('spriteFilesOf: falls back a key at a time', function () {
   assert.deepStrictEqual(junk, m.SPRITE_FILES);
 });
 
+// --- the templates panel's operations --------------------------------------
+
+test('doorways are decided by position, not by name', function () {
+  // Knight Lore's room_build.s tests the index, so renaming an arch must not
+  // stop the designer seeing a doorway the game still sees.
+  const atlas = knightLoreAtlas();
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_arch_e'), 'e');
+  m.renameTemplate(atlas, 'scenery_arch_e', 'east_way_out');
+  assert.strictEqual(m.doorwayOf(atlas, 'east_way_out'), 'e');
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_high_arch_e'), 'e');
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_high_arch_e_base'), null);
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_walls_0'), null);
+});
+
+test('a rename keeps the template where it is in the table', function () {
+  // The position is the game's own number for it.
+  const atlas = knightLoreAtlas();
+  const before = Object.keys(atlas.objectTemplates);
+  const at = before.indexOf('object_guard_ew');
+  assert.ok(m.renameTemplate(atlas, 'object_guard_ew', 'object_sentry') > 0);
+  assert.strictEqual(Object.keys(atlas.objectTemplates)[at], 'object_sentry');
+  assert.strictEqual(Object.keys(atlas.objectTemplates).length, before.length);
+});
+
+test('a template name has to be able to be a label', function () {
+  const atlas = knightLoreAtlas();
+  assert.ok(m.templateNameProblem(atlas, 'Has Spaces'));
+  assert.ok(m.templateNameProblem(atlas, '9lives'));
+  assert.ok(m.templateNameProblem(atlas, 'scenery_arch_n'), 'taken');
+  assert.ok(m.templateNameProblem(atlas, 'object_block'), 'taken in the other table');
+  assert.strictEqual(m.templateNameProblem(atlas, 'object_new_thing'), null);
+  assert.strictEqual(m.renameTemplate(atlas, 'object_block', 'Bad Name'), null);
+});
+
+test('a new template goes on the end of its table', function () {
+  const atlas = knightLoreAtlas();
+  const count = Object.keys(atlas.objectTemplates).length;
+  assert.strictEqual(m.newTemplate(atlas, 'objectTemplates', 'object_new'), count);
+  assert.deepStrictEqual(atlas.objectTemplates.object_new, []);
+  assert.strictEqual(Object.keys(atlas.objectTemplates)[count], 'object_new');
+});
+
+test('the object table stops at 32', function () {
+  // Five bits of a room's group byte.
+  const atlas = knightLoreAtlas();
+  let made = 0;
+  while (m.newTemplate(atlas, 'objectTemplates', 'object_extra_' + made) !== null) {
+    made++;
+  }
+  assert.strictEqual(Object.keys(atlas.objectTemplates).length, 32);
+});
+
+test('a duplicate is a copy of the pieces, on the end', function () {
+  const atlas = knightLoreAtlas();
+  const at = m.duplicateTemplate(atlas, 'sceneryTemplates', 'scenery_arch_n', 'my_arch');
+  assert.strictEqual(at, Object.keys(atlas.sceneryTemplates).length - 1);
+  assert.deepStrictEqual(atlas.sceneryTemplates.my_arch, atlas.sceneryTemplates.scenery_arch_n);
+  atlas.sceneryTemplates.my_arch[0].u = 1;
+  assert.notStrictEqual(atlas.sceneryTemplates.scenery_arch_n[0].u, 1, 'not shared');
+  // ...and it is not a doorway, however much it looks like one: the game
+  // decides that by position, and this one is past the arches.
+  assert.strictEqual(m.doorwayOf(atlas, 'my_arch'), null);
+});
+
+test('only an unused template on the end of its table can be deleted', function () {
+  const atlas = knightLoreAtlas();
+  // In use.
+  assert.ok(/places it/.test(m.deleteProblem(atlas, 'sceneryTemplates', 'scenery_arch_n')));
+  // Unused, but not last: two object templates no room places sit mid-table.
+  const unused = Object.keys(atlas.objectTemplates).filter(function (name) {
+    return !m.refreshUsage(atlas).has(name);
+  });
+  assert.ok(unused.length);
+  const last = Object.keys(atlas.objectTemplates).slice(-1)[0];
+  for (const name of unused) {
+    if (name !== last) {
+      assert.ok(/renumber/.test(m.deleteProblem(atlas, 'objectTemplates', name)), name);
+    }
+  }
+  // Made here, unused, last: it can go, and nothing moves.
+  const before = Object.keys(atlas.objectTemplates);
+  m.newTemplate(atlas, 'objectTemplates', 'object_scratch');
+  assert.strictEqual(m.deleteProblem(atlas, 'objectTemplates', 'object_scratch'), null);
+  assert.ok(m.deleteTemplate(atlas, 'objectTemplates', 'object_scratch'));
+  assert.deepStrictEqual(Object.keys(atlas.objectTemplates), before);
+});
+
+test('pieces can be added, moved and removed', function () {
+  const atlas = knightLoreAtlas();
+  m.newTemplate(atlas, 'sceneryTemplates', 'my_wall');
+  const wall = atlas.sceneryTemplates.my_wall;
+  assert.strictEqual(m.addPiece(wall, 'sceneryTemplates', 'scenery.block.g7'), 0);
+  assert.strictEqual(m.addPiece(wall, 'sceneryTemplates', 'door.castle.1'), 1);
+  assert.deepStrictEqual(Object.keys(wall[0]).sort(), ['flags', 'graphic', 'u', 'v', 'z']);
+  assert.ok(m.movePiece(wall, 1, 0));
+  assert.strictEqual(wall[0].graphic, 'door.castle.1');
+  assert.ok(m.removePiece(wall, 0));
+  assert.deepStrictEqual(wall.map(function (p) { return p.graphic; }), ['scenery.block.g7']);
+  assert.strictEqual(m.removePiece(wall, 5), false);
+  assert.strictEqual(m.movePiece(wall, 0, 3), false);
+
+  // An object piece has a nudge instead of a place.
+  m.newTemplate(atlas, 'objectTemplates', 'object_mine');
+  m.addPiece(atlas.objectTemplates.object_mine, 'objectTemplates', 'scenery.block.g7');
+  assert.deepStrictEqual(Object.keys(atlas.objectTemplates.object_mine[0]).sort(),
+                         ['flags', 'graphic', 'offsets']);
+});
+
+test('the rooms a template is used in, in order', function () {
+  const atlas = knightLoreAtlas();
+  const rooms = m.roomsUsing(atlas, 'scenery_arch_n');
+  assert.ok(rooms.length > 5);
+  assert.strictEqual(rooms[0], 0);
+  assert.deepStrictEqual(rooms, rooms.slice().sort(function (a, b) { return a - b; }));
+  assert.deepStrictEqual(m.roomsUsing(atlas, 'no_such_template'), []);
+});
+
+test('a scenery piece moves anywhere its three bytes reach', function () {
+  const atlas = knightLoreAtlas();
+  const arch = atlas.sceneryTemplates.scenery_arch_n;
+  const was = { u: arch[0].u, v: arch[0].v, z: arch[0].z };
+  assert.ok(m.shiftPiece(arch, 'sceneryTemplates', 0, { u: 3, v: -2, z: 8 }));
+  assert.deepStrictEqual({ u: arch[0].u, v: arch[0].v, z: arch[0].z },
+                         { u: was.u + 3, v: was.v - 2, z: was.z + 8 });
+  // ...and no further: a byte.
+  m.shiftPiece(arch, 'sceneryTemplates', 0, { u: 1000, v: -1000 });
+  assert.strictEqual(arch[0].u, 255);
+  assert.strictEqual(arch[0].v, 0);
+  assert.strictEqual(m.shiftPiece(arch, 'sceneryTemplates', 9, { u: 1 }), false);
+});
+
+test('an object piece moves only by its nudge', function () {
+  // It takes its place from the room; all it has of its own is half a cell
+  // along U and V, and a raise the game masks to a multiple of four.
+  const atlas = knightLoreAtlas();
+  m.newTemplate(atlas, 'objectTemplates', 'object_mine');
+  const mine = atlas.objectTemplates.object_mine;
+  m.addPiece(mine, 'objectTemplates', 'scenery.block.g7');
+
+  assert.ok(m.shiftPiece(mine, 'objectTemplates', 0, { u: 8 }));
+  assert.strictEqual(mine[0].offsets.halfU, true);
+  assert.strictEqual(mine[0].offsets.halfV, false);
+  m.shiftPiece(mine, 'objectTemplates', 0, { u: -8, v: 8 });
+  assert.strictEqual(mine[0].offsets.halfU, false);
+  assert.strictEqual(mine[0].offsets.halfV, true);
+
+  m.shiftPiece(mine, 'objectTemplates', 0, { z: 4 });
+  m.shiftPiece(mine, 'objectTemplates', 0, { z: 4 });
+  assert.strictEqual(mine[0].offsets.raiseZ, 8);
+  m.shiftPiece(mine, 'objectTemplates', 0, { z: 3 });
+  assert.strictEqual(mine[0].offsets.raiseZ % 4, 0, 'kept to a multiple of four');
+  m.shiftPiece(mine, 'objectTemplates', 0, { z: -1000 });
+  assert.strictEqual(mine[0].offsets.raiseZ, 0);
+});
+
+test('a drag measures from where the piece was picked up', function () {
+  const atlas = knightLoreAtlas();
+  const arch = atlas.sceneryTemplates.scenery_arch_n;
+  const from = JSON.parse(JSON.stringify(arch[0]));
+  // Three moves of a drag, each the total so far, land where the last says --
+  // not at the sum of all three.
+  m.shiftPiece(arch, 'sceneryTemplates', 0, { u: 2 }, from);
+  m.shiftPiece(arch, 'sceneryTemplates', 0, { u: 4 }, from);
+  m.shiftPiece(arch, 'sceneryTemplates', 0, { u: 5 }, from);
+  assert.strictEqual(arch[0].u, from.u + 5);
+});
+
+test('a drag lands the piece under the pointer', function () {
+  // Checked through the renderer's own projection, so the inverse is held to
+  // what is actually drawn rather than to its own algebra. Across is exact;
+  // down is to the nearest two world units, because the projection halves
+  // V - U, so it may land one pixel short and never more.
+  const render = require('../room_render');
+  for (const at of [{ u: 120, v: 130, z: 128 }, { u: 121, v: 130, z: 128 }]) {
+    const a = render.project(at, null);
+    for (let dx = -9; dx <= 9; dx++) {
+      for (let dy = -7; dy <= 7; dy++) {
+        const move = m.screenToWorld(dx, dy);
+        assert.ok(Number.isInteger(move.u) && Number.isInteger(move.v));
+        const b = render.project({ u: at.u + move.u, v: at.v + move.v, z: at.z }, null);
+        assert.strictEqual(b.x - a.x, dx, 'across, ' + dx + ',' + dy);
+        assert.ok(Math.abs((b.y - a.y) - dy) <= 1, 'down, ' + dx + ',' + dy);
+      }
+    }
+  }
+});
+
+test('a world move the screen can show comes back exactly', function () {
+  const render = require('../room_render');
+  const at = { u: 120, v: 130, z: 128 };
+  for (const [du, dv] of [[4, 0], [0, 4], [6, -6], [-10, 2], [16, 16], [3, 5]]) {
+    const a = render.project(at, null);
+    const b = render.project({ u: at.u + du, v: at.v + dv, z: at.z }, null);
+    assert.deepStrictEqual(m.screenToWorld(b.x - a.x, b.y - a.y), { u: du, v: dv },
+                           'moved ' + du + ',' + dv);
+  }
+});
+
+test('the two files have to name each other, and nothing is assumed', function () {
+  const rooms = { meta: { templates: 'templates.json' } };
+  const templates = { meta: { rooms: 'rooms.json' } };
+  assert.strictEqual(m.pairProblem('rooms.json', rooms, 'templates.json', templates), null);
+
+  // Neither name is supplied when a file leaves it out.
+  assert.strictEqual(m.templatesFileOf({ meta: {} }), null);
+  assert.strictEqual(m.roomsFileOf({ meta: {} }), null);
+  assert.ok(/meta\.templates/.test(
+    m.pairProblem('rooms.json', { meta: {} }, 'templates.json', templates)));
+  assert.ok(/meta\.rooms/.test(
+    m.pairProblem('rooms.json', rooms, 'templates.json', { meta: {} })));
+
+  // Two castles' files paired by mistake.
+  assert.ok(/not templates\.json/.test(m.pairProblem(
+    'rooms.json', { meta: { templates: 'other.json' } }, 'templates.json', templates)));
+  assert.ok(/belongs to other_rooms\.json/.test(m.pairProblem(
+    'rooms.json', rooms, 'templates.json', { meta: { rooms: 'other_rooms.json' } })));
+});
+
+for (const game of GAMES) {
+  test(game + ': the shipped pair names each other', function () {
+    const rooms = m.parseAtlas(textFor(game));
+    const templates = m.parseTemplates(templatesText(game));
+    assert.strictEqual(m.pairProblem('rooms.json', rooms, 'templates.json', templates), null);
+  });
+}
+
 // --- the two namers agree --------------------------------------------------
 
 // The names come out of the sprite sheet twice: examples/filmation/graphics.py
@@ -548,7 +816,8 @@ for (const game of GAMES) {
   test(game + ': the designer names graphics exactly as graphics.py does',
     function () {
       const sheet = sheetFor(game);
-      const mine = m.graphicNames(sheet);
+      const graphics = graphicsFor(game);
+      const mine = m.graphicNames(sheet, graphics);
       const theirs = pythonNames(game);
       if (theirs === null) skip('python could not run graphics.py');
 
@@ -571,6 +840,68 @@ function pythonNames(game) {
     'import json, sys; sys.path.insert(0, r"' + FILMATION + '"); ' +
     'import graphics; ' +
     'print(json.dumps(graphics.names(r"' + here + '")))';
+  for (const python of [
+    path.join(FILMATION, '..', '..', '.venv-win', 'Scripts', 'python.exe'), 'python'
+  ]) {
+    const done = childProcess.spawnSync(python, ['-c', script], { encoding: 'utf8' });
+    if (done.status === 0 && done.stdout) return JSON.parse(done.stdout);
+  }
+  return null;
+}
+
+// --- ...and so do the two box rules ----------------------------------------
+
+// The box a template entry occupies is worked out twice as well:
+// examples/filmation/graphics.py does it for the build, room_model.js for the
+// designer. Both read graphics.json, both swap U and V for a mirrored piece,
+// and both let an entry override with one of its own. A disagreement would
+// draw a room whose pieces sort and collide differently from the built game's,
+// which is exactly the kind of thing nobody notices until a wall is walked
+// through.
+for (const game of GAMES) {
+  test(game + ': the designer boxes graphics exactly as graphics.py does',
+    function () {
+      const atlas = atlasFor(game);
+      const boxes = m.graphicBoxes(sheetFor(game), graphicsFor(game));
+      const theirs = pythonBoxes(game);
+      if (theirs === null) skip('python could not run graphics.py');
+
+      const apart = [];
+      let checked = 0;
+      for (const key of ['sceneryTemplates', 'objectTemplates']) {
+        for (const name of Object.keys(atlas[key])) {
+          atlas[key][name].forEach(function (entry, i) {
+            const mine = sheetModel.boxOf(boxes, entry);
+            const said = theirs[name + '#' + i];
+            checked++;
+            if (!mine || !said || mine.u !== said[0] || mine.v !== said[1] ||
+                mine.z !== said[2]) {
+              apart.push(name + ' entry ' + i + ' (' + entry.graphic +
+                         '): js ' + JSON.stringify(mine) +
+                         ', py ' + JSON.stringify(said));
+            }
+          });
+        }
+      }
+      assert.deepStrictEqual(apart.slice(0, 8), []);
+      assert.ok(checked > 100, 'checked ' + checked + ' entries');
+    });
+}
+
+// graphics.py's own answer, asked of it directly: every template entry's box,
+// keyed by the template it is in and where in it.
+function pythonBoxes(game) {
+  const here = path.join(FILMATION, game);
+  const script =
+    'import json, sys; sys.path.insert(0, r"' + FILMATION + '"); ' +
+    'import graphics, castle; ' +
+    'atlas = json.load(open(r"' + path.join(here, 'rooms.json') + '")); ' +
+    'sizes = graphics.sizes(r"' + here + '"); ' +
+    'out = {}; ' +
+    '[out.__setitem__(t + "#" + str(i), [b["u"], b["v"], b["z"]]) ' +
+    ' for _g, t, i, e in castle.placements(atlas) ' +
+    ' for b in [graphics.box_of(sizes, e, t)]]; ' +
+    'print(json.dumps(out))';
   for (const python of [
     path.join(FILMATION, '..', '..', '.venv-win', 'Scripts', 'python.exe'), 'python'
   ]) {

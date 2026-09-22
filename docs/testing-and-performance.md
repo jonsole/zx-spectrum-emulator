@@ -89,6 +89,26 @@ tape is, including the repo's own, which ROM it gets, the launch configuration
 it makes, telling a `.z80` source file from a snapshot, and finding the screen
 in a `.sna`, a compressed `.z80` and a tape's loading screen).
 
+The Filmation designers have four of their own, described in
+[room-designer.md](room-designer.md):
+`node vscode-extension/tests/room_model_test.js` and `room_render_test.js` (what
+a room expands to and where each piece lands),
+`node vscode-extension/tests/specials_model_test.js` (Knight Lore's
+collectables, with the game's own constants read out of `special.s` rather than
+repeated here), `node vscode-extension/tests/graphic_map_model_test.js` (which
+sprite each graphic number draws, held against what `sprite_sheet.py` carried
+into the sheet), and `room_page_test.js` with `graphic_map_page_test.js`, which
+assemble each page the way its hosts do and open it against the real files --
+the pages are built by string replacement, so a mistake in one is a syntax
+error in a file that exists only at runtime and nothing else would catch it.
+
+The JSON schemas the extension registers for those files are checked from
+Python, because `jsonschema` is in the repo's venv:
+`.venv-win\Scripts\python.exe vscode-extension/tests/schemas_test.py`. It holds
+each schema against every real file it describes and then against a
+deliberately broken copy, which must fail it -- a schema that merely looks
+plausible puts errors on a file that is right, and you learn to ignore them.
+
 Above those sits the full [ZEXALL/ZEXDOC](https://github.com/agn453/ZEXALL)
 exerciser, labelled `slow` and excluded from the routine run: over a billion
 emulated instructions per pass.

@@ -1,4 +1,4 @@
-"""Harvest Knight Lore's per-graphic pixel adjustments into sprite_adj.s.
+"""Harvest Knight Lore's per-graphic pixel adjustments into sprites.json.
 
 Every object the game draws is nudged a few pixels from its logical position so
 that the artwork lines up: `set_pixel_adj` at $C72B stores a signed pair into
@@ -20,7 +20,11 @@ number is at $5C10. Write the room number, let a frame pass, read the records.
 
     python adj.py            # needs zx_server running and the game to hand
 
-Writes sprite_adj.s, which the build includes. Re-run it only if the sprite
+Writes the nudges into sprites.json, beside the sprite each graphic number
+draws -- the sheet is the authoritative form of the graphics and nothing
+regenerates it, so a harvest goes straight in. sprite_source.py packs them
+into the table
+the game reads and the room designer reads as it stands. Re-run it only if the sprite
 numbering changes.
 """
 import base64
@@ -32,6 +36,18 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+import graphics as gfx                                          # noqa: E402
+
+# Where the harvest goes: into the graphic table, beside the sprite each
+# number draws and the box it occupies. sprite_sheet.py reads it back out of
+# there rather than out of the extraction, so a harvest written here survives
+# the sheet being remade -- which is the only copy there will ever be.
+MAP_FILE = "graphics.json"
+# The sheet beside it, for the blank rows each sprite lost. See fold().
+SHEET_FILE = "sprites.json"
+# How many graphic numbers the game has, which is how wide that table is.
+GRAPHIC_COUNT = 256
 TAB = chr(9)
 ROM = "C:/Users/jonso/zx-spectrum-emulator/roms/48.rom"
 GAME = "C:/Users/jonso/zx-spectrum-emulator/snapshots/Knight Lore (1984)(Ultimate).sna"
@@ -306,129 +322,125 @@ def resolve(found):
     return {k: (signed(x), signed(y)) for k, (x, y) in out.items()}, borrowed
 
 
+def trims():
+    """graphic number -> the blank rows taken off the bottom of its sprite.
+
+    The nudge in graphics.json is for the sprite as WE hold it, trimmed, while
+    what comes off a running Knight Lore is for the sprite as the GAME holds
+    it, blank rows and all. sprite_sheet.py folds the trim in when it writes
+    the sheet; a harvest written straight into the file has to fold it too, or
+    every trimmed sprite would sit that many rows too high.
+
+    The number is in sprites.json against each sprite, so this needs neither
+    the packed sprite data nor the extraction file.
+    """
+    table = gfx._read(HERE, MAP_FILE) or {}
+    sheet = gfx._read(HERE, SHEET_FILE) or {}
+
+    taken = {}
+
+    def walk(node, path):
+        for name, box in (node.get("sprites") or {}).items():
+            taken[".".join(path + [name])] = box.get("trim", 0)
+        for group, sub in (node.get("group") or {}).items():
+            walk(sub, path + [group])
+
+    walk(sheet, [])
+
+    out = {}
+    for entry in (table.get("graphics") or {}).values():
+        out[entry["number"]] = taken.get(entry.get("sprite"), 0)
+    return out
+
+
 def emit(found):
-    """A pair table, an index into it per graphic, and the few exceptions.
+    """The harvest, written back into graphics.json.
 
-    It used to be two flat tables of 256 signed pairs -- a kilobyte, and
-    almost all of it repetition. Of the 512 entries only about 226 carry
-    anything and there are twenty distinct pairs in the whole set, so the
-    pairs are listed once and every graphic holds an index into them.
+    The nudges share a file with the sprite each graphic number draws and the
+    box it occupies, because they are all facts about that number. Only some
+    of them can be rebuilt -- Knight Lore picks its nudges inside its
+    per-graphic update routines rather than reading a table, so these are the
+    values its own code produced, read back out of live object records, and
+    nothing but a running game can produce them again.
 
-    One index serves both ways round, because only four of the 113 graphics
-    that have a nudge want a different one mirrored. Bit 7 marks those and
-    sends the mirrored case to a short exception list.
+    So this MERGES. Whatever the file already says about a graphic's sprite is
+    kept, and only the nudge is rewritten; a graphic this run never saw keeps
+    the nudge it had. Wiping the nudges means deleting them by hand.
+
+    A graphic with no nudge gets none of these keys, and `mirrored` is given
+    only where the other way round wants a different pair. Where a value was
+    not harvested but borrowed, resolve() says from where and that is kept as
+    a note.
     """
     adj, borrowed = resolve(found)
+    path = HERE / MAP_FILE
+    if not path.is_file():
+        raise SystemExit("%s is missing -- it is what the nudges belong in; "
+                         "run sprite_sheet.py once to make it" % MAP_FILE)
+    said = json.loads(path.read_text(encoding="utf-8"))
+    # Keyed by name in the file; keyed by number here, because that is what a
+    # harvest is keyed by. Put back under the same names at the end.
+    table = {e["number"]: dict(e, graphic=n)
+             for n, e in (said.get("graphics") or {}).items()}
+    taken = trims()
 
-    pairs = [(0, 0)]
-    for key in sorted(adj):
-        if adj[key] not in pairs:
-            pairs.append(adj[key])
-    if len(pairs) * 2 > 128:
-        sys.exit("too many distinct nudges for a seven-bit index: %d" % len(pairs))
-
-    index, mirror = [], []
-    for g in range(256):
+    for g in range(GRAPHIC_COUNT):
         plain, flipped = adj[(g, 0)], adj[(g, 1)]
-        b = pairs.index(plain) * 2
+        # Into the sheet's terms: our sprite lost `fell` rows off the bottom,
+        # so it falls that much further and the nudge has to say so.
+        fell = taken.get(g, 0)
+        plain = (plain[0], plain[1] + fell)
+        flipped = (flipped[0], flipped[1] + fell)
+        entry = dict(table.get(g) or {})
+        # Out with the old nudge, whatever it was, and in with this run's --
+        # but the sprite, and anything else the entry carries, stays.
+        for key in ("x", "y", "mirrored", "note"):
+            entry.pop(key, None)
+        if plain != (0, 0):
+            entry["x"], entry["y"] = plain
         if flipped != plain:
-            b |= 0x80
-            mirror.append((g, pairs.index(flipped) * 2))
-        index.append(b)
+            entry["mirrored"] = {"x": flipped[0], "y": flipped[1]}
+        note = borrowed.get((g, 0)) or borrowed.get((g, 1))
+        if note and ("x" in entry or "y" in entry):
+            entry["note"] = note
+        if entry:
+            table[g] = entry
+        else:
+            table.pop(g, None)
 
-    L = []
-    L.append("; Generated by adj.py from a running Knight Lore -- do not edit.")
-    L.append(";")
-    L.append("; The pixel nudge that lines a sprite's artwork up with its logical")
-    L.append("; position. Knight Lore picks these inside 29 per-graphic update")
-    L.append("; routines rather than reading a table, so these are the values its")
-    L.append("; own code produced, read back out of live object records.")
-    L.append(";")
-    L.append("; %d distinct pairs cover all 256 graphics both ways round, and %d"
-             % (len(pairs), len(mirror)))
-    L.append("; graphics want a different one mirrored. room_adjust does the lookup.")
-    L.append("")
-    L.append("; The pairs, x then y. Entry 0 is no nudge at all, so a graphic")
-    L.append("; nothing knows about indexes to it harmlessly.")
-    L.append("sprite_adj_pairs:")
-    for i, (x, y) in enumerate(pairs):
-        L.append(TAB * 5 + "DB" + TAB * 2 + "%4d,%4d" % (x, y) + TAB * 2 + "; %d" % (i * 2))
-    L.append("")
-    L.append("")
-    L.append("; Graphics whose mirror image wants a different nudge from their")
-    L.append("; plain one. Graphic, then its mirrored index; a zero graphic ends it.")
-    L.append("sprite_adj_mirror:")
-    for g, b in mirror:
-        note = borrowed.get((g, 1), "")
-        L.append(TAB * 5 + "DB" + TAB * 2 + "%3d, %3d" % (g, b)
-                 + ((TAB * 2 + "; " + note) if note else ""))
-    L.append(TAB * 5 + "DB" + TAB * 2 + "0")
-    L.append("")
-    L.append("")
-    L.append("; One byte a graphic: its pair, doubled, plus bit 7 if the mirror")
-    L.append("; differs. Page-aligned, so the graphic number IS the low byte of")
-    L.append("; the address and the lookup needs no arithmetic at all.")
-    L.append(TAB * 5 + "ALIGN" + TAB + "256")
-    L.append("sprite_adj_index:")
-    for i in range(0, 256, 8):
-        L.append(TAB * 5 + "DB" + TAB * 2
-                 + ", ".join("$%02X" % b for b in index[i:i + 8])
-                 + TAB * 2 + "; %d" % i)
-    L.append("")
-    return "\n".join(L) + "\n"
+    # Written in graphics.py's layout, a graphic to a line, because that is
+    # what the file already is and what the graphic-map panel writes too.
+    return gfx.format_table(
+        {v.pop("graphic"): v for v in table.values()},
+        said.get("sprites", SHEET_FILE))
 
 
 def previous():
-    """The pairs the last run wrote, so a re-run can only add to them.
+    """What earlier runs harvested, so this one adds to it.
 
-    An object's adjustment is only filled in when the game next updates it,
-    and which objects get updated in a quarter of a second is a lottery, so
-    each run sees a slightly different subset. Merging keeps the union.
-    Delete sprite_adj.s first if the sprite numbering has changed and the old
-    values are no longer about the same artwork.
+    A graphic is only seen when a room places it and the game draws it, so no
+    one session sees them all.
 
-    A mirror entry the last run BORROWED rather than harvested carries a note,
-    and is skipped, so a re-run neither counts it as known nor lets it stand
-    in the way of the real value turning up.
+    An entry with a sprite but no nudge is NOT a harvested zero -- it is a
+    graphic nobody has seen drawn yet -- so it is skipped rather than seeded,
+    or the first run would freeze every unseen graphic at (0, 0).
     """
-    path = HERE / "sprite_adj.s"
-    if not path.exists():
+    said = gfx._read(HERE, MAP_FILE)
+    if said is None:
         return {}
-    text = path.read_text(encoding="utf-8")
-    if "sprite_adj_pairs" not in text:
-        return {}                       # an older format: start over
-
-    def chunk(name, end):
-        start = text.index(name + ":")
-        return text[start:text.index(end, start)]
-
-    pairs = [(int(a), int(b)) for a, b in
-             re.findall(r"DB\s+(-?\d+),\s*(-?\d+)",
-                        chunk("sprite_adj_pairs", "sprite_adj_mirror"))]
-    mirror = {}
-    for line in chunk("sprite_adj_mirror", "ALIGN").splitlines():
-        m = re.match(r"\s+DB\s+(\d+),\s*(\d+)", line)
-        if m and ";" not in line:
-            mirror[int(m.group(1))] = int(m.group(2))
-    index = [int(x, 16) for x in
-             re.findall(r"\$([0-9A-F]{2})", text[text.index("sprite_adj_index:"):])]
-    if len(index) != 256:
-        return {}
-
-    was = {}
-    for g in range(256):
-        b = index[g]
-        plain = pairs[(b & 0x7F) // 2]
-        if plain != (0, 0):
-            was[(g, 0)] = (plain[0] & 0xFF, plain[1] & 0xFF)
-        if b & 0x80:
-            if g in mirror:
-                flipped = pairs[(mirror[g] & 0x7F) // 2]
-                if flipped != (0, 0):
-                    was[(g, 1)] = (flipped[0] & 0xFF, flipped[1] & 0xFF)
-        elif plain != (0, 0):
-            was[(g, 1)] = (plain[0] & 0xFF, plain[1] & 0xFF)
-    return was
+    taken = trims()
+    out = {}
+    for entry in (said.get("graphics") or {}).values():
+        if "x" not in entry and "y" not in entry:
+            continue
+        g = entry["number"]
+        # Back out of the sheet's terms, so this run compares like with like.
+        fell = taken.get(g, 0)
+        plain = (entry.get("x", 0), entry.get("y", 0) - fell)
+        other = entry.get("mirrored")
+        out[(g, 0)] = plain
+        out[(g, 1)] = ((other["x"], other["y"] - fell) if other else plain)
+    return out
 
 
 def main():
@@ -449,8 +461,8 @@ def main():
                   % (key[0], key[1], found[key], pair))
     if kept:
         print("kept %d more from the last run" % kept)
-    (HERE / "sprite_adj.s").write_text(emit(found), encoding="utf-8")
-    print("wrote sprite_adj.s -- %d pairs" % len(found))
+    (HERE / MAP_FILE).write_text(emit(found), encoding="utf-8")
+    print("wrote %s -- %d pairs" % (MAP_FILE, len(found)))
 
 
 if __name__ == "__main__":

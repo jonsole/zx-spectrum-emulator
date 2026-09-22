@@ -171,75 +171,48 @@ function depthOrder(pieces) {
 
 // --- the per-graphic nudge ------------------------------------------------
 
-// Read sprite_adj.s, which adj.py harvests from a running game: a flat table
-// of signed pairs, a short list of graphics whose mirror image wants a
-// different one, and a page-aligned table of one byte per graphic naming its
-// pair. That last one is only as long as the game has graphics -- Knight
-// Lore's runs to all 256, Pentagram's stops at 172 -- so adjFor has to cope
-// with a graphic past the end rather than assume a full page.
+// The per-graphic pixel nudge, as adj.py harvested it from a running game.
 //
-// The file is generated and its shape is fixed, but it is still assembler, so
-// this is deliberately forgiving: anything it cannot make sense of leaves the
-// table short and adjFor falls back on no nudge at all, which is what entry 0
-// is for.
-function parseSpriteAdj(text) {
-  const tables = { sprite_adj_pairs: [], sprite_adj_mirror: [], sprite_adj_index: [] };
-  let current = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/;.*$/, '');
-    const labelled = line.match(/^([a-z_0-9]+):/);
-    if (labelled) {
-      current = tables.hasOwnProperty(labelled[1]) ? labelled[1] : null;
-      continue;
-    }
-    if (!current) continue;
-    const db = line.match(/^\s+DB\s+(.+)$/i);
-    if (!db) continue;
-    for (const field of db[1].split(',')) {
-      const text2 = field.trim();
-      if (!text2) continue;
-      const value = text2.startsWith('$')
-        ? parseInt(text2.slice(1), 16)
-        : parseInt(text2, 10);
-      if (!Number.isNaN(value)) tables[current].push(value);
-    }
+// The nudges are in graphics.json, beside the sprite each graphic number
+// draws: two halves of one fact -- how that number is drawn -- and both keyed
+// by graphic number. This reads only the nudge half; spriteFor above found the
+// artwork through the sprite half of the same table.
+//
+// A nudge for every graphic that has one, and a second pair for the four whose
+// mirror image wants a different one. The game wants it packed -- a table of
+// distinct pairs, an index a graphic long, and a short exception list -- and
+// sprite_source.py does that packing on the way to sprite_adj_gen.s. Nothing
+// here needs to know about it.
+//
+// A graphic the file does not mention is not nudged, which is what entry 0 of
+// the packed table means.
+function readSpriteAdj(graphics_json) {
+  const graphics = new Map();
+  // graphics.json is keyed by the graphic's NAME and carries the number the
+  // game knows it by; room_adjust is indexed by that number, so it is what
+  // this is keyed by.
+  const table = (graphics_json && graphics_json.graphics) || {};
+  for (const name of Object.keys(table)) {
+    const entry = table[name] || {};
+    if (!Number.isInteger(entry.number)) continue;
+    const plain = { x: entry.x || 0, y: entry.y || 0 };
+    graphics.set(entry.number, {
+      plain: plain,
+      mirrored: entry.mirrored
+        ? { x: entry.mirrored.x || 0, y: entry.mirrored.y || 0 }
+        : plain
+    });
   }
-
-  // The mirror list is graphic, then the index to use instead, ending at a
-  // lone zero graphic.
-  const mirror = new Map();
-  const flat = tables.sprite_adj_mirror;
-  for (let i = 0; i + 1 < flat.length; i += 2) {
-    if (flat[i] === 0) break;
-    mirror.set(flat[i], flat[i + 1]);
-  }
-
-  return {
-    pairs: tables.sprite_adj_pairs.map(signedOf),
-    mirror: mirror,
-    index: tables.sprite_adj_index
-  };
+  return { graphics: graphics };
 }
 
-// room_adjust: the table is page-aligned, so the graphic number IS the index.
-// Bit 7 says this graphic wants a different nudge mirrored, which four of them
-// do; everything else uses the one index whichever way round it is drawn. The
-// index is already doubled, so it reaches straight into the flat pairs table.
-const ADJ_MIRROR_DIFFERS = 0x80;
-
+// room_adjust: the nudge a graphic is drawn with, which way round it is drawn
+// being the only thing that can change it -- four graphics want a different
+// one mirrored, and everything else uses the one pair either way.
 function adjFor(adj, graphic, mirrored) {
-  if (!adj || !adj.index.length) return { x: 0, y: 0 };
-  let entry = adj.index[graphic];
-  if (entry === undefined) return { x: 0, y: 0 };
-  if (mirrored && (entry & ADJ_MIRROR_DIFFERS)) {
-    const instead = adj.mirror.get(graphic);
-    if (instead !== undefined) entry = instead;
-  }
-  const at = entry & 0x7F;
-  return {
-    x: adj.pairs[at] || 0,
-    y: adj.pairs[at + 1] || 0
-  };
+  const found = adj && adj.graphics && adj.graphics.get(graphic);
+  if (!found) return { x: 0, y: 0 };
+  return mirrored ? found.mirrored : found.plain;
 }
 
 // --- the sprite sheet -----------------------------------------------------
@@ -249,30 +222,16 @@ function adjFor(adj, graphic, mirrored) {
 // mapping in the atlas, so several graphic numbers sharing one bitmap -- 186
 // valid graphics over 103 sprites, in Knight Lore -- all land on the same
 // rectangle. A graphic the game never uses maps to nothing.
-function sheetIndex(sheet) {
-  const zx = sheet && sheet.meta && sheet.meta.zx;
-  const game = zx && zx.game;
-  return {
-    graphicMap: (game && game.graphicMap) || [],
-    sprites: (zx && zx.sprites) || [],
-    frames: (sheet && sheet.frames) || {}
-  };
-}
-
-function spriteFor(index, graphic) {
-  const n = index.graphicMap[graphic];
-  if (n === null || n === undefined) return null;
-  const sprite = index.sprites[n];
-  if (!sprite) return null;
-  const frame = index.frames[sprite.label];
-  if (!frame) return null;
-  return {
-    sprite: sprite.label,
-    group: sprite.group,
-    rect: frame.frame,
-    width: frame.frame.w,
-    height: frame.frame.h
-  };
+// sheetIndex and spriteFor are sheet_model.js's -- it is the one place that
+// knows what sprites.json and graphics.json look like, and three files want
+// that. In the page it is inlined above this one, so they are simply in
+// scope; under Node each file is its own module, so they are pulled in.
+// `var` rather than `const` because this runs at the top level of a script
+// that already has them when inlined.
+if (typeof require !== 'undefined' && typeof module !== 'undefined') {
+  // eslint-disable-next-line no-var, vars-on-top
+  var { sheetIndex, spriteFor, spritesByName, graphicTable } =
+    require('./sheet_model');
 }
 
 // --- the draw list --------------------------------------------------------
@@ -282,8 +241,7 @@ function spriteFor(index, graphic) {
 // and the rectangle to put it in. A piece whose graphic the sheet has nothing
 // for is kept, with no source rectangle, so the designer can say so rather
 // than silently leaving a hole.
-function drawList(pieces, sheet, adj) {
-  const index = sheetIndex(sheet);
+function drawList(pieces, index, adj) {
   const ordered = depthOrder(pieces);
   return ordered.map(function (piece) {
     const nudge = adjFor(adj, piece.graphic, piece.mirrored);
@@ -319,11 +277,57 @@ function roomBounds(size) {
   };
 }
 
+// --- the floor, for drawing ------------------------------------------------
+//
+// Where a room's floor lies on the screen: its outline, and the cells inside
+// it. Nothing in the game draws a floor, so these are the editors' own overlay.
+//
+// They use the unwrapped Y origin, 40 + 256. object_place writes its origin as
+// 40, which is 296 less a whole byte, and project() wraps the way the engine
+// does -- right for a sprite, but a floor drawn that way folds at its far
+// corner. Everything at floor height or above wraps to the same place, so the
+// floor and the sprites standing on it line up.
+const TRUE_Y_ORIGIN = WORLD_Y_ORIGIN + 256;
+
+function floorPoint(u, v, z) {
+  return { x: u + v - WORLD_X_ORIGIN, y: TRUE_Y_ORIGIN - (((v - u + WORLD_V_BIAS) >> 1) + z) };
+}
+
+// The four corners of a room's floor, as roomBounds says it reaches.
+function floorOutline(size) {
+  const b = roomBounds(size);
+  return [floorPoint(b.minU, b.minV, size.z), floorPoint(b.maxU, b.minV, size.z),
+          floorPoint(b.maxU, b.maxV, size.z), floorPoint(b.minU, b.maxV, size.z)];
+}
+
+// The cells a room reaches, each as its four corners. The grid's own measures
+// -- a cell's size, where cell 0's centre is, how many a side -- are the room
+// model's, and passed in rather than declared twice.
+function floorCells(size, grid) {
+  const b = roomBounds(size);
+  const out = [];
+  for (let cv = 0; cv < grid.count; cv++) {
+    for (let cu = 0; cu < grid.count; cu++) {
+      const u = grid.origin + cu * grid.cell;
+      const v = grid.origin + cv * grid.cell;
+      // A narrow room reaches fewer cells; the rest are wall.
+      if (u < b.minU || u > b.maxU || v < b.minV || v > b.maxV) continue;
+      const u0 = u - grid.half;
+      const v0 = v - grid.half;
+      out.push([floorPoint(u0, v0, size.z), floorPoint(u0 + grid.cell, v0, size.z),
+                floorPoint(u0 + grid.cell, v0 + grid.cell, size.z),
+                floorPoint(u0, v0 + grid.cell, size.z)]);
+    }
+  }
+  return out;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     WORLD_X_ORIGIN, WORLD_Y_ORIGIN, WORLD_V_BIAS, SCREEN_WIDTH, SCREEN_ROWS,
-    VOTE_NEARER, VOTE_FURTHER, ADJ_MIRROR_DIFFERS,
+    VOTE_NEARER, VOTE_FURTHER,
     byteOf, signedOf, project, depthCompare, insertPlaced, depthOrder,
-    parseSpriteAdj, adjFor, sheetIndex, spriteFor, drawList, roomBounds
+    readSpriteAdj, adjFor, sheetIndex, spriteFor, drawList, roomBounds,
+    TRUE_Y_ORIGIN, floorPoint, floorOutline, floorCells
   };
 }

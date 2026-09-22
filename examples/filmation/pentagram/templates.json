@@ -1,0 +1,561 @@
+{
+ "meta": {
+  "version": 1,
+  "game": "pentagram",
+  "rooms": "rooms.json",
+  "comment": "The castle's templates: pieces every room naming one is built from. rooms.json places them."
+ },
+
+ "sceneryTemplates": {
+  "door_a_n": [
+   { "graphic": "sprites.74", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_a_e": [
+   { "graphic": "sprites.74", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "door_a_s": [
+   { "graphic": "sprites.74", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_a_w": [
+   { "graphic": "sprites.74", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "door_b_n": [
+   { "graphic": "sprites.85", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_b_e": [
+   { "graphic": "sprites.85", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "door_b_s": [
+   { "graphic": "sprites.85", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_b_w": [
+   { "graphic": "sprites.85", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_08": [
+   { "graphic": "sprites.79", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_09": [
+   { "graphic": "sprites.79", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_10": [
+   { "graphic": "sprites.76", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_11": [
+   { "graphic": "sprites.76", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_12": [
+   { "graphic": "sprites.82", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.87", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.84", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_13": [
+   { "graphic": "sprites.83", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.84", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.82", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.87", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_14": [
+   { "graphic": "sprites.87", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.84", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_15": [
+   { "graphic": "sprites.80", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.82", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.87", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_16": [
+   { "graphic": "sprites.79", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_17": [
+   { "graphic": "sprites.79", "u": 120, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 136, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.76", "u": 72, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 88, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 104, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 152, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.78", "u": 168, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.79", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.77", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_18": [
+   { "graphic": "gfx_AD", "u": 105, "v": 190, "z": 105, "sizeU": 207, "sizeV": 105, "sizeZ": 224,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_F1", "u": 105, "v": 2, "z": 106, "sizeU": 19, "sizeV": 106, "sizeZ": 36,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "gfx_BD", "u": 106, "v": 254, "z": 106, "sizeU": 205, "sizeV": 106, "sizeZ": 14,
+     "flags": { "mirrored": true, "passable": false, "rest": 43 } },
+   { "graphic": "gfx_D1", "u": 107, "v": 18, "z": 108, "sizeU": 225, "sizeV": 107, "sizeZ": 34,
+     "flags": { "mirrored": true, "passable": false, "rest": 44 } },
+   { "graphic": "sprites.37.g63", "u": 107, "v": 136, "z": 107, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_53", "u": 108, "v": 156, "z": 108, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "sprites.81", "u": 106, "v": 70, "z": 106, "sizeU": 87, "sizeV": 106, "sizeZ": 104,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.41.g121", "u": 106, "v": 138, "z": 106,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.74", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_19": [
+   { "graphic": "gfx_AD", "u": 105, "v": 190, "z": 105, "sizeU": 207, "sizeV": 105, "sizeZ": 224,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_F1", "u": 105, "v": 2, "z": 106, "sizeU": 19, "sizeV": 106, "sizeZ": 36,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "gfx_BD", "u": 106, "v": 254, "z": 106, "sizeU": 205, "sizeV": 106, "sizeZ": 14,
+     "flags": { "mirrored": true, "passable": false, "rest": 43 } },
+   { "graphic": "gfx_D1", "u": 107, "v": 18, "z": 108, "sizeU": 225, "sizeV": 107, "sizeZ": 34,
+     "flags": { "mirrored": true, "passable": false, "rest": 44 } },
+   { "graphic": "sprites.37.g63", "u": 107, "v": 136, "z": 107, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_53", "u": 108, "v": 156, "z": 108, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "sprites.81", "u": 106, "v": 70, "z": 106, "sizeU": 87, "sizeV": 106, "sizeZ": 104,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.41.g121", "u": 106, "v": 138, "z": 106,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.74", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_20": [
+   { "graphic": "sprites.82", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.87", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.82", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_21": [
+   { "graphic": "sprites.82", "u": 120, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 136, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 72, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 88, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 104, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.83", "u": 152, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.81", "u": 168, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.87", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.80", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_22": [
+   { "graphic": "gfx_AD", "u": 105, "v": 190, "z": 105, "sizeU": 207, "sizeV": 105, "sizeZ": 224,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_F1", "u": 105, "v": 2, "z": 106, "sizeU": 19, "sizeV": 106, "sizeZ": 36,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "gfx_BD", "u": 106, "v": 254, "z": 106, "sizeU": 205, "sizeV": 106, "sizeZ": 14,
+     "flags": { "mirrored": true, "passable": false, "rest": 43 } },
+   { "graphic": "gfx_D1", "u": 107, "v": 18, "z": 108, "sizeU": 225, "sizeV": 107, "sizeZ": 34,
+     "flags": { "mirrored": true, "passable": false, "rest": 44 } },
+   { "graphic": "sprites.37.g63", "u": 107, "v": 136, "z": 107, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_53", "u": 108, "v": 156, "z": 108, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "sprites.81", "u": 106, "v": 70, "z": 106, "sizeU": 87, "sizeV": 106, "sizeZ": 104,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.41.g121", "u": 106, "v": 138, "z": 106,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.74", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_23": [
+   { "graphic": "gfx_AD", "u": 105, "v": 190, "z": 105, "sizeU": 207, "sizeV": 105, "sizeZ": 224,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_F1", "u": 105, "v": 2, "z": 106, "sizeU": 19, "sizeV": 106, "sizeZ": 36,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "gfx_BD", "u": 106, "v": 254, "z": 106, "sizeU": 205, "sizeV": 106, "sizeZ": 14,
+     "flags": { "mirrored": true, "passable": false, "rest": 43 } },
+   { "graphic": "gfx_D1", "u": 107, "v": 18, "z": 108, "sizeU": 225, "sizeV": 107, "sizeZ": 34,
+     "flags": { "mirrored": true, "passable": false, "rest": 44 } },
+   { "graphic": "sprites.37.g63", "u": 107, "v": 136, "z": 107, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "gfx_53", "u": 108, "v": 156, "z": 108, "sizeU": 109, "sizeV": 105, "sizeZ": 109,
+     "flags": { "mirrored": true, "passable": false, "rest": 41 } },
+   { "graphic": "sprites.81", "u": 106, "v": 70, "z": 106, "sizeU": 87, "sizeV": 106, "sizeZ": 104,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.41.g121", "u": 106, "v": 138, "z": 106,
+     "flags": { "mirrored": true, "passable": false, "rest": 42 } },
+   { "graphic": "sprites.74", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.73", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_c_n": [
+   { "graphic": "sprites.85", "u": 147, "v": 197, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 173, "v": 197, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_c_e": [
+   { "graphic": "sprites.85", "u": 197, "v": 173, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 197, "v": 147, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "door_c_s": [
+   { "graphic": "sprites.85", "u": 83, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 109, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "door_c_w": [
+   { "graphic": "sprites.85", "u": 59, "v": 109, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.86", "u": 59, "v": 83, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_28": [
+   { "graphic": "sprites.41.g11", "u": 152, "v": 200, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.41.g11", "u": 168, "v": 200, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_29": [
+   { "graphic": "sprites.41.g11", "u": 200, "v": 152, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.41.g11", "u": 200, "v": 168, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_30": [
+   { "graphic": "sprites.41.g11", "u": 88, "v": 57, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.41.g11", "u": 104, "v": 57, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_31": [
+   { "graphic": "sprites.41.g11", "u": 56, "v": 88, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sprites.41.g11", "u": 56, "v": 104, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ]
+ },
+
+ "objectTemplates": {
+  "object_00": [
+   { "graphic": "sprites.41.g11",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_01": [
+   { "graphic": "sprites.75.g10",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_02": [
+   { "graphic": "sprites.27.g48",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_03": [
+   { "graphic": "sprites.39.g23",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_04": [
+   { "graphic": "sprites.75.g72",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_05": [
+   { "graphic": "sprites.38.g30",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_06": [
+   { "graphic": "sprites.37.g63",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_07": [
+   { "graphic": "sprites.47",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_08": [
+   { "graphic": "sprites.75.g76",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_09": [
+   { "graphic": "sprites.41.g91",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_10": [
+   { "graphic": "sprites.41.g78",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_11": [
+   { "graphic": "sprites.41.g79",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_12": [
+   { "graphic": "sprites.41.g84",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_13": [
+   { "graphic": "sprites.9",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_14": [
+   { "graphic": "sprites.39.g28",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_15": [
+   { "graphic": "sprites.14.g86",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_16": [
+   { "graphic": "sprites.41.g87",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_17": [
+   { "graphic": "sprites.41.g88",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_18": [
+   { "graphic": "sprites.88.g89",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_19": [
+   { "graphic": "sprites.48",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_20": [
+   { "graphic": "sprites.88.g16",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_21": [
+   { "graphic": "sprites.10",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_22": [
+   { "graphic": "sprites.41.g91",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_23": [
+   { "graphic": "sprites.37.g82",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_24": [
+   { "graphic": "sprites.41.g136",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_25": [
+   { "graphic": "sprites.41.g140",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_26": [
+   { "graphic": "sprites.41.g141",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_27": [
+   { "graphic": "sprites.41.g142",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_28": [
+   { "graphic": "sprites.41.g143",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_29": [
+   { "graphic": "sprites.14.g92",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_30": [
+   { "graphic": "sprites.14.g93",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ]
+ }
+}

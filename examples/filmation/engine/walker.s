@@ -270,7 +270,7 @@ character_add:		ld		(ix+OBJ.U),b
 ; ever show rather than whatever it shows first: the legs walk in frames no
 ; taller than 3x21 but die and come back as sparkles of 3x24, and his top half
 ; is at most 3x21 as a knight and 3x29 as a wolf. (Those are the trimmed
-; heights. This was sprite_048 for the legs, 3x25 until its blank rows came
+; heights. This was sabreman.body.5 for the legs, 3x25 until its blank rows came
 ; off -- and 3x21 is three rows short of a sparkle, which then spilled into the
 ; body's buffer as a smear under every death and every arrival.)
 ;

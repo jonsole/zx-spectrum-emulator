@@ -59,6 +59,15 @@ node vscode-extension\tests\asm_index_test.js
 node vscode-extension\tests\profile_model_test.js
 ```
 
+There is one a topic; `vscode-extension\tests\` is the list. Two of them --
+`room_page_test.js` and `graphic_map_page_test.js` -- assemble a webview page
+the way its host does and run it against a fake DOM, which is worth knowing
+before changing one: those pages are built by string replacement, so a mistake
+is a syntax error in a file that exists only at runtime. The JSON schemas under
+`vscode-extension\schemas\` are checked from Python instead, because
+`jsonschema` is in the venv:
+`.venv-win\Scripts\python.exe vscode-extension\tests\schemas_test.py`.
+
 No `node` on PATH? VS Code's own works:
 `$env:ELECTRON_RUN_AS_NODE=1; & "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe" <script>`.
 The extension is installed as a symlink to `vscode-extension/`, so a change

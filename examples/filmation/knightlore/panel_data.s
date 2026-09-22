@@ -1,5 +1,5 @@
 ; The status panel's data, down here with the castle's: it is read when the
-; panel is drawn and never in a hurry, and it fits in what sprite_adj.s's
+; panel is drawn and never in a hurry, and it fits in what the nudge table's
 ; ALIGN would otherwise leave empty.
 
 ; ---------------------------------------------------------------------------

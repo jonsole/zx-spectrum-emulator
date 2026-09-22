@@ -28,12 +28,12 @@
 SPECIAL_ROWS		EQU		32
 SPECIAL_SLOTS		EQU		2
 SPECIAL_WANTED		EQU		14		; how many the wizard asks for
-SPECIAL_FIRST		EQU		96		; the first collectable graphic
-SPECIAL_LIFE		EQU		103		; the one that is taken, not carried
+SPECIAL_FIRST		EQU		GFX_COLLECTABLE_1_G96		; the first collectable graphic
+SPECIAL_LIFE		EQU		GFX_PANEL_4_G103		; the one that is taken, not carried
 SPECIAL_FLIGHT		EQU		8		; added to one on its way into the pot
 SPECIAL_BUBBLES		EQU		160		; rising out of it, four frames
 SPECIAL_SPELL		EQU		164		; ...and what they turn into for a werewolf
-SPECIAL_SHOW		EQU		168		; the wanted one, shown by the bubbles
+SPECIAL_SHOW		EQU		GFX_COLLECTABLE_1_G168		; the wanted one, shown by the bubbles
 SPECIAL_POT_ROOM	EQU		$88
 SPECIAL_POT_TOP		EQU		$98		; standing on the pot
 SPECIAL_POT_FLOOR	EQU		$80		; ...and in it

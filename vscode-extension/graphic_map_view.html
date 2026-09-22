@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Filmation Graphic Map</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px var(--vscode-font-family, system-ui, sans-serif);
+           color: var(--vscode-foreground, #ccc);
+           background: var(--vscode-editor-background, #1e1e1e);
+           padding: 16px 20px; box-sizing: border-box; overflow: auto; }
+    h1 { font-size: 19px; font-weight: 600; margin: 0 0 2px; }
+    h2 { font-size: 12px; font-weight: normal; opacity: .7; margin: 0 0 14px;
+         font-variant-numeric: tabular-nums; }
+    h3 { font-size: 12px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase;
+         letter-spacing: .06em; opacity: .75; }
+
+    button { font: inherit; padding: 4px 12px; border: 0; border-radius: 2px; cursor: pointer;
+             color: var(--vscode-button-secondaryForeground, #ccc);
+             background: var(--vscode-button-secondaryBackground, #3a3d41); }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+    button.primary { color: var(--vscode-button-foreground, #fff);
+                     background: var(--vscode-button-background, #0e639c); }
+    button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #1177bb); }
+    button.small { padding: 1px 8px; font-size: 11px; }
+    button:disabled { opacity: .4; cursor: default; }
+    input[type=text] { font: inherit; padding: 2px 6px; border-radius: 2px; width: 100%;
+      box-sizing: border-box;
+      color: var(--vscode-input-foreground, #ccc);
+      background: var(--vscode-input-background, #3c3c3c);
+      border: 1px solid var(--vscode-input-border, transparent); }
+
+    header { display: flex; align-items: flex-start; gap: 16px; }
+    header .spacer { flex: 1 1 auto; }
+    header .buttons { display: flex; gap: 8px; align-items: center; }
+
+    .layout { display: flex; gap: 18px; align-items: flex-start; }
+    .middle { flex: 1 1 auto; min-width: 0; }
+    .sidebar { flex: 0 0 320px; }
+    .card { background: var(--vscode-editorWidget-background, #252526);
+            border: 1px solid var(--vscode-editorWidget-border, #333);
+            border-radius: 4px; padding: 12px 14px; margin-bottom: 14px; }
+
+    /* A sprite is drawn by showing one rectangle of the sheet: the sheet is the
+       background of a box the size of that rectangle, slid so the wanted frame
+       is at the origin. No canvas and no per-sprite image, so a map of two
+       hundred of them costs two hundred divs and one download. */
+    .art { background-repeat: no-repeat; image-rendering: pixelated;
+           transform-origin: center center; }
+    .artbox { display: flex; align-items: center; justify-content: center;
+              overflow: hidden; }
+
+    #map { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+           gap: 6px; }
+    .tile { background: #000; border: 1px solid var(--vscode-editorWidget-border, #333);
+            border-radius: 3px; padding: 0; cursor: pointer; color: inherit;
+            display: flex; flex-direction: column; align-items: stretch;
+            font: inherit; text-align: center; }
+    .tile:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+    .tile.here { outline: 2px solid var(--vscode-focusBorder, #007fd4); }
+    .tile .artbox { height: 62px; }
+    .tile .caption { font-size: 10px; line-height: 1.3; padding: 2px 3px 3px;
+                     background: var(--vscode-editorWidget-background, #252526);
+                     border-radius: 0 0 2px 2px; font-variant-numeric: tabular-nums;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile .caption .name { opacity: .6; display: block; }
+    /* A graphic number the game does not use. Kept in the grid, because an
+       empty number is where a new graphic can go, but not competing for the
+       eye with the ones that draw something. */
+    .tile.empty { opacity: .3; background: transparent; }
+    .tile.empty .artbox { color: var(--vscode-foreground); font-size: 10px; }
+    /* Two or more numbers on one bitmap: the thing the file states only by
+       repeating an index, and the reason a name carries its number. */
+    .tile.shared { border-color: #9a7b2f; }
+    .tile.dangling { border-color: var(--vscode-editorError-foreground, #f48771); }
+
+    .problems { color: var(--vscode-editorError-foreground, #f48771); font-size: 12px; }
+    .problems div { margin-bottom: 3px; }
+    .hint { opacity: .65; font-size: 12px; line-height: 1.5; }
+
+    .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px;
+                 margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+    .detail dt { opacity: .6; }
+    .detail dd { margin: 0; }
+    .detail .big { height: 96px; background: #000; border-radius: 3px; margin-bottom: 10px; }
+    .chip { display: inline-block; padding: 0 5px; margin: 0 3px 3px 0; border-radius: 2px;
+            font-size: 11px; cursor: pointer; font-variant-numeric: tabular-nums;
+            background: var(--vscode-input-background, #3c3c3c); border: 0; color: inherit;
+            font-family: inherit; }
+    .chip:hover { background: var(--vscode-button-background, #0e639c); color: #fff; }
+
+    #picker { max-height: 340px; overflow: auto; display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 4px; }
+    #picker .tile .artbox { height: 48px; }
+    .nosheet { padding: 40px 0; text-align: center; opacity: .7; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 id="title">Graphic map</h1>
+      <h2 id="summary"></h2>
+    </div>
+    <div class="spacer"></div>
+    <div class="buttons">
+      <span id="state" style="opacity:.7; font-size:12px"></span>
+      <button id="save" class="primary" style="display:none">Save</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="middle">
+      <div class="card">
+        <h3>Graphic numbers</h3>
+        <div id="problems" class="problems"></div>
+        <div id="map"></div>
+      </div>
+    </div>
+    <aside class="sidebar">
+      <div class="card detail" id="detail"></div>
+    </aside>
+  </div>
+
+<script>
+/*@sheet_model.js@*/
+/*@graphic_map_model.js@*/
+/*@host@*/
+
+// The graphic-map page. Like the room designer's, it is the same page in the
+// editor and in a browser, and everything that differs arrives through
+// `graphicMapHost`, injected above.
+//
+// What it is for: graphic_map.json is numbers pointing at numbers, so nothing
+// in the file says what graphic 30 looks like or that 150 draws the same
+// bitmap. Both are visible at a glance here, and re-pointing one is a click
+// rather than an edit to a number you cannot check.
+//
+// graphic_map_model.js above it is the whole of what it knows about the file.
+(function () {
+  'use strict';
+
+  const host = window.graphicMapHost;
+  let boot = host.boot;
+  // The document IS the sheet: sprites.json holds the artwork, the sprites and
+  // the graphic table together, so there is one thing here rather than two.
+  // The document: graphics.json. The sheet beside it is an input, and the
+  // page never writes one back -- sprites.json is the artwork's own file.
+  let said = boot.graphics;
+  let sheet = boot.sheet || {};
+  let chosen = null;              // the graphic number being looked at
+  let dirty = false;
+
+  const el = (id) => document.getElementById(id);
+
+  // --- drawing a sprite ---------------------------------------------------
+
+  // One frame of the sheet, as a box the size of that frame with the sheet
+  // slid behind it. `fit` is the box it has to sit inside; the sprite is
+  // scaled up by whole numbers only, because these are Spectrum pixels and a
+  // fractional scale would make some of them wider than others.
+  function artFor(rect, fit) {
+    const box = document.createElement('div');
+    box.className = 'artbox';
+    if (!rect || !boot.sheetPng) return box;
+    const art = document.createElement('div');
+    art.className = 'art';
+    art.style.width = rect.w + 'px';
+    art.style.height = rect.h + 'px';
+    art.style.backgroundImage = 'url(' + boot.sheetPng + ')';
+    art.style.backgroundPosition = (-rect.x) + 'px ' + (-rect.y) + 'px';
+    const scale = Math.max(1, Math.floor(Math.min(fit / rect.w, fit / rect.h)));
+    if (scale > 1) art.style.transform = 'scale(' + scale + ')';
+    box.appendChild(art);
+    return box;
+  }
+
+  function tileFor(row, fit) {
+    const tile = document.createElement('button');
+    tile.className = 'tile';
+    if (row.sprite === null) tile.classList.add('empty');
+    if (row.sharedWith.length) tile.classList.add('shared');
+    if (row.dangling) tile.classList.add('dangling');
+    if (chosen === row.graphic) tile.classList.add('here');
+
+    if (row.dangling) {
+      const box = document.createElement('div');
+      box.className = 'artbox';
+      box.textContent = '?';
+      tile.appendChild(box);
+    } else if (row.sprite === null) {
+      const box = document.createElement('div');
+      box.className = 'artbox';
+      box.textContent = 'unused';
+      tile.appendChild(box);
+    } else {
+      tile.appendChild(artFor(row.rect, fit));
+    }
+
+    const caption = document.createElement('div');
+    caption.className = 'caption';
+    caption.textContent = row.graphic;
+    if (row.sprite) {
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = row.sprite;
+      caption.appendChild(name);
+    }
+    tile.appendChild(caption);
+
+    tile.title = row.sprite === null
+      ? 'Graphic ' + row.graphic + ' -- the game does not use this number'
+      : 'Graphic ' + row.graphic + ' -> sprite ' + row.sprite +
+        (row.group ? ' (in ' + row.group + ')' : '') +
+        (row.sharedWith.length
+          ? '\nAlso drawn by ' + row.sharedWith.join(', ')
+          : '');
+    tile.addEventListener('click', () => { chosen = row.graphic; draw(); });
+    return tile;
+  }
+
+  // --- the whole page -----------------------------------------------------
+
+  function draw() {
+    const sums = summary(said, sheet);
+    el('title').textContent =
+      (boot.game || 'Filmation') + ' graphic map';
+    el('summary').textContent =
+      sums.used + ' of ' + sums.count + ' graphic numbers used, drawn by ' +
+      sums.sprites + ' of the sheet’s ' + sums.onSheet + ' sprites — ' +
+      sums.shared + ' bitmaps are shared';
+
+    const problems = el('problems');
+    problems.textContent = '';
+    for (const why of checkMap(said, sheet)) {
+      const line = document.createElement('div');
+      line.textContent = why;
+      problems.appendChild(line);
+    }
+
+    const map = el('map');
+    map.textContent = '';
+    for (const row of rows(said, sheet)) map.appendChild(tileFor(row, 58));
+
+    drawDetail();
+    el('state').textContent = dirty ? 'edited' : '';
+    el('save').style.display = boot.showSave ? '' : 'none';
+    el('save').disabled = !dirty;
+  }
+
+  function drawDetail() {
+    const box = el('detail');
+    box.textContent = '';
+    if (chosen === null) {
+      const h = document.createElement('h3');
+      h.textContent = 'A graphic number';
+      box.appendChild(h);
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = 'Pick one to see what draws it and what else shares ' +
+        'its bitmap. A gold border means a bitmap more than one number draws: ' +
+        'those numbers are not interchangeable, because the pixel nudge in ' +
+        'graphic_map.json is per number.';
+      box.appendChild(hint);
+      return;
+    }
+
+    const list = rows(said, sheet);
+    const row = list[chosen];
+    const h = document.createElement('h3');
+    h.textContent = 'Graphic ' + chosen;
+    box.appendChild(h);
+
+    if (row && row.rect) {
+      const big = artFor(row.rect, 90);
+      big.className = 'artbox big';
+      box.appendChild(big);
+    }
+
+    const dl = document.createElement('dl');
+    const pair = (key, value) => {
+      const dt = document.createElement('dt');
+      dt.textContent = key;
+      const dd = document.createElement('dd');
+      if (typeof value === 'string' || typeof value === 'number') dd.textContent = value;
+      else dd.appendChild(value);
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    };
+    pair('Number', chosen + '  ($' + chosen.toString(16).toUpperCase().padStart(2, '0') + ')');
+    pair('Sprite', row && row.sprite !== null ? String(row.sprite) : 'none');
+    if (row && row.name) pair("Called", row.name);
+    if (row && row.label) pair("Sprite name", row.label);
+    if (row && row.group) pair('Group', row.group);
+    if (row && row.rect) {
+      pair('Frame', row.rect.w + ' × ' + row.rect.h +
+                    ' at ' + row.rect.x + ', ' + row.rect.y);
+    }
+    box.appendChild(dl);
+
+    if (row && row.sharedWith.length) {
+      const h2 = document.createElement('h3');
+      h2.textContent = 'Also drawn by';
+      box.appendChild(h2);
+      const chips = document.createElement('div');
+      for (const other of row.sharedWith) {
+        const chip = document.createElement('button');
+        chip.className = 'chip';
+        chip.textContent = other;
+        chip.title = 'Look at graphic ' + other;
+        chip.addEventListener('click', () => { chosen = other; draw(); });
+        chips.appendChild(chip);
+      }
+      box.appendChild(chips);
+      const why = document.createElement('div');
+      why.className = 'hint';
+      why.textContent = 'The game points these at one bitmap itself. They still ' +
+        'draw in different places, because the nudge is per number.';
+      box.appendChild(why);
+    }
+
+
+
+    const h3 = document.createElement('h3');
+    h3.style.marginTop = '12px';
+    h3.textContent = 'Point it at';
+    box.appendChild(h3);
+
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Filter by name or group…';
+    search.style.marginBottom = '6px';
+    box.appendChild(search);
+
+    const picker = document.createElement('div');
+    picker.id = 'picker';
+    box.appendChild(picker);
+
+    const sprites = sheetSprites(sheet);
+    const fill = () => {
+      const want = search.value.trim().toLowerCase();
+      picker.textContent = '';
+      for (const sprite of sprites) {
+        if (want && !(sprite.label || '').toLowerCase().includes(want) &&
+            !(sprite.group || '').toLowerCase().includes(want)) continue;
+        const tile = document.createElement('button');
+        tile.className = 'tile';
+        if (row && sprite.index === row.sprite) tile.classList.add('here');
+        tile.appendChild(artFor(sprite.rect, 44));
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        caption.textContent = sprite.index;
+        tile.appendChild(caption);
+        tile.title = sprite.label + ' (sprite ' + sprite.index + ')';
+        tile.addEventListener('click', () => repoint(sprite.index));
+        picker.appendChild(tile);
+      }
+    };
+    search.addEventListener('input', fill);
+    fill();
+
+    const clear = document.createElement('button');
+    clear.className = 'small';
+    clear.style.marginTop = '8px';
+    clear.textContent = 'Mark unused';
+    clear.title = 'Take graphic ' + chosen + ' out of the map: the game does ' +
+                  'not use this number.';
+    clear.addEventListener('click', () => repoint(null));
+    box.appendChild(clear);
+  }
+
+  // --- editing ------------------------------------------------------------
+
+  function repoint(sprite) {
+    const before = rows(said, sheet)[chosen];
+    if (before && before.sprite === sprite) return;
+    said = setSprite(said, chosen, sprite);
+    dirty = true;
+    send();
+    draw();
+  }
+
+  // The whole document, back to the host. The editor turns it into one
+  // WorkspaceEdit so undo, the dirty mark and Save are its own; the browser
+  // host holds it until Save is pressed, which is why nothing here writes.
+  function send() {
+    host.save(serializeMap(said, boot.eol || '\n'));
+  }
+
+  el('save').addEventListener('click', () => {
+    if (host.commit) host.commit();
+    dirty = false;
+    draw();
+  });
+
+  // The file changed under us -- an undo, the text editor, or kl_extract.py
+  // having been run again. Reopen on the graphic we were looking at.
+  host.onReload(function (next) {
+    boot = next;
+    said = next.graphics;
+    if (next.sheet) sheet = next.sheet;
+    dirty = false;
+    if (chosen !== null && chosen >= countOf(said)) chosen = null;
+    draw();
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>

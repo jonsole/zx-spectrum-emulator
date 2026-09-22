@@ -36,6 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import castle                                                   # noqa: E402
 import graphics as gfx                                          # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -81,9 +82,6 @@ BACKGROUND_TEMPLATES = ("bg_walls_", "bg_trees_")
 SHARED_SHIFT_TEMPLATES = ()
 
 # The three room shapes, in the order room_size_tbl holds them.
-SHAPE_NOTES = ("square", "narrow along U", "narrow along V")
-
-
 def resolve_graphics(atlas):
     """Turn every named graphic back into the number the game knows it by.
 
@@ -96,12 +94,21 @@ def resolve_graphics(atlas):
         sys.exit("%s is missing, so the graphics cannot be named back to the "
                  "numbers room_data.s needs -- run build.py, which unpacks it "
                  "from sprite_data.bin." % gfx.SHEET)
-    for group, key in ((atlas["sceneryTemplates"], "blocks"),
-                       (atlas["objectTemplates"], "entries")):
-        for template in group:
-            for entry in template[key]:
-                entry["graphic"] = gfx.number_of(known, entry["graphic"],
-                                                 template["name"])
+    sizes = gfx.sizes(HERE)
+    for _group, template, _at, entry in castle.placements(atlas):
+        # The box first, because it is looked up by the graphic's NAME and the
+        # next line spends that name. Most entries have not got one of their
+        # own -- the box belongs to the graphic, and sits in graphics.json --
+        # so this is where it is filled in, and record_of below still just
+        # reads sizeU/sizeV/sizeZ.
+        # The number first: it is the lookup that says plainly when a name
+        # is not in graphics.json at all, which is what a half-finished rename
+        # looks like. The box would otherwise complain about a missing size.
+        number = gfx.number_of(known, entry["graphic"], template)
+        box = gfx.box_of(sizes, entry, template)
+        entry["sizeU"], entry["sizeV"], entry["sizeZ"] = (
+            box["u"], box["v"], box["z"])
+        entry["graphic"] = number
     return known
 
 
@@ -169,11 +176,11 @@ def room_pieces(scn_by_name, obj_by_name, room):
     """(graphic, mirrored) for every piece a room expands to."""
     out = []
     for s in room["scenery"]:
-        for p in scn_by_name[s["template"]]["blocks"]:
+        for p in scn_by_name[s["template"]]:
             if p["graphic"] >= 2:
                 out.append((p["graphic"], 1 if p["flags"]["mirrored"] else 0))
     for o in room["objects"]:
-        entries = obj_by_name[o["template"]]["entries"]
+        entries = obj_by_name[o["template"]]
         for _ in o["positions"]:
             for p in entries:
                 if p["graphic"] >= 2:
@@ -245,35 +252,39 @@ def flag_note(flags):
 def shared_labels(templates):
     """The label each table index points at, and the blocks to emit once.
 
-    Several table entries share a template -- four of the object types are the
-    same block seen from different sides -- so a label is emitted once, named
-    after the first entry that reaches it. The game shared them by address, and
-    rooms.json keeps each template's address, so that is what they are grouped
-    by: two entries at one address are one template however either is renamed.
+    Several table entries can share a template -- Pentagram has one of each
+    kind -- so a label is emitted once, named after the first entry that
+    reaches it.
+
+    The game shared them by address, and rooms.json used to carry one. It does
+    not any more: a template is its pieces, and two templates whose pieces are
+    identical ARE the same block, which is the whole of what sharing an address
+    meant. Checked against the addresses when they were dropped: in both games
+    the two groupings are the same, template for template.
     """
     label_at = {}
     order = []
-    for t in templates:
-        at = t["address"]
-        if at not in label_at:
-            label_at[at] = label_of(t["name"])
-            order.append(t)
-    return order, [label_at[t["address"]] for t in templates]
+    for name, pieces in templates.items():
+        body = json.dumps(pieces, sort_keys=True)
+        if body not in label_at:
+            label_at[body] = label_of(name)
+            order.append((name, pieces))
+    return order, [label_at[json.dumps(pieces, sort_keys=True)]
+                   for pieces in templates.values()]
 
 
 def emit_templates(out, templates, key, stride, noun, cached, only=None):
     """One labelled block a template, in table order, skipping the unreached."""
     order, refs = shared_labels(templates)
-    for t in order:
-        label = label_of(t["name"])
+    for name, entries in order:
+        label = label_of(name)
         if only is not None and label not in only:
             continue
-        entries = t[key]
         line(out, label + ":", "", "", "%d %s%s"
              % (len(entries), noun, "" if len(entries) == 1 else "s"))
         for e in entries:
             body = record_of(e, stride == SCENERY_STRIDE)
-            assert len(body) == stride, (t["name"], body)
+            assert len(body) == stride, (name, body)
             body[stride - 1 if stride == SCENERY_STRIDE else 4] = \
                 our_flags(e, cached, label)
             if stride == SCENERY_STRIDE:
@@ -291,7 +302,9 @@ def emit_templates(out, templates, key, stride, noun, cached, only=None):
 def main():
     if not ATLAS.is_file():
         sys.exit("%s is missing -- run rooms.py first" % ATLAS.name)
-    atlas = json.loads(ATLAS.read_text(encoding="utf-8"))
+    # The rooms and the templates they place, as one castle -- found through
+    # rooms.json's own meta, which says where its templates are.
+    atlas = castle.read_castle(HERE)
     if atlas.get("meta", {}).get("game") != "knightlore":
         sys.exit("%s is not Knight Lore's" % ATLAS.name)
 
@@ -299,8 +312,10 @@ def main():
     scenery = atlas["sceneryTemplates"]
     objects = atlas["objectTemplates"]
     rooms = atlas["rooms"]
-    scn_by_name = {t["name"]: t for t in scenery}
-    obj_by_name = {t["name"]: t for t in objects}
+    # A template IS its pieces, so the castle's own mapping is the lookup.
+    scn_by_name = scenery
+    obj_by_name = objects
+    object_index = {name: n for n, name in enumerate(objects)}
 
     out = []
     out.append("; Generated by rooms_source.py from rooms.json -- do not edit.")
@@ -320,9 +335,9 @@ def main():
     out.append("; Three of them, and the index is bits 3 and 4 of a room's attribute byte.")
     out.append("; Only the floor changes shape; every room is 128 tall.")
     line(out, "room_size_tbl:", "", "")
-    for s in atlas["sizes"]:
+    for n, (shape, s) in enumerate(atlas["roomDimensions"].items()):
         line(out, "", "DB", "%3d, %3d, %3d" % (s["u"], s["v"], s["z"]),
-             "%d - %s" % (s["index"], SHAPE_NOTES[s["index"]]))
+             "%d - %s" % (n, shape))
     out.append("")
     out.append("")
 
@@ -341,16 +356,18 @@ def main():
     # A shared template carries one flags byte for every index that reaches it,
     # so background has to be all or nothing across them.
     _, bg_refs = shared_labels(scenery)
-    for t, ref in zip(scenery, bg_refs):
+    for name, ref in zip(scenery, bg_refs):
         assert ref.startswith(BACKGROUND_TEMPLATES) == \
-            label_of(t["name"]).startswith(BACKGROUND_TEMPLATES), t["name"]
+            label_of(name).startswith(BACKGROUND_TEMPLATES), name
     emit_templates(out, scenery, "blocks", SCENERY_STRIDE, "piece", cached)
     line(out, "background_type_tbl:", "", "")
-    for t, ref in zip(scenery, bg_refs):
-        line(out, "", "DW", ref, "$%02X" % t["index"])
+    # The index a room names a template by is where that template sits in the
+    # castle: rooms.json keys them by name, in the game's own table order.
+    for index, ref in enumerate(bg_refs):
+        line(out, "", "DW", ref, "$%02X" % index)
     out.append("")
-    for t in scenery:
-        line(out, "BG_" + bare(t["name"]).upper(), "EQU", "$%02X" % t["index"])
+    for index, name in enumerate(scenery):
+        line(out, "BG_" + bare(name).upper(), "EQU", "$%02X" % index)
     out.append("")
     out.append("")
 
@@ -368,21 +385,21 @@ def main():
     # out, and their table entries hold 0: nothing looks them up.
     _, fg_refs = shared_labels(objects)
     named = {o["template"] for r in rooms for o in r["objects"]}
-    reached = {label_of(t["name"]) for t, ref in zip(objects, fg_refs)
-               if t["name"] in named}
-    reached |= {ref for t, ref in zip(objects, fg_refs) if t["name"] in named}
+    reached = {label_of(name) for name, ref in zip(objects, fg_refs)
+               if name in named}
+    reached |= {ref for name, ref in zip(objects, fg_refs) if name in named}
     emit_templates(out, objects, "entries", OBJECT_STRIDE, "sprite", cached,
                    only=reached)
     line(out, "block_type_tbl:", "", "")
-    for t, ref in zip(objects, fg_refs):
+    for index, (name, ref) in enumerate(zip(objects, fg_refs)):
         if ref in reached:
-            line(out, "", "DW", ref, "$%02X - %s" % (t["index"], bare(t["name"])))
+            line(out, "", "DW", ref, "$%02X - %s" % (index, bare(name)))
         else:
             line(out, "", "DW", "0",
-                 "$%02X - %s: no room names it" % (t["index"], bare(t["name"])))
+                 "$%02X - %s: no room names it" % (index, bare(name)))
     out.append("")
-    for t in objects:
-        line(out, "FG_" + bare(t["name"]).upper(), "EQU", "$%02X" % t["index"])
+    for index, name in enumerate(objects):
+        line(out, "FG_" + bare(name).upper(), "EQU", "$%02X" % index)
     out.append("")
     out.append("")
 
@@ -424,24 +441,25 @@ def main():
         scn, obs = r["scenery"], r["objects"]
         object_bytes = sum(1 + len(o["positions"]) for o in obs)
         biggest = max(biggest, len(scn) + object_bytes)
-        placed = sum(len(scn_by_name[s["template"]]["blocks"]) for s in scn)
-        placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]]["entries"])
+        placed = sum(len(scn_by_name[s["template"]]) for s in scn)
+        placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]])
                       for o in obs)
         most_objects = max(most_objects, placed)
 
-        attr = r["ink"] | (r["size"] << 3)
+        attr = r["ink"] | (castle.shape_index(atlas, r["dimensions"],
+                                       "room %d" % r["number"]) << 3)
         skip = 2 + len(scn) + object_bytes
         assert len(scn) < 8 and attr < 0x20 and skip < 256, r["number"]
         line(out, "room_%02X:" % r["number"], "DB", "$%02X, %d, $%02X"
              % (r["number"], skip, len(scn) << ROOM_SCN_SHIFT | attr),
-             "attr %d, shape %d, %d scenery, %d object bytes"
-             % (r["ink"], r["size"], len(scn), object_bytes))
+             "attr %d, %s, %d scenery, %d object bytes"
+             % (r["ink"], r["dimensions"], len(scn), object_bytes))
         if scn:
             line(out, "", "DB",
                  ", ".join("BG_" + bare(s["template"]).upper() for s in scn))
         for o in obs:
             n = len(o["positions"])
-            group = obj_by_name[o["template"]]["index"] << 3 | (n - 1)
+            group = object_index[o["template"]] << 3 | (n - 1)
             spots = ", ".join("$%02X" % (p["u"] | p["v"] << 3 | p["z"] << 6)
                               for p in o["positions"])
             line(out, "", "DB", "$%02X, %s" % (group, spots),

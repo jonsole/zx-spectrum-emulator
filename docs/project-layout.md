@@ -40,16 +40,24 @@ zx-spectrum-emulator/
     build_rom_source.py         # builds rom_disassembly/ (see vscode-debugging.md)
     make_test_tape.py             # generates tapes/
     make_toolbar_icons.py          # the extension's coloured debug-toolbar icons
+    room_designer.py                # serves the room designer outside VS Code
   examples/
     hello_rom_call/              # tiny original demo, committed
     filmation/                    # isometric masked-sprite engine; multi-file,
                                   #   assembled by its own build.py
+      graphics.py                 #   what each game's graphic numbers are called,
+                                  #   off its sprite sheet: the one rule both
+                                  #   rooms.py and rooms_source.py name them by
     zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
                                   #   a fast custom tape loader, and the Python that
                                   #   renders its tapes to WAV
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels
+    room_view.html                     # the Filmation room designer's page, shared by
+    room_view.js                       #   its two hosts: the custom editor on rooms.json
+    room_model.js                      #   ...what a castle is (no vscode API, tested)
+    room_render.js                     #   ...and what it looks like (ditto)
     extension.js                 #   the panels, and activation of everything below
     profile_view.js              #   execution profile: heat map on the source, hot spots
     profile_tree.js              #   ...its call tree and worst frames in the debug sidebar

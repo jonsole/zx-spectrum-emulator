@@ -89,16 +89,26 @@ captures/
 examples/filmation/knightlore/output/
 examples/filmation/output/
 
-# Knight Lore's sprites, as kl_extract.py takes them out of your own copy of
-# the game: the packed file, the sprite sheet sprite_sheet.py unpacks it into,
-# and the assembly transcription sprite_source.py builds from that sheet --
-# 3,000 lines of DB that build.py regenerates whenever the sheet is newer.
-# None of it is carried, because all of it is Ultimate's artwork: run
-# kl_extract.py once against your own copy to produce the packed file, and
-# build.py makes the sheet from it the first time it needs one.
+# The flow this repository follows, for both games:
+#
+#   your game --(extract, ONCE)--> sprites.json + sprites.png
+#                                  rooms.json, specials.json
+#                                        |
+#                                        v  (build.py, every time)
+#                                  the .s files --> the game
+#
+# The files in the middle are CARRIED and are what you edit, by hand or in the
+# designers. Nothing regenerates them -- that is the whole point, and it is why
+# build.py stops rather than re-running an extractor. What the extractors write
+# in the games' own packed shapes is scratch: it is listed below, it is yours
+# alone, and once the JSON exists nothing needs it again.
+#
+# sprite_data.s and the rest are the assembly forms the build makes from the
+# carried files, so they are not carried either.
 examples/filmation/knightlore/sprite_data.bin
-examples/filmation/knightlore/sprites.png
-examples/filmation/knightlore/sprites.json
+examples/filmation/knightlore/graphic_map.json
+# ...and the .bin an older kl_extract.py wrote before the map became JSON.
+examples/filmation/knightlore/graphic_map.bin
 examples/filmation/knightlore/sprite_data.s
 
 # ...and the graphic-number table that sprite_source.py writes beside it. It is
@@ -107,6 +117,7 @@ examples/filmation/knightlore/sprite_data.s
 # last thing in the image and rounded the whole thing up.
 examples/filmation/knightlore/sprite_table.s
 examples/filmation/knightlore/sprite_adj_gen.s
+examples/filmation/knightlore/graphics_gen.s
 
 # The font, the same way round as the sprites above: the packed file, the sheet
 # font_sheet.py unpacks it into, and the assembly form font_source.py builds
@@ -119,24 +130,25 @@ examples/filmation/knightlore/font.png
 examples/filmation/knightlore/font.json
 examples/filmation/knightlore/font.s
 
-# Likewise the assembly form of examples/filmation/knightlore/room_data.bin: every room
-# in Knight Lore, the templates they are built from, and the tables that index
-# them. rooms_source.py regenerates it from rooms.json, which rooms.py decodes
-# out of the packed file -- so the packed file and rooms.json are both carried
-# and this one is not. rooms.json is the editable form: edit it, by hand or in
-# the room designer, and the build picks the change up. Note that sprite_adj.s
-# is NOT here -- adj.py can only produce it from a running game, so that one is
-# committed.
+# The rest of Knight Lore's extraction, and the assembly the build makes from
+# the carried JSON. rooms.json and specials.json are carried; room_data.bin and
+# specials.bin are what they were first decoded out of, and nothing reads them
+# again.
+#
+# Note that the pixel nudges in sprites.json cannot be re-made from any of
+# this: adj.py harvests them from a RUNNING game. That is the one thing here
+# with no second copy anywhere, which is why sprites.json is carried and why
+# every tool that writes it merges rather than replacing.
+examples/filmation/knightlore/room_data.bin
 examples/filmation/knightlore/room_data.s
+examples/filmation/knightlore/specials.bin
+examples/filmation/knightlore/specials_gen.s
 
-# Pentagram's sprites and font, on the same line as Knight Lore's above: the
-# artwork is Ultimate's and this repository is public, so none of it is
-# carried, while the packed room tables and the graphic-number table beside
-# them are. Run pg_extract.py once against your own copy of the tape to
-# produce these, and build.py makes the sheets from them when it needs one.
+# Pentagram, on the same line as Knight Lore above: sprites.json, sprites.png
+# and rooms.json are carried and are what you edit; what pg_extract.py writes
+# in the game's own packed shapes is scratch.
 examples/filmation/pentagram/sprite_data.bin
-examples/filmation/pentagram/sprites.png
-examples/filmation/pentagram/sprites.json
+examples/filmation/pentagram/graphic_map.json
 examples/filmation/pentagram/sprite_data.s
 examples/filmation/pentagram/sprite_table.s
 examples/filmation/pentagram/sprite_adj_gen.s
@@ -144,7 +156,9 @@ examples/filmation/pentagram/font.bin
 examples/filmation/pentagram/font.png
 examples/filmation/pentagram/font.json
 examples/filmation/pentagram/font.s
+examples/filmation/pentagram/room_data.bin
 examples/filmation/pentagram/room_data.s
+examples/filmation/pentagram/graphic_map.bin
 examples/filmation/pentagram/quest.bin
 examples/filmation/pentagram/quest_data.s
 examples/filmation/pentagram/sound.bin

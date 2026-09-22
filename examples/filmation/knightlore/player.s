@@ -5,8 +5,8 @@
 ; A character like any other -- see character.s. The knight's legs are the
 ; block at 16 and his body the one at 32; he starts facing away from the
 ; viewer and up the screen.
-PLAYER_LEGS_GFX     EQU     16
-PLAYER_BODY_GFX     EQU     32
+PLAYER_LEGS_GFX     EQU     GFX_SABREMAN_LEGS_1_G16
+PLAYER_BODY_GFX     EQU     GFX_SABREMAN_BODY_1
 PLAYER_U            EQU     128         ; the middle of the room, where the game
 PLAYER_V            EQU     128         ; starts him (plyr_spr_init_data)
 PLAYER_FACING       EQU     0           ; -U, up and left
@@ -29,8 +29,8 @@ PLAYER_ALIVE        EQU     0
 PLAYER_DYING        EQU     1
 PLAYER_APPEARING    EQU     2
 PLAYER_CHANGING     EQU     3                   ; between man and wolf -- see day_step
-PLAYER_DEATH_GFX    EQU     112
-PLAYER_APPEAR_GFX   EQU     120
+PLAYER_DEATH_GFX    EQU     GFX_SPELL_1_G112
+PLAYER_APPEAR_GFX   EQU     GFX_SPELL_6_G120
 player_state:       DB      PLAYER_APPEARING
 
 ; Set when he touches something deadly -- see object_touched -- and read at the
@@ -59,9 +59,9 @@ SUN_SET             EQU     $E1
 DAYS_ALLOWED        EQU     $40                 ; in BCD, as the game counts
 PLAYER_WOLF         EQU     $20                 ; what the wolf adds to the knight's
                                                 ; graphics: legs 48, body 64
-PLAYER_CHANGE_GFX   EQU     92                  ; 92 to 95, the twinkle between
+PLAYER_CHANGE_GFX   EQU     GFX_TRANSFORM_1                  ; 92 to 95, the twinkle between
 PLAYER_CHANGE_TURNS EQU     8                   ; ...shown this many times,
-PLAYER_HIDDEN_GFX   EQU     1                   ; with nothing on top of it
+PLAYER_HIDDEN_GFX   EQU     GFX_GFX_01                   ; with nothing on top of it
 
 sun_x:              DB      SUN_RISE
 night:              DB      0                   ; PLAYER_WOLF by night

@@ -25,7 +25,7 @@ MENU_KEY_0          EQU     $EFFE               ; 0 in bit 0
 ; byte of the top and bottom runs. A run is that slice repeated, which is how
 ; the game draws them too: 24 along the top and the bottom, 128 down each side.
 MENU_FRAME_ATTR     EQU     $46                 ; bright yellow, under everything
-MENU_CORNER_GFX     EQU     137                 ; four bytes by 32 rows
+MENU_CORNER_GFX     EQU     GFX_MENU_1                 ; four bytes by 32 rows
 MENU_CORNER_X       EQU     224                 ; where the right-hand pair start
 MENU_SIDE_X         EQU     232                 ; and the right-hand side run
 MENU_SIDE_BITS      EQU     %00111100           ; a run's four pixels, graphic 138

@@ -14,9 +14,9 @@ COLLIDE_HEIGHT		EQU		23
 ; half can wear, once sprite_source.py has taken the blank rows off. That is a fact
 ; about the trimmed set, not the game's artwork, so sprite_source.py checks it on
 ; every build: a buffer too small gets rotated past its end, into the other.
-CHARACTER_LARGEST	EQU		sprite_030		; 3x24: the sparkle the legs die and
+CHARACTER_LARGEST	EQU		sprite_spell_1		; 3x24: the sparkle the legs die and
 					; come back as, which is bigger than any walking frame
-CHARACTER_TALLEST	EQU		sprite_092		; 3x29: the werewolf's body, which only a
+CHARACTER_TALLEST	EQU		sprite_werewolf_body_9		; 3x29: the werewolf's body, which only a
 					; walking character's top half ever wears
 CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; the same twelve Knight Lore gives the

@@ -25,10 +25,10 @@ nothing after them that has to be aligned.
     sprite_data.s       the sprites, bottom row first, mask and data
                         interleaved, with the blank bottom rows trimmed off
     sprite_table.s      256 pointers, indexed by Pentagram's graphic number
-    sprite_adj_gen.s    the pixel nudges from sprite_adj.s, with the rows this
+    sprite_adj_gen.s    the pixel nudges from graphic_map.json, with the rows this
                         script trimmed folded in
 
-sprite_adj.s is the other input, and is not generated here: adj.py harvested
+graphic_map.json is the other input, and is not generated here: adj.py harvested
 it from a running Pentagram, and it is committed and never edited.
 """
 
@@ -40,6 +40,9 @@ from pathlib import Path
 from PIL import Image
 
 HERE = Path(__file__).resolve().parent
+
+# How many graphic numbers the game has, and so how wide its table is.
+GRAPHIC_COUNT = 172
 
 # How a pixel's colour in the sheet becomes the two bits the Z80 wants: does
 # the sprite cover the screen here, and what does it put down if it does. The
@@ -60,7 +63,23 @@ def read_atlas(path):
     zx = atlas.get("meta", {}).get("zx", {})
     if "sprites" not in zx or "game" not in zx:
         raise SystemExit(f"{path.name} is not a sheet written by sprite_sheet.py")
-    return atlas, zx["sprites"], zx["game"]
+    facts = zx["game"]
+    if "graphics" not in facts:
+        raise SystemExit(
+            f"{path.name} has no meta.zx.game.graphics -- it was written by an "
+            "older sprite_sheet.py, before the graphic table moved into the "
+            "sheet. Delete it and run sprite_sheet.py once to rebuild it.")
+    # The file keys the table by graphic number and leaves the unused numbers
+    # out, which is what makes it readable. Everything below indexes by graphic
+    # number, so the list is filled back out here -- one table, presented two
+    # ways, rather than two tables that can disagree.
+    gmap = [None] * GRAPHIC_COUNT
+    for number, entry in facts["graphics"].items():
+        number = int(number)
+        if 0 <= number < GRAPHIC_COUNT and isinstance(entry.get("sprite"), int):
+            gmap[number] = entry["sprite"]
+    facts["graphicMap"] = gmap
+    return atlas, zx["sprites"], facts
 
 
 def read_sheet(sheet, atlas, entries, palette):
@@ -239,7 +258,7 @@ def emit_table(sprites, facts):
     # number. Its own table at $7112 is 256 pointers into sprite memory and
     # several graphic numbers share a bitmap -- 186 valid graphics across 103
     # sprites -- so the room templates can name sprites directly only if we
-    # number them its way. graphic_map.bin holds that mapping; see
+    # number them its way. graphic_map.json holds that mapping; see
     # pg_extract.py, and sprites.json carries it from there.
     #
     # 256 entries is 512 bytes, so the table is ALIGNed to its own size and
@@ -265,10 +284,12 @@ def emit_table(sprites, facts):
 # ---------------------------------------------------------------------------
 # The pixel adjustments, with the trimmed rows folded in.
 #
-# sprite_adj.s is what adj.py harvested from a running Pentagram: the nudge
-# its own code gives each graphic, as a table of distinct pairs, an index a
-# graphic long, and the handful of graphics whose mirror image wants a
-# different pair. That file is the harvest and is never edited.
+# graphic_map.json holds what adj.py harvested from a running Pentagram: the
+# nudge its own code gives each graphic, beside the sprite that graphic draws,
+# and the handful whose mirror image wants a different one. Those are the
+# harvest and are never edited; the pair table, the index and the exception
+# list are this file's packing of them, and are built below rather than carried
+# around.
 #
 # A sprite hangs from its bottom row -- object_place works the row out and
 # object_update takes the height off it -- so a sprite with blank rows taken
@@ -277,51 +298,22 @@ def emit_table(sprites, facts):
 # the index is per graphic, so the pairs are rebuilt here from the effective
 # values rather than patched.
 
-def read_adj(harvest):
-    """sprite_adj.s -> the nudge (x, y) for every graphic, and mirrored."""
-    text = harvest.read_text(encoding="utf-8")
+def read_adj(facts):
+    """graphic_map.json -> the nudge (x, y) for every graphic, and mirrored.
 
-    def numbers(chunk):
-        out = []
-        for line in chunk.splitlines():
-            line = line.split(";")[0].strip()
-            if not line.startswith("DB"):
-                continue
-            for v in line[2:].split(","):
-                v = v.strip()
-                if v:
-                    out.append(int(v[1:], 16) if v.startswith("$") else int(v))
-        return out
-
-    pairs_text = text.split("sprite_adj_pairs:")[1].split("sprite_adj_mirror:")[0]
-    flat = numbers(pairs_text)
-    pairs = [(flat[i], flat[i + 1]) for i in range(0, len(flat), 2)]
-
-    mirror_text = text.split("sprite_adj_mirror:")[1].split("sprite_adj_index:")[0]
-    flat = numbers(mirror_text)
-    mirror = {}
-    for i in range(0, len(flat) - 1, 2):
-        if flat[i] == 0:
-            break
-        mirror[flat[i]] = flat[i + 1]
-
-    index = numbers(text.split("sprite_adj_index:")[1])
-    # Pentagram names 172 graphics where Knight Lore names 256, so adj.py
-    # emits an index only that long -- padding it out to 256 would cost 84
-    # bytes in the region with the least room to spare. Graphics past the end
-    # never reach a sprite table entry, so give them the no-nudge pair rather
-    # than running off the list.
-    none = pairs[0]
+    The harvest is data, so it is kept as data. A graphic the file does not
+    mention is not nudged, and `mirrored` is only there where the other way
+    round wants a different pair -- four of them do. The `sprite` beside them
+    is the other half of the same entry and is not this function's business.
+    """
+    said = facts["graphics"]
     plain, flipped = [], []
     for g in range(256):
-        if g >= len(index):
-            plain.append(none)
-            flipped.append(none)
-            continue
-        entry = index[g]
-        pair = pairs[(entry & 0x7E) // 2]
+        entry = said.get(str(g)) or {}
+        pair = (entry.get("x", 0), entry.get("y", 0))
+        other = entry.get("mirrored")
         plain.append(pair)
-        flipped.append(pairs[mirror[g] // 2] if entry & 0x80 else pair)
+        flipped.append((other["x"], other["y"]) if other else pair)
     return plain, flipped
 
 
@@ -329,8 +321,8 @@ def signed(v):
     return v - 256 if v > 127 else v
 
 
-def emit_adj(sprites, facts, harvest):
-    plain, flipped = read_adj(harvest)
+def emit_adj(sprites, facts):
+    plain, flipped = read_adj(facts)
     # Nudges the original sets from a constant, which override the harvest:
     # see FIXED_NUDGES in sprite_sheet.py.
     for g, (x, y) in facts.get("fixedNudges", {}).items():
@@ -362,7 +354,7 @@ def emit_adj(sprites, facts, harvest):
     assert len(pairs) * 2 <= 128, "more pairs than an index byte can name"
 
     out = []
-    out.append("; Generated by sprite_source.py from sprite_adj.s -- do not edit.")
+    out.append("; Generated by sprite_source.py from graphic_map.json -- do not edit.")
     out.append(";")
     out.append("; The pixel nudge that lines a sprite's artwork up with its logical")
     out.append("; position: what adj.py harvested from a running Pentagram, plus the")
@@ -425,13 +417,11 @@ def main():
                         help="the sprite sheet PNG (default: sprites.png)")
     parser.add_argument("--json", type=Path, default=HERE / "sprites.json",
                         help="the atlas that describes it (default: sprites.json)")
-    parser.add_argument("--adj", type=Path, default=HERE / "sprite_adj.s",
-                        help="the harvested nudges (default: sprite_adj.s)")
     parser.add_argument("--out-dir", type=Path, default=HERE,
                         help="where the .s files go (default: beside this script)")
     args = parser.parse_args()
 
-    for needed in (args.sheet, args.json, args.adj):
+    for needed in (args.sheet, args.json):
         if not needed.is_file():
             raise SystemExit(f"{needed} is missing -- run sprite_sheet.py to make "
                              "the sheet from sprite_data.bin")
@@ -448,7 +438,7 @@ def main():
     used = {n for n in gmap if n is not None}
     for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated, used)),
                         ("sprite_table.s", emit_table(sprites, facts)),
-                        ("sprite_adj_gen.s", emit_adj(sprites, facts, args.adj))):
+                        ("sprite_adj_gen.s", emit_adj(sprites, facts))):
         (args.out_dir / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"Wrote {name}")
 

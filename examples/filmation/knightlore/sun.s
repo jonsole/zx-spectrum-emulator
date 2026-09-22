@@ -23,7 +23,7 @@ SUN_COLUMN          EQU     23                  ; the window's first byte
 SUN_COLUMNS         EQU     6
 SUN_ROWS            EQU     31
 SUN_ROW             EQU     SCREEN_ROWS - SUN_ROWS
-SUN_GFX             EQU     88                  ; the sun, and 89 the moon
+SUN_GFX             EQU     GFX_SUN_1                  ; the sun, and 89 the moon
 SUN_DISC_ROWS       EQU     16                  ; ...both 2x16
 SUN_FRAME_ATTR      EQU     $42
 SUN_ATTR            EQU     $46                 ; and $47 by night
@@ -152,13 +152,13 @@ sun_draw:           call    turn_add
                     add     a,d
                     ld      l,a
                     ld      h,0
-                    ld      bc,sprite_000 + 2
+                    ld      bc,sprite_window_1 + 2
                     add     hl,bc
                     ld      a,3
                     sub     d
                     jr      z,.leaf_186
                     jr      nc,.leaf_90
-.leaf_186:          ld      bc,sprite_001 - sprite_000 - 6
+.leaf_186:          ld      bc,sprite_window_2 - sprite_window_1 - 6
                     add     hl,bc
                     xor     a                   ; so that it never counts down to 0
 .leaf_90:           ld      (.cross + 2),a
@@ -240,7 +240,7 @@ sun_draw:           call    turn_add
                     dec     ixh
                     jr      nz,.next
                     push    bc
-                    ld      bc,sprite_001 - sprite_000 - 6
+                    ld      bc,sprite_window_2 - sprite_window_1 - 6
                     add     hl,bc
                     pop     bc
 .next:              dec     ixl

@@ -22,23 +22,23 @@ It writes five files next to itself, and those are what the build uses
                    sprites, in the game's own format and address order.
                    sprite_sheet.py turns this into the sprite sheet.
 
-  graphic_map.bin  256 bytes, one per Knight Lore graphic number, giving the
-                   index of the sprite in sprite_data.bin that holds its
-                   bitmap, or 255 for the graphic numbers the game does not
-                   use. The game's own table at $7112 is 256 pointers into
-                   sprite memory, and several graphic numbers share a bitmap,
-                   which is why 186 valid graphics resolve to 103 sprites.
-                   the sheet carries this, to number sprite_table the way the
-                   game numbers its graphics, so the room templates can name
-                   sprites directly.
+  graphic_map.json the sprite each Knight Lore graphic number draws, keyed by
+                   number, leaving out the ones the game does not use. The
+                   game's own table at $7112 is 256 pointers into sprite
+                   memory, and several graphic numbers share a bitmap, which is
+                   why 186 valid graphics resolve to 103 sprites. The sheet
+                   carries this, to number sprite_table the way the game
+                   numbers its graphics, so the room templates can name sprites
+                   directly.
 
-  specials.bin     142 bytes: where each of the 32 collectables starts --
-                   U, V, Z and room, four bytes each, from the second to
-                   fifth bytes of every nine-byte row of special_objs_tbl at
-                   $6FF2 -- and then the fourteen-long order the wizard asks
-                   for them in, objects_required at $C27D, before the game
-                   shuffles it.
+  specials.json    where each of the 32 collectables starts -- room, U, V and
+                   Z, from the second to fifth bytes of every nine-byte row of
+                   special_objs_tbl at $6FF2 -- and the fourteen-long order the
+                   wizard asks for them in, objects_required at $C27D, before
+                   the game shuffles it. specials_source.py assembles it back
+                   into the two tables the game reads.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -120,6 +120,98 @@ def graphic_map(ram, addresses):
     return bytes(out), resolved
 
 
+def write_graphic_map(gmap):
+    """Which sprite each graphic number draws, merged into graphic_map.json.
+
+    The file holds two halves of one fact: which bitmap a graphic number draws,
+    which is what this writes, and the pixel nudge that lines it up, which
+    adj.py harvests from a RUNNING game and nothing else can produce. So this
+    MERGES -- the nudges already in the file are kept, and only the sprites are
+    rewritten. Re-extracting from a fresh snapshot therefore costs nothing.
+
+    The game's own table is 256 pointers and most of them go nowhere; only the
+    numbers that resolve are written, so the file says what the game actually
+    draws rather than burying it in a run of 255s.
+    """
+    path = HERE / "graphic_map.json"
+    said = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    table = said.get("graphics") or {}
+
+    for number, sprite in enumerate(gmap):
+        entry = dict(table.get(str(number)) or {})
+        if sprite == NO_SPRITE:
+            entry.pop("sprite", None)
+        else:
+            entry["sprite"] = sprite
+        if entry:
+            table[str(number)] = entry
+        else:
+            table.pop(str(number), None)
+
+    drawn = {k: v for k, v in table.items() if "sprite" in v}
+    said["comment"] = ("How each of %s's graphic numbers is drawn: `sprite` is which "
+            "bitmap, out of the game's own table of sprite pointers, and "
+            "`x`/`y` are the pixel nudge that lines that bitmap up with the "
+            "piece's logical position. A graphic number that is not here is "
+            "one the game does not use. The two come from different places "
+            "and only one can be rebuilt: %s reads the sprite pointers "
+            "out of a snapshot, while the nudges are harvested by adj.py "
+            "from a RUNNING game, because %s picks them inside its "
+            "per-graphic update routines rather than reading a table. So "
+            "re-running %s keeps whatever nudges are already here. "
+            "`mirrored` is the pair to use when the piece is drawn the other "
+            "way round, and is given only where it differs. Several graphic "
+            "numbers can share one sprite -- that is the game's own doing -- "
+            "and they are still not interchangeable, because the nudge is "
+            "per graphic number."
+        % ("Knight Lore", "kl_extract.py", "Knight Lore", "kl_extract.py"))
+    said["game"] = "knightlore"
+    said["count"] = len(gmap)
+    said["graphics"] = {k: table[k] for k in sorted(table, key=int)}
+    path.write_text(json.dumps(said, indent=1) + "\n", encoding="utf-8")
+    return len(drawn), len({v["sprite"] for v in drawn.values()})
+
+def write_specials(ram):
+    """Where the collectables start, and the order the wizard wants them in.
+
+    Four bytes a row out of special_objs_tbl and then objects_required, named
+    rather than packed: they are thirty-two positions and fourteen kinds, and
+    a remake wants to move them about. specials_source.py assembles this back
+    into the two tables the game reads.
+    """
+    collectables = []
+    for row in range(SPECIALS_ROWS):
+        at = SPECIALS_TBL + row * 9 - 0x4000
+        u, v, z, room = ram[at + 1:at + 5]
+        collectables.append({"room": room, "u": u, "v": v, "z": z})
+
+    at = OBJECTS_REQUIRED - 0x4000
+    wanted = list(ram[at:at + OBJECTS_REQUIRED_COUNT])
+
+    out = {
+        "comment": (
+            "The thirty-two collectables: where each one lies at the start of a "
+            "game, and the order the wizard asks for them in. kl_extract.py "
+            "pulls both out of Knight Lore -- the positions from the second to "
+            "fifth bytes of every nine-byte row of special_objs_tbl at $6FF2, "
+            "and the wanted list from objects_required at $C27D, before the "
+            "game shuffles it. Which KIND each row is dealt is not here: "
+            "special_init deals those at the start of every game, counting on "
+            "from a random number, so no two games are alike."),
+        "game": "knightlore",
+        "collectables": collectables,
+        "wantedComment": (
+            "The fourteen kinds the wizard wants, in order, each 0 to 7 -- "
+            "matched against a collectable's graphic AND 7. special_init turns "
+            "this list round four to seven places before a game, so the order "
+            "here is only where the turning starts."),
+        "wanted": wanted,
+    }
+    (HERE / "specials.json").write_text(
+        json.dumps(out, indent=1) + "\n", encoding="utf-8")
+    return len(collectables), len(wanted)
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -135,15 +227,9 @@ def main():
     print("room_data.bin    %d bytes ($%04X-$%04X)"
           % (len(rooms), ROOM_DATA_START, ROOM_DATA_END - 1))
 
-    specials = bytearray()
-    for row in range(SPECIALS_ROWS):
-        at = SPECIALS_TBL + row * 9 - 0x4000
-        specials += ram[at + 1:at + 5]
-    at = OBJECTS_REQUIRED - 0x4000
-    specials += ram[at:at + OBJECTS_REQUIRED_COUNT]
-    (HERE / "specials.bin").write_bytes(specials)
-    print("specials.bin     %d bytes, %d collectables and the order they are wanted in"
-          % (len(specials), SPECIALS_ROWS))
+    rows, wanted = write_specials(ram)
+    print("specials.json    %d collectables and the %d the wizard wants"
+          % (rows, wanted))
 
     packed, addresses = sprites(ram)
     (HERE / "sprite_data.bin").write_bytes(packed)
@@ -151,9 +237,9 @@ def main():
           % (len(packed), SPRITES_START, SPRITES_END - 1, len(addresses)))
 
     gmap, resolved = graphic_map(ram, addresses)
-    (HERE / "graphic_map.bin").write_bytes(gmap)
-    print("graphic_map.bin  %d bytes, %d graphic numbers resolved"
-          % (len(gmap), resolved))
+    used, sprites_used = write_graphic_map(gmap)
+    print("graphic_map.json %d graphic numbers resolved to %d sprites"
+          % (used, sprites_used))
 
 
 if __name__ == "__main__":

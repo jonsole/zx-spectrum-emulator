@@ -1,0 +1,228 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Filmation castle",
+ "description": "Every room in a Filmation game, and the floor shapes they stand on. The editable form: rooms_source.py turns it, with templates.json beside it, into room_data.s, and the room designer opens it as a picture. A room places templates by name; the templates themselves are templates.json's.",
+ "type": "object",
+ "required": [
+  "meta",
+  "roomDimensions",
+  "rooms"
+ ],
+ "properties": {
+  "meta": {
+   "type": "object",
+   "description": "About the file rather than the castle. rooms_source.py ignores all of it, so nothing here changes one byte of the game.",
+   "properties": {
+    "version": {
+     "type": "integer",
+     "description": "The schema's own version."
+    },
+    "game": {
+     "type": "string",
+     "description": "Which game, naming a directory under examples/filmation."
+    },
+    "comment": {
+     "type": "string",
+     "description": "Prose for whoever opens the file."
+    },
+    "sprites": {
+     "type": "object",
+     "description": "Which sheet the graphic names in this file go with. The designer resolves a name through these; the paths are relative to this file, and neither host will follow one that is absolute or climbs out of the directory.",
+     "properties": {
+      "sheet": {
+       "type": "string",
+       "description": "The picture, normally sprites.png."
+      },
+      "atlas": {
+       "type": "string",
+       "description": "The atlas that names and locates each frame, normally sprites.json."
+      },
+      "graphics": {
+       "type": "string",
+       "description": "Which sprite each graphic number draws and the pixel nudge that lines it up, normally graphic_map.json."
+      }
+     },
+     "additionalProperties": false
+    },
+    "templates": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9_.-]+[.]json$",
+     "description": "The file this castle's templates are in, beside this one. Required: nothing is assumed about where it is, and it has to name this file back in its own meta.rooms."
+    }
+   },
+   "required": [
+    "templates"
+   ]
+  },
+  "roomDimensions": {
+   "type": "object",
+   "description": "The floor shapes a room can have, keyed by name. room_shape copies the three bytes into room_half_u, room_half_v and room_floor_z; the floor is centred on 128 along both axes. The key ORDER is the game's own -- bits 3 and 4 of a room's attribute byte index this table straight -- so a shape may be renamed but not moved.",
+   "minProperties": 1,
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "u",
+     "v",
+     "z"
+    ],
+    "properties": {
+     "u": {
+      "$ref": "#/definitions/byte",
+      "description": "Half-width along U."
+     },
+     "v": {
+      "$ref": "#/definitions/byte",
+      "description": "Half-width along V."
+     },
+     "z": {
+      "$ref": "#/definitions/byte",
+      "description": "The floor's height: where a piece resting on the floor sits."
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  "rooms": {
+   "type": "array",
+   "description": "The castle. A room is a colour, a floor shape and a handful of indices; room_build.s expands those into the records the engine draws.",
+   "items": {
+    "type": "object",
+    "required": [
+     "number",
+     "ink",
+     "dimensions"
+    ],
+    "properties": {
+     "number": {
+      "$ref": "#/definitions/byte",
+      "description": "The room's own number. In Knight Lore the map is arithmetic -- a 16 x 16 grid, so the number is a row and a column -- and in Pentagram each doorway carries its destination instead."
+     },
+     "ink": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 7,
+      "description": "The room's ink colour, 0 to 7. Black on black would be a room you cannot see."
+     },
+     "dimensions": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Which of `roomDimensions` gives this room its floor, by name."
+     },
+     "scenery": {
+      "type": "array",
+      "description": "The scenery templates this room is built from, in the order they are drawn.",
+      "items": {
+       "type": "object",
+       "required": [
+        "template"
+       ],
+       "properties": {
+        "template": {
+         "type": "string",
+         "description": "A name from sceneryTemplates."
+        },
+        "destination": {
+         "$ref": "#/definitions/byte",
+         "description": "Pentagram only: the room a doorway leads to. Knight Lore works its own out from the room number."
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     "objects": {
+      "type": "array",
+      "description": "Object templates, each stamped at one or more places on the floor grid.",
+      "items": {
+       "type": "object",
+       "required": [
+        "template",
+        "positions"
+       ],
+       "properties": {
+        "template": {
+         "type": "string",
+         "description": "A name from objectTemplates."
+        },
+        "positions": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "required": [
+           "u",
+           "v",
+           "z"
+          ],
+          "properties": {
+           "u": {
+            "$ref": "#/definitions/cell",
+            "description": "Floor cell along U, 0 to 7."
+           },
+           "v": {
+            "$ref": "#/definitions/cell",
+            "description": "Floor cell along V, 0 to 7."
+           },
+           "z": {
+            "$ref": "#/definitions/level",
+            "description": "Which level up, 0 to 3. room_unpack turns it into 12 units a level."
+           },
+           "nudge": {
+            "$ref": "#/definitions/byte",
+            "description": "Knight Lore only: a sixth byte nudging this one placement."
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       },
+       "additionalProperties": false
+      }
+     }
+    },
+    "additionalProperties": false
+   }
+  }
+ },
+ "additionalProperties": false,
+ "definitions": {
+  "byte": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 255
+  },
+  "cell": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 7,
+   "multipleOf": 0.5
+  },
+  "level": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 3,
+   "multipleOf": 0.5
+  },
+  "graphic": {
+   "type": "string",
+   "description": "A sprite's name from the sheet, not a number: a path through the sprite groups, then which one it is within its group, counting from one -- knight.legs.1. A frame shared by several graphic numbers takes the number as a last segment (knight.legs.1.g144), because they are not interchangeable. A graphic with no artwork at all is gfx_NN. graphics.py is the one place names and numbers meet; rooms_source.py stops on a name it cannot place rather than emit a wrong byte."
+  },
+  "flags": {
+   "type": "object",
+   "description": "The game's own flag byte. Two bits are known and named; the rest are carried whole rather than guessed at.",
+   "properties": {
+    "mirrored": {
+     "type": "boolean",
+     "description": "Bit 6: draw the artwork the other way round. The nudge may differ when it is -- see graphic_map.json."
+    },
+    "passable": {
+     "type": "boolean",
+     "description": "Bit 1: things walk through it rather than into it."
+    },
+    "rest": {
+     "$ref": "#/definitions/byte",
+     "description": "The bits we have not named, kept so the file claims no more than is actually known."
+    }
+   },
+   "additionalProperties": false
+  }
+ }
+}

@@ -20,8 +20,11 @@ font.bin, and this makes one the first time it finds none. It never remakes
 one that is already there, because that is where your edits to the artwork
 live -- run the unpacking script by hand to go back to the game's own.
 
-sprite_adj.s is generated too, but by adj.py from a RUNNING Pentagram, so it
-is committed and never rebuilt here.
+graphic_map.json is an input rather than something generated here. It says
+which sprite each graphic number draws and the pixel nudge that lines it up;
+the first half pg_extract.py reads out of a snapshot, but the second can only
+be harvested by adj.py from a RUNNING Pentagram, so the file is committed and
+nothing rebuilds it.
 
 Run it directly, or via the "filmation.build" VS Code task that
 .vscode/launch.json's "ZX Spectrum: Filmation" configuration depends on.
@@ -31,6 +34,7 @@ Run it directly, or via the "filmation.build" VS Code task that
 """
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -77,33 +81,37 @@ def find_sjasmplus() -> str:
 def generate_sprite_data() -> None:
     """Regenerates the sprite sources when the sheet has moved on.
 
-    Two steps: sprite_sheet.py unpacks sprite_data.bin into sprites.png and
-    sprites.json if there is no sheet yet, and sprite_source.py turns that
-    sheet into the three assembler files. Only the first run makes a sheet --
-    an existing one is the artwork, edits and all, and is never overwritten.
+    ONE step, not two. sprites.png and sprites.json are the authoritative form
+    of the graphics -- the sprites themselves, the name and group of each one,
+    which sprite every graphic number draws and the pixel nudge that lines it
+    up -- and nothing here regenerates them. They are made once, by
+    sprite_sheet.py, out of what pg_extract.py pulled from the game; after that
+    they are what you edit and what the build reads.
+
+    That is the whole of why the flow is one way. sprite_sheet.py used to be
+    run from here whenever the sheet was missing, which quietly made the atlas
+    a CACHE of graphic_map.json -- and a cache nothing invalidated, so
+    re-pointing a graphic changed a file the build had already stopped reading.
     """
-    packed = PENTAGRAM / "sprite_data.bin"
-    unpack = PENTAGRAM / "sprite_sheet.py"
     generator = PENTAGRAM / "sprite_source.py"
     sheet = PENTAGRAM / "sprites.png"
     atlas = PENTAGRAM / "sprites.json"
-    harvest = PENTAGRAM / "sprite_adj.s"
     generated = [PENTAGRAM / name for name in
                  ("sprite_data.s", "sprite_table.s", "sprite_adj_gen.s")]
 
     if not sheet.is_file() or not atlas.is_file():
-        if not packed.is_file():
-            sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
-                     "own copy of Pentagram to produce it")
-        print(f"Unpacking {packed.name} into {sheet.name} and {atlas.name}")
-        subprocess.run([sys.executable, str(unpack)], cwd=PENTAGRAM, check=True)
+        sys.exit(f"{sheet.name} and {atlas.name} are the graphics this game is "
+                 f"built from, and one of them is missing.\n"
+                 f"They are made once, from your own copy of the game:\n"
+                 f"    python pg_extract.py \"path/to/Pentagram\"\n"
+                 f"    python sprite_sheet.py\n"
+                 f"After that they are yours to edit and nothing overwrites them.")
 
-    newest_input = max(f.stat().st_mtime
-                       for f in (generator, sheet, atlas, harvest))
+    newest_input = max(f.stat().st_mtime for f in (generator, sheet, atlas))
     if all(f.is_file() and f.stat().st_mtime >= newest_input for f in generated):
         return
 
-    print(f"Regenerating the sprite sources from {sheet.name}")
+    print(f"Regenerating the sprite sources from {atlas.name}")
     subprocess.run([sys.executable, str(generator)], cwd=PENTAGRAM, check=True)
 
 
@@ -268,43 +276,46 @@ def z80_snapshot(ram: bytes, pc: int) -> bytes:
 
 
 def generate_room_data() -> None:
-    """Regenerates room_data.s when its inputs have moved on, in two steps.
+    """Regenerates room_data.s when rooms.json has moved on.
 
-    rooms.py decodes room_data.bin into rooms.json, the readable form, and
-    rooms_source.py turns rooms.json into room_data.s. Both write their files
-    themselves rather than to stdout, because they are thousands of lines of
-    named templates and commented room records rather than one table.
+    ONE step, like the sprites. rooms.json is the authoritative form of the
+    castle: rooms.py decodes it out of the game ONCE, and after that it is what
+    you edit -- by hand or in the room designer -- and what rooms_source.py
+    assembles. Nothing here re-decodes it, so an edit cannot be overwritten by
+    the original game's rooms.
+
+    Going back to those is a deliberate act: run rooms.py by hand, which says
+    plainly that it overwrites what is there.
     """
-    decoder = PENTAGRAM / "rooms.py"
     emitter = PENTAGRAM / "rooms_source.py"
-    packed = PENTAGRAM / "room_data.bin"
     atlas = PENTAGRAM / "rooms.json"
     generated = PENTAGRAM / "room_data.s"
 
-    if not packed.is_file():
-        sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
-                 "own copy of Pentagram to produce it")
+    if not atlas.is_file():
+        sys.exit(f"{atlas.name} is the castle this game is built from, and it "
+                 f"is missing.\nIt is made once, from your own copy of the "
+                 f"game:\n    python pg_extract.py \"path/to/Pentagram\"\n"
+                 f"    python rooms.py")
 
-    # The sprite sheet is an input too: rooms.json names its graphics after the
+    # The sheet is an input too: rooms.json names its graphics after the
     # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
-    # been regenerated or renamed leaves those names stale, and rooms_source.py
-    # would stop on a name it could not place.
-    inputs = [decoder.stat().st_mtime, packed.stat().st_mtime]
-    # ...and the naming rule itself, which lives one directory up and is what
-    # turns a graphic number into the name rooms.json carries.
+    # been renamed leaves those names stale and rooms_source.py would stop on
+    # one it could not place.
+    inputs = [emitter.stat().st_mtime, atlas.stat().st_mtime]
+    # ...and the templates the rooms place, a file of their own, wherever
+    # rooms.json says it is.
+    named = (json.loads(atlas.read_text(encoding="utf-8")).get("meta") or {}).get("templates")
+    templates = PENTAGRAM / named if named else None
+    if templates and templates.is_file():
+        inputs.append(templates.stat().st_mtime)
     namer = PENTAGRAM.parent / "graphics.py"
     if namer.is_file():
         inputs.append(namer.stat().st_mtime)
     sheet = PENTAGRAM / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
-    newest_input = max(inputs)
-    if not atlas.is_file() or atlas.stat().st_mtime < newest_input:
-        print(f"Regenerating {atlas.name} from {packed.name}")
-        subprocess.run([sys.executable, str(decoder)], cwd=PENTAGRAM, check=True)
 
-    newest_input = max(emitter.stat().st_mtime, atlas.stat().st_mtime)
-    if generated.is_file() and generated.stat().st_mtime >= newest_input:
+    if generated.is_file() and generated.stat().st_mtime >= max(inputs):
         return
 
     print(f"Regenerating {generated.name} from {atlas.name}")

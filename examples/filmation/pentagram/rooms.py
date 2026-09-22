@@ -65,6 +65,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import castle as castle_fmt                                     # noqa: E402
 import graphics as gfx                                          # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -101,7 +102,7 @@ OBJECT_GRAPHIC, OBJECT_FLAGS = 0, 4
 # known; bit 2 appears on five object templates only.
 FLAG_MIRROR = 0x40
 
-GRAPHIC_COUNT = 172             # what graphic_map.bin holds
+GRAPHIC_COUNT = 172             # what graphic_map.json holds
 
 # Doorways. Exactly twelve scenery templates ever carry a destination -- 0 to 7
 # and 24 to 27 -- in three sets of four, and the side is `index & 3` with
@@ -128,12 +129,19 @@ def w(addr):
     return data[addr - BASE] | (data[addr - BASE + 1] << 8)
 
 
+# The three floor shapes, in the order the game's own table holds them --
+# bits 3 and 4 of a room's attribute byte are an index into it, so the order is
+# the game's and cannot be rearranged. rooms.json names them instead, because
+# "square" says what a room is and "0" does not.
+SHAPE_NAMES = ("square", "narrowU", "narrowV")
+
+
 def sizes():
-    """The room size table: three bytes an entry, as the builder reads it."""
-    out = []
+    """The room floor shapes: three bytes an entry, as the builder reads it."""
+    out = {}
     for n in range(ROOM_SIZE_COUNT):
         at = ROOM_SIZE_TBL + n * 3
-        out.append({"index": n, "u": b(at), "v": b(at + 1), "z": b(at + 2)})
+        out[SHAPE_NAMES[n]] = {"u": b(at), "v": b(at + 1), "z": b(at + 2)}
     return out
 
 
@@ -160,7 +168,7 @@ def scenery_templates(known):
     The game copies a block, then looks at the byte after it and copies another
     while that byte is not zero, so a template is as long as its chain.
     """
-    out = []
+    out = {}
     for n in range(SCENERY_COUNT):
         at = w(SCENERY_TBL + n * 2)
         blocks = []
@@ -181,14 +189,11 @@ def scenery_templates(known):
             # they look like wants someone to open sprites.png; the data only
             # proves they are not doorways, so they keep their index.
             name = "scenery_%02d" % n
-        out.append({
-            "index": n,
-            "name": name,
-            "address": "$%04X" % at,
-            "doorway": n in DOOR_INDICES,
-            "side": SIDES[n & 3] if n in DOOR_INDICES else None,
-            "blocks": blocks,
-        })
+        # Keyed by name, and the name is all a template carries besides its
+        # pieces. Whether it is a doorway, and which wall it stands in, is
+        # decided by its position in the table, the way the game decides it
+        # -- castle.side_of has the rule. The name only says so for a reader.
+        out[name] = blocks
     return out
 
 
@@ -201,7 +206,7 @@ def object_templates(known):
     reads the byte after an entry and loops back to $C9DB while it is not zero
     -- so one object index can place several pieces.
     """
-    out = []
+    out = {}
     for n in range(OBJECT_COUNT):
         index = n * 2
         at = w(OBJECT_TBL + index)
@@ -222,12 +227,7 @@ def object_templates(known):
                 "offsets": {"halfU": False, "halfV": False, "raiseZ": 0},
             })
             p += OBJECT_BLOCK
-        out.append({
-            "index": index,
-            "name": "object_%02d" % n,
-            "address": "$%04X" % at,
-            "entries": entries,
-        })
+        out["object_%02d" % n] = entries
     return out
 
 
@@ -296,7 +296,7 @@ def rooms(scenery_names, object_names):
         out.append({
             "number": number,
             "ink": attr & 7,
-            "size": attr >> 3,
+            "dimensions": SHAPE_NAMES[attr >> 3],
             "scenery": scenery,
             "objects": objects,
         })
@@ -317,8 +317,10 @@ def main():
               "unpacked" % gfx.SHEET)
     scenery = scenery_templates(known)
     objects = object_templates(known)
-    scenery_names = {t["index"]: t["name"] for t in scenery}
-    object_names = {t["index"]: t["name"] for t in objects}
+    # A room names a template by its offset into the game's own table: the
+    # scenery table is one entry a template, the object table two bytes each.
+    scenery_names = dict(enumerate(scenery))
+    object_names = {n * 2: name for n, name in enumerate(objects)}
 
     castle = rooms(scenery_names, object_names)
 
@@ -334,23 +336,24 @@ def main():
                          % (room["number"], piece["destination"]))
 
     # Only a doorway template may name a destination.
-    by_name = {t["name"]: t for t in scenery}
     for room in castle:
         for piece in room["scenery"]:
-            if piece["destination"] and not by_name[piece["template"]]["doorway"]:
+            if piece["destination"] and not castle_fmt.side_of({"meta": {"game": "pentagram"}, "sceneryTemplates": scenery}, piece["template"]):
                 sys.exit("room %d: %s carries a destination but is not a doorway"
                          % (room["number"], piece["template"]))
 
+    # A template a room uses has to be drawable. Checked rather than recorded:
+    # it is worked out from the rest of the file, so a "used" or "valid" field
+    # would only be something to fall out of date.
     named = {s["template"] for r in castle for s in r["scenery"]}
     named |= {o["template"] for r in castle for o in r["objects"]}
-    for group, key in ((scenery, "blocks"), (objects, "entries")):
-        for t in group:
-            t["used"] = t["name"] in named
-            drawable = set(known.values())
-            t["valid"] = all(e["graphic"] in drawable for e in t[key])
-            if t["used"] and not t["valid"]:
+    drawable = set(known.values())
+    for group in (scenery, objects):
+        for name, pieces in group.items():
+            if name in named and not all(p["graphic"] in drawable
+                                         for p in pieces):
                 sys.exit("%s is used by a room but names a graphic the table "
-                         "has no number for" % t["name"])
+                         "has no number for" % name)
 
     atlas = {
         "meta": {
@@ -367,21 +370,32 @@ def main():
             "sprites": {
                 "sheet": "sprites.png",
                 "atlas": "sprites.json",
-                "adjust": "sprite_adj.s",
+                "graphics": "graphics.json",
             },
+            # ...and the file its templates are in, which is a file of its own:
+            # a template is castle-wide, not part of a room.
+            "templates": castle_fmt.TEMPLATES,
         },
-        "sizes": sizes(),
+        "roomDimensions": sizes(),
         "sceneryTemplates": scenery,
         "objectTemplates": objects,
         "rooms": castle,
     }
-    OUT.write_text(json.dumps(atlas, indent=1) + "\n", encoding="utf-8")
+    # The box each piece occupies belongs to the graphic, not to the template
+    # that places one, so it goes into graphics.json and leaves rooms.json
+    # saying only where the exceptions are. graphics.py has the rule.
+    kept = gfx.fold_sizes(HERE, atlas)
+
+    # Two files, one job each: the rooms, and the templates they place.
+    castle_fmt.write_castle(HERE, atlas)
 
     placed = sum(len(o["positions"]) for r in castle for o in r["objects"])
     print("%s: %d rooms, %d scenery entries, %d object entries placing %d objects"
           % (OUT.name, len(castle),
              sum(len(r["scenery"]) for r in castle),
              sum(len(r["objects"]) for r in castle), placed))
+    print("graphics.json: %d graphics given a size; %d template entries keep "
+          "a box of their own" % (len(gfx.sizes(HERE)), len(kept)))
 
 
 if __name__ == "__main__":

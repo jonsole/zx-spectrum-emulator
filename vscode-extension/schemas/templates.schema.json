@@ -1,0 +1,242 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "Filmation castle templates",
+ "description": "A Filmation castle's templates: the castle-wide pieces every room naming one is built from. rooms.json places them by name; rooms_source.py turns the two into room_data.s, and the templates editor opens this file. A template is keyed by its name and IS its list of placements. Its POSITION in its table is the game's own number for it -- Knight Lore's code takes scenery 0-7 to be the arches, and gives object templates behaviour by label -- so a template may be renamed but not moved, and a new one goes on the end.",
+ "type": "object",
+ "required": [
+  "meta",
+  "sceneryTemplates",
+  "objectTemplates"
+ ],
+ "properties": {
+  "meta": {
+   "type": "object",
+   "description": "About the file. The game matters: which templates are doorways is decided by their position in the game's own table, and the two games put them in different places.",
+   "properties": {
+    "version": {
+     "type": "integer"
+    },
+    "game": {
+     "type": "string",
+     "enum": [
+      "knightlore",
+      "pentagram"
+     ]
+    },
+    "comment": {
+     "type": "string"
+    },
+    "rooms": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9_.-]+[.]json$",
+     "description": "The rooms file these templates belong to, beside this one. Required: nothing is assumed, and that file has to name this one back in its meta.templates."
+    }
+   },
+   "required": [
+    "game",
+    "rooms"
+   ]
+  },
+  "sceneryTemplates": {
+   "type": "object",
+   "description": "Walls, arches and trees: pieces placed at fixed world coordinates rather than on the floor grid. background_insert puts them in an unsorted run at the front of the draw list, so nothing is ever drawn behind them. Keyed by the name rooms call it by; a template IS its list of placements, in the order they are put down. The key ORDER is the game's table order, so a template may be renamed but not moved. The same graphic may be placed more than once -- a wall is one stone laid five times.",
+   "additionalProperties": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "graphic"
+     ],
+     "dependencies": {
+      "sizeU": [
+       "sizeV",
+       "sizeZ"
+      ],
+      "sizeV": [
+       "sizeU",
+       "sizeZ"
+      ],
+      "sizeZ": [
+       "sizeU",
+       "sizeV"
+      ]
+     },
+     "properties": {
+      "graphic": {
+       "$ref": "#/definitions/graphic"
+      },
+      "u": {
+       "$ref": "#/definitions/byte",
+       "description": "World U, towards the viewer; the floor is centred on 128. Scenery only -- an object takes its place from the room."
+      },
+      "v": {
+       "$ref": "#/definitions/byte",
+       "description": "World V, away from the viewer."
+      },
+      "z": {
+       "$ref": "#/definitions/byte",
+       "description": "World Z, up."
+      },
+      "sizeU": {
+       "$ref": "#/definitions/byte",
+       "description": "An override of the box graphics.json gives this graphic, for a record whose bytes are not a box at all -- Knight Lore's guard templates end with a blank, passable entry whose U and V are the guard's patrol extent. Give all three or none. Nothing else needs them: the box belongs to the graphic, and a mirrored piece swaps U and V by itself."
+      },
+      "sizeV": {
+       "$ref": "#/definitions/byte",
+       "description": "Half-width along V, with sizeU and sizeZ."
+      },
+      "sizeZ": {
+       "$ref": "#/definitions/byte",
+       "description": "Height, with sizeU and sizeV."
+      },
+      "flags": {
+       "$ref": "#/definitions/flags"
+      },
+      "offsets": {
+       "type": "object",
+       "description": "Where inside its cell the piece sits. A cell is 16 units across, so a half offset is 8. Objects only.",
+       "properties": {
+        "halfU": {
+         "type": "boolean",
+         "description": "Half a cell along U."
+        },
+        "halfV": {
+         "type": "boolean",
+         "description": "Half a cell along V."
+        },
+        "raiseZ": {
+         "$ref": "#/definitions/byte",
+         "description": "Extra height above the floor, on top of the room's floorZ and the position's own z. Masked to a multiple of 4 by room_unpack."
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     "additionalProperties": false
+    }
+   }
+  },
+  "objectTemplates": {
+   "type": "object",
+   "description": "A group of objects placed together on the floor grid. A room names the template and then lists where to stamp it. Keyed by the name rooms call it by; a template IS its list of placements, in the order they are put down. The key ORDER is the game's table order, so a template may be renamed but not moved. The same graphic may be placed more than once -- a wall is one stone laid five times.",
+   "additionalProperties": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "graphic"
+     ],
+     "dependencies": {
+      "sizeU": [
+       "sizeV",
+       "sizeZ"
+      ],
+      "sizeV": [
+       "sizeU",
+       "sizeZ"
+      ],
+      "sizeZ": [
+       "sizeU",
+       "sizeV"
+      ]
+     },
+     "properties": {
+      "graphic": {
+       "$ref": "#/definitions/graphic"
+      },
+      "u": {
+       "$ref": "#/definitions/byte",
+       "description": "World U, towards the viewer; the floor is centred on 128. Scenery only -- an object takes its place from the room."
+      },
+      "v": {
+       "$ref": "#/definitions/byte",
+       "description": "World V, away from the viewer."
+      },
+      "z": {
+       "$ref": "#/definitions/byte",
+       "description": "World Z, up."
+      },
+      "sizeU": {
+       "$ref": "#/definitions/byte",
+       "description": "An override of the box graphics.json gives this graphic, for a record whose bytes are not a box at all -- Knight Lore's guard templates end with a blank, passable entry whose U and V are the guard's patrol extent. Give all three or none. Nothing else needs them: the box belongs to the graphic, and a mirrored piece swaps U and V by itself."
+      },
+      "sizeV": {
+       "$ref": "#/definitions/byte",
+       "description": "Half-width along V, with sizeU and sizeZ."
+      },
+      "sizeZ": {
+       "$ref": "#/definitions/byte",
+       "description": "Height, with sizeU and sizeV."
+      },
+      "flags": {
+       "$ref": "#/definitions/flags"
+      },
+      "offsets": {
+       "type": "object",
+       "description": "Where inside its cell the piece sits. A cell is 16 units across, so a half offset is 8. Objects only.",
+       "properties": {
+        "halfU": {
+         "type": "boolean",
+         "description": "Half a cell along U."
+        },
+        "halfV": {
+         "type": "boolean",
+         "description": "Half a cell along V."
+        },
+        "raiseZ": {
+         "$ref": "#/definitions/byte",
+         "description": "Extra height above the floor, on top of the room's floorZ and the position's own z. Masked to a multiple of 4 by room_unpack."
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     "additionalProperties": false
+    }
+   }
+  }
+ },
+ "additionalProperties": false,
+ "definitions": {
+  "byte": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 255
+  },
+  "cell": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 7,
+   "multipleOf": 0.5
+  },
+  "level": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 3,
+   "multipleOf": 0.5
+  },
+  "graphic": {
+   "type": "string",
+   "description": "A sprite's name from the sheet, not a number: a path through the sprite groups, then which one it is within its group, counting from one -- knight.legs.1. A frame shared by several graphic numbers takes the number as a last segment (knight.legs.1.g144), because they are not interchangeable. A graphic with no artwork at all is gfx_NN. graphics.py is the one place names and numbers meet; rooms_source.py stops on a name it cannot place rather than emit a wrong byte."
+  },
+  "flags": {
+   "type": "object",
+   "description": "The game's own flag byte. Two bits are known and named; the rest are carried whole rather than guessed at.",
+   "properties": {
+    "mirrored": {
+     "type": "boolean",
+     "description": "Bit 6: draw the artwork the other way round. The nudge may differ when it is -- see graphic_map.json."
+    },
+    "passable": {
+     "type": "boolean",
+     "description": "Bit 1: things walk through it rather than into it."
+    },
+    "rest": {
+     "$ref": "#/definitions/byte",
+     "description": "The bits we have not named, kept so the file claims no more than is actually known."
+    }
+   },
+   "additionalProperties": false
+  }
+ }
+}

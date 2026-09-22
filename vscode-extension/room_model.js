@@ -59,31 +59,35 @@ const FIRST_REAL_GRAPHIC = 2;
 // frame's name therefore takes the number with it.
 const UNNAMED_PREFIX = 'gfx_';
 
-function graphicNames(sheet) {
-  const out = new Map();
-  const zx = sheet && sheet.meta && sheet.meta.zx;
-  const map = zx && zx.game && zx.game.graphicMap;
-  const sprites = (zx && zx.sprites) || [];
-  if (!map) return out;
-
-  const sharing = new Map();
-  map.forEach(function (n, graphic) {
-    if (n === null || n === undefined) return;
-    if (!sharing.has(n)) sharing.set(n, []);
-    sharing.get(n).push(graphic);
-  });
-  map.forEach(function (n, graphic) {
-    if (n === null || n === undefined || !sprites[n]) return;
-    const label = sprites[n].label;
-    out.set(graphic, sharing.get(n).length === 1
-      ? label : label + '.g' + graphic);
-  });
-  return out;
+// sheet_model.js is the one place that knows what the two graphics files look
+// like -- see the note in room_render.js about why this is pulled in twice
+// over.
+if (typeof require !== 'undefined' && typeof module !== 'undefined') {
+  // eslint-disable-next-line no-var, vars-on-top
+  var { graphicNamesOf, graphicSizes, boxOf } = require('./sheet_model');
 }
 
-function graphicNumbers(sheet) {
+// A graphic is named after the sprite it draws, with the number on the end
+// where several graphics draw one sprite. examples/filmation/graphics.py does
+// the same in Python for the build, and tests/room_model_test.js requires the
+// two to agree name for name -- a castle built from one and named by the other
+// would be built out of the wrong pieces.
+function graphicNames(sheet, graphics) {
+  return graphicNamesOf(sheet, graphics);
+}
+
+// The box each graphic occupies, by name. It used to be repeated on every
+// template entry; graphics.json holds it now, and sheet_model has the rule for
+// reading one back -- including the U/V swap a mirrored piece wants.
+function graphicBoxes(sheet, graphics) {
+  return graphicSizes(sheet, graphics);
+}
+
+function graphicNumbers(sheet, graphics) {
   const out = new Map();
-  for (const [graphic, name] of graphicNames(sheet)) out.set(name, graphic);
+  for (const [graphic, name] of graphicNames(sheet, graphics)) {
+    out.set(name, graphic);
+  }
   return out;
 }
 
@@ -137,9 +141,15 @@ const DIRECTIONS = ['n', 'e', 's', 'w'];
 // one that has to refuse a path that climbs out of the tree.
 const SPRITE_FILES = {
   sheet: 'sprites.png',         // the artwork
-  atlas: 'sprites.json',        // ...and which rectangle each graphic is
-  adjust: 'sprite_adj.s'        // the per-graphic pixel nudge, from adj.py
+  atlas: 'sprites.json',        // ...and which rectangle each sprite is
+  graphics: 'graphics.json',    // ...and which sprite each graphic draws
 };
+
+// All three come out of the extraction ONCE and are the authoritative form
+// afterwards; nothing regenerates them. Each is one thing: the PNG is the
+// pixels, sprites.json says where every sprite sits in it, and graphics.json
+// is the table the game indexes by -- which sprite each graphic number draws,
+// the nudge that lines that bitmap up, and the box it occupies.
 
 function spriteFilesOf(atlas) {
   const said = (atlas && atlas.meta && atlas.meta.sprites) || {};
@@ -152,27 +162,267 @@ function spriteFilesOf(atlas) {
 
 // --- reading and writing --------------------------------------------------
 
+// A castle is two files, one job each: rooms.json is the rooms and the floor
+// shapes, templates.json the castle-wide pieces the rooms place. Both editors
+// work on ONE castle in memory, the two merged -- rooms with the template
+// groups in them -- the way examples/filmation/castle.py's read_castle does
+// for the build, and each writes back only the file it owns.
+const TEMPLATE_GROUPS = ['sceneryTemplates', 'objectTemplates'];
+// What rooms.py calls the two when it first writes them. After that each file
+// names the other in its meta, and readers follow those names -- these are
+// only what a writer puts there when it has nothing else to go on.
+const TEMPLATES_FILE = 'templates.json';
+const ROOMS_FILE = 'rooms.json';
+
+function mustBeBlock(said, key) {
+  if (!said || typeof said !== 'object' || Array.isArray(said)) {
+    throw new Error('no ' + key + ' block');
+  }
+}
+
+// rooms.json. The floor shapes are keyed by name; the rooms are a list,
+// because a room's identity is its number and the order is the game's.
 function parseAtlas(text) {
   const atlas = JSON.parse(text);
   if (!atlas || typeof atlas !== 'object') throw new Error('not an object');
-  for (const key of ['sizes', 'sceneryTemplates', 'objectTemplates', 'rooms']) {
-    if (!Array.isArray(atlas[key])) throw new Error('no ' + key + ' array');
+  mustBeBlock(atlas.roomDimensions, 'roomDimensions');
+  if (!Array.isArray(atlas.rooms)) throw new Error('no rooms array');
+  // Until a templates file is merged in, there are no templates to name.
+  for (const group of TEMPLATE_GROUPS) {
+    if (atlas[group] === undefined) atlas[group] = {};
   }
   return atlas;
 }
 
-// Python writes the file with json.dumps(atlas, indent=1) and a trailing
-// newline, and rooms.py will rewrite it whenever room_data.bin moves on. Match
-// that byte for byte so the two are interchangeable and a save that changed one
-// room does not rewrite all twelve thousand lines of the diff.
+// templates.json.
+function parseTemplates(text) {
+  const templates = JSON.parse(text);
+  if (!templates || typeof templates !== 'object') throw new Error('not an object');
+  for (const group of TEMPLATE_GROUPS) mustBeBlock(templates[group], group);
+  return templates;
+}
+
+// The castle: the rooms with the templates in them. The templates' own header
+// comes along as templatesMeta, so writing them back gives the file the header
+// it had. Shared, not copied -- an edit to a template in the castle is an edit
+// to the templates it came from.
+function withTemplates(atlas, templates) {
+  for (const group of TEMPLATE_GROUPS) {
+    atlas[group] = (templates && templates[group]) || {};
+  }
+  atlas.templatesMeta = (templates && templates.meta) || null;
+  return atlas;
+}
+
+// Where a castle's templates are, as rooms.json says in its meta -- or null
+// if it does not say, because nothing is assumed about it.
+function templatesFileOf(atlas) {
+  const said = atlas && atlas.meta && atlas.meta.templates;
+  return typeof said === 'string' && said ? said : null;
+}
+
+// ...and which rooms a templates file belongs to, as it says in its own.
+function roomsFileOf(templates) {
+  const said = templates && templates.meta && templates.meta.rooms;
+  return typeof said === 'string' && said ? said : null;
+}
+
+// Why two files are not one castle, or null if they are: each has to name the
+// other. Two castles' files paired by mistake would build rooms out of the
+// wrong pieces, so this is checked rather than trusted. The names are the
+// files' own, without their directory.
+function pairProblem(roomsName, atlas, templatesName, templates) {
+  const said = templatesFileOf(atlas);
+  if (!said) return roomsName + ' does not say where its templates are (meta.templates)';
+  if (said !== templatesName) {
+    return roomsName + ' names ' + said + ' as its templates, not ' + templatesName;
+  }
+  const back = roomsFileOf(templates);
+  if (!back) return templatesName + ' does not say which rooms it belongs to (meta.rooms)';
+  if (back !== roomsName) {
+    return templatesName + ' belongs to ' + back + ', not to ' + roomsName;
+  }
+  return null;
+}
+
+// The twins of castle.py's format_rooms and format_templates, and they have
+// to stay twins: rooms.py rewrites these files whenever room_data.bin moves
+// on, and if the two sides laid them out differently then saving one room in
+// the designer would rewrite the whole diff. A placement is one record and
+// belongs on one line; JSON.stringify(atlas, null, 1) spreads each across
+// nine. tests/room_model_test.js requires both games' real files to come back
+// out of these byte for byte.
 //
 // Including the line endings, which on Windows are CRLF: Path.write_text opens
 // in text mode, so every "\n" the generator writes reaches the disk as "\r\n".
 // The caller says which to use -- the editor knows its document's own -- and
 // eolOf reads it off the text that was loaded.
+
+// rooms.json: the header, the floor shapes and the rooms. Not the templates,
+// which are templates.json's.
 function serializeAtlas(atlas, eol) {
-  const text = JSON.stringify(atlas, null, 1) + '\n';
+  const out = ['{', ' "meta": ' + block(atlas.meta, 1) + ',', ''];
+
+  const shapes = Object.keys(atlas.roomDimensions || {});
+  out.push(' "roomDimensions": {');
+  const shapeWidth = widest(shapes) + 3;
+  shapes.forEach(function (name, i) {
+    out.push('  ' + pad('"' + name + '":', shapeWidth) + ' ' +
+             flat(atlas.roomDimensions[name]) +
+             (i < shapes.length - 1 ? ',' : ''));
+  });
+  out.push(' },');
+
+  out.push('');
+  out.push(' "rooms": [');
+  (atlas.rooms || []).forEach(function (room, i) {
+    const lines = roomLines(room, '  ');
+    if (i < atlas.rooms.length - 1) lines[lines.length - 1] += ',';
+    for (const one of lines) out.push(one);
+  });
+  out.push(' ]');
+  out.push('}');
+  return withEol(out.join('\n') + '\n', eol);
+}
+
+// templates.json: a template to a name, a piece to a line.
+function serializeTemplates(atlas, eol) {
+  const meta = atlas.templatesMeta || {
+    version: 1,
+    game: gameOf(atlas),
+    rooms: ROOMS_FILE,
+    comment: 'The castle\u2019s templates: pieces every room naming one is ' +
+             'built from. rooms.json places them.'
+  };
+  const out = ['{', ' "meta": ' + block(meta, 1)];
+  TEMPLATE_GROUPS.forEach(function (group, g) {
+    out[out.length - 1] += ',';
+    out.push('');
+    out.push(' "' + group + '": {');
+    const names = Object.keys(atlas[group] || {});
+    names.forEach(function (name, i) {
+      const comma = i < names.length - 1 ? ',' : '';
+      const pieces = atlas[group][name] || [];
+      if (!pieces.length) { out.push('  "' + name + '": []' + comma); return; }
+      out.push('  "' + name + '": [');
+      pieces.forEach(function (piece, j) {
+        const lines = placement(piece, '   ');
+        if (j < pieces.length - 1) lines[lines.length - 1] += ',';
+        for (const one of lines) out.push(one);
+      });
+      out.push('  ]' + comma);
+    });
+    out.push(' }');
+  });
+  out.push('}');
+  return withEol(out.join('\n') + '\n', eol);
+}
+
+function withEol(text, eol) {
   return eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
+}
+
+function pad(text, width) {
+  return text.length >= width ? text : text + ' '.repeat(width - text.length);
+}
+
+// The longest name in a group, which the keys are padded out to: the Python
+// side writes "%-*s" % (max + 3, '"name":'), and the three is the two quotes
+// and the colon.
+function widest(names) {
+  let most = 0;
+  for (const name of names) if (name.length > most) most = name.length;
+  return most;
+}
+
+// One value, the way JSON spells it. Only the scalars a castle holds.
+function scalar(value) {
+  if (typeof value === 'string') return '"' + value + '"';
+  return JSON.stringify(value);
+}
+
+// A mapping on one line, in the order its keys were written.
+function flat(said) {
+  return '{ ' + Object.keys(said).map(function (key) {
+    return '"' + key + '": ' + scalar(said[key]);
+  }).join(', ') + ' }';
+}
+
+// One placement: its graphic and where it goes, then its named bits, each kept
+// whole on a line of its own rather than run past a hundred characters.
+const PLACE_HEAD = ['u', 'v', 'z', 'sizeU', 'sizeV', 'sizeZ'];
+
+function placement(piece, indent) {
+  const head = ['"graphic": ' + scalar(piece.graphic)];
+  for (const key of PLACE_HEAD) {
+    if (piece[key] !== undefined) head.push('"' + key + '": ' + scalar(piece[key]));
+  }
+  const lines = [indent + '{ ' + head.join(', ')];
+  for (const key of ['flags', 'offsets']) {
+    if (piece[key] !== undefined) {
+      lines[lines.length - 1] += ',';
+      lines.push(indent + '  "' + key + '": ' + flat(piece[key]));
+    }
+  }
+  lines[lines.length - 1] += ' }';
+  return lines;
+}
+
+// One room: what it is on a line, then what stands in it.
+function roomLines(room, indent) {
+  const head = ['number', 'ink', 'dimensions'].filter(function (key) {
+    return room[key] !== undefined;
+  }).map(function (key) { return '"' + key + '": ' + scalar(room[key]); });
+  const lines = [indent + '{ ' + head.join(', ') + ','];
+
+  const scenery = room.scenery || [];
+  if (!scenery.length) {
+    lines.push(indent + '  "scenery": [],');
+  } else {
+    lines.push(indent + '  "scenery": [');
+    scenery.forEach(function (ref, i) {
+      lines.push(indent + '   ' + flat(ref) + (i < scenery.length - 1 ? ',' : ''));
+    });
+    lines.push(indent + '  ],');
+  }
+
+  const objects = room.objects || [];
+  if (!objects.length) {
+    lines.push(indent + '  "objects": []');
+    lines.push(indent + '}');
+    return lines;
+  }
+  lines.push(indent + '  "objects": [');
+  objects.forEach(function (group, i) {
+    const spots = group.positions || [];
+    lines.push(indent + '   { "template": ' + scalar(group.template) +
+               ', "positions": [');
+    spots.forEach(function (spot, j) {
+      lines.push(indent + '    ' + flat(spot) + (j < spots.length - 1 ? ',' : ''));
+    });
+    lines.push(indent + '   ] }' + (i < objects.length - 1 ? ',' : ''));
+  });
+  lines.push(indent + '  ]');
+  lines.push(indent + '}');
+  return lines;
+}
+
+// A nested mapping, one key to a line: the meta block and nothing else.
+function block(said, depth) {
+  const indent = ' '.repeat(depth);
+  const keys = Object.keys(said || {});
+  const lines = ['{'];
+  keys.forEach(function (key, i) {
+    const comma = i < keys.length - 1 ? ',' : '';
+    const value = said[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      lines.push(indent + ' "' + key + '": ' + block(value, depth + 1) + comma);
+    } else {
+      lines.push(indent + ' "' + key + '": ' + scalar(value) + comma);
+    }
+  });
+  lines.push(indent + '}');
+  return lines.join('\n');
 }
 
 function eolOf(text) {
@@ -183,9 +433,22 @@ function gameOf(atlas) {
   return (atlas.meta && atlas.meta.game) || '';
 }
 
+// Templates, by the name rooms call them by. rooms.json keys them that way
+// already -- a template IS its list of placements -- so this is the file's own
+// mapping, kept as a Map for the has/get the rest of this file does.
+//
+// The key ORDER is the game's table order: bits of a room's record index that
+// table, so a template may be renamed but not moved.
 function byName(templates) {
   const out = new Map();
-  for (const t of templates) out.set(t.name, t);
+  for (const name of Object.keys(templates || {})) out.set(name, templates[name]);
+  return out;
+}
+
+// ...and the index the game knows a template by, which is where its name sits.
+function templateIndex(templates) {
+  const out = new Map();
+  Object.keys(templates || {}).forEach(function (name, i) { out.set(name, i); });
   return out;
 }
 
@@ -205,15 +468,16 @@ function isBackgroundTemplate(game, name) {
 
 // A piece of scenery carries absolute world coordinates and needs nothing from
 // the room it is in.
-function pieceFromBlock(block, numbers, template, index) {
+function pieceFromBlock(block, numbers, sizes, templateName, index) {
+  const box = boxOf(sizes, block) || { u: 0, v: 0, z: 0 };
   return {
     graphic: graphicNumberOf(numbers, block.graphic),
     graphicName: block.graphic,
     u: block.u, v: block.v, z: block.z,
-    sizeU: block.sizeU, sizeV: block.sizeV, sizeZ: block.sizeZ,
+    sizeU: box.u, sizeV: box.v, sizeZ: box.z,
     mirrored: !!(block.flags && block.flags.mirrored),
     kind: 'scenery',
-    template: template.name,
+    template: templateName,
     entry: index
   };
 }
@@ -222,8 +486,10 @@ function pieceFromBlock(block, numbers, template, index) {
 // object takes its place from the room and carries only a nudge of its own --
 // half a cell along U or V, and a raise in Z, which is the template's and so
 // moves every object drawn from it.
-function pieceFromEntry(entry, position, floorZ, numbers, template, index) {
+function pieceFromEntry(entry, position, floorZ, numbers, sizes,
+                        templateName, index) {
   const nudge = entry.offsets || {};
+  const box = boxOf(sizes, entry) || { u: 0, v: 0, z: 0 };
   const u = position.u * CELL + (nudge.halfU ? HALF_CELL : 0) + CELL_ORIGIN;
   const v = position.v * CELL + (nudge.halfV ? HALF_CELL : 0) + CELL_ORIGIN;
   // The mask is room_unpack's: it adds the nudge byte whole and drops its two
@@ -233,24 +499,40 @@ function pieceFromEntry(entry, position, floorZ, numbers, template, index) {
     graphic: graphicNumberOf(numbers, entry.graphic),
     graphicName: entry.graphic,
     u: u, v: v, z: z,
-    sizeU: entry.sizeU, sizeV: entry.sizeV, sizeZ: entry.sizeZ,
+    sizeU: box.u, sizeV: box.v, sizeZ: box.z,
     mirrored: !!(entry.flags && entry.flags.mirrored),
     kind: 'object',
-    template: template.name,
+    template: templateName,
     entry: index,
     cell: { u: position.u, v: position.v, z: position.z }
   };
 }
 
+// The floor a room stands on: how far it reaches along U and V from the
+// centre, and its height. A room NAMES one of the shapes rooms.json lists
+// rather than indexing them, because "square" says what a room is and "0"
+// does not -- but the order of that list is still the game's own, since bits
+// 3 and 4 of the attribute byte index room_size_tbl straight.
+//
+// The first is the fallback, for a room naming a shape the file has not got:
+// the designer still has to draw something, and checkAtlas says so separately.
+function dimensionsOf(atlas) {
+  const out = new Map();
+  const said = (atlas && atlas.roomDimensions) || {};
+  for (const name of Object.keys(said)) out.set(name, said[name]);
+  return out;
+}
+
 function sizeOf(atlas, room) {
-  return atlas.sizes[room.size] || atlas.sizes[0];
+  const shapes = dimensionsOf(atlas);
+  return shapes.get(room.dimensions) || shapes.values().next().value;
 }
 
 // Every piece a room puts in the pool, in the order room_build.s adds them:
 // all the scenery first, template by template, then the object groups. The
 // order matters -- it is the order the background run ends up in, and the
 // order the depth list is built from.
-function expandRoom(atlas, room, numbers) {
+function expandRoom(atlas, room, numbers, sizes) {
   const game = gameOf(atlas);
   const scenery = byName(atlas.sceneryTemplates);
   const objects = byName(atlas.objectTemplates);
@@ -260,9 +542,9 @@ function expandRoom(atlas, room, numbers) {
   room.scenery.forEach(function (ref, refIndex) {
     const template = scenery.get(ref.template);
     if (!template) return;
-    const background = isBackgroundTemplate(game, template.name);
-    template.blocks.forEach(function (block, i) {
-      const piece = pieceFromBlock(block, numbers, template, i);
+    const background = isBackgroundTemplate(game, ref.template);
+    template.forEach(function (block, i) {
+      const piece = pieceFromBlock(block, numbers, sizes, ref.template, i);
       if (piece.graphic < FIRST_REAL_GRAPHIC) return;
       piece.background = background;
       piece.ref = refIndex;
@@ -274,8 +556,9 @@ function expandRoom(atlas, room, numbers) {
     const template = objects.get(group.template);
     if (!template) return;
     group.positions.forEach(function (position, slot) {
-      template.entries.forEach(function (entry, i) {
-        const piece = pieceFromEntry(entry, position, floorZ, numbers, template, i);
+      template.forEach(function (entry, i) {
+        const piece = pieceFromEntry(entry, position, floorZ, numbers,
+                                     sizes, group.template, i);
         if (piece.graphic < FIRST_REAL_GRAPHIC) return;
         piece.background = false;
         piece.ref = refIndex;
@@ -297,11 +580,11 @@ function poolUsed(atlas, room) {
   let n = 0;
   for (const ref of room.scenery) {
     const t = scenery.get(ref.template);
-    if (t) n += t.blocks.length;
+    if (t) n += t.length;
   }
   for (const group of room.objects) {
     const t = objects.get(group.template);
-    if (t) n += group.positions.length * t.entries.length;
+    if (t) n += group.positions.length * t.length;
   }
   return n;
 }
@@ -318,19 +601,38 @@ function poolUsed(atlas, room) {
 // are a doorway on a tall room's walkway and only ever face east or south;
 // their bases are not doorways, and neither are the gates. Pentagram says so
 // outright, on the template.
-const KL_PLAIN_ARCHES = 8;      // indices 0-7, side in bits 0-1
-const KL_HIGH_ARCH_E = 20;      // BG_HIGH_ARCH_E, and BG_HIGH_ARCH_S after it
-const KL_HIGH_ARCH_S = 21;
 
-function doorwayOf(atlas, template) {
-  if (gameOf(atlas) === 'pentagram') {
-    return template.doorway ? template.side : null;
-  }
-  const index = template.index;
-  if (index < KL_PLAIN_ARCHES) return DIRECTIONS[index & 3];
-  if (index === KL_HIGH_ARCH_E) return 'e';
-  if (index === KL_HIGH_ARCH_S) return 's';
-  return null;
+// Which wall a doorway template stands in, or null if it is not one.
+//
+// Decided by the template's POSITION in the table, as the games decide it:
+// Knight Lore's room_build.s tests the index (`cp 8`, then the two high
+// arches), and Pentagram's builder reads a destination byte after exactly the
+// scenery indices in rooms.py's DOOR_INDICES. The names say the same thing
+// today, but a name can be edited in the templates panel and the game's code
+// cannot, so it is not trusted for this. examples/filmation/castle.py has the
+// same table for the build.
+const DOORWAYS = {
+  knightlore: (function () {
+    const out = new Map();
+    for (let i = 0; i < 8; i++) out.set(i, DIRECTIONS[i & 3]);
+    out.set(20, 'e');
+    out.set(21, 's');
+    return out;
+  }()),
+  pentagram: (function () {
+    const out = new Map();
+    for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 24, 25, 26, 27]) {
+      out.set(i, DIRECTIONS[i & 3]);
+    }
+    return out;
+  }())
+};
+
+function doorwayOf(atlas, templateName) {
+  const rule = DOORWAYS[gameOf(atlas)];
+  if (!rule) return null;
+  const at = templateIndex(atlas.sceneryTemplates).get(templateName);
+  return at === undefined ? null : (rule.get(at) || null);
 }
 
 // Where a doorway leads. Knight Lore computes it: north is a row on, east a
@@ -364,7 +666,7 @@ function roomMap(atlas) {
     room.scenery.forEach(function (ref, refIndex) {
       const template = scenery.get(ref.template);
       if (!template) return;
-      const side = doorwayOf(atlas, template);
+      const side = doorwayOf(atlas, ref.template);
       if (!side) return;
       const to = destinationOf(atlas, room, ref, side);
       if (to === null) return;
@@ -425,17 +727,15 @@ function checkAtlas(atlas, numbers) {
   // A template naming a graphic the sheet has no number for cannot be built:
   // rooms_source.py has nothing to put in the record's first byte. Only worth
   // saying when there is a sheet to check against.
-  for (const group of numbers ? [
-    { list: atlas.sceneryTemplates, key: 'blocks' },
-    { list: atlas.objectTemplates, key: 'entries' }
-  ] : []) {
-    for (const template of group.list) {
-      for (const entry of template[group.key] || []) {
+  for (const group of numbers
+    ? [atlas.sceneryTemplates, atlas.objectTemplates] : []) {
+    for (const name of Object.keys(group || {})) {
+      for (const entry of group[name] || []) {
         if (graphicNumberOf(numbers, entry.graphic) < 0) {
           problems.push({
             room: null, severity: 'error',
-            text: template.name + ' names the graphic ' + entry.graphic +
-                  ', which the sprite sheet has no number for'
+            text: name + ' names the graphic ' + entry.graphic +
+                  ', which graphics.json has no number for'
           });
         }
       }
@@ -452,7 +752,9 @@ function checkAtlas(atlas, numbers) {
     previous = n;
 
     if (room.ink < 0 || room.ink > 7) fault(n, 'ink ' + room.ink + ' is not 0-7');
-    if (!atlas.sizes[room.size]) fault(n, 'no room shape ' + room.size);
+    if (!dimensionsOf(atlas).has(room.dimensions)) {
+      fault(n, 'no floor shape called ' + JSON.stringify(room.dimensions));
+    }
 
     // The scenery count shares the attribute byte with the ink and the shape.
     // Knight Lore stores it as it is, in bits 5-7; Pentagram stores it less
@@ -600,14 +902,23 @@ function removeScenery(room, ref) {
 // rooms name templates by name, so every reference moves with it.
 function renameTemplate(atlas, from, to) {
   if (from === to) return 0;
-  const taken = byName(atlas.sceneryTemplates).has(to) ||
-                byName(atlas.objectTemplates).has(to);
-  if (taken) return null;
+  // Held to what an assembler label can be, and unique across both tables.
+  if (templateNameProblem(atlas, to)) return null;
+
+  // The name is the key, and the key order is the game's table order -- so the
+  // group is rebuilt in place rather than the entry deleted and re-added,
+  // which would move the template to the end of the table and renumber every
+  // room's reference to everything after it.
   let moved = 0;
   for (const group of [atlas.sceneryTemplates, atlas.objectTemplates]) {
-    for (const template of group) {
-      if (template.name === from) { template.name = to; moved++; }
+    if (!group || !Object.prototype.hasOwnProperty.call(group, from)) continue;
+    const rebuilt = {};
+    for (const name of Object.keys(group)) {
+      rebuilt[name === from ? to : name] = group[name];
+      if (name === from) moved++;
     }
+    for (const name of Object.keys(group)) delete group[name];
+    for (const name of Object.keys(rebuilt)) group[name] = rebuilt[name];
   }
   if (!moved) return null;
   for (const room of atlas.rooms) {
@@ -621,11 +932,21 @@ function renameTemplate(atlas, from, to) {
   return moved;
 }
 
-// The fields a template entry is made of, and what each may hold. The designer
-// edits these by name; rooms_source.py puts the record back together from them.
+// The fields of a template entry the designer may edit by name, which
+// rooms_source.py puts the record back together from.
+//
+// A block's own place in the world is one of them. Its SIZE is not: the box a
+// piece occupies belongs to the graphic, and lives in graphics.json, so it is
+// changed in the graphic map rather than once per template that happens to
+// place one. An object entry has nothing left here at all -- it takes its
+// place from the room -- and edits its flags and its nudge through the two
+// groups below.
+//
+// An entry may still carry a box of its own, for the records whose bytes are
+// not a box at all, and nothing here writes one or throws one away.
 const ENTRY_FIELDS = {
-  blocks: ['u', 'v', 'z', 'sizeU', 'sizeV', 'sizeZ'],
-  entries: ['sizeU', 'sizeV', 'sizeZ']
+  blocks: ['u', 'v', 'z'],
+  entries: []
 };
 const FLAG_FIELDS = ['mirrored', 'passable'];
 const NUDGE_FIELDS = ['halfU', 'halfV'];
@@ -634,7 +955,7 @@ const NUDGE_FIELDS = ['halfU', 'halfV'];
 // offsets.<name> for the two nested groups. Values are clamped to a byte
 // because that is what every one of them ends up as.
 function setTemplateField(template, key, entryIndex, field, value) {
-  const entry = template[key] && template[key][entryIndex];
+  const entry = template && template[entryIndex];
   if (!entry) return null;
   const dot = field.indexOf('.');
   if (dot < 0) {
@@ -666,7 +987,7 @@ function setTemplateField(template, key, entryIndex, field, value) {
 // Which graphic an entry is drawn from, by name. Refused rather than guessed
 // when the name is not in the table: a graphic with no number cannot be built.
 function setTemplateGraphic(numbers, template, key, entryIndex, name) {
-  const entry = template[key] && template[key][entryIndex];
+  const entry = template && template[entryIndex];
   if (!entry || graphicNumberOf(numbers, name) < 0) return null;
   entry.graphic = name;
   return entry;
@@ -696,19 +1017,185 @@ function templateUsage(atlas, name) {
   return { rooms: rooms, placements: placements };
 }
 
-// Whether a template is named by any room, which is what rooms_source.py uses
-// to decide whether to emit it at all. Kept fresh here so the designer can grey
-// out the ones nothing uses, and so the flag in the file stays true.
+// Which templates any room names, which is what rooms_source.py uses to decide
+// whether to emit one at all. Worked out rather than stored: the file used to
+// carry a `used` flag on every template, and a flag derived from the rest of
+// the file is only something to fall out of date with it.
 function refreshUsage(atlas) {
   const named = new Set();
   for (const room of atlas.rooms) {
     for (const ref of room.scenery) named.add(ref.template);
     for (const ref of room.objects) named.add(ref.template);
   }
-  for (const group of [atlas.sceneryTemplates, atlas.objectTemplates]) {
-    for (const template of group) template.used = named.has(template.name);
-  }
   return named;
+}
+
+// --- editing the templates themselves -------------------------------------
+//
+// A template's POSITION in its table is the game's own number for it, and the
+// game's code leans on some of those numbers: Knight Lore's room_build.s takes
+// scenery 0-7 to be the arches and BG_GATE_0..BG_GATE_3 to be a run, and its
+// movers.s gives behaviour to particular object templates by label. So
+// nothing here renumbers a template. A new one goes on the end of its table,
+// and only the last one can be deleted -- anything else would shift every
+// template after it, and the code would be pointing at the wrong ones.
+
+// How many templates a table can hold. An object group in a room is one byte,
+// the template in its top five bits and the repeat count in the bottom three,
+// so 32. A scenery reference is a byte of its own, and $FF ends the section.
+const TEMPLATE_LIMIT = { sceneryTemplates: 255, objectTemplates: 32 };
+
+// A template's name becomes an assembler label -- BG_ARCH_N, FG_GUARD_EW -- so
+// it is held to what a label can be.
+const TEMPLATE_NAME = /^[a-z][a-z0-9_]*$/;
+
+// Why a name cannot be used, or null if it can.
+function templateNameProblem(atlas, name) {
+  if (!TEMPLATE_NAME.test(name || '')) {
+    return 'a name is lower-case letters, digits and underscores, starting with a letter';
+  }
+  if (byName(atlas.sceneryTemplates).has(name) || byName(atlas.objectTemplates).has(name)) {
+    return name + ' is already a template';
+  }
+  return null;
+}
+
+// What a new piece starts as. Scenery stands at the middle of the floor, on
+// it; an object takes its place from the room and has only its nudge.
+function freshPiece(group, graphic) {
+  const flags = { mirrored: false, passable: false, rest: 16 };
+  if (group === 'sceneryTemplates') {
+    return { graphic: graphic, u: 128, v: 128, z: 128, flags: flags };
+  }
+  return { graphic: graphic, flags: flags,
+           offsets: { halfU: false, halfV: false, raiseZ: 0 } };
+}
+
+// A new, empty template on the end of its table. Returns its index, or null.
+function newTemplate(atlas, group, name) {
+  if (templateNameProblem(atlas, name)) return null;
+  if (Object.keys(atlas[group]).length >= TEMPLATE_LIMIT[group]) return null;
+  atlas[group][name] = [];
+  return Object.keys(atlas[group]).length - 1;
+}
+
+// A copy of one, under a new name, on the end of its table. The copy is the
+// pieces and nothing else: behaviour the game's code gives the original by
+// label does not come with it.
+function duplicateTemplate(atlas, group, from, to) {
+  if (!Object.prototype.hasOwnProperty.call(atlas[group], from)) return null;
+  const at = newTemplate(atlas, group, to);
+  if (at === null) return null;
+  atlas[group][to] = JSON.parse(JSON.stringify(atlas[group][from]));
+  return at;
+}
+
+// Why a template cannot be deleted, or null if it can.
+function deleteProblem(atlas, group, name) {
+  const names = Object.keys(atlas[group]);
+  if (names.indexOf(name) < 0) return 'no such template';
+  if (refreshUsage(atlas).has(name)) return 'a room still places it';
+  if (names[names.length - 1] !== name) {
+    return 'only the last template can go: deleting one before it would ' +
+           'renumber every template after, and the game\'s code refers to ' +
+           'some of them by number';
+  }
+  return null;
+}
+
+function deleteTemplate(atlas, group, name) {
+  if (deleteProblem(atlas, group, name)) return false;
+  delete atlas[group][name];
+  return true;
+}
+
+// The pieces of one template. These change every room that uses it, which is
+// what the templates panel is for; the room panels never do it.
+function addPiece(template, group, graphic) {
+  template.push(freshPiece(group, graphic));
+  return template.length - 1;
+}
+
+function removePiece(template, index) {
+  if (index < 0 || index >= template.length) return false;
+  template.splice(index, 1);
+  return true;
+}
+
+// Order matters: scenery is laid in the order it is listed, and room_build
+// adds a template's pieces to the object pool one after another.
+function movePiece(template, from, to) {
+  if (from < 0 || from >= template.length || to < 0 || to >= template.length) {
+    return false;
+  }
+  const piece = template.splice(from, 1)[0];
+  template.splice(to, 0, piece);
+  return true;
+}
+
+// Move one piece of a template, by world units. What it can move by depends on
+// what kind of piece it is.
+//
+// Scenery carries its own place in the world, three bytes, so it moves
+// anywhere they reach. An object carries no place at all -- it takes one from
+// the room -- only its nudge: half a cell along U and along V, on or off, and a
+// raise in Z that room_unpack masks to a multiple of four. So an object piece
+// moved along U has its half-cell switched on past the middle of the cell and
+// off before it, and a raise is kept to what the game can hold.
+//
+// `from` is where the move started, for a drag that measures from the piece's
+// place when it was picked up rather than piling small moves on each other.
+function shiftPiece(template, group, at, move, from) {
+  const piece = template && template[at];
+  if (!piece) return false;
+  const was = JSON.stringify(piece);
+  const start = from || piece;
+  const du = move.u || 0;
+  const dv = move.v || 0;
+  const dz = move.z || 0;
+  if (group === 'sceneryTemplates') {
+    piece.u = Math.max(0, Math.min(255, start.u + du));
+    piece.v = Math.max(0, Math.min(255, start.v + dv));
+    piece.z = Math.max(0, Math.min(255, start.z + dz));
+  } else {
+    const offsets = start.offsets || { halfU: false, halfV: false, raiseZ: 0 };
+    const u = (offsets.halfU ? HALF_CELL : 0) + du;
+    const v = (offsets.halfV ? HALF_CELL : 0) + dv;
+    const raise = Math.max(0, Math.min(Z_MASK, (offsets.raiseZ || 0) + dz));
+    piece.offsets = {
+      halfU: u >= HALF_CELL / 2,
+      halfV: v >= HALF_CELL / 2,
+      raiseZ: raise & Z_MASK
+    };
+  }
+  return JSON.stringify(piece) !== was;
+}
+
+// A drag on the picture, in screen pixels, back into world units at the
+// piece's own height.
+//
+// The projection puts U + V across and (V - U) / 2 down-the-screen-negated, so
+// across is exact and down is only to the nearest two units: a move whose
+// V - U is odd has no screen position of its own. So U + V is made the move
+// across exactly, and U - V the nearest value to twice the move down that has
+// the same parity -- which U + V and U - V always must, being the same two
+// integers added and taken away. Across then lands on the pixel, and down on
+// it or one short.
+function screenToWorld(dx, dy) {
+  let apart = 2 * dy;
+  if ((apart - dx) % 2 !== 0) apart += 1;
+  return { u: (dx + apart) / 2, v: (dx - apart) / 2 };
+}
+
+// Every room that places a template, by number, in the castle's order.
+function roomsUsing(atlas, name) {
+  const out = [];
+  for (const room of atlas.rooms) {
+    const here = room.scenery.some(function (ref) { return ref.template === name; }) ||
+                 room.objects.some(function (ref) { return ref.template === name; });
+    if (here) out.push(room.number);
+  }
+  return out;
 }
 
 // The fullest room, which is what the object pool has to hold: ROOM_MAX_OBJECTS
@@ -727,13 +1214,17 @@ if (typeof module !== 'undefined') {
   module.exports = {
     CELL, CELL_ORIGIN, HALF_CELL, CELLS, LEVELS, LEVEL_Z, Z_MASK,
     FIRST_REAL_GRAPHIC, GRID_WIDTH, DIRECTIONS,
-    KL_PLAIN_ARCHES, KL_HIGH_ARCH_E, KL_HIGH_ARCH_S,
+    DOORWAYS, TEMPLATE_LIMIT, templateNameProblem, newTemplate,
+    duplicateTemplate, deleteProblem, deleteTemplate, addPiece,
+    removePiece, movePiece, roomsUsing, shiftPiece, screenToWorld,
     BACKGROUND_TEMPLATES,
-    SPRITE_FILES, spriteFilesOf, graphicNumbers, graphicNames, graphicNumberOf,
+    SPRITE_FILES, spriteFilesOf, graphicNumbers, graphicNames, graphicBoxes,
+    graphicNumberOf, templateIndex,
     UNNAMED_PREFIX,
     ENTRY_FIELDS, FLAG_FIELDS, NUDGE_FIELDS,
-    parseAtlas, serializeAtlas, gameOf, byName, byNumber,
-    isBackgroundTemplate, expandRoom, poolUsed, sizeOf, eolOf,
+    parseAtlas, serializeAtlas, parseTemplates, serializeTemplates,
+    withTemplates, templatesFileOf, roomsFileOf, pairProblem, TEMPLATES_FILE, ROOMS_FILE, gameOf, byName, byNumber,
+    isBackgroundTemplate, expandRoom, poolUsed, sizeOf, dimensionsOf, eolOf,
     doorwayOf, destinationOf, roomMap, unreciprocated,
     GROUP_LIMIT, addObject, removeObject, moveObject, retemplateObject,
     addScenery, removeScenery, renameTemplate, refreshUsage,

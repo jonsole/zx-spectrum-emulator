@@ -25,21 +25,31 @@ nothing after them that has to be aligned.
     sprite_data.s       the sprites, bottom row first, mask and data
                         interleaved, with the blank bottom rows trimmed off
     sprite_table.s      256 pointers, indexed by Knight Lore's graphic number
-    sprite_adj_gen.s    the pixel nudges from sprite_adj.s, with the rows this
-                        script trimmed folded in
+    sprite_adj_gen.s    the pixel nudges from graphics.json
 
-sprite_adj.s is the other input, and is not generated here: adj.py harvested
-it from a running Knight Lore, and it is committed and never edited.
+graphics.json is the other input, and is not generated here: it says which
+sprite each graphic number draws, and carries the nudges adj.py harvested from
+a running Knight Lore. The rows the sheet trimmed off are already folded into
+those, by sprite_sheet.py, once as the sheet was made.
 """
 
 import argparse
 import base64
 import json
+import re
 from pathlib import Path
 
 from PIL import Image
 
+# The engine's own facts about this game: what animates, what keeps its blank
+# bottom rows, the two rotation buffers, and the graphic that draws nothing.
+# They are hand-written constants, not data, so they live in source -- next to
+# sprite_sheet.py's own use of them rather than couriered through a JSON file.
+from sprite_sheet import (ANIMATIONS, BLANK_GRAPHIC, GRAPHIC_COUNT,
+                          ROTATION_BUFFERS, WHOLE_SPRITE_GRAPHICS)
+
 HERE = Path(__file__).resolve().parent
+
 
 # How a pixel's colour in the sheet becomes the two bits the Z80 wants: does
 # the sprite cover the screen here, and what does it put down if it does. The
@@ -54,25 +64,92 @@ PIXEL_BITS = {
 OPAQUE = 128                            # alpha at or above this is a colour
 
 
-def read_atlas(path):
-    """sprites.json -> the sprite entries in sprite order, and our own facts."""
-    atlas = json.loads(path.read_text(encoding="utf-8"))
-    zx = atlas.get("meta", {}).get("zx", {})
-    if "sprites" not in zx or "game" not in zx:
-        raise SystemExit(f"{path.name} is not a sheet written by sprite_sheet.py")
-    return atlas, zx["sprites"], zx["game"]
+def read_sheet_files(sprites_path, graphics_path):
+    """sprites.json + graphics.json -> the sprites in sheet order, and the facts.
+
+    A sprite is named by where it sits in the group tree, so the name is built
+    walking it; the order that walk produces is the order the sheet lays them
+    out, and so the order they are emitted in. `asm` is the assembler label the
+    game's own sources call it by, made from the name.
+
+    The engine's own facts -- what animates, what keeps its blank rows, the two
+    rotation buffers -- are not in either file. They are hand-written constants
+    about the game, and they live beside the code that checks them.
+    """
+    sheet = json.loads(sprites_path.read_text(encoding="utf-8"))
+    said = json.loads(graphics_path.read_text(encoding="utf-8"))
+
+    entries, by_name = [], {}
+
+    def walk(node, path):
+        for key, box in (node.get("sprites") or {}).items():
+            name = ".".join(path + [key])
+            by_name[name] = len(entries)
+            entries.append({
+                "name": name,
+                "asm": "sprite_" + name.replace(".", "_"),
+                "x": box["x"], "y": box["y"],
+                "width": box["w"] // 8, "height": box["h"],
+            })
+        for group, sub in (node.get("group") or {}).items():
+            walk(sub, path + [group])
+
+    walk(sheet, [])
+    if not entries:
+        raise SystemExit(f"{sprites_path.name} has no sprites in it")
+
+    # Graphic number -> the sprite that draws it, filled out into a list because
+    # everything below indexes by number. One table, two ways of reading it.
+    # graphics.json is keyed by the graphic's NAME and carries the number the
+    # game knows it by; everything below indexes by that number.
+    table = said.get("graphics") or {}
+    gmap = [None] * GRAPHIC_COUNT
+    nudge = {}
+    for graphic, entry in table.items():
+        number = entry["number"]
+        if not 0 <= number < GRAPHIC_COUNT:
+            continue
+        name = entry.get("sprite")
+        if name is not None:
+            if name not in by_name:
+                raise SystemExit(
+                    f"{graphics_path.name}: {graphic} names the sprite "
+                    f"{name!r}, which {sprites_path.name} does not have")
+            gmap[number] = by_name[name]
+        nudge[number] = dict(entry, graphic=graphic)
+
+    facts = {
+        "graphicMap": gmap,
+        "graphics": nudge,
+        "palette": {name: rgba for name, rgba
+                    in (sheet.get("sheet") or {}).get("colours", {}).items()},
+        "blankGraphic": BLANK_GRAPHIC,
+        "wholeSpriteGraphics": WHOLE_SPRITE_GRAPHICS,
+        "animations": ANIMATIONS,
+        "rotationBuffers": [{"label": label, "sprite": sprite,
+                             "graphics": list(graphics)}
+                            for label, sprite, graphics in ROTATION_BUFFERS],
+    }
+    return sheet, entries, facts
 
 
 def read_sheet(sheet, atlas, entries, palette):
     """The sheet's pixels, as (mask, data) byte rows a sprite, top row first."""
     image = Image.open(sheet).convert("RGBA")
-    colours = {tuple(rgba[:3]): PIXEL_BITS[name] for name, rgba in palette.items()}
+    # Only the colours that are actually drawn, keyed by RGB. "paper" and
+    # "transparent" are both black and differ only in their alpha, so a map
+    # keyed by RGB alone would have one quietly overwrite the other -- and
+    # which one won would depend on the order the palette happened to list
+    # them. Everything see-through is handled by the alpha test below, so the
+    # see-through colours are left out of this and black means paper.
+    colours = {tuple(rgba[:3]): PIXEL_BITS[name] for name, rgba in palette.items()
+               if len(rgba) < 4 or rgba[3] >= OPAQUE}
     pixels = image.load()
 
     sprites = []
     for entry in entries:
         width, height = entry["width"], entry["height"]
-        box = atlas["frames"][entry["frames"][0]]["frame"]
+        box = entry
         if box["x"] + width * 8 > image.width or box["y"] + height > image.height:
             raise SystemExit(f"{entry['name']} runs off {sheet.name}, which is "
                              f"{image.width}x{image.height}")
@@ -95,10 +172,9 @@ def read_sheet(sheet, atlas, entries, palette):
             mask_rows.append(mask)
             data_rows.append(data)
         sprites.append({
-            "name": entry["name"],
+            "name": entry["asm"],
             "w": width,
             "h": height,
-            "flag": entry.get("flag", 0),
             "mask": mask_rows,
             "data": data_rows,
         })
@@ -248,8 +324,8 @@ def emit_table(sprites, facts):
     # number. Its own table at $7112 is 256 pointers into sprite memory and
     # several graphic numbers share a bitmap -- 186 valid graphics across 103
     # sprites -- so the room templates can name sprites directly only if we
-    # number them its way. graphic_map.bin holds that mapping; see
-    # kl_extract.py, and sprites.json carries it from there.
+    # number them its way. graphics.json holds that mapping, by name; it came
+    # out of that table, which kl_extract.py reads.
     #
     # 256 entries is 512 bytes, so the table is ALIGNed to its own size and
     # object_update reaches it by doubling a pre-halved base, rather than the
@@ -271,10 +347,12 @@ def emit_table(sprites, facts):
 # ---------------------------------------------------------------------------
 # The pixel adjustments, with the trimmed rows folded in.
 #
-# sprite_adj.s is what adj.py harvested from a running Knight Lore: the nudge
-# its own code gives each graphic, as a table of distinct pairs, an index a
-# graphic long, and the handful of graphics whose mirror image wants a
-# different pair. That file is the harvest and is never edited.
+# graphics.json holds what adj.py harvested from a running Knight Lore: the
+# nudge its own code gives each graphic, beside the sprite that graphic draws,
+# and the handful whose mirror image wants a different one. Those are the
+# harvest and are never edited; the pair table, the index and the exception
+# list are this file's packing of them, and are built below rather than carried
+# around.
 #
 # A sprite hangs from its bottom row -- object_place works the row out and
 # object_update takes the height off it -- so a sprite with blank rows taken
@@ -283,41 +361,26 @@ def emit_table(sprites, facts):
 # the index is per graphic, so the pairs are rebuilt here from the effective
 # values rather than patched.
 
-def read_adj(harvest):
-    """sprite_adj.s -> the nudge (x, y) for every graphic, and mirrored."""
-    text = harvest.read_text(encoding="utf-8")
+def read_adj(facts):
+    """graphic_map.json -> the nudge (x, y) for every graphic, and mirrored.
 
-    def numbers(chunk):
-        out = []
-        for line in chunk.splitlines():
-            line = line.split(";")[0].strip()
-            if not line.startswith("DB"):
-                continue
-            for v in line[2:].split(","):
-                v = v.strip()
-                if v:
-                    out.append(int(v[1:], 16) if v.startswith("$") else int(v))
-        return out
-
-    pairs_text = text.split("sprite_adj_pairs:")[1].split("sprite_adj_mirror:")[0]
-    flat = numbers(pairs_text)
-    pairs = [(flat[i], flat[i + 1]) for i in range(0, len(flat), 2)]
-
-    mirror_text = text.split("sprite_adj_mirror:")[1].split("sprite_adj_index:")[0]
-    flat = numbers(mirror_text)
-    mirror = {}
-    for i in range(0, len(flat) - 1, 2):
-        if flat[i] == 0:
-            break
-        mirror[flat[i]] = flat[i + 1]
-
-    index = numbers(text.split("sprite_adj_index:")[1])
+    The harvest is data, so it is kept as data. A graphic the file does not
+    mention is not nudged, and `mirrored` is only there where the other way
+    round wants a different pair -- four of them do. The `sprite` beside them
+    is the other half of the same entry and is not this function's business.
+    """
+    said = facts["graphics"]
     plain, flipped = [], []
-    for g in range(256):
-        entry = index[g]
-        pair = pairs[(entry & 0x7E) // 2]
+    # Keyed by NUMBER, not by the string the file writes: read_sheet_files has
+    # already turned the keys into ints. Looking one up the other way silently
+    # finds nothing, and every graphic is then drawn with no nudge at all --
+    # which is a whole game very slightly wrong rather than a crash.
+    for g in range(GRAPHIC_COUNT):
+        entry = said.get(g) or {}
+        pair = (entry.get("x", 0), entry.get("y", 0))
+        other = entry.get("mirrored")
         plain.append(pair)
-        flipped.append(pairs[mirror[g] // 2] if entry & 0x80 else pair)
+        flipped.append((other["x"], other["y"]) if other else pair)
     return plain, flipped
 
 
@@ -325,8 +388,55 @@ def signed(v):
     return v - 256 if v > 127 else v
 
 
-def emit_adj(sprites, facts, harvest):
-    plain, flipped = read_adj(harvest)
+def label_of(name):
+    """The assembler label for a graphic, from the name graphics.json keys it by.
+
+    werewolf.legs.1 -> GFX_WEREWOLF_LEGS_1. Anything that is not a letter or a
+    digit becomes an underscore, so a rename in the JSON carries straight
+    through to the source: the two cannot drift, because one is made from the
+    other every build.
+    """
+    return "GFX_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper()
+
+
+def emit_labels(facts):
+    """graphics_gen.s: what every graphic number is called.
+
+    The game indexes sprite_table, the nudge table and every template record by
+    a graphic NUMBER, and the sources used to spell those numbers out -- 16 for
+    the player's legs, 96 for the first collectable. A number says nothing
+    about what it draws, and moving one meant finding every place that knew it.
+
+    So the numbers come from graphics.json, where they sit beside the name and
+    the artwork, and this turns each into an EQU the sources can use instead.
+    Rename a graphic there and the label follows on the next build; refer to a
+    graphic that is not in the table and the assembler says so rather than
+    quietly assembling the wrong index.
+    """
+    out = [
+        "; --- graphic numbers -------------------------------------------------------",
+        ";",
+        "; Generated by sprite_source.py from graphics.json -- do not edit. One EQU a",
+        "; graphic, named after the key it sits under there, so the sources can say",
+        "; what they mean: GFX_WEREWOLF_LEGS_1 rather than 48.",
+        ";",
+        "; The number is the game's own and cannot be chosen freely: sprite_table is",
+        "; indexed by it, and some of the numbering is arithmetic -- a collectable in",
+        "; flight is its own graphic plus SPECIAL_FLIGHT. The NAME is free.",
+        "",
+    ]
+    for number in sorted(facts["graphics"]):
+        entry = facts["graphics"][number]
+        label = label_of(entry["graphic"])
+        note = entry.get("sprite") or "no bitmap of its own"
+        out.append("%-24s EQU     %3d                 ; %s"
+                   % (label, number, note))
+    out.append("")
+    return out
+
+
+def emit_adj(sprites, facts):
+    plain, flipped = read_adj(facts)
     gmap = facts["graphicMap"]
     want = []                       # (x, y) and its mirrored twin, per graphic
     for g in range(256):
@@ -351,7 +461,7 @@ def emit_adj(sprites, facts, harvest):
     assert len(pairs) * 2 <= 128, "more pairs than an index byte can name"
 
     out = []
-    out.append("; Generated by sprite_source.py from sprite_adj.s -- do not edit.")
+    out.append("; Generated by sprite_source.py from graphic_map.json -- do not edit.")
     out.append(";")
     out.append("; The pixel nudge that lines a sprite's artwork up with its logical")
     out.append("; position: what adj.py harvested from a running Knight Lore, plus the")
@@ -409,36 +519,37 @@ def main():
     parser.add_argument("--sheet", type=Path, default=HERE / "sprites.png",
                         help="the sprite sheet PNG (default: sprites.png)")
     parser.add_argument("--json", type=Path, default=HERE / "sprites.json",
-                        help="the atlas that describes it (default: sprites.json)")
-    parser.add_argument("--adj", type=Path, default=HERE / "sprite_adj.s",
-                        help="the harvested nudges (default: sprite_adj.s)")
+                        help="what is in it (default: sprites.json)")
+    parser.add_argument("--graphics", type=Path, default=HERE / "graphics.json",
+                        help="the graphic table (default: graphics.json)")
     parser.add_argument("--out-dir", type=Path, default=HERE,
                         help="where the .s files go (default: beside this script)")
     args = parser.parse_args()
 
-    for needed in (args.sheet, args.json, args.adj):
+    for needed in (args.sheet, args.json, args.graphics):
         if not needed.is_file():
-            raise SystemExit(f"{needed} is missing -- run sprite_sheet.py to make "
-                             "the sheet from sprite_data.bin")
+            raise SystemExit(f"{needed} is missing -- run sprite_sheet.py once "
+                             "against your own copy of the game to make it")
 
-    atlas, entries, facts = read_atlas(args.json)
+    atlas, entries, facts = read_sheet_files(args.json, args.graphics)
     gmap = facts["graphicMap"]
-    whole = {gmap[g] for g in facts["wholeSpriteGraphics"]}
-    animated = {gmap[g] for frames in facts["animations"] for g in frames}
+    whole = {gmap[g] for g in facts["wholeSpriteGraphics"] if gmap[g] is not None}
+    animated = {gmap[g] for frames in facts["animations"] for g in frames
+                if gmap[g] is not None}
 
     sprites = read_sheet(args.sheet, atlas, entries, facts["palette"])
+    # The sheet is trimmed already -- sprite_sheet.py does it as it draws -- so
+    # this finds nothing to take. It stays as the check that that is true, and
+    # to work out the rows each sprite ended up with.
     trim(sprites, whole)
     check(sprites, facts, animated)
 
     for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated)),
                         ("sprite_table.s", emit_table(sprites, facts)),
-                        ("sprite_adj_gen.s", emit_adj(sprites, facts, args.adj))):
-        (args.out_dir / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+                        ("graphics_gen.s", emit_labels(facts)),
+                        ("sprite_adj_gen.s", emit_adj(sprites, facts))):
+        (args.out_dir / name).write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
         print(f"Wrote {name}")
-
-    if refresh_atlas(args.json, atlas, entries, sprites):
-        print(f"Brought {args.json.name}'s copy of the bytes back in step with "
-              f"{args.sheet.name}")
 
 
 if __name__ == "__main__":
