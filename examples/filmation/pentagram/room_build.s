@@ -99,10 +99,7 @@ room_build:			ld		c,a
 					push	hl		; the record
 
 					call	shift_reset
-					ld		hl,0
-					ld		(object_list),hl
-					ld		hl,object_list
-					ld		(sort_head),hl
+					depth_reset
 					xor		a
 					ld		(room_object_count),a
 					ld		(room_door_z + ROOM_DOOR_N),a

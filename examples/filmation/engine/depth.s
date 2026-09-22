@@ -26,6 +26,22 @@ object_list			DW		0
 sort_head			DW		object_list
 
 
+; Empty the list. A room change keeps nothing: room_build expands this before
+; it places anything, and every object goes back in through depth_insert or
+; background_insert. It is a macro rather than a routine because the games
+; have no bytes to spare for a CALL, and it is here rather than in each of
+; them so that sort_head is never named outside this file -- a game that
+; emptied object_list and forgot sort_head would leave the sorted run
+; starting inside the room that has just gone.
+; Corrupts HL.
+				MACRO	depth_reset
+					ld		hl,0
+					ld		(object_list),hl
+					ld		hl,object_list		; no background yet: the sorted run is all of it
+					ld		(sort_head),hl
+				ENDM
+
+
 ; Take an object out of the list.
 ;
 ; A NEXT field never ends a page, so the pointers here step with INC L. PREV
@@ -57,7 +73,7 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 					ret
 
 
-; Compare the object being placed -- whose bounds depth_cmp_setup has
+; Compare the object being placed, in IX -- whose bounds depth_cmp_setup has
 ; hoisted into the immediates below -- against the candidate in IY.
 ;
 ; On any axis where the two boxes do NOT overlap, that axis's coordinate
@@ -78,7 +94,12 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 ; Out: cf = 1  the placed object is FURTHER than the candidate
 ;      a  = 0  every axis that separates them agrees, so that is certain;
 ;              any other value and the ordering is only a guess
-; Corrupts A, BC, DE, HL. IX, IY and the shadow set are untouched.
+;      zf = 1  the same thing: certain. The scans test Z rather than A, so
+;              the certain answers must keep coming from XOR A and the
+;              guess must keep ending in INC A.
+; Corrupts A, BC, DE, HL. IX, IY and the shadow set are untouched. IX is read
+; for the two centres -- once per separating floor axis, which is seldom enough
+; that hoisting them too cost six bytes of setup to save twelve T a time.
 ;
 ; depth_cmp_hl takes the candidate in HL instead, and leaves it in IY -- which
 ; is where every caller wants it afterwards.
@@ -112,7 +133,7 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					set		1,b		; their min >= our max: they are nearer
 					DB		$11		; ld de,nn: over the SET
 .u_near:			set		0,b
-.u_ours:			ld		a,0		; imm = our U
+.u_term:								ld		a,(ix+OBJ.U)		; our U
 					sub		c
 					ld		e,a
 					sbc		a,a		; sign-extend the borrow
@@ -135,22 +156,29 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					set		0,b
 					DB		$11		; ld de,nn: over the SET
 .v_far:				set		1,b
-					ld		a,c		; a = their V
-.v_ours:			sub		0		; imm = our V, so theirV - ourV
+.v_term:			ld		a,c		; a = their V
+					sub		(ix+OBJ.V)		; theirV - ourV
 					ld		e,a
 					sbc		a,a
 					ld		d,a
 					add		hl,de
 .v_over:			
 
-					; Z -- nearer as Z grows, the same shape as U, but it only
-					; votes: its term stays out of the sum. The sum is only read
-					; when the separating axes disagree, and when one of them is
-					; Z that is something above and behind something else -- the
-					; knight's body over the top of a table he is pushing, whose
-					; box starts where the table's ends. Counting Z there put the
-					; body in front by a unit, twelve up against eleven back; the
-					; floor is what the eye goes by, and without Z it decides.
+					; Z -- nearer as Z grows, the same shape as U, but its term is
+					; one unit and no more, whatever the height between them. The
+					; sum is only read when the separating axes disagree, and when
+					; one of them is Z that is something above and behind
+					; something else -- the knight's body over the top of a table
+					; he is pushing, whose box starts where the table's ends.
+					; Counting the whole of Z there put the body in front by a
+					; unit, twelve up against eleven back; the floor is what the
+					; eye goes by, and any floor term at all outvotes this one.
+					;
+					; A single unit still breaks a tie, which is what it is for.
+					; Room $B3 has a spike and a block whose floor terms cancel
+					; exactly, and a ball that is certainly nearer than the spike
+					; and certainly further than the block: order those two by a
+					; coin toss and the ball has nowhere in the list it can go.
 					ld		a,(iy+OBJ.Z)
 					ld		c,a
 					add		a,(iy+OBJ.SIZE_Z)
@@ -160,8 +188,10 @@ depth_cmp:			ld		hl,0		; running difference, signed
 .z_max:				cp		0
 					jr		c,.z_over
 					set		1,b
-					DB		$11		; ld de,nn: over the SET
+					dec		hl		; and the one unit of tie-break above
+					jr		.z_over
 .z_near:			set		0,b
+					inc		hl
 .z_over:
 
 					; What decides it is not how MANY axes separate the two but
@@ -182,27 +212,33 @@ depth_cmp:			ld		hl,0		; running difference, signed
 					; height sits at the same Z as the one standing on it, and
 					; the two are disjoint all the same.
 					;
-					; B comes down by one a DJNZ, so the first falls through only
-					; for 1 and the second only for 2. A 0 wraps to $FF and a 3
-					; stops at 1, and both go on to the guess.
-					xor		a		; A = 0 and cf clear, and DJNZ touches neither
-					djnz	.not_nearer
-					ret				; certain, and cf clear says nearer
-.not_nearer:		djnz	.guess
-					scf				; certain, and further
-					ret
+					; So b - 1 == 0 is the first, b - 2 == 0 the second, and every
+					; other value -- 0 and 3 -- falls out of the bottom to the guess.
+					xor		a		; a = 0 and cf clear, and DEC B leaves both alone
+					dec		b
+					ret		z		; b was 1: nearer, and cf already says so
+					dec		b
+					jr		nz,.guess		; b was 0 or 3: nothing certain to go on
+					scf
+					ret				; b was 2: further
 .guess:				sla		h		; cf = sign of the difference, which is
 					inc		a		; the best guess there is. INC leaves cf alone
 					ret
 
+					; Each DB $11 above is LD DE,nn eating the two bytes of the SET that
+					; follows it. Put a third byte there and it would eat half of it, so
+					; the assembler is made to check the length rather than a reader.
+					ASSERT	depth_cmp.u_term - depth_cmp.u_near == 2
+					ASSERT	depth_cmp.v_term - depth_cmp.v_far == 2
 
-; Hoist the placed object's bounds into depth_cmp's immediates. Nine
-; stores once per insert, against six (ix+d) reads per candidate if they
-; stayed in the record -- it pays for itself after about three of them.
+
+; Hoist the placed object's bounds into depth_cmp's immediates. Six stores
+; once per insert, against six (ix+d) reads and their adds per candidate if
+; they stayed in the record -- it pays for itself after about three of them.
 ;   IX -> the object
 ; Corrupts AF, B.
 depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
-					ld		(depth_cmp.u_ours+1),a		; back down past it to the min
+											; back down past it to the min
 					ld		b,(ix+OBJ.SIZE_U)
 					add		a,b
 					ld		(depth_cmp.u_max+1),a
@@ -212,7 +248,6 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 					ld		(depth_cmp.u_min+1),a
 
 					ld		a,(ix+OBJ.V)
-					ld		(depth_cmp.v_ours+1),a
 					ld		b,(ix+OBJ.SIZE_V)
 					add		a,b
 					ld		(depth_cmp.v_max+1),a
@@ -279,10 +314,22 @@ depth_step:			call	depth_add_step
 ; Corrupts A, BC, DE, HL, IY.
 ;
 ; The list is furthest first, so an object is still in place if it is not
-; further than the one before it and not nearer than the one after it -- a
-; guess counts either way. That costs two depth_cmp calls instead of a scan
-; down the whole list, and it is the common case: an object creeping a unit
-; per frame changes its place in the order only every several frames.
+; further than the ones before it and not nearer than the ones after it -- a
+; guess counts either way. Usually the neighbours settle it: a certain answer
+; from each costs two depth_cmp calls instead of a scan down the whole list,
+; and it is the common case: an object creeping a unit per frame changes its
+; place in the order only every several frames.
+;
+; But a neighbour that can only guess settles nothing, and the check walks on
+; past it, back and forward, until an answer is certain -- the way the
+; insertion scan walks on past a guess. Stopping at the neighbour missed room
+; $A3: the moveable block rides the hunting ball, which carried it in under the
+; feet of a knight standing still beside it. The two had been guessed apart
+; and he was ahead of it in the list, rightly; under his feet he is certainly
+; the nearer, but between the two lay a spike and a spiked ball that the block
+; could only guess about, so its look at its neighbours said "in order", he
+; took no step to be re-sorted by, and the block's top stayed drawn over his
+; legs.
 ;
 ; When it has crossed one, it comes out and goes back in, and which neighbour
 ; it crossed says where the scan may start:
@@ -303,28 +350,39 @@ depth_step:			call	depth_add_step
 ; -- which also meant A had to survive depth_unlink in between.
 depth_relink:		call	depth_cmp_setup		; its bounds, for every depth_cmp below
 
-					; Against the one before it -- unless that is where the sorted run
-					; starts, and there is nothing sorted ahead of it to cross.
-					ld		l,(ix+OBJ.PREV)
-					ld		h,(ix+OBJ.PREV+1)
+					; Against the ones before it, back to where the sorted run starts:
+					; there is nothing sorted ahead of that to cross. Each walk starts
+					; with IY on the object itself, and steps from it.
+					;
+					; depth_cmp's Z says whether it was certain: its two certain answers
+					; come from XOR A, and its guess ends with INC A.
+					push	ix
+					pop		iy
+.back:				ld		l,(iy+OBJ.PREV)
+					ld		h,(iy+OBJ.PREV+1)
 					ld		de,(sort_head)
 					or		a
 					sbc		hl,de
 					add		hl,de		; HL back, and ADD HL leaves Z alone
-					jr		z,.next		; first in the run
-					call	depth_cmp_hl		; PREV is the predecessor itself here
+					jr		z,.next		; the front of the run
+					call	depth_cmp_hl		; PREV is the record itself here
 					jr		c,.earlier		; further than it: it belongs earlier
+					jr		nz,.back		; only guessed nearer: and the one before?
 
-					; Against the one after it, if any.
-.next:				ld		a,(ix+OBJ.NEXT+1)
+					; Against the ones after it, to the tail.
+.next:				push	ix
+					pop		iy
+.on:				ld		l,(iy+OBJ.NEXT)
+					ld		h,(iy+OBJ.NEXT+1)
+					ld		a,h
 					and		a
 					ret		z		; the tail: nothing to cross
-					ld		h,a
-					ld		l,(ix+OBJ.NEXT)
 					call	depth_cmp_hl
-					ret		c		; still further than it: in order
+					jr		nc,.later		; nearer than it: it belongs later
+					ret		z		; certainly further: in order
+					jr		.on		; only guessed further: and the one after?
 
-					call	depth_unlink		; nearer than it: later, so on from
+.later:				call	depth_unlink		; later, so on from
 					ex		de,hl		; where it came out -- the setup above
 					jr		depth_insert_from		; still stands
 
@@ -412,15 +470,16 @@ depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
 .advance:			ld		l,(iy+OBJ.NEXT)
 					ld		h,(iy+OBJ.NEXT+1)
 					jr		.scan
-.further:			and		a
-					jr		nz,.advance		; only a guess: keep looking
+.further:			jr		nz,.advance		; only a guess: keep looking -- depth_cmp's
+										; Z is whether it was certain
 .commit:			pop		hl
 					; NB: fall through
 
-; Splice IX in after a NEXT field.
+; Splice IX in after a NEXT field. depth_insert_from falls into it once its
+; scan has settled on one, and background_insert calls it with the boundary.
 ;   IX -> the object, HL -> the NEXT field to follow
 ; Corrupts A, BC, DE, HL.
-.link:				ld		e,(hl)
+depth_link:				ld		e,(hl)
 					inc		l
 					ld		d,(hl)
 					dec		l		; de = whoever follows us
@@ -451,6 +510,6 @@ depth_insert_from:	push	hl		; the insertion point: the NEXT field we will write,
 ;   IX -> the object, not currently in any list
 ; Corrupts A, BC, DE, HL.
 background_insert:	ld		hl,(sort_head)
-					call	depth_insert_from.link
+					call	depth_link
 					ld		(sort_head),ix		; our NEXT field is the new boundary
 					ret

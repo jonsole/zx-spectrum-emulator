@@ -22,6 +22,10 @@
 ; guesses, and isometric boxes are not transitive, so the order a guess picks is
 ; not something a test can hold the sort to.
 ;
+; And room $A3's corner, where the knight stands still and something else moves:
+; the moveable block, carried in under his feet by the hunting ball. That tests
+; depth_relink's walk past the neighbours it can only guess about.
+;
 ; Records: the knight's legs at LEGS, his body a slot on and his tail a slot
 ; after that; a guard's torso at TORSO and its legs a slot on; the nine blocks
 ; from BLOCKS, a slot each, row by row along U.
@@ -30,6 +34,10 @@
 					INCLUDE	"harness.s"
 
 					INCLUDE	"../object_struct.s"
+
+					; Before anything else: platform_empty expands depth.s's depth_reset,
+					; and sjasmplus wants a macro defined before it is used.
+					INCLUDE	"../depth.s"
 
 LEGS				EQU		$C000		; the knight: legs, body, tail
 BODY				EQU		LEGS + ROOM_STRIDE
@@ -191,6 +199,30 @@ start:				ld		sp,$FE00
 					NO_INVERSIONS	"inversions"
 					EXPECT_BYTE	GUARD_LEGS + OBJ.V, 138 - 36, "the legs' V, after"
 
+; --- something sliding under a knight who is standing still --------------------
+; Room $A3: the moveable block rides the hunting ball, and the knight stands
+; half on a stack beside it. The block is sorted in after him, rightly -- beside
+; him it is only guessed nearer or further -- and then the ball carries it in
+; under his feet, where he is certainly nearer. He takes no step, so he is
+; never re-sorted, and the block's own re-sort looks only at its neighbours.
+
+					TEST	"$A3: a block carried in under a knight standing still"
+					call	a3_scene
+					call	check
+					NO_INVERSIONS	"inversions, before"
+					ld		b,6
+.a3_step:			push	bc
+					ld		hl,step
+					inc		(hl)
+					ld		ix,A3_BLOCK
+					ld		de,$0002		; +2 along V, as the ball goes
+					xor		a
+					call	depth_step
+					call	check
+					pop		bc
+					djnz	.a3_step
+					NO_INVERSIONS	"inversions"
+
 					call	finish
 					DB		"pair_sort_tests", 0
 
@@ -200,17 +232,7 @@ start:				ld		sp,$FE00
 
 ; The platform: every record cleared, an empty list, the checker's findings
 ; cleared, and the nine blocks sorted in by the real depth_insert.
-platform:			ld		hl,LEGS		; the knight, the guard and the blocks
-					ld		bc,BLOCKS + 9 * ROOM_STRIDE - LEGS
-					call	zero
-					ld		hl,found
-					ld		bc,FOUND_SIZE
-					call	zero
-					ld		hl,0
-					ld		(object_list),hl
-					ld		hl,object_list
-					ld		(sort_head),hl
-
+platform:			call	platform_empty
 					ld		ix,BLOCKS
 					ld		hl,blocks
 					ld		b,9
@@ -233,6 +255,55 @@ platform:			ld		hl,LEGS		; the knight, the guard and the blocks
 					add		ix,de
 					djnz	.block
 					ret
+
+; Every record cleared, an empty list, and the checker's findings cleared.
+platform_empty:		ld		hl,LEGS		; the knight, the guard and the blocks
+					ld		bc,BLOCKS + 9 * ROOM_STRIDE - LEGS
+					call	zero
+					ld		hl,found
+					ld		bc,FOUND_SIZE
+					call	zero
+					depth_reset			
+					ret
+
+; Room $A3's corner, as the game has it: two blocks stacked, a spike and a
+; spiked ball on it, the moveable block beside the knight's feet, and the knight
+; on the stack -- in the order the room builds them, the knight last.
+A3_STACK			EQU		BLOCKS
+A3_SPIKE			EQU		BLOCKS + 2 * ROOM_STRIDE
+A3_BALL				EQU		BLOCKS + 3 * ROOM_STRIDE
+A3_BLOCK			EQU		BLOCKS + 4 * ROOM_STRIDE
+
+a3_scene:			call	platform_empty
+					ld		ix,A3_STACK
+					ld		hl,(136 << 8) | 168
+					ld		d,8
+					ld		bc,(12 << 8) | 128
+					call	place
+					ld		ix,A3_STACK + ROOM_STRIDE
+					ld		bc,(12 << 8) | 140
+					call	place
+					ld		ix,A3_SPIKE
+					ld		hl,(120 << 8) | 136
+					ld		d,6
+					ld		bc,(12 << 8) | 128
+					call	place
+					ld		ix,A3_BALL
+					ld		bc,(12 << 8) | 140
+					call	place
+					ld		ix,A3_BLOCK		; beside him along V: 148 to 164
+					ld		hl,(152 << 8) | 156
+					ld		d,8
+					ld		bc,(12 << 8) | 140
+					call	place
+					ld		hl,(144 << 8) | 169		; on the stack, at its top
+					ld		d,CHARACTER_HALF_U
+					ld		ix,LEGS
+					ld		bc,(CHARACTER_BODY_UP << 8) | 152
+					call	place
+					ld		ix,BODY
+					ld		bc,((COLLIDE_HEIGHT - CHARACTER_BODY_UP) << 8) | (152 + CHARACTER_BODY_UP)
+					jr		place
 
 ; The blocks' centres, row by row along U: 120, 136 and 152 by 104, 120 and 136.
 blocks:				DB		120, 104,  136, 104,  152, 104
@@ -340,7 +411,6 @@ check:				ld		hl,(sort_head)
 					jr		z,.next
 					call	depth_cmp_hl		; ...against each after it, in IY
 					jr		c,.fine		; further than it: as it should be
-					or		a
 					jr		nz,.fine		; nearer, but only a guess
 					ld		hl,inversions
 					inc		(hl)
@@ -418,4 +488,3 @@ sound_z:			ret
 
 					INCLUDE	"../walker.s"
 					INCLUDE	"../mover.s"
-					INCLUDE	"../depth.s"

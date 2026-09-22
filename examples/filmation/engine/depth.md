@@ -123,8 +123,9 @@ removes the "am I the head?" branch from both unlink and insert.
    drawn first                                                  drawn last
 ```
 
-The list is doubly linked only so that taking an object out is a constant-time
-job. Nothing ever walks it backwards.
+The list is doubly linked so that taking an object out is a constant-time job.
+Only depth_relink's check walks it backwards, from a moved object through the
+ones before it that it can only guess about -- see stage 2 of section 9.
 
 The draw loop fixes where `NEXT` has to be. `objects_draw_all` points SP at a
 record and pops: NEXT, then the Y extent, the X extent, the flags and blit
@@ -185,19 +186,30 @@ total in HL, the difference in position in the nearer direction:
 |---|---|
 | U | our U − their U |
 | V | their V − our V |
-| Z | none: Z votes, but adds nothing |
+| Z | one unit, in the nearer direction, however far apart they are |
 
 A positive total means we are nearer. Each term is worked out exactly from two
 unsigned bytes: the SUB gives the low byte and its borrow, and `sbc a,a` turns
 the borrow into the high byte, so a term runs from −255 to +255.
 
 An axis where the boxes overlap says nothing about depth, so it adds nothing.
-Head Over Heels sums every separating axis, Z included. Z is left out here
+
+Head Over Heels sums every separating axis, Z included, by how far apart the
+boxes are. Z counts for a single unit here, whatever the height between them,
 because the total is only ever read when the axes disagree (see below), and
 when Z is one of the disagreeing axes the floor is what the picture goes by.
 The case that showed it: the knight pushing a table from behind. His body's box
-starts at the table's top, so Z says the body is nearer by 12, U says it is
-further by 11, and with Z counted the body was drawn over the table.
+starts at the table's top, so Z counted in full said the body was nearer by 12
+against 11 back along U, and the body was drawn over the table. Any floor term
+at all outvotes a single unit, so the floor still decides.
+
+A unit is not nothing, though, and what it decides is a tie. Room `$B3` has a
+spike and a block whose floor terms cancel exactly -- 16 along U against 16
+along V -- with a ball between them that is certainly nearer than the spike and
+certainly further than the block. Ordering the spike and the block by the coin
+toss a sum of nought comes down to left the ball nowhere in the list it could
+go, and it was drawn on top of the block it should have been behind. With Z's
+unit the pair come out lower-first, and the ball has its place.
 
 ### The answer
 
@@ -228,9 +240,11 @@ so Z separates them, and HL alone would say "level".
 B is set with SET rather than INC because a vote has to count once however many
 axes cast it. Two axes both saying nearer must still give 1.
 
-The dispatch at the end uses two DJNZs. The first falls through only when B was
-1, the second only when B was 2. A 0 wraps to $FF and a 3 stops at 1, and both
-reach the guess, which is `sla h` to put the sign of HL into the carry.
+The dispatch at the end is two `dec b`s. The first leaves zero only when B was
+1, the second only when B was 2, and every other value -- 0 and 3 -- falls out
+of the bottom to the guess, which is `sla h` to put the sign of HL into the
+carry. Neither DEC touches the carry, so the `xor a` above them still stands
+for the certain answers.
 
 ### Worked example: certain
 
@@ -269,14 +283,14 @@ depth_cmp's own instructions:
 |---|---|---|
 | `.u_min` | `cp n` | our U − SIZE_U + 1 |
 | `.u_max` | `cp n` | our U + SIZE_U |
-| `.u_ours` | `ld a,n` | our U |
 | `.v_min` | `cp n` | our V − SIZE_V + 1 |
 | `.v_max` | `cp n` | our V + SIZE_V |
-| `.v_ours` | `sub n` | our V |
 | `.z_min` | `cp n` | our Z + 1 |
 | `.z_max` | `cp n` | our Z + SIZE_Z |
 
-So the `cp 0`, `ld a,0` and `sub 0` you see in the source are placeholders. The
+So the `cp 0`s you see in the source are placeholders. The two centres are read
+from IX instead: they are only needed for a separating floor axis, so hoisting
+them too cost six bytes of setup to save twelve T-states a time. The
 labels are there only to give setup an address to write to, one byte past each.
 
 The `+ 1` on the mins turns "their max ≤ our min" into a single compare. CP sets
@@ -284,7 +298,7 @@ the carry for "less than", so `cp our_min+1` sets it for "less than or equal".
 
 A patched `cp n` is 2 bytes and 7 T-states. Reading the bound out of the record
 instead would be at least 3 bytes and 19 T, before redoing the add or subtract
-for every candidate. Setup's nine stores pay for themselves after about three
+for every candidate. Setup's six stores pay for themselves after about three
 candidates, and a scan typically visits many more.
 
 ## 5. Why there is no sort
@@ -384,7 +398,7 @@ certain "further" stops the scan.
 
 ### The link
 
-`depth_insert_from.link` splices IX in after the NEXT field HL points at. The scan pops the insertion point into HL and falls into it:
+`depth_link` splices IX in after the NEXT field HL points at. The scan pops the insertion point into HL and falls into it:
 
 ```
 before:   [at] --> F                (F may be 0)
@@ -487,18 +501,36 @@ object_place afterwards, and the flags from the OR are still intact for its
 
 ### Stage 2: is it still between its neighbours?
 
-After depth_cmp_setup, depth_relink checks the object against the two objects
+After depth_cmp_setup, depth_relink checks the object against the objects
 either side of it. The list is furthest first, so the object is still in place
-if it is not further than the one before it and not nearer than the one after
+if it is not further than the ones before it and not nearer than the ones after
 it.
 
-| Check | Skipped when | Out of order if | Then |
+| Walk | Stops, in order, when | Out of order if | Then |
 |---|---|---|---|
-| against the predecessor | PREV equals sort_head: nothing sorted is ahead | the object is further, certain or guessed | it belongs earlier |
-| against the successor | NEXT is 0: it is last | the object is nearer, certain or guessed | it belongs later |
+| back from the predecessor | it reaches sort_head, or the object is certainly nearer | the object is further, certain or guessed | it belongs earlier |
+| on from the successor | it reaches the tail, or the object is certainly further | the object is nearer, certain or guessed | it belongs later |
 
-When the predecessor check runs, PREV is not sort_head, so it must point at a
-sorted record, and PREV is that record's address.
+A neighbour that answers with a guess settles nothing, so each walk steps on
+past it, the way the insertion scan steps on past a guessed "further". Usually
+the first neighbour gives a certain answer and the whole check is still two
+comparisons.
+
+It used to stop at the neighbour, guess or not, and room `$A3` showed what that
+misses. The moveable block there rides the hunting ball. The knight stood still
+on a stack beside it, and he was ahead of the block in the list, which was
+right: side by side their boxes disagree by axis, and the guess put him further.
+Then the ball carried the block in under his feet, where he is certainly the
+nearer. Between the two in the list lay a spike and a spiked ball that the
+block could only guess about, so its look at its neighbours said "in order",
+and the knight took no step that would re-sort him. The block's top stayed
+drawn over his legs. `pair_sort_tests.s` has the scene.
+
+When the backward walk compares a record, it has not reached sort_head, so the
+field it came from is a sorted record's NEXT, and PREV is that record's address.
+The walks read depth_cmp's Z flag for "certain": both certain answers come from
+`XOR A`, and the guess ends with `INC A`. The insertion scan reads it the same
+way.
 
 Each check jumps straight to the stage 3 it calls for. They used to be a
 routine of their own, `depth_in_order`, which answered 0 or 1 in A for
@@ -507,7 +539,7 @@ nine bytes with them, and A no longer has to survive depth_unlink.
 
 If it is still in order, depth_relink returns. This is the common case. An
 object creeping one unit a frame only crosses a neighbour every few frames, and
-this stage costs two depth_cmp calls instead of a scan.
+this stage usually costs two depth_cmp calls instead of a scan.
 
 ### Stage 3: take it out and put it back
 
@@ -581,7 +613,10 @@ snapped somewhere new would not be re-sorted at all.
 
 ### When a room is built
 
-1. **room_build** empties the list: `object_list = 0`, `sort_head = object_list`.
+1. **room_build** empties the list with the `depth_reset` macro, which is what
+   sets `object_list` to 0 and `sort_head` back to `object_list`. It is a macro
+   because neither game has the bytes for a CALL; it lives here so that no game
+   has to know `sort_head` exists.
 2. **room_show** places every object first, so every comparison sees real
    coordinates. Then it inserts each one: `background_insert` if it has
    `OBJ_BACKGROUND`, otherwise `depth_insert`. Only then does it draw anything.
@@ -626,6 +661,7 @@ everything the relink could change.
 | depth_insert_placed | IX, setup done | IX linked in | A, BC, DE, HL, IY |
 | depth_insert_from | IX, HL = the field to start at, setup done | IX linked in | A, BC, DE, HL, IY |
 | background_insert | IX | IX linked, sort_head moved | A, BC, DE, HL |
+| depth_link | IX, HL = the NEXT field to follow | IX spliced in after it | A, BC, DE, HL |
 | depth_add_step | IX, D, E, A = the step | Z set if the step was zero | AF, C. Keeps HL, DE, B |
 | depth_step | IX in the list, D, E, A = the step | IX moved, and in order | A, BC, DE, HL, IY |
 | depth_relink | IX in the list and moved | IX in order | A, BC, DE, HL, IY |
@@ -637,6 +673,7 @@ everything the relink could change.
 |---|---|---|
 | `object_list` | depth.s | the first object, or 0. Doubles as a NEXT field |
 | `sort_head` | depth.s | the NEXT field that starts the sorted run |
+| `depth_reset` | depth.s, a macro | sets both back to an empty list |
 | the insertion point | the stack, during a scan | the NEXT field the object will be linked after |
 | nine operands | inside depth_cmp | the placed object's bounds, from depth_cmp_setup |
 
@@ -713,6 +750,10 @@ before one it is certainly in front of. Guessed orders are not checked, since
 the sort is free to settle those either way. On the code before the
 legs-and-body fix it finds the inversions for both figures in both walks
 towards the viewer, which is where the legs have to move later in the list.
+It also sets up room `$A3`'s corner: the knight standing still on a stack, and
+the moveable block stepping in under his feet along V, checked after every
+step. With depth_relink stopping at a guessing neighbour, it found 12
+inversions, the first on the block's first step.
 
 To run them:
 
