@@ -11,8 +11,15 @@
 ; up, drawing the whole panel once.
 ; ---------------------------------------------------------------------------
 
-                    ASSERT  $ == redraw_view_end
 REDRAW_HOOK_ON      EQU     $3A                 ; LD A,(nn): what it starts with
+
+; Whatever of the panel the repaint reached: its pieces, what he carries, and
+; the word and the numbers.
+;
+; In:  view_y_extent, view_x_extent = the region just repainted
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
+                    ASSERT  $ == redraw_view_end
 redraw_hook:        ld      a,(view_y_extent+1) ; max, exclusive
                     cp      PANEL_ROW + 1
                     ret     c                   ; nowhere near the panel
@@ -32,13 +39,19 @@ redraw_hook:        ld      a,(view_y_extent+1) ; max, exclusive
 
 
 ; The room is up: the panel on again, and all of it drawn.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 panel_on:           ld      a,REDRAW_HOOK_ON
                     ld      (redraw_hook),a
                     jp      panel_show
 
 ; And off while the next is drawn.
-; Corrupts AF.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: A
 panel_off:          ld      a,$C9               ; RET
                     ld      (redraw_hook),a
                     ret

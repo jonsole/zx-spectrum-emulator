@@ -60,7 +60,10 @@ flyer_slots:        DW      0               ; the first of the two records;
 ;
 ; And whether this room drops anything at all, and the whole wait again
 ; before it does.
-; Corrupts AF, BC, DE, HL, IX.
+;
+; In:  nothing
+; Out: flyer_slots -> the first of the four, now counted in room_object_count
+; Corrupts: AF, B, DE, HL, IX
 flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
                     ld      (flyer_timer),a     ; turn; 1 runs out on it
                     ld      a,(room_object_count)
@@ -121,7 +124,10 @@ flyer_room_enter:   ld      a,FLYER_NOW         ; 0 wraps to 255 on the first
 
 ; ---------------------------------------------------------------------------
 ; One turn of the sky. $CBAB, step for step.
-; Corrupts AF, BC, DE, HL, IX.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 flyer_step:         ld      a,(flyer_banned)
                     or      a
                     ret     nz

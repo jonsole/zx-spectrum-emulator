@@ -97,7 +97,10 @@ tune_start:         DB      $59,$5C,$5B,$54,$19,$17,$14,$17,$D9,$FF
 
 
 ; The menu, until 0 starts the game.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: menu_mode = what was chosen
+; Corrupts: AF, BC, DE, HL, AF'
 menu_run:           call    menu_draw
                     ld      de,tune_menu
                     call    tune_play           ; once, and any key cuts it short
@@ -112,7 +115,10 @@ menu_run:           call    menu_draw
 
 ; The whole menu: the frame's colour under everything, the lines, and then
 ; the frame itself.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 menu_draw:          ld      hl,menu_lines
                     ld      b,MENU_LINES
                     ld      c,MENU_FRAME_ATTR
@@ -132,7 +138,10 @@ menu_draw:          ld      hl,menu_lines
 ; The two top corners are the bottom ones upside down, and nothing else in the
 ; game draws a sprite that way, so rather than teach screen_sprite to,
 ; menu_flip_v turns the corner over where it lies and back again.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 menu_border:        ld      hl,menu_corners
                     ld      b,MENU_CORNERS
 .corner:            push    bc
@@ -225,7 +234,10 @@ MENU_BARS           EQU     $ - menu_bars
 ; Turn the corner over where it lies, so that screen_sprite draws it upside
 ; down. It is turned back straight afterwards: the sprite table is shared with
 ; the game, and this is the only thing that ever wants it this way up.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 menu_flip_v:        ld      a,MENU_CORNER_GFX
                     ld      l,a
                     ld      h,(high sprite_table) / 2
@@ -289,7 +301,10 @@ menu_flip_v:        ld      a,MENU_CORNER_GFX
 
 
 ; 1 to 5, and the flash moved if one of them changed something.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: menu_mode = the choice, as the keys have changed it
+; Corrupts: AF, BC, DE, HL
 menu_pick:          ld      bc,MENU_KEYS_1_5
                     in      a,(c)
                     cpl                         ; held reads 0, and this is
@@ -337,7 +352,10 @@ menu_pick:          ld      bc,MENU_KEYS_1_5
 ; already on the screen, so each of the five that can flash has its attribute
 ; set or cleared and laid back over its own characters -- the lines are
 ; consecutive, and painting one leaves DE on the next.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 menu_flash:         ld      hl,menu_line_1
                     ld      a,(menu_mode)
                     rrca
@@ -367,8 +385,10 @@ menu_flash:         ld      hl,menu_line_1
 
 ; A line's attribute onto the cells its characters are in, and no others: a
 ; blank cell given FLASH would blink solid, paper and ink swapping.
-;   HL -> the line: its attribute, row and column, then the characters
-; Returns DE -> the line after it. Corrupts AF, BC, HL.
+;
+; In:  HL -> the line: its attribute, row and column, then the characters
+; Out: DE -> the line after it
+; Corrupts: AF, C, HL
 menu_paint:         ld      c,(hl)
                     inc     hl
                     ld      d,(hl)

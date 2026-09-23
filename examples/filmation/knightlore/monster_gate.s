@@ -9,9 +9,10 @@
 ;
 ; At the end of the castle's data, where the trimmed nudge index left room:
 ; contended memory, a few instructions a monster a turn.
-;   IX -> the record
-; ---------------------------------------------------------------------------
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 monster_gate:       ld      a,(room_busy)
                     or      a
                     jr      z,.go

@@ -81,7 +81,10 @@ quest_take_held:    DB      0
 ; ---------------------------------------------------------------------------
 ; A new game: the records as they start, the collectables dealt, nothing
 ; carried and nothing done. $D16F.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 quest_new_game:     ld      hl,quest_start
                     ld      de,quest_table
                     ld      bc,QUEST_RECORDS * QR_LEN
@@ -134,8 +137,11 @@ quest_new_game:     ld      hl,quest_start
                     ret
 
 
-; HL -> record A.
-; Corrupts AF, DE.
+; Where record A is.
+;
+; In:  A = the record
+; Out: HL -> it
+; Corrupts: F, DE
 quest_record:       ld      l,a
                     ld      h,0
                     add     hl,hl
@@ -148,8 +154,10 @@ quest_record:       ld      l,a
 
 
 ; What a record's graphic does, as the original's dispatch at $AE2F would.
-;   A - the graphic
-; Out: A - the behaviour. Corrupts nothing else.
+;
+; In:  A = the graphic
+; Out: A = the behaviour
+; Corrupts: F
 quest_behaviour:    cp      QUEST_GFX_WATER
                     jr      z,.water
                     cp      QUEST_GFX_ITEM
@@ -177,7 +185,10 @@ quest_behaviour:    cp      QUEST_GFX_WATER
 ; background: they lie flat on the floor, under everything.
 ;
 ; room_add fills through IX, which is where room_objects_of left it.
-; Corrupts AF, BC, DE, HL; IX moves on past what it added.
+;
+; In:  IX -> the next free record
+; Out: IX -> past what it added
+; Corrupts: AF, BC, DE, HL
 quest_room_enter:   ld      (quest_first),ix
                     xor     a
                     ld      (quest_slots),a
@@ -238,7 +249,10 @@ quest_room_enter:   ld      (quest_first),ix
 ; And, once the room is up, the empty slots to put things down into: as many
 ; as he can carry, if the pool has them. flyer_room_enter follows, so these
 ; come before the flyers' and bolts'.
-; Corrupts AF, BC, DE, HL, IX.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, DE, HL, IX
 quest_room_spares:  ld      b,QUEST_SPARES
 .spare:             ld      a,(room_object_count)
                     cp      ROOM_SLOTS
@@ -272,7 +286,10 @@ quest_room_spares:  ld      b,QUEST_SPARES
 ; Leaving a room, or starting it over: every record still lying in it has
 ; where it now is, and what it has become, written back -- $B115. A slot
 ; emptied by picking up has already been.
-; Corrupts AF, BC, DE, HL, IX.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, DE, HL, IX
 quest_room_leave:   ld      a,(quest_slots)
                     or      a
                     ret     z
@@ -315,8 +332,11 @@ quest_room_leave:   ld      a,(quest_slots)
 ; Put record A into the empty slot IX, at the U, V and Z already in the
 ; record, and draw it: the way a thing is put down, swapped out, or comes out
 ; of the well.
-;   A - the record, IX -> an empty slot of the room's
-; Corrupts everything but IX.
+;
+; In:  A  = the record
+;      IX -> an empty slot of the room's
+; Out: nothing
+; Corrupts: everything but IX
 quest_place:        ld      (ix+QUEST_INDEX),a
                     call    quest_record
                     ld      a,(hl)
@@ -365,8 +385,10 @@ quest_place:        ld      (ix+QUEST_INDEX),a
 
 
 ; An empty slot of the room's, for putting something into.
-; Out: IX -> it and carry clear, or carry set for none.
-; Corrupts AF, BC, DE.
+;
+; In:  nothing
+; Out: carry clear and IX -> it, or carry set for none, and IX anywhere
+; Corrupts: A, B, DE
 quest_free_slot:    ld      a,(quest_slots)
                     or      a
                     scf
@@ -385,7 +407,10 @@ quest_free_slot:    ld      a,(quest_slots)
 
 ; Take the thing in slot IX out of the room: repainted without it, and the slot
 ; left empty.
-; Corrupts everything but IX.
+;
+; In:  IX -> the slot
+; Out: nothing
+; Corrupts: everything but IX
 quest_lift:         push    ix
                     call    object_hide
                     pop     ix
@@ -403,8 +428,10 @@ quest_lift:         push    ix
 ; already had three, the oldest is left where the new one was. With nothing
 ; there, he puts the oldest down under himself and stands on it, if there is
 ; the headroom; if he has no oldest, what he carries moves up one.
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL, IY. IX comes back as it was.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything but IX
 quest_take:         ld      a,(input_now)
                     and     INPUT_TAKE
                     ld      hl,quest_take_held
@@ -438,9 +465,11 @@ quest_take:         ld      a,(input_now)
 ; Something he can take, beside or under him: the well's bucket or a
 ; collectable not yet in its place. Near enough is his own footprint and four
 ; more each way, overlapping him in height with his feet four lower -- $C0D4.
-;   IX -> the legs record
-; Out: IY -> its slot and carry clear, or carry set for nothing.
-; Corrupts AF, BC, DE.
+;
+; In:  IX -> the legs record
+; Out: carry clear and IY -> its slot, or carry set for nothing, and IY
+;        anywhere
+; Corrupts: A, BC, DE
 quest_at_feet:      ld      a,(quest_slots)
                     or      a
                     scf
@@ -497,7 +526,10 @@ quest_at_feet:      ld      a,(quest_slots)
 
 ; Take the thing in slot IY. If three were carried already, the oldest is left
 ; where it was, in its slot.
-; Corrupts everything.
+;
+; In:  IY -> the slot
+; Out: nothing
+; Corrupts: everything
 quest_pick_up:      ld      a,(iy+QUEST_INDEX)
                     ld      c,a
                     call    quest_record        ; it is carried now
@@ -537,9 +569,11 @@ quest_pick_up:      ld      a,(iy+QUEST_INDEX)
 
 
 ; Put the oldest thing down under him, and stand him on it -- $C017. With no
-; oldest, what he carries moves up one ($C091).
-;   IX -> the legs record
-; Corrupts everything but IX.
+; oldest, what he carries moves up one ($C091). It finds him at player itself.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 quest_put_down:     ld      a,(quest_carry + 2)
                     inc     a
                     jr      z,.shuffle          ; nothing oldest: just move up
@@ -580,9 +614,13 @@ quest_put_down:     ld      a,(quest_carry + 2)
 quest_spot:         DS      3                   ; U, V, Z
 
 
-; Record A to go down at quest_spot, at a thing's dropped size -- $C061.
-;   A - the record
-; Out: A - the record still. Corrupts DE, HL.
+; Record A to go down at quest_spot, at a thing's dropped size -- $C061. A
+; comes back as it went in, for quest_place.
+;
+; In:  A = the record
+;      quest_spot = where
+; Out: nothing
+; Corrupts: DE, HL
 quest_set_down:     push    af
                     call    quest_record
                     inc     hl
@@ -606,9 +644,10 @@ quest_set_down:     push    af
 
 ; Is there room for him twelve higher? Whether his raised box would meet
 ; anything solid in the room -- $BF1B, with him lifted by twelve first.
-;   IX -> the legs record
-; Out: carry set if it would.
-; Corrupts AF, BC, DE, IY.
+;
+; In:  IX -> the legs record
+; Out: carry set if it would
+; Corrupts: A, BC, DE, IY
 quest_headroom:     ld      a,(room_object_count)
                     ld      b,a
                     ld      iy,room_objects
@@ -659,15 +698,18 @@ quest_headroom:     ld      a,(room_object_count)
                     ret
 
 
-; ---------------------------------------------------------------------------
-; What he carries, drawn on the panel: three places along the bottom left, the
-; newest first -- $BA3D, which blanks each three bytes by 24 rows and draws
-; the graphic in it.
-; Corrupts everything but IX and IY.
 CARRY_ROW           EQU     SCREEN_ROWS - 24
 CARRY_X             EQU     16
 CARRY_STEP          EQU     24
 
+; ---------------------------------------------------------------------------
+; What he carries, drawn on the panel: three places along the bottom left, the
+; newest first -- $BA3D, which blanks each three bytes by 24 rows and draws
+; the graphic in it.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 quest_carry_show:   ld      hl,quest_carry
                     ld      c,CARRY_X
                     ld      b,QUEST_SPARES
@@ -710,14 +752,17 @@ quest_carry_show:   ld      hl,quest_carry
                     ret
 
 
+WELL_SHOTS          EQU     32                  ; see mover_well
+
 ; ---------------------------------------------------------------------------
 ; The well -- $CFD2. Nothing comes out while the bucket is out. Otherwise
 ; every turn one of his bolts is touching it counts, and on the thirty-second
 ; the bucket comes out beside it, eight along V and at Z 141, into a slot
 ; of the room's -- record QUEST_WATER.
-;   IX -> the well
-WELL_SHOTS          EQU     32
-
+;
+; In:  IX -> the well; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_well:         ld      a,(quest_water_out)
                     or      a
                     ret     nz
@@ -783,6 +828,9 @@ mover_well:         ld      a,(quest_water_out)
                     ret
 
 
+WATER_TARGET        EQU     30                  ; see mover_water
+WATER_HIGH          EQU     176
+
 ; ---------------------------------------------------------------------------
 ; The well's bucket of water -- $D0AC. Until it has a quest item to go to it
 ; sinks a unit a turn, looking for one in the room; then it flies to it, a unit
@@ -794,10 +842,10 @@ mover_well:         ld      a,(quest_water_out)
 ; under him, it rises straight up through him in the original rather than
 ; carrying him or waiting for him to move. So it moves by mover_paint, which
 ; takes the step as it is -- no clamp, and no gravity to allow for.
-;   IX -> the record
-WATER_TARGET        EQU     30
-WATER_HIGH          EQU     176
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_water:        bit     0,(ix+OBJ.MOVE_STATE)
                     jr      nz,.flying
 
@@ -849,6 +897,10 @@ mover_water:        bit     0,(ix+OBJ.MOVE_STATE)
                     jp      mover_poof_start
 
 ; +1, -1 or 0, the way A says.
+;
+; In:  A = a difference
+; Out: A = its sign: +1, -1 or 0
+; Corrupts: F
 water_sign:         or      a
                     ret     z
                     ld      a,1
@@ -857,8 +909,10 @@ water_sign:         or      a
                     ret
 
 ; A quest item not yet done, in the room's slots.
-; Out: A - its slot index from the first, and carry clear; carry set for none.
-; Corrupts BC, DE, IY.
+;
+; In:  nothing
+; Out: carry clear and A = its slot index from the first, or carry set for none
+; Corrupts: BC, DE, IY
 water_find_item:    ld      a,(quest_slots)
                     or      a
                     scf
@@ -878,8 +932,11 @@ water_find_item:    ld      a,(quest_slots)
                     scf
                     ret
 
-; IY -> the room's slot A, counting from the first record's.
-; Corrupts AF, DE.
+; The room's slot A, counting from the first record's.
+;
+; In:  A = the slot
+; Out: IY -> it
+; Corrupts: AF, DE
 quest_slot_iy:      ld      iy,(quest_first)
                     or      a
                     ret     z
@@ -894,7 +951,10 @@ quest_slot_iy:      ld      iy,(quest_first)
 ; A quest item -- $CF68. It stands where it is; when the bucket has marked it
 ; done, it becomes the graphic four on, gives a life and counts, and if that
 ; makes all four the pentagram comes to room 82 ($D13A).
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_quest:        call    mover_hover
                     bit     0,(ix+OBJ.MOVE_STATE)
                     ret     z
@@ -944,7 +1004,10 @@ mover_quest:        call    mover_hover
 ; stump. In room 82 with the pentagram there, it flies to its own place in it,
 ; a unit a turn, and settles as the graphic eight on; five settled and the
 ; game is won.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_collectable:  ld      a,(room_shown)
                     cp      QUEST_PIECES_ROOM
                     jp      nz,mover_pushed
@@ -1019,6 +1082,12 @@ won_text:           game_over_line 48, 9, $46
                     DB      'E'-$30,$FF
                     DB      0
 
+; The screen, the lines, the tune and the pause, and then on into the game
+; over.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 quest_win:          ld      a,WON_INK
                     call    screen_wipe
                     xor     a

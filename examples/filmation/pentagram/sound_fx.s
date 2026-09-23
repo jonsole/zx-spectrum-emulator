@@ -31,13 +31,22 @@
 ; sound_cycle can count.
 ; ---------------------------------------------------------------------------
 
+; The sound of a fall, which the engine calls while something is going down:
+; silence, since the original makes none.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: nothing
 sound_z:            ret
 
 ; What stops a tune that may be stopped: any key at all, which is how $D6AB
 ; asks -- every half-row in one read. engine/tune.s calls it. It is here
 ; rather than in sound_tune.s because the page that file is in had two bytes
 ; left and this is eight.
-; Out: NZ if a key is down. Corrupts AF, BC.
+;
+; In:  nothing
+; Out: NZ if a key is down
+; Corrupts: A, BC
 tune_key:           ld      bc,$00FE
                     in      a,(c)
                     cpl
@@ -46,7 +55,10 @@ tune_key:           ld      bc,$00FE
 
 ; A jump -- $D5E4: one cycle each for C from 16 down to 1, pitched at C
 ; exclusive-or $A5, plus C.
-; Corrupts AF, BC.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC
 sound_jump:         ld      c,16
 .cycle:             ld      a,c
                     xor     $A5
@@ -58,7 +70,10 @@ sound_jump:         ld      c,16
                     ret
 
 ; A step -- $D635: every fourth, two cycles, at $60 and $40 by turns.
-; Corrupts AF, BC, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, HL
 sound_step:         ld      hl,sound_steps
                     inc     (hl)
                     ld      a,(hl)
@@ -76,7 +91,10 @@ sound_steps:        DB      0
 ; A bolt away -- $D629: a cycle each for C from 32 down to 1, pitched at C.
 ; ($D629 pitches at C less B, and B is always 0 there: the LDIR at $C150 has
 ; just run it out.)
-; Corrupts AF, BC.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC
 sound_fire:         ld      c,32
 .cycle:             ld      b,c
                     call    sound_cycle
@@ -86,7 +104,10 @@ sound_fire:         ld      c,32
 
 ; A poof's crackle -- $D64E: four cycles, pitched by four bytes of the ROM in
 ; a row from somewhere random in its first 8K.
-; Corrupts AF, BC, E, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, E, HL
 sound_poof:         call    mover_rand
                     ld      e,a
                     call    mover_rand
@@ -109,7 +130,10 @@ sound_poof:         call    mover_rand
 ; turn, while the count lasts, the note that many past the place plays for
 ; twelve cycles, and the count goes down one. So a jingle plays backwards
 ; from its end, a note a turn.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_jingle:       ld      hl,sound_jingle_left
                     ld      a,(hl)
                     or      a
@@ -124,15 +148,28 @@ sound_jingle:       ld      hl,sound_jingle_left
                     jp      sound_tone
 
 ; He comes into a room -- $B07E: four notes.
-; Corrupts AF, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: A, HL
 sound_jingle_room:  ld      hl,sound_jingles
                     ld      a,4
                     jr      sound_jingle_start
 
 ; The take key goes down -- $C007: five notes, from four on.
-; Corrupts AF, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: A, HL
 sound_jingle_take:  ld      hl,sound_jingles + 4
                     ld      a,5
+
+; Start a jingle: the next turns play it, a note a turn, from its end.
+;
+; In:  HL -> the jingle's notes in sound_jingles
+;      A  = how many notes it has
+; Out: nothing
+; Corrupts: nothing
 sound_jingle_start: ld      (sound_jingle_at),hl
                     ld      (sound_jingle_left),a
                     ret
@@ -144,7 +181,10 @@ sound_jingle_at:    DW      sound_jingles
 ; $40, after adding one to it. The count is the jingle's own, so the original
 ; plays a note or two of whatever jingle it was on once the game goes on again;
 ; so does this.
-; Corrupts AF, BC, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, HL
 sound_click:        ld      hl,sound_jingle_left
                     inc     (hl)
                     ld      a,(hl)

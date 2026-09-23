@@ -47,7 +47,10 @@ deadly_touched      EQU     player_touched
 ;
 ; A character that is only standing there is repainted all the same -- see
 ; character_stand -- so there is no early out here.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: room_number = the next room, when he has walked out of this one
+; Corrupts: everything
 player_step:        ld      ix,player
                     ld      a,(player_state)
                     or      a
@@ -111,8 +114,11 @@ player_step:        ld      ix,player
 ; the engine picks the block with). Jumps and falls move both records by one
 ; step, so setting it from the legs each turn keeps it right; and the region
 ; the move repaints comes from where he was drawn, not from Z.
-;   IX -> the legs record, A - the facing
-; Corrupts AF.
+;
+; In:  IX -> the legs record
+;      A  = the facing
+; Out: nothing
+; Corrupts: AF
 player_body_up:     and     2
                     ld      a,CHARACTER_BODY_UP
                     jr      z,.away
@@ -128,9 +134,9 @@ player_body_up:     and     2
 ; plays. Turning does not move him, so a turn and a step are different turns of
 ; the loop, which is what "turn then walk" means to play.
 ;
-;   IX -> the legs record
-; Out: carry set and A the facing to walk; carry clear to stand.
-; Corrupts AF, BC, HL.
+; In:  IX -> the legs record
+; Out: carry set and A = the facing to walk, or carry clear to stand
+; Corrupts: B, HL
 player_turn:        ; A jump is a leap. Once he is off the ground he goes on the
                     ; way he faces, whatever is held, and cannot turn until he
                     ; is down: in the original, jumping with nothing else held
@@ -198,8 +204,11 @@ player_turn:        ; A jump is a leap. Once he is off the ground he goes on the
 ; reads it. Every doorway in the data but one has a matching door on the
 ; opposite side of the room it leads to -- 288 of 289 -- so he comes in by the
 ; opposite wall.
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL.
+;
+; In:  IX -> the legs record
+; Out: room_number = where it leads, and enter_dir = the side he comes in by,
+;        when he is out
+; Corrupts: AF, BC, DE, HL
 player_exit:        ld      a,(ix+CHARACTER_DOOR)
                     inc     a
                     ret     z                   ; not in a doorway
@@ -262,8 +271,10 @@ enter_dir:          DB      $FF
 ; one side of their wall, and the engine's test would never find him in one.
 ; The box is the engine's -- DOOR_ACROSS either side of the centre, DOOR_ALONG
 ; either side of the arch, and DOOR_LEVEL below to DOOR_HEIGHT above its floor.
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL.
+;
+; In:  IX -> the legs record
+; Out: CHARACTER_DOOR in the record = the side, 0 to 3, or $FF for none
+; Corrupts: AF, BC, E, HL
 player_door_find:   ld      (ix+CHARACTER_DOOR),$FF
                     ld      c,0
 
@@ -327,9 +338,14 @@ player_door_find:   ld      (ix+CHARACTER_DOOR),$FF
 ;
 ; One doorway in the data leads to a room with no partner on that side. There
 ; he stands on the floor, at the wall, where he was across it.
-;   IX -> the legs record, still holding where he was in the last room
-; Out: B - U, C - V, A - the Z to stand at. (enter_dir) is spent.
-; Corrupts DE, HL.
+;
+; In:  IX -> the legs record, still holding where he was in the last room
+;      enter_dir = the side he comes in by
+; Out: B = U
+;      C = V
+;      A = the Z to stand at
+;      enter_dir = $FF: it is spent
+; Corrupts: F, E, HL
 player_entry:       ld      a,(enter_dir)
                     ld      e,a                 ; E - the side he comes in by
                     ld      b,(ix+OBJ.U)
@@ -385,14 +401,7 @@ player_entry:       ld      a,(enter_dir)
 
 
 ; ---------------------------------------------------------------------------
-; Fire a bolt, if fire has just been pressed and he has one to spare -- $C126.
-;
-; A press, not a hold: the original latches it until the key is let go. Two
-; bolts at most, in the two slots after the flyers'. It goes the way he faces,
-; eight a turn, from two turns' flight ahead of him and four up; if that is
-; outside the room there is no shot.
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL, IY. IX comes back as it was.
+; His bolts -- see player_fire.
 BOLT_STEP           EQU     8
 BOLT_UP             EQU     4
 BOLT_START_GFX      EQU     150
@@ -407,6 +416,16 @@ bolt_steps:         DB      -BOLT_STEP, 0       ; 0  -U
                     DB      BOLT_STEP, 0        ; 2  +U
                     DB      0, -BOLT_STEP       ; 3  -V
 
+; Fire a bolt, if fire has just been pressed and he has one to spare -- $C126.
+;
+; A press, not a hold: the original latches it until the key is let go. Two
+; bolts at most, in the two slots after the flyers'. It goes the way he faces,
+; eight a turn, from two turns' flight ahead of him and four up; if that is
+; outside the room there is no shot.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything but IX
 player_fire:        ld      a,(input_now)
                     and     INPUT_FIRE
                     ld      hl,fire_held
@@ -508,17 +527,32 @@ PLAYER_DEAD         EQU     2               ; played out: main.s's to act on
 
 player_state:       DB      PLAYER_ALIVE
 
-;   IX -> the legs record
+; Something deadly has touched him: he starts to go out in the puff.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything
 player_die:         ld      a,PLAYER_DYING
                     ld      (player_state),a
                     set     2,(ix+OBJ.FLAGS)    ; OBJ_PASSABLE, and nothing else
                     ld      a,POOF_FIRST
                     jr      player_dying.frame
 
+; A turn of it: the puff's next frame, or dead after the last.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything
 player_dying:       ld      a,(ix+OBJ.GFX)
                     cp      POOF_LAST
                     jr      nc,.done
                     inc     a
+; See player_dying: both halves to frame A, repainted where they stand.
+;
+; In:  IX -> the legs record
+;      A  = the frame
+; Out: nothing
+; Corrupts: everything
 .frame:             ld      (ix+OBJ.GFX),a      ; both halves the one frame,
                     ld      (ix+CHARACTER_BODY+OBJ.GFX),a
                     ld      de,0                ; repainted where they stand

@@ -57,9 +57,9 @@ room_group_move:	DB		0
 ; order and the last one is room $FF -- rooms_source.py asserts both -- so the walk
 ; always reaches a number at least the one it wants, and stops there.
 ;
-;   C  - the room wanted
-; Out: cf set and HL -> its record; cf clear if there is no such room.
-; Corrupts AF, DE, HL.
+; In:  C = the room wanted
+; Out: carry set and HL -> its record; carry clear if there is no such room
+; Corrupts: A, DE
 room_find:			ld		hl,room_list
 					ld		d,0
 .next:				ld		a,(hl)
@@ -75,10 +75,14 @@ room_find:			ld		hl,room_list
 
 
 ; Build a room and draw it.
-;   A = room number
 ;
 ; Everything the previous room owned goes with it: the sorted list is emptied,
 ; the rotation arena handed back, and the object pool refilled from the start.
+;
+; In:  A = the room number
+; Out: carry set if it was built; carry clear if there is no such room, and
+;        the old one is still up
+; Corrupts: everything
 room_build:			ld		c,a
 					call	room_find
 					ret		nc		; no such room, and the caller must not go
@@ -163,6 +167,10 @@ room_build:			ld		c,a
 ; Wipe the last room off the screen. Only whole rooms are drawn this way --
 ; once something moves, redraw_view repaints the area it disturbed and nothing
 ; else -- so the cost of an LDIR here is paid once per room and buys clarity.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: F, BC, DE, HL
 room_wipe:			ld		hl,16384
 					ld		de,16385
 					ld		bc,6143
@@ -173,6 +181,10 @@ room_wipe:			ld		hl,16384
 
 ; The room's colour over the whole screen. Bits 0-2 of the attribute byte,
 ; always bright.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 room_paper:			ld		a,SUN_FILL_ON		; colours may go on again
 					ld		(sun_fill),a
 					ld		a,REDRAW_HOOK_ON		; and the panel be put back
@@ -185,8 +197,10 @@ room_paper:			ld		a,SUN_FILL_ON		; colours may go on again
 
 
 ; Every attribute cell one colour.
-;   A - the colour
-; Corrupts BC, DE, HL.
+;
+; In:  A = the colour
+; Out: nothing
+; Corrupts: F, BC, DE, HL
 screen_colour:		ld		hl,22528
 					ld		de,22529
 					ld		bc,767
@@ -197,6 +211,10 @@ screen_colour:		ld		hl,22528
 
 ; The room's shape. Bits 3 and 4 of the attribute byte index room_size_tbl,
 ; three bytes an entry; above them is the scenery count.
+;
+; In:  room_attr = the room's attribute byte
+; Out: room_half_u, room_half_v, room_floor_z = the room's
+; Corrupts: AF, BC, DE, HL
 room_shape:			ld		a,(room_attr)
 					rrca
 					rrca
@@ -223,8 +241,13 @@ room_shape:			ld		a,(room_attr)
 ; ---------------------------------------------------------------------------
 ; The scenery. Each index names a template of pieces, each piece already in
 ; the eight-byte shape room_add wants, so this is a walk and a call.
-;   DE -> the scenery indices
-; Leaves DE on the first object byte.
+;
+; In:  DE -> the scenery indices
+;      IX -> the first free record
+;      room_scenery_left = how many indices
+; Out: DE -> the first object byte
+;      IX -> the next free record
+; Corrupts: AF, BC, HL
 room_scenery:		ld		a,(room_scenery_left)
 					or		a
 					ret		z
@@ -277,8 +300,10 @@ room_scenery:		ld		a,(room_scenery_left)
 ; His two pieces are eight units apart in the template, where a guard's sit on
 ; top of each other. It does not matter: mover_move_pair copies the torso's U
 ; and V down to the legs every turn, so they are together from his first step.
-;   C  - the scenery template index
-; Corrupts AF.
+;
+; In:  C = the scenery template index
+; Out: room_behaviour = MOVE_GATE, MOVE_GUARD_SQ or 0
+; Corrupts: AF
 room_scenery_move:	xor		a
 					ld		(room_behaviour),a
 					ld		a,c
@@ -307,9 +332,10 @@ room_scenery_move:	xor		a
 ; its opening is centred thirteen units from that leaf, which is the middle
 ; of the room -- so its position is the one to keep.
 ;
-;   C  - the scenery template index
-;   HL -> the template
-; Corrupts AF and BC. HL comes back where it was.
+; In:  C  = the scenery template index
+;      HL -> the template
+; Out: room_door_z and room_door_at = the doorway, if it is an arch
+; Corrupts: AF, BC
 room_door_note:		ld		a,c
 					cp		8		; 0-7 are the four arches, plain and
 					jr		c,.plain		; among the trees; the side is in bit 0-1
@@ -365,7 +391,13 @@ room_door_note:		ld		a,c
 ; The template's last byte carries all three nudges at once: bit 0 for U,
 ; bit 1 for V, and the whole byte is added into Z with those two bits masked
 ; off again afterwards.
-;   DE -> the object bytes
+;
+; In:  DE -> the object bytes
+;      IX -> the next free record
+;      room_bytes_left = how many bytes
+; Out: DE -> past the last of them
+;      IX -> the next free record
+; Corrupts: AF, BC, HL
 room_objects_of:	ld		a,(room_bytes_left)
 					or		a
 					ret		z
@@ -442,8 +474,11 @@ room_objects_of:	ld		a,(room_bytes_left)
 
 ; Turn one template entry plus the packed position into the eight bytes
 ; room_add takes.
-;   HL -> sprite, size U, size V, size Z, flags, offsets
-; Preserves HL.
+;
+; In:  HL -> sprite, size U, size V, size Z, flags, offsets
+;      room_packed = the position byte
+; Out: room_stage = the eight bytes
+; Corrupts: AF, BC, DE
 room_unpack:		push	hl
 					ld		a,(hl)
 					ld		(room_stage + 0),a		; sprite
@@ -501,6 +536,9 @@ room_unpack:		push	hl
 					ret
 
 
+DAYS_AT				EQU		$4000 + 2 * 2048 + 7 * 32 + 15	; row 23, print_days
+LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives
+
 ; ---------------------------------------------------------------------------
 ; The day and the lives in their places on the panel, and -- in a build with
 ; DEBUG_ROOM defined, `build.py --debug-room` -- the room number in the top-left
@@ -511,9 +549,10 @@ room_unpack:		push	hl
 ; right without anything else having to ask.
 ;
 ; Straight to the screen, byte-aligned, no mask.
-DAYS_AT				EQU		$4000 + 2 * 2048 + 7 * 32 + 15	; row 23, print_days
-LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives
-
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, DE, HL
 print_room:			ld		a,(days)
 					ld		hl,DAYS_AT
 					call	print_hex
@@ -529,8 +568,11 @@ print_room:			ld		a,(days)
 
 
 ; A byte as two digits.
-;   A  - the byte, HL -> the top row of the first cell
-; Corrupts AF, BC, DE, HL.
+;
+; In:  A  = the byte
+;      HL -> the top row of the first cell
+; Out: nothing
+; Corrupts: AF, B, DE, HL
 print_hex:			push	af
 					push	hl
 					rrca
@@ -548,8 +590,11 @@ print_hex:			push	af
 
 
 ; One character of the font, eight rows of it.
-;   A  - which character, HL -> the top row of its cell
-; Corrupts AF, BC, DE, HL.
+;
+; In:  A  = which character
+;      HL -> the top row of its cell
+; Out: DE -> past the glyph
+; Corrupts: AF, B, H
 print_char:			push	hl
 					ld		l,a
 					ld		h,0
@@ -565,8 +610,11 @@ print_char:			push	hl
 
 
 ; Eight rows of a glyph.
-;   DE -> the glyph, HL -> the top row of its cell
-; Returns DE past it. Corrupts AF, B, H.
+;
+; In:  DE -> the glyph
+;      HL -> the top row of its cell
+; Out: DE -> past it
+; Corrupts: AF, B, H
 print_glyph:		ld		b,8
 .row:				ld		a,(de)
 					ld		(hl),a
@@ -584,6 +632,10 @@ print_glyph:		ld		b,8
 ; each row a graphic by counting on from a random number, so the kinds come
 ; round in turn and every game puts them in different places; and
 ; shuffle_objects_required turns the wizard's list round four to seven places.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 special_init:		ld		hl,special_where_start		; every collectable back where it
 					ld		de,special_where		; began, nothing carried and
 					ld		bc,SPECIAL_ROWS * 4		; nothing delivered
@@ -632,6 +684,10 @@ special_init:		ld		hl,special_where_start		; every collectable back where it
 ; Write back whatever is lying in the room being left. update_special_objs.
 ; Something on its way into the pot is not lying anywhere, and nothing in the
 ; second slot of the pot's room belongs to the table.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IX
 special_room_leave:	ld		ix,(special_slots)
 					ld		a,ixh
 					or		a
@@ -669,6 +725,10 @@ special_room_leave:	ld		ix,(special_slots)
 ; Put the room's collectables in it: the next two records after everything
 ; the room data made, filled from any rows naming this room. find_special_objs_here.
 ; Runs after room_show, so each one is placed, sorted and drawn here.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 special_room_enter:	xor		a
 					ld		(special_busy),a
 					ld		a,(room_shown)
@@ -742,8 +802,10 @@ special_room_enter:	xor		a
 
 
 ; Where a row says its collectable is.
-;   C - the row
-; Out: HL -> its U, V, Z and room. Corrupts AF, DE.
+;
+; In:  C  = the row
+; Out: HL -> its U, V, Z and room
+; Corrupts: AF, DE
 special_where_of:	ld		a,c
 					add		a,a
 					add		a,a
@@ -755,10 +817,14 @@ special_where_of:	ld		a,c
 
 
 ; Fill a collectable slot and put it in the room.
-;   IX -> the slot
-;   A  - the graphic, B - its behaviour, C - its table row
-;   HL -> U, V and Z
-; Corrupts everything, IX included.
+;
+; In:  IX -> the slot
+;      A  = the graphic
+;      B  = its behaviour
+;      C  = its table row
+;      HL -> U, V and Z
+; Out: nothing
+; Corrupts: everything, IX included
 special_fill:		ld		(ix+OBJ.GFX),a
 					ld		(ix+OBJ.BEHAVIOUR),b
 					ld		(ix+OBJ.MOVE_STATE),c

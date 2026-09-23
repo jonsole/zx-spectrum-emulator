@@ -10,7 +10,11 @@
 ; Here past the pixel adjustments' index, where there was room.
 ; ---------------------------------------------------------------------------
 
-; Corrupts AF, BC, HL.
+; A pause, if SPACE and only SPACE is down.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, HL
 game_pause:         ld      a,$7F               ; SPACE, SYMBOL SHIFT, M, N, B
                     in      a,($FE)
                     cpl

@@ -65,9 +65,9 @@ room_stage:			DS		8
 ;
 ; Each record says how far it is to the next, so a step is one add.
 ;
-;   C  - the room wanted
-; Out: cf set and HL -> its record; cf clear if there is no such room.
-; Corrupts AF, DE, HL.
+; In:  C = the room wanted
+; Out: carry set and HL -> its record, or carry clear if there is no such room
+; Corrupts: A, B, DE
 room_find:			ld		hl,room_list
 					ld		d,0
 					ld		b,ROOM_COUNT
@@ -86,10 +86,13 @@ room_find:			ld		hl,room_list
 
 ; ---------------------------------------------------------------------------
 ; Build a room and draw it.
-;   A = room number
 ;
 ; Everything the previous room owned goes with it: the sorted list is emptied,
 ; the rotation arena handed back, and the object pool refilled from the start.
+;
+; In:  A = the room number
+; Out: carry set if it was built, or carry clear if there is no such room
+; Corrupts: everything
 room_build:			ld		c,a
 					call	room_find
 					ret		nc		; no such room -- the caller must not go on
@@ -169,6 +172,10 @@ room_build:			ld		c,a
 ; Knight Lore's version also turns its sun window and its panel hook back on
 ; here. Pentagram has neither yet, so this only sets the colour; whatever it
 ; grows in their place belongs at this point.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 room_paper:			ld		a,(room_attr)
 					and		7
 					or		64		; BRIGHT
@@ -177,8 +184,10 @@ room_paper:			ld		a,(room_attr)
 
 
 ; Every attribute cell one colour.
-;   A - the colour
-; Corrupts BC, DE, HL.
+;
+; In:  A = the colour
+; Out: nothing
+; Corrupts: F, BC, DE, HL
 screen_colour:		ld		hl,22528
 					ld		de,22529
 					ld		bc,767
@@ -189,6 +198,10 @@ screen_colour:		ld		hl,22528
 
 ; ---------------------------------------------------------------------------
 ; The room's floor, from the shape index in the attribute.
+;
+; In:  nothing
+; Out: room_half_u, room_half_v and room_floor_z = the floor
+; Corrupts: AF, BC, DE, HL
 room_shape:			ld		a,(room_attr)
 					rrca
 					rrca
@@ -217,8 +230,12 @@ room_shape:			ld		a,(room_attr)
 ; The scenery. Each entry is a template index, and a doorway's is followed by
 ; the room it leads to -- nothing else has one. The template's pieces are already in the eight-byte shape
 ; room_add wants, so this is a walk and a call.
-;   DE -> the scenery entries
-; Leaves DE on the first object byte.
+;
+; In:  DE -> the scenery entries
+;      IX -> the next free record
+; Out: DE -> the first object byte
+;      IX -> past what it added
+; Corrupts: AF, BC, HL
 room_scenery:		ld		a,(room_scenery_left)
 					or		a
 					ret		z
@@ -277,8 +294,10 @@ room_scenery:		ld		a,(room_scenery_left)
 ; nothing else in the data says so. So this clears the behaviour and returns,
 ; which is right for scenery that stands still -- and every piece does, until
 ; something proves otherwise.
-;   C  - the scenery template index
-; Corrupts AF.
+;
+; In:  C = the scenery template index
+; Out: room_behaviour = 0: none
+; Corrupts: AF
 room_scenery_move:	xor		a
 					ld		(room_behaviour),a
 					ret
@@ -286,8 +305,10 @@ room_scenery_move:	xor		a
 
 ; ---------------------------------------------------------------------------
 ; Is scenery template C a doorway? Twelve are -- indices 0 to 7 and 24 to 27.
-; Out: Z if it is.
-; Corrupts AF.
+;
+; In:  C = the scenery template index
+; Out: Z set if it is
+; Corrupts: A
 room_is_door:		ld		a,c
 					cp		8
 					jr		c,.yes			; 0-7, the first two sets
@@ -310,9 +331,10 @@ room_is_door:		ld		a,c
 ; The first piece of a template is the one to measure from, so its position is
 ; the one kept.
 ;
-;   C  - the scenery template index
-;   HL -> the template
-; Corrupts AF and B. HL comes back where it was.
+; In:  C  = the scenery template index
+;      HL -> the template
+; Out: nothing
+; Corrupts: AF, B
 room_door_note:		call	room_is_door
 					ret		nz
 
@@ -394,7 +416,11 @@ room_door_note:		call	room_is_door
 ; an instance, so an entry is 1 + count bytes -- NOT a fixed size, which is the
 ; trap in this format.
 ;
-;   DE -> the object bytes
+; In:  DE -> the object bytes
+;      IX -> the next free record
+; Out: DE -> past them
+;      IX -> past what it added
+; Corrupts: AF, BC, HL
 room_objects_of:	ld		a,(room_bytes_left)
 					or		a
 					ret		z
@@ -458,7 +484,12 @@ room_objects_of:	ld		a,(room_bytes_left)
 ; works because the level times twelve is always a multiple of four. Pentagram
 ; has no such byte of its own -- rooms_source.py emits zero -- but the shape is
 ; kept so the capability is there. See ../knightlore/room_build.s.
-;   HL -> the template entry
+;
+; In:  HL -> the template entry
+;      IX -> the record
+;      room_packed = the position byte
+; Out: IX -> the next record, if this one was filled
+; Corrupts: AF, BC, DE, HL
 room_unpack_place:	ld		a,(hl)
 					ld		(room_stage + 0),a		; graphic
 					inc		hl

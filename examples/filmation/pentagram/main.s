@@ -14,6 +14,12 @@ PLAYER_START_ROOM   EQU     92
 PLAYER_START_U      EQU     128             ; the middle of the floor
 PLAYER_START_V      EQU     128
 
+; From cold: the stack, a black border and a still speaker, and his two
+; rotation buffers, before the first game.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
                     xor     a                   ; the border black and the speaker
@@ -25,9 +31,16 @@ start:              di
                     ld      ix,player
                     call    character_keep
 
-                    ; A new game: four lives on the panel, no score, and one of
-                    ; the four rooms the original starts in, at random -- $C2CE
-                    ; picks from $C2E8 by the random byte.
+                    ;; NB: fall through into new_game
+
+
+; A new game: four lives on the panel, no score, and one of the four rooms the
+; original starts in, at random -- $C2CE picks from $C2E8 by the random byte.
+; game_over comes back here, by way of the menu.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 new_game:           call    menu_run            ; $AFB6
                     call    sound_tune_start    ; $AFBC
                     ld      a,$04

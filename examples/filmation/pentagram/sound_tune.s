@@ -12,21 +12,44 @@
 ; and those are sound_cycle, sound_long and sound_rest in ../engine/sound.s.
 ; ---------------------------------------------------------------------------
 
+; A game starting -- $AFBC.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_tune_start:   ld      de,sound_tune_start_data
                     jp      tune_play_all
+; The water reaching a quest item -- $D0F1.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_tune_water:   ld      de,sound_tune_water_data
                     jp      tune_play_all
+; The game over -- $C34A.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_tune_over:    ld      de,sound_tune_over_data
                     jp      tune_play_all
+; The quest won -- $C320.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_tune_win:     ld      de,sound_tune_win_data
                     jp      tune_play_all
 
 
 ; A note's pitch and length -- $D6C0's table, three bytes a note from note 1:
 ; the DJNZs, then the 256s plus one, then the cycles in one length of it.
-;   A - the note, 1 to 63
-; Out: carry set, B and C the half-period, E the cycles in one length.
-; Corrupts AF, D, HL.
+;
+; In:  A = the note, 1 to 63
+; Out: carry set
+;      B, C = the half-period
+;      E    = the cycles in one length
+; Corrupts: D, HL
 tune_note_at:       ld      e,a
                     ld      d,0
                     ld      hl,sound_notes - 3

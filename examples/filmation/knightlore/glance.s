@@ -2,6 +2,12 @@
 ; The knight's glance, down with the room builder: it is a few instructions a
 ; turn and nothing here is in a hurry, so it costs only what the ULA takes.
 
+PLAYER_GLANCE_TURNS EQU     8
+PLAYER_GLANCE_GFX   EQU     6                   ; and 7, the other way
+
+player_glance_left: DB      0                   ; turns of it still to go
+player_glance_gfx:  DB      0                   ; and which way he is looking
+
 ; He looks about him while he goes -- upd_player_top. One turn in 128 he turns
 ; his head one way, one in 128 the other, and holds it for eight turns; the
 ; rest of the time his top half follows his legs.
@@ -11,13 +17,10 @@
 ; plus the block plus the phase through a mask, so the glance is that base
 ; moved on to the glance frame with the mask taken away -- and his legs walk
 ; on underneath it, as they do in the game.
-;   IX -> the player's legs
-PLAYER_GLANCE_TURNS EQU     8
-PLAYER_GLANCE_GFX   EQU     6                   ; and 7, the other way
-
-player_glance_left: DB      0                   ; turns of it still to go
-player_glance_gfx:  DB      0                   ; and which way he is looking
-
+;
+; In:  nothing
+; Out: player_glance_left, player_glance_gfx = the glance, if one starts
+; Corrupts: AF, HL
 player_glance:      ld      hl,player_glance_left
                     ld      a,(hl)
                     or      a
@@ -39,12 +42,16 @@ player_glance:      ld      hl,player_glance_left
                     ret
 
 
+walker_glance       EQU     player_glance_body  ; the engine's name for it
+
 ; The body frame character_frame has worked out, or the glance instead. Every
 ; character comes through here and only the knight is ever changed: the others
 ; are in the room's pool, a long way below him.
-;   A - the block plus the phase, IX -> the legs
-; Out: A - the frame to show. Corrupts C.
-walker_glance       EQU     player_glance_body  ; the engine's name for it
+;
+; In:  A  = the block plus the phase
+;      IX -> the legs
+; Out: A  = the frame to show
+; Corrupts: F, C
 player_glance_body: ld      c,a
                     ld      a,ixh
                     cp      high player

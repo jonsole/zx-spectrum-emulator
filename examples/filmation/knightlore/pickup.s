@@ -8,12 +8,18 @@
 ; port read and a compare.
 ; ---------------------------------------------------------------------------
 
+SUN_FILL_ON         EQU     $11                 ; LD DE,nn: what sun_fill starts with
+
 ; Fill a block of attributes -- fill_window, at $C515. While a room is being
 ; drawn in the dark its first byte is a RET, so nothing is coloured in before the
 ; room is: see room_build and room_paper.
-;   A - the attribute, HL -> the top-left cell, B - columns, C - rows
-; Corrupts BC, DE, HL.
-SUN_FILL_ON         EQU     $11                 ; LD DE,nn: what it starts with
+;
+; In:  A  = the attribute
+;      HL -> the top-left cell
+;      B  = columns
+;      C  = rows
+; Out: nothing
+; Corrupts: F, C, DE, HL -- nothing while it is a RET
 sun_fill:           ld      de,32
 .row:               push    bc
                     push    hl
@@ -35,8 +41,10 @@ sun_fill:           ld      de,32
 ; and inside the room's edges -- held down in the air, it waits for him to
 ; land. Then, if he is next to a collectable, he picks it up; if not, he puts
 ; one down.
-;   IX -> the knight's legs
-; Corrupts everything.
+;
+; In:  IX -> the knight's legs
+; Out: nothing
+; Corrupts: everything
 special_keys:		ld		a,(input_now)
 					ld		b,a
 					ld		a,(menu_mode)
@@ -132,6 +140,10 @@ special_keys:		ld		a,(input_now)
 ; above his head. And if the last slot is empty there is nothing to put down,
 ; and the press turns the others round instead, which is how you choose what
 ; to drop.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 special_drop:		ld		ix,(special_slots)
 					ld		a,(ix+OBJ.GFX)
 					or		a
@@ -194,6 +206,10 @@ special_where_at:	DS		3
 ;
 ; If all three places are full, the oldest is put down where the new one was
 ; -- the same record, redrawn with the other graphic.
+;
+; In:  IX -> the collectable
+; Out: nothing
+; Corrupts: everything
 special_pickup:		xor		a		; and a room's spiked balls may drop now,
 					ld		(spike_ball_held),a	; as pickup_object says
 					ld		a,(ix+OBJ.GFX)
@@ -221,6 +237,10 @@ special_pickup:		xor		a		; and a room's spiked balls may drop now,
 
 ; Move everything carried on a place, the last one dropping off the end, and
 ; show the result. adjust_carried, at $C12B.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 special_shift:		ld		hl,special_carried + 5
 					ld		de,special_carried + 7
 					ld		bc,6
@@ -237,6 +257,10 @@ special_shift:		ld		hl,special_carried + 5
 ;
 ; Straight to the screen, as the room number is. A region reaching the corner
 ; wipes them, so redraw_view calls back in here when one does.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 special_show:		ld		hl,special_carried + 2
 					ld		bc,3 << 8 | 2	; three slots, and the character column
 .slot:				push	bc
@@ -253,8 +277,12 @@ special_show:		ld		hl,special_carried + 2
 					djnz	.slot
 					jp		panel_show		; and the panel in front, as the game has it
 
-;   A - the graphic, or 0 for none
-;   C - the character column
+; One of the three places: its colour, blanked, and the graphic in it.
+;
+; In:  A = the graphic, or 0 for none
+;      C = the character column
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 special_show_one:	push	af
 
 					; Its colour, three by three -- through sun_fill, which leaves

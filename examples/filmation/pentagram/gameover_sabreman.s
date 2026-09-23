@@ -17,7 +17,11 @@ game_over_sab_pieces:
                     DB      36, GAME_OVER_SAB_X, GAME_OVER_SAB_FEET, 0      ; legs
                     DB      44, GAME_OVER_SAB_X, GAME_OVER_SAB_FEET - 9, 0  ; body
 
-; Corrupts everything.
+; Him, drawn and coloured in.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 game_over_sabreman: ld      hl,game_over_sab_pieces
                     ld      b,2
                     call    frame_draw

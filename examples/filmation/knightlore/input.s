@@ -50,6 +50,10 @@ KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to E
 ; SYM SHIFT, M, N and B beside them -- Z, C, M and B turn him one way and
 ; X, V, SYM and N the other. Any letter of the middle row walks him forward,
 ; any of the top row jumps, and any number picks up or puts down.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_keyboard:     ld      bc,KEY_ROW_SHIFT_V
                     in      a,(c)
                     cpl
@@ -106,8 +110,16 @@ input_keyboard:     ld      bc,KEY_ROW_SHIFT_V
 ; Bit 5, which is where pick up and put down go while a joystick is steering:
 ; any letter at all, which is what the game asks for at finished_input. Every
 ; stick reader in engine/input.s ends here.
-;   E - what the reader made of it
+;
+; In:  E = what the reader made of it
+; Out: input_now = that, and bit 5 for any letter
+; Corrupts: AF, BC, DE
 input_stick_done:
+; See input_stick_done.
+;
+; In:  E = what the reader made of it
+; Out: input_now = that, and bit 5 for any letter
+; Corrupts: AF, BC, DE
 input_done:         ld      bc,KEY_ROWS_Z_B
                     in      a,(c)
                     cpl

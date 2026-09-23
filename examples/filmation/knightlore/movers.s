@@ -197,8 +197,9 @@ GUARD_STEP			EQU		2
 ; legs'. The test is on the deltas, and it is the game's own: compare dU with
 ; dV unsigned, and then look at the sign of whichever won.
 ;
-;   IX -> the torso record, DU and DV set
-; Corrupts AF, BC.
+; In:  IX -> the torso record, DU and DV set
+; Out: nothing
+; Corrupts: AF, BC, DE
 mover_guard_face:	ld		a,(ix+OBJ.DU)
 					or		(ix+OBJ.DV)
 					ret		z		; going nowhere: leave it as it stands
@@ -264,7 +265,10 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 ; It does not cancel gravity the way a fire does: the game calls
 ; dec_dZ_and_update_XYZ without setting DZ first, so a guard falls if it walks
 ; off something, and the floor stops it where it stands.
-;   IX -> the torso record
+;
+; In:  IX -> the torso record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_guard_u:		xor		a
 					ld		(ix+OBJ.DV),a
 					ld		(ix+OBJ.DZ),a
@@ -281,6 +285,15 @@ mover_guard_u:		xor		a
 
 
 ; ---------------------------------------------------------------------------
+; The four legs of mover_guard_sq's circuit, in order: the step in U and V, and
+; the axis that has to give before the next leg starts.
+GUARD_SQ_MASK		EQU		3
+
+mover_guard_sq_tbl:	DB		-GUARD_STEP, 0, COLLIDE_U		; west
+					DB		0, GUARD_STEP, COLLIDE_V		; north
+					DB		GUARD_STEP, 0, COLLIDE_U		; east
+					DB		0, -GUARD_STEP, COLLIDE_V		; south
+
 ; A guard that walks a circuit: west until something stops it, then north, then
 ; east, then south, and round again -- upd_30_31_158_159 through the four
 ; routines in guard_NSEW_tbl.
@@ -290,14 +303,10 @@ mover_guard_u:		xor		a
 ; of the walk is the shape of the room and whatever is standing in it. The two
 ; bits of MOVE_STATE are which leg it is on, and they are the game's own bits
 ; 0 and 1 of $0D.
-;   IX -> the torso record
-GUARD_SQ_MASK		EQU		3
-
-mover_guard_sq_tbl:	DB		-GUARD_STEP, 0, COLLIDE_U		; west
-					DB		0, GUARD_STEP, COLLIDE_V		; north
-					DB		GUARD_STEP, 0, COLLIDE_U		; east
-					DB		0, -GUARD_STEP, COLLIDE_V		; south
-
+;
+; In:  IX -> the torso record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_guard_sq:		ld		a,(ix+OBJ.MOVE_STATE)
 					and		GUARD_SQ_MASK
 					ld		c,a
@@ -332,6 +341,15 @@ mover_guard_sq:		ld		a,(ix+OBJ.MOVE_STATE)
 
 
 ; ---------------------------------------------------------------------------
+; The portcullises: how high one rises, how many drops come without waiting,
+; and what the room's gates share -- see mover_gate.
+GATE_RISE			EQU		31
+GATE_DROPS			EQU		4
+
+mover_gate_busy:	DB		0		; a gate has the room
+mover_gate_drops:	DB		0		; how many times one has fallen
+
+
 ; A portcullis: rises a unit a turn to GATE_RISE above the floor, waits, then
 ; drops under its own weight and waits again.
 ;
@@ -350,13 +368,10 @@ mover_guard_sq:		ld		a,(ix+OBJ.MOVE_STATE)
 ; Rising is a unit a turn. Falling is not: the game decrements dZ itself on
 ; top of the one dec_dZ_and_update_XYZ already does, so a dropping portcullis
 ; accelerates at two a turn and lands hard.
-GATE_RISE			EQU		31
-GATE_DROPS			EQU		4
-
-mover_gate_busy:	DB		0		; a gate has the room
-mover_gate_drops:	DB		0		; how many times one has fallen
-
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_gate:			call	mover_halt		; it only ever moves in Z
 
 					bit		0,(ix+OBJ.GFX)
@@ -420,6 +435,9 @@ mover_gate:			call	mover_halt		; it only ever moves in Z
 
 
 ; ---------------------------------------------------------------------------
+; A ghost's speeds, -3, +3, -4 and +4 -- see mover_ghost.
+ghost_deltas:		DB		-3, 3, -4, 4
+
 ; A ghost, which drifts until something stops it and then picks a new way to
 ; go -- upd_80_to_83.
 ;
@@ -430,9 +448,10 @@ mover_gate:			call	mover_halt		; it only ever moves in Z
 ;
 ; It takes its step first and decides afterwards, which is the order upd_80_to_83
 ; uses -- the clamp has to have had its say before there is anything to decide.
-;   IX -> the record
-ghost_deltas:		DB		-3, 3, -4, 4
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 					; then picks, because the clamp has to have had its say -- but
 					; anything riding on this ghost reads its step out of the record,
@@ -515,6 +534,10 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 ; A table, which goes where it is shoved and then stops -- upd_84. It clears
 ; its step AFTER moving, where a carried block clears before: the difference is
 ; that this one keeps what it was given long enough to spend it.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_pushed:		call	mover_sliding
 					jp		mover_halt
 
@@ -525,6 +548,10 @@ mover_pushed:		call	mover_sliding
 ; Either makes a noise while it is actually going somewhere: the game asks
 ; whether it moved (at $C1A1) and sounds audio_B467 if it did. What the clamp
 ; left of the step is what it moved.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_sliding:		call	mover_move
 					ld		a,(ix+OBJ.DU)
 					or		(ix+OBJ.DV)
@@ -533,6 +560,9 @@ mover_sliding:		call	mover_move
 
 
 ; ---------------------------------------------------------------------------
+BOUNCE_RISE			EQU		4
+BOUNCE_STEP			EQU		2
+
 ; The ball that hunts -- upd_182_183. It bounces, and every time it lands it
 ; takes a new upward push and a new direction along ONE axis, chosen by which
 ; side of it the knight is on. Which axis is a coin toss.
@@ -547,10 +577,10 @@ mover_sliding:		call	mover_move
 ; if the player's graphic is 16 to 47, which is the knight; $30, JR NC, for
 ; anything else, which is the werewolf -- and so does this. The game also
 ; varies the bounce height by room number, which is not here.
-;   IX -> the record
-BOUNCE_RISE			EQU		4
-BOUNCE_STEP			EQU		2
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_bounce:		ld		a,(ix+OBJ.DZ)		; before gravity has had it
 					push	af
 					ld		c,(ix+OBJ.DU)
@@ -622,7 +652,10 @@ mover_bounce:		ld		a,(ix+OBJ.DZ)		; before gravity has had it
 ; it: level with him counts as past him, so it jitters about his position
 ; rather than settling on it. It does not set DZ, so it falls like anything
 ; else, and it runs through its four frames every turn.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_spell:		ld		c,SPELL_STEP
 					ld		a,(room_shown)
 					cp		$88
@@ -658,7 +691,10 @@ mover_spell:		ld		c,SPELL_STEP
 ; it lets go and drops until it lands -- upd_63. One at a time: while one is
 ; falling no other may start. The test is the game's own, the random seed below
 ; sixteen.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_spike_ball:	ld		a,(spike_ball_held)
 					or		a
 					ret		nz
@@ -692,7 +728,10 @@ mover_spike_ball:	ld		a,(spike_ball_held)
 ; turns it into graphic 184 and steps it straight on to 185, draws that for a
 ; turn, and then takes it out of the room. The dropping block, which sinks
 ; under the same mark instead, is engine/movers.s's mover_sinks.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything -- IX only on the turn object_hide takes it away
 mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
 					jp		nz,object_hide		; crumbled last turn: gone
 					bit		3,(ix+OBJ.MOVE_STATE)
@@ -726,13 +765,31 @@ mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
 ; Position is taken as (coordinate + 8) & 15, so a block standing in the
 ; middle of its cell is in the middle of its travel and swings eight either
 ; way.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_slide_u:		call	sound_u		; upd_54's hum, every frame
 					ld		hl,OBJ.DU * 256 + OBJ.U
 					jr		mover_slide
+
+; See mover_slide_u.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_slide_v:		call	sound_v
 					ld		hl,OBJ.DV * 256 + OBJ.V
+					;; NB: fall through into mover_slide
 
+; See mover_slide_u. The axis comes in HL: H the offset of its step in the
+; record, L of its position.
+;
+; In:  IX -> the record; mover_ix names it too
+;      H  = OBJ.DU or OBJ.DV
+;      L  = OBJ.U or OBJ.V
+; Out: nothing
+; Corrupts: everything but IX
 mover_slide:		ld		a,l
 					ld		(.here + 2),a		; LD A,(IX+d) is DD 7E d
 					ld		a,h

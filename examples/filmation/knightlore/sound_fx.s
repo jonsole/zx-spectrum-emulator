@@ -8,26 +8,57 @@
 
 ; A pitch from where something is, six cycles of it: higher the further along or
 ; up it is -- audio_B454 and the three that feed it. Continuous.
-;   IX -> the record
-; Preserves BC, DE, HL.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
 sound_z:            ld      a,(ix+OBJ.Z)        ; audio_B451: falling things
                     jr      sound_pitch
+
+; See sound_z.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
 sound_u:            ld      a,(ix+OBJ.U)        ; audio_B45D: along U
                     jr      sound_pitch
 
 ; A fire's hum, along whichever axis it paces -- engine/movers.s's mover_pacer
 ; calls it with L the axis's collide bit. upd_86_87 plays sound_u, and
 ; upd_180_181 sound_v.
+;
+; In:  IX -> the record
+;      L  = COLLIDE_U or COLLIDE_V
+; Out: nothing
+; Corrupts: AF
 pacer_sound:        bit     1,l                 ; COLLIDE_V
                     jr      z,sound_u
                     ASSERT  COLLIDE_V == 2
                     ;; NB: fall through into sound_v
 
+; See sound_z.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
 sound_v:            ld      a,(ix+OBJ.V)        ; audio_B462: along V
                     jr      sound_pitch
+
+; See sound_z.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
 sound_uvz:          ld      a,(ix+OBJ.U)        ; audio_B467: ghosts, gates, things shoved
                     add     a,(ix+OBJ.V)
                     add     a,(ix+OBJ.Z)
+                    ;; NB: fall through into sound_pitch
+
+; What the four above come to: six cycles pitched by the position in A.
+;
+; In:  A = the position
+; Out: nothing
+; Corrupts: AF
 sound_pitch:        push    bc
                     ld      b,a
                     call    sound_take
@@ -45,6 +76,10 @@ sound_pitch:        push    bc
 
 ; The loose block's chirp, four cycles at a pitch picked by the turn --
 ; audio_B3E9. Continuous.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_chirp:        call    sound_take
                     ret     z
                     ld      a,(move_tick)
@@ -63,9 +98,12 @@ sound_chirps:       DB      $A0, $B0, $C0, $90, $A0, $E0, $80, $60
 ; A footstep -- audio_B4C1. As many cycles as the walker is far along U and back
 ; along V, and pitched at B, or by the walker's height on turns with bit 1 of A
 ; set. Continuous.
-;   A  - the turn's bits: the knight's count, a guard's the other way up
-;   B  - the pitch: $60 for the knight, $80 for a guard or the wizard
-;   IX -> the legs
+;
+; In:  A  = the turn's bits: the knight's count, a guard's the other way up
+;      B  = the pitch: $60 for the knight, $80 for a guard or the wizard
+;      IX -> the legs
+; Out: nothing
+; Corrupts: AF, BC
 sound_step:         ld      c,a
                     call    sound_take
                     ret     z
@@ -92,7 +130,14 @@ sound_step:         ld      c,a
 
 
 ; Noise: a run of bytes out of the ROM, each a pitch for C cycles.
-;   HL -> the bytes, E - how many (0 for 256), C - cycles each, D - a mask
+;
+; In:  HL -> the bytes
+;      E  = how many, 0 for 256
+;      C  = cycles each
+;      D  = a mask
+; Out: HL -> past the bytes
+;      E  = 0
+; Corrupts: AF, B
 sound_noise:        ld      a,(hl)
                     inc     hl
                     and     d
@@ -106,7 +151,10 @@ sound_noise:        ld      a,(hl)
 
 ; A sparkle -- audio_B403: fewer bytes the further on the graphic is, out of
 ; the ROM at $1234. The knight dying, a block crumbling, the wizard pleased.
-;   A - the graphic
+;
+; In:  A = the graphic
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_sparkle:      cpl
                     and     $1F
                     ld      e,a
@@ -119,6 +167,11 @@ sound_sparkle:      cpl
 ; calls it with A the axis's bit. A fire turning on V bounces off what stopped
 ; it, as upd_180_181 has it; nothing else here turns on V. Fires jammed
 ; against each other turn every turn, so it is a continuous sound here.
+;
+; In:  A  = the axis's bit
+;      IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 mover_turned:       cp      COLLIDE_V
                     ret     nz
                     call    sound_take
@@ -127,6 +180,10 @@ mover_turned:       cp      COLLIDE_V
 
 ; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
 ; are DI, XOR A and LD DE,$FFFF, with the top two bits set.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_bounce:       ld      hl,sound_bounces
                     ld      de,$FF04
                     ld      c,3
@@ -136,6 +193,10 @@ sound_bounces:      DB      $F3 | $C0, $AF | $C0, $11 | $C0, $FF | $C0
 
 ; A portcullis coming down -- audio_B489: sixteen bytes from somewhere in the
 ; first 8K of the ROM, picked by the seed and the turn, below $80.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sound_gate:         ld      a,(move_tick)
                     and     $1F
                     ld      h,a
@@ -147,13 +208,21 @@ sound_gate:         ld      a,(move_tick)
 
 
 ; A pickup, a drop, a life, or a change on the menu -- toggle_audio_hw_x16:
-; sixteen cycles at $80. Corrupts AF and C.
+; sixteen cycles at $80.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC
 sound_pickup:       ld      bc,$8010
                     jp      sound_tone
 
 
 ; A jump -- audio_B441: one cycle each for C from 32 down to 1, pitched at C
 ; turned three bits left.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC
 sound_jump:         ld      c,$20
 .cycle:             ld      a,c
                     rlca
@@ -168,7 +237,10 @@ sound_jump:         ld      c,$20
 
 ; The knight coming back -- audio_B419: a falling run as long as the sparkle
 ; is late, each C turned two bits left.
-;   A - the graphic
+;
+; In:  A = the graphic
+; Out: nothing
+; Corrupts: AF, BC
 sound_appear:       rlca
                     rlca
                     and     $1F
@@ -185,7 +257,10 @@ sound_appear:       rlca
 
 
 ; The knight changing -- audio_B472.
-;   A - the graphic
+;
+; In:  A = the graphic
+; Out: nothing
+; Corrupts: AF, BC
 sound_change:       rlca
                     rlca
                     rlca

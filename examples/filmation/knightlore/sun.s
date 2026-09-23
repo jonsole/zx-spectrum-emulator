@@ -45,7 +45,10 @@ sun_disc_top:       DB      0                   ; its first row in the window
 
 ; Draw the whole window, with its colours: when a room is shown, when a repaint
 ; has wiped it, and when the sun and the moon change places.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sun_show_all:       ld      a,SUN_FRAME_ATTR
                     ld      hl,$5800 + 20 * 32 + SUN_COLUMN
                     ld      bc,SUN_COLUMNS << 8 | 4
@@ -67,7 +70,10 @@ sun_show_all:       ld      a,SUN_FRAME_ATTR
 
 ; A step of the clock: the rows and columns between where the disc was and
 ; where it is now.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sun_show:           ld      hl,(sun_disc_at)    ; where it was: L the column, H the row
                     push    hl
                     call    sun_place
@@ -107,12 +113,16 @@ sun_show:           ld      hl,(sun_disc_at)    ; where it was: L the column, H 
                     ;; NB: fall through into sun_draw
 
 
-; Draw a block of the window straight onto the screen.
-;   A  - what it costs, in turn units
-;   B  - the first row, C - the row after the last
-;   D  - the first column, E - the column after the last
-; The disc's rows must be in shift_shared, from sun_place.
-; Corrupts everything but IX and IY.
+; Draw a block of the window straight onto the screen. The disc's rows must be
+; in shift_shared, from sun_place.
+;
+; In:  A = what it costs, in turn units
+;      B = the first row
+;      C = the row after the last
+;      D = the first column
+;      E = the column after the last
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sun_draw:           call    turn_add
                     push    ix
                     push    iy
@@ -258,7 +268,11 @@ sun_draw:           call    turn_add
 ; Where the disc is, from sun_x, and its sixteen rows put onto their pixel:
 ; three bytes of data a row into shift_shared. Shifting uses the same tables
 ; object_update rotates with -- x >> shift, and what falls out, a page each.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: sun_disc_at, sun_disc_top = where the disc is
+;      shift_shared = its sixteen rows
+; Corrupts: AF, BC, DE, HL
 sun_place:          ld      a,(sun_x)
                     rrca
                     rrca

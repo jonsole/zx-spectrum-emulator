@@ -162,7 +162,10 @@ mover_tbl:          DW      mover_pacer_u       ; MOVE_PACE_U: engine/movers.s
 ;
 ; mover_move_anim repaints if this was an animating turn, and only if the
 ; thing moved otherwise.
-;   IX -> the record
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
                     or      a                   ; every time it moves
                     jp      nz,mover_move_always
@@ -192,11 +195,13 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 MONSTER_KEEP_SPEED  EQU     0               ; 1: twice as far, one turn in two
 
 
-; Out: carry set if this monster sits this turn out. The monsters count
-; busy_count down between them, and whichever reaches nought sits out;
-; busy_check starts it one further on each turn, so each has its turn.
-;   IX -> the record
-; Corrupts AF.
+; Whether this monster sits this turn out. The monsters count busy_count down
+; between them, and whichever reaches nought sits out; busy_check starts it one
+; further on each turn, so each has its turn.
+;
+; In:  nothing
+; Out: carry set if it sits this turn out
+; Corrupts: A
 monster_sits_out:   ld      a,(room_busy)
                     or      a
                     ret     z                   ; carry is clear
@@ -208,9 +213,12 @@ monster_sits_out:   ld      a,(room_busy)
 .moves:             ld      (busy_count),a
                     ret
 
-; Twice the step for the move, and back to what it keeps afterwards.
-;   IX -> the record
-; Corrupts AF.
+; Twice the step for the move, and back to what it keeps afterwards -- in a
+; busy room, and only with MONSTER_KEEP_SPEED: without it both are a RET.
+;
+; In:  IX -> the record
+; Out: DU and DV in the record doubled
+; Corrupts: AF
 monster_double:
                 IF      MONSTER_KEEP_SPEED
                     ld      a,(room_busy)
@@ -220,6 +228,12 @@ monster_double:
                     sla     (ix+OBJ.DV)
                 ENDIF
                     ret
+
+; See monster_double.
+;
+; In:  IX -> the record
+; Out: DU and DV in the record halved again
+; Corrupts: AF
 monster_halve:
                 IF      MONSTER_KEEP_SPEED
                     ld      a,(room_busy)
@@ -233,7 +247,12 @@ monster_halve:
 
 ; ---------------------------------------------------------------------------
 ; Spikes, thorns and water: deadly, and nothing more. Their behaviour is what
-; kills; the turn has nothing to do.
+; kills; the turn has nothing to do. shared_movers.s names it, too, for each
+; of the engine's hooks Pentagram wants nothing from.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: nothing
 mover_still:        ret
 
 
@@ -248,20 +267,35 @@ mover_still:        ret
 ; A dragon's head paces the same way, but it is a monster: in a busy room it
 ; sits turns out, and with MONSTER_KEEP_SPEED goes twice as far when it does
 ; move. A platform never sits out -- he rides it, and it would throw him off.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_pace_u_deadly: call   monster_sits_out
                     ret     c
                     jp      mover_pacer_u
+
+; See mover_pace_u_deadly.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_pace_v_deadly: call   monster_sits_out
                     ret     c
                     jp      mover_pacer_v
 
 ; mover_pacer's move, with its step now in the record.
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 pacer_move:         ld      a,(ix+OBJ.BEHAVIOUR)
                     cp      BEHAVIOUR_DEADLY
                     call    nc,monster_double
                     jp      mover_move
 
+
+PUSHED_REST_EVERY   EQU     4                   ; a power of two -- see mover_pushed
 
 ; ---------------------------------------------------------------------------
 ; Moved by a shove, once, and then still -- $CD81 and $CD87. The engine's
@@ -277,7 +311,6 @@ pacer_move:         ld      a,(ix+OBJ.BEHAVIOUR)
 ; handed up here instead, before it is forgotten, to anything loose sitting
 ; on top. That rider spends it on its own turn and hands it up again, so a
 ; stack of any height moves as one.
-;   IX -> the record
 ;
 ; At rest it looks to itself only every fourth turn. A pushable's turn is
 ; mostly its clamp -- gravity against everything under it -- and a busy room
@@ -288,8 +321,10 @@ pacer_move:         ld      a,(ix+OBJ.BEHAVIOUR)
 ; until it lands; only standing still is checked less often -- staggered by
 ; slot, so a room's pushables share the turns. A support taken away is
 ; noticed within four turns. MOVE_STATE bit 7 is "was falling".
-PUSHED_REST_EVERY   EQU     4                   ; a power of two
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_pushed:       ld      a,(ix+OBJ.DU)
                     or      (ix+OBJ.DV)
                     jr      nz,.moves           ; shoved: now
@@ -319,8 +354,10 @@ mover_pushed:       ld      a,(ix+OBJ.DU)
 
 ; Give this object's step to everything loose standing on it that has none of
 ; its own: the same thing object_carry does, from underneath.
-;   IX -> the record that has just moved, DU and DV what it moved by
-; Corrupts AF, BC, DE, IY.
+;
+; In:  IX -> the record that has just moved, DU and DV what it moved by
+; Out: nothing
+; Corrupts: AF, BC, DE, IY
 pushed_carry:       ld      a,(room_object_count)
                     ld      b,a
                     ld      iy,room_objects
@@ -366,6 +403,8 @@ pushed_carry:       ld      a,(room_object_count)
                     ret
 
 
+SPIDER_STEP         EQU     4                   ; see mover_spider
+
 ; ---------------------------------------------------------------------------
 ; The spider -- $CF22. It walks diagonally, four units a turn on both axes,
 ; and whenever anything stops it on either axis, or it has no step at all, it
@@ -376,9 +415,10 @@ pushed_carry:       ld      a,(room_object_count)
 ; Z step and then applies gravity, every turn.
 ;
 ; MOVE_STATE keeps which axes stopped it last turn.
-;   IX -> the record
-SPIDER_STEP         EQU     4
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_spider:       call    monster_sits_out
                     ret     c
                     ld      (ix+OBJ.DZ),0
@@ -439,15 +479,18 @@ HOPPER_TOP          EQU     176
 hopper_top:         DB      HOPPER_TOP - 1
 
 
+CREATURE_STEP       EQU     4                   ; see mover_creature
+
 ; ---------------------------------------------------------------------------
 ; A creature that walks one axis at a time -- $D1F5, graphics 16 and 17. It
 ; flips its mirror every turn, which is its animation. When it has no step
 ; left -- something stopped it -- it picks four units either way at random,
 ; along U if the last thing that stopped it was across V and along V
 ; otherwise, and wears 16 for U and 17 for V.
-;   IX -> the record
-CREATURE_STEP       EQU     4
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_creature:     call    monster_sits_out
                     ret     c
                     ld      a,(move_tick)
@@ -483,6 +526,14 @@ mover_creature:     call    monster_sits_out
                     ret
 
 
+HOMER_ACC_U         EQU     30              ; past OBJ, inside the slot
+HOMER_ACC_V         EQU     31
+HOMER_ACC_Z         EQU     OBJ.MOVE_STATE
+                    ASSERT  OBJ <= HOMER_ACC_U && HOMER_ACC_V < ROOM_STRIDE
+HOMER_PULL          EQU     3
+HOMER_MOST          EQU     $38             ; +56
+HOMER_LEAST         EQU     $B8             ; -72
+
 ; ---------------------------------------------------------------------------
 ; What falls out of the sky and flies at him -- $CC4B, for 48-51 and 160-167.
 ; flyers.s drops it.
@@ -500,15 +551,10 @@ mover_creature:     call    monster_sits_out
 ; The original moves it first, with last turn's velocity, and then steers for
 ; the next; so does this. The sixteenths live in the two bytes past the end of
 ; the record and in MOVE_STATE.
-;   IX -> the record
-HOMER_ACC_U         EQU     30              ; past OBJ, inside the slot
-HOMER_ACC_V         EQU     31
-HOMER_ACC_Z         EQU     OBJ.MOVE_STATE
-                    ASSERT  OBJ <= HOMER_ACC_U && HOMER_ACC_V < ROOM_STRIDE
-HOMER_PULL          EQU     3
-HOMER_MOST          EQU     $38             ; +56
-HOMER_LEAST         EQU     $B8             ; -72
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_homer:        call    monster_sits_out
                     ret     c
                     call    monster_double
@@ -570,7 +616,11 @@ mover_homer:        call    monster_sits_out
 
 ; Three more towards him, held to the range: carry from the SUB before this
 ; means he is below us on that axis. $CD04 and $CD0D.
-;   A - the velocity, in sixteenths
+;
+; In:  A = the velocity, in sixteenths
+;      carry set if he is below us
+; Out: A = the velocity, steered
+; Corrupts: F
 homer_pull:         jr      c,.down
                     add     a,HOMER_PULL
                     ret     m
@@ -586,6 +636,10 @@ homer_pull:         jr      c,.down
                     ret
 
 ; Sixteenths to whole units, rounded, sign kept.
+;
+; In:  A = the velocity, in sixteenths
+; Out: A = the step, in whole units
+; Corrupts: F
 homer_whole:        add     a,8
                     sra     a
                     sra     a
@@ -593,6 +647,8 @@ homer_whole:        add     a,8
                     sra     a
                     ret
 
+
+FALLER_STEP         EQU     4                   ; see mover_faller4
 
 ; ---------------------------------------------------------------------------
 ; What falls out of the sky and then roams -- $D1FD for 80 and 81, $D251 for
@@ -605,9 +661,10 @@ homer_whole:        add     a,8
 ; tells the two directions on it apart; 168-171 do the same with bit 1, and
 ; flip bit 0 every turn besides, which is their animation. Going the negative
 ; way flips the axis bit as well -- the original's own sums.
-;   IX -> the record
-FALLER_STEP         EQU     4
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_faller4:      call    monster_sits_out
                     ret     c
                     ld      a,(move_tick)
@@ -619,10 +676,22 @@ mover_faller4:      call    monster_sits_out
 .kept:
                     ld      c,2                 ; the axis is bit 1
                     jr      mover_faller_c
+
+; See mover_faller4.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_faller:       call    monster_sits_out
                     ret     c
                     ld      c,1                 ; ...and bit 0 here
 
+; See mover_faller4: the turn of either, with the graphic's axis bit in C.
+;
+; In:  IX -> the record; mover_ix names it too
+;      C  = the axis bit: 1 for 80 and 81, 2 for 168 to 171
+; Out: nothing
+; Corrupts: everything but IX
 mover_faller_c:     ld      a,(ix+OBJ.DU)
                     or      (ix+OBJ.DV)
                     jr      nz,.go
@@ -662,6 +731,12 @@ mover_faller_c:     ld      a,(ix+OBJ.DU)
                     ret
 
 
+BOLT_DU             EQU     30              ; the velocity it was fired with,
+BOLT_DV             EQU     31              ; past OBJ inside the slot
+BOLT_LOW            EQU     132
+BOLT_FIRST          EQU     149
+BOLT_LAST           EQU     151
+
 ; ---------------------------------------------------------------------------
 ; His bolt -- $C1C5. It flies straight on at the velocity it was fired with,
 ; eight a turn, a little above the floor -- the original stops it falling
@@ -669,13 +744,10 @@ mover_faller_c:     ld      a,(ix+OBJ.DU)
 ; from the sky: it tests the two flyer slots, and not the room ($C206). Hit
 ; one and that one goes out in a puff and the bolt is simply gone ($C264);
 ; hit anything else across its path and the bolt puffs out itself ($C107).
-;   IX -> the record
-BOLT_DU             EQU     30              ; the velocity it was fired with,
-BOLT_DV             EQU     31              ; past OBJ inside the slot
-BOLT_LOW            EQU     132
-BOLT_FIRST          EQU     149
-BOLT_LAST           EQU     151
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
 mover_bolt:         ld      a,(ix+OBJ.GFX)
                     dec     a
                     cp      BOLT_FIRST
@@ -732,8 +804,11 @@ mover_bolt:         ld      a,(ix+OBJ.GFX)
 ; Whether the bolt at IX overlaps the flyer at IY: centres closer on each
 ; axis than their two sizes and a little -- $C216. An empty slot, or one
 ; already going out, is not hit.
-;   IX -> the bolt, IY -> the slot
-; Out: carry set for a hit. Corrupts AF, C.
+;
+; In:  IX -> the bolt
+;      IY -> the slot
+; Out: carry set for a hit
+; Corrupts: A, C
 bolt_hits:          ld      a,(iy+OBJ.GFX)
                     or      a
                     ret     z                   ; carry clear
@@ -775,25 +850,34 @@ bolt_hits:          ld      a,(iy+OBJ.GFX)
                     ret
 
 
+POOF_FIRST          EQU     64                  ; see mover_poof_start
+POOF_LAST           EQU     70
+
 ; ---------------------------------------------------------------------------
 ; A puff -- $C107 starts one, $C111 runs it. Graphics 64 to 70, a frame a
 ; turn, and then nothing: the slot is emptied. While it plays it neither falls
 ; nor blocks nor harms.
-;   IX -> the record
-POOF_FIRST          EQU     64
-POOF_LAST           EQU     70
-
+;
 ; Only the passable bit is set: the rest of FLAGS is the engine's own
 ; bookkeeping, and OBJ_SHIFTED in particular says the record's sprite pointer
 ; is into its rotation buffer. Writing the whole byte cleared that while the
 ; pointer still pointed there, and the next draw took what lay before the
 ; copy for a sprite header and mirrored it forever.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: nothing
 mover_poof_start:   ld      (ix+OBJ.GFX),POOF_FIRST
                     ld      (ix+OBJ.BEHAVIOUR),MOVE_POOF
                     set     2,(ix+OBJ.FLAGS)
                     ASSERT  OBJ_PASSABLE == 1 << 2
                     ret
 
+; A puff's turn: the next frame, or after the last, nothing.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
 mover_poof:         call    sound_poof
                     ld      a,(ix+OBJ.GFX)
                     cp      POOF_LAST
@@ -804,6 +888,9 @@ mover_poof:         call    sound_poof
                     jp      mover_move_always
 
 
+CRUMBLE_LAST        EQU     139                 ; see mover_crumbles
+CRUMBLE_EVERY       EQU     4                   ; a power of two
+
 ; ---------------------------------------------------------------------------
 ; A block that cracks under him and goes -- $D2AD. While he is on it, it
 ; becomes the next graphic of its four, 136 to 139, and on the step after the
@@ -813,10 +900,10 @@ mover_poof:         call    sound_poof
 ; The original takes a step every turn, but at its own 5 to 20 turns a second
 ; that is a quarter to most of a second; at the remake's pace it was an eighth,
 ; too quick to see. A step every CRUMBLE_EVERY turns puts it back to about half.
-;   IX -> the record
-CRUMBLE_LAST        EQU     139
-CRUMBLE_EVERY       EQU     4                   ; a power of two
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
 mover_crumbles:     call    player_on_top
                     ret     nz
                     ld      a,(move_tick)
@@ -831,6 +918,10 @@ mover_crumbles:     call    player_on_top
                     jp      mover_move_always
 
 
+LIFT_TOP            EQU     176                 ; see mover_lift
+LIFT_RISE           EQU     2
+LIFT_GIVES_HIM      EQU     4                   ; three, and his own gravity's
+
 ; ---------------------------------------------------------------------------
 ; A lift -- $CDBB. It carries him up: while he stands on it it rises two a turn
 ; and gives him three ($A77A), up to Z 176, where it holds; when he is off it,
@@ -838,11 +929,10 @@ mover_crumbles:     call    player_on_top
 ; has no gravity of its own.
 ;
 ; MOVE_STATE bit 0 is going; bit 1 is on its way back down.
-;   IX -> the record
-LIFT_TOP            EQU     176
-LIFT_RISE           EQU     2
-LIFT_GIVES_HIM      EQU     4                   ; three, and his own gravity's
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_lift:         bit     0,(ix+OBJ.MOVE_STATE)
                     jr      nz,.going
                     call    player_on_top       ; waiting: until he is on it
@@ -881,7 +971,10 @@ mover_lift:         bit     0,(ix+OBJ.MOVE_STATE)
 ; engine already hands a thing standing on a record that record's step
 ; (object_carry), so a conveyor simply holds a step of its own -- one a turn,
 ; the same pace -- and never moves by it.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: DU and DV in the record = its step
+; Corrupts: AF, DE, HL
 mover_conveyor:     ld      a,(ix+OBJ.GFX)
                     and     3
                     add     a,a

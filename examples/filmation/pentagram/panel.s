@@ -75,7 +75,10 @@ score:              DS      3
 
 ; ---------------------------------------------------------------------------
 ; The whole panel: every piece, the colours, the word and both numbers.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 panel_show:         xor     a
                     call    panel_draw
                     call    panel_colour
@@ -84,9 +87,18 @@ panel_show:         xor     a
                     jp      panel_score
 
 ; The pieces the last region reached, going by view_x_extent and view_y_extent.
-; Corrupts everything but IX and IY.
+;
+; In:  view_y_extent, view_x_extent = the region
+; Out: nothing
+; Corrupts: AF, B, DE, HL, AF'
 panel_redraw:       ld      a,1
 
+; See panel_redraw: the pieces it reached, or with A = 0 all of them.
+;
+; In:  A = 0 for every piece, 1 for only those the region reached
+;      view_y_extent, view_x_extent = the region, for 1
+; Out: nothing
+; Corrupts: AF, B, DE, HL, AF'
 panel_draw:         ld      (.region + 1),a
                     ld      hl,panel_pieces
                     ld      b,PANEL_PIECES
@@ -158,7 +170,10 @@ panel_draw:         ld      (.region + 1),a
 
 ; White for the lives and Sabreman by them, and for the score and its word:
 ; $B514 colours the lives' cells, and the word and the digits print in $47.
-; Corrupts AF, BC, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: A, B, HL
 panel_colour:       ld      a,PANEL_INK
                     ld      hl,$5800 + 18 * 32 + 2
                     ld      b,2
@@ -181,7 +196,10 @@ panel_colour:       ld      a,PANEL_INK
 
 
 ; The word.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, E, HL
 panel_word:         ld      hl,score_word
                     ld      c,SCORE_WORD_COLUMN * 8
                     ld      e,SCORE_WORD_LENGTH
@@ -202,7 +220,10 @@ panel_word:         ld      hl,score_word
 
 
 ; The lives, two digits.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, E, HL
 panel_lives:        ld      hl,player_lives
                     ld      b,LIVES_ROW
                     ld      c,LIVES_COLUMN * 8
@@ -210,13 +231,24 @@ panel_lives:        ld      hl,player_lives
                     jr      panel_bcd
 
 ; The score, six digits.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, E, HL
 panel_score:        ld      hl,score
                     ld      b,SCORE_ROW
                     ld      c,SCORE_COLUMN * 8
                     ld      e,3
 
 ; E bytes of BCD from HL, two digits each, at row B and pixel column C.
+;
+; In:  HL -> the first byte
+;      E  = how many bytes
+;      B  = the row
+;      C  = the pixel column
+; Out: HL -> past the last byte
+;      C  = the pixel column after the last digit
+; Corrupts: AF, E
 panel_bcd:          ld      a,(hl)
                     rrca
                     rrca
@@ -246,8 +278,12 @@ panel_bcd:          ld      a,(hl)
 
 ; One character of the font, top row at row B, at pixel column C -- any row,
 ; since the score's is not on a character boundary.
-;   A - the character's index in the font
-; Corrupts AF, B, DE, HL.
+;
+; In:  A = the character's index in the font
+;      B = the row of its top
+;      C = the pixel column
+; Out: nothing
+; Corrupts: AF, B, DE, HL
 panel_char:         ld      l,a
                     ld      h,0
                     add     hl,hl
@@ -272,8 +308,10 @@ panel_char:         ld      l,a
 ; ---------------------------------------------------------------------------
 ; Score, as the original adds it -- $BB29, BCD: C into the last byte and B
 ; into the one before, carrying up. Then shown.
-;   B, C - the points, BCD
-; Corrupts AF, BC, DE, HL.
+;
+; In:  B, C = the points, BCD
+; Out: nothing
+; Corrupts: AF, BC, E, HL
 score_add:          ld      hl,score + 2
                     ld      a,(hl)
                     add     a,c

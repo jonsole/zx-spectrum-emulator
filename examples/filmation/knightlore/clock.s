@@ -6,6 +6,11 @@
 ; bytes its last record had been missing.)
 
 ; The clock's turn. It stops once the wizard has everything, as the game's does.
+;
+; In:  nothing
+; Out: nothing -- except on the fortieth dawn, when it never returns:
+;        game_over starts a new game
+; Corrupts: AF, BC, DE, HL
 day_step:           ld      a,(move_tick)
                     and     SUN_TURNS - 1
                     ret     nz

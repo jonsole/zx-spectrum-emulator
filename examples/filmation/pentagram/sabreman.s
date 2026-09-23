@@ -86,9 +86,13 @@ CHARACTER_STEP		EQU		3
 ; Lore's character_steer (see ../knightlore/knight.s for the whole account),
 ; with one change: the middle of the opening is room_door_mid, not the middle
 ; of the wall, because Pentagram's raised doorways stand off to one side.
-;   IX -> the legs record
-;   D, E - the step for his facing, which this may add a unit to
-; Corrupts AF, BC, HL.
+;
+; In:  IX -> the legs record
+;      D  = the step in U for his facing
+;      E  = the step in V
+; Out: D, E = the step, a unit added towards the middle of the opening when he
+;        is near a doorway
+; Corrupts: AF, BC, HL
 character_steer:	ld		c,0
 .side:				ld		b,0
 					ld		hl,room_door_z
@@ -154,12 +158,15 @@ character_steer:	ld		c,0
 
 
 ; ---------------------------------------------------------------------------
-; His top half looking about as he goes.
-;   A - block + phase in, the body frame to show out
-;   IX -> his legs
-; Corrupts C. Returning A unchanged means no glance.
+; His top half looking about as he goes. Returning A unchanged means no
+; glance.
 ;
 ; Knight Lore gives its knight a glance of his own -- see ../knightlore/glance.s
 ; -- and whether Sabreman does the same here has not been established. Until
 ; then he does not, which is a valid answer rather than a stub.
+;
+; In:  A  = block + phase
+;      IX -> his legs
+; Out: A  = the body frame to show: here always the one it came in as
+; Corrupts: nothing -- the engine allows C
 walker_glance:		ret

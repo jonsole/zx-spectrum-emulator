@@ -4,7 +4,10 @@
 ; ---------------------------------------------------------------------------
 
 ; The menu, until 0 starts a game.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: menu_mode = the way chosen
+; Corrupts: AF, BC, DE, HL, AF'
 menu_run:           ld      a,MENU_INK
                     call    frame_screen
                     call    menu_show
@@ -24,7 +27,10 @@ menu_run:           ld      a,MENU_INK
 
 ; Every line, with the way chosen flashing. A line is printed over itself, so
 ; only its colour changes.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 menu_show:          ld      a,(menu_mode)
                     rrca
                     and     3

@@ -8,6 +8,10 @@
 ; sprites with it, and redraw_view clears the view buffer by pushing
 ; through it. An interrupt taken during any of those would push a return
 ; address into whatever SP was aimed at.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
                     xor     a                   ; the border black and the speaker
@@ -121,6 +125,9 @@ start:              di
                     call    turn_pace
                     jr      .loop
 
+KEY_ROOMS           EQU     $F7FE       ; 1 bit 0, 2 bit 1
+
+                IFDEF   DEBUG_ROOM
 
 ; 1 goes back a room, 2 on to the next -- with DEBUG_ROOM defined,
 ; `build.py --debug-room`, which is also what puts the room number in the
@@ -137,9 +144,10 @@ start:              di
 ;
 ; One room a press, not one a frame -- the whole row is compared against what
 ; it read last time, so holding the key down does nothing after the first.
-KEY_ROOMS           EQU     $F7FE       ; 1 bit 0, 2 bit 1
-
-                IFDEF   DEBUG_ROOM
+;
+; In:  nothing
+; Out: room_number = the room to go to, if a key was pressed
+; Corrupts: AF, BC, E, HL
 room_keys:          ld      bc,KEY_ROOMS
                     in      a,(c)
                     cpl                         ; a key reads 0 while it is held

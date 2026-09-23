@@ -84,9 +84,13 @@ CHARACTER_STEP		EQU		3
 ;
 ; An arch's centre is the room's doorway table all over again: the wall it
 ; stands in on its own axis, and the middle of the room on the other.
-;   IX -> the legs record
-;   D, E - the step for his facing, which this may add a unit to
-; Corrupts AF, BC, HL.
+;
+; In:  IX -> the legs record
+;      D  = the step in U for his facing
+;      E  = the step in V
+; Out: D, E = the step, with a unit added towards an arch's middle if he is
+;        near one
+; Corrupts: AF, BC, HL
 character_steer:	ld		c,0
 .side:				ld		b,0
 					ld		hl,room_door_z

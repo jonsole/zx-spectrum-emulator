@@ -148,8 +148,10 @@ end_ink:            DB      0                   ; the colour the line being prin
 
 
 ; Mark this room as seen, for the percentage.
-;   A - its number
-; Corrupts AF, BC, HL.
+;
+; In:  A = its number
+; Out: nothing
+; Corrupts: AF, BC, HL
 room_seen:          ld      c,a
                     and     7
                     inc     a
@@ -175,6 +177,10 @@ room_seen:          ld      c,a
 
 
 ; The end. Nothing comes back: it starts a new game.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 game_over:          di
                     ld      sp,STACK_TOP
 
@@ -222,7 +228,12 @@ game_over:          di
 
 
 ; A screen of the game's words: one colour, and then the lines.
-;   HL -> the lines, B - how many, C - the colour to lay under them
+;
+; In:  HL -> the lines
+;      B  = how many
+;      C  = the colour to lay under them
+; Out: HL -> past the lines
+; Corrupts: AF, B, DE
 end_show:           ld      a,c                 ; before room_wipe, which
                     ld      (.paper + 1),a      ; counts BC down to nothing
                     push    bc
@@ -251,6 +262,10 @@ end_show:           ld      a,c                 ; before room_wipe, which
 
 
 ; Long enough to read it, or until a key says otherwise -- wait_for_key_press.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, D, HL
 end_pause:          ld      d,8                 ; not B: end_key reads the keyboard
 .turn:              ld      hl,0                ; through BC
 .spin:              call    end_key
@@ -270,10 +285,11 @@ end_pause:          ld      d,8                 ; not B: end_key reads the keybo
 ; A note's entry is four bytes -- the note itself, the half period as B DJNZs
 ; and C runs of 256, and how long one beat of it lasts -- and the table holds
 ; only the notes these tunes play, so it is searched rather than indexed.
-;   A - the note, 1 to 63
-; Out: carry set and B, C the half period, E one beat; carry clear for a note
-; the tunes never play, which is then skipped.
-; Corrupts AF, D, HL.
+;
+; In:  A = the note, 1 to 63
+; Out: carry set: B, C = the half period and E = one beat
+;      carry clear: a note the tunes never play, which is then skipped
+; Corrupts: D, HL, and B and E when the carry is clear
 tune_note_at:       ld      hl,tune_notes
                     ld      b,TUNE_NOTES
 .find:              cp      (hl)
@@ -296,7 +312,10 @@ tune_note_at:       ld      hl,tune_notes
 
 ; Is any key down? Z if none is -- the game asks the same way, at $B5F7 with
 ; nothing selected: every half-row at once, in one read.
-; Corrupts AF, BC.
+;
+; In:  nothing
+; Out: Z set if no key is down
+; Corrupts: A, BC
 end_key:            ld      bc,$00FE
                     in      a,(c)
                     cpl
@@ -312,8 +331,13 @@ tune_key            EQU     end_key
 
 ; A string in end_ink, from the character row and column, the last character
 ; carrying bit 7.
-;   HL -> the characters, D - the row, E - the column
-; Returns HL past the string.
+;
+; In:  HL -> the characters
+;      D  = the row
+;      E  = the column
+; Out: HL -> past the string
+;      E  = the column after it
+; Corrupts: AF, BC
 end_string:         ld      a,(hl)
                     and     $7F
                     push    hl
@@ -337,7 +361,12 @@ end_string:         ld      a,(hl)
 
 
 ; A byte in two digits, in the gap a line left for it.
-;   A - the byte, D - the row, E - the column
+;
+; In:  A = the byte
+;      D = the row
+;      E = the column
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 end_number:         push    af
                     call    end_at
                     pop     af
@@ -345,6 +374,10 @@ end_number:         push    af
 
 
 ; Ten or more of the charms, in BCD, as the game turns them at $BA72.
+;
+; In:  A = the count, up to 19
+; Out: A = the count in BCD
+; Corrupts: F
 end_bcd:            cp      10
                     ret     c
                     sub     10
@@ -355,6 +388,10 @@ end_bcd:            cp      10
 ; The percentage of the quest -- calc_and_display_percent. $A41A is a
 ; hundredth of the 156 that one room and two-a-charm add up to, counted in BCD
 ; as it goes; the $28 at the end is what rounds the last of them up to 100.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 end_percent:        call    end_seen
                     ld      a,(special_count)
                     add     a,a
@@ -386,6 +423,10 @@ end_percent:        call    end_seen
 
 ; What it makes of it: the quarter of the castle he saw, and whether the wizard
 ; ever had everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 end_rating:         call    end_seen
                     ld      a,e
                     rrca
@@ -415,7 +456,10 @@ end_rating:         call    end_seen
 
 
 ; How many rooms he saw, less the one he started in.
-; Out: E - the count. Corrupts AF, BC, HL.
+;
+; In:  nothing
+; Out: E = the count
+; Corrupts: AF, BC, HL
 end_seen:           ld      hl,end_rooms_seen
                     ld      c,END_ROOMS
                     ld      e,0

@@ -84,6 +84,10 @@ entered_at:         DW      0                   ; V, then U
 
 
 ; Put the player in the room that has just been built.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 player_add:         ld      ix,player
                     ld      bc,PLAYER_U << 8 | PLAYER_V
                     ld      a,CHARACTER_Z
@@ -118,8 +122,13 @@ player_add:         ld      ix,player
 ; into it, and it is what Knight Lore does too: adjust_plyr_Z_for_arch hunts
 ; down the arch he is entering by and takes its Z.
 ;
-;   IX -> the player's legs
-; Out: B - U, C - V, A - the Z to stand at. (enter_dir) is spent.
+; In:  IX -> the player's legs
+;      enter_dir = the side he is coming in by
+; Out: B  = U
+;      C  = V
+;      A  = the Z to stand at
+;      enter_dir = $FF: it is spent
+; Corrupts: F, E, HL
 player_entry:       ld      a,(enter_dir)
                     ld      e,a
                     ld      c,a
@@ -157,6 +166,15 @@ player_entry:       ld      a,(enter_dir)
                     ret
 
 
+; How long he waits between quarter turns. The game gives itself two frames
+; ($C8F2). Two is wrong here: it runs at six to twelve frames a second and
+; this engine runs at eighteen to thirty-five, so the same number spins him at
+; eleven quarter turns a second against the game's three. Eight put ours back
+; on about three, which played too slow to steer by; four is about six a second.
+PLAYER_TURN_WAIT    EQU     4           ; turns before he will turn again
+
+player_turn_wait:   DB      0
+
 ; Read what the player is asking for and walk him.
 ;
 ; The four isometric directions are the two floor axes both ways, and
@@ -164,15 +182,11 @@ player_entry:       ld      a,(enter_dir)
 ; 0 is -U (up and left, the castle's west), 1 is +V (north), 2 is +U (east)
 ; and 3 is -V (south). So a turn is the facing plus or minus one, and a
 ; direction on a joystick is one of the four outright.
-; The game gives itself two frames between quarter turns ($C8F2). Two is
-; wrong here: it runs at six to twelve frames a second and this engine runs at
-; eighteen to thirty-five, so the same number spins him at eleven quarter
-; turns a second against the game's three. Eight put ours back on about
-; three, which played too slow to steer by; four is about six a second.
-PLAYER_TURN_WAIT    EQU     4           ; turns before he will turn again
-
-player_turn_wait:   DB      0
-
+;
+; In:  nothing
+; Out: nothing -- and when the last life is lost it never returns: game_over
+;        starts a new game
+; Corrupts: everything
 player_step:        ld      ix,player
                     ld      a,(player_state)
                     or      a
@@ -270,7 +284,9 @@ player_step:        ld      ix,player
 ; has a matching one in the room that arithmetic lands on, which is as good a
 ; proof of it as measuring the game would be.
 ;
-;   IX -> the player's legs
+; In:  IX -> the player's legs
+; Out: room_number and enter_dir = where he goes, if he has left
+; Corrupts: AF, BC, DE, HL
 player_exit:        ld      a,(ix+CHARACTER_DOOR)
                     inc     a
                     ret     z                       ; not in a doorway
@@ -351,9 +367,10 @@ player_exit:        ld      a,(ix+CHARACTER_DOOR)
 ; walks him on whenever the jumping flag is set, and neither turning routine
 ; will turn him while it is. Without it a jump let go of forward stopped dead
 ; in the air, and a ball took a run-up and a held key to clear.
-;   IX -> the player
-; Out: cf set if he should walk, clear if he should stand.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  IX -> the player
+; Out: carry set if he should walk, clear if he should stand
+; Corrupts: A, C, HL
 player_turn:        bit     0,(ix+CHARACTER_STATE)  ; CHARACTER_JUMPING
                     scf
                     ret     nz
@@ -433,7 +450,10 @@ player_turn:        bit     0,(ix+CHARACTER_STATE)  ; CHARACTER_JUMPING
 ; He has touched something that kills. upd_player_bottom at $C82B turns both
 ; halves to the first sparkle, and init_death_sparkles makes him something
 ; nothing collides with, so that whatever killed him walks on through.
-;   IX -> the player's legs
+;
+; In:  IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_die:         ld      a,PLAYER_DYING
                     ld      (player_state),a
                     set     2,(ix+OBJ.FLAGS)    ; OBJ_PASSABLE
@@ -442,7 +462,12 @@ player_die:         ld      a,PLAYER_DYING
 
 
 ; A turn of dying or of coming back.
-;   A  - player_state, IX -> the player's legs
+;
+; In:  A  = player_state
+;      IX -> the player's legs
+; Out: nothing -- and when the last life is lost it never returns: game_over
+;        starts a new game
+; Corrupts: everything
 player_phase:       cp      PLAYER_CHANGING
                     jr      z,player_change_turn
                     cp      PLAYER_DYING
@@ -451,6 +476,12 @@ player_phase:       cp      PLAYER_CHANGING
                     cp      PLAYER_DEATH_GFX + 7
                     jr      z,.gone
                     inc     a                   ; upd_112_to_118_184: a frame a turn
+                    ; player_die starts here, with the first sparkle.
+                    ;
+                    ; In:  A  = the graphic
+                    ;      IX -> the player's legs
+                    ; Out: nothing
+                    ; Corrupts: everything
 .death:             push    af                  ; and a noise each, audio_B403
                     call    sound_sparkle
                     pop     af
@@ -493,7 +524,11 @@ player_phase:       cp      PLAYER_CHANGING
                     jr      player_sparkle
 
                     ; upd_127: himself again, and whatever touched him while he
-                    ; was arriving forgotten.
+                    ; was arriving forgotten. player_change_turn ends here too.
+                    ;
+                    ; In:  IX -> the player's legs
+                    ; Out: nothing
+                    ; Corrupts: everything
 .back:              xor     a
                     ld      (player_state),a
                     ld      (player_touched),a
@@ -503,9 +538,19 @@ player_phase:       cp      PLAYER_CHANGING
                     jr      player_repaint
 
 ; Both halves to one graphic, repainted where they stand.
-;   A  - the graphic, IX -> the player's legs
+;
+; In:  A  = the graphic
+;      IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_sparkle:     ld      (ix+OBJ.GFX),a
                     ld      (ix+CHARACTER_BODY+OBJ.GFX),a
+
+; See player_sparkle: the graphics he has, repainted.
+;
+; In:  IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_repaint:     ld      de,0
                     ld      (ix+OBJ.DZ),0
                     jp      character_move
@@ -513,7 +558,10 @@ player_repaint:     ld      de,0
 
 ; A turn of changing, upd_92_to_95: something deadly still kills him, and every
 ; fourth turn he twinkles on, until the last twinkle turns him into the other one.
-;   IX -> the player's legs
+;
+; In:  IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_change_turn: ld      a,(player_touched)
                     or      a
                     jp      nz,player_die
@@ -538,7 +586,10 @@ player_change_turn: ld      a,(player_touched)
 ; He starts to change: nothing on top, and the legs twinkling. The twinkles are
 ; up to 38 rows tall, taller than the buffer his legs rotate into, so they
 ; rotate at draw time for the few turns they are up.
-;   IX -> the player's legs
+;
+; In:  IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_changing:    ld      a,PLAYER_CHANGING
                     ld      (player_state),a
                     ld      a,PLAYER_CHANGE_TURNS
@@ -551,7 +602,10 @@ player_changing:    ld      a,PLAYER_CHANGING
 
 ; One of the four twinkles at random, never the one he already shows, turned
 ; the other way round each time -- rand_legs_sprite, at $C357.
-;   IX -> the player's legs
+;
+; In:  IX -> the player's legs
+; Out: nothing
+; Corrupts: everything
 player_twinkle:     call    mover_rand
                     and     3
                     add     a,PLAYER_CHANGE_GFX
@@ -567,7 +621,10 @@ player_twinkle:     call    mover_rand
 
 ; The knight's two graphic bases, for man or wolf. character_frame works each
 ; frame out from them, so the wolf walks and turns with the knight's own code.
-;   A - the legs' base: PLAYER_LEGS_GFX, plus PLAYER_WOLF for the wolf
+;
+; In:  A = the legs' base: PLAYER_LEGS_GFX, plus PLAYER_WOLF for the wolf
+; Out: nothing
+; Corrupts: AF
 player_form:        ld      (player + CHARACTER_LEGS),a
                     add     a,PLAYER_BODY_GFX - PLAYER_LEGS_GFX
                     ld      (player + CHARACTER_BODY_G),a

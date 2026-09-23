@@ -87,7 +87,11 @@ special_colours:	DB		$42, $43, $44, $45, $46, $47, $42, $47
 ; upd_84's move-and-let-go with a different nudge. 103 goes the moment the
 ; knight is next to it and gives him a life (upd_103). And one with
 ; SPECIAL_FLIGHT added is on its way into the pot.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing -- and the last one the wizard wants never returns: game_over
+;        starts a new game
+; Corrupts: everything -- IX only on the turn object_hide takes it away
 mover_special:		ld		a,(ix+OBJ.GFX)
 					cp		SPECIAL_LIFE
 					jp		c,mover_pushed
@@ -182,7 +186,10 @@ mover_special:		ld		a,(ix+OBJ.GFX)
 ;
 ; MOVE_STATE holds the step in Z for next turn. The game leaves it in dZ and
 ; takes one off before using it; here dZ is gravity's to spend.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything -- IX only on the turn object_hide takes it away
 mover_cauldron:		ld		a,(ix+OBJ.GFX)
 					cp		SPECIAL_SPELL
 					jr		c,.bubbles
@@ -262,6 +269,10 @@ mover_cauldron:		ld		a,(ix+OBJ.GFX)
 ; init_cauldron_bubbles, which the game runs at the end of every frame. It only
 ; asks about the second slot, and the bubbles then take themselves away at once
 ; if the first is taken; asking about both here saves drawing them for nothing.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 special_step:		ld		a,(room_shown)
 					cp		SPECIAL_POT_ROOM
 					ret		nz
@@ -286,7 +297,12 @@ special_pot:		DB		128, 128, 128
 ; Is the knight next to IX? His box widened by E each way and reaching down by
 ; D -- is_on_or_near_obj at $C17A, which the game calls with the knight's own
 ; sizes enlarged.
-; Out: carry if so. Corrupts AF, BC, IY.
+;
+; In:  IX -> the thing
+;      D  = how much further down he reaches
+;      E  = how much wider his box is each way
+; Out: carry set if he is next to it
+; Corrupts: A, BC, IY
 special_near:		ld		iy,player
 					ld		a,(iy+OBJ.U)
 					sub		(ix+OBJ.U)
@@ -336,8 +352,10 @@ special_near:		ld		iy,player
 
 ; This one's table row no longer has anything in the castle: it is carried,
 ; or gone for good.
-;   IX -> the record
-; Corrupts AF, DE, HL.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF, DE, HL
 special_row_gone:	ld		a,(ix+OBJ.MOVE_STATE)
 					cp		SPECIAL_ROWS
 					ret		nc		; not a row at all
@@ -352,7 +370,10 @@ special_row_gone:	ld		a,(ix+OBJ.MOVE_STATE)
 ; The wizard has had one he wanted: every attribute's ink steps round, sixteen
 ; times -- back where it started -- with a pause between.
 ; cycle_colours_with_sound, at $C2A5, less the sound.
-; Corrupts everything but IX.
+;
+; In:  IX -> the record, whose graphic the sparkle's noise is pitched by
+; Out: nothing
+; Corrupts: AF, BC, D, HL
 special_flash:		ld		d,16
 .cycle:				ld		hl,$5800
 					ld		bc,768

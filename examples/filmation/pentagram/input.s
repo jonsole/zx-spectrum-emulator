@@ -67,6 +67,10 @@ KEY_ROWS_1_0        EQU     $E7FE               ; 1 to 5 and 6 to 0
 ; SYM SHIFT, M, N and B beside them -- Z, C, M and B turn him one way and
 ; X, V, SYM and N the other. Any letter of the middle row walks him forward,
 ; the top row jumps and fires by turns, and any number picks up or puts down.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_keyboard:     ld      e,0
 
                     ld      bc,KEY_ROW_SHIFT_V  ; CAPS, Z, X, C, V
@@ -140,7 +144,16 @@ input_keyboard:     ld      e,0
 ; $BEFD reads Z to V and SYM SHIFT to B together through port $7E -- since
 ; the number keys are Interface II's sticks. Every stick reader in
 ; engine/input.s ends here, and input_store is there too.
+;
+; In:  E = what the stick reader made of it
+; Out: input_now = E, and the take bit if either row has a key down
+; Corrupts: AF, E
 input_stick_done:
+; See input_stick_done.
+;
+; In:  E = what the stick reader made of it
+; Out: input_now = E, and the take bit if either row has a key down
+; Corrupts: AF, E
 input_stick_take:   ld      a,$7E
                     in      a,($FE)
                     cpl

@@ -32,7 +32,10 @@ menu_tuned:         DB      0                   ; the title tune has played
 
 
 ; 1 to 4, and the lines again if one of them changed something.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: menu_mode = the way chosen
+; Corrupts: AF, BC, DE, HL
 menu_pick:          ld      bc,MENU_KEYS_1_4
                     in      a,(c)
                     cpl                         ; held reads 0, and this is

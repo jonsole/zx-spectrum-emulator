@@ -24,14 +24,25 @@ DAYS_WORD_COLUMN    EQU     14
 
 
 ; The whole panel.
-; Corrupts everything but IX and IY.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 panel_show:         xor     a
                     jr      panel_draw
 
 ; The pieces the last region reached, going by view_x_extent and view_y_extent.
-; Corrupts everything but IX and IY.
+;
+; In:  view_x_extent, view_y_extent = the region
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 panel_redraw:       ld      a,1
 
+; What both come to.
+;
+; In:  A = 0 for every piece, or 1 for those the region reached
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 panel_draw:         ld      (.region + 1),a
                     ld      hl,panel_pieces
                     ld      b,PANEL_PIECES

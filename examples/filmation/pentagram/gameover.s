@@ -100,8 +100,10 @@ PERCENT_COLUMN      EQU     19                  ; x 152
 
 ; ---------------------------------------------------------------------------
 ; Mark the room just entered as seen.
-;   A - the room
-; Corrupts AF, BC, HL.
+;
+; In:  A = the room
+; Out: nothing
+; Corrupts: AF, BC, HL
 room_seen:          ld      c,a
                     rrca
                     rrca
@@ -126,6 +128,10 @@ room_seen:          ld      c,a
 
 ; ---------------------------------------------------------------------------
 ; The whole screen, then the pause, then a new game.
+;
+; In:  nothing
+; Out: nothing -- it never returns
+; Corrupts: everything
 game_over:          ld      a,GAME_OVER_INK
                     call    frame_screen
 
@@ -220,8 +226,10 @@ game_over:          ld      a,GAME_OVER_INK
 ; ---------------------------------------------------------------------------
 ; The whole screen cleared, one colour, and nothing drawing the panel back
 ; over it.
-;   A - the colour
-; Corrupts everything.
+;
+; In:  A = the colour
+; Out: nothing
+; Corrupts: F, BC, DE, HL
 screen_wipe:        push    af
                     call    panel_off
                     ld      hl,$4000
@@ -239,15 +247,20 @@ screen_wipe:        push    af
 
 ; ...and the frame round it -- $BD59. An upside-down piece is turned over
 ; where it lies in the sprite table, drawn, and turned back.
-;   A - the colour
-; Corrupts everything.
+;
+; In:  A = the colour
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
 frame_screen:       call    screen_wipe
                     ld      hl,frame_pieces
                     ld      b,FRAME_PIECES
 
 ; B pieces from a table in frame_pieces' shape, drawn straight onto the screen.
-;   HL -> the table
-; Corrupts everything.
+;
+; In:  HL -> the table
+;      B  = how many pieces
+; Out: HL -> past the last of them
+; Corrupts: AF, B, DE, AF'
 frame_draw:
 .piece:             push    bc
                     ld      a,(hl)              ; the graphic
@@ -280,8 +293,17 @@ frame_draw:
                     ret
 
 ; Turn the frame piece in hand over, if it is an upside-down one.
-; Corrupts everything.
+;
+; In:  nothing -- frame_draw patches in the graphic and whether it is
+;        upside down
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 game_over_turn:
+; See game_over_turn: the same place, named for the byte frame_draw patches.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 game_over_upside:   ld      a,0                 ; patched: upside down?
                     or      a
                     ret     z
@@ -295,7 +317,10 @@ game_over_percent:  DB      0
 ; $FF, until a row of 0. A line flashes if its bit of print_flash is set -- bit
 ; 0 the first line, bit 1 the next -- and print_flash turns a bit a line, so
 ; eight lines leave it as they found it.
-; Corrupts AF, BC, DE, HL.
+;
+; In:  HL -> the lines
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 print_lines:        ld      a,(hl)
                     or      a
                     ret     z
@@ -317,7 +342,13 @@ print_flash:        DB      0
 
 ; One line: the characters from HL to an $FF, at row B from column C, and
 ; their cells coloured A.
-; Out: HL past the $FF. Corrupts AF, BC, DE.
+;
+; In:  HL -> the characters
+;      B  = the row, in pixels, on a character boundary
+;      C  = the column, in characters
+;      A  = the colour
+; Out: HL -> past the $FF
+; Corrupts: AF, C, DE
 game_over_print:    ld      (.ink + 1),a
                     push    hl
                     ld      a,b                 ; the attribute row: rows are
@@ -368,8 +399,10 @@ game_over_print:    ld      (.ink + 1),a
 ; Turn a sprite upside down where it lies in the table: Knight Lore's
 ; menu_flip_v, for any graphic. Twice puts it back. Its rows swap end for end,
 ; mask and data together.
-;   A - the graphic
-; Corrupts everything.
+;
+; In:  A = the graphic
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sprite_flip_v:      ld      l,a
                     ld      h,(high sprite_table) / 2
                     add     hl,hl
