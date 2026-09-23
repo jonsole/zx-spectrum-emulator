@@ -38,18 +38,32 @@ TURN_SPIN           EQU     11                  ; DJNZs making up one unit
 
 turn_work:          DW      0
 
-; Add A units to the turn's work. Corrupts AF and HL.
-turn_add:           ld      hl,turn_work
+; Add to the turn's work.
+;
+; HL is kept because the sounds count themselves in here from the middle of
+; loops that walk HL through the ROM for their pitches: sound_cycle ended in a
+; JP here, and a noise's every pitch after the first came from turn_work.
+;
+; In:  A = the units
+; Out: nothing
+; Corrupts: AF
+turn_add:           push    hl
+                    ld      hl,turn_work
                     add     a,(hl)
                     ld      (hl),a
-                    ret     nc
+                    jr      nc,.done
                     inc     hl
                     inc     (hl)
+.done:              pop     hl
                     ret
 
 
 ; Spend what is left of the budget, and start the next turn's count.
 ; One pass of .wait is 7 + (TURN_SPIN * 13 - 5) + 26 = 171 T, which is the unit.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, DE, HL
 turn_pace:          ld      hl,(TURN_BUDGET_T - TURN_BASE_T) / TURN_UNIT_T
                     ld      de,(turn_work)
                     or      a
