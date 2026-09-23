@@ -1337,51 +1337,6 @@ view_x_extent:		dw		0
 view_y_extent:		dw		0
 
 
-; Make the shared graphic the way round this object wants it.
-;
-; A graphic is shared by every object drawn from it, and an object that wants
-; it the other way round mirrors it where it lies. So the bytes may not be the
-; way THIS object wants them: another object in the same region may have turned
-; them since. Knight Lore compares the two in print_sprite, per object, for
-; exactly this reason.
-;
-; Settling it once per region cannot work, which is what redraw_orient used to
-; try. Two objects in one region wanting opposite orientations leave whichever
-; the pass reached last holding the graphic, and the other draws mirrored --
-; room $88 puts the north arch's leaf and the east arch's leaf, one flipped and
-; one not, in the same region at the foot of an arch, and a few pixels of the
-; one landed on the other.
-;
-; Everything is kept, the flags included, so it can sit in the middle of the
-; offset arithmetic.
-;
-; In:  HL -> the object's sprite data (the record + 2)
-;      E' = the object's FLAGS, popped alongside BLIT_IDX
-; Out: nothing
-; Corrupts: nothing
-sprite_orient:		push	af
-					push	bc
-					push	de
-					push	hl
-					ASSERT	OBJ_SHIFTED == 1 << 5
-					exx
-					bit		5,e					; OBJ_SHIFTED
-					ld		a,e					; FLAGS, for the XOR below
-					exx
-					jr		nz,.done			; its own private copy, and SPRITE - 2
-					; is not a sprite header at all
-					dec		l					; SPRITE is the record + 2, and records
-					dec		l					; are ALIGN 4, so this cannot borrow
-					xor		(hl)
-					rrca						; the two flip bits differ: carry
-					call	c,sprite_flip_h		; HL -> the record, which is what it wants
-.done:				pop		hl
-					pop		de
-					pop		bc
-					pop		af
-					ret
-
-
 ; Composite every object that meets the region into the view buffer, in list
 ; order, furthest first.
 ;
@@ -1566,7 +1521,22 @@ objects_draw_all:
 					; Out of line because it was once the thing that kept this
 					; loop inside a JR's reach of the filter tests above. They
 					; are JPs now, and it stays out of line for its size.
-					ex		af,af'				; x overlap: the columns to composite
+					;
+					; First, count the blit towards the turn -- see turn_pace. It is
+					; written out rather than a call to turn_add, which would save HL
+					; for nobody: this is once per object drawn, and H and L are
+					; free here. The rows are in the other bank.
+					exx
+					ld		a,b
+					exx
+					add		a,TURN_PER_BLIT
+					ld		hl,turn_work
+					add		a,(hl)
+					ld		(hl),a
+					jr		nc,.counted
+					inc		hl
+					inc		(hl)
+.counted:			ex		af,af'				; x overlap: the columns to composite
 					jp		sprite_blit_setup
 
 					; Return here after blit routine

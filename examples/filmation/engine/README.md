@@ -17,12 +17,12 @@ an `EQU`, so the split costs no bytes and no T-states.
 |---|---|
 | `object_struct.s` | The `OBJ` record and `ROOM_STRIDE`, the 32-byte slot every record sits in |
 | `sprite_defs.s` | Sprite header layout and the `sprite_width_class` macro |
-| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 7×512-byte `sprite_rotate_table` for sub-byte shifts |
+| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 7×512-byte `sprite_rotate_table` for sub-byte shifts. In the page's gap before the table, `sprite_orient` and `pixelAddress` |
 | `sprite_flip.s` | `sprite_flip_h` mirrors a sprite in place; `bit_reverse_bytes` makes its table |
-| `object.s` | Projection (`object_place`), bounds and rotation (`object_update`), the draw walk (`objects_draw_all`), and collision (`object_collide`) |
+| `object.s` | Projection (`object_place`), bounds and rotation (`object_update`), the draw walk (`objects_draw_all`, which counts each blit towards the turn), and collision (`object_collide`) |
 | `depth.s` | The depth-ordered list: insert, unlink, step and relink. See [depth.md](depth.md) |
 | `shift.s` | The rotation arena: per-object buffers for sub-byte shifts, and the shared buffer when it runs out |
-| `vid_buff.s` | `pixelAddress`, and `vid_buff_copy` from the view buffer to the screen |
+| `vid_buff.s` | `vid_buff_copy`, from the view buffer to the screen |
 | `redraw.s` | Dirty regions: `region_reset`/`region_add`, `redraw_defer`/`redraw_flush`, `redraw_view`, `redraw_screen` |
 | `turn.s` | Turn pacing: work is counted in units with `turn_add`, and `turn_pace` spends the rest of a fixed budget |
 | `sound.s` | The beeper: `sound_cycle` and `sound_tone`, which count their time towards the turn; `sound_take`, which lets one continuous sound a frame through; and `sound_long` and `sound_rest` for a tune's notes |

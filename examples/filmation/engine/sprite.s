@@ -91,24 +91,11 @@ sprite_jump_table:
 ;      D   = BLIT_IDX
 ;      DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
 ;      IX  = where to go when the sprite is drawn
-; Out: nothing -- it leaves by JP (IX), with the two banks exchanged
-; Corrupts: AF, BC, DE, HL, and the blit's B, DE and HL
+; Out: nothing -- it leaves by JP (IX), with the two banks exchanged and SP
+;      somewhere in the sprite
+; Corrupts: AF, BC, DE, HL, SP, and the blit's B, DE and HL
 sprite_blit_setup:
 					ld		c,a					; c = columns to composite
-
-					; Count it towards the turn -- see turn_pace. The rows are in
-					; the other bank, and H and L are dead here.
-					exx
-					ld		a,b
-					exx
-					add		a,TURN_PER_BLIT
-					ld		hl,turn_work
-					add		a,(hl)
-					ld		(hl),a
-					jr		nc,.counted
-					inc		hl
-					inc		(hl)
-.counted:
 					ld		a,d					; blit index back to a width
 					sprite_width_class
 					add		a,2
@@ -154,7 +141,8 @@ sprite_blit_setup:
 					sub		b
 					add		a,(sprite_blit.c6 - sprite_blit.pops - 2) & $FF
 					ld		(hl),a
-					jp		sprite_blit
+					ASSERT	$ == sprite_blit
+					; NB: fall through into sprite_blit
 
 
 BLIT_COLUMNS		EQU		6		; the widest a sprite gets: five bytes of
@@ -168,12 +156,17 @@ BLIT_COLUMN_SIZE	EQU		6		; and what one column of the chain assembles
 ; The blit, as sprite_blit_setup last patched it. It starts with EXX, so the
 ; registers named in the other bank here are the ones it works in.
 ;
+; SP walks the sprite and is left there. objects_draw_all is the only caller,
+; and both ways on from .next_object set SP before they use it -- LD SP,IY to
+; walk the next record, or the real stack back at the end -- so putting it
+; back here was 30 T a blit spent on a value nobody read.
+;
 ; In:  DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
 ;      IX  = where to go when the sprite is drawn
-; Out: nothing -- it leaves by JP (IX), with the two banks exchanged
-; Corrupts: AF, and the blit's B, DE and HL
+; Out: nothing -- it leaves by JP (IX), with the two banks exchanged and SP
+;      somewhere in the sprite
+; Corrupts: AF, SP, and the blit's B, DE and HL
 sprite_blit:		exx
-					ld		(.restore_sp+1),sp	; save SP
 					ld		sp,hl				; SP walks the sprite
 
 .entry:				DB		$18, 0				; JR, with the displacement patched:
@@ -219,8 +212,7 @@ sprite_blit:		exx
 				ENDR
 					DB		0,0					; room for it past the lot
 
-.restore_sp:		ld		sp,0				; restore SP, value set before loop
-					jp		(ix)
+					jp		(ix)				; SP is the caller's to set: see above
 
 ; Where the DJNZ went last time, so those two bytes can be made POPs again.
 .patched:			DW		.pops
@@ -232,9 +224,92 @@ sprite_blit:		exx
 					ASSERT	high sprite_blit.pops == high (sprite_blit.pops + BLIT_COLUMNS - 1)
 
 
+; ---------------------------------------------------------------------------
+; Two small routines of the engine's, here because sprite_rotate_table wants a
+; page of its own and everything above ends part-way through this one: what
+; they take would otherwise be padding. Any routine the size of the gap would
+; do. sprite_orient is at home here anyway; pixelAddress is vid_buff.s's.
+; ---------------------------------------------------------------------------
 
 
-	
+; Make the shared graphic the way round this object wants it.
+;
+; A graphic is shared by every object drawn from it, and an object that wants
+; it the other way round mirrors it where it lies. So the bytes may not be the
+; way THIS object wants them: another object in the same region may have turned
+; them since. Knight Lore compares the two in print_sprite, per object, for
+; exactly this reason.
+;
+; Settling it once per region cannot work, which is what redraw_orient used to
+; try. Two objects in one region wanting opposite orientations leave whichever
+; the pass reached last holding the graphic, and the other draws mirrored --
+; room $88 puts the north arch's leaf and the east arch's leaf, one flipped and
+; one not, in the same region at the foot of an arch, and a few pixels of the
+; one landed on the other.
+;
+; Everything is kept, the flags included, so it can sit in the middle of the
+; offset arithmetic.
+;
+; In:  HL -> the object's sprite data (the record + 2)
+;      E' = the object's FLAGS, popped alongside BLIT_IDX
+; Out: nothing
+; Corrupts: nothing
+sprite_orient:		push	af
+					push	bc
+					push	de
+					push	hl
+					ASSERT	OBJ_SHIFTED == 1 << 5
+					exx
+					bit		5,e					; OBJ_SHIFTED
+					ld		a,e					; FLAGS, for the XOR below
+					exx
+					jr		nz,.done			; its own private copy, and SPRITE - 2
+					; is not a sprite header at all
+					dec		l					; SPRITE is the record + 2, and records
+					dec		l					; are ALIGN 4, so this cannot borrow
+					xor		(hl)
+					rrca						; the two flip bits differ: carry
+					call	c,sprite_flip_h		; HL -> the record, which is what it wants
+.done:				pop		hl
+					pop		de
+					pop		bc
+					pop		af
+					ret
+
+
+; The screen address of a pixel. BC and DE are unchanged, so there is no need
+; for expensive push and pop operations.
+;
+; In:  B = y, 0 to 191
+;      C = x, 0 to 255
+; Out: HL -> the byte holding the pixel
+; Corrupts: AF
+pixelAddress:   ld      a, b
+                and     %00000111
+                ld      h, a    ; h contains Y2-Y0
+                ld      a, b
+                rra
+                scf             ; set bit 14
+                rra
+                rra
+                ld      l, a    ; l contains Y5-Y3
+                and     %01011000
+                or      h
+                ld      h, a    ; h is complete now
+                ld      a, c    ; divide X by 8
+                rr      l       ; and rotate Y5-Y3 in
+                rra
+                rr      l
+                rra
+                rr      l
+                rra
+                ld      l, a    ; l is complete now
+                ret
+
+					; The ALIGN below would pad out to the next page, costing up to
+					; 256 bytes, if anything above ever ran past this one.
+					ASSERT	high ($ - 1) == high sprite_jump_table
+
 						ALIGN	256
 ; Shift amounts 1..7. There is deliberately no table for shift 0:
 ; object_update only takes the shifting path when x & 7 is non-zero, so a
