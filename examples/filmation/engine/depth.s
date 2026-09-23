@@ -297,17 +297,22 @@ depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 ; through IY. Nothing can interrupt -- the engine runs with interrupts off
 ; for exactly this, see main.s -- but nothing can be pushed either, so the
 ; insertion point, the NEXT field the object will be linked after, lives in
-; B and D rather than on the stack, and the real SP comes back at .commit.
+; DE rather than on the stack, and the real SP comes back at .commit.
+;
+; DE and not HL, because under IY's prefix a register-to-register move that
+; names H or L means IYH or IYL instead: there is no LD H,IYH, and moving IY
+; into HL would go through A at 24 T. LD D,IYH / LD E,IYL is 16. The indexed
+; loads, which do reach the real H and L, take them as the comparison's
+; scratch instead, and at the end one EX DE,HL hands the field to depth_link.
 ;
 ; .advance comes first and falls into the comparison, so a candidate that
 ; turns us away costs no jump back to the top. The field the scan starts
 ; from is read exactly like a candidate's NEXT, which is what loads the first
 ; candidate.
 depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
-					ld		b,h
-					ld		d,l		; the insertion point: the field we start from
 					push	hl
-					pop		iy		; and IY on it, for .advance to read
+					pop		iy		; IY on the field we start from, for .advance to read
+					ex		de,hl		; and DE on it too: the insertion point
 
 .advance:			ld		sp,iy
 					pop		iy		; IY -> the next candidate
@@ -315,29 +320,29 @@ depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 					and		a		; byte of zero is the end and nothing else
 					jr		z,.commit
 
-					; U -- nearer as U grows. E holds their half-width for both
+					; U -- nearer as U grows. H holds their half-width for both
 					; bounds, read once: a byte less than reading it twice, and 11 T
 					; quicker whenever the first bound does not settle the axis.
-.each:				ld		c,(iy+OBJ.U)		; c = their centre
-					ld		e,(iy+OBJ.SIZE_U)		; e = their half-width
-					ld		a,c
-					add		a,e		; a = their max
+.each:				ld		l,(iy+OBJ.U)		; l = their centre: an indexed load
+					ld		h,(iy+OBJ.SIZE_U)		; h = their half-width, into the real H and L
+					ld		a,l
+					add		a,h		; a = their max
 .u_min:				cp		0		; imm = our min + 1
 					jr		c,.nearer		; their max <= our min: we are nearer
-					ld		a,c
-					sub		e		; a = their min
+					ld		a,l
+					sub		h		; a = their min
 .u_max:				cp		0		; imm = our max
 					jr		nc,.advance		; their min >= our max: they are nearer
 
 					; V -- FURTHER as V grows, so the same two tests go the other way
-					ld		c,(iy+OBJ.V)
-					ld		e,(iy+OBJ.SIZE_V)
-					ld		a,c
-					add		a,e
+					ld		l,(iy+OBJ.V)
+					ld		h,(iy+OBJ.SIZE_V)
+					ld		a,l
+					add		a,h
 .v_min:				cp		0
 					jr		c,.advance		; their V is the lower: they are nearer
-					ld		a,c
-					sub		e
+					ld		a,l
+					sub		h
 .v_max:				cp		0
 					jr		nc,.nearer		; their V is the higher: we are nearer
 
@@ -345,22 +350,21 @@ depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 					; coordinate is the box's base and SIZE_Z its height, so the
 					; minimum is Z itself and there is nothing to subtract.
 					ld		a,(iy+OBJ.Z)
-					ld		c,a
+					ld		l,a
 					add		a,(iy+OBJ.SIZE_Z)
 .z_min:				cp		0		; imm = our Z + 1
 					jr		c,.nearer		; their top at or below our base: we are nearer
-					ld		a,c
+					ld		a,l
 .z_max:				cp		0		; imm = our Z + SIZE_Z
 					jr		nc,.advance		; their base at or above our top: they are nearer
 					; nothing separates them: interpenetrating, and nearer it is
 
-.nearer:			ld		b,iyh		; we go after this one, so it is the
-					ld		d,iyl		; insertion point now
+.nearer:			ld		d,iyh		; we go after this one, so it is the
+					ld		e,iyl		; insertion point now
 					jr		.advance
 
 .commit:			ld		sp,0		; patched: the real stack
-					ld		h,b
-					ld		l,d		; HL -> the field to link after
+					ex		de,hl		; HL -> the field to link after
 					; NB: fall through
 
 ; Splice IX in after a NEXT field. depth_insert_from falls into it once its

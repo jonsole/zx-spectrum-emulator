@@ -394,7 +394,7 @@ never reads them.
 
 Two positions are kept: **the cursor**, in IY, the candidate being compared;
 and **the insertion point**, the NEXT field the object will be linked after,
-held in B and D and starting as the field the scan began from.
+held in DE and starting as the field the scan began from.
 
 The cursor is advanced the way `objects_draw_all` walks the same list: SP is
 pointed at the candidate's NEXT field and `pop iy` loads the next one, 24
@@ -402,7 +402,15 @@ T-states against 54 for reading the two bytes through IY. Nothing can
 interrupt -- the engine runs with interrupts off for exactly this -- but
 nothing can be pushed while SP is borrowed either, which is why the insertion
 point lives in registers; the real SP is saved on entry and put back at
-`.commit`. The end of the list is a high byte of zero, since no record lives
+`.commit`.
+
+It is DE rather than HL because of the prefix: under IY's `FD`, a
+register-to-register move that names H or L means IYH or IYL instead, so
+there is no `ld h,iyh`, and moving IY into HL would go through A at 24 T
+against 16 for `ld d,iyh / ld e,iyl`. The indexed loads *do* reach the real H
+and L, so those are the comparison's scratch -- their centre in L, their
+half-width in H -- and a single `ex de,hl` at either end moves the field in
+and hands it to `depth_link`. The end of the list is a high byte of zero, since no record lives
 in page 0.
 
 `.advance` sits in front of the comparison and falls into it, so a candidate
@@ -670,10 +678,10 @@ everything the relink could change.
 | `object_list` | depth.s | the first object, or 0. Doubles as a NEXT field |
 | `sort_head` | depth.s | the NEXT field that starts the sorted run |
 | `depth_reset` | depth.s, a macro | sets both back to an empty list |
-| the insertion point | B and D, during a scan | the NEXT field the object will be linked after |
+| the insertion point | DE, during a scan | the NEXT field the object will be linked after |
 | six operands | inside depth_insert_from | the placed object's bounds, from depth_cmp_setup |
 
-The whole module is 271 bytes, four of them the two variables above.
+The whole module is 269 bytes, four of them the two variables above.
 
 ---
 
@@ -891,7 +899,7 @@ movers mostly sit out a turn, gains more than its scan alone would give.
 ### Walking the list with SP
 
 Then the walk itself: `ld sp,iy / pop iy` in place of two indexed loads, the
-insertion point moved off the stack into B and D to make that possible, and the
+insertion point moved off the stack into registers to make that possible, and the
 loop rotated so `.advance` falls into the comparison. Same method, one snapshot
 of the tree built twice with only depth.s different, the same rooms in the same
 order, `depth_insert_from` in T-states per turn:
@@ -906,3 +914,7 @@ order, `depth_insert_from` in T-states per turn:
 **-15%** on the scan against -20% priced, for 4 bytes. `$8C` is left out: its
 busy time per turn came out 238k on one run and 260k on the other, so the two
 saw different scenes and the pair says nothing.
+
+The insertion point then moved from B and D to DE, with H and L taking over
+as the comparison's scratch, so that one `ex de,hl` replaces two `ld`s at each
+end: 2 bytes and 4 T a scan, and nothing in the loop.
