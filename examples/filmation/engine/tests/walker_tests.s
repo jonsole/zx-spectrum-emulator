@@ -323,6 +323,16 @@ start:				ld		sp,$FE00
 					EXPECT_TAIL	CHARACTER_STATE, 1, "the state"
 					EXPECT_TAIL	CHARACTER_DZ, CHARACTER_JUMP_DZ, "the velocity"
 
+					; DZ + 1 is zero here, which is what A used to come back as.
+					TEST	"jump: sinking a unit a turn, A still says the key is down"
+					call	fresh
+					SET		CHARACTER_DZ, -1
+					ld		a,1
+					RUN		character_jump
+					EXPECT_TAIL	CHARACTER_STATE, 1, "the state"
+					EXPECT_TAIL	CHARACTER_DZ, CHARACTER_JUMP_DZ, "the velocity"
+					EXPECT_A	1, "A"
+
 					TEST	"jump: not twice"
 					call	fresh
 					SET		CHARACTER_STATE, 1

@@ -493,13 +493,15 @@ character_jump_held:	DB		0
 ; it. CHARACTER_DOOR is 0 to 3 for a doorway and $FF for none, so bit 7 is the
 ; test, which leaves A alone. Only the knight ever has one set, so this costs
 ; nobody else anything; player_step finds it before it reads the keys.
-; player_step stores A as the key afterwards, and A comes back non-zero
-; whenever it went in non-zero.
+; player_step stores A as the key afterwards, so A has to come back non-zero.
+; It used to be kept with a PUSH AF after it had been loaded with DZ + 1, which
+; is zero when he is sinking a unit a turn: that jump's first turn then read as
+; the key let go, and it came out a unit lower.
 ;
 ; In:  IX -> the legs record
 ;      A  = non-zero: the key is down
-; Out: nothing
-; Corrupts: AF, BC -- BC is the game's sound_jump
+; Out: A = non-zero still
+; Corrupts: F, BC -- BC is the game's sound_jump
 character_jump:		bit		0,(ix+CHARACTER_STATE)
 					ret		nz		; already in the air
 					bit		7,(ix+CHARACTER_DOOR)
@@ -511,9 +513,8 @@ character_jump:		bit		0,(ix+CHARACTER_STATE)
 					; makes the same test at $C956.
 					set		0,(ix+CHARACTER_STATE)
 					ld		(ix+CHARACTER_DZ),CHARACTER_JUMP_DZ
-					push	af		; player_step reads A back as the key
 					call	sound_jump		; handle_jump's audio_B441
-					pop		af
+					ld		a,1		; player_step reads A back as the key
 					ret
 
 
