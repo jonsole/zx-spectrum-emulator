@@ -234,3 +234,9 @@ profile {action: "get", lines: 10}         # compare
 
 Costs are timed off the emulated clock. ULA memory contention is not emulated
 yet, so code in contended memory costs what it would uncontended.
+
+For a game that paces itself rather than waiting for the frame, measure per
+turn instead: a breakpoint at the top of its loop makes each `run` one turn.
+The Knight Lore remake's notes work through that, pitfalls included --
+[Profiling a turn](../examples/filmation/knightlore/driving.md#7-profiling-a-turn),
+with `profile_turns.py` beside them.
