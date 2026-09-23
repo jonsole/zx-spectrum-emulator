@@ -629,8 +629,10 @@ collide_gather:		ld		a,TURN_PER_GATHER
 ; it gets the whole of it and not what is left after we have given way.
 ;
 ; We still walk our own step back either way, so the shove costs us the turn
-; and IY moves on its own next one. That is the game's, at loc_CBAF, and it is
-; why a block meeting the knight both stops and moves him.
+; and IY moves when its own update comes round -- later this turn if it comes
+; after us, as Knight Lore's table does behind the knight, or next turn if not.
+; That is the game's, at loc_CBAF, and it is why a block meeting the knight both
+; stops and moves him.
 ;
 ; Whether the shove comes off is not decided here. IY's own clamp has the say
 ; when its turn comes, and if it cannot go anywhere it simply does not.

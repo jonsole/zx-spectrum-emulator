@@ -564,8 +564,10 @@ player_repaint:     ld      de,0
 ; Corrupts: everything
 player_change_turn: ld      a,(player_touched)
                     or      a
-                    jp      nz,player_die
-                    ld      a,(move_tick)
+                    jr      z,.alive
+                    call    player_legs_short   ; he dies in two halves again
+                    jp      player_die
+.alive:             ld      a,(move_tick)
                     and     3
                     ret     nz
                     ld      a,(ix+OBJ.GFX)      ; audio_B472
@@ -573,6 +575,7 @@ player_change_turn: ld      a,(player_touched)
                     ld      hl,player_change
                     dec     (hl)
                     jr      nz,player_twinkle
+                    call    player_legs_short
                     ld      a,(ix+CHARACTER_LEGS)
                     xor     PLAYER_WOLF
                     call    player_form
@@ -597,6 +600,14 @@ player_changing:    ld      a,PLAYER_CHANGING
                     set     3,(ix+OBJ.FLAGS)    ; OBJ_SHARED_SHIFT
                     ld      (ix+CHARACTER_BODY+OBJ.GFX),PLAYER_HIDDEN_GFX
 
+                    ; With nothing on top, the twinkle is the whole of him, and
+                    ; it reaches up through where his body was. So his legs are
+                    ; sorted as the whole figure while it is up -- Knight Lore's
+                    ; legs are that all the time, H=23 -- or the block above
+                    ; the one he stands against is drawn over it.
+                    ld      a,COLLIDE_HEIGHT
+                    call    player_legs_height
+
                     ;; NB: fall through into player_twinkle
 
 
@@ -617,6 +628,22 @@ player_twinkle:     call    mover_rand
                     xor     OBJ_FLIP_H
                     ld      (ix+OBJ.FLAGS),a
                     jr      player_repaint
+
+
+; How tall his legs are to the depth sort, and his place in it again to match. A
+; step of nothing re-sorts nothing -- depth_step_upper returns early -- so a
+; repaint where he stands would leave him wherever the old height put him.
+;
+; player_legs_short puts back the height the legs have with a body on top of them.
+;
+; In:  A  = the height (player_legs_height only)
+;      IX -> the player's legs
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
+player_legs_short:  ld      a,CHARACTER_BODY_UP
+                    ;; NB: fall through into player_legs_height
+player_legs_height: ld      (ix+OBJ.SIZE_Z),a
+                    jp      depth_relink
 
 
 ; The knight's two graphic bases, for man or wolf. character_frame works each

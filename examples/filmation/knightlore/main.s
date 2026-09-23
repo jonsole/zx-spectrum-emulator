@@ -112,9 +112,18 @@ start:              di
                     ; sprite. Nothing needs them -- the keyboard is read
                     ; directly, in player_step, rather than through the ROM's
                     ; scan.
+                    ;
+                    ; He goes before everything else, as he does in the game:
+                    ; his two records are the first two slots of its object
+                    ; table at $5C08, and it updates them in slot order. It
+                    ; matters for a shove. The table he walks into takes his
+                    ; step and spends it in the same turn, so it is drawn a
+                    ; step clear of him. The other way round, it moved before
+                    ; he did, and he was drawn pressed up against it every turn,
+                    ; his legs under its top.
                     call    special_step
-                    call    movers_step
                     call    player_step
+                    call    movers_step
                     call    day_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
