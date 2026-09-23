@@ -197,9 +197,17 @@ function launchConfigFor(filePath, fileName, info, rom, debugInfo, stopOnEntry) 
 // The debug info beside a program: name.sld and a source of the same name.
 function debugInfoCandidates(filePath) {
   const stem = filePath.replace(/\.[^.\\/]*$/, '');
+  const exts = ['.asm', '.s', '.a80'];
+  // A build that writes into a folder of its own -- examples/filmation's
+  // output/ -- leaves the snapshot and the .sld there and the entry source
+  // one level up, so that is looked in too, after the snapshot's own folder.
+  const cut = Math.max(stem.lastIndexOf('/'), stem.lastIndexOf('\\'));
+  const dir = cut >= 0 ? stem.slice(0, cut) : '';
+  const up = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'));
+  const above = up >= 0 ? dir.slice(0, up) + stem.slice(cut) : null;
   return {
     sld: stem + '.sld',
-    asm: ['.asm', '.s', '.a80'].map((ext) => stem + ext)
+    asm: exts.map((ext) => stem + ext).concat(above ? exts.map((ext) => above + ext) : [])
   };
 }
 

@@ -188,7 +188,8 @@ ZX Spectrum** without opening it. Tick *Run programs as soon as they are
 opened* to skip the page.
 
 A `.sld` with the same name beside the program, and a source file with that
-name too, are loaded with it, so you can step through its source. A `.z80`
+name too -- beside it, or one folder up for a build that writes into an
+`output/` folder -- are loaded with it, so you can step through its source. A `.z80`
 file that is really assembly source opens as text, as usual.
 
 ### Snapshots in a launch configuration

@@ -201,7 +201,9 @@ they are opened* (`zxspectrum.program.runOnOpen`) skips the page.
   `roms/`: the 32K pair for a 128K snapshot (with `machine` set to match), the
   16K ROM otherwise.
 - **Source.** A `.sld` of the same name beside the file, with an `.asm`, `.s`
-  or `.a80` of that name too, is loaded with it.
+  or `.a80` of that name too, is loaded with it. The source may also be one
+  folder up, for a build that writes into an `output/` of its own, as
+  `examples/filmation` does.
 - **Running on.** The server stops every session on entry; `stopOnEntry:
   false` (a launch attribute anyone can use) has the extension continue from
   that one stop.

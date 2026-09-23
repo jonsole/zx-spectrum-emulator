@@ -171,7 +171,7 @@ function pageHtml(fileName, described, runOnOpen, picture) {
   <label><input type="checkbox" id="auto" ${runOnOpen ? 'checked' : ''}> Run programs as soon as they are opened</label>
   <p class="note">Running a program resets the emulator, and takes the place of any debug session already
   running. The emulator is started if it is not running. A <code>.sld</code> and a source file of the same
-  name beside this one are loaded with it, for stepping through its source.</p>`}
+  name beside this one (the source may be a folder up) are loaded with it, for stepping through its source.</p>`}
   </div>
 </div>
 <script nonce="${nonce}">
@@ -360,4 +360,4 @@ function activatePrograms(context) {
   );
 }
 
-module.exports = { activatePrograms };
+module.exports = { activatePrograms, romCandidates };

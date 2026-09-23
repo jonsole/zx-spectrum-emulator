@@ -106,8 +106,27 @@ test('the launch configuration loads the program the right way', () => {
     rom: '/r/48.rom', tape: '/g/t.tzx', tapeAutoStart: true
   });
   assert.deepStrictEqual(p.debugInfoCandidates('/g/prog.sna'),
-    { sld: '/g/prog.sld', asm: ['/g/prog.asm', '/g/prog.s', '/g/prog.a80'] });
+    { sld: '/g/prog.sld', asm: ['/g/prog.asm', '/g/prog.s', '/g/prog.a80',
+                                '/prog.asm', '/prog.s', '/prog.a80'] });
 });
+
+test('a build\'s output/ folder finds the source one level up', () => {
+  // examples/filmation: output/knightlore.z80 and .sld, knightlore.s above.
+  const c = p.debugInfoCandidates('C:\\g\\knightlore\\output\\knightlore.z80');
+  assert.strictEqual(c.sld, 'C:\\g\\knightlore\\output\\knightlore.sld');
+  assert.deepStrictEqual(c.asm.slice(3),
+    ['C:\\g\\knightlore\\knightlore.asm', 'C:\\g\\knightlore\\knightlore.s', 'C:\\g\\knightlore\\knightlore.a80']);
+  assert.deepStrictEqual(p.debugInfoCandidates('prog.sna').asm, ['prog.asm', 'prog.s', 'prog.a80']);
+});
+
+const FILMATION = path.join(__dirname, '..', '..', 'examples', 'filmation', 'knightlore');
+if (fs.existsSync(path.join(FILMATION, 'output', 'knightlore.sld'))) {
+  test('the Filmation build is found from its snapshot', () => {
+    const c = p.debugInfoCandidates(path.join(FILMATION, 'output', 'knightlore.z80'));
+    assert.ok(fs.existsSync(c.sld), c.sld);
+    assert.ok(c.asm.some((f) => fs.existsSync(f)), c.asm.join(', '));
+  });
+}
 
 // ---- the screen ----
 
