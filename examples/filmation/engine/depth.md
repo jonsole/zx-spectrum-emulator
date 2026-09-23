@@ -7,8 +7,9 @@ contracts, the traps, and an appendix on what the current design replaced.
 
 The short version, in four sentences. Every object in the room is on one linked
 list, furthest first, and the draw loop just walks it. Two objects are compared
-by their boxes, one axis at a time, and the first axis that separates them
-decides. An object that moves comes out of the list and is scanned back in
+by their boxes, one axis at a time: "they are in front" is taken from the first
+axis that separates them, "we are in front" only when every separating axis
+agrees. An object that moves comes out of the list and is scanned back in
 against the whole run; an object that has not moved costs one `OR`. There is no
 sort, and nothing keeps a score.
 
@@ -186,26 +187,38 @@ rather than a routine of its own: it has one caller, and the `CALL`, the `RET`
 and the `PUSH HL`/`POP IY` that handed the candidate over were 53 T-states of
 the ~140 the loop spent around each one. It compares **the object being
 placed** -- whose bounds depth_cmp_setup has hoisted into the loop's
-immediates -- with **the candidate in IY**, and answers one question: is the
-placed object nearer than the candidate? Each answer is a `JR` straight to
-where the loop goes next.
+immediates -- with **the candidate in IY**, and decides one thing: whether
+the placed object is *certainly* nearer than the candidate, and so goes after
+it. Each answer is a `JR` straight to where the loop goes next.
 
-### The first axis that separates decides
+### Further from the first axis, nearer only if certain
 
 On each axis the two boxes are in one of three states:
 
 | State | Test on U | Means |
 |---|---|---|
-| We are nearer | their max <= our min | answer: `jr .nearer` |
-| They are nearer | their min >= our max | answer: `jr .advance` |
+| We are nearer | their max <= our min | check the axes after this one, then `.nearer` |
+| They are nearer | their min >= our max | `jr .advance` |
 | They overlap | neither | this axis says nothing: ask the next |
 
-The moment an axis separates the two, the loop moves on; the axes after it are
-never read. On V the first two rows swap, because V grows away from the viewer.
+On V the first two rows swap, because V grows away from the viewer.
 
-If all three overlap the boxes interpenetrate, no order is right, and the loop
-falls out of the bottom to "nearer" -- which is where it would have left the
-object anyway.
+The two answers are not asked the same way, and that is the design. **"They
+are nearer" comes from the first axis that separates the boxes** and is acted
+on at once: all it does is move the scan on, so being wrong about it costs
+nothing. **"We are nearer" moves the insertion point, so it has to be
+certain**: the first axis that says it is checked against the axes after it,
+and if any of them says the opposite the pair is treated as unordered and the
+scan simply moves on.
+
+If all three overlap the boxes interpenetrate, no order is right, and nothing
+moves.
+
+Why "nearer" has to be certain is room `$A3`, and
+[the appendix](#first-axis-nearer-and-room-a3) has the scene: a far-off pillar
+whose axes disagreed with the block the knight stood on moved the insertion
+point past itself, and dragged the block past a pedestal it is certainly
+behind.
 
 ### Why U, then V, then Z
 
@@ -216,13 +229,14 @@ T-states in. That is what makes it affordable for every moving object to walk
 the whole run, which is what [section 6](#6-putting-an-object-in-depth_insert)
 does.
 
-**Z last, because when a floor axis and Z disagree the floor is what the eye
-goes by.** The knight pushing a table from behind is the case: his body's box
-starts at the table's top, so Z says the body is nearer by twelve while U says
-it is further by eleven. Ask Z first and the body is drawn over the table.
+**Z last, because it must never overrule the floor.** The knight pushing a
+table from behind is the case: his body's box starts at the table's top, so Z
+says the body is nearer by twelve while U says it is further by eleven. U
+answers first, "they are nearer", and the body goes in behind the table. Ask Z
+first and the body is drawn over it.
 
-**U before V costs nothing**, which is worth showing because it looks as though
-it should. Suppose U separates with us nearer and V separates the other way:
+**The two floor axes can never disagree about a pair you can see**, which is
+worth showing because it is what makes leaving such a pair unordered safe. Suppose U separates with us nearer and V separates the other way:
 
 ```
 U separated, we nearer:    dU >= SIZE_U(ours) + SIZE_U(theirs)
@@ -237,35 +251,53 @@ d(screenX) = dU + dV >= (SIZE_U + SIZE_V)ours + (SIZE_U + SIZE_V)theirs
 
 apart across the screen. A box's half-width in screenX is exactly
 `SIZE_U + SIZE_V`, so that sum **is** the distance at which the two sprites
-stop overlapping. Two floor axes can never disagree about a pair you can see.
+stop overlapping.
 
-Their order still matters, but only through a third object standing between
-them. Room `$B3` is that case, and [section 13](#13-tests) has it.
+So nothing is ever drawn wrong by leaving such a pair unordered -- and
+something was drawn wrong by ordering it. Its order does matter to a third
+object standing between the two, and a guess about a pair nobody can see is
+exactly what must not be allowed to push that third object about.
 
 ### The exits
 
-Every answer is a `CP` and a conditional `JR` to one of the loop's two
-continuations. On V the two go the other way round, because V runs nearer as
-it *falls*:
+Every answer is a `CP` and a conditional `JR`. On V the two go the other way
+round, because V runs nearer as it *falls*:
 
 ```
 .u_min:   cp   <our min + 1>
-          jr   c,.nearer          ; their max <= our min: we are nearer
+          jr   c,.u_near          ; their max <= our min: nearer, if V and Z agree
 .u_max:   cp   <our max>
           jr   nc,.advance        ; their min >= our max: they are nearer
 
 .v_min:   cp   <our min + 1>
           jr   c,.advance         ; their V is the lower, so THEY are nearer
 .v_max:   cp   <our max>
-          jr   nc,.nearer
+          jr   nc,.v_near         ; nearer, if Z agrees
 
+.z_min:   cp   <our Z + 1>
+          jr   c,.nearer          ; their top at or below our base
+          jr   .advance           ; above us, or interpenetrating: nothing moves
+
+.u_near:  ld   a,(iy+V) / add a,(iy+SIZE_V)
+          ld   hl,.v_min+1 / cp (hl)
+          jr   c,.advance         ; V says they are nearer: the axes disagree
+.v_near:  ld   a,(iy+Z)
 .z_max:   cp   <our Z + SIZE_Z>
-          jr   nc,.advance        ; their base at or above our top
-          ; fall through: interpenetrating, and nearer it is
-.nearer:  pop  de
-          push iy                 ; the insertion point is this candidate now
-.advance: ...
+          jr   nc,.advance        ; Z says they are above: the axes disagree
+.nearer:  ld   d,iyh / ld e,iyl   ; certainly nearer: the insertion point is here
+          jr   .advance
 ```
+
+Only the contradicting test is needed at each check. After U says nearer, V
+overlapping and V agreeing both leave the answer standing, so only "V says
+they are nearer" has to be asked; the same goes for Z. Z's check is the whole
+of what used to be the main loop's `.z_max` test -- the main loop's Z needs
+only `.z_min` now, since both of the other outcomes walk on -- and V's check
+reads its bound back out of `.v_min`'s own operand rather than having setup
+patch it a second time.
+
+The checks cost the "nearer" path about 90 T-states; "further", the common
+answer, costs what it did.
 
 When the comparison was a routine the same answers had to come back in the
 carry, and which way round it meant was decided by where `CP` leaves it: right
@@ -279,18 +311,20 @@ jumps to the other target.
 Nearer along U.  Placed at U 60, candidate at U 40, both half-width 5.
 
   U: their max = 40 + 5 = 45,  our min = 60 - 5 = 55
-     45 <= 55, so we are nearer  ->  carry set, and V and Z are never read
+     45 <= 55, so we are nearer -- if V and Z agree
+  V, Z: the same, so they overlap and nothing contradicts  ->  .nearer
 ```
 
 ```
 The floor axes disagreeing.  Placed at U 70 V 90, candidate at U 40 V 50,
 all half-widths 5.
 
-  U: their max 45 <= our min 65  ->  we are nearer, carry set, done.
+  U: their max 45 <= our min 65  ->  we are nearer, if V and Z agree
+  V: their max 55 <= our min 85   ->  they are nearer: the axes disagree
+     ->  .advance, and the insertion point stays where it was
 
-V would have said the opposite. It is never asked -- and the two sprites are
-(70 + 90) - (40 + 50) = 70 apart across a screen where each is 10 half-wide,
-so no picture shows the pair.
+The pair is left unordered -- and the two sprites are (70 + 90) - (40 + 50) =
+70 apart across a screen where each is 10 half-wide, so no picture shows it.
 ```
 
 ```
@@ -299,7 +333,7 @@ the table he is pushing at U 112 Z 128 (half 6, height 12).
 
   U: their max = 118, our min + 1 = 97.   118 < 97?   no.
      their min = 106, our max = 106.      106 < 106?  no.
-     So their min >= our max: they are nearer  ->  carry clear.
+     So their min >= our max: they are nearer  ->  .advance.
 
 Z, which would have called the body nearer by twelve, is never reached.
 ```
@@ -365,11 +399,14 @@ the cycle is the only thing that order is wrong about. It is *not* harmless to
 a scan that stops at the first candidate it is behind, because stopping is
 exactly an appeal to transitivity -- everything after this must be nearer too.
 
-**The comparison needs no notion of how sure it is.** It used to have one, and
-the only thing that ever read it was a scan deciding whether it might stop.
-With no early exit there is nothing to tell: both ways of being further mean
-the same thing, keep walking. That is what lets it leave from its first
-separating axis rather than weighing all three.
+**Only a certain "nearer" may move anything.** With no early exit, the
+insertion point is wherever the *last* "nearer" left it, so a single wrong
+"nearer" late in the run can carry the object past everything it met before --
+including things it is certainly behind. A pair whose axes disagree gives no
+real answer, only whichever axis happened to be asked first, so it must not be
+allowed to move the insertion point. Being wrong about "further" is harmless,
+since it only moves the scan on, and so that half is still taken from the first
+separating axis.
 
 So the order the list holds is not "sorted". It is an order in which the
 comparison was asked about every pair on the way past, and resolved as far as
@@ -422,14 +459,14 @@ any other, so reading it as one loads the first candidate.
 at     = start
 cursor = *start
 while cursor != 0:
-    if placed is nearer than cursor:
+    if placed is CERTAINLY nearer than cursor:
         at = cursor                     # we go after this one
     cursor = cursor.NEXT
 link the placed object after at
 ```
 
-The object ends up just after **the last candidate it was nearer than**, and
-the whole run is always walked. One branch, no early exit --
+The object ends up just after **the last candidate it was certainly nearer
+than**, and the whole run is always walked. One branch, no early exit --
 [section 5](#5-why-there-is-no-sort) is why.
 
 ### Worked example
@@ -681,16 +718,17 @@ everything the relink could change.
 | the insertion point | DE, during a scan | the NEXT field the object will be linked after |
 | six operands | inside depth_insert_from | the placed object's bounds, from depth_cmp_setup |
 
-The whole module is 269 bytes, four of them the two variables above.
+The whole module is 284 bytes, four of them the two variables above.
 
 ---
 
 ## 12. Traps
 
-- **Never insert an object that is already in the list.** It compares against
-  itself, the two boxes interpenetrate, and the scan can pick the object as its
-  own insertion point and link its NEXT to itself. The draw loop then never
-  ends. `start` in knightlore/main.s has a note about this happening after a
+- **Never insert an object that is already in the list.** Linking it a second
+  time leaves its old neighbours pointing at it and its new ones pointing past
+  them, and when "interpenetrating" still counted as nearer, the object compared
+  against itself could become its own insertion point and link its NEXT to
+  itself -- after which the draw loop never ends. `start` in knightlore/main.s has a note about this happening after a
   failed room build.
 
 - **The scan is only valid after depth_cmp_setup for the object being placed.**
@@ -725,7 +763,7 @@ The whole module is 269 bytes, four of them the two variables above.
 ## 13. Tests
 
 [tests/depth_tests.s](tests/depth_tests.s) assembles depth.s on its own, with
-no other engine code, and runs 44 tests on the C++ Z80 core. It builds its
+no other engine code, and runs 45 tests on the C++ Z80 core. It builds its
 lists with its own helpers, so no test depends on the code it is testing. It
 covers:
 
@@ -735,9 +773,14 @@ covers:
 - **the comparison**, by inserting one record into a list holding another and
   seeing which side it lands: on every axis in both directions -- which checks
   which axis got asked as much as what it answered, since a later axis
-  answering at all would mean an earlier one had wrongly separated. Plus a zero-height box on top, two
-  agreeing axes, the floor axes disagreeing either way round, room `$B3`'s pair
-  both ways, above-and-behind, and interpenetration.
+  answering at all would mean an earlier one had wrongly separated. Plus a
+  zero-height box on top, two agreeing axes, above-and-behind, and the cases
+  that must come out *unordered*: the floor axes disagreeing either way round,
+  room `$B3`'s pair both ways, and interpenetration.
+- **room `$A3`'s scene**, three records with the room's own boxes: the block the
+  knight stood on, the spiked ball's pedestal certainly in front of it, and a
+  pillar across the room whose axes disagree with the block. The block has to
+  go in front of both. It fails on the first-axis rule.
 - **depth_insert** into an empty list, before, between and after, and after a
   background object.
 - **depth_relink** on an object that has not moved, one moved past either
@@ -751,10 +794,11 @@ covers:
   `$B4` stepping forward onto the next block and back off it, with the room's
   own boxes.
 
-Room `$B3` is the pair worth knowing about: a spike and a block, 16 apart along
+Room `$B3` is a pair worth knowing about: a spike and a block, 16 apart along
 U and 16 along V, with a ball between them that is certainly nearer than the
-spike and certainly further than the block. Get those two the wrong way round
-and the ball has nowhere in the list it can go.
+spike and certainly further than the block. Their axes disagree, so neither way
+round are they ordered -- and with nothing forcing the pair, the ball's own
+certain answers are what place it.
 
 [tests/pair_sort_tests.s](tests/pair_sort_tests.s) runs the two-part figures'
 real moves against the real sort: the knight through character_move and a guard
@@ -767,13 +811,11 @@ step checks the whole list for a **certain inversion**: an object before one
 that every separating axis agrees it is in front of.
 
 That "certain" is the suite's own reading of the two boxes, in
-`certainly_nearer`, and deliberately not the sort's. The scan answers from
-the first axis that separates the pair and has no notion of how sure it is;
-what a picture can be wrong about is narrower -- a pair that *every* separating
-axis agrees on. Where the axes disagree the sort may settle it either way and
-no test should hold it to one. Asking the boxes rather than the code under test
-is also what let the suite survive a change to the comparison, which is exactly
-what it had to do.
+`certainly_nearer`, and deliberately not the sort's -- even though the scan now
+asks the same question before it moves anything. What a picture can be wrong
+about is a pair that *every* separating axis agrees on; where the axes disagree
+no test should hold the sort to one order. Asking the boxes rather than the code
+under test is also what let the suite survive two changes to the comparison.
 
 On the code before the legs-and-body fix it finds inversions for both figures
 in both walks towards the viewer, which is where the legs have to move later in
@@ -918,3 +960,35 @@ saw different scenes and the pair says nothing.
 The insertion point then moved from B and D to DE, with H and L taking over
 as the comparison's scratch, so that one `ex de,hl` replaces two `ld`s at each
 end: 2 bytes and 4 T a scan, and nothing in the loop.
+
+### First-axis "nearer", and room $A3
+
+Taking both answers from the first axis that separates the boxes was wrong,
+and the live game showed it. In room `$A3` the block the knight stood on was
+drawn over the spiked ball's pedestal, which is certainly in front of it: V
+146..160 against 130..142, U and Z overlapping.
+
+The block's scan went on past the pedestal, as it should, and reached a thin
+pillar on the far side of the room: U 112..118 against the block's 119..133, V
+54..64 against 146..160. U called the block nearer and V called it further;
+first-axis let U win, the insertion point moved past the pillar -- and so past
+the pedestal ahead of it -- and the block went in after both. The neighbour-
+check design had never shown it, because its scan stopped at the first
+certain "further", the pedestal. Taking that stop out removed the thing that
+had been keeping far-off guesses from dragging anything.
+
+Before the fix, each candidate rule was replayed on the paused game's own
+list, every object re-inserted six times over:
+
+| rule | visible inversions | hidden |
+|---|---|---|
+| first axis decides, full scan | 3 | 8 |
+| **only a certain "nearer" moves the insertion point** | **0** | **0** |
+| first axis, but stop at a certain "further" (the old stop) | 0 | 0, but 6 on the way |
+| both of the last two | 0 | 0 |
+| first axis, only between sprites that overlap on screen | 0 | 53 |
+
+The second is what the scan does now. It costs the "nearer" path about 90 T
+and the module 15 bytes, 269 to 284, which left Knight Lore 19 bytes free
+below the stack. The `$A3` test in depth_tests.s is the scene with the room's
+own boxes, and it fails on the rule before.
