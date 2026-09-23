@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ZX Spectrum Tape</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px var(--vscode-font-family, system-ui, sans-serif); color: var(--vscode-foreground);
+           background: var(--vscode-editor-background); padding: 20px 24px; box-sizing: border-box;
+           overflow: auto; }
+    h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+    h2 { font-size: 13px; font-weight: normal; opacity: .75; margin: 0 0 16px; font-variant-numeric: tabular-nums; }
+    h3 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; display: flex; align-items: center; gap: 8px; }
+    h3 .note { font-weight: normal; opacity: .6; font-size: 12px; }
+    h3 .spacer { flex: 1 1 auto; }
+    button { font: inherit; padding: 5px 16px; border: 0; border-radius: 2px; cursor: pointer;
+             color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
+    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+    button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+    button.small { padding: 2px 10px; font-size: 12px; }
+    button:disabled { opacity: .4; cursor: default; }
+    select { font: inherit; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background);
+             border: 1px solid var(--vscode-dropdown-border, rgba(128,128,128,.4)); padding: 2px 4px; }
+    .buttons { display: flex; gap: 10px; align-items: center; }
+    .buttons .state { opacity: .75; }
+
+    .layout { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+    figure { margin: 0; flex: none; }
+    #screen { display: block; width: 304px; height: 240px; image-rendering: pixelated;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+    figcaption { margin-top: 10px; display: flex; gap: 8px; }
+    .info { flex: 1 1 360px; min-width: 300px; max-width: 640px; }
+    .line { opacity: .85; line-height: 1.6; font-variant-numeric: tabular-nums; }
+    .hint { opacity: .6; font-size: 12px; line-height: 1.5; }
+
+    .row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+    .row .what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .what b { font-weight: 600; }
+    .row .cost { flex: none; opacity: .7; font-variant-numeric: tabular-nums; }
+    .row .drop { flex: none; border: 0; background: none; color: inherit; cursor: pointer; opacity: .5;
+                 padding: 0 4px; font-size: 14px; line-height: 1; }
+    .row .drop:hover { opacity: 1; }
+    .row.missing .what { color: var(--vscode-errorForeground, #f48771); }
+    .empty { opacity: .65; line-height: 1.5; }
+    input.address { font: inherit; font-variant-numeric: tabular-nums; width: 6em; padding: 2px 5px;
+                    color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+                    border: 1px solid var(--vscode-input-border, rgba(128,128,128,.4)); border-radius: 2px; }
+    input.address.invalid { border-color: var(--vscode-inputValidation-errorBorder, #be1100); }
+    .fields { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 10px; align-items: center; }
+
+    #map { display: block; width: 100%; height: 22px; margin-top: 2px; }
+    #mapLegend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; opacity: .75; margin-top: 4px; }
+    #mapLegend span::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 4px;
+                              background: var(--swatch); vertical-align: -1px; }
+    #mapHover { font-size: 12px; opacity: .7; min-height: 1.5em; font-variant-numeric: tabular-nums; }
+
+    .problem { line-height: 1.5; }
+    .error { color: var(--vscode-errorForeground, #f48771); }
+    .warning { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .ok { opacity: .7; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <figure>
+    <canvas id="screen" width="304" height="240"></canvas>
+    <figcaption>
+      <button id="designScreen" class="primary" title="Draw the order the picture loads in, in a window of its own">Design screen...</button>
+      <button id="pick" title="Choose the .scr, .tap, .sna, .z80 or .tzx the loading screen comes from">Picture...</button>
+    </figcaption>
+  </figure>
+
+  <div class="info">
+    <h1 id="name"></h1>
+    <h2 id="summary"></h2>
+    <div class="buttons">
+      <button id="buildRun" class="primary" title="Build the tape, then load it into the emulator">Build &amp; Run</button>
+      <button id="build" title="Save the design and build the tape with scripts/build_tape.py">Build</button>
+      <span class="state" id="building"></span>
+    </div>
+
+    <h3>Loading scheme</h3>
+    <select id="scheme" title="How the tape loads"></select>
+    <div class="hint" id="schemeNote"></div>
+
+    <h3>Loading screen</h3>
+    <div class="line" id="screenLine"></div>
+
+    <h3>Blocks <span class="note" id="blockCount"></span><span class="spacer"></span>
+      <button class="small" id="addBlock" title="Load a file into memory at an address of your choosing">Add file...</button>
+      <button class="small" id="importTape" title="Take a standard .tap or .tzx's CODE files, loading screen and USR address">Import tape...</button>
+    </h3>
+    <div id="blocks"></div>
+    <div class="empty" id="blocksEmpty">After the screen, the tape loads these in order, each at its own address.</div>
+
+    <h3>Start</h3>
+    <div class="fields">
+      <label for="entry">Jump to</label>
+      <input id="entry" class="address" spellcheck="false" placeholder="$8000">
+      <span class="hint">where the program starts once everything has loaded</span>
+      <label for="stack">Stack at</label>
+      <input id="stack" class="address" spellcheck="false">
+      <span class="hint" id="stackHint"></span>
+      <label for="loaderAddress" id="loaderLabel">Loader at</label>
+      <input id="loaderAddress" class="address" spellcheck="false">
+      <span class="hint" id="loaderHint">anywhere in $8000-$FFFF; it is 433 bytes</span>
+    </div>
+
+    <h3>Memory</h3>
+    <canvas id="map" height="22"></canvas>
+    <div id="mapLegend"></div>
+    <div id="mapHover"></div>
+
+    <h3>Checks</h3>
+    <div id="problems"></div>
+  </div>
+</div>
+
+<script>
+    // tape_model.js -- the schemes, the files, what they cost and whether they
+    // can load -- is inlined here by the extension so the pages and the tests
+    // share it.
+    /*@tape_model.js@*/
+
+    const vscode = acquireVsCodeApi();
+
+    const PALETTE = [
+      [0, 0, 0], [0, 0, 192], [192, 0, 0], [192, 0, 192],
+      [0, 192, 0], [0, 192, 192], [192, 192, 0], [192, 192, 192],
+      [0, 0, 0], [0, 0, 255], [255, 0, 0], [255, 0, 255],
+      [0, 255, 0], [0, 255, 255], [255, 255, 0], [255, 255, 255]
+    ];
+
+    let fileName = '';
+    let tape = emptyTape();
+    let blockInfo = [];        // parallel to tape.blocks: { name, length (or null), problem, data }
+    let screen = null;         // the picture's 6912 bytes, when there is one
+    let screenFile = null;
+    let picture = '';
+    let order = [];
+    let fastRomSeconds = null; // zx-tape-loader's BASIC bootstrap at ROM speed, when its loader.tap was found
+    let fileProblems = [];
+    let building = '';
+
+    const lengths = () => blockInfo.map((info) => info.length);
+    const scheme = () => SCHEMES[tape.scheme] || SCHEMES[DEFAULT_SCHEME];
+
+    function bytesOf(text) {
+      return text ? Uint8Array.from(atob(text), (c) => c.charCodeAt(0)) : null;
+    }
+
+    // --- what it costs -------------------------------------------------------
+
+    // A standard ROM tape's time depends on its bytes -- a 1 takes twice as
+    // long as a 0 -- so it is timed from the .tap the builder will write.
+    function romSeconds() {
+      const data = blockInfo.map((info) => bytesOf(info.data));
+      return romTapeSeconds(romTap(tape, screen, data, fileName.replace(/\.tape\.json$/i, '')));
+    }
+
+    function screenBits() {
+      return totalBits(screen ? patternRuns(screen, order) : []);
+    }
+
+    function blockSeconds(i) {
+      const length = blockInfo[i] && blockInfo[i].length;
+      if (!length) {
+        return null;
+      }
+      if (tape.scheme === 'rom') {
+        const data = bytesOf(blockInfo[i].data);
+        const block = tape.blocks[i];
+        return data ? romTapeSeconds(Uint8Array.from(tapBlock(0, codeHeader(block.name, data.length, block.address ?? 0))
+          .concat(tapBlock(0xFF, data)))) : null;
+      }
+      return seconds(blockBits(length));
+    }
+
+    // The whole tape's time, and what it is made of.
+    function timing() {
+      if (tape.scheme === 'rom') {
+        return { total: romSeconds(), about: '', parts: 'the standard ROM loader, at normal speed' };
+      }
+      const fast = fastSeconds(screenBits(), lengths());
+      // The BASIC bootstrap is timed from the loader.tap that runs at the top of
+      // RAM on its own stack; a moved loader or stack has other addresses in it, and at ROM speed a 1 bit
+      // takes twice as long as a 0, so its time is only nearly that.
+      const about = (tape.loaderAddress !== null && tape.loaderAddress !== LOADER_DEFAULT) ||
+                    (tape.stack !== null && tape.stack !== STACK_DEFAULT) ? 'about ' : '';
+      if (fastRomSeconds === null) {
+        return { total: fast, about: '', parts: 'after the BASIC bootstrap' };
+      }
+      return { total: fastRomSeconds + fast, about,
+               parts: 'BASIC ' + about + fastRomSeconds.toFixed(1) + ' s, then ' + fast.toFixed(1) + ' s fast' };
+    }
+
+    // --- drawing ------------------------------------------------------------
+
+    // The picture as it will be once loaded, in the black border the loader
+    // leaves -- what the program view shows for a snapshot or a tape.
+    function drawScreen() {
+      const canvas = document.getElementById('screen');
+      const ctx = canvas.getContext('2d');
+      const image = ctx.createImageData(304, 240);
+      for (let i = 0; i < 304 * 240; i++) {
+        image.data[i * 4 + 3] = 255;
+      }
+      if (screen) {
+        for (let y = 0; y < 192; y++) {
+          for (let x = 0; x < 256; x++) {
+            const attr = screen[BITMAP_BYTES + (y >> 3) * 32 + (x >> 3)];
+            const bright = attr & 0x40 ? 8 : 0;
+            const set = (screen[pixelAddress(x >> 3, y)] >> (7 - (x & 7))) & 1;
+            image.data.set(PALETTE[set ? (attr & 7) | bright : ((attr >> 3) & 7) | bright],
+                           ((y + 24) * 304 + x + 24) * 4);
+          }
+        }
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+
+    function draw() {
+      const time = timing();
+      document.getElementById('name').textContent = fileName;
+      document.getElementById('summary').textContent = 'Tape for the ZX Spectrum 48K · ' + time.about +
+        time.total.toFixed(1) + ' s · ' + time.parts;
+
+      const select = document.getElementById('scheme');
+      if (!select.options.length) {
+        for (const key of Object.keys(SCHEMES)) {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = SCHEMES[key].title;
+          select.appendChild(option);
+        }
+      }
+      select.value = tape.scheme;
+      document.getElementById('schemeNote').textContent = scheme().description;
+
+      const line = document.getElementById('screenLine');
+      if (!screenFile) {
+        line.textContent = 'None: the tape goes straight to its blocks.';
+      } else if (scheme().screenOrder) {
+        line.textContent = screenFile + ' · ' + (picture || 'no picture') + ' · ' + order.length +
+          (order.length === 1 ? ' rectangle' : ' rectangles') + ' · ' + seconds(screenBits()).toFixed(2) + ' s';
+      } else {
+        line.textContent = screenFile + ' · ' + (picture || 'no picture') +
+          ' · loaded whole with LOAD ""SCREEN$, in the ROM\'s own order';
+      }
+      const design = document.getElementById('designScreen');
+      design.disabled = !scheme().screenOrder;
+      design.title = scheme().screenOrder ? 'Draw the order the picture loads in, in a window of its own'
+        : 'The standard ROM loader loads a screen in its own fixed order: there is no order to design';
+
+      drawScreen();
+      drawBlocks();
+      const movable = scheme().loaderAddress;
+      for (const id of ['loaderLabel', 'loaderAddress', 'loaderHint']) {
+        document.getElementById(id).classList.toggle('hidden', !movable);
+      }
+      for (const id of ['entry', 'stack', 'loaderAddress']) {
+        const input = document.getElementById(id);
+        if (document.activeElement !== input) {
+          input.value = tape[id] === null ? '' : formatAddress(tape[id]);
+          input.classList.remove('invalid');
+        }
+      }
+      document.getElementById('loaderAddress').placeholder = formatAddress(LOADER_DEFAULT) + ' (top)';
+      // What an empty stack box means: the fast loader's own CLEAR, just above
+      // its BASIC, or the ROM loader's, just below the lowest block.
+      const stackBox = document.getElementById('stack');
+      const hint = document.getElementById('stackHint');
+      if (tape.scheme === 'rom') {
+        const own = romClear(Object.assign({}, tape, { stack: null }), lengths());
+        stackBox.placeholder = own === null ? '' : formatAddress(own) + ' (below)';
+        hint.textContent = "the BASIC loader's CLEAR: the stack is just under it while the tape loads, " +
+          'and the program starts on it; empty for just below the lowest block';
+      } else {
+        stackBox.placeholder = formatAddress(STACK_DEFAULT) + ' (BASIC)';
+        hint.textContent = "the BASIC loader's CLEAR: the loader, and then the program, run on the stack " +
+          'just under it; empty for just above the BASIC, where nothing can load over ' +
+          formatAddress(LIVE_STACK[0]) + '-' + formatAddress(LIVE_STACK[1] - 1);
+      }
+      drawMap();
+      drawChecks();
+    }
+
+    function drawBlocks() {
+      const list = document.getElementById('blocks');
+      document.getElementById('blockCount').textContent = tape.blocks.length
+        ? tape.blocks.length + (tape.blocks.length === 1 ? ' block' : ' blocks') : '';
+      document.getElementById('blocksEmpty').classList.toggle('hidden', tape.blocks.length > 0);
+      list.textContent = '';
+      tape.blocks.forEach((block, i) => {
+        const info = blockInfo[i] || { length: null };
+        const row = document.createElement('div');
+        row.className = 'row' + (info.length === null ? ' missing' : '');
+        const address = document.createElement('input');
+        address.className = 'address';
+        address.spellcheck = false;
+        address.title = 'Where this block loads';
+        address.value = block.address === null ? '' : formatAddress(block.address);
+        bindAddress(address, () => block.address, (value) => { block.address = value; });
+        const what = document.createElement('span');
+        what.className = 'what';
+        const name = document.createElement('b');
+        name.textContent = block.name;
+        what.appendChild(name);
+        what.appendChild(document.createTextNode(' · ' + block.file +
+          (info.length !== null ? ', ' + info.length + ' bytes' : '')));
+        what.title = info.problem || (block.file + (block.offset ? ', from byte ' + block.offset : ''));
+        const cost = document.createElement('span');
+        cost.className = 'cost';
+        const time = blockSeconds(i);
+        cost.textContent = time === null ? '' : time.toFixed(2) + ' s';
+        const drop = document.createElement('button');
+        drop.className = 'drop';
+        drop.textContent = '×';
+        drop.title = 'Take this block off the tape';
+        drop.addEventListener('click', () => {
+          tape.blocks.splice(i, 1);
+          blockInfo.splice(i, 1);
+          commit();
+        });
+        row.appendChild(address);
+        row.appendChild(what);
+        row.appendChild(cost);
+        row.appendChild(drop);
+        list.appendChild(row);
+      });
+    }
+
+    // An address box: a good address commits as it is typed; anything else
+    // shows as invalid and commits nothing, and leaving the box puts it back.
+    function bindAddress(input, get, set) {
+      const show = () => {
+        const value = get();
+        input.value = value === null || value === undefined ? '' : formatAddress(value);
+        input.classList.remove('invalid');
+      };
+      input.addEventListener('input', () => {
+        const value = parseAddress(input.value);
+        input.classList.toggle('invalid', Number.isNaN(value));
+        if (!Number.isNaN(value) && value !== get()) {
+          set(value);
+          commit(true);
+        }
+      });
+      input.addEventListener('change', show);
+      input.addEventListener('blur', show);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          input.blur();
+        }
+      });
+    }
+    bindAddress(document.getElementById('entry'), () => tape.entry, (value) => { tape.entry = value; });
+    bindAddress(document.getElementById('stack'), () => tape.stack, (value) => { tape.stack = value; });
+    bindAddress(document.getElementById('loaderAddress'), () => tape.loaderAddress,
+                (value) => { tape.loaderAddress = value; });
+
+    document.getElementById('scheme').addEventListener('change', (event) => {
+      tape.scheme = event.target.value;
+      commit();
+    });
+
+    const MAP_COLOURS = {
+      rom: 'rgba(128,128,128,.55)', screen: '#3d7bd9', stack: '#e0873a', loader: '#b05ce0', block: '#3fb96a'
+    };
+
+    function drawMap() {
+      const map = document.getElementById('map');
+      const width = map.clientWidth || 300;
+      const ratio = window.devicePixelRatio || 1;
+      map.width = width * ratio;
+      map.height = 22 * ratio;
+      const ctx = map.getContext('2d');
+      ctx.scale(ratio, ratio);
+      ctx.fillStyle = 'rgba(128,128,128,.12)';
+      ctx.fillRect(0, 2, width, 18);
+      const scale = width / 0x10000;
+      const spans = memoryMap(tape, lengths(), !!screenFile);
+      for (const span of spans) {
+        ctx.fillStyle = MAP_COLOURS[span.kind];
+        ctx.fillRect(span.start * scale, span.kind === 'block' ? 5 : 2,
+                     Math.max(1, (span.end - span.start) * scale), span.kind === 'block' ? 12 : 18);
+      }
+      // Anything a block would load over that must survive the load.
+      ctx.fillStyle = '#ff3b30';
+      const vital = spans.filter((s) => s.kind !== 'block' && s.kind !== 'screen');
+      for (const span of spans.filter((s) => s.kind === 'block')) {
+        for (const other of vital) {
+          const start = Math.max(span.start, other.start);
+          const end = Math.min(span.end, other.end);
+          if (start < end) {
+            ctx.fillRect(start * scale, 0, Math.max(2, (end - start) * scale), 22);
+          }
+        }
+      }
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.fillRect(0x8000 * scale, 0, 1, 22);
+
+      const legend = document.getElementById('mapLegend');
+      legend.textContent = '';
+      const kinds = tape.scheme === 'rom'
+        ? [['rom', 'ROM'], ['screen', 'screen'], ['stack', 'BASIC loader and stack'], ['block', 'blocks']]
+        : [['rom', 'ROM'], ['screen', 'screen'], ['stack', 'stack'], ['loader', 'loader'], ['block', 'blocks']];
+      for (const [kind, text] of kinds) {
+        const item = document.createElement('span');
+        item.style.setProperty('--swatch', MAP_COLOURS[kind]);
+        item.textContent = text;
+        legend.appendChild(item);
+      }
+    }
+
+    document.getElementById('map').addEventListener('mousemove', (event) => {
+      const rect = event.target.getBoundingClientRect();
+      const address = Math.max(0, Math.min(0xFFFF, Math.floor((event.clientX - rect.left) / rect.width * 0x10000)));
+      const here = memoryMap(tape, lengths(), !!screenFile).filter((s) => s.start <= address && address < s.end)
+        .map((s) => (s.kind === 'block' ? 'block "' + s.label + '"' : s.label) + ' (' + formatAddress(s.start) + '-' +
+                    formatAddress(s.end - 1) + ')');
+      document.getElementById('mapHover').textContent = formatAddress(address) +
+        (address >= 0x4000 && address < 0x8000 ? ', contended' : '') + (here.length ? ': ' + here.join(', ') : '');
+    });
+    document.getElementById('map').addEventListener('mouseleave', () => {
+      document.getElementById('mapHover').textContent = '';
+    });
+
+    function drawChecks() {
+      const verdict = checkTape(tape, lengths(), !!screenFile);
+      const warnings = fileProblems.concat(verdict.warnings);
+      if (screen && scheme().screenOrder) {
+        const cover = coverage(screen, order);
+        if (cover.missed) {
+          warnings.push(cover.missed + (cover.missed === 1 ? ' cell of the picture has' : ' cells of the picture have') +
+                        ' something in it that the screen\'s order never loads');
+        }
+      }
+      const list = document.getElementById('problems');
+      list.textContent = '';
+      for (const [items, kind, mark] of [[verdict.errors, 'error', '✖ '], [warnings, 'warning', '⚠ ']]) {
+        for (const text of items) {
+          const line = document.createElement('div');
+          line.className = 'problem ' + kind;
+          line.textContent = mark + text.charAt(0).toUpperCase() + text.slice(1);
+          list.appendChild(line);
+        }
+      }
+      if (!list.children.length) {
+        const line = document.createElement('div');
+        line.className = 'problem ok';
+        line.textContent = 'Nothing in the way: this tape should load.';
+        list.appendChild(line);
+      }
+      for (const id of ['build', 'buildRun']) {
+        document.getElementById(id).disabled = verdict.errors.length > 0 || !!building;
+      }
+      document.getElementById('building').textContent = building;
+    }
+
+    // Every change goes back to the tape file, which is what makes undo, the
+    // dirty mark and Save work. While an address is being typed the page is not
+    // rebuilt, so the box keeps its focus.
+    function commit(typing) {
+      vscode.postMessage({ type: 'tape', tape });
+      if (typing) {
+        drawMap();
+        drawChecks();
+      } else {
+        draw();
+      }
+    }
+
+    for (const id of ['designScreen', 'pick', 'addBlock', 'importTape', 'build', 'buildRun']) {
+      document.getElementById(id).addEventListener('click', () => vscode.postMessage({ type: id }));
+    }
+
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (message.type === 'building') {
+        building = message.text || '';
+        drawChecks();
+        return;
+      }
+      if (message.type !== 'load') {
+        return;
+      }
+      fileName = message.name;
+      tape = message.tape;
+      blockInfo = message.blocks;
+      screen = bytesOf(message.screen);
+      screenFile = message.screenFile;
+      picture = message.picture || '';
+      order = message.order || [];
+      fastRomSeconds = typeof message.fastRomSeconds === 'number' ? message.fastRomSeconds : null;
+      fileProblems = message.problems || [];
+      draw();
+    });
+
+    window.addEventListener('resize', drawMap);
+    vscode.postMessage({ type: 'ready' });
+</script>
+</body>
+</html>

@@ -81,6 +81,15 @@ given as source still work there) and
 export: names and labels, how the sheet is packed, the picture's transparency,
 the atlas, that the assembler source assembles back to the same bytes, groups,
 pointing into a `.sna`, and reading an atlas back),
+`node vscode-extension/tests/tape_model_test.js` (the tape designer: the rectangles a
+loading screen is revealed in, what they and a tape's blocks cost, the two files, the ROM
+scheme's BASIC and `.tap`, both schemes' checks, and -- with the `examples/zx-tape-loader`
+submodule and the venv -- that all of it agrees byte for byte and word for word with
+`loader.py`, `scripts/tape_rom.py` and `scripts/tape_screen.py`),
+`node vscode-extension/tests/tape_page_test.js` and `screen_page_test.js` (the tape's page
+and the screen designer, assembled as the extension does and run against a fake DOM),
+`.venv-win\Scripts\python.exe vscode-extension/tests/schemas_test.py` (the two JSON schemas
+accept what the designer writes and refuse plausible mistakes),
 `node vscode-extension/tests/server_launch_test.js` (where the extension looks
 for `zx_server`, the directory it runs it in, its command line, and reading the
 port's process from `netstat`) and

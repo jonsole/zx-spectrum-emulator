@@ -126,6 +126,7 @@ changes touch:
 | `examples/filmation/vscode/` | The Filmation designer: a second VS Code extension, independent of the emulator's -- room, templates and graphic-map editors |
 | `game-disassemblies/` | Submodule: Manic Miner, Fairlight, Atic Atac |
 | `examples/zx-tape-loader/` | Submodule: a fast custom tape loader and the Python that renders its tapes to WAV |
+| `vscode-extension/tape_*`, `screen_*` | The tape designer: editors for `*.tape.json` and `*.screen.json`, built by `scripts/build_tape.py` (docs/tape-designer.md) |
 
 ROM images are not in the repository (`roms/` is gitignored); tests and
 examples that need one skip or say so. `sjasmplus` is at

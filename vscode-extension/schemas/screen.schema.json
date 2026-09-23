@@ -1,0 +1,39 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "ZX Spectrum loading screen",
+ "description": "A tape's loading screen: the picture, and the order its character-cell rectangles are sent in -- which, for a loader that sends a screen in pieces, is the order the picture appears in. The tape designer draws it; a *.tape.json names it.",
+ "type": "object",
+ "required": ["picture", "order"],
+ "additionalProperties": false,
+ "properties": {
+  "meta": {
+   "type": "object",
+   "description": "About the file rather than the screen. The builder ignores all of it.",
+   "properties": {
+    "version": { "type": "integer", "description": "The schema's own version." },
+    "comment": { "type": "string", "description": "Prose for whoever opens the file." }
+   }
+  },
+  "picture": {
+   "type": "string",
+   "minLength": 1,
+   "pattern": "\\.([sS][cC][rR]|[sS][nN][aA]|[zZ]80|[tT][aA][pP]|[tT][zZ][xX])$",
+   "description": "The .scr, .sna, .z80, .tap or .tzx the screen comes from, relative to this file."
+  },
+  "order": {
+   "type": "array",
+   "description": "The rectangles, in the order they are sent: x and w in character columns, y and h in character rows.",
+   "items": {
+    "type": "object",
+    "required": ["x", "y", "w", "h"],
+    "additionalProperties": false,
+    "properties": {
+     "x": { "type": "integer", "minimum": 0, "maximum": 31 },
+     "y": { "type": "integer", "minimum": 0, "maximum": 23 },
+     "w": { "type": "integer", "minimum": 1, "maximum": 32 },
+     "h": { "type": "integer", "minimum": 1, "maximum": 24 }
+    }
+   }
+  }
+ }
+}

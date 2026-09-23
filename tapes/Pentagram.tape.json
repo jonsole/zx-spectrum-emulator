@@ -1,0 +1,12 @@
+{
+  "meta": {"version":1},
+  "scheme": "zx-tape-loader",
+  "loaderAddress": null,
+  "loadingScreen": "Pentagram.screen.json",
+  "blocks": {
+    "pp": { "file": "Pentagram.tzx", "address": "$6000", "offset": 226, "length": 6912 },
+    "game": { "file": "Pentagram.tzx", "address": "$5E00", "offset": 7169, "length": 31390 }
+  },
+  "entry": "$5E00",
+  "stack": "$FE4D"
+}

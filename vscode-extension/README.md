@@ -55,11 +55,26 @@ A handful of things, in one small extension:
    carries it. `graphics_model.js` (tested by `node tests/graphics_model_test.js`) does the
    decoding, the packing and the three export formats, and is inlined into the page as source.
    See [docs/vscode-debugging.md](../docs/vscode-debugging.md#graphics-viewer).
-6. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
+6. **A tape designer.** Two JSON file types, each a custom text editor with a schema
+   (`schemas/`), the way the Filmation designer does `rooms.json`: a `*.tape.json`
+   (`tape_view.js`, `tape_view.html`) is a tape -- its loading scheme, blocks keyed by name,
+   entry and loader address -- shown the way the program editor shows a `.tap`, with a
+   memory map, the checks its scheme makes, and Build / Build & Run, which run the repo's
+   `scripts/build_tape.py` as a task and load the result like Run does a tape. Its
+   `*.screen.json` (`screen_view.js`, `screen_designer.html`) is the loading screen and the
+   order it is sent in; **Design screen...** opens it in a window of its own. Each is its
+   own document, edited through `WorkspaceEdit`s, so undo, the dirty mark and Save are
+   VS Code's. `tape_model.js` is the pure half, inlined into both pages; `tape_files.js` what
+   the two editors share. Tested by `tests/tape_model_test.js` (which holds the model to the
+   Python builders byte for byte and word for word), `tape_page_test.js` and
+   `screen_page_test.js` (the pages against a fake DOM) and `schemas_test.py`. "ZX Spectrum:
+   Design Tape..." makes the pair from a picture or a standard tape. See
+   [docs/tape-designer.md](../docs/tape-designer.md).
+7. **A tape pane.** A tree in the debug sidebar, docked with Call Stack and Breakpoints, listing
    what is on the inserted tape block by block. See "Tape pane" below.
-7. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
+8. **An execution profiler.** Where the CPU's time goes, as a heat map on the source, a call tree
    and the worst frames in the debug sidebar. See "Execution profile" below.
-8. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
+9. **Z80 assembly editing.** sjasmplus colouring, Go to Definition, references, rename, call
    hierarchy, hover and the outline, with or without a debug session. See "Z80 assembly" below.
 
 ## Settings

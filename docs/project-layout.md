@@ -58,6 +58,8 @@ zx-spectrum-emulator/
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels
+    tape_view.js, screen_view.js       # the tape designer: *.tape.json and *.screen.json
+    tape_model.js, tape_files.js       #   editors; schemas/ has their JSON schemas
     extension.js                 #   the panels, and activation of everything below
     profile_view.js              #   execution profile: heat map on the source, hot spots
     profile_tree.js              #   ...its call tree and worst frames in the debug sidebar

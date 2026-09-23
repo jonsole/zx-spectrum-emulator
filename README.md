@@ -277,6 +277,7 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Game disassemblies](https://github.com/jonsole/zx-spectrum-disassemblies) | Manic Miner, Fairlight and Atic Atac &mdash; their own repository, checked out here as `game-disassemblies/` |
 | [Fast tape loader](https://github.com/jonsole/zx-tape-loader) | A custom high-speed tape loader for the 48K, with an animated loading counter, and the Python that renders its tapes to WAV &mdash; its own repository, checked out here as `examples/zx-tape-loader/` |
 | [Designing a Filmation room](examples/filmation/room-designer.md) | The room designer for `examples/filmation`, a VS Code extension of its own: what a room is made of, editing one in VS Code or in a browser, the collectables and the graphic map, and how the preview is held to the engine's own projection and depth sort |
+| [Designing a tape](docs/tape-designer.md) | `*.tape.json` and `*.screen.json`: a tape for the standard ROM loader or the fast one in `examples/zx-tape-loader` -- its blocks, entry and loading screen, the order the screen appears in, the checks, and building it into the emulator |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |

@@ -1,0 +1,68 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "ZX Spectrum tape",
+ "description": "What goes on a tape and how it loads: the loading scheme, the blocks it loads and where, where it jumps once they have, and its loading screen. The tape designer opens it as a page; scripts/build_tape.py builds it.",
+ "type": "object",
+ "required": ["scheme", "blocks"],
+ "additionalProperties": false,
+ "definitions": {
+  "address": {
+   "description": "A 16-bit address: \"$7000\", \"#7000\", \"0x7000\", \"28672\" or a number.",
+   "oneOf": [
+    { "type": "integer", "minimum": 0, "maximum": 65535 },
+    { "type": "string", "pattern": "^\\s*(([$#][0-9A-Fa-f]{1,4})|(0[xX][0-9A-Fa-f]{1,4})|([0-9]{1,5}))\\s*$" }
+   ]
+  }
+ },
+ "properties": {
+  "meta": {
+   "type": "object",
+   "description": "About the file rather than the tape. The builder ignores all of it.",
+   "properties": {
+    "version": { "type": "integer", "description": "The schema's own version." },
+    "comment": { "type": "string", "description": "Prose for whoever opens the file." }
+   }
+  },
+  "scheme": {
+   "description": "How the tape loads. \"zx-tape-loader\": the fast loader in examples/zx-tape-loader, with a screen revealed in a designed order. \"rom\": the Spectrum's own LOAD \"\", a BASIC loader then each file at normal speed.",
+   "enum": ["zx-tape-loader", "rom"]
+  },
+  "loaderAddress": {
+   "description": "zx-tape-loader only: where its 433-byte loader runs, anywhere in $8000-$FFFF. null is the top of RAM, $FE4E.",
+   "oneOf": [{ "$ref": "#/definitions/address" }, { "type": "null" }]
+  },
+  "loadingScreen": {
+   "description": "The *.screen.json that is the tape's loading screen, relative to this file; null for none.",
+   "oneOf": [{ "type": "string", "pattern": "\\.screen\\.json$" }, { "type": "null" }]
+  },
+  "blocks": {
+   "type": "object",
+   "description": "What the tape loads after its screen, in tape order, keyed by name.",
+   "additionalProperties": {
+    "type": "object",
+    "required": ["file", "address"],
+    "additionalProperties": false,
+    "properties": {
+     "file": { "type": "string", "minLength": 1, "description": "The file the bytes come from, relative to this file." },
+     "address": { "$ref": "#/definitions/address", "description": "Where the block loads." },
+     "offset": { "type": "integer", "minimum": 0, "description": "Where in the file the block starts. 0 if left out." },
+     "length": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "How many bytes. The rest of the file if left out." }
+    }
+   }
+  },
+  "entry": {
+   "description": "Where the program starts once everything has loaded.",
+   "oneOf": [{ "$ref": "#/definitions/address" }, { "type": "null" }]
+  },
+  "stack": {
+   "description": "The address the BASIC loader CLEARs: RAMTOP, with the machine stack just below it, and the program entered on that stack. zx-tape-loader: from $5F41 (its own, just above the BASIC, when null) up to just below the loader; the loader's calls reach $1B below it. rom: at least just below the lowest block the BASIC allows; null for just below the lowest block; blocks keep $40 below it clear.",
+   "oneOf": [{ "$ref": "#/definitions/address" }, { "type": "null" }]
+  },
+  "output": {
+   "type": "string",
+   "description": "What to build, relative to this file: a .tap (rom only), a .tzx, a .wav or a .csw. Left out, the tape's own name as a .tap for rom and a .tzx for zx-tape-loader."
+  }
+ },
+ "if": { "properties": { "scheme": { "const": "rom" } } },
+ "then": { "not": { "required": ["loaderAddress"] } }
+}

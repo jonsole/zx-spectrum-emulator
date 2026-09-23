@@ -271,7 +271,7 @@ own bit-reading loop, plus `loader.py`/`convert_tape.py`, which re-encode a
 standard-speed `.tap`/`.tzx` through it and render the result to a WAV you can
 play into real hardware. The same `--recurse-submodules` clone (or `git
 submodule update --init`) brings it down. It assembles with `sjasmplus` and its
-Python needs `numpy` and `scipy`; its own `.vscode/` targets DeZog rather than
+Python needs `numpy`; its own `.vscode/` targets DeZog rather than
 this emulator, so drive it from the emulator's launch configurations instead.
 Its Lunar Jetman payload is copyrighted and stays in that repository.
 
