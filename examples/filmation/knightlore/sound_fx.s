@@ -23,6 +23,19 @@ sound_z:            ld      a,(ix+OBJ.Z)        ; audio_B451: falling things
 sound_u:            ld      a,(ix+OBJ.U)        ; audio_B45D: along U
                     jr      sound_pitch
 
+; A sliding block's hum, along whichever axis it slides -- engine/movers.s's
+; mover_slide calls it with L the offset of that axis's position in the
+; record. upd_54 plays sound_u and upd_55 sound_v, both every frame.
+;
+; In:  IX -> the record
+;      L  = OBJ.U or OBJ.V
+; Out: nothing
+; Corrupts: AF, BC
+slide_sound:        ld      a,l
+                    cp      OBJ.U
+                    jr      z,sound_u
+                    jr      sound_v
+
 ; A fire's hum, along whichever axis it paces -- engine/movers.s's mover_pacer
 ; calls it with L the axis's collide bit. upd_86_87 plays sound_u, and
 ; upd_180_181 sound_v.

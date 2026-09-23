@@ -34,7 +34,7 @@ monster_gate:       ld      a,(room_busy)
                     jp      (hl)
 
 ; What monster_gate goes on to, MOVE_FIRE_U to MOVE_SPIKE_BALL.
-monster_movers:     DW      mover_pacer_u, mover_pacer_v, mover_guard_u
-                    DW      mover_guard_sq, mover_ghost, mover_bounce
+monster_movers:     DW      mover_pacer_u, mover_pacer_v, mover_pacer_pair
+                    DW      mover_circuit_pair, mover_ghost, mover_bounce
                     DW      mover_spike_ball
                     ASSERT  ($ - monster_movers) / 2 == MOVE_SPIKE_BALL - MOVE_FIRE_U + 1

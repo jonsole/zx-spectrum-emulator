@@ -117,7 +117,7 @@ sprite_end:
 					INCLUDE "../engine/walker.s"
 					INCLUDE "knight.s"
 					INCLUDE "movers.s"
-					INCLUDE "../engine/mover.s"		; movers.s falls into it
+					INCLUDE "../engine/mover.s"
 					INCLUDE "shared_movers.s"		; what it gives the next
 					INCLUDE "../engine/movers.s"		; the behaviours shared with Pentagram
 					INCLUDE "special.s"

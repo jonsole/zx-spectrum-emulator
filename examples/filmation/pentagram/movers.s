@@ -918,77 +918,18 @@ mover_crumbles:     call    player_on_top
                     jp      mover_move_always
 
 
-LIFT_TOP            EQU     176                 ; see mover_lift
+; What the lift is given: it stops at Z 176, climbs two a turn, and hands him
+; four -- three of his own and the one his gravity takes back ($A77A). The
+; engine's mover_lift does the rest.
+LIFT_TOP            EQU     176
 LIFT_RISE           EQU     2
 LIFT_GIVES_HIM      EQU     4                   ; three, and his own gravity's
 
 ; ---------------------------------------------------------------------------
-; A lift -- $CDBB. It carries him up: while he stands on it it rises two a turn
-; and gives him three ($A77A), up to Z 176, where it holds; when he is off it,
-; it sinks a unit a turn back to where it stands, and waits for him again. It
-; has no gravity of its own.
-;
-; MOVE_STATE bit 0 is going; bit 1 is on its way back down.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything but IX
-mover_lift:         bit     0,(ix+OBJ.MOVE_STATE)
-                    jr      nz,.going
-                    call    player_on_top       ; waiting: until he is on it
-                    ret     nz
-                    set     0,(ix+OBJ.MOVE_STATE)
-
-.going:             bit     1,(ix+OBJ.MOVE_STATE)
-                    jr      nz,.down
-                    call    player_on_top
-                    jr      nz,.back            ; he has got off: back down
-                    ld      a,(ix+OBJ.Z)
-                    cp      LIFT_TOP
-                    jr      nc,.hold            ; up: it stays while he does
-                    ld      a,LIFT_GIVES_HIM    ; and he goes up with it
-                    ld      (player + CHARACTER_DZ),a
-                    call    mover_halt
-                    ld      (ix+OBJ.DZ),LIFT_RISE + 1   ; net of gravity
-                    jp      mover_move_always
-.hold:              call    mover_hover
-                    ret
-
-.back:              set     1,(ix+OBJ.MOVE_STATE)
-.down:              call    mover_halt
-                    ld      (ix+OBJ.DZ),0       ; a unit a turn, not a fall
-                    call    mover_move
-                    ld      a,(collide_hit)
-                    and     COLLIDE_Z
-                    ret     z
-                    ld      (ix+OBJ.MOVE_STATE),0   ; down: waiting again
-                    ret
-
-
-; ---------------------------------------------------------------------------
-; A conveyor -- $B866, which pushes whatever stands on it two units every other
-; turn, along the way the bottom two bits of its graphic say ($D30A). The
-; engine already hands a thing standing on a record that record's step
-; (object_carry), so a conveyor simply holds a step of its own -- one a turn,
-; the same pace -- and never moves by it.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: DU and DV in the record = its step
-; Corrupts: AF, DE, HL
-mover_conveyor:     ld      a,(ix+OBJ.GFX)
-                    and     3
-                    add     a,a
-                    ld      e,a
-                    ld      d,0
-                    ld      hl,conveyor_steps
-                    add     hl,de
-                    ld      a,(hl)
-                    ld      (ix+OBJ.DU),a
-                    inc     hl
-                    ld      a,(hl)
-                    ld      (ix+OBJ.DV),a
-                    ret
-
+; Which way each conveyor pushes, by the bottom two bits of its graphic
+; ($D30A). engine/movers.s's mover_conveyor reads it; the engine hands whatever
+; stands on a record that record's step, so a conveyor holds one and never
+; moves by it.
 conveyor_steps:     DB      1, 0
                     DB      -1, 0
                     DB      0, 1

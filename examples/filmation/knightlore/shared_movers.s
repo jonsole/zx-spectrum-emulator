@@ -30,6 +30,33 @@ pacer_frame			EQU		mover_flicker
 pacer_move			EQU		mover_move_always		; it changes every turn
 
 
+; A guard is two records walking as one figure: engine/movers.s's
+; mover_pacer_pair along U, and mover_circuit_pair round a square. The frames
+; both halves wear are Knight Lore's own artwork, in mover_guard_face.
+PAIR_STEP			EQU		GUARD_STEP
+pair_frame			EQU		mover_guard_face
+
+
+; A portcullis: engine/movers.s's mover_gate, upd_8 and upd_9. It hums as it
+; climbs -- move_portcullis_up -- and lands with a crash.
+GATE_RISE			EQU		31
+GATE_DROPS			EQU		4		; before one waits on the dice
+gate_rising			EQU		sound_uvz
+gate_landed			EQU		sound_gate
+
+
+; A spiked ball: engine/movers.s's mover_spike_ball, upd_63. One turn in
+; sixteen it lets go, and it whistles all the way down.
+SPIKE_BALL_DICE		EQU		16
+spike_ball_sound	EQU		sound_z
+
+
+; A sliding block: engine/movers.s's mover_slide_u and _v, loc_B6BF. Its
+; travel is eight either way of the middle of its cell, and it hums along the
+; axis it slides on -- slide_sound, in sound_fx.s.
+SLIDE_MIDDLE		EQU		8
+
+
 ; A ball bounces on the spot: engine/movers.s's mover_hopper_claim, which is
 ; upd_178_179, and bounces to BALL_RISE_TO above where the room's first ball
 ; started -- see there. It flickers where it stands, hums as it goes, and

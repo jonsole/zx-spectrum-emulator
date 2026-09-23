@@ -1,13 +1,14 @@
 # Plan: a shared library of movers
 
-Status: **decided; stage 1 committed (69d7d6e), stage 2 done and
-uncommitted** (2026-09-22). This file is the brief
+Status: **stages 1, 2 and 3 done** -- 1 as 69d7d6e, 2 as c2f2296, 3
+uncommitted (2026-09-23). This file is the brief
 for the session that does the work. It records what was found, what is
 proposed, and what the user decided.
 
 ## Decided (2026-09-22)
 
-1. **Scope:** stages 1 and 2. Stage 3 is not part of this work.
+1. **Scope:** stages 1 and 2 to begin with; stage 3 was asked for afterwards
+   and is done too.
 2. **Hooks:** constants and hook labels supplied by the game are acceptable
    under the no-per-game-options rule. They have no defaults, and there are no
    `IFDEF` switches inside the library.
@@ -281,6 +282,35 @@ committed on the user's say-so.
 - **Memory.** Both games are tight, Pentagram especially: a busy room already
   sheds work. Report each region's `DISPLAY` of space left before and after.
   `IFUSED` should keep the cost at or below today's.
+
+## Stage 3: done, uncommitted (2026-09-23)
+
+The behaviours only one game had, which any Filmation game could use. Each has
+exactly one user today, so `IFUSED` leaves the other game's image alone and the
+owner's cost is unchanged -- what were plain calls are now calls to names it
+supplies, and an `EQU` to the routine it already had costs nothing.
+
+- **Knight Lore's:** `mover_gate` the portcullis; `mover_spike_ball`;
+  `mover_slide_u`/`_v` the sliding block; and the guards' walk as
+  `mover_pacer_pair` (along one axis) and `mover_circuit_pair` (round a
+  square). What stayed behind is the artwork and the room's own state: the
+  frames a guard wears (`mover_guard_face`, now `pair_frame`), and
+  `spike_ball_held`, which the room sets from its number.
+- **Pentagram's:** `mover_lift` and `mover_conveyor`. Its table of which way
+  each conveyor pushes stays with the game.
+- **The fall-through went.** Knight Lore's `mover_slide` used to fall into
+  `mover_move`, which only worked because its movers.s sat immediately before
+  engine/mover.s. In the library it ends with a `jp`, and the game's file no
+  longer ends in a fall-through at all.
+- **Bytes.** Knight Lore's code region is unchanged at 30 free: the sliding
+  block grew 6 for the `jp` and the sound hook, and its two entry points lost
+  exactly those 6. Its `$6000` region went from 21 free to 14, for the
+  `slide_sound` hook beside the other sounds. Pentagram is unchanged at 11.
+- **Checked.** Every moved routine assembles to the same bytes as before but
+  for its addresses -- `mover_slide` excepted, and only by the two
+  instructions above. The games' own suites cover them through their tables
+  (Knight Lore's 63 tests, Pentagram's 22); `mover_conveyor` had no test
+  anywhere, so the engine's suite gained two.
 
 ## Not in this plan
 

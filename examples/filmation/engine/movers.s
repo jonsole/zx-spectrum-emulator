@@ -370,3 +370,396 @@ mover_hopper:		call	hopper_frame
 					res		HOPPER_RISING,(ix+OBJ.MOVE_STATE)
 					ret
 					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A lift, which carries the player up: while he stands on it it rises
+; LIFT_RISE a turn and gives him LIFT_GIVES_HIM, up to LIFT_TOP, where it
+; holds; when he is off it, it sinks a unit a turn back to where it stands,
+; and waits for him again. It has no gravity of its own. Pentagram's $CDBB.
+;
+; MOVE_STATE bit 0 is going; bit 1 is on its way back down.
+;
+; What the game supplies: LIFT_TOP, LIFT_RISE and LIFT_GIVES_HIM, which is one
+; more than it means -- the character's own gravity takes that one back.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_lift
+mover_lift:         bit     0,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.going
+                    call    player_on_top       ; waiting: until he is on it
+                    ret     nz
+                    set     0,(ix+OBJ.MOVE_STATE)
+
+.going:             bit     1,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.down
+                    call    player_on_top
+                    jr      nz,.back            ; he has got off: back down
+                    ld      a,(ix+OBJ.Z)
+                    cp      LIFT_TOP
+                    jr      nc,.hold            ; up: it stays while he does
+                    ld      a,LIFT_GIVES_HIM    ; and he goes up with it
+                    ld      (walker_player + CHARACTER_DZ),a
+                    call    mover_halt
+                    ld      (ix+OBJ.DZ),LIFT_RISE + 1   ; net of gravity
+                    jp      mover_move_always
+.hold:              call    mover_hover
+                    ret
+
+.back:              set     1,(ix+OBJ.MOVE_STATE)
+.down:              call    mover_halt
+                    ld      (ix+OBJ.DZ),0       ; a unit a turn, not a fall
+                    call    mover_move
+                    ld      a,(collide_hit)
+                    and     COLLIDE_Z
+                    ret     z
+                    ld      (ix+OBJ.MOVE_STATE),0   ; down: waiting again
+                    ret
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A conveyor, which pushes whatever stands on it along -- Pentagram's $B866.
+; object_carry already hands a thing standing on a record that record's step,
+; so a conveyor simply holds a step of its own and never moves by it.
+;
+; What the game supplies: conveyor_steps, four pairs of (step in U, step in V),
+; which the bottom two bits of the graphic choose between.
+;
+; In:  IX -> the record
+; Out: DU and DV in the record = its step
+; Corrupts: AF, DE, HL
+                    IFUSED  mover_conveyor
+mover_conveyor:     ld      a,(ix+OBJ.GFX)
+                    and     3
+                    add     a,a
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,conveyor_steps
+                    add     hl,de
+                    ld      a,(hl)
+                    ld      (ix+OBJ.DU),a
+                    inc     hl
+                    ld      a,(hl)
+                    ld      (ix+OBJ.DV),a
+                    ret
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A two-record figure that paces along U, turning at whatever stops it --
+; Knight Lore's guards, upd_150_151. The torso carries the step and the legs
+; follow it; mover_move_pair moves and re-sorts both.
+;
+; It does not cancel gravity the way a pacer does: the game calls
+; dec_dZ_and_update_XYZ without setting DZ first, so a guard falls if it walks
+; off something, and the floor stops it where it stands.
+;
+; What the game supplies: PAIR_STEP, how far it goes a turn, and pair_frame,
+; which wears the frames the step calls for -- both halves' graphics are the
+; game's own artwork.
+;
+; In:  IX -> the first record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_pacer_pair
+mover_pacer_pair:	xor		a
+					ld		(ix+OBJ.DV),a
+					ld		(ix+OBJ.DZ),a
+					ld		a,PAIR_STEP
+					bit		0,(ix+OBJ.MOVE_STATE)
+					jr		nz,.forward
+					neg
+.forward:			ld		(ix+OBJ.DU),a
+
+					call	pair_frame
+					call	mover_move_pair
+					ld		a,COLLIDE_U		; which is bit 0 of MOVE_STATE too
+					jp		mover_turn_if_hit
+					ENDIF
+
+
+; The four legs of mover_circuit_pair's round, in order: the step in U and V,
+; and the axis that has to give before the next leg starts.
+CIRCUIT_MASK		EQU		3
+
+					IFUSED	mover_circuit_pair
+mover_circuit_tbl:	DB		-PAIR_STEP, 0, COLLIDE_U		; west
+					DB		0, PAIR_STEP, COLLIDE_V		; north
+					DB		PAIR_STEP, 0, COLLIDE_U		; east
+					DB		0, -PAIR_STEP, COLLIDE_V		; south
+
+; A two-record figure that walks a circuit: west until something stops it,
+; then north, then east, then south, and round again -- Knight Lore's square
+; guards, upd_30_31_158_159 through the four routines in guard_NSEW_tbl.
+;
+; Nothing measures the square out. Each leg simply runs until the clamp says
+; that axis gave, and the next leg starts from wherever that was, so the shape
+; of the walk is the shape of the room and whatever is standing in it. The two
+; bits of MOVE_STATE are which leg it is on, and they are the game's own bits
+; 0 and 1 of $0D.
+;
+; What the game supplies: PAIR_STEP and pair_frame, as mover_pacer_pair has
+; them.
+;
+; In:  IX -> the first record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+mover_circuit_pair:	ld		a,(ix+OBJ.MOVE_STATE)
+					and		CIRCUIT_MASK
+					ld		c,a
+					ld		b,0
+					ld		hl,mover_circuit_tbl
+					add		hl,bc
+					add		hl,bc
+					add		hl,bc		; three bytes a leg
+
+					ld		a,(hl)
+					ld		(ix+OBJ.DU),a
+					inc		hl
+					ld		a,(hl)
+					ld		(ix+OBJ.DV),a
+					inc		hl
+					ld		a,(hl)
+					ld		(.blocked + 1),a		; the axis this leg walks
+					ld		(ix+OBJ.DZ),0
+
+					call	pair_frame
+					call	mover_move_pair
+
+					ld		a,(collide_hit)
+.blocked:			and		0		; patched just above
+					ret		z		; the leg is not done yet
+
+					ld		a,(ix+OBJ.MOVE_STATE)
+					inc		a		; on to the next side
+					and		CIRCUIT_MASK
+					ld		(ix+OBJ.MOVE_STATE),a
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A portcullis: rises a unit a turn to GATE_RISE above the floor, waits, then
+; drops under its own weight and waits again -- Knight Lore's upd_8 and upd_9.
+;
+; The game splits it across two graphics: one gate standing still, whose turn
+; only decides whether to set off, and the same gate in motion, which does the
+; moving. Bit 0 of the graphic is which, so it changes its own mind for no
+; state at all -- and the two frames are the same size, so the rotation buffer
+; one took from the arena fits the other.
+;
+; Two facts belong to the room rather than the gate, and both are the game's:
+; only one gate moves at a time ($5BAF), and a gate drops to a schedule for
+; its first GATE_DROPS drops and on the dice after that ($5BB0). Room $87 has
+; four of them and they take it in turns.
+;
+; Rising is a unit a turn. Falling is not: the game decrements dZ itself on
+; top of the one dec_dZ_and_update_XYZ already does, so a dropping portcullis
+; accelerates at two a turn and lands hard.
+;
+; What the game supplies: GATE_RISE and GATE_DROPS, and two sounds --
+; gate_rising every turn it climbs, gate_landed on the turn it hits the floor.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_gate
+mover_gate_busy:	DB		0		; a gate has the room
+mover_gate_drops:	DB		0		; how many times one has fallen
+
+mover_gate:			call	mover_halt		; it only ever moves in Z
+
+					bit		0,(ix+OBJ.GFX)
+					jr		nz,.moving
+
+					; Standing still, at one end of its travel or the other.
+					ld		a,(mover_gate_busy)
+					or		a
+					ret		nz
+
+					ld		a,(room_floor_z)
+					cp		(ix+OBJ.Z)
+					jr		z,.go_up		; fully down
+					add		a,GATE_RISE
+					cp		(ix+OBJ.Z)
+					jr		nc,.go_up		; not up yet
+
+					; Fully up. The first few drops come without waiting.
+					ld		a,(mover_gate_drops)
+					cp		GATE_DROPS
+					jr		c,.drop
+					call	mover_dice
+					ret		nz
+.drop:				ld		hl,mover_gate_drops
+					inc		(hl)
+					ld		(ix+OBJ.DZ),-1
+					jr		.set_off
+
+.go_up:				call	mover_dice
+					ret		nz
+					ld		(ix+OBJ.DZ),1
+.set_off:			set		0,(ix+OBJ.GFX)		; the moving frame
+					ld		a,1
+					ld		(mover_gate_busy),a
+					ret
+
+.moving:			ld		a,(ix+OBJ.DZ)
+					or		a
+					jp		p,.rising
+
+					dec		(ix+OBJ.DZ)		; falling, and gathering pace
+					call	mover_move_always
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still on its way down
+					call	gate_landed		; and down with a crash, upd_9
+					jr		.stop
+
+.rising:			ld		(ix+OBJ.DZ),2		; a unit a turn, after the DEC
+					call	gate_rising		; move_portcullis_up
+					call	mover_move_always
+					ld		a,(room_floor_z)
+					add		a,GATE_RISE
+					cp		(ix+OBJ.Z)
+					ret		nc		; not at the top yet
+
+.stop:				xor		a
+					ld		(mover_gate_busy),a
+					res		0,(ix+OBJ.GFX)
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A spiked ball, which hangs where the room put it until, one turn in
+; SPIKE_BALL_DICE, it lets go and drops until it lands -- Knight Lore's
+; upd_63. One at a time: while one is falling no other may start. The test is
+; the game's own, the random seed below sixteen.
+;
+; What the game supplies: SPIKE_BALL_DICE; spike_ball_held, a byte the room
+; sets while its balls are to stay up; and spike_ball_sound, played every turn
+; one is on its way down.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_spike_ball
+spike_ball_falling:	DB		0		; one is on its way down, so no other starts
+
+mover_spike_ball:	ld		a,(spike_ball_held)
+					or		a
+					ret		nz
+					bit		2,(ix+OBJ.MOVE_STATE)
+					jr		nz,.drop
+					ld		a,(spike_ball_falling)
+					or		a
+					ret		nz
+					call	mover_rand
+					cp		SPIKE_BALL_DICE
+					ret		nc
+					set		2,(ix+OBJ.MOVE_STATE)
+					ld		a,1
+					ld		(spike_ball_falling),a
+					ret
+
+					; Falling: gravity has DZ, which it has been taking one off a
+					; turn since the ball let go, so it gathers speed as it goes.
+.drop:				call	mover_move		; which leaves IX -> the record
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					jp		z,spike_ball_sound	; whistling down, spiked_ball_drop
+					res		2,(ix+OBJ.MOVE_STATE)
+					xor		a
+					ld		(spike_ball_falling),a
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A block that slides to and fro along one axis, a unit a turn -- Knight
+; Lore's loc_B6BF, which upd_54 and upd_55 share by patching the two
+; instructions that name the axis, as this does: (IX+d) takes its displacement
+; as an immediate.
+;
+; The block does not remember which way it is going. Instead the turn counter
+; is folded into a triangle: bit 4 says which way the ramp runs and the low
+; four bits are how far along it is, so the wave climbs 0 to 15 and falls back
+; over thirty-two turns. The block compares where it is against where the wave
+; says it should be and steps one unit towards it.
+;
+; Bit 5 of the record's own address is added in first. Records are thirty-two
+; bytes apart, so that bit alternates, and neighbouring blocks run in
+; antiphase -- one going out as the other comes back.
+;
+; Position is taken as (coordinate + SLIDE_MIDDLE) & 15, so a block standing
+; in the middle of its cell is in the middle of its travel and swings half of
+; SLIDE_MIDDLE either way.
+;
+; What the game supplies: SLIDE_MIDDLE, and slide_sound, called with the axis
+; in HL every turn -- Knight Lore hums along the one it slides on.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_slide_u
+mover_slide_u:		ld		hl,OBJ.DU * 256 + OBJ.U
+					jr		mover_slide
+					ENDIF
+
+; See mover_slide_u.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_slide_v
+mover_slide_v:		ld		hl,OBJ.DV * 256 + OBJ.V
+					ASSERT	$ == mover_slide
+					ENDIF
+
+; See mover_slide_u. The axis comes in HL: H the offset of its step in the
+; record, L of its position.
+;
+; In:  IX -> the record; mover_ix names it too
+;      H  = OBJ.DU or OBJ.DV
+;      L  = OBJ.U or OBJ.V
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_slide
+mover_slide:		call	slide_sound
+					ld		a,l
+					ld		(.here + 2),a		; LD A,(IX+d) is DD 7E d
+					ld		a,h
+					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
+
+					call	mover_hover		; it moves along one axis and no
+										; other, and does not fall
+
+					; Where the wave says it should be.
+					ld		a,ixl
+					rrca
+					and		$10		; half a cycle for every other record
+					ld		c,a
+					ld		a,(move_tick)
+					add		a,c
+					bit		4,a
+					jr		z,.climbing
+					cpl				; the falling half of the ramp
+.climbing:			and		$0F
+					ld		c,a
+
+					; ...and where it is.
+.here:				ld		a,(ix+OBJ.U)		; patched: U or V
+					add		a,SLIDE_MIDDLE
+					and		$0F
+					cp		c
+					ret		z		; already there, and nothing to draw
+
+					ld		a,1
+					jr		c,.step		; below the wave: out
+					neg				; above it: back
+.step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
+					jp		mover_move
+					ENDIF

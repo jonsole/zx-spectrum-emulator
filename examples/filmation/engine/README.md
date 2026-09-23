@@ -32,7 +32,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `room.s` | The room: bounds, doorways, the object count, and `room_add` → `room_show` |
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
-| `movers.s` | The behaviours more than one game has, each assembled only if the game names it (`IFUSED`): `mover_find`, `mover_falls`, `mover_falls_noisy`, `mover_sinks`, `mover_pacer_u`/`_v` and `mover_turn_if_hit`, `mover_hopper` and `mover_hopper_claim`, `player_on_top`, `object_hide`, `object_blank`. Included after `mover.s`, with the game's names for it in between |
+| `movers.s` | The behaviours a Filmation game can have, each assembled only if the game names it (`IFUSED`): `mover_find`; `mover_falls` and `mover_falls_noisy`; `mover_sinks`; `mover_pacer_u`/`_v` with `mover_turn_if_hit`; `mover_hopper` and `mover_hopper_claim`; `mover_pacer_pair` and `mover_circuit_pair` for a two-record figure; `mover_gate`; `mover_spike_ball`; `mover_slide_u`/`_v`; `mover_lift`; `mover_conveyor`; `player_on_top`; `object_hide` and `object_blank`. Included after `mover.s`, with the game's names for it in between |
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
 | `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the games' |
 
@@ -123,6 +123,12 @@ The engine names nothing else of the game's.
 | `menu_mode`, `input_keyboard`, `input_stick_done` | byte, routines | input.s | Which control the menu chose; the game's own keys; and the tail every stick reader ends at, which adds whatever else that game reads while a stick is steering and ends at `input_store` |
 | `INPUT_LEFT_B`, `INPUT_RIGHT_B`, `INPUT_FORWARD_B`, `INPUT_DOWN_B`, `INPUT_STICK_FIRE_B` | EQU | input.s | Which BIT of the answer each of a stick's five inputs sets. A stick has five and no more, so what the fifth means is the games' own business: Knight Lore points it at jump, Pentagram at fire |
 | `tune_note_at`, `tune_key` | routines | tune.s | A = a note, 1 to 63: carry set and B, C its half-period with E the cycles one length lasts, or carry clear to skip it; and whether a key is down, which stops a tune |
+| `PAIR_STEP`, `pair_frame` | EQU, routine | movers.s | For `mover_pacer_pair` and `mover_circuit_pair`: how far a two-record figure goes a turn, and the frames both halves wear for the step it is about to take |
+| `GATE_RISE`, `GATE_DROPS`; `gate_rising`, `gate_landed` | EQU; routines | movers.s | For `mover_gate`: how high a portcullis climbs and how many drops come before it waits on the dice; a sound every turn it climbs, and one as it lands |
+| `SPIKE_BALL_DICE`, `spike_ball_held`; `spike_ball_sound` | EQU, byte; routine | movers.s | For `mover_spike_ball`: one turn in how many it lets go, whether this room holds its balls up at all, and what it plays on the way down |
+| `SLIDE_MIDDLE`, `slide_sound` | EQU, routine | movers.s | For `mover_slide_u`/`_v`: where the middle of a cell is, and a sound called with L the axis's position offset |
+| `LIFT_TOP`, `LIFT_RISE`, `LIFT_GIVES_HIM` | EQU | movers.s | For `mover_lift`: where it stops, how fast it climbs, and what it hands the character -- one more than it means, since his own gravity takes that one back |
+| `conveyor_steps` | table | movers.s | For `mover_conveyor`: four pairs of (step in U, step in V), chosen between by the bottom two bits of the graphic |
 | `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/sprite_source.py` |
 
 A name that only `movers.s` uses is needed only if the game uses the routine

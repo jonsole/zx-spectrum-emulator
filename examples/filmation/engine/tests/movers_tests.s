@@ -342,6 +342,32 @@ start:				ld		sp,$FE00
 					EXPECT_FIELD	OBJ.Z, 111, "Z"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, only its bit cleared"
 
+; --- mover_conveyor -------------------------------------------------------------
+; It never moves by its step: object_carry hands that to whatever stands on it,
+; and the bottom two bits of the graphic say which way. The table is the game's,
+; and this one's is the four ways round in a different order from Pentagram's,
+; so a routine that knew the directions itself rather than reading them would
+; show here.
+
+					TEST	"conveyor: the way its graphic names"
+					call	fresh
+					SET		OBJ.GFX, 140 + 2		; the third pair
+					SET		OBJ.U, 100
+					SET		OBJ.V, 100
+					RUN		mover_conveyor
+					EXPECT_FIELD	OBJ.DU, 0, "DU"
+					EXPECT_FIELD	OBJ.DV, 3, "DV"
+					EXPECT_FIELD	OBJ.U, 100, "U: it does not move itself"
+					EXPECT_FIELD	OBJ.V, 100, "V"
+					EXPECT_BYTE	clamp_calls, 0, "clamps"
+
+					TEST	"conveyor: only the bottom two bits count"
+					call	fresh
+					SET		OBJ.GFX, 143		; ...which is the fourth pair
+					RUN		mover_conveyor
+					EXPECT_FIELD	OBJ.DU, -4 & $FF, "DU"
+					EXPECT_FIELD	OBJ.DV, 0, "DV"
+
 ; --- object_hide ---------------------------------------------------------------
 
 					TEST	"hide: repainted, unlinked, and the slot emptied"
@@ -404,6 +430,12 @@ block_at_50:		ld		ix,REC
 
 ; ---------------------------------------------------------------------------
 ; The game: only what movers.s names.
+
+; Which way each conveyor pushes, by the bottom two bits of its graphic.
+conveyor_steps:		DB		1, 0
+					DB		0, -2
+					DB		0, 3
+					DB		-4, 0
 
 mover_of:			DB		4, 7
 					DB		9, 3

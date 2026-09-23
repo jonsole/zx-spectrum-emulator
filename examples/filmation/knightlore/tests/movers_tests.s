@@ -387,7 +387,7 @@ start:				ld		sp,$FE00
 					EXPECT_LEGS	OBJ.GFX, 144, "the legs"
 					EXPECT_BYTE	flip_calls, 0, "flips"
 
-; --- mover_guard_u, mover_guard_sq ---------------------------------------------
+; --- mover_pacer_pair, mover_circuit_pair ---------------------------------------------
 
 					TEST	"guard U: forward, the legs sorted, then the torso"
 					call	fresh
@@ -396,7 +396,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, 1
 					SET		OBJ.DV, 9
 					SET		OBJ.DZ, 9
-					RUN		mover_guard_u
+					RUN		mover_pacer_pair
 					EXPECT_BYTE	clamp_de + 1, GUARD_STEP, "D, the step along U"
 					EXPECT_BYTE	clamp_dz, -1 & $FF, "DZ: it falls"
 					EXPECT_LEGS	OBJ.U, 102, "the legs' U"
@@ -419,7 +419,7 @@ start:				ld		sp,$FE00
 					call	guard_at_100
 					ld		a,COLLIDE_U
 					ld		(stub_hit),a
-					RUN		mover_guard_u
+					RUN		mover_pacer_pair
 					EXPECT_BYTE	clamp_de + 1, -2 & $FF, "D, the step along U"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, turned"
 
@@ -430,7 +430,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, 1
 					ld		a,COLLIDE_V
 					ld		(stub_hit),a
-					RUN		mover_guard_sq
+					RUN		mover_circuit_pair
 					EXPECT_WORD	clamp_de, GUARD_STEP, "the step: north"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 2, "MOVE_STATE"
 
@@ -441,7 +441,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, 3
 					ld		a,COLLIDE_U
 					ld		(stub_hit),a
-					RUN		mover_guard_sq
+					RUN		mover_circuit_pair
 					EXPECT_WORD	clamp_de, -GUARD_STEP & $FF, "the step: south"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 3, "MOVE_STATE"
 
@@ -452,12 +452,12 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, 3
 					ld		a,COLLIDE_V
 					ld		(stub_hit),a
-					RUN		mover_guard_sq
+					RUN		mover_circuit_pair
 					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
 					call	fresh
 					call	guard_graphics
 					call	guard_at_100
-					RUN		mover_guard_sq
+					RUN		mover_circuit_pair
 					EXPECT_WORD	clamp_de, (-GUARD_STEP & $FF) << 8, "the step: west"
 
 ; --- mover_gate ------------------------------------------------------------------
@@ -1101,6 +1101,7 @@ sound_step:
 sound_bounce:
 sound_gate:
 sound_take:
+slide_sound:
 sound_sparkle:
 pacer_sound:
 mover_turned:		ret		; sound_fx.s's, which only choose a sound
