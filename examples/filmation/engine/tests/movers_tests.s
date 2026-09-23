@@ -26,12 +26,14 @@ COLLIDE_U			EQU		1
 COLLIDE_V			EQU		2
 COLLIDE_Z			EQU		4
 OBJ_PASSABLE		EQU		$04
+OBJ_FLIP_H			EQU		1
 room_objects		EQU		ROOMS
 
 ; What a game gives them. The character's half-widths are this suite's own,
 ; chosen apart from the record's sizes so that a sum taken the wrong way
 ; round shows.
 BEHAVIOUR_FIRST_TURN	EQU		2
+BEHAVIOUR_LOOSE		EQU		8		; what shoved_carry hands its step up to
 CHARACTER_HALF_U	EQU		5
 CHARACTER_HALF_V	EQU		3
 
@@ -368,6 +370,102 @@ start:				ld		sp,$FE00
 					EXPECT_FIELD	OBJ.DU, -4 & $FF, "DU"
 					EXPECT_FIELD	OBJ.DV, 0, "DV"
 
+; --- mover_poof ------------------------------------------------------------------
+; A frame a turn from POOF_FIRST to POOF_LAST, and then the slot is empty. It
+; neither falls nor blocks while it plays.
+
+					TEST	"poof: starting one takes the slot over"
+					call	fresh
+					SET		OBJ.GFX, 99
+					SET		OBJ.BEHAVIOUR, 7
+					SET		OBJ.FLAGS, $80
+					RUN		mover_poof_start
+					EXPECT_FIELD	OBJ.GFX, POOF_FIRST, "GFX"
+					EXPECT_FIELD	OBJ.BEHAVIOUR, POOF_BEHAVIOUR, "BEHAVIOUR"
+					EXPECT_FIELD	OBJ.FLAGS, $80 | OBJ_PASSABLE, "FLAGS, and nothing else lost"
+
+					TEST	"poof: a frame a turn, held up"
+					call	fresh
+					SET		OBJ.GFX, POOF_FIRST
+					SET		OBJ.DU, 3
+					RUN		mover_poof
+					EXPECT_BYTE	poof_calls, 1, "poof_sound"
+					EXPECT_FIELD	OBJ.GFX, POOF_FIRST + 1, "GFX"
+					EXPECT_WORD	clamp_de, 0, "the step, cleared"
+					EXPECT_BYTE	clamp_dz, 0, "DZ, held up"
+
+					TEST	"poof: after the last frame, the slot is empty"
+					call	fresh
+					SET		OBJ.GFX, POOF_LAST
+					RUN		mover_poof
+					EXPECT_BYTE	unlink_calls, 1, "depth_unlink"
+					EXPECT_FIELD	OBJ.GFX, 0, "GFX"
+					EXPECT_FIELD	OBJ.BEHAVIOUR, 0, "BEHAVIOUR"
+
+; --- mover_shoved_pile ------------------------------------------------------------
+; A shove is acted on at once and a fall every turn; standing still it looks to
+; itself one turn in SHOVED_REST_EVERY, staggered by the record's own slot so
+; that a room's pushables share the turns.
+
+					TEST	"shoved pile: a shove moves it now, and is then spent"
+					call	fresh
+					SET		OBJ.DU, 3
+					RUN		mover_shoved_pile
+					EXPECT_WORD	clamp_de, $0300, "the step clamped"
+					EXPECT_FIELD	OBJ.DU, 0, "DU after"
+					EXPECT_FIELD	OBJ.DV, 0, "DV after"
+
+					TEST	"shoved pile: standing still, not its turn"
+					call	fresh
+					ld		a,1		; REC's own slot makes turn 0 its one in four
+					ld		(move_tick),a
+					RUN		mover_shoved_pile
+					EXPECT_BYTE	clamp_calls, 0, "clamps"
+
+					TEST	"shoved pile: falling, every turn"
+					call	fresh
+					ld		a,1
+					ld		(move_tick),a
+					SET		OBJ.MOVE_STATE, $80		; was falling
+					RUN		mover_shoved_pile
+					EXPECT_BYTE	clamp_calls, 1, "clamps"
+					EXPECT_FIELD	OBJ.MOVE_STATE, $80, "MOVE_STATE: still falling"
+
+					TEST	"shoved pile: landing clears the falling mark"
+					call	fresh
+					ld		a,1
+					ld		(move_tick),a
+					SET		OBJ.MOVE_STATE, $80
+					ld		a,COLLIDE_Z
+					ld		(stub_hit),a
+					RUN		mover_shoved_pile
+					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
+
+; --- mover_roamer, mover_scuttler ---------------------------------------------------
+; Both pick a new way when something stopped them or they have no step at all:
+; the roamer along one axis, the scuttler along both at once. ROAM_STEP and
+; SCUTTLE_STEP are four here, so the answer is one of -4 and +4.
+
+					TEST	"roamer: stopped across V, so it picks along U"
+					call	fresh
+					SET		OBJ.MOVE_STATE, COLLIDE_V
+					RUN		mover_roamer
+					call	four_either_way
+					call	snap
+					EXPECT_A	1, "DU is four, either way"
+					EXPECT_FIELD	OBJ.DV, 0, "DV: the other axis is left alone"
+
+					TEST	"scuttler: nothing stopped it and it has no step, so both"
+					call	fresh
+					RUN		mover_scuttler
+					call	four_either_way
+					call	snap
+					EXPECT_A	1, "DU is four, either way"
+					ld		a,(REC + OBJ.DV)
+					call	four_either_way.four
+					call	snap
+					EXPECT_A	1, "DV is four, either way"
+
 ; --- object_hide ---------------------------------------------------------------
 
 					TEST	"hide: repainted, unlinked, and the slot emptied"
@@ -418,6 +516,18 @@ zero:				ld		(hl),0
 					jr		nz,zero
 					ret
 
+; A = 1 if the record's DU is four either way, 0 if not.
+four_either_way:	ld		a,(REC + OBJ.DU)
+.four:				cp		4
+					jr		z,.yes
+					cp		-4 & $FF
+					jr		z,.yes
+					xor		a
+					ret
+.yes:				ld		a,1
+					ret
+
+
 block_at_50:		ld		ix,REC
 					SET		OBJ.U, 50
 					SET		OBJ.V, 60
@@ -457,9 +567,26 @@ sound_falls:		ld		hl,falls_calls
 					inc		(hl)
 					ret
 
+poof_sound:			ld		hl,poof_calls
+					inc		(hl)
+					ret
+
+; A game with busy rooms sits its monsters out and doubles their step; this
+; one has none, so they all move every turn at the step they were given.
+monster_sits_out:	or		a		; carry clear: it moves
+					ret
+monster_double:
+monster_halve:		ret
+
 ; The pacer's and the hopper's. The ones that are routines count their calls
 ; and write down what they were handed.
 PACER_STEP			EQU		3
+SCUTTLE_STEP		EQU		4
+ROAM_STEP			EQU		4
+SHOVED_REST_EVERY	EQU		4		; a power of two
+POOF_FIRST			EQU		64
+POOF_LAST			EQU		70
+POOF_BEHAVIOUR		EQU		6		; the behaviour a poof takes on
 HOPPER_RISE			EQU		4
 HOPPER_ABOVE		EQU		20
 
@@ -498,6 +625,7 @@ hopper_landed:		ld		hl,landed_calls
 
 stubs:
 collide_hit:		DB		0
+room_busy:			DB		0		; engine/busy.s's, which this suite does not include
 collide_other:		DW		0
 room_object_count:	DB		0
 
@@ -505,6 +633,7 @@ stub_hit:			DB		0		; what the clamp says gave
 stub_block:			DB		0		; non-zero: the clamp takes the whole step
 
 z_calls:			DB		0
+poof_calls:			DB		0
 falls_calls:		DB		0
 clamp_calls:		DB		0
 clamp_de:			DW		0		; D, E as the clamp was handed them

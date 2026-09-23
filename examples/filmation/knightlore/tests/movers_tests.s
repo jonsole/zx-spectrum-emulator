@@ -548,7 +548,7 @@ start:				ld		sp,$FE00
 					call	fresh
 					SET		OBJ.DU, 3
 					SET		OBJ.DV, -1
-					RUN		mover_pushed
+					RUN		mover_shoved
 					EXPECT_WORD	clamp_de, $03FF, "the step clamped"
 					EXPECT_FIELD	OBJ.DU, 0, "DU after"
 					EXPECT_FIELD	OBJ.DV, 0, "DV after"
@@ -556,7 +556,7 @@ start:				ld		sp,$FE00
 					TEST	"sliding: keeps its step"
 					call	fresh
 					SET		OBJ.DU, 3
-					RUN		mover_sliding
+					RUN		mover_shoved_on
 					EXPECT_WORD	clamp_de, $0300, "the step clamped"
 					EXPECT_FIELD	OBJ.DU, 3, "DU after"
 
@@ -568,7 +568,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.DU, 3
 					ld		a,COLLIDE_Z
 					ld		(stub_hit),a
-					RUN		mover_ghost
+					RUN		mover_drifter
 					EXPECT_WORD	clamp_de, $0300, "the step clamped"
 					EXPECT_FIELD	OBJ.GFX, 82, "the graphic"
 					EXPECT_FIELD	OBJ.MOVE_STATE, 0, "MOVE_STATE"
@@ -580,7 +580,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.MOVE_STATE, COLLIDE_U
 					ld		a,COLLIDE_V | COLLIDE_Z
 					ld		(stub_hit),a
-					RUN		mover_ghost
+					RUN		mover_drifter
 					ld		a,(REC + OBJ.DU)
 					call	ghost_speed
 					call	snap
@@ -598,7 +598,7 @@ start:				ld		sp,$FE00
 					TEST	"ghost: no step at all, a new way to go"
 					call	fresh
 					SET		OBJ.GFX, 83
-					RUN		mover_ghost
+					RUN		mover_drifter
 					ld		a,(REC + OBJ.DU)
 					call	ghost_speed
 					call	snap
@@ -617,7 +617,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.FLAGS, 0
 					SET		OBJ.DU, 4
 					SET		OBJ.DV, -3
-					RUN		mover_ghost.face
+					RUN		ghost_face
 					EXPECT_FIELD	OBJ.GFX, 81, "the graphic"
 					EXPECT_FIELD	OBJ.FLAGS, 1, "mirrored"
 
@@ -627,7 +627,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.FLAGS, 0
 					SET		OBJ.DU, -4
 					SET		OBJ.DV, 3
-					RUN		mover_ghost.face
+					RUN		ghost_face
 					EXPECT_FIELD	OBJ.GFX, 82, "the graphic"
 					EXPECT_FIELD	OBJ.FLAGS, 1, "mirrored"
 
@@ -637,7 +637,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.FLAGS, 1
 					SET		OBJ.DU, -3
 					SET		OBJ.DV, 4
-					RUN		mover_ghost.face
+					RUN		ghost_face
 					EXPECT_FIELD	OBJ.GFX, 82, "the graphic"
 					EXPECT_FIELD	OBJ.FLAGS, 0, "not mirrored"
 
@@ -647,7 +647,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.FLAGS, 1
 					SET		OBJ.DU, 3
 					SET		OBJ.DV, -4
-					RUN		mover_ghost.face
+					RUN		ghost_face
 					EXPECT_FIELD	OBJ.GFX, 81, "the graphic"
 					EXPECT_FIELD	OBJ.FLAGS, 0, "not mirrored"
 
@@ -660,7 +660,7 @@ start:				ld		sp,$FE00
 					SET		OBJ.DV, -2
 					ld		a,1
 					ld		(stub_block),a
-					RUN		mover_bounce
+					RUN		mover_hunter
 					EXPECT_FIELD	OBJ.DU, 2, "DU"
 					EXPECT_FIELD	OBJ.DV, -2 & $FF, "DV"
 					EXPECT_FIELD	OBJ.GFX, 182, "the graphic"
@@ -670,20 +670,20 @@ start:				ld		sp,$FE00
 					call	ball_beside_player
 					ld		a,16		; the knight's legs
 					ld		(player + OBJ.GFX),a
-					RUN		mover_bounce
-					EXPECT_FIELD	OBJ.DZ, BOUNCE_RISE, "DZ"
+					RUN		mover_hunter
+					EXPECT_FIELD	OBJ.DZ, HUNTER_RISE, "DZ"
 					EXPECT_FIELD	OBJ.GFX, 183, "the graphic"
 					call	one_axis
-					EXPECT_A	BOUNCE_STEP, "one axis, away from him"
+					EXPECT_A	HUNTER_STEP, "one axis, away from him"
 
 					TEST	"bounce: lands, and comes for the werewolf"
 					call	fresh
 					call	ball_beside_player
 					ld		a,48		; the werewolf's legs
 					ld		(player + OBJ.GFX),a
-					RUN		mover_bounce
+					RUN		mover_hunter
 					call	one_axis
-					EXPECT_A	-BOUNCE_STEP & $FF, "one axis, towards him"
+					EXPECT_A	-HUNTER_STEP & $FF, "one axis, towards him"
 
 ; --- mover_spell -------------------------------------------------------------------
 
@@ -691,7 +691,7 @@ start:				ld		sp,$FE00
 					call	fresh
 					call	spell_near_player
 					SET		OBJ.GFX, 164
-					RUN		mover_spell
+					RUN		mover_stalker
 					EXPECT_FIELD	OBJ.DU, SPELL_STEP, "DU"
 					EXPECT_FIELD	OBJ.DV, -SPELL_STEP & $FF, "DV"
 					EXPECT_FIELD	OBJ.GFX, 165, "the graphic"
@@ -702,7 +702,7 @@ start:				ld		sp,$FE00
 					ld		a,1
 					ld		(player + CHARACTER_DOOR),a
 					SET		OBJ.GFX, 167
-					RUN		mover_spell
+					RUN		mover_stalker
 					EXPECT_FIELD	OBJ.DU, SPELL_CREEP, "DU"
 					EXPECT_FIELD	OBJ.DV, -SPELL_CREEP & $FF, "DV"
 					EXPECT_FIELD	OBJ.GFX, 164, "the graphic, round to the first"
@@ -714,14 +714,14 @@ start:				ld		sp,$FE00
 					ld		(player + CHARACTER_DOOR),a
 					ld		a,$88
 					ld		(room_shown),a
-					RUN		mover_spell
+					RUN		mover_stalker
 					EXPECT_FIELD	OBJ.DU, SPELL_STEP, "DU"
 
 					TEST	"spell: level with him counts as past"
 					call	fresh
 					call	spell_near_player
 					SET		OBJ.U, 100
-					RUN		mover_spell
+					RUN		mover_stalker
 					EXPECT_FIELD	OBJ.DU, -SPELL_STEP & $FF, "DU"
 
 ; --- mover_spike_ball ------------------------------------------------------------

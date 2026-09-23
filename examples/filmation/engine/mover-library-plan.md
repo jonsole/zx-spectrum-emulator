@@ -1,6 +1,7 @@
 # Plan: a shared library of movers
 
-Status: **stages 1, 2 and 3 done** -- 1 as 69d7d6e, 2 as c2f2296, 3
+Status: **done, and further than it was written for** -- stages 1 to 3 as
+69d7d6e, c2f2296 and ea2b0e1, and then the rest of both games' movers on top,
 uncommitted (2026-09-23). This file is the brief
 for the session that does the work. It records what was found, what is
 proposed, and what the user decided.
@@ -311,6 +312,43 @@ supplies, and an `EQU` to the routine it already had costs nothing.
   instructions above. The games' own suites cover them through their tables
   (Knight Lore's 63 tests, Pentagram's 22); `mover_conveyor` had no test
   anywhere, so the engine's suite gained two.
+
+## The rest of them: done, uncommitted (2026-09-23)
+
+Asked for after stage 3: a library a new game can pick a whole castle's worth
+of behaviour out of, rather than two games' leftovers. So everything either
+game had that another could want went across as well, each still its own
+routine -- nothing was merged, because what two games do differently is the
+point of them.
+
+- **From Knight Lore:** `mover_drifter` (the ghost), `mover_hunter` (the
+  hunting ball), `mover_stalker` (the repel spell), `mover_shoved` and
+  `mover_shoved_on` (the table and the chest), and `mover_collapsing`.
+- **From Pentagram:** `mover_scuttler` and `mover_roamer` (the spider and the
+  creature), `mover_faller` and `mover_faller4`, `mover_homer`, `mover_poof`
+  with `mover_poof_start`, `mover_crumbles`, `mover_shoved_pile` with
+  `shoved_carry`, and the `mover_move_anim` helper.
+- **Renamed for what they do**, since both games had a `mover_pushed` and they
+  are not the same thing: Knight Lore's is `mover_shoved`, Pentagram's
+  `mover_shoved_pile`. The spider and creature became the scuttler and the
+  roamer for the same reason -- a library names behaviours, not animals.
+- **Still each game's own:** Knight Lore's collectables and cauldron, the
+  frames a guard wears, its busy-room dispatch; Pentagram's quest, well,
+  water, his bolt, and the monster policy (`monster_sits_out`,
+  `monster_double`, `monster_halve`), which the shared monsters call by name.
+  A game with no busy rooms points all three at a RET.
+- **A bug the tests caught.** Merging the ghost's flicker into its facing hook
+  wiped the step it had just picked: `mover_flicker` falls through into
+  `mover_halt`. The original flickers before picking and faces after, so they
+  are two hooks, `drift_turn` and `drift_frame`.
+- **Bytes.** Pentagram is unchanged at 11 free. Knight Lore went from 30 to
+  20: the hunting ball costs 5 for asking the game which way to go rather than
+  patching a branch opcode, and the repel spell 5 for asking how fast. Every
+  other routine assembles to the same bytes as before but for its addresses.
+- **Tests.** The engine's suite gained nine (39 in all): the puff's frames and
+  its end, the shoved pile's rest cadence and its falling mark, and the roamer
+  and scuttler picking. The games' own suites cover the rest through their
+  tables. 248 pass.
 
 ## Not in this plan
 

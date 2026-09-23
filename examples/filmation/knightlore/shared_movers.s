@@ -57,6 +57,37 @@ spike_ball_sound	EQU		sound_z
 SLIDE_MIDDLE		EQU		8
 
 
+; A ghost drifts until something stops it: engine/movers.s's mover_drifter,
+; upd_80_to_83. Its speeds and the frames it wears are Knight Lore's own.
+drift_deltas		EQU		ghost_deltas
+drift_sound			EQU		sound_uvz
+drift_turn			EQU		mover_flicker
+drift_frame			EQU		ghost_face
+
+
+; A table is shoved and stops, a chest is shoved and slides on:
+; engine/movers.s's mover_shoved and mover_shoved_on, upd_84 and upd_85. Both
+; hum while they are actually going somewhere -- audio_B467.
+shoved_sound		EQU		sound_uvz
+
+
+; The hunting ball: engine/movers.s's mover_hunter, upd_182_183. It springs
+; four up and takes two along one axis, and hunter_flees and hunter_landed in
+; movers.s are the rest.
+HUNTER_RISE			EQU		4
+HUNTER_STEP			EQU		2
+
+
+; The repel spell: engine/movers.s's mover_stalker, upd_164_to_167. Its speed
+; and its frames are stalker_speed and stalker_frame, in movers.s.
+
+
+; The collapsing block: engine/movers.s's mover_collapsing, upd_143. It goes
+; straight to the last of its graphics, with the sparkles' noise.
+COLLAPSE_GFX		EQU		185
+collapse_sound		EQU		sound_sparkle
+
+
 ; A ball bounces on the spot: engine/movers.s's mover_hopper_claim, which is
 ; upd_178_179, and bounces to BALL_RISE_TO above where the room's first ball
 ; started -- see there. It flickers where it stands, hums as it goes, and

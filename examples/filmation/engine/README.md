@@ -32,7 +32,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `room.s` | The room: bounds, doorways, the object count, and `room_add` → `room_show` |
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
-| `movers.s` | The behaviours a Filmation game can have, each assembled only if the game names it (`IFUSED`): `mover_find`; `mover_falls` and `mover_falls_noisy`; `mover_sinks`; `mover_pacer_u`/`_v` with `mover_turn_if_hit`; `mover_hopper` and `mover_hopper_claim`; `mover_pacer_pair` and `mover_circuit_pair` for a two-record figure; `mover_gate`; `mover_spike_ball`; `mover_slide_u`/`_v`; `mover_lift`; `mover_conveyor`; `player_on_top`; `object_hide` and `object_blank`. Included after `mover.s`, with the game's names for it in between |
+| `movers.s` | Every behaviour either game has that another could want -- see [The movers](#the-movers). Each is assembled only if the game names it (`IFUSED`), so a game pays for what it picks and nothing else. Included after `mover.s`, with the game's names for it in between |
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
 | `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the games' |
 
@@ -53,6 +53,54 @@ behaviour, or anything else the engine calls through a table or a hook, says
 what the game's side may do as well -- "and whatever mover_turned does". The
 editor's hover shows the three lines first
 ([A routine's header](../../../docs/vscode-debugging.md#a-routines-header)).
+
+## The movers
+
+`mover.s` gives every behaviour its turn through the game's `mover_tbl`;
+`movers.s` is the behaviours themselves. A game writes its own `mover_tbl` and
+points each entry wherever it likes -- one of these, or something of its own.
+Nothing here is assembled unless the game names it.
+
+Every one of them takes `IX` -> the record, with `mover_ix` naming it too, and
+may corrupt anything but `IX`. What each asks of the game is in the right-hand
+column and spelled out in full above the routine.
+
+| Mover | What it does | What the game supplies |
+|---|---|---|
+| `mover_find` | Not a mover: turns a template into a behaviour when a room is built | `mover_of`, pairs of (template, behaviour) ending `$FF` |
+| `mover_falls` | Clears its step and falls; goes wherever what it stands on goes | -- |
+| `mover_falls_noisy` | The same, with a sound every turn | `sound_falls` |
+| `mover_sinks` | Sinks a unit a turn while something stands on it | `sound_z` |
+| `mover_hopper_claim` | The same, and the first one in a room fixes the height they all bounce to | ...and `HOPPER_ABOVE` |
+| `mover_shoved` | Takes a shove, spends it, and forgets it | `shoved_sound` |
+| `mover_shoved_on` | Takes a shove and slides on until something stops it | `shoved_sound` |
+| `mover_shoved_pile` | Takes a shove and hands it up to whatever is stacked on top; at rest it looks to itself one turn in `SHOVED_REST_EVERY` | `SHOVED_REST_EVERY` |
+| `mover_drifter` | Drifts in a straight line until something stops it, then picks again | `drift_deltas`; `drift_sound`, `drift_turn`, `drift_frame` |
+| `mover_roamer` | Roams one axis at a time, picking the other when it is stopped | `ROAM_STEP`; the monster names below |
+| `mover_scuttler` | The same on both axes at once, mirrored every other turn | `SCUTTLE_STEP`; the monster names below |
+| `mover_faller`, `mover_faller4` | Falls from the sky and then roams, in two frames or four | `FALLER_STEP`; the monster names below |
+| `mover_homer` | Steers at the player on all three axes in sixteenths, bouncing off walls | `HOMER_ACC_U/V/Z`, `HOMER_PULL`, `HOMER_MOST`, `HOMER_LEAST`; the monster names below |
+| `mover_hunter` | Bounces, and on landing takes a new direction along one axis, towards the player or away | `HUNTER_RISE`, `HUNTER_STEP`; `hunter_landed`, `hunter_flees` |
+| `mover_stalker` | Follows the player about at a step the game picks each turn | `stalker_speed`, `stalker_frame` |
+| `mover_collapsing` | Goes to its last graphic the turn something lands on it, and is gone the next | `COLLAPSE_GFX`, `collapse_sound` |
+| `mover_crumbles` | Steps a frame every `CRUMBLE_EVERY` turns while the player stands on it, then goes | `CRUMBLE_LAST`, `CRUMBLE_EVERY` |
+| `mover_poof`, `mover_poof_start` | A puff that plays its frames where something was and empties the slot | `POOF_FIRST`, `POOF_LAST`, `POOF_BEHAVIOUR`, `poof_sound` |
+
+And the pieces a mover is built from, which a game's own movers may use too:
+
+| | |
+|---|---|
+| `mover_turn_if_hit` | Turn round if the move just made was stopped along the axis in A, and tell `mover_turned` |
+| `mover_move_anim` | Repaint if this was an animating turn, and otherwise only if it moved |
+| `player_on_top` | Is the player standing on this record? |
+| `object_hide`, `object_blank` | Take a record out of the room, and empty a slot |
+
+**The monsters.** `mover_roamer`, `mover_scuttler`, the fallers and
+`mover_homer` are monsters, so they ask the game three things every turn:
+`monster_sits_out` (carry set to sit this one out, which is how a busy room
+shares the work -- see `busy.s`), and `monster_double`/`monster_halve` around
+the move, for a game that would rather a monster went twice as far on the
+turns it does move. A game with none of that points all three at a `RET`.
 
 ## Laying out memory
 
@@ -109,10 +157,7 @@ The engine names nothing else of the game's.
 | `mover_tbl` | table | mover.s | One `DW` per behaviour from `BEHAVIOUR_FIRST_TURN` up. Each gets `IX` → its record, may corrupt anything but must leave the stack balanced, and returns |
 | `deadly_touched` | byte | object.s | Set to 1 when a character touches something deadly |
 | `walker_player` | label | mover.s, movers.s | The character, which is not in the pool, so movers collide with it explicitly; `player_on_top` asks whether it is standing on a record |
-| `mover_of` | table | movers.s | For `mover_find`: pairs of (template, behaviour), ended by `$FF` |
-| `sound_falls` | routine | movers.s | For `mover_falls_noisy`: played every turn before it falls. Preserves IX |
-| `PACER_STEP`; `pacer_sound`, `pacer_frame`, `pacer_move`, `mover_turned` | EQU; routines | movers.s | For `mover_pacer_u`/`_v`: how far it goes a turn; a sound, with L the axis's collide bit; a frame change once it is held up; the move itself (`mover_move` or `mover_move_always`); and what to do when it turns, with A the axis. See the header of `mover_pacer` |
-| `hopper_top`, `HOPPER_RISE`, `HOPPER_ABOVE`; `hopper_frame`, `hopper_sound`, `hopper_move`, `hopper_landed` | byte, EQU; routines | movers.s | For `mover_hopper`: the height it climbs past, the DZ it climbs with, and (for `mover_hopper_claim` only) how far above the first one the room's top is claimed; clearing the step (`mover_halt` or `mover_flicker`), a sound, the falling move, and what to do on landing |
+| the movers' own | EQU, tables, routines | movers.s | Every behaviour a game picks out of `movers.s` asks for a few names of its own -- a step, a sound, the frames it wears. They are listed against each one under [The movers](#the-movers), and in full above the routine itself |
 | `walker_glance` | routine | walker.s | A = block + phase in, the body frame to show out; IX → legs. Corrupts C. Return A unchanged for no glance |
 | `sound_jump`, `sound_z` | routines | walker.s, movers.s | A jump starting; a fall faster than two units a turn, and `mover_sinks` going down |
 | `CHARACTER_STEP`, `CHARACTER_HALF_U/V`, `CHARACTER_BODY_UP`, `CHARACTER_JUMP_DZ`, `CHARACTER_FALL_MAX` | EQU | walker.s, movers.s | How far a character walks, how wide it is, how high its body rides, how it jumps and falls |
@@ -123,12 +168,6 @@ The engine names nothing else of the game's.
 | `menu_mode`, `input_keyboard`, `input_stick_done` | byte, routines | input.s | Which control the menu chose; the game's own keys; and the tail every stick reader ends at, which adds whatever else that game reads while a stick is steering and ends at `input_store` |
 | `INPUT_LEFT_B`, `INPUT_RIGHT_B`, `INPUT_FORWARD_B`, `INPUT_DOWN_B`, `INPUT_STICK_FIRE_B` | EQU | input.s | Which BIT of the answer each of a stick's five inputs sets. A stick has five and no more, so what the fifth means is the games' own business: Knight Lore points it at jump, Pentagram at fire |
 | `tune_note_at`, `tune_key` | routines | tune.s | A = a note, 1 to 63: carry set and B, C its half-period with E the cycles one length lasts, or carry clear to skip it; and whether a key is down, which stops a tune |
-| `PAIR_STEP`, `pair_frame` | EQU, routine | movers.s | For `mover_pacer_pair` and `mover_circuit_pair`: how far a two-record figure goes a turn, and the frames both halves wear for the step it is about to take |
-| `GATE_RISE`, `GATE_DROPS`; `gate_rising`, `gate_landed` | EQU; routines | movers.s | For `mover_gate`: how high a portcullis climbs and how many drops come before it waits on the dice; a sound every turn it climbs, and one as it lands |
-| `SPIKE_BALL_DICE`, `spike_ball_held`; `spike_ball_sound` | EQU, byte; routine | movers.s | For `mover_spike_ball`: one turn in how many it lets go, whether this room holds its balls up at all, and what it plays on the way down |
-| `SLIDE_MIDDLE`, `slide_sound` | EQU, routine | movers.s | For `mover_slide_u`/`_v`: where the middle of a cell is, and a sound called with L the axis's position offset |
-| `LIFT_TOP`, `LIFT_RISE`, `LIFT_GIVES_HIM` | EQU | movers.s | For `mover_lift`: where it stops, how fast it climbs, and what it hands the character -- one more than it means, since his own gravity takes that one back |
-| `conveyor_steps` | table | movers.s | For `mover_conveyor`: four pairs of (step in U, step in V), chosen between by the bottom two bits of the graphic |
 | `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/sprite_source.py` |
 
 A name that only `movers.s` uses is needed only if the game uses the routine

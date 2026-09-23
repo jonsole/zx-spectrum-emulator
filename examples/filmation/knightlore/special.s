@@ -94,12 +94,12 @@ special_colours:	DB		$42, $43, $44, $45, $46, $47, $42, $47
 ; Corrupts: everything -- IX only on the turn object_hide takes it away
 mover_special:		ld		a,(ix+OBJ.GFX)
 					cp		SPECIAL_LIFE
-					jp		c,mover_pushed
+					jp		c,mover_shoved
 					jr		nz,.flight
 
 					ld		de,$0001		; next to him, reaching no further down
 					call	special_near
-					jp		nc,mover_pushed
+					jp		nc,mover_shoved
 					ld		hl,player_lives		; and a life with it
 					inc		(hl)
 					call	sound_pickup
@@ -201,7 +201,7 @@ mover_cauldron:		ld		a,(ix+OBJ.GFX)
 					ld		a,(player + OBJ.GFX)
 					sub		16
 					cp		64
-					jp		c,mover_spell
+					jp		c,mover_stalker
 					jp		object_hide
 
 .shown:				ld		(ix+OBJ.GFX),SPECIAL_BUBBLES

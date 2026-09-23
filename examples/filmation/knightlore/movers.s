@@ -144,12 +144,12 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_gate			; MOVE_GATE
 					DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_slide_v		; MOVE_SLIDE_V
-					DW		mover_spell		; MOVE_SPELL
+					DW		mover_stalker		; MOVE_SPELL: engine/movers.s
 					DW		mover_cauldron	; MOVE_CAULDRON
 					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
-					DW		mover_pushed		; MOVE_PUSHED
+					DW		mover_shoved		; MOVE_PUSHED: engine/movers.s
 					DW		mover_move		; MOVE_SLIDING: see mover_sliding
 					DW		mover_special	; MOVE_SPECIAL
 					ASSERT	($ - mover_tbl) / 2 == MOVE_SPECIAL - MOVE_BALL + 1
@@ -260,77 +260,23 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 
 ; ---------------------------------------------------------------------------
 ; ---------------------------------------------------------------------------
-; A ghost's speeds, -3, +3, -4 and +4 -- see mover_ghost.
+; A ghost's speeds, -3, +3, -4 and +4: engine/movers.s's mover_drifter picks
+; one of them an axis, and the game indexes delta_tbl at (random & 3) + 4 for
+; the same four.
 ghost_deltas:		DB		-3, 3, -4, 4
 
-; A ghost, which drifts until something stops it and then picks a new way to
-; go -- upd_80_to_83.
+
+; The frames a ghost wears, which mover_drifter calls once it has picked a new
+; way to go -- calc_ghost_sprite, and the flicker between its two.
 ;
-; It keeps whatever step it has until it is blocked or has come to nothing, so
-; it crosses a room in a straight line and then turns at random. The speeds are
-; the game's: it indexes delta_tbl at (random & 3) + 4, and entries 4 to 7 of
-; that table are -3, +3, -4 and +4.
+; The wider of the two steps says whether it drifts along U or along V: along
+; U it is drawn mirrored, and the sign picks between its two pairs of frames,
+; the other way round on the two axes. It keeps the pair until it turns again.
 ;
-; It takes its step first and decides afterwards, which is the order upd_80_to_83
-; uses -- the clamp has to have had its say before there is anything to decide.
-;
-; In:  IX -> the record; mover_ix names it too
+; In:  IX -> the record
 ; Out: nothing
-; Corrupts: everything but IX
-mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
-					; then picks, because the clamp has to have had its say -- but
-					; anything riding on this ghost reads its step out of the record,
-					; and if what is in there is the step it is ABOUT to take rather
-					; than the one it just took, the passenger moves a turn early and
-					; every turn the ghost is blocked leaves it further behind. This
-					; way round the record holds the step actually achieved, clamped
-					; and all, which is what object_carry wants to copy.
-					;
-					; What the move would have told us is carried over in MOVE_STATE
-					; instead: it got nowhere last turn, so draw again.
-					call	sound_uvz		; and it moans as it goes
-					ld		a,(ix+OBJ.MOVE_STATE)
-					or		a
-					jr		nz,.turn
-					ld		a,(ix+OBJ.DU)
-					or		(ix+OBJ.DV)
-					jr		nz,.go
-
-					; A new way to go, and the two axes are drawn separately -- the
-					; game takes one from its seed and the other from the frame
-					; counter, so they are not the same number twice.
-.turn:				call	mover_flicker		; it flickers as it goes
-					call	mover_rand
-					call	.pick
-					ld		(ix+OBJ.DU),a
-					ld		a,(move_tick)
-					call	.pick
-					ld		(ix+OBJ.DV),a
-					call	.face
-
-.go:				call	mover_move_always		; which leaves IX -> the record
-					ld		a,(collide_hit)	; whether something stopped it, kept
-					and		COLLIDE_U | COLLIDE_V	; for next turn to read -- which is
-					ld		(ix+OBJ.MOVE_STATE),a	; the game's own test on (IX+$0C),
-					ret				; a turn later than it asks it
-
-
-.pick:				and		3
-					ld		c,a
-					ld		b,0
-					ld		hl,ghost_deltas
-					add		hl,bc
-					ld		a,(hl)
-					ret
-
-
-					; And which way it faces, from the step it has just taken --
-					; calc_ghost_sprite. The wider of the two says whether it
-					; drifts along U or along V: along U it is drawn mirrored,
-					; and the sign picks between its two pairs of frames, the
-					; other way round on the two axes. It keeps the pair until
-					; it turns again, and flickers between the two of them.
-.face:				ld		a,(ix+OBJ.DU)
+; Corrupts: AF, BC, DE, HL
+ghost_face:			ld		a,(ix+OBJ.DU)
 					call	character_door_find.abs
 					ld		c,a
 					ld		a,(ix+OBJ.DV)
@@ -356,180 +302,69 @@ mover_ghost:		; Decide BEFORE moving, not after. Knight Lore moves first and
 
 
 ; ---------------------------------------------------------------------------
-; A table, which goes where it is shoved and then stops -- upd_84. It clears
-; its step AFTER moving, where a carried block clears before: the difference is
-; that this one keeps what it was given long enough to spend it.
+; What the hunting ball asks, every time it lands -- engine/movers.s's
+; mover_hunter.
 ;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything but IX
-mover_pushed:		call	mover_sliding
-					jp		mover_halt
-
-
-; A chest, which never lets go of its step at all -- upd_85. Shove one and it
-; slides on by itself until the clamp takes the step away.
+; It runs FROM the knight and comes FOR the werewolf, which upd_182_183
+; decides by the player's own graphic: 16 to 47 is the knight. The game asks
+; $5C08, the legs' graphic, and so does this.
 ;
-; Either makes a noise while it is actually going somewhere: the game asks
-; whether it moved (at $C1A1) and sounds audio_B467 if it did. What the clamp
-; left of the step is what it moved.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything but IX
-mover_sliding:		call	mover_move
-					ld		a,(ix+OBJ.DU)
-					or		(ix+OBJ.DV)
-					jp		nz,sound_uvz
-					ret
-
-
-; ---------------------------------------------------------------------------
-BOUNCE_RISE			EQU		4
-BOUNCE_STEP			EQU		2
-
-; The ball that hunts -- upd_182_183. It bounces, and every time it lands it
-; takes a new upward push and a new direction along ONE axis, chosen by which
-; side of it the knight is on. Which axis is a coin toss.
-;
-; It keeps its horizontal step across the move: the routine saves dX and dY,
-; lets dec_dZ_and_update_XYZ clamp them, and then puts the originals straight
-; back. So touching something does not cost it its direction -- only landing
-; changes that.
-;
-; And it runs FROM the knight and comes FOR the werewolf. upd_182_183 decides
-; which by patching the opcode of the branch that picks the sign -- $38, JR C,
-; if the player's graphic is 16 to 47, which is the knight; $30, JR NC, for
-; anything else, which is the werewolf -- and so does this. The game also
-; varies the bounce height by room number, which is not here.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything but IX
-mover_bounce:		ld		a,(ix+OBJ.DZ)		; before gravity has had it
-					push	af
-					ld		c,(ix+OBJ.DU)
-					ld		b,(ix+OBJ.DV)
-					push	bc
-					call	mover_move_always		; which leaves IX -> the record
-					pop		bc
-					ld		(ix+OBJ.DU),c		; whatever the clamp made of them,
-					ld		(ix+OBJ.DV),b		; it still wants to go that way
-					pop		bc		; B - that DZ
-
-					ld		a,(collide_hit)
-					and		COLLIDE_Z
-					ret		z		; still in the air
-
-					; Stopped in Z either way, it springs up again -- but it
-					; only makes a noise if it was coming down. The game keeps
-					; the DZ it started the turn with at $B60C and asks it at
-					; $B645: a ball with a block sitting on it is stopped on
-					; its way UP every turn, and bounced silently in the game
-					; where this clicked on every turn of room $A3.
-					ld		(ix+OBJ.DZ),BOUNCE_RISE
-					bit		7,b
-					call	nz,sound_bounce
-					call	mover_flicker		; and neither axis, until one is picked
-
-					; Knight or werewolf. The game asks $5C08, the legs' graphic.
-					ld		a,(player + OBJ.GFX)
+; In:  nothing
+; Out: A = $FF to run from him, 0 to come for him
+; Corrupts: AF
+hunter_flees:		ld		a,(player + OBJ.GFX)
 					sub		16
 					cp		32
-					ld		a,$38		; JR C: away from the knight
-					jr		c,.form
-					ld		a,$30		; JR NC: towards the werewolf
-.form:				ld		(.v_dir),a
-					ld		(.u_dir),a
-
-					call	mover_rand
-					and		1
-					jr		z,.along_u
-
-					ld		a,(player + OBJ.V)
-					cp		(ix+OBJ.V)
-					ld		a,BOUNCE_STEP
-.v_dir:				jr		nc,.go_v		; opcode patched above
-					neg
-.go_v:				ld		(ix+OBJ.DV),a
+					ld		a,$FF		; the knight: away
+					ret		c
+					inc		a		; anything else: towards
 					ret
 
-.along_u:			ld		a,(player + OBJ.U)
-					cp		(ix+OBJ.U)
-					ld		a,BOUNCE_STEP
-.u_dir:				jr		nc,.go_u		; opcode patched above
-					neg
-.go_u:				ld		(ix+OBJ.DU),a
-					ret
+
+; And what it does on the turn it lands: a click if it was coming down, and
+; the other of its two frames either way. The game keeps the DZ it started the
+; turn with at $B60C and asks it at $B645 -- a ball with a block sitting on it
+; is stopped on its way UP every turn, and clicked every turn of room $A3
+; before that was asked.
+;
+; In:  B  = the DZ it had before gravity
+;      IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
+hunter_landed:		bit		7,b
+					call	nz,sound_bounce
+					jp		mover_flicker
 
 
 ; ---------------------------------------------------------------------------
-; The repel spell: a sparkle that homes in on the knight, four units a turn on
-; each axis at once, and creeps at one while he stands in an arch -- which is
-; what gives him the chance to get out of the room ahead of it.
+; How fast the repel spell comes after him this turn -- engine/movers.s's
+; mover_stalker asks before it steps.
 ;
-; Knight Lore's, from upd_164_to_167 and move_towards_plyr. The game's "in an
-; arch" is bit 0 of the knight's own byte, set by whichever arch finds him
-; near it (chk_plyr_spec_near_arch); ours is CHARACTER_DOOR, which player_step
-; works out from the same kind of box. In room $88 it never slows.
+; The game's "in an arch" is bit 0 of the knight's own byte, set by whichever
+; arch finds him near it (chk_plyr_spec_near_arch); ours is CHARACTER_DOOR,
+; which player_step works out from the same kind of box. In room $88 it never
+; slows.
 ;
-; The way to go is the SIGN of the difference, not its carry, as the game has
-; it: level with him counts as past him, so it jitters about his position
-; rather than settling on it. It does not set DZ, so it falls like anything
-; else, and it runs through its four frames every turn.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything but IX
-mover_spell:		ld		c,SPELL_STEP
+; In:  nothing
+; Out: C = the step, on each axis
+; Corrupts: AF, C
+stalker_speed:		ld		c,SPELL_STEP
 					ld		a,(room_shown)
 					cp		$88
-					jr		z,.speed
+					ret		z
 					ld		a,(player + CHARACTER_DOOR)
 					inc		a		; $FF: in no doorway
-					jr		z,.speed
-					ld		c,SPELL_CREEP
-
-.speed:				ld		hl,player + OBJ.U
-					ld		a,(ix+OBJ.U)
-					sub		(hl)
-					ld		a,c
-					jp		m,.u		; short of him: towards
-					neg
-.u:					ld		(ix+OBJ.DU),a
-
-					inc		hl		; player + OBJ.V
-					ld		a,(ix+OBJ.V)
-					sub		(hl)
-					ld		a,c
-					jp		m,.v
-					neg
-.v:					ld		(ix+OBJ.DV),a
-
-					call	mover_cycle4
-					call	sound_uvz
-					jp		mover_move_always
-
-
-; ---------------------------------------------------------------------------
-; A block that crumbles away when something lands on it -- upd_143. The game
-; turns it into graphic 184 and steps it straight on to 185, draws that for a
-; turn, and then takes it out of the room. The dropping block, which sinks
-; under the same mark instead, is engine/movers.s's mover_sinks.
-;
-; In:  IX -> the record; mover_ix names it too
-; Out: nothing
-; Corrupts: everything -- IX only on the turn object_hide takes it away
-mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
-					jp		nz,object_hide		; crumbled last turn: gone
-					bit		3,(ix+OBJ.MOVE_STATE)
 					ret		z
-					ld		(ix+OBJ.MOVE_STATE),$10
-					ld		a,185		; crumbling with the sparkles' noise
-					ld		(ix+OBJ.GFX),a
-					call	sound_sparkle
-					call	mover_halt
-					ld		(ix+OBJ.DZ),a
-					jp		mover_paint
+					ld		c,SPELL_CREEP
+					ret
 
+
+; ...and what it wears while it does: the next of its four frames, and the
+; moan that goes with it.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
+stalker_frame:		call	mover_cycle4
+					jp		sound_uvz
 

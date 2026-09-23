@@ -1010,10 +1010,10 @@ mover_quest:        call    mover_hover
 ; Corrupts: everything but IX
 mover_collectable:  ld      a,(room_shown)
                     cp      QUEST_PIECES_ROOM
-                    jp      nz,mover_pushed
+                    jp      nz,mover_shoved_pile
                     ld      a,(quest_pieces_on)
                     or      a
-                    jp      z,mover_pushed
+                    jp      z,mover_shoved_pile
 
                     ld      a,(ix+OBJ.GFX)      ; its place: $D562 by graphic
                     and     7

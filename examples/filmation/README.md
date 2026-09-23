@@ -101,8 +101,8 @@ copy: the font pipeline lives there, and each game's `font_sheet.py` and
 | `player.s` | The knight: his record, entering and leaving rooms, dying, changing into the wolf |
 | `knight.s` | His size, step, jump and doorway box, and the arch nudge |
 | `glance.s` | His top half looking about as he goes |
-| `movers.s` | What is Knight Lore's alone: the ghost, the hunting ball, the repel spell, the collapsing block, and the frames a guard wears. Everything another Filmation game could want -- fires and balls, guards' walks, portcullises, spiked balls, sliding blocks -- is the engine's, in `engine/movers.s` |
-| `shared_movers.s` | What it gives `engine/movers.s`: the steps, sounds and frames that make a pacer a fire, a hopper a ball, a paced pair a guard, and the rest |
+| `movers.s` | Which template gets which behaviour, and which routine each behaviour is. The behaviours themselves are the engine's, in `engine/movers.s`; what is left here is the frames a guard wears, the hunting ball's two questions, how fast the repel spell comes, and the ghost's speeds |
+| `shared_movers.s` | What it gives `engine/movers.s`: the steps, sounds and frames that make a pacer a fire, a hopper a ball, a paced pair a guard, a drifter a ghost, and the rest |
 | `special.s`, `pickup.s` | The collectables and the cauldron; picking up, putting down, the carried objects |
 | `room_build.s` | Decoding a room from the castle's templates; printing the day and lives |
 | `sun.s`, `clock.s` | The sun and moon window, and day and night |

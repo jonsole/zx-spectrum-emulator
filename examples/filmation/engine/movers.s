@@ -763,3 +763,767 @@ mover_slide:		call	slide_sound
 .step:				ld		(ix+OBJ.DU),a		; patched: DU or DV
 					jp		mover_move
 					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Something that drifts in a straight line until something stops it, and then
+; picks a new way to go -- Knight Lore's ghosts, upd_80_to_83. It keeps
+; whatever step it has until it is blocked or has come to nothing, so it
+; crosses a room and then turns at random.
+;
+; It picks BEFORE moving, where the game picks after. Anything riding on it
+; reads its step out of the record, and a step it is ABOUT to take carries the
+; passenger a turn early; this way the record holds the step actually
+; achieved, clamped and all, which is what object_carry copies. What the move
+; would have told us is carried in MOVE_STATE instead: it got nowhere last
+; turn, so draw again.
+;
+; The two axes are drawn separately, one from the seed and one from the turn
+; counter, so they are not the same number twice.
+;
+; What the game supplies: drift_deltas, four speeds to pick between;
+; drift_sound; drift_turn, called as it decides to pick again and before it
+; does -- which is where Knight Lore's flicker goes, since mover_flicker
+; clears the step on its way through mover_halt; and drift_frame, the frames
+; it wears, called once the new step is in the record.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_drifter
+mover_drifter:		call	drift_sound
+					ld		a,(ix+OBJ.MOVE_STATE)
+					or		a
+					jr		nz,.turn
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					jr		nz,.go
+
+.turn:				call	drift_turn
+					call	mover_rand
+					call	.pick
+					ld		(ix+OBJ.DU),a
+					ld		a,(move_tick)
+					call	.pick
+					ld		(ix+OBJ.DV),a
+					call	drift_frame
+
+.go:				call	mover_move_always		; which leaves IX -> the record
+					ld		a,(collide_hit)		; whether something stopped it, kept
+					and		COLLIDE_U | COLLIDE_V	; for next turn to read -- which is
+					ld		(ix+OBJ.MOVE_STATE),a	; the game's own test on (IX+$0C),
+					ret				; a turn later than it asks it
+
+.pick:				and		3
+					ld		c,a
+					ld		b,0
+					ld		hl,drift_deltas
+					add		hl,bc
+					ld		a,(hl)
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Something that goes where it is shoved and then stops -- Knight Lore's
+; table, upd_84. It clears its step AFTER moving, where mover_falls clears
+; before: the difference is that this one keeps what it was given long enough
+; to spend it.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_shoved
+mover_shoved:		call	mover_shoved_on
+					jp		mover_halt
+					ENDIF
+
+; Something that never lets go of its step at all -- Knight Lore's chest,
+; upd_85. Shove one and it slides on by itself until the clamp takes the step
+; away. What the clamp left of the step is what it moved, so that is what says
+; whether to make a noise -- the game asks the same way, at $C1A1.
+;
+; What the game supplies: shoved_sound, played on a turn it went somewhere.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_shoved_on
+mover_shoved_on:	call	mover_move
+					ld		a,(ix+OBJ.DU)
+					or		(ix+OBJ.DV)
+					jp		nz,shoved_sound
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A ball that hunts: it bounces, and every time it lands it takes a new upward
+; push and a new direction along ONE axis, chosen by which side of it the
+; player is on -- Knight Lore's upd_182_183. Which axis is a coin toss.
+;
+; It keeps its horizontal step across the move: the step is saved, the clamp
+; has its say, and the original goes straight back. Touching something does
+; not cost it its direction; only landing changes that.
+;
+; Whether it comes for the player or runs from him is the game's to say every
+; time it lands, and Knight Lore's answer changes with what he has turned
+; into. The game varies the bounce height by room number as well, which is not
+; here.
+;
+; What the game supplies: HUNTER_RISE and HUNTER_STEP; hunter_landed, called
+; with B the DZ it had before gravity, so a game can tell a bounce from a ball
+; held down by something standing on it; and hunter_flees, which says which
+; way to go.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_hunter
+mover_hunter:		ld		a,(ix+OBJ.DZ)		; before gravity has had it
+					push	af
+					ld		c,(ix+OBJ.DU)
+					ld		b,(ix+OBJ.DV)
+					push	bc
+					call	mover_move_always		; which leaves IX -> the record
+					pop		bc
+					ld		(ix+OBJ.DU),c		; whatever the clamp made of them,
+					ld		(ix+OBJ.DV),b		; it still wants to go that way
+					pop		bc		; B - that DZ
+
+					ld		a,(collide_hit)
+					and		COLLIDE_Z
+					ret		z		; still in the air
+
+					ld		(ix+OBJ.DZ),HUNTER_RISE		; stopped in Z: up again
+					call	hunter_landed
+
+					call	mover_rand
+					and		1
+					jr		z,.along_u
+
+					ld		a,(walker_player + OBJ.V)
+					sub		(ix+OBJ.V)
+					call	.step
+					ld		(ix+OBJ.DV),a
+					ret
+
+.along_u:			ld		a,(walker_player + OBJ.U)
+					sub		(ix+OBJ.U)
+					call	.step
+					ld		(ix+OBJ.DU),a
+					ret
+
+					; The step along that axis: HUNTER_STEP towards him, turned
+					; round again if the game says to run. Carry from the SUB
+					; above means he is the lower of the two.
+					;
+					; The turn is A XOR mask less mask, which is A for a mask of
+					; nought and -A for one of $FF: the two's complement, without
+					; a branch.
+.step:				ld		a,HUNTER_STEP
+					jr		nc,.towards
+					neg
+.towards:			ld		c,a
+					call	hunter_flees		; 0 to come for him, $FF to run
+					ld		b,a
+					ld		a,c
+					xor		b
+					sub		b
+					ret
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Something that follows the player about, so many units a turn on each axis
+; at once -- Knight Lore's repel spell, upd_164_to_167 and move_towards_plyr.
+;
+; The way to go is the SIGN of the difference, not its carry, as the game has
+; it: level with him counts as past him, so it jitters about his position
+; rather than settling on it. It does not set DZ, so it falls like anything
+; else.
+;
+; What the game supplies: stalker_speed, which hands back the step for this
+; turn in C -- Knight Lore creeps at one while he stands in an arch, which is
+; what gives him the chance to leave the room ahead of it -- and
+; stalker_frame, called once the step is set.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+					IFUSED	mover_stalker
+mover_stalker:		call	stalker_speed
+					ld		hl,walker_player + OBJ.U
+					ld		a,(ix+OBJ.U)
+					sub		(hl)
+					ld		a,c
+					jp		m,.u		; short of him: towards
+					neg
+.u:					ld		(ix+OBJ.DU),a
+
+					inc		hl		; the player's V
+					ld		a,(ix+OBJ.V)
+					sub		(hl)
+					ld		a,c
+					jp		m,.v
+					neg
+.v:					ld		(ix+OBJ.DV),a
+
+					call	stalker_frame
+					jp		mover_move_always
+					ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A block that crumbles away the turn after something lands on it -- Knight
+; Lore's upd_143. The game turns it into one graphic and steps it straight on
+; to COLLAPSE_GFX, draws that for a turn, and then takes it out of the room.
+; The dropping block, which sinks under the same mark instead, is mover_sinks.
+;
+; object_landed_on leaves the mark, MOVE_STATE bit 3, so a collapsing block's
+; behaviour has to sit between BEHAVIOUR_GIVES and BEHAVIOUR_GIVES_LAST. Bit 4
+; is this routine's own: crumbled, and gone next turn.
+;
+; What the game supplies: COLLAPSE_GFX, and collapse_sound with A the graphic.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything -- IX only on the turn object_hide takes it away
+					IFUSED	mover_collapsing
+mover_collapsing:	bit		4,(ix+OBJ.MOVE_STATE)
+					jp		nz,object_hide		; crumbled last turn: gone
+					bit		3,(ix+OBJ.MOVE_STATE)
+					ret		z
+					ld		(ix+OBJ.MOVE_STATE),$10
+					ld		a,COLLAPSE_GFX
+					ld		(ix+OBJ.GFX),a
+					call	collapse_sound
+					call	mover_halt
+					ld		(ix+OBJ.DZ),a
+					jp		mover_paint
+					ENDIF
+
+
+; Animation at half the turn rate. The original flips and steps its creatures'
+; frames every turn -- $A715, which it bumps once round its main loop, is a
+; turn counter like move_tick -- but it manages only 5 to 20 turns a second,
+; and the remake 16 to 33. Every other turn keeps the flicker nearer what the
+; original looks like, and each frame not changed is a sprite not re-mirrored
+; and re-rotated: a mover that did not move, and did not change, is not
+; repainted at all.
+;
+; mover_move_anim repaints if this was an animating turn, and only if the
+; thing moved otherwise.
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_move_anim
+mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
+                    or      a                   ; every time it moves
+                    jp      nz,mover_move_always
+                    ld      a,(move_tick)
+                    rra
+                    jp      nc,mover_move_always ; an even turn: it changed
+                    jp      mover_move
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; Moved by a shove, once, and then still -- $CD81 and $CD87. The engine's
+; object_shove gives a LOOSE object the shover's step; this spends it, with
+; gravity, and then forgets it, which is the original clearing +9 to +11
+; after the move.
+;
+; Whatever is stacked on it goes too: shoot the bottom log of a pile and the
+; original moves the pile. The engine does carry a rider -- object_carry, in
+; the rider's own clamp -- but only if the thing under it still has its step
+; when the rider's turn comes, and this clears its step the moment it has
+; moved; a rider later in the pool found nothing to take. So the step is
+; handed up here instead, before it is forgotten, to anything loose sitting
+; on top. That rider spends it on its own turn and hands it up again, so a
+; stack of any height moves as one.
+;
+; At rest it looks to itself only every fourth turn. A pushable's turn is
+; mostly its clamp -- gravity against everything under it -- and a busy room
+; is busy with pushables, not monsters: room 13 has six stumps and two
+; spiders, 9 and 133 eight stumps and one. The original clamps every one of
+; them every turn, which is why it runs room 13 at under five turns a second.
+; A shove is acted on at once, and once it is falling it moves every turn
+; until it lands; only standing still is checked less often -- staggered by
+; slot, so a room's pushables share the turns. A support taken away is
+; noticed within four turns. MOVE_STATE bit 7 is "was falling".
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_shoved_pile
+mover_shoved_pile:       ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.moves           ; shoved: now
+                    bit     7,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.moves           ; falling: every turn
+                    ld      a,ixl               ; standing: its slot's turn
+                    rlca                        ; of four -- records are 32
+                    rlca                        ; apart, so bits 5 and 6
+                    rlca
+                    ld      c,a
+                    ld      a,(move_tick)
+                    add     a,c
+                    and     SHOVED_REST_EVERY - 1
+                    ret     nz
+
+.moves:             call    mover_move
+                    ld      a,(collide_hit)     ; landed, or still going down?
+                    and     COLLIDE_Z
+                    res     7,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.landed
+                    set     7,(ix+OBJ.MOVE_STATE)
+.landed:            ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    call    nz,shoved_carry     ; it moved: take the pile with it
+                    jp      mover_halt
+
+
+; Give this object's step to everything loose standing on it that has none of
+; its own: the same thing object_carry does, from underneath.
+;
+; In:  IX -> the record that has just moved, DU and DV what it moved by
+; Out: nothing
+; Corrupts: AF, BC, DE, IY
+shoved_carry:       ld      a,(room_object_count)
+                    ld      b,a
+                    ld      iy,room_objects
+                    ld      a,(ix+OBJ.Z)
+                    add     a,(ix+OBJ.SIZE_Z)
+                    ld      c,a                 ; C - its top
+.next:              ld      a,(iy+OBJ.BEHAVIOUR)
+                    cp      BEHAVIOUR_LOOSE
+                    jr      c,.skip             ; not the sort that rides
+                    ld      a,(iy+OBJ.Z)
+                    cp      c
+                    jr      nz,.skip            ; not sitting on our top
+                    ld      a,(iy+OBJ.DU)
+                    or      (iy+OBJ.DV)
+                    jr      nz,.skip            ; going somewhere already
+
+                    ld      a,(iy+OBJ.U)        ; over us along U?
+                    sub     (ix+OBJ.U)
+                    call    character_door_find.abs
+                    ld      e,a
+                    ld      a,(iy+OBJ.SIZE_U)
+                    add     a,(ix+OBJ.SIZE_U)
+                    cp      e
+                    jr      c,.skip
+                    jr      z,.skip
+                    ld      a,(iy+OBJ.V)        ; ...and along V?
+                    sub     (ix+OBJ.V)
+                    call    character_door_find.abs
+                    ld      e,a
+                    ld      a,(iy+OBJ.SIZE_V)
+                    add     a,(ix+OBJ.SIZE_V)
+                    cp      e
+                    jr      c,.skip
+                    jr      z,.skip
+
+                    ld      a,(ix+OBJ.DU)
+                    ld      (iy+OBJ.DU),a
+                    ld      a,(ix+OBJ.DV)
+                    ld      (iy+OBJ.DV),a
+.skip:              ld      de,ROOM_STRIDE
+                    add     iy,de
+                    djnz    .next
+                    ret
+
+
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; The spider -- $CF22. It walks diagonally, four units a turn on both axes,
+; and whenever anything stops it on either axis, or it has no step at all, it
+; picks a new diagonal at random. It is drawn mirrored every other turn, which
+; is the whole of its animation: one sprite, flipped.
+;
+; It falls a unit a turn if there is nothing under it: the original zeroes its
+; Z step and then applies gravity, every turn.
+;
+; MOVE_STATE keeps which axes stopped it last turn.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_scuttler
+mover_scuttler:       call    monster_sits_out
+                    ret     c
+                    ld      (ix+OBJ.DZ),0
+
+                    ld      a,(ix+OBJ.MOVE_STATE)
+                    and     COLLIDE_U | COLLIDE_V
+                    jr      nz,.new             ; stopped: somewhere else
+                    ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.go
+.new:               call    mover_rand
+                    and     SCUTTLE_STEP * 2     ; 0 or 8, less 4: -4 or +4
+                    sub     SCUTTLE_STEP
+                    ld      (ix+OBJ.DU),a
+                    call    mover_rand
+                    and     SCUTTLE_STEP * 2
+                    sub     SCUTTLE_STEP
+                    ld      (ix+OBJ.DV),a
+
+.go:                ; Mirrored for two turns, then not for two -- see
+                    ; mover_move_anim for why two.
+                    ld      a,(move_tick)
+                    rrca
+                    and     1
+                    ld      c,a
+                    ld      a,(ix+OBJ.FLAGS)
+                    ld      b,a
+                    and     ~OBJ_FLIP_H & $FF
+                    or      c
+                    ld      (ix+OBJ.FLAGS),a
+                    ASSERT  OBJ_FLIP_H == 1
+                    xor     b                   ; did the mirror change?
+                    ld      b,a
+                    call    monster_double
+                    ld      a,b
+                    or      a
+                    jr      z,.same
+                    call    mover_move_always
+                    jr      .moved
+.same:              call    mover_move          ; only if it went anywhere
+.moved:             call    monster_halve
+                    ld      a,(collide_hit)
+                    ld      (ix+OBJ.MOVE_STATE),a
+                    ret
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A creature that walks one axis at a time -- $D1F5, graphics 16 and 17. It
+; flips its mirror every turn, which is its animation. When it has no step
+; left -- something stopped it -- it picks four units either way at random,
+; along U if the last thing that stopped it was across V and along V
+; otherwise, and wears 16 for U and 17 for V.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_roamer
+mover_roamer:     call    monster_sits_out
+                    ret     c
+                    ld      a,(move_tick)
+                    rra
+                    jr      c,.kept             ; flips on even turns only
+                    ld      a,(ix+OBJ.FLAGS)
+                    xor     OBJ_FLIP_H
+                    ld      (ix+OBJ.FLAGS),a
+.kept:
+
+                    ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.go
+
+                    call    mover_rand
+                    and     ROAM_STEP * 2
+                    sub     ROAM_STEP
+                    ld      c,a
+                    ld      a,(ix+OBJ.MOVE_STATE)
+                    and     COLLIDE_V
+                    jr      nz,.along_u
+                    ld      (ix+OBJ.DV),c
+                    set     0,(ix+OBJ.GFX)      ; 17: along V
+                    jr      .go
+.along_u:           ld      (ix+OBJ.DU),c
+                    res     0,(ix+OBJ.GFX)      ; 16: along U
+
+.go:                call    monster_double
+                    call    mover_move_anim
+                    call    monster_halve
+                    ld      a,(collide_hit)
+                    ld      (ix+OBJ.MOVE_STATE),a
+                    ret
+
+
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; What falls out of the sky and flies at him -- $CC4B, for 48-51 and 160-167.
+; flyers.s drops it.
+;
+; It steers on all three axes at once: each turn it adds three towards him to
+; a velocity it keeps in sixteenths -- towards his legs' U and V and his body's
+; Z -- held between -72 and +56, and moves by that sixteenth, rounded: four a
+; turn at most. Anything that stops it along U or V turns that velocity round,
+; so it bounces off walls rather than sticking to them. It animates through
+; the four graphics of its block, a frame a turn.
+;
+; It is not deadly: $CC4B never calls $C291, and its record carries neither
+; bit. Harmless it may be, but it gets in the way.
+;
+; The original moves it first, with last turn's velocity, and then steers for
+; the next; so does this. The sixteenths live in the two bytes past the end of
+; the record and in MOVE_STATE.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_homer
+mover_homer:        call    monster_sits_out
+                    ret     c
+                    call    monster_double
+                    call    mover_move_always
+                    call    monster_halve
+
+                    ; Bounce: what stopped it along an axis turns it round there.
+                    ld      a,(collide_hit)
+                    and     COLLIDE_U
+                    jr      z,.u_free
+                    ld      a,(ix+HOMER_ACC_U)
+                    neg
+                    ld      (ix+HOMER_ACC_U),a
+.u_free:            ld      a,(collide_hit)
+                    and     COLLIDE_V
+                    jr      z,.v_free
+                    ld      a,(ix+HOMER_ACC_V)
+                    neg
+                    ld      (ix+HOMER_ACC_V),a
+.v_free:
+                    ; Steer: towards him on each axis.
+                    ld      a,(walker_player + OBJ.U)
+                    sub     (ix+OBJ.U)
+                    ld      a,(ix+HOMER_ACC_U)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_U),a
+                    ld      a,(walker_player + OBJ.V)
+                    sub     (ix+OBJ.V)
+                    ld      a,(ix+HOMER_ACC_V)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_V),a
+                    ld      a,(walker_player + CHARACTER_BODY + OBJ.Z)
+                    sub     (ix+OBJ.Z)
+                    ld      a,(ix+HOMER_ACC_Z)
+                    call    homer_pull
+                    ld      (ix+HOMER_ACC_Z),a
+
+                    ; ...and the step for next turn, in whole units.
+                    ld      a,(ix+HOMER_ACC_U)
+                    call    homer_whole
+                    ld      (ix+OBJ.DU),a
+                    ld      a,(ix+HOMER_ACC_V)
+                    call    homer_whole
+                    ld      (ix+OBJ.DV),a
+                    ld      a,(ix+HOMER_ACC_Z)
+                    call    homer_whole
+                    ld      (ix+OBJ.DZ),a
+
+                    ; The next frame of its four, every other turn.
+                    ld      a,(move_tick)
+                    rrca
+                    and     3
+                    ld      c,a
+                    ld      a,(ix+OBJ.GFX)
+                    and     $FC
+                    or      c
+                    ld      (ix+OBJ.GFX),a
+                    ret
+
+; Three more towards him, held to the range: carry from the SUB before this
+; means he is below us on that axis. $CD04 and $CD0D.
+;
+; In:  A = the velocity, in sixteenths
+;      carry set if he is below us
+; Out: A = the velocity, steered
+; Corrupts: F
+homer_pull:         jr      c,.down
+                    add     a,HOMER_PULL
+                    ret     m
+                    cp      HOMER_MOST
+                    ret     c
+                    ld      a,HOMER_MOST
+                    ret
+.down:              sub     HOMER_PULL
+                    ret     p
+                    cp      HOMER_LEAST
+                    ret     nc
+                    ld      a,HOMER_LEAST
+                    ret
+
+; Sixteenths to whole units, rounded, sign kept.
+;
+; In:  A = the velocity, in sixteenths
+; Out: A = the step, in whole units
+; Corrupts: F
+homer_whole:        add     a,8
+                    sra     a
+                    sra     a
+                    sra     a
+                    sra     a
+                    ret
+
+
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; What falls out of the sky and then roams -- $D1FD for 80 and 81, $D251 for
+; 168 to 171. Deadly both. It falls under gravity like anything else; along
+; the floor it goes four units a turn along one axis, and when something
+; stops it -- or before it has ever moved -- picks four either way at random,
+; along U if the thing that stopped it was across V, along V otherwise.
+;
+; Its graphic says which way. For 80 and 81, bit 0 is the axis and the mirror
+; tells the two directions on it apart; 168-171 do the same with bit 1, and
+; flip bit 0 every turn besides, which is their animation. Going the negative
+; way flips the axis bit as well -- the original's own sums.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+                    IFUSED  mover_faller4
+mover_faller4:      call    monster_sits_out
+                    ret     c
+                    ld      a,(move_tick)
+                    rra
+                    jr      c,.kept             ; the frame, on even turns
+                    ld      a,(ix+OBJ.GFX)
+                    xor     1
+                    ld      (ix+OBJ.GFX),a
+.kept:
+                    ld      c,2                 ; the axis is bit 1
+                    jr      mover_faller_c
+
+; See mover_faller4.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+mover_faller:       call    monster_sits_out
+                    ret     c
+                    ld      c,1                 ; ...and bit 0 here
+
+; See mover_faller4: the turn of either, with the graphic's axis bit in C.
+;
+; In:  IX -> the record; mover_ix names it too
+;      C  = the axis bit: 1 for 80 and 81, 2 for 168 to 171
+; Out: nothing
+; Corrupts: everything but IX
+mover_faller_c:     ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    jr      nz,.go
+
+                    call    mover_rand
+                    and     FALLER_STEP * 2
+                    sub     FALLER_STEP
+                    ld      b,a
+                    ld      a,(ix+OBJ.MOVE_STATE)
+                    and     COLLIDE_V
+                    jr      nz,.along_u
+
+                    ld      (ix+OBJ.DV),b       ; along V: the axis bit set,
+                    ld      a,(ix+OBJ.GFX)      ; unmirrored
+                    or      c
+                    ld      (ix+OBJ.GFX),a
+                    res     0,(ix+OBJ.FLAGS)
+                    jr      .facing
+.along_u:           ld      (ix+OBJ.DU),b       ; along U: clear, mirrored
+                    ld      a,c
+                    cpl
+                    and     (ix+OBJ.GFX)
+                    ld      (ix+OBJ.GFX),a
+                    set     0,(ix+OBJ.FLAGS)
+                    ASSERT  OBJ_FLIP_H == 1
+.facing:            bit     7,b
+                    jr      z,.go
+                    ld      a,(ix+OBJ.GFX)      ; the negative way
+                    xor     c
+                    ld      (ix+OBJ.GFX),a
+
+.go:                call    monster_double
+                    call    mover_move_anim
+                    call    monster_halve
+                    ld      a,(collide_hit)
+                    ld      (ix+OBJ.MOVE_STATE),a
+                    ret
+
+
+BOLT_DU             EQU     30              ; the velocity it was fired with,
+BOLT_DV             EQU     31              ; past OBJ inside the slot
+BOLT_LOW            EQU     132
+BOLT_FIRST          EQU     149
+BOLT_LAST           EQU     151
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A puff -- $C107 starts one, $C111 runs it. Graphics 64 to 70, a frame a
+; turn, and then nothing: the slot is emptied. While it plays it neither falls
+; nor blocks nor harms.
+;
+; Only the passable bit is set: the rest of FLAGS is the engine's own
+; bookkeeping, and OBJ_SHIFTED in particular says the record's sprite pointer
+; is into its rotation buffer. Writing the whole byte cleared that while the
+; pointer still pointed there, and the next draw took what lay before the
+; copy for a sprite header and mirrored it forever.
+;
+; What the game supplies: POOF_FIRST and POOF_LAST, the frames it plays;
+; POOF_BEHAVIOUR, which its record takes on while it does; and poof_sound.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: nothing
+                    IFUSED  mover_poof_start
+mover_poof_start:   ld      (ix+OBJ.GFX),POOF_FIRST
+                    ld      (ix+OBJ.BEHAVIOUR),POOF_BEHAVIOUR
+                    set     2,(ix+OBJ.FLAGS)
+                    ASSERT  OBJ_PASSABLE == 1 << 2
+                    ret
+
+; A puff's turn: the next frame, or after the last, nothing.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
+mover_poof:         call    poof_sound
+                    ld      a,(ix+OBJ.GFX)
+                    cp      POOF_LAST
+                    jp      nc,object_hide
+                    inc     a
+                    ld      (ix+OBJ.GFX),a
+                    call    mover_hover
+                    jp      mover_move_always
+
+
+                    ENDIF
+
+
+; ---------------------------------------------------------------------------
+; A block that cracks under him and goes -- $D2AD. While he is on it, it
+; becomes the next graphic of its four, 136 to 139, and on the step after the
+; last it is gone. Only he cracks it: $B890 marks what his legs land on, and
+; nothing else's.
+;
+; The original takes a step every turn, but at its own 5 to 20 turns a second
+; that is a quarter to most of a second; at the remake's pace it was an eighth,
+; too quick to see. A step every CRUMBLE_EVERY turns puts it back to about half.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
+                    IFUSED  mover_crumbles
+mover_crumbles:     call    player_on_top
+                    ret     nz
+                    ld      a,(move_tick)
+                    and     CRUMBLE_EVERY - 1
+                    ret     nz
+                    ld      a,(ix+OBJ.GFX)
+                    cp      CRUMBLE_LAST
+                    jp      z,object_hide
+                    inc     a
+                    ld      (ix+OBJ.GFX),a
+                    call    mover_hover
+                    jp      mover_move_always
+                    ENDIF
