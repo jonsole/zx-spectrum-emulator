@@ -592,13 +592,177 @@ TEST(tzx_metadata_does_not_shift_the_data) {
 
 TEST(tzx_rejects_an_unsupported_block_by_id) {
     std::vector<uint8_t> tzx = tzx_header();
-    tzx.push_back(0x19); // generalized data -- length is not knowable up front
+    tzx.push_back(0x16); // C64 ROM type data -- length is not knowable up front
     push16(tzx, 0);
 
     Tape t;
-    const std::string error = t.insert(tzx.data(), tzx.size(), "gen.tzx");
+    const std::string error = t.insert(tzx.data(), tzx.size(), "c64.tzx");
     CHECK(!error.empty());
-    CHECK(error.find("0x19") != std::string::npos);
+    CHECK(error.find("0x16") != std::string::npos);
+}
+
+/// A generalized data block (0x19), built field by field from the .tzx spec:
+/// the pilot/sync alphabet and its run-length list, then the data alphabet and
+/// the symbols packed as bits. `pilot` is (symbol, repetitions) pairs and
+/// `data` the symbol numbers to send.
+std::vector<uint8_t> generalized_block(const std::vector<std::vector<uint32_t>>& pilot_defs,
+                                       const std::vector<uint8_t>& pilot_flags,
+                                       const std::vector<std::pair<uint8_t, uint32_t>>& pilot,
+                                       const std::vector<std::vector<uint32_t>>& data_defs,
+                                       const std::vector<uint8_t>& data_flags,
+                                       const std::vector<uint8_t>& data, uint32_t pause = 0) {
+    uint8_t npp = 0;
+    for (const auto& def : pilot_defs) {
+        npp = std::max(npp, uint8_t(def.size()));
+    }
+    uint8_t npd = 0;
+    for (const auto& def : data_defs) {
+        npd = std::max(npd, uint8_t(def.size()));
+    }
+    uint8_t bits = 1;
+    while ((size_t(1) << bits) < data_defs.size()) {
+        bits++;
+    }
+
+    std::vector<uint8_t> body;
+    push16(body, pause);
+    push16(body, uint32_t(pilot.size()));   // TOTP: (symbol, repetitions) pairs
+    push16(body, 0);
+    body.push_back(npp);
+    body.push_back(uint8_t(pilot_defs.size()));
+    push16(body, uint32_t(data.size()));    // TOTD: symbols in the data stream
+    push16(body, 0);
+    body.push_back(npd);
+    body.push_back(uint8_t(data_defs.size()));
+    auto symdefs = [&](const std::vector<std::vector<uint32_t>>& defs,
+                       const std::vector<uint8_t>& flags, uint8_t pulses) {
+        for (size_t i = 0; i < defs.size(); i++) {
+            body.push_back(flags[i]);
+            for (uint8_t p = 0; p < pulses; p++) {
+                push16(body, p < defs[i].size() ? defs[i][p] : 0);   // a zero ends a short symbol
+            }
+        }
+    };
+    symdefs(pilot_defs, pilot_flags, npp);
+    for (const auto& run : pilot) {
+        body.push_back(run.first);
+        push16(body, run.second);
+    }
+    symdefs(data_defs, data_flags, npd);
+    uint32_t held = 0;
+    uint8_t held_bits = 0;
+    for (uint8_t symbol : data) {          // packed most significant bit first
+        held = (held << bits) | symbol;
+        held_bits = uint8_t(held_bits + bits);
+        while (held_bits >= 8) {
+            held_bits = uint8_t(held_bits - 8);
+            body.push_back(uint8_t((held >> held_bits) & 0xFF));
+        }
+    }
+    if (held_bits > 0) {
+        body.push_back(uint8_t((held << (8 - held_bits)) & 0xFF));
+    }
+
+    std::vector<uint8_t> out;
+    out.push_back(0x19);
+    push16(out, uint32_t(body.size() & 0xFFFF));
+    push16(out, uint32_t(body.size() >> 16));
+    for (uint8_t v : body) {
+        out.push_back(v);
+    }
+    return out;
+}
+
+TEST(tzx_generalized_block_plays_its_own_symbols) {
+    // examples/zx-tape-loader's encoding, which is why 0x19 exists at all: a 1
+    // bit is one 672T pulse where a 0 bit is two of 336T, so a bit is not two
+    // pulses and no ordinary data block can say it.
+    std::vector<uint8_t> tzx = tzx_header();
+    const std::vector<uint8_t> block =
+        generalized_block({{2168}, {600}}, {0, 0}, {{0, 3}, {1, 2}},
+                          {{336, 336}, {672}}, {0, 0}, {1, 0, 1, 1, 0});
+    tzx.insert(tzx.end(), block.begin(), block.end());
+
+    Tape t;
+    CHECK_EQ(t.insert(tzx.data(), tzx.size(), "fast.tzx"), std::string());
+    CHECK_EQ(t.status(0).blocks, size_t(1));
+    t.play(0);
+
+    // Three leader pulses, two sync, then 672 / 336 336 / 672 / 672 / 336 336.
+    // As ever the first pulse's leading edge and the last one's trailing edge
+    // are invisible, so those twelve pulses show as the ten in between.
+    const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 20000 * HC_PER_TSTATE));
+    const std::vector<uint64_t> want = {2168, 2168, 600, 600, 672, 336, 336, 672, 672, 336};
+    CHECK_EQ(ts.size(), want.size());
+    if (ts.size() != want.size()) {
+        return;
+    }
+    for (size_t i = 0; i < want.size(); i++) {
+        CHECK_EQ(ts[i], want[i]);
+    }
+}
+
+TEST(tzx_generalized_symbol_without_an_edge_lengthens_the_pulse_before_it) {
+    // Flags b0-b1 == 1 says the symbol starts at the level it is already at,
+    // which on a tape is the pulse before it simply going on for longer.
+    std::vector<uint8_t> tzx = tzx_header();
+    const std::vector<uint8_t> block =
+        generalized_block({{1000}}, {0}, {{0, 2}}, {{500}, {700}}, {0, 1}, {0, 1, 0});
+    tzx.insert(tzx.end(), block.begin(), block.end());
+
+    Tape t;
+    CHECK_EQ(t.insert(tzx.data(), tzx.size(), "merge.tzx"), std::string());
+    t.play(0);
+
+    // Two leader pulses of 1000, then 500, then a 700 with no edge in front of
+    // it -- so the 500 and the 700 are one 1200T pulse -- then a last 500,
+    // whose trailing edge is not there to measure.
+    const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 20000 * HC_PER_TSTATE));
+    const std::vector<uint64_t> want = {1000, 1200};
+    CHECK_EQ(ts.size(), want.size());
+    if (ts.size() != want.size()) {
+        return;
+    }
+    for (size_t i = 0; i < want.size(); i++) {
+        CHECK_EQ(ts[i], want[i]);
+    }
+}
+
+TEST(tzx_generalized_block_refuses_a_symbol_it_has_no_definition_for) {
+    // Three symbols in the data alphabet means two bits each, and two bits can
+    // say "symbol 3" -- which the block never defined.
+    std::vector<uint8_t> tzx = tzx_header();
+    const std::vector<uint8_t> block =
+        generalized_block({{1000}}, {0}, {{0, 1}}, {{500}, {700}, {900}}, {0, 0, 0}, {1, 3});
+    tzx.insert(tzx.end(), block.begin(), block.end());
+
+    Tape t;
+    const std::string error = t.insert(tzx.data(), tzx.size(), "bad.tzx");
+    CHECK(!error.empty());
+    CHECK(error.find("alphabet") != std::string::npos);
+}
+
+TEST(tzx_generalized_block_refuses_a_leader_symbol_it_has_no_definition_for) {
+    std::vector<uint8_t> tzx = tzx_header();
+    const std::vector<uint8_t> block =
+        generalized_block({{1000}}, {0}, {{1, 4}}, {{500}, {700}}, {0, 0}, {0, 1});
+    tzx.insert(tzx.end(), block.begin(), block.end());
+
+    Tape t;
+    const std::string error = t.insert(tzx.data(), tzx.size(), "badpilot.tzx");
+    CHECK(!error.empty());
+    CHECK(error.find("alphabet") != std::string::npos);
+}
+
+TEST(tzx_generalized_block_rejects_a_truncated_body) {
+    std::vector<uint8_t> tzx = tzx_header();
+    std::vector<uint8_t> block =
+        generalized_block({{1000}}, {0}, {{0, 1}}, {{500}, {700}}, {0, 0}, {1, 0});
+    block.resize(block.size() - 3);        // the data stream and its last symdef, gone
+    tzx.insert(tzx.end(), block.begin(), block.end());
+
+    Tape t;
+    CHECK(!t.insert(tzx.data(), tzx.size(), "short.tzx").empty());
 }
 
 TEST(tzx_rejects_a_future_major_version) {

@@ -124,6 +124,26 @@ that carry a recording inline — `0x15` direct recording and `0x18` CSW — go
 through the same code, so a `.tzx` built around either now loads where before
 it was refused outright.
 
+## A loader's own symbols
+
+A `.tzx` **generalized data block** (`0x19`) is how a loader whose bits are not
+"two pulses each" gets written down exactly rather than recorded. The block
+spells out its own alphabet — each symbol is a short run of pulse lengths — and
+then sends symbols: a run-length list of them for the leader and sync, and a
+packed bit stream for the data, as many bits a symbol as the alphabet needs.
+`examples/zx-tape-loader`'s encoding is one of these: a 1 bit is a single
+672-T-state pulse where a 0 bit is two of 336, which no ordinary data block can
+express. All of it becomes plain pulses at insert time, so playback is the same
+engine as everything else, and a whole game is a few tens of kilobytes where a
+`.wav` of it is tens of megabytes. The tape designer writes these
+(`scripts/build_tape.py`, [Designing a tape](tape-designer.md)).
+
+Symbol flags are followed except for the two that force an absolute signal
+level: a pulse list has no level to force, so those are played as an ordinary
+edge and the tape carries a warning saying so. The sampled `0x16` and `0x17`
+are still refused by name — their bodies are the only thing that says how long
+they are, so skipping one would desync every block after it.
+
 Recordings never fast-load. A recording is by definition not a standard-speed
 block, so the trap declines and the ROM reads real pulses at real cassette
 speed. `set_speed uncapped` is how to make that bearable.

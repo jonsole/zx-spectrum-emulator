@@ -338,6 +338,8 @@ void Tape::describe_blocks() {
                 info.kind = "Pure tone";
             } else if (b.id == 0x15 || b.id == 0x18) {
                 info.kind = "Recording";
+            } else if (b.id == 0x19) {
+                info.kind = "Generalized data";
             } else {
                 info.kind = "Pulses";
             }
@@ -721,14 +723,146 @@ std::string Tape::parse_tzx(const uint8_t* data, size_t len) {
             b.pulses = std::move(edges.pulses);
             blocks_.push_back(std::move(b));
 
-        } else if (id == 0x16 || id == 0x17 || id == 0x19) {
-            // What is left of the sampled/generalised family. Rejected by name
-            // rather than skipped: their bodies are the only thing that would
-            // tell us how long they are, so guessing would desync every block
-            // after them and produce garbage that looks like a tape that merely
-            // does not load.
-            return "unsupported .tzx block " + hex_byte(id) + " at offset " + std::to_string(at)
-                   + (id == 0x19 ? " (generalized data)" : "");
+        } else if (id == 0x19) { // generalized data: a custom loader's own symbols
+            // The block spells out its own alphabet -- each symbol is a short
+            // run of pulses -- and then sends symbols: a run-length list of
+            // them for the leader and sync, and a packed bit stream for the
+            // data. It is how a loader whose bits are not "two pulses each"
+            // gets written down exactly; examples/zx-tape-loader's is one, a 1
+            // being a single pulse where a 0 is two half-length ones. All of it
+            // becomes plain pulses here.
+            uint32_t body_len = 0;
+            uint32_t pause = 0;
+            uint32_t totp = 0;
+            uint32_t totd = 0;
+            uint8_t npp = 0;
+            uint8_t asp = 0;
+            uint8_t npd = 0;
+            uint8_t asd = 0;
+            // The length counts everything after itself, of which the fourteen
+            // bytes read next are the header.
+            if (!r.u32(body_len) || body_len < 14) {
+                return truncated();
+            }
+            std::vector<uint8_t> body;
+            if (!r.u16(pause) || !r.u32(totp) || !r.u8(npp) || !r.u8(asp) || !r.u32(totd)
+                || !r.u8(npd) || !r.u8(asd) || !r.bytes(body_len - 14, body)) {
+                return truncated();
+            }
+            // A zero alphabet size means 256 symbols, the one count that will
+            // not fit in its byte.
+            const size_t pilot_symbols = totp > 0 ? (asp == 0 ? 256 : size_t(asp)) : 0;
+            const size_t data_symbols = totd > 0 ? (asd == 0 ? 256 : size_t(asd)) : 0;
+
+            Reader sym(body.data(), body.size());
+            bool forced_level = false;
+            // One symbol: its flags byte, then up to `pulses` lengths, of which
+            // a zero ends it early. Flag 1 means the symbol starts without an
+            // edge, which is the pulse before it going on for longer.
+            auto read_symbol = [&](uint8_t pulses, std::vector<uint32_t>& out, uint8_t& flags) {
+                if (!sym.u8(flags)) {
+                    return false;
+                }
+                out.clear();
+                for (uint8_t i = 0; i < pulses; i++) {
+                    uint32_t length = 0;
+                    if (!sym.u16(length)) {
+                        return false;
+                    }
+                    if (length == 0) {
+                        sym.skip(size_t(pulses - i - 1) * 2);
+                        break;
+                    }
+                    out.push_back(length);
+                }
+                return true;
+            };
+            std::vector<std::vector<uint32_t>> pilot_defs(pilot_symbols);
+            std::vector<uint8_t> pilot_flags(pilot_symbols);
+            std::vector<std::vector<uint32_t>> data_defs(data_symbols);
+            std::vector<uint8_t> data_flags(data_symbols);
+            for (size_t i = 0; i < pilot_symbols; i++) {
+                if (!read_symbol(npp, pilot_defs[i], pilot_flags[i])) {
+                    return truncated();
+                }
+            }
+
+            TapeBlock b;
+            auto play = [&](const std::vector<uint32_t>& def, uint8_t flags) {
+                for (size_t i = 0; i < def.size(); i++) {
+                    // b0-b1 of the flags: 0 an edge as usual, 1 no edge, 2 and
+                    // 3 force the level low or high. A pulse list has no
+                    // absolute level to force, so those two are noted and
+                    // played as an ordinary edge.
+                    if (i == 0 && (flags & 3) == 1 && !b.pulses.empty()) {
+                        b.pulses.back() += def[i];
+                        continue;
+                    }
+                    if (i == 0 && (flags & 3) >= 2) {
+                        forced_level = true;
+                    }
+                    b.pulses.push_back(def[i]);
+                }
+            };
+            // The leader and sync, as (symbol, repetitions) pairs.
+            for (uint32_t i = 0; i < totp; i++) {
+                uint8_t symbol = 0;
+                uint32_t repeats = 0;
+                if (!sym.u8(symbol) || !sym.u16(repeats)) {
+                    return truncated();
+                }
+                if (symbol >= pilot_symbols) {
+                    return "generalized block's leader uses symbol " + std::to_string(symbol)
+                           + ", which its alphabet does not have" + where;
+                }
+                for (uint32_t n = 0; n < repeats; n++) {
+                    play(pilot_defs[symbol], pilot_flags[symbol]);
+                }
+            }
+            for (size_t i = 0; i < data_symbols; i++) {
+                if (!read_symbol(npd, data_defs[i], data_flags[i])) {
+                    return truncated();
+                }
+            }
+            // The data stream: each symbol is as many bits as its alphabet
+            // needs, most significant first, running on across byte boundaries.
+            uint8_t bits_per_symbol = 1;
+            while ((size_t(1) << bits_per_symbol) < data_symbols) {
+                bits_per_symbol++;
+            }
+            for (uint32_t i = 0; i < totd; i++) {
+                uint32_t symbol = 0;
+                for (uint8_t bit = 0; bit < bits_per_symbol; bit++) {
+                    const size_t at_bit = size_t(i) * bits_per_symbol + bit;
+                    const size_t byte = sym.pos() + at_bit / 8;
+                    if (byte >= body.size()) {
+                        return truncated();
+                    }
+                    symbol = (symbol << 1) | ((body[byte] >> (7 - at_bit % 8)) & 1);
+                }
+                if (symbol >= data_symbols) {
+                    return "generalized block's data uses symbol " + std::to_string(symbol)
+                           + ", which its alphabet does not have" + where;
+                }
+                play(data_defs[symbol], data_flags[symbol]);
+            }
+            if (forced_level) {
+                warn("generalized block" + where
+                     + " forces a signal level, which is played as an ordinary edge");
+            }
+            b.id = id;
+            b.standard_speed = false;
+            b.pilot_pulses = 0;
+            b.pause_ms = pause;
+            blocks_.push_back(std::move(b));
+
+        } else if (id == 0x16 || id == 0x17) {
+            // What is left of the sampled family. Rejected by name rather than
+            // skipped: their bodies are the only thing that would tell us how
+            // long they are, so guessing would desync every block after them
+            // and produce garbage that looks like a tape that merely does not
+            // load.
+            return "unsupported .tzx block " + hex_byte(id) + " at offset " + std::to_string(at);
 
         } else if (id == 0x21) { // group start
             uint8_t n = 0;

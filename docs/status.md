@@ -93,7 +93,7 @@ Definition, Find All References, Rename, Call Hierarchy, hover and the outline.
 
 Stretch goals, not blocking normal use:
 - `.z80` snapshot format (versioned, compressed — `.sna` works today)
-- Tape loading — **done** for `.tap`/`.tzx` (see [Tape](tape.md));
-  `.pzx` and tape *saving* are still open, as are the `.tzx` sampled-data block
-  types (`0x15` direct recording, `0x18` CSW, `0x19` generalized)
+- Tape loading — **done** for `.tap`/`.tzx` (see [Tape](tape.md)), including
+  `0x15` direct recording, `0x18` CSW and `0x19` generalized data; `.pzx` and
+  tape *saving* are still open, as are the C64 block types (`0x16`, `0x17`)
 - Beeper audio synthesis — **done** (see [Audio](audio.md)); the AY chip is not
