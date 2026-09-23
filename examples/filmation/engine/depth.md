@@ -394,13 +394,20 @@ never reads them.
 
 Two positions are kept: **the cursor**, in IY, the candidate being compared;
 and **the insertion point**, the NEXT field the object will be linked after,
-held on the stack for the length of the scan and starting as the field the scan
-began from.
+held in B and D and starting as the field the scan began from.
 
-The cursor is advanced by loading the candidate's NEXT straight into IY with
-`ld iyh,a` / `ld iyl,c`, testing the high byte for the end of the list on the
-way past -- no record lives in page 0. The scan enters that same code first,
-with IY sitting on the field it starts from: that field is a NEXT field like
+The cursor is advanced the way `objects_draw_all` walks the same list: SP is
+pointed at the candidate's NEXT field and `pop iy` loads the next one, 24
+T-states against 54 for reading the two bytes through IY. Nothing can
+interrupt -- the engine runs with interrupts off for exactly this -- but
+nothing can be pushed while SP is borrowed either, which is why the insertion
+point lives in registers; the real SP is saved on entry and put back at
+`.commit`. The end of the list is a high byte of zero, since no record lives
+in page 0.
+
+`.advance` sits in front of the comparison and falls into it, so a candidate
+that turns the object away costs no jump back to the top. The scan enters at
+`.advance` with IY on the field it starts from: that field is a NEXT field like
 any other, so reading it as one loads the first candidate.
 
 ```
@@ -663,10 +670,10 @@ everything the relink could change.
 | `object_list` | depth.s | the first object, or 0. Doubles as a NEXT field |
 | `sort_head` | depth.s | the NEXT field that starts the sorted run |
 | `depth_reset` | depth.s, a macro | sets both back to an empty list |
-| the insertion point | the stack, during a scan | the NEXT field the object will be linked after |
+| the insertion point | B and D, during a scan | the NEXT field the object will be linked after |
 | six operands | inside depth_insert_from | the placed object's bounds, from depth_cmp_setup |
 
-The whole module is 267 bytes, four of them the two variables above.
+The whole module is 271 bytes, four of them the two variables above.
 
 ---
 
@@ -880,3 +887,22 @@ it the candidate, the `CCF` on V, and the `HL` round trip when advancing, which
 now loads NEXT straight into IY with `ld iyh,a`/`ld iyl,c`. `depth_add_step`'s
 early return for a zero step is the rest, and is why `$E3`, whose seventeen
 movers mostly sit out a turn, gains more than its scan alone would give.
+
+### Walking the list with SP
+
+Then the walk itself: `ld sp,iy / pop iy` in place of two indexed loads, the
+insertion point moved off the stack into B and D to make that possible, and the
+loop rotated so `.advance` falls into the comparison. Same method, one snapshot
+of the tree built twice with only depth.s different, the same rooms in the same
+order, `depth_insert_from` in T-states per turn:
+
+| room | before | after | |
+|---|---|---|---|
+| `$BF` | 3,927 | 3,184 | -19% |
+| `$A3` | 6,953 | 6,118 | -12% |
+| `$43` | 3,443 | 2,918 | -15% |
+| `$E3` | 2,611 | 2,189 | -16% |
+
+**-15%** on the scan against -20% priced, for 4 bytes. `$8C` is left out: its
+busy time per turn came out 238k on one run and 260k on the other, so the two
+saw different scenes and the pair says nothing.

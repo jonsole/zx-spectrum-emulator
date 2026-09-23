@@ -292,14 +292,28 @@ depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 ; interpenetration: no order is right, and the loop falls out of the bottom to
 ; "nearer", which is where it would have left the object anyway.
 ;
-; The insertion point -- the NEXT field the object will be linked after -- is
-; the field the scan started from, and is kept on the stack for its length.
-; That field is read like any candidate's NEXT: IY is put on it and the loop
-; entered at .advance, which is what loads the first candidate.
-depth_insert_from:	push	hl		; the insertion point
+; The list is walked the way objects_draw_all walks it: SP pointed at a
+; record's NEXT field and a POP IY, 24 T against 54 for reading the two bytes
+; through IY. Nothing can interrupt -- the engine runs with interrupts off
+; for exactly this, see main.s -- but nothing can be pushed either, so the
+; insertion point, the NEXT field the object will be linked after, lives in
+; B and D rather than on the stack, and the real SP comes back at .commit.
+;
+; .advance comes first and falls into the comparison, so a candidate that
+; turns us away costs no jump back to the top. The field the scan starts
+; from is read exactly like a candidate's NEXT, which is what loads the first
+; candidate.
+depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
+					ld		b,h
+					ld		d,l		; the insertion point: the field we start from
 					push	hl
-					pop		iy		; and IY on the same field, for .advance to read
-					jr		.advance
+					pop		iy		; and IY on it, for .advance to read
+
+.advance:			ld		sp,iy
+					pop		iy		; IY -> the next candidate
+					ld		a,iyh		; no record lives in page 0, so a high
+					and		a		; byte of zero is the end and nothing else
+					jr		z,.commit
 
 					; U -- nearer as U grows. E holds their half-width for both
 					; bounds, read once: a byte less than reading it twice, and 11 T
@@ -340,21 +354,13 @@ depth_insert_from:	push	hl		; the insertion point
 					jr		nc,.advance		; their base at or above our top: they are nearer
 					; nothing separates them: interpenetrating, and nearer it is
 
-.nearer:			pop		de		; we go after this one, so it is the
-					push	iy		; insertion point now
+.nearer:			ld		b,iyh		; we go after this one, so it is the
+					ld		d,iyl		; insertion point now
+					jr		.advance
 
-					; On to the candidate this one's NEXT names, straight into IY --
-					; no round trip through HL and the stack -- with the end-of-list
-					; test taken on the high byte on the way past. No record lives in
-					; page 0, so a high byte of zero is the end and nothing else.
-.advance:			ld		a,(iy+OBJ.NEXT+1)
-					and		a
-					jr		z,.commit		; ran off the end
-					ld		c,(iy+OBJ.NEXT)
-					ld		iyh,a
-					ld		iyl,c		; IY -> the next candidate
-					jr		.each
-.commit:			pop		hl
+.commit:			ld		sp,0		; patched: the real stack
+					ld		h,b
+					ld		l,d		; HL -> the field to link after
 					; NB: fall through
 
 ; Splice IX in after a NEXT field. depth_insert_from falls into it once its
