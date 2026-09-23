@@ -83,8 +83,13 @@ Each region ends with an `ASSERT` that it fits and a `DISPLAY` of the space it
 has left.
 
 **[engine/](engine/README.md)** is the engine: blit, projection, depth sort,
-rotation arena, dirty-region redraw, collision, characters and movers. Its
-README lists what a game has to supply.
+rotation arena, dirty-region redraw, collision, characters, movers, sound and
+tunes, busy rooms and the joysticks. Its README lists what a game has to
+supply.
+
+**tools/** is what both games' build scripts share, rather than each keeping a
+copy: the font pipeline lives there, and each game's `font_sheet.py` and
+`font_source.py` say only what its own characters are.
 
 **knightlore/** is the game:
 
@@ -103,9 +108,10 @@ README lists what a game has to supply.
 | `sun.s`, `clock.s` | The sun and moon window, and day and night |
 | `overlay.s` | What is drawn straight on the screen, put back over a redrawn region |
 | `panel.s`, `panel_data.s` | The status panel |
-| `menu.s`, `input.s` | The menu, and keyboard and joystick reading |
-| `end.s`, `end_at.s` | Game over, the tunes, and the percentage of the castle seen |
+| `menu.s` | The menu: the controls on offer, and its own tune |
+| `end.s`, `end_at.s` | Game over, its two tunes and the notes they are made of, and the percentage of the castle seen. `engine/tune.s` plays them |
 | `sound_fx.s` | The sound effects: which tone to play, and when -- including a fire's hum and its bounce, for the shared pacer |
+| `busy.s`, `input.s` | What it gives `engine/busy.s` and `engine/input.s`: how slow a room has to be before its monsters take turns, and its own keys. The joysticks are the engine's |
 | `tests/` | Unit tests for the movers and the arch nudge, run by `engine/tests/run_tests.py` |
 
 The generated files and the scripts that make them are in `knightlore/` too --

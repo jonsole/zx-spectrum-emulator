@@ -343,6 +343,7 @@ walker_player		EQU		player
 
 flyer_slots:		DW		0
 busy_count:			DB		0
+room_busy:			DB		0		; engine/busy.s's, which this suite does not include
 
 mover_quest:
 mover_well:

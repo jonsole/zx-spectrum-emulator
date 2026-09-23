@@ -22,15 +22,27 @@
 ; for that, is a plain RET. Its space bar pauses the game with a click in and
 ; out -- sound_click, $D5D7; see pause.s.
 ;
-; The code is here in the room builder's page, but for sound_tune, which is
-; in sound_tune.s beside the notes and tunes of sound_data.s: the page had no
-; room for it. All of that is contended memory, which is fine for working out
-; what to play. Only the loops that play it, or time it, have to be where the ULA
-; leaves the CPU alone: sound_cycle in engine/sound.s, and sound_long.s for the
-; tunes' notes, which are longer than sound_cycle can count, and their rests.
+; The code is here in the room builder's page, but for sound_tune.s, which is
+; beside the notes and tunes of sound_data.s: the page had no room for it. All
+; of that is contended memory, which is fine for working out what to play.
+; Only the loops that play it, or time it, have to be where the ULA leaves the
+; CPU alone, and those are all in engine/sound.s: sound_cycle for an effect,
+; and sound_long and sound_rest for a tune's notes, which are longer than
+; sound_cycle can count.
 ; ---------------------------------------------------------------------------
 
 sound_z:            ret
+
+; What stops a tune that may be stopped: any key at all, which is how $D6AB
+; asks -- every half-row in one read. engine/tune.s calls it. It is here
+; rather than in sound_tune.s because the page that file is in had two bytes
+; left and this is eight.
+; Out: NZ if a key is down. Corrupts AF, BC.
+tune_key:           ld      bc,$00FE
+                    in      a,(c)
+                    cpl
+                    and     $1F
+                    ret
 
 ; A jump -- $D5E4: one cycle each for C from 16 down to 1, pitched at C
 ; exclusive-or $A5, plus C.

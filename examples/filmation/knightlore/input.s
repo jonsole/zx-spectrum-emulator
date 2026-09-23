@@ -18,11 +18,22 @@
 ; way he should face.
 ; ---------------------------------------------------------------------------
 
-INPUT_LEFT          EQU     1 << 0
-INPUT_RIGHT         EQU     1 << 1
-INPUT_FORWARD       EQU     1 << 2
-INPUT_JUMP          EQU     1 << 3
-INPUT_PICKUP        EQU     1 << 4              ; and down, on a joystick
+; The bit numbers first: engine/input.s's stick readers SET them, and a stick
+; has five inputs, so Knight Lore points its fire at jump and its down at
+; pick up -- which is what the game does, and why bit 4 has two names.
+INPUT_LEFT_B        EQU     0
+INPUT_RIGHT_B       EQU     1
+INPUT_FORWARD_B     EQU     2
+INPUT_JUMP_B        EQU     3
+INPUT_PICKUP_B      EQU     4                   ; and down, on a joystick
+INPUT_STICK_FIRE_B  EQU     INPUT_JUMP_B
+INPUT_DOWN_B        EQU     INPUT_PICKUP_B
+
+INPUT_LEFT          EQU     1 << INPUT_LEFT_B
+INPUT_RIGHT         EQU     1 << INPUT_RIGHT_B
+INPUT_FORWARD       EQU     1 << INPUT_FORWARD_B
+INPUT_JUMP          EQU     1 << INPUT_JUMP_B
+INPUT_PICKUP        EQU     1 << INPUT_PICKUP_B
 INPUT_PICKUP_DIR    EQU     1 << 5
 
 ; The keyboard's half-rows. Knight Lore takes whole rows rather than single
@@ -34,114 +45,6 @@ KEY_ROWS_Q_P        EQU     $DBFE               ; Q to T and Y to P
 KEY_ROWS_1_0        EQU     $E7FE               ; 1 to 5 and 6 to 0
 KEY_ROWS_Z_B        EQU     $7EFE               ; the letters of the bottom row
 KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to ENTER
-KEY_STICK_1_5       EQU     $F7FE               ; 1 to 5: the cursor keys' 5, and
-                                                ; Interface II's second stick
-KEY_STICK_0_6       EQU     $EFFE               ; 0, 9, 8, 7, 6: the rest of the
-                                                ; cursor keys, and its first stick
-KEMPSTON_PORT       EQU     $1F
-
-input_now:          DB      0
-
-
-; Read whichever the menu chose.
-; Corrupts AF, BC, DE.
-input_read:         ld      a,(menu_mode)
-                    rrca
-                    and     3                   ; 00 keyboard, 01 Kempston,
-                    jp      z,input_keyboard    ; 10 cursor, 11 Interface II
-                    dec     a
-                    jp      z,input_kempston
-                    dec     a
-                    jp      z,input_cursor
-                    ;; NB: fall through into input_interface_ii
-
-
-; Both of the Interface II's sticks at once, as the game reads them. The first
-; is keys 6 to 0 -- 6 left, 7 right, 8 down, 9 up, 0 to fire -- and the second
-; is 1 to 5, the same five directions in the same order. They sit at opposite
-; ends of their half-rows, though, so the second's bits run the other way
-; round: they are turned over before the two are merged.
-input_interface_ii: ld      bc,KEY_STICK_1_5    ; the second stick
-                    in      a,(c)
-                    cpl                         ; a key reads 0 while it is held
-                    and     $1F
-                    ld      d,0
-                    ld      b,5
-.reverse:           rra
-                    rl      d
-                    djnz    .reverse
-
-                    ld      bc,KEY_STICK_0_6    ; and the first, which they join
-                    in      a,(c)
-                    cpl
-                    and     $1F
-                    or      d
-                    ld      e,0
-                    rra                         ; fire
-                    jr      nc,.up
-                    set     3,e
-.up:                rra
-                    jr      nc,.down
-                    set     2,e
-.down:              rra
-                    jr      nc,.right
-                    set     4,e
-.right:             rra
-                    jr      nc,.left
-                    set     1,e
-.left:              rra
-                    jp      nc,input_done
-                    set     0,e
-                    jp      input_done
-
-
-; The Kempston's own port, where a bit is set while it is held -- the other
-; way round from the keyboard.
-input_kempston:     ld      e,0
-                    in      a,(KEMPSTON_PORT)
-                    rra                         ; right
-                    jr      nc,.left
-                    set     1,e
-.left:              rra
-                    jr      nc,.down
-                    set     0,e
-.down:              rra
-                    jr      nc,.up
-                    set     4,e
-.up:                rra
-                    jr      nc,.fire
-                    set     2,e
-.fire:              rra
-                    jp      nc,input_done
-                    set     3,e
-                    jp      input_done
-
-
-; The cursor keys: 5 left, 8 right, 7 up, 6 down and 0 to fire.
-input_cursor:       ld      e,0
-                    ld      bc,KEY_STICK_1_5
-                    in      a,(c)
-                    cpl
-                    bit     4,a                 ; 5
-                    jr      z,.rest
-                    set     0,e
-.rest:              ld      bc,KEY_STICK_0_6
-                    in      a,(c)
-                    cpl
-                    bit     0,a                 ; 0
-                    jr      z,.up
-                    set     3,e
-.up:                bit     3,a                 ; 7
-                    jr      z,.right
-                    set     2,e
-.right:             bit     2,a                 ; 8
-                    jr      z,.down
-                    set     1,e
-.down:              bit     4,a                 ; 6
-                    jp      z,input_done
-                    set     4,e
-                    jp      input_done
-
 
 ; The keyboard. Left and right are Z, X, C and V along the bottom row and
 ; SYM SHIFT, M, N and B beside them -- Z, C, M and B turn him one way and
@@ -197,12 +100,14 @@ input_keyboard:     ld      bc,KEY_ROW_SHIFT_V
                     jp      z,input_done
                     set     4,e
 
-                    ;; NB: fall through into input_done
+                    ;; NB: fall through into input_done -- input_stick_done
 
 
 ; Bit 5, which is where pick up and put down go while a joystick is steering:
-; any letter at all, which is what the game asks for at finished_input.
+; any letter at all, which is what the game asks for at finished_input. Every
+; stick reader in engine/input.s ends here.
 ;   E - what the reader made of it
+input_stick_done:
 input_done:         ld      bc,KEY_ROWS_Z_B
                     in      a,(c)
                     cpl
@@ -213,8 +118,6 @@ input_done:         ld      bc,KEY_ROWS_Z_B
                     cpl
                     and     $1F
                     or      d
-                    jr      z,.store
+                    jp      z,input_store
                     set     5,e
-.store:             ld      a,e
-                    ld      (input_now),a
-                    ret
+                    jp      input_store

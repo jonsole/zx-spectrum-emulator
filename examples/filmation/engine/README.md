@@ -25,7 +25,10 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `vid_buff.s` | `pixelAddress`, and `vid_buff_copy` from the view buffer to the screen |
 | `redraw.s` | Dirty regions: `region_reset`/`region_add`, `redraw_defer`/`redraw_flush`, `redraw_view`, `redraw_screen` |
 | `turn.s` | Turn pacing: work is counted in units with `turn_add`, and `turn_pace` spends the rest of a fixed budget |
-| `sound.s` | The beeper: `sound_cycle` and `sound_tone`, which count their time towards the turn |
+| `sound.s` | The beeper: `sound_cycle` and `sound_tone`, which count their time towards the turn; `sound_take`, which lets one continuous sound a frame through; and `sound_long` and `sound_rest` for a tune's notes |
+| `tune.s` | Tunes: a byte a note, `$FF` at the end. `tune_play` stops if a key is down, `tune_play_all` plays out |
+| `busy.s` | Busy rooms: `busy_check` watches what a room's turns cost and `room_busy` says how often a monster sits one out |
+| `input.s` | The sticks -- Kempston, cursor and Interface II -- and the dispatch that picks one. The keyboard is the game's |
 | `room.s` | The room: bounds, doorways, the object count, and `room_add` → `room_show` |
 | `walker.s` | Characters: two records moving as one figure, with walk, jump, gravity, doorways and the room-edge clamp |
 | `mover.s` | The mover framework: `movers_step` gives every behaviour its turn, plus move, paint, clamp and the pair move |
@@ -54,6 +57,10 @@ The game's top-level file owns the memory map, and has to honour these:
 - **Interrupts stay off.** The blit, the draw walk and the buffer clear all use
   SP as a data pointer, so an interrupt would push into a sprite. Put the stack
   in uncontended memory and leave room below it.
+
+That is the 48K map. The planned 128K one -- a room page of graphics at
+$C000, a library in other banks and a pre-drawn backdrop -- is in
+[memory-128k.md](memory-128k.md).
 
 Two things must sit next to each other:
 
@@ -94,6 +101,10 @@ The engine names nothing else of the game's.
 | `CHARACTER_LARGEST`, `CHARACTER_TALLEST` | EQU | walker.s | Sprites sizing the two rotation buffers `character_keep` takes for good |
 | `DOOR_ACROSS`, `DOOR_ALONG`, `DOOR_LEVEL`, `DOOR_HEIGHT` | EQU | walker.s | The box around a doorway that counts as standing in it |
 | `character_steer` | routine | walker.s | Called with the step in D, E before a walk; may adjust it. Corrupts AF, BC, HL. A plain `RET` will do |
+| `BUSY_TURNS_A_SECOND`, `BUSY_OFF_EIGHTHS`, `BUSY_HOT_TURNS`, `BUSY_CALM_TURNS`, `BUSY_MOST`, `BUSY_LEAST` | EQU | busy.s | The pace the game is copying, how far under it counts as calm, how many turns either way before the room changes its mind, and the ends of `room_busy`'s range |
+| `menu_mode`, `input_keyboard`, `input_stick_done` | byte, routines | input.s | Which control the menu chose; the game's own keys; and the tail every stick reader ends at, which adds whatever else that game reads while a stick is steering and ends at `input_store` |
+| `INPUT_LEFT_B`, `INPUT_RIGHT_B`, `INPUT_FORWARD_B`, `INPUT_DOWN_B`, `INPUT_STICK_FIRE_B` | EQU | input.s | Which BIT of the answer each of a stick's five inputs sets. A stick has five and no more, so what the fifth means is the games' own business: Knight Lore points it at jump, Pentagram at fire |
+| `tune_note_at`, `tune_key` | routines | tune.s | A = a note, 1 to 63: carry set and B, C its half-period with E the cycles one length lasts, or carry clear to skip it; and whether a key is down, which stops a tune |
 | `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/sprite_source.py` |
 
 A name that only `movers.s` uses is needed only if the game uses the routine
@@ -102,9 +113,11 @@ for one whose table names `mover_falls_noisy`, and so on. None of them has a
 default, so one that is missing is an assembly error. Most are an `EQU` to a
 routine the game already has, or to any `RET` where it wants nothing done, and
 cost no bytes. A game states them in a file of its own included between
-`mover.s` and `movers.s` (both games call it `shared_movers.s`): an `EQU` of a
-label still to come takes the previous pass's value, and `IFUSED` moves code
-about between the early passes, so sjasmplus warns.
+`mover.s` and `movers.s` (both games call it `shared_movers.s`), and the same
+goes for every other name here that is an `EQU` to an engine routine: state it
+after that routine's file. An `EQU` of a label still to come takes the previous
+pass's value, and `IFUSED` moves code about between the early passes, so
+sjasmplus warns.
 
 The top-level file also provides `VIEW_BUF_WIDTH`, `VIEW_BUF_ROWS`,
 `view_buffer`, `shift_shared` and `bit_reverse_table`, as laid out above.

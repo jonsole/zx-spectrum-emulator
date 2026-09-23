@@ -3,20 +3,8 @@
 ; each only works out a pitch and a count and hands them to sound_tone, which
 ; is up in the fast memory where the timing has to be.
 
-
-; Whether a continuous sound may play: yes once a Knight Lore frame, and to
-; the first thing that asks. The game plays every one of them each frame, but
-; four fires at six cycles each are half of a turn, and a room full of them ran
-; at half speed for it; one a frame keeps the room sounding and the cost to one
-; sound's worth.
-; Out: NZ to play, and the frame's sound is taken. Corrupts AF.
-sound_take:         ld      a,(sound_now)
-                    or      a
-                    ret     z
-                    xor     a
-                    ld      (sound_now),a
-                    inc     a
-                    ret
+; The continuous ones ask sound_take, in engine/sound.s, whether this is their
+; turn: one of them a frame, where the game plays them all.
 
 ; A pitch from where something is, six cycles of it: higher the further along or
 ; up it is -- audio_B454 and the three that feed it. Continuous.

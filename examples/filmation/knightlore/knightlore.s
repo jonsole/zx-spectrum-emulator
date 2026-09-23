@@ -123,9 +123,11 @@ sprite_end:
 					INCLUDE "special.s"
 					INCLUDE "../engine/sound.s"
 					INCLUDE "panel.s"
-					INCLUDE "end.s"
+					INCLUDE "end.s"		; its tunes and their notes, then
+					INCLUDE "../engine/tune.s"		; what plays them
 					INCLUDE "menu.s"
-					INCLUDE "input.s"
+					INCLUDE "input.s"		; its keys and its bits, then
+					INCLUDE "../engine/input.s"		; the sticks, which are nobody's
 
 ; The view buffer and the object pool used to sit here, at the top of the
 ; image. They are reserved at the foot of this file instead, in the gap between
@@ -232,7 +234,8 @@ bit_reverse_table:
 ; And code that only runs when a key is pressed, in what is left.
                     INCLUDE "pickup.s"
                     INCLUDE "../engine/screen.s"         ; pickup.s falls into it
-                    INCLUDE "busy.s"            ; where the trimmed sprite table left room
+                    INCLUDE "busy.s"            ; its numbers, then the engine's own,
+                    INCLUDE "../engine/busy.s"  ; where the trimmed sprite table left room
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end

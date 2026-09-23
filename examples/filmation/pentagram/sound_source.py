@@ -88,8 +88,7 @@ def main():
          ";",
          "; The title's tune, which a key cuts short -- $D69C. See sound_tune.s.",
          "sound_tune_title:\tld\tde,sound_tune_title_data",
-         "\t\t\tld\ta,1",
-         "\t\t\tjp\tsound_tune_keys",
+         "\t\t\tjp\ttune_play",
          "sound_tune_title_data:"]
     t = tunes["title"]
     for i in range(0, len(t), 12):

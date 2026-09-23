@@ -264,46 +264,24 @@ end_pause:          ld      d,8                 ; not B: end_key reads the keybo
                     ret
 
 
-; A tune: its notes until $FF, which a key cuts short -- play_audio.
-;   DE -> the notes
-tune_play:          ld      a,(de)
-                    cp      $FF
-                    ret     z
-                    push    de
-                    call    tune_note
-                    pop     de
-                    inc     de
-                    call    end_key
-                    jr      z,tune_play
-                    ret
-
-
-; The whole of a tune, whatever is held -- play_audio at $B2CF, which is what
-; the start of a game wants: 0 is still down when the menu lets go of it, and
-; tune_play would take that as "stop".
-;   DE -> the notes
-tune_play_all:      ld      a,(de)
-                    cp      $FF
-                    ret     z
-                    push    de
-                    call    tune_note
-                    pop     de
-                    inc     de
-                    jr      tune_play_all
-
-
-; One note: its number in bits 0 to 5, and how long to hold it in 6 and 7.
-;   A - the note
-tune_note:          push    af
-                    and     $3F
-                    ld      hl,tune_notes
+; What Knight Lore gives engine/tune.s, which plays its two tunes and the
+; menu's: where a note's pitch comes from, and what counts as a key.
+;
+; A note's entry is four bytes -- the note itself, the half period as B DJNZs
+; and C runs of 256, and how long one beat of it lasts -- and the table holds
+; only the notes these tunes play, so it is searched rather than indexed.
+;   A - the note, 1 to 63
+; Out: carry set and B, C the half period, E one beat; carry clear for a note
+; the tunes never play, which is then skipped.
+; Corrupts AF, D, HL.
+tune_note_at:       ld      hl,tune_notes
                     ld      b,TUNE_NOTES
 .find:              cp      (hl)
                     jr      z,.found
                     ld      de,4
                     add     hl,de
                     djnz    .find
-                    pop     af                  ; a note these tunes never play
+                    or      a                   ; no entry: carry clear
                     ret
 
 .found:             inc     hl
@@ -312,35 +290,7 @@ tune_note:          push    af
                     ld      c,(hl)
                     inc     hl
                     ld      e,(hl)              ; and how long one beat is
-                    ld      d,0
-                    pop     af
-                    rlca
-                    rlca
-                    and     3
-                    inc     a                   ; one to four beats
-                    ld      hl,0
-.beats:             add     hl,de
-                    dec     a
-                    jr      nz,.beats
-
-.period:            push    bc
-                    xor     a
-                    out     ($FE),a
-.low:               djnz    .low
-                    dec     c
-                    jr      nz,.low
-                    pop     bc
-                    push    bc
-                    ld      a,SOUND_EAR
-                    out     ($FE),a
-.high:              djnz    .high
-                    dec     c
-                    jr      nz,.high
-                    pop     bc
-                    dec     hl
-                    ld      a,h
-                    or      l
-                    jr      nz,.period
+                    scf
                     ret
 
 
@@ -352,6 +302,12 @@ end_key:            ld      bc,$00FE
                     cpl
                     and     $1F
                     ret
+
+
+; ...which is also what stops a tune, for engine/tune.s. Named after end_key
+; rather than before it: an EQU of a label still to come takes the value it
+; had in the pass before, which sjasmplus warns about.
+tune_key            EQU     end_key
 
 
 ; A string in end_ink, from the character row and column, the last character

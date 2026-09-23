@@ -101,7 +101,8 @@ PERCENT_CHAR        EQU     43
 shift_shared:       DS      SHIFT_SHARED_SIZE
 
                     INCLUDE "sound_data.s"
-                    INCLUDE "sound_tune.s"
+                    INCLUDE "sound_tune.s"      ; what it gives the engine's
+                    INCLUDE "../engine/tune.s"  ; player, and the player itself
 room_data_end:
                     ASSERT  room_data_end <= $7400      ; clear of the view buffer
                     DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
@@ -137,13 +138,13 @@ sprite_end:
 					INCLUDE "shared_movers.s"		; what it gives the next
 					INCLUDE "../engine/movers.s"		; the behaviours shared with Knight Lore
 					INCLUDE "../engine/sound.s"
-					INCLUDE "sound_long.s"
 					INCLUDE "../engine/screen.s"
 					INCLUDE "panel.s"
 					INCLUDE "gameover.s"
 					INCLUDE "quest.s"
 					INCLUDE "quest_data.s"
-					INCLUDE "input.s"
+					INCLUDE "input.s"		; its keys and its bits, then
+					INCLUDE "../engine/input.s"		; the sticks, which are nobody's
 					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
 					INCLUDE "player.s"
@@ -193,7 +194,8 @@ image_end:
                     INCLUDE "room_build.s"
                     INCLUDE "../engine/room.s"
                     INCLUDE "quest_ram.s"
-                    INCLUDE "busy.s"
+                    INCLUDE "busy.s"            ; its numbers, then the engine's own
+                    INCLUDE "../engine/busy.s"
                     INCLUDE "sound_fx.s"
                     INCLUDE "menu.s"
 room_code_end:

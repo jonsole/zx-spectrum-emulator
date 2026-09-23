@@ -191,7 +191,6 @@ mover_move_anim:    ld      a,(room_busy)       ; taking turns, it animates
 ; hopper, the pushed things or anything of the quest's.
 MONSTER_KEEP_SPEED  EQU     0               ; 1: twice as far, one turn in two
 
-room_busy:          DB      0               ; 0, or 4, 3 or 2: busy.s sets it
 
 ; Out: carry set if this monster sits this turn out. The monsters count
 ; busy_count down between them, and whichever reaches nought sits out;

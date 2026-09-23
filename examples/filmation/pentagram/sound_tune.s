@@ -1,66 +1,43 @@
 ; ---------------------------------------------------------------------------
-; A whole tune -- $D6B5; sound_fx.s says where each plays. A byte a note:
-; the note in bits 0-5, from sound_notes, and its length in bits 6-7, one to
-; four times the note's own. Note 0 is a rest of that many $430B-long waits.
-; $FF ends it. Only the title's stops for a key, as $D69C's does; the rest play
-; out, as $D6B5's do. The title's is in sound_title.s.
-; Corrupts AF, BC, DE, HL.
+; What Pentagram gives engine/tune.s, and the four tunes that go through it --
+; $D6B5; sound_fx.s says where each plays. The notes themselves are
+; sound_data.s's, generated from the original.
+;
+; Only the title's stops for a key, as $D69C's does, and it is in
+; sound_title.s with its own notes; the rest play out, as $D6B5's do.
+;
+; The code is here in the room builder's page, as the rest of the sound is:
+; all of it is contended memory, which is fine for working out what to play.
+; Only the loops that play it have to be where the ULA leaves the CPU alone,
+; and those are sound_cycle, sound_long and sound_rest in ../engine/sound.s.
+; ---------------------------------------------------------------------------
+
 sound_tune_start:   ld      de,sound_tune_start_data
-                    jr      sound_tune
+                    jp      tune_play_all
 sound_tune_water:   ld      de,sound_tune_water_data
-                    jr      sound_tune
+                    jp      tune_play_all
 sound_tune_over:    ld      de,sound_tune_over_data
-                    jr      sound_tune
+                    jp      tune_play_all
 sound_tune_win:     ld      de,sound_tune_win_data
+                    jp      tune_play_all
 
-sound_tune:         xor     a                   ; plays out
-sound_tune_keys:    ld      (.cut + 1),a        ; A = 1: a key stops it
-.note:              ld      a,(de)
-                    cp      $FF
-                    ret     z
-.cut:               ld      a,0                 ; patched
-                    or      a
-                    jr      z,.play
-                    xor     a                   ; every half-row
-                    in      a,($FE)
-                    cpl
-                    and     $1F
-                    ret     nz
-.play:              ld      a,(de)
-                    inc     de
-                    ld      c,a
-                    rlca
-                    rlca
-                    and     3
-                    inc     a
-                    ld      b,a                 ; B - how many lengths
-                    ld      a,c
-                    and     $3F
-                    jr      z,.rest
 
-                    push    de
-                    ld      e,a
+; A note's pitch and length -- $D6C0's table, three bytes a note from note 1:
+; the DJNZs, then the 256s plus one, then the cycles in one length of it.
+;   A - the note, 1 to 63
+; Out: carry set, B and C the half-period, E the cycles in one length.
+; Corrupts AF, D, HL.
+tune_note_at:       ld      e,a
                     ld      d,0
                     ld      hl,sound_notes - 3
                     add     hl,de
                     add     hl,de
                     add     hl,de
-                    ld      d,(hl)              ; the DJNZs
+                    ld      b,(hl)
                     inc     hl
-                    ld      e,(hl)              ; the 256s, plus one
+                    ld      c,(hl)
                     inc     hl
-                    ld      a,(hl)              ; the cycles in one length
-                    push    de
-                    ld      e,a
-                    ld      d,0
-                    ld      hl,0
-.length:            add     hl,de
-                    djnz    .length
-                    pop     bc                  ; B the DJNZs, C the 256s
-                    call    sound_long
-                    pop     de
-                    jr      .note
+                    ld      e,(hl)
+                    scf                         ; every note has an entry
+                    ret
 
-.rest:              call    sound_rest          ; $D702
-                    djnz    .rest
-                    jr      .note
