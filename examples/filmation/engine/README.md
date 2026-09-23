@@ -36,6 +36,24 @@ an `EQU`, so the split costs no bytes and no T-states.
 | `screen.s` | `screen_sprite`: a graphic straight onto the screen, masked and byte-aligned |
 | `tests/` | Z80 unit tests for the engine, the harness every suite shares, and `run_tests.py`, which runs these and the games' |
 
+Every routine's header ends with what it takes, what it hands back and what it
+leaves changed, directly above its label:
+
+```
+; In:  IX -> the object
+;      D  = the step in U
+; Out: Z set if the step was zero
+; Corrupts: A, C
+```
+
+`->` is a pointer and `=` a value; `In: nothing` and `Out: nothing` are written
+out rather than left off. `Corrupts` is complete, calls included, so a register
+it does not name, and `Out` does not either, comes back as it went in. A
+behaviour, or anything else the engine calls through a table or a hook, says
+what the game's side may do as well -- "and whatever mover_turned does". The
+editor's hover shows the three lines first
+([A routine's header](../../../docs/vscode-debugging.md#a-routines-header)).
+
 ## Laying out memory
 
 The game's top-level file owns the memory map, and has to honour these:

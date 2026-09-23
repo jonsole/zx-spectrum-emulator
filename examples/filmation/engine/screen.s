@@ -1,8 +1,12 @@
 ; A graphic straight onto the screen, masked and byte-aligned: the carried
 ; objects, and the status panel's pieces -- print_sprite as the panel uses it.
-;   A - the graphic, C - x in pixels, a multiple of 8
-;   D - 1 to draw it mirrored, E - the row below its bottom one
-; Corrupts everything but IX and IY.
+;
+; In:  A = the graphic
+;      C = x in pixels, a multiple of 8
+;      D = 1 to draw it mirrored
+;      E = the row below its bottom one
+; Out: nothing
+; Corrupts: AF, B, DE, HL, AF'
 screen_sprite:		ld		l,a
 					ld		h,(high sprite_table) / 2
 					add		hl,hl

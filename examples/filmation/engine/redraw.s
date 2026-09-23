@@ -28,16 +28,22 @@ region_width:		DB		0
 ; -- so the first region_add sets both. Adding nothing at all leaves them that
 ; way, which redraw_view would read as a region and try to draw, so every
 ; region_reset must be followed by at least one region_add.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: HL
 region_reset:       ld      hl,$00FF            ; l = min, h = max
                     ld      (view_y_extent),hl
                     ld      (view_x_extent),hl
                     ret
 
 
-; Widen the pending region to take in one object's extent.
-;   IX -> the object
-; Corrupts A and HL. DE, BC and IX are untouched, so a caller can hold a step
-; in DE across it.
+; Widen the pending region to take in one object's extent. DE and BC are
+; untouched, so a caller can hold a step in DE across it.
+;
+; In:  IX -> the object
+; Out: nothing
+; Corrupts: AF, HL
 region_add:         ld      hl,view_y_extent
                     ld      a,(ix+OBJ.MIN_Y)
                     cp      (hl)
@@ -86,8 +92,10 @@ pend_x_extent:		dw		0
 ;
 ; Regions that do not overlap are not merged even when they would fit: the
 ; rows between them would be composited for nothing.
-;   view_y_extent, view_x_extent - the region
-; Corrupts AF, BC, DE, HL; and IX, when it draws.
+;
+; In:  view_y_extent, view_x_extent = the region
+; Out: nothing
+; Corrupts: everything -- AF, BC, DE and HL alone when it draws nothing
 redraw_defer:		ld		a,(pend_y_extent+1)
 					or		a
 					jr		z,.adopt		; nothing waiting
@@ -158,7 +166,10 @@ redraw_defer:		ld		a,(pend_y_extent+1)
 
 
 ; Draw the region still waiting, if there is one.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 redraw_flush:		ld		a,(pend_y_extent+1)
 					or		a
 					ret		z
@@ -177,7 +188,10 @@ redraw_flush:		ld		a,(pend_y_extent+1)
 ; again for every one of them, and mirrors the shared graphics back and forth as
 ; it goes; a tile composites everything that reaches it once. The tiles meet
 ; edge to edge and cover every pixel, so nothing has to be wiped first.
-; Corrupts everything.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 					ASSERT	32 % VIEW_BUF_WIDTH == 0 && SCREEN_ROWS % VIEW_BUF_ROWS == 0
 redraw_screen:		ld		de,0		; D - the tile's top row, E - its left column
 .tile:				push	de
@@ -207,7 +221,10 @@ redraw_screen:		ld		de,0		; D - the tile's top row, E - its left column
 
 
 ; Repaint one object's own area, with no previous position to take in.
-;   IX -> the object
+;
+; In:  IX -> the object
+; Out: nothing
+; Corrupts: everything
 redraw_object:		ld		a,(ix+OBJ.MIN_Y)
 					ld		(view_y_extent),a
 					ld		a,(ix+OBJ.MAX_Y)
@@ -225,6 +242,10 @@ redraw_object:		ld		a,(ix+OBJ.MIN_Y)
 ; height case to handle here: the tallest is the 64-row castle arch and the
 ; buffer holds exactly 64. That is the whole reason the buffer went to
 ; 8 x 64 -- a region that does not fit has nowhere to go but wrap.
+;
+; In:  view_y_extent, view_x_extent = the region
+; Out: nothing
+; Corrupts: everything
 redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ld		a,h
 					sub		l

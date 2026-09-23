@@ -79,16 +79,20 @@ sprite_jump_table:
 				;
 				; The two bytes that DJNZ covers are POPs again by the time the
 				; next sprite is drawn, which is what `patched` is for.
-; Point the one blitter at this sprite.
-;
-;   A - the columns of a row that land inside the region
-;   D - BLIT_IDX, which matches however many columns a row of the sprite
-;       actually has: shift_sprite bumps it by a width class when it rotates,
-;       for the overflow column
+; Point the one blitter at this sprite, and go into it.
 ;
 ; Once per object drawn, against that sprite's sixteen to sixty-four rows. B,
 ; C, E, H and L are all dead here -- the blit's own registers are in the other
-; bank -- and A is finished with by the time it jumps.
+; bank -- and A is finished with by the time it jumps. D is BLIT_IDX, which
+; matches however many columns a row of the sprite actually has: shift_sprite
+; bumps it by a width class when it rotates, for the overflow column.
+;
+; In:  A   = the columns of a row that land inside the region
+;      D   = BLIT_IDX
+;      DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
+;      IX  = where to go when the sprite is drawn
+; Out: nothing -- it leaves by JP (IX), with the two banks exchanged
+; Corrupts: AF, BC, DE, HL, and the blit's B, DE and HL
 sprite_blit_setup:
 					ld		c,a					; c = columns to composite
 
@@ -161,6 +165,13 @@ BLIT_COLUMN_SIZE	EQU		6		; and what one column of the chain assembles
 					; read the EQU -- the ASSERT below is what
 					; keeps the two honest.
 
+; The blit, as sprite_blit_setup last patched it. It starts with EXX, so the
+; registers named in the other bank here are the ones it works in.
+;
+; In:  DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
+;      IX  = where to go when the sprite is drawn
+; Out: nothing -- it leaves by JP (IX), with the two banks exchanged
+; Corrupts: AF, and the blit's B, DE and HL
 sprite_blit:		exx
 					ld		(.restore_sp+1),sp	; save SP
 					ld		sp,hl				; SP walks the sprite

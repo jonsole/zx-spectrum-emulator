@@ -30,8 +30,10 @@
 ; ---------------------------------------------------------------------------
 
 ; A tune, which a key cuts short.
-;   DE -> the notes
-; Corrupts AF, BC, DE, HL.
+;
+; In:  DE -> the notes
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 					IFUSED	tune_play
 tune_play:			ld		a,(de)
 					cp		$FF
@@ -47,8 +49,10 @@ tune_play:			ld		a,(de)
 
 
 ; The whole of a tune, whatever is held.
-;   DE -> the notes
-; Corrupts AF, BC, DE, HL.
+;
+; In:  DE -> the notes
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 					IFUSED	tune_play_all
 tune_play_all:		ld		a,(de)
 					cp		$FF
@@ -62,8 +66,10 @@ tune_play_all:		ld		a,(de)
 
 
 ; One note.
-;   A - the note byte
-; Corrupts AF, BC, DE, HL.
+;
+; In:  A = the note byte
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 					IFUSED	tune_note
 tune_note:			push	af
 					and		$3F

@@ -48,10 +48,14 @@ room_behaviour:		DB		0
 
 
 ; ---------------------------------------------------------------------------
-; Fill one object record.
-;   HL -> sprite, U, V, Z, size U, size V, size Z, flags
-;   IX -> the record
-; Advances HL past the eight bytes and IX to the next record.
+; Fill one object record. A graphic of 0 or 1 -- the end of a template, or a
+; part drawn by something else -- fills nothing, and neither does a full room.
+;
+; In:  HL -> the graphic, U, V, Z, size U, size V, size Z and flags
+;      IX -> the record
+; Out: HL -> past the eight bytes
+;      IX -> the next record, if this one was filled
+; Corrupts: AF, BC
 room_add:			ld		a,(room_object_count)
 					cp		ROOM_SLOTS
 					jr		nc,.full
@@ -124,7 +128,10 @@ room_add:			ld		a,(room_object_count)
 ; The pixel nudge that lines this sprite's artwork up with its position.
 ; Knight Lore picks these inside its per-graphic update routines; adj.py
 ; harvested the values into two tables, one for each way round.
-;   IX -> the record, with GFX and FLAGS already set
+;
+; In:  IX -> the record, with GFX and FLAGS already set
+; Out: nothing
+; Corrupts: AF, BC
 room_adjust:		push	hl
 					ld		h,high sprite_adj_index
 					ld		l,(ix+OBJ.GFX)		; the table is page-aligned, so the
@@ -174,6 +181,10 @@ room_adjust:		push	hl
 ; Placement has to finish before any insertion, so that every depth comparison
 ; sees real coordinates; and everything is placed before anything is drawn, so
 ; that the first object painted already has the rest behind it.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 room_show:			ld		hl,object_place
 					call	room_each
 					ld		hl,room_insert_one
@@ -183,7 +194,10 @@ room_show:			ld		hl,object_place
 
 ; Call a routine once for every object in the room. One walk for the three
 ; passes of room_show, with the routine written into the CALL.
-;   HL -> the routine, which gets IX -> the record and may corrupt anything
+;
+; In:  HL -> the routine, which gets IX -> the record and may corrupt anything
+; Out: nothing
+; Corrupts: AF, BC, IX, and whatever the routine does
 room_each:			ld		(.call+1),hl
 					ld		a,(room_object_count)
 					or		a
@@ -203,7 +217,10 @@ room_each:			ld		(.call+1),hl
 
 ; Into the depth list: the background straight to the front, never compared
 ; with anything, and everything else sorted.
-;   IX -> the record
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 room_insert_one:	ld		a,(ix+OBJ.FLAGS)
 					and		OBJ_BACKGROUND
 					jp		nz,background_insert

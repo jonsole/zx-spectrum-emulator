@@ -33,7 +33,10 @@ sort_head			DW		object_list
 ; them so that sort_head is never named outside this file -- a game that
 ; emptied object_list and forgot sort_head would leave the sorted run
 ; starting inside the room that has just gone.
-; Corrupts HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: HL
 				MACRO	depth_reset
 					ld		hl,0
 					ld		(object_list),hl
@@ -48,9 +51,10 @@ sort_head			DW		object_list
 ; aims at offset 0 of a record, whose low byte is a multiple of ROOM_STRIDE,
 ; or at object_list, which is asserted. A record's own PREV is well inside
 ; its slot.
-;   IX -> the object
+;
+; In:  IX -> the object
 ; Out: DE -> the NEXT field that named us, which is where we came out of
-; Corrupts F, BC, HL. A is kept.
+; Corrupts: F, BC, HL
 					ASSERT	(object_list & $FF) != $FF
 					ASSERT	OBJ.PREV + 1 < ROOM_STRIDE
 depth_unlink:		ld		l,(ix+OBJ.PREV)
@@ -77,8 +81,10 @@ depth_unlink:		ld		l,(ix+OBJ.PREV)
 ; operands inside depth_insert_from. Six stores once per insert, against six
 ; (ix+d) reads and their adds per candidate if they stayed in the record: it
 ; pays for itself after about three candidates.
-;   IX -> the object
-; Corrupts AF, B.
+;
+; In:  IX -> the object
+; Out: nothing
+; Corrupts: AF, B
 depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 											; back down past it to the min
 					ld		b,(ix+OBJ.SIZE_U)
@@ -108,15 +114,18 @@ depth_cmp_setup:	ld		a,(ix+OBJ.U)		; the centre, then the max, then
 
 
 ; Add a step to an object's U, V and Z.
-;   IX -> the object
-;   D  - the step in U, E in V, A in Z
-; Out: Z set if the step was zero, and so moved nothing
-; Corrupts AF, C. HL, DE and B come through.
 ;
 ; The step is ORed together before anything is added, so a step of nothing
 ; costs 27 T rather than the 148 of three read-add-writes it does not need. It
 ; is ORed again on the way out because the flags of the last ADD are no use: a
 ; coordinate can wrap to zero.
+;
+; In:  IX -> the object
+;      D  = the step in U
+;      E  = the step in V
+;      A  = the step in Z
+; Out: Z set if the step was zero, and so moved nothing
+; Corrupts: A, C
 depth_add_step:		ld		c,a
 					ld		a,d
 					or		e
@@ -153,17 +162,19 @@ depth_add_step:		ld		c,a
 ;
 ; Nothing here reads the screen position, so this runs before room_adjust and
 ; object_place, not after.
-;   IX -> the object, in the list
-;   D  - the step in U, E in V, A in Z
-; Corrupts A, BC, DE, HL, IY.
+;
+; In:  IX -> the object, in the list
+;      D  = the step in U
+;      E  = the step in V
+;      A  = the step in Z
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_step:			call	depth_add_step
 					ret		z		; no step: nothing to re-sort
 					; NB: fall through
 
 
 ; Put an object that has moved back into depth order.
-;   IX -> the object, in the list
-; Corrupts A, BC, DE, HL, IY.
 ;
 ; It comes out and goes back in, scanned from the front of the sorted run --
 ; every time, however little it moved.
@@ -189,6 +200,10 @@ depth_step:			call	depth_add_step
 ; objects that both stood still cannot have come to need a different order,
 ; and anything that moved is placed against the whole run again, so a
 ; mistake cannot outlive the frame that made it.
+;
+; In:  IX -> the object, in the list
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_relink:		call	depth_unlink
 					jr		depth_insert		; which does depth_cmp_setup for us
 
@@ -220,10 +235,14 @@ depth_relink:		call	depth_unlink
 ;
 ; The lower half's own step has to be added before this, and a caller that
 ; re-sorts it as well does no harm: it is re-sorted again here, properly.
-;   IX -> the upper record, in the list
-;   HL -> the lower record, which is its own NEXT field
-;   D  - the step in U, E in V, A in Z
-; Corrupts A, BC, DE, HL, IY.
+;
+; In:  IX -> the upper record, in the list
+;      HL -> the lower record, which is its own NEXT field
+;      D  = the step in U
+;      E  = the step in V
+;      A  = the step in Z
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_step_upper:	call	depth_add_step		; HL comes through this
 					ret		z
 					push	hl		; the lower, for the scan that puts us back
@@ -239,8 +258,6 @@ depth_step_upper:	call	depth_add_step		; HL comes through this
 
 ; Put an object into the list in depth order. It must not already be in
 ; the list -- NEXT and PREV are written, not read.
-;   IX -> the object
-; Corrupts A, BC, DE, HL, IY.
 ;
 ; The scan walks the whole sorted run and leaves the object after the LAST
 ; candidate it was nearer than. It never stops early, and that is the point:
@@ -250,15 +267,24 @@ depth_step_upper:	call	depth_add_step		; HL comes through this
 ; candidate it was behind would be trusting exactly the thing that is not
 ; true. Walking on costs the rest of the run and is never wrong about more
 ; than the cycle itself.
+;
+; In:  IX -> the object
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_insert:		call	depth_cmp_setup
 					; NB: the two entries below assume depth_cmp_setup has already run for
 					; this object. depth_step_upper is what relies on that -- it runs setup
 					; itself for the upper half and then enters at depth_insert_from.
+
+; The same, for an object whose bounds depth_cmp_setup has already patched in.
+;
+; In:  IX -> the object
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 					; NB: fall through
 
 ; ...and the same, starting at the NEXT field HL names instead of at the front.
-;   IX -> the object, HL -> where to start looking
 ;
 ; The comparison is written out inside the loop rather than called. This is its
 ; only caller, and the CALL, the RET and the PUSH HL / POP IY that handed it
@@ -321,6 +347,11 @@ depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 ; turns us away costs no jump back to the top. The field the scan starts
 ; from is read exactly like a candidate's NEXT, which is what loads the first
 ; candidate.
+;
+; In:  IX -> the object, its bounds already patched in by depth_cmp_setup
+;      HL -> the NEXT field to start looking after
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, IY
 depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 					push	hl
 					pop		iy		; IY on the field we start from, for .advance to read
@@ -395,8 +426,11 @@ depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 
 ; Splice IX in after a NEXT field. depth_insert_from falls into it once its
 ; scan has settled on one, and background_insert calls it with the boundary.
-;   IX -> the object, HL -> the NEXT field to follow
-; Corrupts A, BC, DE, HL.
+;
+; In:  IX -> the object
+;      HL -> the NEXT field to follow
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 depth_link:				ld		e,(hl)
 					inc		l
 					ld		d,(hl)
@@ -425,8 +459,10 @@ depth_link:				ld		e,(hl)
 ; never sorted, so it is permanently behind. Splices in at sort_head --
 ; the same splice depth_insert uses -- and then moves sort_head past us,
 ; so the sorted run now starts after this object.
-;   IX -> the object, not currently in any list
-; Corrupts A, BC, DE, HL.
+;
+; In:  IX -> the object, not currently in any list
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 background_insert:	ld		hl,(sort_head)
 					call	depth_link
 					ld		(sort_head),ix		; our NEXT field is the new boundary

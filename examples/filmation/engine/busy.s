@@ -50,7 +50,10 @@ busy_count:			DB		0		; the game's monsters count it down
 
 
 ; Once a turn, before turn_pace spends what is left of it.
-; Corrupts AF, DE, HL.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, DE, HL
 busy_check:			ld		a,(room_busy)		; next turn, the next monster
 					or		a		; sits out first
 					jr		z,.measure
@@ -107,9 +110,12 @@ busy_check:			ld		a,(room_busy)		; next turn, the next monster
 					ret
 
 
-; How busy: 0 for quiet, or BUSY_LEAST down to BUSY_MOST. Starts the count of
-; turns towards the next change over, and the monsters' turns.
-; Corrupts AF.
+; Set how busy the room is. Starts the count of turns towards the next change
+; over, and the monsters' turns.
+;
+; In:  A = 0 for quiet, or BUSY_LEAST down to BUSY_MOST
+; Out: nothing
+; Corrupts: AF
 busy_set:			ld		(room_busy),a
 					ld		a,1
 					ld		(busy_phase),a

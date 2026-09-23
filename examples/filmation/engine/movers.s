@@ -35,8 +35,10 @@
 ; What drives a template, or 0 for nothing. Room-build time only, so a walk
 ; will do. The game's mover_of is pairs of (template, behaviour), ended by
 ; $FF, which is not a template.
-;   A  - the template index
-; Out: A - the behaviour. Preserves DE.
+;
+; In:  A = the template index
+; Out: A = the behaviour
+; Corrupts: F, C, HL
 					IFUSED	mover_find
 mover_find:			ld		hl,mover_of
 .next:				ld		c,(hl)
@@ -72,12 +74,20 @@ mover_find:			ld		hl,mover_of
 ; mover_falls_noisy is the same with the game's sound_falls every turn first:
 ; Knight Lore's moveable block chirps as upd_62 does, and Pentagram's makes no
 ; sound and uses mover_falls.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_falls_noisy
 mover_falls_noisy:	call	sound_falls
 					ASSERT	$ == mover_falls
 					ENDIF
 
+; See mover_falls_noisy.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_falls
 mover_falls:		call	mover_halt
 					jp		mover_move		; DZ is left to gravity
@@ -96,7 +106,10 @@ mover_falls:		call	mover_halt
 ;
 ; It sounds the game's sound_z while it is going down -- Knight Lore's hum
 ; for falling things. Pentagram's sound_z is silent.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_sinks
 mover_sinks:		bit		3,(ix+OBJ.MOVE_STATE)
 					ret		z
@@ -110,6 +123,9 @@ mover_sinks:		bit		3,(ix+OBJ.MOVE_STATE)
 					ENDIF
 
 
+ON_TOP_SLACK		EQU		6		; see player_on_top
+
+
 ; ---------------------------------------------------------------------------
 ; Is the player standing on this record? His feet on its top or a little
 ; above it, and over it along both floor axes.
@@ -120,10 +136,10 @@ mover_sinks:		bit		3,(ix+OBJ.MOVE_STATE)
 ; The boxes are half-widths, and boxes that only touch count as apart, as the
 ; clamp has them. So he is over it when the distance between the centres is
 ; less than its half-width and his together.
-;   IX -> the record
-; Out: zf set if he is. Corrupts AF, C.
-ON_TOP_SLACK		EQU		6
-
+;
+; In:  IX -> the record
+; Out: Z set if he is
+; Corrupts: A, C
 					IFUSED	player_on_top
 player_on_top:		ld		a,(ix+OBJ.Z)
 					add		a,(ix+OBJ.SIZE_Z)
@@ -161,8 +177,10 @@ player_on_top:		ld		a,(ix+OBJ.Z)
 ; Take a record out of the room: repaint where it was, without it, and leave
 ; the slot empty. Knight Lore gives a taken object graphic 1, which the next
 ; draw wipes and turns to 0; this does both at once.
-;   IX -> the record
-; Corrupts everything, IX included.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: everything
 					IFUSED	object_hide
 object_hide:		call	region_reset
 					call	region_add
@@ -172,7 +190,10 @@ object_hide:		call	region_reset
 					ENDIF
 
 ; A slot with nothing in it: no graphic, no behaviour, and nothing collides.
-;   IX -> the record
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: nothing
 					IFUSED	object_blank
 object_blank:		ld		(ix+OBJ.GFX),0
 					ld		(ix+OBJ.BEHAVIOUR),0
@@ -204,17 +225,33 @@ object_blank:		ld		(ix+OBJ.GFX),0
 ;                 mover_move_always for one whose graphic changes every turn.
 ;   mover_turned  see mover_turn_if_hit.
 ; Each may corrupt anything but IX.
-;   IX -> the record
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_pacer_u
 mover_pacer_u:		ld		hl,OBJ.DU * 256 + COLLIDE_U
 					jr		mover_pacer
 					ENDIF
 
+; See mover_pacer_u.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_pacer_v
 mover_pacer_v:		ld		hl,OBJ.DV * 256 + COLLIDE_V
 					ASSERT	$ == mover_pacer
 					ENDIF
 
+; See mover_pacer_u. The axis comes in HL: H its offset in the record, L its
+; collide bit.
+;
+; In:  IX -> the record; mover_ix names it too
+;      H  = OBJ.DU or OBJ.DV
+;      L  = COLLIDE_U or COLLIDE_V
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_pacer
 mover_pacer:		ld		a,h
 					ld		(.step + 2),a		; LD (IX+d),A is DD 77 d
@@ -242,9 +279,11 @@ mover_pacer:		ld		a,h
 ; bit of MOVE_STATE, which is numbered by axis the same way collide_hit is,
 ; and tell the game's mover_turned, with the bit in A. Knight Lore's fires
 ; bounce off whatever stops them along V; Pentagram's paced things are silent.
-;   A  - the axis's bit
-;   IX -> the record
-; Corrupts AF, C, and whatever mover_turned does.
+;
+; In:  A  = the axis's bit
+;      IX -> the record
+; Out: nothing
+; Corrupts: AF, C, and whatever mover_turned does
 					IFUSED	mover_turn_if_hit
 mover_turn_if_hit:	ld		c,a
 					ld		a,(collide_hit)
@@ -256,6 +295,9 @@ mover_turn_if_hit:	ld		c,a
 					ld		a,c
 					jp		mover_turned
 					ENDIF
+
+
+HOPPER_RISING		EQU		2		; the bit of MOVE_STATE -- see mover_hopper
 
 
 ; ---------------------------------------------------------------------------
@@ -288,9 +330,10 @@ mover_turn_if_hit:	ld		c,a
 ;                  for one whose graphic changes every turn
 ;   hopper_landed  jumped to on the turn it lands
 ; Each may corrupt anything but IX.
-;   IX -> the record
-HOPPER_RISING		EQU		2		; the bit of MOVE_STATE
-
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_hopper_claim
 mover_hopper_claim:	ld		a,(hopper_top)
 					or		a
@@ -301,6 +344,11 @@ mover_hopper_claim:	ld		a,(hopper_top)
 					ASSERT	$ == mover_hopper
 					ENDIF
 
+; See mover_hopper_claim.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 					IFUSED	mover_hopper
 mover_hopper:		call	hopper_frame
 					call	hopper_sound

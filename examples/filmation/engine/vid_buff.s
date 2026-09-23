@@ -1,6 +1,10 @@
-; This is the final optimized code. It takes the X coordinate in the C register,
-; and the Y coordinate in the B register. The screen address is returned in the HL register pair.
-; BC and DE are unchanged, so there is no need for expensive push and pop operations.
+; The screen address of a pixel. BC and DE are unchanged, so there is no need
+; for expensive push and pop operations.
+;
+; In:  B = y, 0 to 191
+;      C = x, 0 to 255
+; Out: HL -> the byte holding the pixel
+; Corrupts: AF
 pixelAddress:   ld      a, b
                 and     %00000111
                 ld      h, a    ; h contains Y2-Y0
@@ -25,10 +29,6 @@ pixelAddress:   ld      a, b
 
 
 ; Copy a composited region out of the view buffer and onto the screen.
-;
-;   HL - view buffer, at the region's top-left
-;   DE - screen address of the same corner
-;   B  - rows, plus one: the DJNZ takes one on the way in
 ;
 ; One routine for every region width, not eight. A width decides two things --
 ; how many bytes of each row to move, and how far the buffer pointer steps to
@@ -72,6 +72,15 @@ vid_buff_row:		; two bytes a column, from the wide end
 					;; NB: fall through into vid_buff_copy
 
 
+; The way in: sets a row up and goes round the chain above. The width is
+; patched in first -- the DJNZ's displacement and .hstride, which redraw_view
+; writes.
+;
+; In:  HL -> the view buffer, at the region's top-left
+;      DE -> the screen, at the same corner
+;      B  = rows, plus one: the DJNZ takes one on the way in
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 vid_buff_copy:
 					; LDI counts BC down as it copies. B is the row counter, so
 					; a borrow out of C would silently drop a row -- and rows *

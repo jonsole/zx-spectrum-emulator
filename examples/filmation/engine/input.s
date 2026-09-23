@@ -36,7 +36,10 @@ input_now:			DB		0
 
 
 ; Read whichever the menu chose.
-; Corrupts AF, BC, DE.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_read:			ld		a,(menu_mode)
 					rrca
 					and		3		; 00 keyboard, 01 Kempston,
@@ -52,6 +55,10 @@ input_read:			ld		a,(menu_mode)
 ; is keys 6 to 0 -- 6 left, 7 right, 8 down, 9 up, 0 to fire -- and the second
 ; is 1 to 5, the same five in the same order. They sit at opposite ends of
 ; their half-rows, so one is read from bit 0 up and the other from bit 4 down.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_interface_ii:	ld		e,0
 					ld		bc,KEY_STICK_1_5	; the second stick
 					in		a,(c)
@@ -95,6 +102,10 @@ input_interface_ii:	ld		e,0
 
 ; The Kempston's own port, where a bit is set while it is held -- the other
 ; way round from the keyboard.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_kempston:		ld		e,0
 					in		a,(KEMPSTON_PORT)
 					rra		; right
@@ -116,6 +127,10 @@ input_kempston:		ld		e,0
 
 
 ; The cursor keys: 5 left, 8 right, 7 up, 6 down and 0 to fire.
+;
+; In:  nothing
+; Out: input_now = what the player is asking for
+; Corrupts: AF, BC, DE
 input_cursor:		ld		e,0
 					ld		bc,KEY_STICK_1_5
 					in		a,(c)
@@ -142,7 +157,10 @@ input_cursor:		ld		e,0
 
 
 ; What every reader ends at, the game's input_stick_done included.
-;   E - what the reader made of it
+;
+; In:  E = what the reader made of it
+; Out: input_now = E
+; Corrupts: A
 input_store:		ld		a,e
 					ld		(input_now),a
 					ret

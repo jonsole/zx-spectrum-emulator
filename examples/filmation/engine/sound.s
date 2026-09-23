@@ -37,7 +37,10 @@ sound_clock:        DW      0
 ; speed for it; one a frame keeps the room sounding and the cost to one
 ; sound's worth. A game with no continuous sounds never names it, and IFUSED
 ; leaves it out.
-; Out: NZ to play, and the frame's sound is taken. Corrupts AF.
+;
+; In:  nothing
+; Out: NZ to play, and the frame's sound is taken
+; Corrupts: A
                     IFUSED  sound_take
 sound_take:         ld      a,(sound_now)
                     or      a
@@ -50,9 +53,12 @@ sound_take:         ld      a,(sound_now)
 
 
 ; One cycle: B DJNZs with the speaker on and B with it off -- toggle_audio_hw.
-;   B - the half-period, 0 for 256
-; Preserves BC, DE, HL. Counts itself towards the turn: a DJNZ is 13 T, so a
-; cycle is about B * 26 T, which is B / 8 turn units and a little over.
+; Counts itself towards the turn: a DJNZ is 13 T, so a cycle is about B * 26 T,
+; which is B / 8 turn units and a little over.
+;
+; In:  B = the half-period, 0 for 256
+; Out: nothing
+; Corrupts: AF
 sound_cycle:        ld      a,SOUND_EAR
                     out     ($FE),a
                     ld      a,b
@@ -71,8 +77,12 @@ sound_cycle:        ld      a,SOUND_EAR
                     jp      turn_add
 
 
-; C cycles at B -- toggle_audio_hw_xC. C = 0 is 256.
-; Preserves B, DE, HL. Leaves C = 0.
+; C cycles at B -- toggle_audio_hw_xC.
+;
+; In:  B = the half-period, 0 for 256
+;      C = the cycles, 0 for 256
+; Out: C = 0
+; Corrupts: AF
 sound_tone:         call    sound_cycle
                     dec     c
                     jr      nz,sound_tone
@@ -87,9 +97,11 @@ sound_tone:         call    sound_cycle
 ; plays, and the turn it stopped is not one to pace. engine/tune.s works out
 ; what to play; this and sound_rest are here because a DJNZ has to be 13 T,
 ; which it only is in uncontended memory.
-;   B, C - the half-period; B = 0 is 256
-;   HL   - how many cycles
-; Corrupts AF, HL.
+;
+; In:  B, C = the half-period; B = 0 is 256
+;      HL   = how many cycles
+; Out: nothing
+; Corrupts: AF, HL
                     IFUSED  sound_long
 sound_long:         push    bc
                     xor     a
@@ -114,7 +126,10 @@ sound_long:         push    bc
 
 
 ; A tune's rest: one wait of $430B counts, which is Pentagram's $D70A.
-; Corrupts AF.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF
                     IFUSED  sound_rest
 sound_rest:         push    bc
                     ld      bc,$430B

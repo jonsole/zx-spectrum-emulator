@@ -2,8 +2,6 @@
 ; Mirror a sprite about its vertical axis, IN PLACE, and record in the
 ; sprite's own header which way round it now is.
 ;
-;   HL -> the sprite record
-;
 ; A wall running along U and the same wall running along V are one graphic
 ; seen from two sides, and only one of them is stored -- which is most of
 ; why the artwork fits at all. So the bytes are shared, and an object that
@@ -35,8 +33,9 @@
 ; nor one from odd to even borrow, so those move L or E alone; only the steps
 ; that could cross a page move the whole pair.
 ;
-; HL comes back pointing at the record, and AF' and IY as they were; AF, BC and
-; DE are clobbered.
+; In:  HL -> the sprite record
+; Out: nothing
+; Corrupts: AF, BC, DE
 sprite_flip_h:		push	hl
 					push	iy
 					ex		af,af'

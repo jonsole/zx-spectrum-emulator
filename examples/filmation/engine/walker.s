@@ -169,8 +169,10 @@ character_steps:	DB		-CHARACTER_STEP, 0		; 0  -U  away, up and left
 ;
 ; Both halves are eight graphics a block, so the block and the phase are the
 ; same number for each, from its own base.
-;   IX -> the legs record
-; Corrupts AF and C.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: AF, C
 character_frame:	ld		a,(ix+CHARACTER_FACING)
 					and		2		; the block: away from the viewer, or
 					add		a		; towards it, as 0 or 2...
@@ -203,8 +205,11 @@ character_frame:	ld		a,(ix+CHARACTER_FACING)
 ; bit is kept: RRA parks the carry in bit 7 and RLCA brings it round into bit
 ; 0, which is where the flip bit lives, and leaves it in the carry again for
 ; the second record. mover_guard_face jumps in here too.
-;   IX -> the first record, carry = the flip wanted
-; Corrupts AF.
+;
+; In:  IX -> the first record
+;      carry set for mirrored
+; Out: nothing
+; Corrupts: AF
 					ASSERT	OBJ_FLIP_BIT == 0 && CHARACTER_BODY == ROOM_STRIDE
 obj_pair_flip:		ld		a,(ix+OBJ.FLAGS)
 					rra
@@ -217,9 +222,14 @@ obj_pair_flip:		ld		a,(ix+OBJ.FLAGS)
 					ret
 
 
-; Put a character in the room that has just been built.
-;   IX -> its legs record
-;   B  - U, C - V, A - the Z its legs stand at
+; Put a character in the room that has just been built, and paint him.
+;
+; In:  IX -> its legs record
+;      B  = U
+;      C  = V
+;      A  = the Z its legs stand at
+; Out: nothing
+; Corrupts: everything
 character_add:		ld		(ix+OBJ.U),b
 					ld		(ix+OBJ.V),c
 					ld		(ix+OBJ.Z),a
@@ -280,8 +290,10 @@ character_add:		ld		(ix+OBJ.U),b
 ; one before, and once they were pushed to its very end the body's rotations
 ; ran off it and over the code that follows. From empty both always fit, so
 ; there is no refusal to prepare for either.
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 character_keep:		ld		hl,shift_arena
 					ld		(shift_arena_next),hl
 					ld		hl,CHARACTER_LARGEST
@@ -298,8 +310,11 @@ character_keep:		ld		hl,shift_arena
 
 
 ; Walk a character one step in facing A, and repaint what that disturbed.
-;   IX -> the legs record
-;   A  - the facing, 0 to 3
+;
+; In:  IX -> the legs record
+;      A  = the facing, 0 to 3
+; Out: nothing
+; Corrupts: everything
 character_walk:		ld		(ix+CHARACTER_FACING),a
 
 					; The step for this facing, found while A still holds it:
@@ -336,6 +351,12 @@ character_walk:		ld		(ix+CHARACTER_FACING),a
 ; the whole step away -- which is what walking on the spot against a wall
 ; looks like, and what the game does: handle_forward at $C969 animates and
 ; print_sprite draws, neither of them caring whether the move came off.
+;
+; In:  IX -> the legs record
+;      D  = the step it would like in U
+;      E  = the step in V
+; Out: nothing
+; Corrupts: everything
 character_walk_on:	call	character_settle
 					jp		character_move
 
@@ -345,6 +366,10 @@ character_walk_on:	call	character_settle
 ; engine does -- but a turn with no knight to draw is a turn that costs next
 ; to nothing, so the game ran at one speed walking and at a sprint standing
 ; still, and everything else in the room with it.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything
 character_stand:	call	character_frame		; only the knight stands still, and
 					ld		de,0		; his top half looks about while he does
 					call	character_settle
@@ -354,8 +379,12 @@ character_stand:	call	character_frame		; only the knight stands still, and
 ; What a turn does to a character before anything is drawn: gravity proposes a
 ; step in Z, the clamp cuts the whole step down to what fits, and the landing
 ; is settled against what had to give.
-;   IX -> the legs record
-;   D  - the step it would like in U, E the step in V
+;
+; In:  IX -> the legs record
+;      D  = the step it would like in U
+;      E  = the step in V
+; Out: D, E = the step, cut to what fits; DZ in the record likewise
+; Corrupts: AF, BC, HL, IY
 character_settle:	; Anything that ran into us since our last turn left its step
 					; in our record, and it ADDS to what we meant to do rather than
 					; replacing it -- calc_plyr_dXY combines them the same way, and
@@ -376,16 +405,12 @@ character_settle:	; Anything that ran into us since our last turn left its step
 
 
 ; Everything a character does in a turn once the step along the floor is known.
-;
-;   IX -> the legs record
-;   D  - the step it would like in U, E the step in V
-;   (character_jump_held) - whether the jump key is down, which is what makes
-;                           the difference between a short hop and a long one
+; character_jump_held says whether the jump key is down, which is what makes
+; the difference between a short hop and a long one.
 ;
 ; Falling is not a special case here: gravity proposes a step in Z every turn
 ; and the clamp cuts it to nothing while there is ground under the feet.
 ; Move both halves by D in U and E in V, and repaint the one region.
-;   IX -> the legs record
 ;
 ; A character is one thing in two records, so he repaints as one region. Doing
 ; a half at a time flickered along his waist: the legs and the body overlap by
@@ -393,9 +418,22 @@ character_settle:	; Anything that ran into us since our last turn left its step
 ; moment -- which, halfway through a step, is still where it was. The body's
 ; own repaint put it right, but not before the raster had had a chance to show
 ; the wrong one.
+;
+; In:  IX -> the legs record
+;      D  = the step in U, already cut to what fits
+;      E  = the step in V
+; Out: nothing
+; Corrupts: everything
 character_move:		ld		a,(ix+OBJ.DZ)		; the body rides with the legs, and
 					ld		(ix+CHARACTER_BODY+OBJ.DZ),a		; reads its own copy
 
+; As character_move, for a caller that has given the body its DZ itself.
+;
+; In:  IX -> the legs record
+;      D  = the step in U, already cut to what fits
+;      E  = the step in V
+; Out: nothing
+; Corrupts: everything
 character_move_go:	call	region_reset
 					call	pair_region_add		; where he was
 
@@ -431,8 +469,10 @@ character_move_go:	call	region_reset
 ; Add both records of a pair -- IX and the one ROOM_STRIDE above it -- to the
 ; region, and come back with IX where it was. A character's legs and body are a
 ; pair, and so are a guard's torso and legs.
-;   IX -> the first record
-; Corrupts AF, BC, HL.
+;
+; In:  IX -> the first record
+; Out: nothing
+; Corrupts: AF, BC, HL
 					ASSERT	CHARACTER_BODY == ROOM_STRIDE
 pair_region_add:	call	region_add
 					ld		bc,ROOM_STRIDE
@@ -453,8 +493,13 @@ character_jump_held:	DB		0
 ; it. CHARACTER_DOOR is 0 to 3 for a doorway and $FF for none, so bit 7 is the
 ; test, which leaves A alone. Only the knight ever has one set, so this costs
 ; nobody else anything; player_step finds it before it reads the keys.
-;   IX -> the legs record
-; Corrupts AF.
+; player_step stores A as the key afterwards, and A comes back non-zero
+; whenever it went in non-zero.
+;
+; In:  IX -> the legs record
+;      A  = non-zero: the key is down
+; Out: nothing
+; Corrupts: AF, BC -- BC is the game's sound_jump
 character_jump:		bit		0,(ix+CHARACTER_STATE)
 					ret		nz		; already in the air
 					bit		7,(ix+CHARACTER_DOOR)
@@ -473,8 +518,10 @@ character_jump:		bit		0,(ix+CHARACTER_STATE)
 
 
 ; Turn the character's velocity into this turn's proposed step in Z.
-;   IX -> the legs record
-; Corrupts AF and B.
+;
+; In:  IX -> the legs record
+; Out: DZ in the record = the step it would like
+; Corrupts: AF, B
 character_gravity:	ld		a,(character_jump_held)
 					ld		b,a
 					ld		a,(ix+CHARACTER_DZ)
@@ -499,8 +546,10 @@ character_gravity:	ld		a,(character_jump_held)
 
 
 ; Settle the vertical state against what the clamp had to do.
-;   IX -> the legs record
-; Corrupts AF.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: AF
 character_land:		ld		a,(collide_hit)
 					and		COLLIDE_Z
 					ret		z		; nothing stopped us in Z
@@ -520,14 +569,16 @@ character_land:		ld		a,(collide_hit)
 
 
 ; Is this character standing in one of the room's doorways, and which?
-;   IX -> the legs record
-; Corrupts AF, BC, DE, HL.
 ;
 ; An arch's opening is a box around a point on the wall: six units either side
 ; of the room's middle, fifteen either side of the arch, and from three below
 ; its floor to twelve above it. The height is what keeps a knight on the
 ; floor of a tall room out of the high arch on its walkway, and a knight on the
 ; walkway out of the floor.
+;
+; In:  IX -> the legs record
+; Out: CHARACTER_DOOR in the record = the side, 0 to 3, or $FF for none
+; Corrupts: AF, BC, E, HL
 character_door_find:
 					ld		(ix+CHARACTER_DOOR),$FF
 					ld		c,0
@@ -575,7 +626,12 @@ character_door_find:
 					jr		c,.side
 					ret		
 
-					; B has to survive this -- it is the top of the index.
+					; The size of a signed difference. B has to survive this --
+					; it is the top of the index.
+					;
+					; In:  A = a signed byte
+					; Out: A = its size
+					; Corrupts: F
 .abs:				or		a
 					ret		p
 					neg		
@@ -584,17 +640,18 @@ character_door_find:
 
 ; Cut a character's step down to what the room allows.
 ;
-;   IX -> the legs record
-;   D  - the step it would like in U, E the step in V
-; Returns them cut to what fits, and collide_hit saying which axes gave.
-;
 ; Two things stop a character. The room's own edges are a plain range test:
 ; walk out of one and the projection puts the figure at screen coordinates
 ; that wrap, and a repaint region wraps with them and scribbles down the far
 ; side of the screen. Then everything standing in the room, which is
 ; object_collide's business.
 ;
-; Corrupts AF, BC, HL, IY.
+; In:  IX -> the legs record
+;      D  = the step it would like in U
+;      E  = the step in V
+; Out: D, E = the step, cut to what fits; DZ in the record likewise
+;      collide_hit = which axes gave
+; Corrupts: AF, BC, HL, IY
 					; The room first. Knight Lore's test, at $CCEC: a room is
 					; centred on 128 and room_half_u says how far its floor
 					; reaches, so the distance from that centre plus our own half
@@ -623,8 +680,13 @@ character_collide:	; Unless he is in a doorway, in which case neither edge
 ; The same, for anything at all: the room's edges, then its floor, then
 ; everything standing in it. A mover comes straight in here -- Knight Lore's
 ; adj_for_out_of_bounds at $CB45 is one routine for every object too.
-;   IX -> the record
-;   D  - the step it would like in U, E the step in V
+;
+; In:  IX -> the record
+;      D  = the step it would like in U
+;      E  = the step in V
+; Out: D, E = the step, cut to what fits, and DU, DV and DZ in the record
+;      collide_hit = which axes gave
+; Corrupts: AF, BC, HL, IY
 object_collide_room:	xor		a
 					ld		(collide_bound),a
 					call	object_bound_uv
@@ -646,12 +708,17 @@ object_collide_room:	xor		a
 
 
 ; Cut a step down to what the room's own edges allow.
-;   IX -> the record, D the step in U, E the step in V
 ;
 ; Both axes go through one piece of code: IY on the record for U and one byte
 ; along for V, where the U fields name the V ones, HL on room_half_u and then
 ; room_half_v, C the bit, and the step in D -- E is swapped into D for V and back.
-; Corrupts AF, C, HL, IY.
+;
+; In:  IX -> the record
+;      D  = the step in U
+;      E  = the step in V
+; Out: D, E = the step, cut to what the edges allow
+;      collide_bound = which axes the edges cut
+; Corrupts: AF, C, HL, IY
 					ASSERT	OBJ.V == OBJ.U + 1 && OBJ.SIZE_V == OBJ.SIZE_U + 1
 					ASSERT	room_half_v == room_half_u + 1 && COLLIDE_V == COLLIDE_U << 1
 object_bound_uv:	push	ix
@@ -694,6 +761,13 @@ object_bound_uv:	push	ix
 
 ; The floor and everything standing in the room, with the edges already
 ; settled or deliberately not applied.
+;
+; In:  IX -> the record, its DZ the step it would like
+;      D  = the step it would like in U
+;      E  = the step in V
+; Out: D, E = the step, cut to what fits, and DU, DV and DZ in the record
+;      collide_hit = which axes gave
+; Corrupts: AF, BC, HL, IY
 object_collide_free:
 					; And the floor, which is not an object -- nothing in a room
 					; stands for the ground, so a fall has to be stopped here or
@@ -740,6 +814,9 @@ object_collide_free:
 ; The graphic changed with the phase, so the nudge that lines its artwork up may
 ; have changed with it -- and it certainly has if the character has just turned
 ; round.
-;   IX -> the record
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: everything but IX
 character_place:	call	room_adjust
 					jp		object_place

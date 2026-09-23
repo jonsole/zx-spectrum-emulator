@@ -33,9 +33,10 @@ BLIT_IDX_MASK		EQU		7 * JUMP_GROUP		; the three class bits, in place
 ; rotated object then got a buffer sized for the wrong width, and they wrote
 ; over each other in the arena. A macro cannot be changed in three places.
 ;
-;   in  A - byte 0 of a sprite record
-;   out A - width - 2, so add 2 for the width in bytes, or 3 for the width
-;           of a rotated copy, which carries one more column
+; In:  A = byte 0 of a sprite record
+; Out: A = width - 2, so add 2 for the width in bytes, or 3 for the width of a
+;          rotated copy, which carries one more column
+; Corrupts: F
 				MACRO	sprite_width_class
 				REPT	8 - WIDTH_CLASS_SHIFT
 					rlca

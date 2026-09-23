@@ -104,10 +104,13 @@ SHIFT_SHARED_SIZE	EQU		416
 ; its way to the blit. SHIFT is zero for all but the marked ones, so this is
 ; usually a load, a test and a return.
 ;
-;   HL -> the sprite's bitmap
 ; The object comes from draw_object, which objects_draw_all patches as it
-; walks the record -- see there for why IY cannot be used.
-; Preserves everything, the flags included.
+; walks the record -- see there for why IY cannot be used. Everything else is
+; kept, the flags included.
+;
+; In:  HL -> the sprite's bitmap
+; Out: HL -> the bitmap to blit: the shared buffer, if it was rotated into it
+; Corrupts: nothing
 shift_if_deferred:	push	af
 					push	iy
 draw_object:		ld		iy,0		; patched: the record + 10, where the
@@ -122,11 +125,13 @@ draw_object:		ld		iy,0		; patched: the record + 10, where the
 
 ; Rotate this object's sprite into the shared buffer, for objects_draw_all.
 ;
-;   HL -> the sprite's bitmap, the way round this object wants it
-;   IY -> the object, as shift_if_deferred has just set it: the record + 10
-; Returns HL -> the shared buffer, and preserves everything else, both
-; register sets included -- the caller is mid-blit and every one of them is
-; live.
+; Both register sets are kept, and IX -- the caller is mid-blit and every one
+; of them is live. AF and IY are shift_if_deferred's to keep, which it does.
+;
+; In:  HL -> the sprite's bitmap, the way round this object wants it
+;      IY -> the object, as shift_if_deferred has just set it: the record + 10
+; Out: HL -> the shared buffer
+; Corrupts: AF, IY
 shift_at_draw:		push	bc
 					push	de
 					push	ix
@@ -185,15 +190,16 @@ shift_kept:			DW		shift_arena
 
 ; Hand back everything but those. Called when a room is built; every other
 ; object in the old room loses its buffer with it, which is the point.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: HL
 shift_reset:		ld		hl,(shift_kept)
 					ld		(shift_arena_next),hl
 					ret
 
 
 ; Give this object a rotation buffer out of the arena.
-;
-;   HL -> the sprite record whose size the buffer has to hold
-;   IX -> the object
 ;
 ; A buffer is (width + 1) columns, because rotating spills into one column
 ; more than the bitmap has, times the height, times two for the mask and data
@@ -206,10 +212,15 @@ shift_reset:		ld		hl,(shift_kept)
 ; this with its largest frame before the object is first placed: a buffer
 ; already allocated is left alone, so an explicit one always wins.
 ;
-; Preserves HL. If the arena is full, BUF_L/BUF_H are left alone and the
-; object is marked OBJ_SHARED_SHIFT instead, to rotate into the shared buffer at
-; draw time -- slower every time it is drawn, but in the right place. All three
-; callers wanted exactly that, so it is done once, here.
+; If the arena is full, BUF_L/BUF_H are left alone and the object is marked
+; OBJ_SHARED_SHIFT instead, to rotate into the shared buffer at draw time --
+; slower every time it is drawn, but in the right place. All three callers
+; wanted exactly that, so it is done once, here.
+;
+; In:  HL -> the sprite record whose size the buffer has to hold
+;      IX -> the object
+; Out: nothing
+; Corrupts: AF, B, DE
 shift_alloc:		push	hl
 					ld		a,(hl)
 					sprite_width_class
@@ -272,6 +283,11 @@ shift_alloc:		push	hl
 
 ; As shift_alloc, but for a straight copy rather than a rotated one: nothing
 ; spills sideways, so the sprite's own width exactly.
+;
+; In:  HL -> the sprite record whose size the buffer has to hold
+;      IX -> the object
+; Out: nothing
+; Corrupts: AF, B, DE
 copy_alloc:			push	hl
 					ld		a,(hl)
 					sprite_width_class
@@ -293,9 +309,10 @@ copy_alloc:			push	hl
 ; skips a shifted one -- so this is the same answer for the objects that do not
 ; rotate, and it is settled once at placement rather than twice a frame.
 ;
-;   IX -> the object, its buffer already allocated
-;   HL -> the sprite's height byte, where object_update holds it
-; Corrupts AF, BC, DE, HL.
+; In:  IX -> the object, its buffer already allocated
+;      HL -> the sprite's height byte, where object_update holds it
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
 sprite_copy:		ld		b,(hl)		; rows
 					dec		l		; -> the header. ALIGN 4 makes this safe
 					ld		a,(hl)

@@ -248,17 +248,14 @@ collide_z_max:		DB		0
 ; the band where one says touching and the other says clear.
 
 
-; Do our box and this object's overlap on all three axes?
+; Do our box and this object's overlap on all three axes? Touching exactly
+; counts as apart, which is what lets a character stand on a block rather than
+; sink into it. BC and HL are kept, which object_clamp is using.
 ;
-;   IX -> the character's legs record
-;   IY -> the object to test against
-;   OBJ.DU/DV/DZ of ours - the step being considered
-;
-; Carry set if they overlap, clear if any axis separates them. Touching
-; exactly counts as apart, which is what lets a character stand on a block
-; rather than sink into it.
-;
-; Corrupts AF, DE. Preserves BC and HL, which object_clamp is using.
+; In:  IX -> the character's legs record, its step in DU, DV and DZ
+;      IY -> the object to test against
+; Out: carry set if they overlap, clear if any axis separates them
+; Corrupts: A, DE
 					; U first, because it is the axis most likely to settle it:
 					; almost everything in a room is somewhere else along the
 					; floor, and this way most objects cost one test.
@@ -308,6 +305,11 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 					; A character is the exception at this end too: its record
 					; says twelve because that is the box the depth sort wants,
 					; and the figure is the whole COLLIDE_HEIGHT.
+					;
+					; In:  IX -> the character's legs record
+					;      IY -> the object to test against
+					; Out: carry set if they overlap in Z
+					; Corrupts: A, DE
 .z:					ld		d,(iy+OBJ.Z)
 					ld		e,(iy+OBJ.SIZE_Z)
 					bit		7,(iy+OBJ.FLAGS)		; OBJ_MOVABLE
@@ -339,8 +341,10 @@ object_overlaps:	ld		a,(iy+OBJ.U)
 
 
 ; Work our box out from the record and the step as it currently stands.
-;   IX -> the character's legs record
-; Corrupts AF.
+;
+; In:  IX -> the character's legs record
+; Out: collide_u_min to collide_z_max = the box
+; Corrupts: AF
 collide_box:		ld		a,(collide_eff_u)
 					add		a,(ix+OBJ.U)
 					ld		c,a		; our centre in U
@@ -380,17 +384,17 @@ collide_box:		ld		a,(collide_eff_u)
 
 ; Cut one axis of the step back until nothing in the room is in the way.
 ;
-;   HL -> the delta to cut, one of this object's DU, DV or DZ
-;   IX -> the character's legs record
-;   collide_mask - the bit to set in collide_hit if this axis has to give
-;
 ; Every object in the room is tested with the step as it currently stands, so
 ; the axes have to be done in a fixed order and each sees the ones before it
 ; already settled. An object that is in the way takes one unit off this axis,
 ; and is then tested again from the new position -- so a step of eight into a
 ; wall ends up as however much of it fits, not as nothing.
 ;
-; Corrupts AF, BC, DE, IY. Preserves HL and IX.
+; In:  HL -> the delta to cut, one of this object's DU, DV or DZ
+;      IX -> the character's legs record
+;      collide_mask = the bit to set in collide_hit if this axis has to give
+; Out: (HL) = the delta, cut
+; Corrupts: AF, BC, DE, IY
 object_clamp:		ld		a,(hl)
 					or		a
 					ret		z		; not moving along this axis
@@ -461,8 +465,10 @@ object_clamp:		ld		a,(hl)
 ; apart here exactly as it does in object_overlaps, which does the testing.
 ;
 ; The one thing that can grow a step is a ride -- see CARRY_REACH.
-;   IX -> the record, DU/DV/DZ its step
-; Corrupts AF, BC, DE, HL, IY.
+;
+; In:  IX -> the record, DU, DV and DZ its step
+; Out: collide_list, collide_list_count = what it could touch
+; Corrupts: AF, BC, DE, HL, IY
 collide_gather:		ld		a,TURN_PER_GATHER
 					call	turn_add
 					ld		e,0
@@ -628,8 +634,12 @@ collide_gather:		ld		a,TURN_PER_GATHER
 ;
 ; Whether the shove comes off is not decided here. IY's own clamp has the say
 ; when its turn comes, and if it cannot go anywhere it simply does not.
-;   IX -> us, IY -> what we ran into, (collide_mask) says which axis
-; Corrupts AF.
+;
+; In:  IX -> us
+;      IY -> what we ran into
+;      collide_mask = which axis
+; Out: nothing
+; Corrupts: AF
 object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 					jr		nz,.shoveable		; other way round: one flag in the game
 					ld		a,(iy+OBJ.BEHAVIOUR)	; means both carried and pushed, and it
@@ -658,8 +668,11 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 ;
 ; The Z pass runs before U and V, so what is written here is what those two
 ; passes then clamp and apply, in the same turn.
-;   IX -> us, IY -> what stopped us
-; Corrupts AF.
+;
+; In:  IX -> us
+;      IY -> what stopped us
+; Out: nothing
+; Corrupts: AF
 object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 					jr		nz,.rides		; the knight rides in the game too --
 					ld		a,(ix+OBJ.BEHAVIOUR)	; plyr_spr_init_data gives his record
@@ -690,8 +703,11 @@ object_carry:		bit		7,(ix+OBJ.FLAGS)	; OBJ_MOVABLE: a character, and
 ; The two bits are separate there, though, and a thing can carry only the one
 ; that says it kills when it hits him. Those are [CRUSHING, HARMLESS): deadly
 ; when they are the mover, and harmless when he is.
-;   IX -> us, IY -> what we touched
-; Corrupts AF.
+;
+; In:  IX -> us
+;      IY -> what we touched
+; Out: nothing
+; Corrupts: AF
 object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 					jr		nz,.he_is_us
 					bit		7,(iy+OBJ.FLAGS)
@@ -714,8 +730,10 @@ object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 ; dropping and collapsing blocks look for the mark on their next turn. Ours goes
 ; in MOVE_STATE, which every other mover uses for something else, so only those
 ; two are marked.
-;   IY -> what stopped us
-; Corrupts AF.
+;
+; In:  IY -> what stopped us
+; Out: nothing
+; Corrupts: AF
 object_landed_on:	ld		a,(iy+OBJ.BEHAVIOUR)
 					cp		BEHAVIOUR_GIVES
 					ret		c
@@ -727,11 +745,10 @@ object_landed_on:	ld		a,(iy+OBJ.BEHAVIOUR)
 
 ; Cut a whole step down to what fits, Z first and then U and then V.
 ;
-;   IX -> the character's legs record
-;   OBJ.DU/DV/DZ - what it would like to do
-;
-; Leaves them as what it may do, and collide_hit saying which axes gave.
-; Corrupts AF, BC, DE, HL, IY.
+; In:  IX -> the character's legs record, DU, DV and DZ what it would like
+; Out: DU, DV and DZ = what it may do
+;      collide_hit = which axes gave
+; Corrupts: AF, BC, DE, HL, IY
 object_collide:		xor		a
 					ld		(collide_hit),a
 					ld		(collide_eff_u),a		; nothing is moving yet, as
@@ -787,10 +804,12 @@ object_collide:		xor		a
 ; collide_eff bytes and the record's three deltas run in the same order, U, V
 ; then Z, so where HL is among the first says which of the second to use, and
 ; that offset is written into the two indexed loads.
-;   A  - the axis's bit, for collide_hit
-;   HL -> its collide_eff byte
-;   IX -> the record
-; Corrupts AF, BC, DE, IY. Preserves HL and IX.
+;
+; In:  A  = the axis's bit, for collide_hit
+;      HL -> its collide_eff byte
+;      IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, IY
 					ASSERT	collide_eff_v == collide_eff_u + 1 && collide_eff_z == collide_eff_u + 2
 					ASSERT	OBJ.DV == OBJ.DU + 1 && OBJ.DZ == OBJ.DU + 2
 object_pass:		ld		(collide_mask),a
@@ -810,7 +829,10 @@ object_pass:		ld		(collide_mask),a
 ; from U, V and Z, projected as WORLD_X_ORIGIN's comment describes, then
 ; object_update with it. The only place the projection is done, so it is here
 ; rather than in a routine of its own.
-;   IX -> the object, with U, V, Z and GFX set
+;
+; In:  IX -> the object, with U, V, Z and GFX set
+; Out: nothing
+; Corrupts: everything but IX
 object_place:		ld		a,(ix+OBJ.U)
 					add		a,(ix+OBJ.V)
 					sub		WORLD_X_ORIGIN
@@ -830,6 +852,15 @@ object_place:		ld		a,(ix+OBJ.U)
 					; NB: fall through
 
 
+; Update an object for a screen position and a graphic: its sprite, the way
+; round it wants it, rotated if it lands off a byte, and its extent.
+;
+; In:  IX -> the object
+;      A  = the graphic
+;      B  = the screen y of its base
+;      C  = the screen x
+; Out: nothing
+; Corrupts: everything but IX
 object_update:
 					; A is a Knight Lore graphic number, and sprite_table has an
 					; entry for all 256 of them -- 512 bytes, so it cannot be reached
@@ -1139,13 +1170,15 @@ object_update:
 					; object_update's locals sit below it and a global one here
 					; would take them out of its scope -- objects_draw_all calls
 					; it as object_update.rotate.
-					;   A  - shift amount, 1..7
-					;   DE - where the rotated copy goes
-					;   HL -> the sprite record's height byte
-					;   IX -> the object, for BLIT_IDX -- which must be the
-					;         UNROTATED index, as it is at placement
-					; Corrupts AF, AF', BC, DE, HL and their shadows, and IY.
-					; Restores SP.
+					; SP is borrowed, and restored.
+					;
+					; In:  A  = the shift, 1 to 7
+					;      DE -> where the rotated copy goes
+					;      HL -> the sprite record's height byte
+					;      IX -> the object, for BLIT_IDX -- which must be the
+					;            UNROTATED index, as it is at placement
+					; Out: nothing
+					; Corrupts: everything but IX
 .rotate:
                     ; A - shift amount, A' - height
                     ; C - BLIT_INX
@@ -1255,14 +1288,6 @@ object_update:
 
 
 ;; Calculate parameters to do with overlapping extents
-;; Parameters:
-;;  BC holds extent of sprite
-;;  DE holds current extent
-;; Returns:
-;;  Sets carry flag if there's any overlap.
-;;  H holds the extent adjustment
-;;  L holds the sprite adjustment
-;;  A holds the overlap size.
 ;;
 ;;  E------D
 ;;  |      |
@@ -1271,6 +1296,14 @@ object_update:
 ;; +--+    |
 ;;  |      |
 ;;  +------+
+;;
+;; In:  BC = the sprite's extent
+;;      DE = the current extent
+;; Out: carry set if there is any overlap
+;;      A  = the overlap's size
+;;      H  = the extent adjustment
+;;      L  = the sprite adjustment
+;; Corrupts: B
 				MACRO extent_intersect 
 					ld		a,d
 					sub		c
@@ -1319,11 +1352,13 @@ view_y_extent:		dw		0
 ; one not, in the same region at the foot of an arch, and a few pixels of the
 ; one landed on the other.
 ;
-;   HL -> the object's sprite data (the record + 2)
-;   E' -  the object's FLAGS, popped alongside BLIT_IDX
-;
-; Preserves everything, the flags included, so it can sit in the middle of the
+; Everything is kept, the flags included, so it can sit in the middle of the
 ; offset arithmetic.
+;
+; In:  HL -> the object's sprite data (the record + 2)
+;      E' = the object's FLAGS, popped alongside BLIT_IDX
+; Out: nothing
+; Corrupts: nothing
 sprite_orient:		push	af
 					push	bc
 					push	de
@@ -1347,6 +1382,12 @@ sprite_orient:		push	af
 					ret
 
 
+; Composite every object that meets the region into the view buffer, in list
+; order, furthest first.
+;
+; In:  view_x_extent, view_y_extent = the region
+; Out: nothing
+; Corrupts: everything
 objects_draw_all:				
 					ld		hl,(view_x_extent)			
 					ld		(.set_x_extent + 1),hl

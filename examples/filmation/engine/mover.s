@@ -23,7 +23,10 @@ MOVER_PAIR			EQU		ROOM_STRIDE		; a two-record figure's second record
 ; through, and anything not meant to fall cancels it by setting DZ to one
 ; first. That is why a bouncing ball needs no gravity code of its own and a
 ; sliding block needs one instruction.
-;   IX -> the record, with DU, DV and DZ set
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_move:			call	mover_clamp
 					ld		a,(ix+OBJ.DU)
 					or		(ix+OBJ.DV)
@@ -31,8 +34,18 @@ mover_move:			call	mover_clamp
 					ret		z		; the room took the whole step away
 					jr		mover_paint
 
+; As mover_move, but repainting even when the step came to nothing.
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_move_always:	call	mover_clamp
 
+; Take the step the clamp has left, and repaint.
+;
+; In:  IX -> the record, with DU, DV and DZ clamped; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_paint:		call	region_reset
 					call	region_add		; where it was
 
@@ -54,6 +67,10 @@ mover_paint:		call	region_reset
 ; it. Nothing may be clamped against itself, and a mover IS in the pool the
 ; clamp walks -- so it is made passable for the length of its own test. A
 ; character never needed this: neither of them is in the room's pool.
+;
+; In:  IX -> the record, with DU, DV and DZ set
+; Out: DU, DV and DZ cut back to what the room allows
+; Corrupts: AF, BC, DE, HL, IY
 mover_clamp:		ld		hl,walker_player	; the character is not in the room's
 					ld		(collide_other),hl	; pool, so a mover would sweep
 									; straight through him without this
@@ -79,15 +96,27 @@ mover_clamp:		ld		hl,walker_player	; the character is not in the room's
 ; falling. mover_flicker turns it to the other of its two frames first -- bit 0
 ; of the graphic. Both go on through mover_halt, which takes the step along the
 ; floor away.
-;   IX -> the record
-; Out: A = 0.
+;
+; In:  IX -> the record
+; Out: A = 0
+; Corrupts: F
 mover_hover:		ld		(ix+OBJ.DZ),1
 					jr		mover_halt
 
+; See mover_hover.
+;
+; In:  IX -> the record
+; Out: A = 0
+; Corrupts: F
 mover_flicker:		ld		a,(ix+OBJ.GFX)
 					xor		1
 					ld		(ix+OBJ.GFX),a
 
+; See mover_hover.
+;
+; In:  IX -> the record
+; Out: A = 0
+; Corrupts: F
 mover_halt:			xor		a
 					ld		(ix+OBJ.DU),a
 					ld		(ix+OBJ.DV),a
@@ -96,8 +125,10 @@ mover_halt:			xor		a
 
 ; The next of an object's four frames: the bottom two bits of its graphic count
 ; round and the rest stay put. The repel spell and the cauldron's bubbles.
-;   IX -> the record
-; Corrupts AF.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
 mover_cycle4:		ld		a,(ix+OBJ.GFX)
 					inc		a
 					xor		(ix+OBJ.GFX)
@@ -125,7 +156,10 @@ mover_cycle4:		ld		a,(ix+OBJ.GFX)
 ; (IX+$02) into (IX+$21) and (IX+$22) is all the game copies. They are worked
 ; out from the torso's old position plus the step, because the torso has not
 ; moved yet when the legs need them.
-;   IX -> the torso record, with DU, DV and DZ set
+;
+; In:  IX -> the torso record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
 mover_move_pair:	call	mover_clamp
 
 					ASSERT	MOVER_PAIR == ROOM_STRIDE
@@ -181,6 +215,10 @@ mover_move_pair:	call	mover_clamp
 ; movers being kept: a room holds at most a couple of dozen objects, and a
 ; walk that reads one byte and moves on costs less than the list would to
 ; maintain across a room change.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: everything
 movers_step:		ld		hl,move_tick
 					inc		(hl)
 
@@ -258,14 +296,27 @@ mover_seed:			DB		0
 ; One turn in thirty-two, near enough. The game stirs the refresh register into
 ; a seed on every object it updates -- ret_from_tbl_jp at $B27C -- and then
 ; looks at five bits of it; this stirs it where it is asked instead.
-; Out: zf set when the dice come up.
+;
+; In:  nothing
+; Out: Z set when the dice come up
+; Corrupts: A, HL
 mover_dice:			call	mover_rand
 					and		$1F
 					ret		
 
 
 ; The seed itself, stirred wherever it is asked for.
+;
+; In:  nothing
+; Out: A = the seed
+; Corrupts: F, HL
 mover_rand:			ld		a,r
+
+; The seed, with something else stirred in.
+;
+; In:  A = what to stir in
+; Out: A = the seed
+; Corrupts: F, HL
 mover_stir:			ld		hl,mover_seed		; A into the seed
 					add		a,(hl)
 					ld		(hl),a
