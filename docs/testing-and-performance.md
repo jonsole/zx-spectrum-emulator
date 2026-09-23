@@ -68,7 +68,10 @@ feature must compile out cleanly.
 The VS Code extension's logic that does not need VS Code itself is tested from
 plain Node: `node vscode-extension/tests/asm_index_test.js` (the Z80 symbol
 index: definitions, references, rename and call hierarchy, including against
-this repo's own sources) and `node vscode-extension/tests/profile_model_test.js`
+this repo's own sources), `node vscode-extension/tests/asm_doc_test.js` (the
+register contract a hover pulls out of a routine's header, in the format asked
+for and the older ones, and against the Filmation sources) and
+`node vscode-extension/tests/profile_model_test.js`
 (how a profile report becomes the heat map and the call tree),
 `node vscode-extension/tests/rewind_model_test.js` (the "before live" status
 text), `node vscode-extension/tests/watchpoint_model_test.js` (how a

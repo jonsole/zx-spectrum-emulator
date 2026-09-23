@@ -209,7 +209,10 @@ On top of the colouring:
   sits in, and what it calls in turn. Macro invocations count as calls. Jumps
   to a routine's own locals are control flow, not calls, and are left out.
 - **Hover** shows the definition line and the comment block above it -- the
-  ROM disassembly's routine descriptions, for instance.
+  ROM disassembly's routine descriptions, for instance. A routine's register
+  contract -- what it takes In, hands back Out, and Corrupts -- is pulled out
+  of the comment and shown first, as a table (`asm_doc.js`; the format is in
+  [docs/vscode-debugging.md](../docs/vscode-debugging.md#editing-z80-assembly)).
 - **Outline**, breadcrumbs and **Go to Symbol** (Ctrl+Shift+O), with local
   labels nested under their routine; **Go to Symbol in Workspace** (Ctrl+T).
 
@@ -219,7 +222,8 @@ and from disk. Several programs here share label names, so a name resolves
 within the files the current one is `INCLUDE`d together with first, and only
 across the whole workspace when it isn't defined there. `MODULE` prefixes are
 not modelled. The parser has its own tests, no vscode needed:
-`node tests/asm_index_test.js`.
+`node tests/asm_index_test.js`, and the hover's reading of a header
+`node tests/asm_doc_test.js`.
 
 ## Execution profile
 

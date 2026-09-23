@@ -542,7 +542,9 @@ colouring. This works without a debug session:
 | Show Call Hierarchy | Shift+Alt+H |
 | Go to Symbol in file / workspace | Ctrl+Shift+O / Ctrl+T |
 
-Hover over a symbol to see its definition and the comment above it. The
+Hover over a symbol to see its definition and the comment above it. For a
+routine whose comment says which registers it takes (`In:`), returns (`Out:`)
+and changes (`Corrupts:`), those come first, as a table. The
 Outline view lists the routines in a file, with each routine's local labels
 under it.
 

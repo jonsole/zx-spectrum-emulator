@@ -1229,7 +1229,11 @@ On top of the colouring:
   sits in, and what it calls in turn. Macro invocations count; jumps to a
   routine's own locals are control flow and are left out.
 - **Hover** shows a symbol's definition line and the comment block above it --
-  the ROM disassembly's routine descriptions, for instance.
+  the ROM disassembly's routine descriptions, for instance. What a caller most
+  needs -- which registers a routine takes, which it hands back and which it
+  leaves changed -- is pulled out of the comment and shown first, as a table,
+  with the rest of the comment after it. See [A routine's
+  header](#a-routines-header).
 - **Outline**, breadcrumbs and **Go to Symbol** (Ctrl+Shift+O), with local labels
   nested under their routine, and **Go to Symbol in Workspace** (Ctrl+T).
 
@@ -1240,3 +1244,40 @@ current from the editor and from disk. Several programs here share label names,
 so a name resolves within the files the current one is `INCLUDE`d together with
 first, and across the whole workspace only when it isn't defined there. `MODULE`
 prefixes are not modelled.
+
+### A routine's header
+
+The hover reads three labelled lines, directly above the label:
+
+```
+; Add a step to an object's U, V and Z.
+;
+; (why it works this way)
+;
+; In:  IX -> the object
+;      D  = the step in U
+;      E  = the step in V
+;      A  = the step in Z
+; Out: Z set if the step was zero, and so moved nothing
+; Corrupts: AF, C
+depth_add_step:  ...
+```
+
+- `->` for a pointer, `=` for a value. A line indented to where the entries
+  start is the next entry; one indented further continues the one above.
+- Write `In: nothing` or `Out: nothing` rather than leaving the line out, so a
+  missing line always means a missing note.
+- `Corrupts` lists every register that can come back changed and is not an
+  output, including through the routine's calls; anything not named in `Out` or
+  `Corrupts` is preserved.
+- An `ASSERT`, `IFUSED`, `IFNUSED` or `ALIGN` between the comment and the label
+  is stepped over.
+
+Older headers are read too, so the sources need not all change at once:
+inputs as indented register lines with no label (`;   IX -> the object`),
+`Entry:`/`Exit:` and `On entry:`/`On exit:` for In and Out, `Corrupts AF, C.`
+and `Preserves DE.` as sentences, and either of those tacked onto the end of an
+`Out:` line. A memory variable (`collide_mask - the bit to set`) can be an entry
+in a list a register has started, but does not start one. The hover gets at
+most the 24 comment lines nearest the label, so a long header loses its top,
+never its registers.

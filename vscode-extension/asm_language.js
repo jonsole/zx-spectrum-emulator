@@ -14,6 +14,7 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
+const { commentAbove, parseContract, hasContract, contractMarkdown, proseMarkdown, escapeMarkdown } = require('./asm_doc');
 const { AsmIndex, fileKey, KIND_LABEL, KIND_LOCAL, KIND_CONSTANT, KIND_MACRO, KIND_PARAM, KIND_STRUCT, KIND_FIELD, KIND_DEFINE } = require('./asm_index');
 
 const LANGUAGE_ID = 'z80-asm';
@@ -29,7 +30,8 @@ const EXCLUDE_GLOB = '**/{node_modules,.git,.venv,.venv-win}/**';
 // How long the editor has to go quiet before a changed file that is not the
 // one being asked about is re-read.
 const REPARSE_DELAY_MS = 300;
-// How much of the comment block above a definition a hover shows.
+// How much of the comment block above a definition a hover shows, counted up
+// from the label, so the register lines nearest it are always among them.
 const HOVER_COMMENT_LINES = 24;
 const WORKSPACE_SYMBOL_LIMIT = 1000;
 
@@ -277,17 +279,14 @@ async function provideHover(document, position) {
   // the same and fits.
   markdown.appendCodeblock(lines[def.line].trim().replace(/\s+/g, ' '), LANGUAGE_ID);
 
-  const comment = commentAbove(lines, def.line);
-  if (comment.length > 0) {
-    let text = '';
-    for (const line of comment) {
-      if (line === '') {
-        text += '\n\n';
-      } else {
-        text += escapeMarkdown(line) + '  \n';
-      }
-    }
-    markdown.appendMarkdown(text + '\n\n');
+  // What a caller has to know -- the registers in, out and corrupted -- goes
+  // first, as a table; the prose it was written among follows.
+  const contract = parseContract(commentAbove(lines, def.line, HOVER_COMMENT_LINES));
+  if (hasContract(contract)) {
+    markdown.appendMarkdown(contractMarkdown(contract) + '\n');
+  }
+  if (contract.prose.length > 0) {
+    markdown.appendMarkdown(proseMarkdown(contract.prose) + '\n\n');
   }
 
   let where = vscode.workspace.asRelativePath(result.path) + ':' + (def.line + 1);
@@ -516,42 +515,6 @@ function sourceLines(filePath) {
   } catch (err) {
     return undefined;
   }
-}
-
-/// The comment block directly above a definition, with the semicolons taken
-/// off -- the ROM disassembly and the engine sources both put a routine's
-/// description there. Blank comment lines are kept as '' to break paragraphs;
-/// a line of rules (;;;;; or ; -----) is dropped.
-function commentAbove(lines, defLine) {
-  const block = [];
-  let line = defLine - 1;
-  while (line >= 0 && block.length < HOVER_COMMENT_LINES) {
-    const trimmed = lines[line].trim();
-    if (trimmed[0] !== ';') {
-      break;
-    }
-    block.push(trimmed.replace(/^;+\s?/, '').replace(/\s+$/, ''));
-    line--;
-  }
-  block.reverse();
-  const kept = [];
-  for (const text of block) {
-    if (/^[-=*;+#~_ ]{3,}$/.test(text)) {
-      continue;
-    }
-    kept.push(text);
-  }
-  while (kept.length > 0 && kept[0] === '') {
-    kept.shift();
-  }
-  while (kept.length > 0 && kept[kept.length - 1] === '') {
-    kept.pop();
-  }
-  return kept;
-}
-
-function escapeMarkdown(text) {
-  return text.replace(/[\\`*_{}[\]()#+\-.!|<>~]/g, '\\$&');
 }
 
 function isSubsequence(needle, haystack) {
