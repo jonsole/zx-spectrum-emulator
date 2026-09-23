@@ -3,7 +3,8 @@
 A walk through [depth.s](depth.s): what problem it solves, the data it keeps,
 how two objects are compared, and how an object gets into the list, out of it,
 and back into it after it moves. It ends with who calls what, the register
-contracts, the traps, and an appendix on what the current design replaced.
+contracts, the traps, and an appendix on what the current design replaced. The whole algorithm in
+pseudo-code comes first, straight after the short version.
 
 The short version, in four sentences. Every object in the room is on one linked
 list, furthest first, and the draw loop just walks it. Two objects are compared
@@ -13,7 +14,151 @@ agrees. An object that moves comes out of the list and is scanned back in
 against the whole run; an object that has not moved costs one `OR`. There is no
 sort, and nothing keeps a score.
 
+## The whole thing in pseudo-code
+
+What depth.s does, without the Z80. The sections after this take each part in
+turn, with the reasons.
+
+### Data
+
+```
+record:
+    NEXT            -> next record (nearer), or null
+    PREV            -> the NEXT field that points at this record
+    U, V            box centres;  SIZE_U, SIZE_V  half-widths
+    Z               box base;     SIZE_Z          height
+
+object_list         the list head; looks exactly like a NEXT field
+sort_head           the NEXT field where the sorted run starts
+                    (the last background record's, or object_list itself)
+
+list order: furthest first -> the draw loop walks from object_list, later covers earlier
+```
+
+### One axis
+
+```
+axis(ours, theirs):                       # boxes as [min, max); touching is apart
+    if theirs.max <= ours.min:  return HIGH   # we are on the high side
+    if theirs.min >= ours.max:  return LOW    # they are
+    return OVERLAP
+```
+
+Nearer is higher on U, **lower** on V, higher on Z: the depth direction is
+(+1, -1, +1).
+
+### Is p certainly nearer than c?
+
+```
+certainly_nearer(p, c):
+    # U first: most pairs are separated along U, so most answers stop here
+    u = axis(p.U, c.U)
+    if u == LOW:                     return false        # they are nearer
+    if u == HIGH:                    goto check_V        # nearer -- if nothing disagrees
+
+    v = axis(p.V, c.V)                                   # U overlapped
+    if v == HIGH:                    return false        # higher V = further
+    if v == LOW:                     goto check_Z
+
+    z = axis(p.Z, c.Z)                                   # U and V overlapped
+    return z == HIGH                                     # above them: nearer
+                                                         # below, or all three overlap: no
+
+check_V:                                                 # a floor axis said nearer
+    if axis(p.V, c.V) == HIGH:       return false        # V says they are nearer: disagree
+check_Z:
+    if axis(p.Z, c.Z) == LOW:        return false        # Z says they are above: disagree
+    return true
+```
+
+"They are nearer" is taken from the first axis that says it, because acting on
+it only moves the scan along. "We are nearer" moves the insertion point, so it
+has to survive every axis after it. A pair whose axes disagree is left
+unordered: such a pair never overlaps on screen, and ordering it is what
+dragged the block in room `$A3` ([section 4](#4-comparing-two-objects)).
+
+### Insert: scan the whole run, and never stop early
+
+```
+insert(p, start = sort_head):
+    at     = start
+    cursor = *start
+    while cursor != null:
+        if certainly_nearer(p, cursor):
+            at = cursor                  # we go after this one
+        cursor = cursor.NEXT
+    link(p, after = at)
+```
+
+Walking the whole run keeps cycles harmless. Stopping at the first candidate
+we are behind would be assuming transitivity, which isometric boxes do not
+have ([section 5](#5-why-there-is-no-sort)).
+
+### Link and unlink
+
+```
+link(p, after field F):
+    p.NEXT = *F
+    p.PREV = F
+    *F     = p
+    if p.NEXT: p.NEXT.PREV = &p.NEXT
+
+unlink(p):
+    *p.PREV = p.NEXT                     # PREV names a field, so no "am I first?" test
+    if p.NEXT: p.NEXT.PREV = p.PREV
+```
+
+### Moving
+
+```
+step(p, du, dv, dz):
+    if du == dv == dz == 0: return       # did not move: costs one OR
+    p.U += du;  p.V += dv;  p.Z += dz
+    relink(p)
+
+relink(p):
+    unlink(p)
+    insert(p)                            # against the whole run, every time
+```
+
+Nothing that stood still can come to need a different order, and anything that
+moved is placed against everything again, so an error cannot outlive the frame
+that made it.
+
+### Two-part figures: legs and body, torso and legs
+
+```
+step_upper(upper, lower, du, dv, dz):    # lower already has its step added
+    if step is zero: return
+    upper += step
+    unlink(upper)
+    relink(lower)                        # the lower, against the room
+    insert(upper, start = &lower.NEXT)   # the upper can never go in front of its lower,
+                                         # so its scan starts right after it
+```
+
+### Building a room
+
+```
+reset():              object_list = null;  sort_head = &object_list
+background_insert(p): link(p, after = sort_head);  sort_head = &p.NEXT
+                      # walls and trees: never compared, always drawn first
+
+place every object, then for each:
+    background ? background_insert(p) : insert(p)
+```
+
+What the Z80 adds is mechanics, not logic: the placed object's six bounds are
+patched into the loop's `CP` instructions once per scan; the list is walked
+with `ld sp,iy` / `pop iy`, which is why the insertion point lives in DE and
+not on the stack; and `certainly_nearer` is written out inside the scan, so
+each answer is a `JR` straight to `.nearer` or `.advance`.
+
+---
+
 ## Contents
+
+- [The whole thing in pseudo-code](#the-whole-thing-in-pseudo-code), above
 
 1. [The problem](#1-the-problem)
 2. [Boxes, and which way is nearer](#2-boxes-and-which-way-is-nearer)
