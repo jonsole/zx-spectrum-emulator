@@ -334,6 +334,9 @@ struct GraphicsView {
 /// Why execution stopped. Maps onto DAP's `stopped` event reasons.
 enum class StopReason { Step, Breakpoint, Pause, Entry, Error, Interrupt, DataBreakpoint };
 
+/// Which front end last set the machine moving. See Engine::set_driver.
+enum class Driver { Unknown, Dap, Mcp };
+
 /// How fast a `run` is allowed to go.
 ///
 /// `Realtime` is the default because it is what the hardware does: a 48K
@@ -491,6 +494,14 @@ public:
 
     // ---- queue-bypassing: safe to call while `run` is in flight ------------
     void pause() { pause_requested_.store(true); }
+    /// Who asked for the run, step, pause, reset, load or step back that the
+    /// next stop will end. Every client hears every stop, whoever caused it;
+    /// this is what lets the DAP side tell a stop its own user asked for from
+    /// one an MCP client did, and not take the editor over for the second
+    /// kind. Only commands that move the machine set it -- a client reading
+    /// registers after someone else's step has not become the driver.
+    void set_driver(Driver d) { driver_.store(d); }
+    Driver driver() const { return driver_.load(); }
     /// Starts recording every half-clock to `options.path`, replacing any
     /// capture already in progress.  Returns "" or the error message.
     ///
@@ -766,6 +777,7 @@ private:
     bool shutting_down_ = false;
 
     std::atomic<bool> pause_requested_{false};
+    std::atomic<Driver> driver_{Driver::Unknown};
     std::atomic<bool> running_{false};
     std::atomic<uint64_t> emulated_hc_{0};
     std::atomic<Speed> speed_{Speed::Realtime};

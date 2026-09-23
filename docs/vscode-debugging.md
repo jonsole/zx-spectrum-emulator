@@ -97,11 +97,32 @@ every stop. They only stop the keyboard and the window being taken. Set them
 in your own user settings to get the same everywhere, or drop them from the
 workspace file to have VS Code's own behaviour back.
 
-The adapter can go further if that is not enough -- DAP's `stopped` event
-carries a `preserveFocusHint` which asks the client not to change focus at all
--- but it is deliberately not sent: VS Code honours it by not selecting the
-stack frame either, so the editor would stop following the program as you step
-through it.
+Those two settings still leave VS Code *revealing* the stopped line -- opening
+its file, and so switching the editor tab you were reading -- and opening the
+Run and Debug view on a breakpoint. For a stop you asked for that is the point;
+for one an MCP client caused, while you were reading something else, it is the
+editor being taken over by somebody else's step. So the adapter tells them
+apart:
+
+- **A stop an MCP client caused** -- its `run`, `step`, `pause`, `reset`, a load
+  or a step back -- goes out with DAP's `preserveFocusHint`. VS Code updates the
+  call stack but selects nothing, so the editor, the sidebar and the window
+  stay as they were. An `invalidated` event follows it, because with no frame
+  newly selected VS Code would otherwise leave the Variables pane showing the
+  registers from *before* the stop.
+- **A stop this window asked for** -- F5, F10, Pause, a step back from the
+  toolbar, a launch -- goes out without it, so the editor follows the program
+  as you step, exactly as before.
+
+What counts is who last set the machine *moving* (`Engine::set_driver`): an
+agent polling `get_state` or reading memory while you step does not make your
+next stop its own. And a breakpoint of yours that an agent's `run` happens to
+hit is its stop -- shown in the call stack and the registers, and one click on
+the top frame away, but not snatched into view.
+
+One thing stays stale: the small address in the CALL STACK pane's header is the
+last stop VS Code *selected*, so after an agent's step it still shows the stop
+before. The frames themselves are current.
 
 ## Starting the emulator from the extension
 

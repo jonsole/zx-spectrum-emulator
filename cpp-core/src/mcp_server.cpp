@@ -1054,6 +1054,19 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
                const json& args) {
     std::string error;
 
+    // The tools that set the machine moving make the stop that ends them an
+    // MCP client's -- which VS Code is then told to show without taking the
+    // editor over for (see Engine::set_driver). Reads do not: an agent
+    // polling get_state while you step does not make your next stop its own.
+    for (const char* moving : {"run", "step", "pause", "reset", "load_snapshot", "load_tape",
+                               "step_back", "reverse_continue", "run_back_to",
+                               "run_back_to_write", "return_to_live"}) {
+        if (name == moving) {
+            engine.set_driver(Driver::Mcp);
+            break;
+        }
+    }
+
     if (name == "load_rom") {
         std::string b64;
         if (!arg_string(args, "rom_base64", b64, error)) {

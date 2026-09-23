@@ -5,10 +5,16 @@ Part of the [zx-spectrum-emulator README](../README.md).
 > **`zx_server.exe` has to be running first.** There is no separate MCP
 > server process and nothing starts one on demand — the MCP endpoint is
 > served *by the emulator process itself*, alongside DAP and the screen
-> stream. No server, no endpoint. Start it either by launching a VS Code
-> debug session (its `preLaunchTask` builds and starts the server — see
-> [Connecting VS Code](vscode-debugging.md)) or by running it by hand as
-> shown under [Running](../README.md#running).
+> stream. No server, no endpoint. Start it either from VS Code — a debug
+> session, or opening a snapshot, starts it if nothing is running (see
+> [Starting the emulator from the
+> extension](vscode-debugging.md#starting-the-emulator-from-the-extension)) —
+> or by running it by hand as shown under [Running](../README.md#running).
+
+A VS Code window debugging the same machine sees every stop an MCP client
+causes, in its call stack and registers, but does not jump its editor to it:
+the window's user may be reading something else. See [Where the focus goes
+when it stops](vscode-debugging.md#where-the-focus-goes-when-it-stops).
 
 Point any MCP client at `http://127.0.0.1:8000/mcp` (streamable HTTP).
 

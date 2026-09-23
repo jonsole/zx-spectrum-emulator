@@ -852,6 +852,21 @@ json graphics_view_json(const GraphicsView& v, uint64_t version) {
 
 // ---- request dispatch ------------------------------------------------------
 
+/// Whether a request sets the machine moving -- and so will end in a stop
+/// that this client asked for. See Engine::set_driver, and the stopped event
+/// in serve_dap for what it changes.
+bool moves_machine(const std::string& command) {
+    for (const char* c : {"launch", "restart", "continue", "next", "stepIn", "stepOut",
+                          "pause", "stepBack", "stepBackInto", "stepBackOut",
+                          "reverseContinue", "runBackToAddress", "runBackToWrite",
+                          "returnToLive", "loadTape"}) {
+        if (command == c) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// A one-line summary of a request worth logging, or "" for the rest.
 ///
 /// Stepping a program produces a constant stream of stackTrace, scopes,
@@ -980,6 +995,9 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
     const std::string summary = describe_request(command, arguments);
     if (!summary.empty()) {
         log("DAP  %s", summary.c_str());
+    }
+    if (moves_machine(command)) {
+        engine.set_driver(Driver::Dap);
     }
 
     bool success = true;
@@ -2157,10 +2175,32 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
                                      {"output", "Watchpoint: " + description + "\n"}});
             }
         }
-        broadcast_event("stopped", json{{"reason", stop_reason_name(reason)},
-                                        {"threadId", THREAD_ID},
-                                        {"allThreadsStopped", true},
-                                        {"description", description}});
+        // A stop an MCP client caused -- an agent stepping, running to its own
+        // breakpoint, loading a snapshot -- is still shown: the call stack,
+        // registers and status all update. What preserveFocusHint stops is
+        // VS Code acting on it: revealing the line in an editor (and so
+        // switching the tab you were reading), opening the Run and Debug
+        // view on a breakpoint, raising the window. Not sent for a stop this
+        // window's own user asked for, because the hint also stops VS Code
+        // selecting the new top frame -- and then the editor would not follow
+        // the program as you stepped it yourself.
+        json stopped{{"reason", stop_reason_name(reason)},
+                     {"threadId", THREAD_ID},
+                     {"allThreadsStopped", true},
+                     {"description", description}};
+        const bool quietly = engine.driver() == Driver::Mcp;
+        if (quietly) {
+            stopped["preserveFocusHint"] = true;
+        }
+        broadcast_event("stopped", stopped);
+        if (quietly) {
+            // With no frame newly selected, VS Code refreshes the call stack
+            // but leaves the Variables pane showing the registers from before
+            // the stop. `invalidated` asks for a refresh without selecting
+            // anything; the old frame's scopes are fine to re-read, since
+            // registers are the machine's, not a frame's.
+            broadcast_event("invalidated", json{{"areas", json::array({"variables"})}});
+        }
         // Named where possible: "stopped at 0x9607" says far less than
         // "stopped at 0x9607 (WAIT_RASTER+9)" when you are trying to work out
         // what the machine was doing.
