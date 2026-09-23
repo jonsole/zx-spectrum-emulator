@@ -264,33 +264,45 @@ depth_insert_placed:	ld		hl,(sort_head)		; the front of the SORTED run
 ; only caller, and the CALL, the RET and the PUSH HL / POP IY that handed it
 ; the candidate were 53 T of the ~140 the loop spent around each one. Written
 ; out, every answer is a CP and a JR straight to where the loop goes next, and
-; the axis that runs the other way round simply jumps to the other target: no
-; carry to flip on the way out, and no convention about what it would mean.
+; the axis that runs the other way round simply jumps to the other target.
 ;
 ; The candidate is in IY; the placed object's bounds are the six immediates
 ; depth_cmp_setup patched in below. On each axis the two boxes are in one of
 ; three states -- their max at or below our min, their min at or above our
-; max, or overlapping -- and the first two answer, we are the nearer or they
-; are, while the third says nothing and hands the question on. The first axis
-; that separates the boxes decides, and the ones after it are never read.
+; max, or overlapping.
+;
+; The two answers are not asked the same way, and that is the whole design.
+;
+; "They are nearer" is taken from the FIRST axis that separates the boxes, and
+; costs nothing to act on: it only moves the scan on.
+;
+; "We are nearer" moves the insertion point, and it has to be CERTAIN -- every
+; axis that separates the two agreeing -- or it is not taken at all. So the
+; first axis that says it is checked against the ones after it, and a
+; contradiction is treated like "they are nearer": walk on. The first version
+; of this loop took "nearer" from the first axis as well, and room $A3 showed
+; what that does. The block the knight stood on met a thin pillar across the
+; room, U calling the block nearer and V calling it further; U won, the
+; insertion point moved past the pillar, and the block went with it -- past the
+; spiked ball's pedestal it is certainly behind, and drew over the ball. A pair
+; whose axes disagree can never overlap on screen (see below), so its order
+; is nobody's business but a third object's -- which is exactly why it must not
+; be allowed to decide anything.
 ;
 ; U is asked first because it is the axis most likely to answer: almost
 ; everything in a room is somewhere else along U -- the same fact
 ; collide_gather's sweep is built on -- so most candidates cost two loads and
-; one CP. Z is asked last because when a floor axis and Z disagree the floor is
-; what the eye goes by: the knight pushing a table from behind has his body's
-; box starting at the table's top, so Z calls the body nearer by twelve while U
-; calls it further by eleven, and asking Z first drew the body over the table.
-; U before V costs nothing, because the two floor axes can never disagree about
-; a pair you can see: if U separates with us nearer and V with them nearer, the
-; sprites are at least (SIZE_U + SIZE_V) apart for each of them along screenX,
-; which is exactly the width at which they stop overlapping. Their order still
-; matters to a third object between them -- room $B3.
+; one CP. When a floor axis and Z disagree, the pair is simply not ordered: the
+; knight pushing a table from behind has his body's box starting at the
+; table's top, Z calling the body nearer and U calling it further, and taking
+; Z's word drew the body over the table. The two floor axes can never disagree
+; about a pair you can see: if U separates with us nearer and V with them
+; nearer, the sprites are at least (SIZE_U + SIZE_V) apart for each of them
+; along screenX, which is exactly the width at which they stop overlapping.
 ;
 ; Boxes that only touch count as apart, which is what lets a stack of cubes
 ; each SIZE_Z above the last separate cleanly on Z. Three overlapping axes is
-; interpenetration: no order is right, and the loop falls out of the bottom to
-; "nearer", which is where it would have left the object anyway.
+; interpenetration, where no order is right: it moves nothing.
 ;
 ; The list is walked the way objects_draw_all walks it: SP pointed at a
 ; record's NEXT field and a POP IY, 24 T against 54 for reading the two bytes
@@ -328,7 +340,7 @@ depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 					ld		a,l
 					add		a,h		; a = their max
 .u_min:				cp		0		; imm = our min + 1
-					jr		c,.nearer		; their max <= our min: we are nearer
+					jr		c,.u_near		; their max <= our min: we are nearer, if V and Z agree
 					ld		a,l
 					sub		h		; a = their min
 .u_max:				cp		0		; imm = our max
@@ -344,23 +356,37 @@ depth_insert_from:	ld		(.commit+1),sp		; the real stack, back at the end
 					ld		a,l
 					sub		h
 .v_max:				cp		0
-					jr		nc,.nearer		; their V is the higher: we are nearer
+					jr		nc,.v_near		; their V is the higher: we are nearer, if Z agrees
 
 					; Z -- nearer as Z grows, and the odd one out in shape: the
 					; coordinate is the box's base and SIZE_Z its height, so the
-					; minimum is Z itself and there is nothing to subtract.
+					; minimum is Z itself and there is nothing to subtract. U and V
+					; overlap to get here, so nothing is left to contradict it.
 					ld		a,(iy+OBJ.Z)
-					ld		l,a
 					add		a,(iy+OBJ.SIZE_Z)
 .z_min:				cp		0		; imm = our Z + 1
 					jr		c,.nearer		; their top at or below our base: we are nearer
-					ld		a,l
-.z_max:				cp		0		; imm = our Z + SIZE_Z
-					jr		nc,.advance		; their base at or above our top: they are nearer
-					; nothing separates them: interpenetrating, and nearer it is
+					jr		.advance		; they are above, or interpenetrating: no move
 
-.nearer:			ld		d,iyh		; we go after this one, so it is the
-					ld		e,iyl		; insertion point now
+					; U said nearer. Does V say they are? Only that test matters --
+					; V overlapping or agreeing both leave the answer standing. Its
+					; bound is .v_min's, read out of the instruction rather than
+					; patched a second time.
+.u_near:			ld		a,(iy+OBJ.V)
+					add		a,(iy+OBJ.SIZE_V)		; their V max
+					ld		hl,.v_min+1
+					cp		(hl)
+					jr		c,.advance		; their V is the lower: the axes disagree
+					; NB: fall through
+
+					; A floor axis said nearer. Does Z say they are above us?
+.v_near:			ld		a,(iy+OBJ.Z)		; their base
+.z_max:				cp		0		; imm = our Z + SIZE_Z
+					jr		nc,.advance		; at or above our top: the axes disagree
+					; NB: fall through
+
+.nearer:			ld		d,iyh		; certainly nearer: we go after this one,
+					ld		e,iyl		; so it is the insertion point now
 					jr		.advance
 
 .commit:			ld		sp,0		; patched: the real stack

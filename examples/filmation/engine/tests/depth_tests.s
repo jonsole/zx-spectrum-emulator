@@ -173,17 +173,18 @@ start:				ld		sp,$FE00
 					call	compare_1_with_2
 					EXPECT_CARRY	1, "carry"
 
-					; The two floor axes separating opposite ways. U is asked
-					; first, so U wins -- and the pair is 100 apart across the
-					; screen (U + V is screenX) against a sprite 16 wide, so
-					; nothing any answer here can decide is ever drawn. It is
-					; their order relative to a THIRD object that matters, which
-					; is why this is pinned down rather than left to fall out.
-					TEST	"cmp: floor axes disagreeing, U is asked first"
+					; The two floor axes separating opposite ways. Only a CERTAIN
+					; "nearer" moves the insertion point, so a pair whose axes
+					; disagree is not ordered at all: REC_1 stays where it was put,
+					; in front, whichever way round they are. Nothing any answer
+					; here could decide is ever drawn -- the pair is 100 apart
+					; across the screen (U + V is screenX) against sprites 16 wide
+					; -- but their order used to drag a third object: see $A3 below.
+					TEST	"cmp: floor axes disagreeing, no order"
 					BOX		REC_1, 60, 100, Z0, HALF, HALF, TALL	; U +40, V +60
 					BOX		REC_2, 20, 40, Z0, HALF, HALF, TALL
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry: U says nearer"
+					EXPECT_CARRY	0, "carry: U alone is not enough"
 
 					TEST	"cmp: floor axes disagreeing the other way"
 					BOX		REC_1, 20, 40, Z0, HALF, HALF, TALL
@@ -192,41 +193,60 @@ start:				ld		sp,$FE00
 					EXPECT_CARRY	0, "carry: U says further"
 
 					; The knight's body over a table he is pushing: above it by
-					; twelve and behind it by eleven. Z last is what makes the
-					; floor decide -- ask Z first and the body draws over the
-					; table it is behind.
-					TEST	"cmp: above and behind, the floor decides"
+					; twelve and behind it by eleven. U says the table is nearer,
+					; which moves nothing, and Z is never allowed to overrule it --
+					; take Z's word and the body draws over the table it is behind.
+					TEST	"cmp: above and behind, not in front"
 					BOX		REC_1, 101, 112, 140, 5, 5, 11		; U -11, Z +12
 					BOX		REC_2, 112, 106, 128, 6, 10, 12
 					call	compare_1_with_2
 					EXPECT_CARRY	0, "carry"
 
 					; Room $B3: a spike on the floor and a block up and away from
-					; it, 16 apart along U and 16 along V. Under the old rule
-					; those two cancelled to nothing and a single unit of Z broke
-					; the tie; U separates them, so U now answers outright. Which
-					; way round they come out still matters -- the ball between
-					; them is certainly nearer than the spike and certainly
-					; further than the block, so a coin toss leaves it nowhere.
-					TEST	"cmp: room $B3's spike and block, U decides"
+					; it, 16 apart along U and 16 along V with Z disagreeing too.
+					; No axis-by-axis answer is certain, so neither way round is
+					; the pair ordered. What mattered there was a ball between
+					; them, certainly nearer than one and further than the other
+					; -- and with nothing forcing the pair, the ball's own certain
+					; answers are what place it.
+					TEST	"cmp: room $B3's spike and block, no order"
 					BOX		REC_1, 136, 136, 128, 6, 6, 12
 					BOX		REC_2, 152, 152, 164, 8, 8, 12
 					call	compare_1_with_2
-					EXPECT_CARRY	0, "carry: the lower one is further"
+					EXPECT_CARRY	0, "carry"
 
 					TEST	"cmp: the same pair the other way round"
 					BOX		REC_1, 152, 152, 164, 8, 8, 12
 					BOX		REC_2, 136, 136, 128, 6, 6, 12
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry: the higher one is nearer"
+					EXPECT_CARRY	0, "carry"
 
 					; Nothing separates them on any axis. No order is right, and
-					; the answer is the one the scan would have reached anyway.
+					; nothing moves.
 					TEST	"cmp: interpenetrating"
 					BOX_U	REC_1, 40
 					BOX_U	REC_2, 42
 					call	compare_1_with_2
-					EXPECT_CARRY	1, "carry"
+					EXPECT_CARRY	0, "carry"
+
+					; Room $A3, as the live game had it, with the room's own boxes.
+					; The block the knight stood on is certainly behind the spiked
+					; ball's pedestal (V: 146 against 142), and a thin pillar across
+					; the room disagrees with it by axis -- U calls the block nearer,
+					; V further. When "nearer" came from the first axis alone, the
+					; pillar moved the insertion point past itself, and past the
+					; pedestal ahead of it, and the block drew over the ball. It
+					; belongs in front of both.
+					TEST	"$A3: a pillar across the room cannot drag the block"
+					BOX		REC_1, 126, 153, 128, 7, 7, 12		; the block
+					BOX		REC_2, 120, 136, 128, 6, 6, 12		; the pedestal
+					BOX		REC_3, 115, 59, 176, 3, 5, 40		; the pillar
+					call	make_list
+					DW		REC_2, REC_3, 0
+					ld		ix,REC_1
+					call	depth_insert
+					call	expect_list
+					DW		REC_1, REC_2, REC_3, 0
 
 
 ; --- depth_insert and background_insert ------------------------------------
