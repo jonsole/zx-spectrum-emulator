@@ -324,6 +324,10 @@ def main():
     if (meta.get("rules") or {}).get("exits") != "table":
         sys.exit("%s does not say its exits are a table (meta.rules.exits), and "
                  "room_build.s reads a destination with every scenery entry" % ATLAS.name)
+    if (meta.get("rules") or {}).get("groupBytes") != 2:
+        sys.exit("%s does not say an object group starts with two bytes "
+                 "(meta.rules.groupBytes), and room_build.s reads a template and a "
+                 "count" % ATLAS.name)
     templates_meta = atlas.get("templatesMeta") or {}
     BACKGROUND.update(label_of(name) for name in templates_meta.get("background") or [])
     doorways = templates_meta.get("doorways") or {}
@@ -459,9 +463,12 @@ def main():
     out.append(";                           room it leads to if it is a doorway -- or")
     out.append(";                           ROOM_NO_EXIT, for a doorway walled up and for")
     out.append(";                           everything that is not a doorway")
-    out.append(";     object groups         a type-and-count byte, then that many")
-    out.append(";                           packed positions: U cell in bits 0-2,")
-    out.append(";                           V cell in bits 3-5, Z level in bits 6-7")
+    out.append(";     object groups         the template's index, how many of it (1-8),")
+    out.append(";                           then that many packed positions: U cell in")
+    out.append(";                           bits 0-2, V cell in bits 3-5, Z level in")
+    out.append(";                           bits 6-7. Knight Lore packs the index and")
+    out.append(";                           the count into one byte, which holds 32")
+    out.append(";                           templates; both games' together are more.")
     out.append(";")
     out.append("; The game bounds the record with a length and ends the scenery list with")
     out.append("; $FF. The skip is that length, and the scenery count says where the")
@@ -506,7 +513,7 @@ def main():
     line(out, "room_list:", "", "")
     for r in rooms:
         scn, obs = r["scenery"], r["objects"]
-        object_bytes = sum(1 + len(o["positions"]) for o in obs)
+        object_bytes = sum(2 + len(o["positions"]) for o in obs)
         biggest = max(biggest, 2 * len(scn) + object_bytes)
         placed = sum(len(scn_by_name[s["template"]]) for s in scn)
         placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]])
@@ -529,10 +536,12 @@ def main():
                  ("walled up" if s["template"] in doorways else ""))
         for o in obs:
             n = len(o["positions"])
-            group = object_index[o["template"]] << 3 | (n - 1)
+            if not 1 <= n <= 8:
+                sys.exit("room %d: a group of %s places %d; a group holds 1 to 8"
+                         % (r["number"], o["template"], n))
             spots = ", ".join("$%02X" % (p["u"] | p["v"] << 3 | p["z"] << 6)
                               for p in o["positions"])
-            line(out, "", "DB", "$%02X, %s" % (group, spots),
+            line(out, "", "DB", "FG_%s, %d, %s" % (bare(o["template"]).upper(), n, spots),
                  "%d x %s" % (n, bare(o["template"])))
         out.append("")
     out.append("")

@@ -68,6 +68,12 @@
       "lastRoom": {
        "$ref": "#/definitions/byte",
        "description": "The number the last room must have. room_find walks the records to the first number at least the one it wants, so there has to be one at the end that every search stops at."
+      },
+      "groupBytes": {
+       "enum": [
+        2
+       ],
+       "description": "2: an object group starts with the template's index and the count as a byte each, so a castle can have up to 255 object templates. Without it, the games' one byte packs the template into five bits and the count into three, which holds 32."
       }
      },
      "additionalProperties": false

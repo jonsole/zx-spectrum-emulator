@@ -12,7 +12,8 @@
   "rules": {
    "exits": "table",
    "sceneryPerRoom": 7,
-   "lastRoom": 255
+   "lastRoom": 255,
+   "groupBytes": 2
   }
  },
 
@@ -145,6 +146,85 @@
       { "u": 3, "v": 4, "z": 1 },
       { "u": 3, "v": 3, "z": 2 },
       { "u": 3, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 5, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_s", "destination": 6 },
+     { "template": "scenery_pentagram_trees_0" },
+     { "template": "scenery_pentagram_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_well", "positions": [
+      { "u": 1, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_pentagram_thorns", "positions": [
+      { "u": 0, "v": 4, "z": 0 },
+      { "u": 1, "v": 4, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 7, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_pentagram_stump_pushed", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_pentagram_dragon_paces_u", "positions": [
+      { "u": 0, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_pentagram_dragon_paces_v", "positions": [
+      { "u": 4, "v": 7, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 6, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_s", "destination": 7 },
+     { "template": "scenery_pentagram_trunk_arch_n", "destination": 5 },
+     { "template": "scenery_pentagram_trees_0" },
+     { "template": "scenery_pentagram_trees_3" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_stump_pushed", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 7, "ink": 7, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_n", "destination": 6 },
+     { "template": "scenery_pentagram_trunk_arch_e", "destination": 19 },
+     { "template": "scenery_pentagram_trunk_arch_w", "destination": 17 },
+     { "template": "scenery_pentagram_trees_2" },
+     { "template": "scenery_pentagram_trees_3" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 0, "v": 2, "z": 0 },
+      { "u": 1, "v": 2, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 7, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 }
      ] }
     ]
   },
@@ -357,6 +437,39 @@
      ] }
     ]
   },
+  { "number": 17, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_e", "destination": 7 },
+     { "template": "scenery_pentagram_trunk_arch_w", "destination": 21 },
+     { "template": "scenery_pentagram_trees_5" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_stump", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 2 },
+      { "u": 4, "v": 2, "z": 3 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_pentagram_stump", "positions": [
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 2 },
+      { "u": 4, "v": 5, "z": 3 }
+     ] },
+     { "template": "object_pentagram_stump_pushed", "positions": [
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_pentagram_dragon_hops", "positions": [
+      { "u": 4, "v": 4, "z": 3 }
+     ] }
+    ]
+  },
   { "number": 18, "ink": 4, "dimensions": "narrowU",
     "scenery": [
      { "template": "scenery_arch_n", "destination": 34 },
@@ -383,6 +496,37 @@
       { "u": 4, "v": 1, "z": 3 },
       { "u": 2, "v": 0, "z": 3 },
       { "u": 5, "v": 0, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 19, "ink": 2, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_e", "destination": 22 },
+     { "template": "scenery_pentagram_trunk_arch_w", "destination": 7 },
+     { "template": "scenery_pentagram_trees_5" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_pentagram_stump_pushed", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_pentagram_spider", "positions": [
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 }
      ] }
     ]
   },
@@ -419,6 +563,57 @@
      ] }
     ]
   },
+  { "number": 21, "ink": 5, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_e", "destination": 17 },
+     { "template": "scenery_pentagram_trunk_arch_w", "destination": 23 },
+     { "template": "scenery_pentagram_trees_5" }
+    ],
+    "objects": []
+  },
+  { "number": 22, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_n", "destination": null },
+     { "template": "scenery_pentagram_trunk_arch_w", "destination": 19 },
+     { "template": "scenery_pentagram_trees_2" },
+     { "template": "scenery_pentagram_trees_3" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_thorny_bush", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_pentagram_spider", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 23, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_trunk_arch_n", "destination": null },
+     { "template": "scenery_pentagram_trunk_arch_e", "destination": 21 },
+     { "template": "scenery_pentagram_trunk_arch_s", "destination": null },
+     { "template": "scenery_pentagram_trees_0" },
+     { "template": "scenery_pentagram_trees_3" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_stump_pushed", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_pentagram_spider", "positions": [
+      { "u": 4, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
   { "number": 24, "ink": 5, "dimensions": "narrowU",
     "scenery": [
      { "template": "scenery_arch_n", "destination": 40 },
@@ -438,6 +633,83 @@
      ] },
      { "template": "object_ball_bounce", "positions": [
       { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 25, "ink": 7, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_e", "destination": 26 },
+     { "template": "scenery_pentagram_stone_arch_w", "destination": null },
+     { "template": "scenery_pentagram_stone_2" },
+     { "template": "scenery_pentagram_stone_1" }
+    ],
+    "objects": []
+  },
+  { "number": 26, "ink": 2, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_n", "destination": 28 },
+     { "template": "scenery_pentagram_stone_arch_e", "destination": 27 },
+     { "template": "scenery_pentagram_stone_arch_w", "destination": 25 },
+     { "template": "scenery_pentagram_stone_2" },
+     { "template": "scenery_pentagram_stone_3" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_pentagram_creature", "positions": [
+      { "u": 0, "v": 6, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 27, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_n", "destination": null },
+     { "template": "scenery_pentagram_stone_arch_e", "destination": 35 },
+     { "template": "scenery_pentagram_stone_arch_s", "destination": 30 },
+     { "template": "scenery_pentagram_stone_arch_w", "destination": 26 },
+     { "template": "scenery_pentagram_stone_2" },
+     { "template": "scenery_pentagram_stone_3" }
+    ],
+    "objects": []
+  },
+  { "number": 28, "ink": 2, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_s", "destination": 26 },
+     { "template": "scenery_pentagram_trees_0" },
+     { "template": "scenery_pentagram_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_conveyor_3", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_pentagram_conveyor_4", "positions": [
+      { "u": 3, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_pentagram_block", "positions": [
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 3, "v": 7, "z": 1 }
+     ] },
+     { "template": "object_pentagram_grass", "positions": [
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 4, "v": 6, "z": 1 }
+     ] },
+     { "template": "object_pentagram_dragon_hops", "positions": [
+      { "u": 3, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_pentagram_thorns", "positions": [
+      { "u": 1, "v": 7, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 4, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 }
      ] }
     ]
   },
@@ -475,6 +747,14 @@
       { "u": 4, "v": 2, "z": 1 }
      ] }
     ]
+  },
+  { "number": 30, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_n", "destination": 27 },
+     { "template": "scenery_pentagram_stone_0" },
+     { "template": "scenery_pentagram_stone_3" }
+    ],
+    "objects": []
   },
   { "number": 31, "ink": 3, "dimensions": "narrowU",
     "scenery": [
@@ -595,6 +875,25 @@
      ] },
      { "template": "object_dropping_block", "positions": [
       { "u": 3, "v": 7, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 35, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_pentagram_stone_arch_s", "destination": null },
+     { "template": "scenery_pentagram_stone_arch_w", "destination": 27 },
+     { "template": "scenery_pentagram_stone_2" },
+     { "template": "scenery_pentagram_stone_1" }
+    ],
+    "objects": [
+     { "template": "object_pentagram_cube_pushed", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_pentagram_spider", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
      ] }
     ]
   },

@@ -664,7 +664,12 @@ function rulesOf(atlas) {
     // null when nothing constrains it. Only Knight Lore's walk needed one of
     // the games that say nothing.
     lastRoom: isByte(said.lastRoom) ? said.lastRoom : game === 'knightlore' ? 0xFF : null,
-    lastRoomSaid: isByte(said.lastRoom)
+    lastRoomSaid: isByte(said.lastRoom),
+    // How many bytes start an object group: 1 for the games' own, the template
+    // in the top five bits and the count in the bottom three; 2 for a castle
+    // whose builder reads the template and the count as a byte each, which is
+    // what lets it have more than 32 object templates.
+    groupBytes: said.groupBytes === 2 ? 2 : 1
   };
 }
 
@@ -1023,8 +1028,9 @@ function checkAtlas(atlas, numbers) {
       const t = objects.get(group.template);
       if (!t) { fault(n, 'no object template called ' + group.template); continue; }
       const count = group.positions.length;
-      // The group byte carries the repeat count in its bottom three bits, so a
-      // group places between one and eight; more than that is another group.
+      // The games' group byte carries the repeat count in its bottom three bits,
+      // so a group places between one and eight; more than that is another
+      // group. A castle with two-byte groups keeps the same limit.
       if (count < 1 || count > CELLS) {
         fault(n, group.template + ' places ' + count + '; a group holds 1 to ' + CELLS);
       }
@@ -1033,7 +1039,7 @@ function checkAtlas(atlas, numbers) {
           fault(n, group.template + ' at ' + p.u + ',' + p.v + ',' + p.z + ' is off the grid');
         }
       }
-      body += 1 + count;
+      body += rules.groupBytes + count;
     }
 
     // The record's skip is one byte, counted from its own length field.
@@ -1398,6 +1404,13 @@ function refreshUsage(atlas) {
 // so 32. A scenery reference is a byte of its own, and $FF ends the section.
 const TEMPLATE_LIMIT = { sceneryTemplates: 255, objectTemplates: 32 };
 
+// ...and for a particular castle: one whose groups start with two bytes
+// (meta.rules.groupBytes) gives the template a byte of its own, so 255.
+function templateLimit(atlas, group) {
+  if (group === 'objectTemplates' && rulesOf(atlas).groupBytes === 2) return 255;
+  return TEMPLATE_LIMIT[group];
+}
+
 // A template's name becomes an assembler label -- BG_ARCH_N, FG_GUARD_EW -- so
 // it is held to what a label can be.
 const TEMPLATE_NAME = /^[a-z][a-z0-9_]*$/;
@@ -1427,7 +1440,7 @@ function freshPiece(group, graphic) {
 // A new, empty template on the end of its table. Returns its index, or null.
 function newTemplate(atlas, group, name) {
   if (templateNameProblem(atlas, name)) return null;
-  if (Object.keys(atlas[group]).length >= TEMPLATE_LIMIT[group]) return null;
+  if (Object.keys(atlas[group]).length >= templateLimit(atlas, group)) return null;
   atlas[group][name] = [];
   return Object.keys(atlas[group]).length - 1;
 }
@@ -1567,7 +1580,7 @@ if (typeof module !== 'undefined') {
   module.exports = {
     CELL, CELL_ORIGIN, HALF_CELL, CELLS, LEVELS, LEVEL_Z, Z_MASK,
     FIRST_REAL_GRAPHIC, GRID_WIDTH, DIRECTIONS,
-    DOORWAYS, TEMPLATE_LIMIT, templateNameProblem, newTemplate,
+    DOORWAYS, TEMPLATE_LIMIT, templateLimit, templateNameProblem, newTemplate,
     duplicateTemplate, deleteProblem, deleteTemplate, addPiece,
     removePiece, movePiece, roomsUsing, shiftPiece, screenToWorld,
     BACKGROUND_TEMPLATES,

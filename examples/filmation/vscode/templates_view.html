@@ -240,7 +240,7 @@
       const names = Object.keys(atlas[g.group]);
       const h = make('h3');
       h.appendChild(make('span', '', g.title));
-      h.appendChild(make('span', 'count', names.length + ' / ' + TEMPLATE_LIMIT[g.group]));
+      h.appendChild(make('span', 'count', names.length + ' / ' + templateLimit(atlas, g.group)));
       el.list.appendChild(h);
 
       names.forEach(function (name, at) {

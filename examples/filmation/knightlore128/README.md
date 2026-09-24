@@ -43,7 +43,7 @@ starts.
 | 2b | the graphics library in bank 1 (3 and 7 as it grows), and each room's graphics copied into the room page in bank 0 | done |
 | 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | done |
 | 4a | one sprite sheet holding every Knight Lore and every Pentagram sprite; Pentagram's graphics numbered 188 up | done |
-| 4b | Pentagram's scenery and object templates, and rooms that use them | |
+| 4b | Pentagram's scenery and object templates, and rooms that use them | done |
 | 4c | Pentagram's creatures and mechanics: its movers, the things that fall from the sky, the bolt, the well | |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
@@ -75,6 +75,50 @@ quest's items and the pentagram's pieces. It is in the sheet, and
 them. Everything under `pentagram` is loaded room by room (`ROOM_GROUPS`); the
 library holds 85 sprites and still fits bank 1. The busy-room code moved to
 the $6000 region to make room for the longer `sprite_table`.
+
+### Pentagram's templates and rooms (stage 4b)
+
+`pentagram_templates.py`, run once, brought across every template a
+Pentagram room places, 19 scenery and 28 object, named for what they are:
+`scenery_pentagram_trunk_arch_n`, `scenery_pentagram_stone_arch_e`,
+`scenery_pentagram_trees_0`, `object_pentagram_well`,
+`object_pentagram_dragon_hops`, `object_pentagram_conveyor_1` and so on.
+Their archways are in `meta.doorways` and their walls in `meta.background`.
+The raised archway on a walkway and its ledge stayed behind. Their opening is
+off the middle of the wall, and this game's doorway test assumes the middle.
+
+It also brought two corners of Pentagram's map, so the templates have
+somewhere to be seen:
+- the forest round the well: Pentagram's rooms 29, 22, 12, 11, 13, 10, 14 and
+  9, here $05, $06, $07, $11, $13, $15, $16 and $17;
+- stone rooms: 95, 96, 97, 108, 82 and 98, here $19, $1A, $1B, $1C, $1E and
+  $23.
+
+Doorways within a cluster still lead to each other; doorways out of it are
+walled up. Neither cluster is joined to the castle: that is for the castle's
+design. Until then, write `room_number` to go there, or use the 1 and 2 keys
+of a `--debug-room` build. Everything in them stands still, because the
+behaviour that goes with Pentagram's templates is stage 4c.
+
+Three things had to change to make room:
+- **An object group is now two bytes**: the template, then the count.
+  Knight Lore packs both into one byte, which reaches 32 templates, and the
+  two games together have 57. `meta.rules.groupBytes` says so, and the room
+  designer follows it.
+- **The templates moved into bank 0**, after the resident sprites. They are
+  read while a room is built, when bank 0 is paged in, and Pentagram's
+  doubled them past what the $6000 region could hold. The fullest room still
+  fits the page, with about 1,150 bytes to spare. If it runs short, the next
+  step is to copy only a room's own templates out of bank 4, as `room_find`
+  copies its record.
+- **The busy-room code moved to $6000**, to make room for the longer
+  `sprite_table` (that was in 4a).
+
+What was checked:
+- Each of the 14 imported rooms builds and runs 20 turns in a 128K emulator,
+  drawing Pentagram's tree and stone walls, archways, the well, stumps,
+  thorns, blocks and the rest, and nothing draws `sprite_missing`.
+- Knight Lore's 127 rooms still build the same objects as the 48K game.
 
 ### How the rooms join (stage 3)
 

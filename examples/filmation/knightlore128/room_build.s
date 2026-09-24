@@ -378,11 +378,15 @@ room_door_note:		ld		a,b
 
 
 ; ---------------------------------------------------------------------------
-; The objects. These come in groups: a byte giving the template and how many
-; of them, then that many packed positions.
+; The objects. These come in groups: the template's index, how many of it,
+; then that many packed positions.
 ;
-;   type   bits 3-7 of the group byte
-;   count  bits 0-2, plus one -- so one to eight
+;   type   the first byte: any of up to 256 object templates
+;   count  the second, one to eight
+;
+; Knight Lore packs both into one byte, the type in bits 3-7 and the count less
+; one in bits 0-2, which reaches only 32 templates. It has 29; with Pentagram's
+; there are 57, so a group costs one byte more here.
 ;
 ; and a position byte is three cells of U, three of V and two levels of Z:
 ;
@@ -406,17 +410,15 @@ room_objects_of:	ld		a,(room_bytes_left)
 					dec		a
 					ld		(room_bytes_left),a
 
-					ld		a,(de)		; the group byte
+					ld		a,(de)		; the template's index
 					inc		de
 					ld		c,a
-					and		7
-					inc		a
-					ld		(room_count_left),a
+					ld		a,(de)		; and how many of it: two bytes, where
+					inc		de		; Knight Lore packs both into one that
+					ld		(room_count_left),a	; holds only 32 templates
+					ld		hl,room_bytes_left
+					dec		(hl)		; the second of them
 					ld		a,c
-					rrca
-					rrca
-					rrca
-					and		$1F		; the template index
 
 					push	de
 					push	af

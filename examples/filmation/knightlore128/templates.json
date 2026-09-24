@@ -14,9 +14,17 @@
    "scenery_tree_arch_s": "s",
    "scenery_tree_arch_w": "w",
    "scenery_high_arch_e": "e",
-   "scenery_high_arch_s": "s"
+   "scenery_high_arch_s": "s",
+   "scenery_pentagram_trunk_arch_n": "n",
+   "scenery_pentagram_trunk_arch_e": "e",
+   "scenery_pentagram_trunk_arch_s": "s",
+   "scenery_pentagram_trunk_arch_w": "w",
+   "scenery_pentagram_stone_arch_n": "n",
+   "scenery_pentagram_stone_arch_e": "e",
+   "scenery_pentagram_stone_arch_s": "s",
+   "scenery_pentagram_stone_arch_w": "w"
   },
-  "background": ["scenery_walls_0", "scenery_walls_1", "scenery_walls_2", "scenery_trees_0", "scenery_trees_1", "scenery_trees_2"]
+  "background": ["scenery_walls_0", "scenery_walls_1", "scenery_walls_2", "scenery_trees_0", "scenery_trees_1", "scenery_trees_2", "scenery_pentagram_trees_0", "scenery_pentagram_trees_1", "scenery_pentagram_trees_2", "scenery_pentagram_trees_3", "scenery_pentagram_trees_4", "scenery_pentagram_trees_5", "scenery_pentagram_stone_0", "scenery_pentagram_stone_1", "scenery_pentagram_stone_2", "scenery_pentagram_stone_3", "scenery_pentagram_stone_4"]
  },
 
  "sceneryTemplates": {
@@ -245,6 +253,242 @@
      "flags": { "mirrored": false, "passable": false, "rest": 16 } },
    { "graphic": "scenery.block.g7", "u": 136, "v": 56, "z": 164,
      "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_n": [
+   { "graphic": "pentagram.door.trees.2", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_e": [
+   { "graphic": "pentagram.door.trees.2", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_s": [
+   { "graphic": "pentagram.door.trees.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_w": [
+   { "graphic": "pentagram.door.trees.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_n": [
+   { "graphic": "pentagram.door.stone.2", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_e": [
+   { "graphic": "pentagram.door.stone.2", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_s": [
+   { "graphic": "pentagram.door.stone.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_w": [
+   { "graphic": "pentagram.door.stone.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_0": [
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_1": [
+   { "graphic": "pentagram.wall.trees.4", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_2": [
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_3": [
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_4": [
+   { "graphic": "pentagram.wall.trees.4", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_5": [
+   { "graphic": "pentagram.wall.trees.4", "u": 120, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 136, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_0": [
+   { "graphic": "pentagram.wall.stone.3", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_1": [
+   { "graphic": "pentagram.wall.stone.4", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_2": [
+   { "graphic": "pentagram.wall.stone.6", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_3": [
+   { "graphic": "pentagram.wall.stone.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_4": [
+   { "graphic": "pentagram.wall.stone.3", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
   ]
  },
 
@@ -399,6 +643,146 @@
    { "graphic": "balls.1.g178",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_grass": [
+   { "graphic": "pentagram.grass.1.g200",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump_pushed": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_thorns": [
+   { "graphic": "pentagram.thorns.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_cube_pushed": [
+   { "graphic": "pentagram.cube.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_table_pushed": [
+   { "graphic": "pentagram.table.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump_low": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_falls": [
+   { "graphic": "pentagram.block.1.g224",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_sinks": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stone_pushed": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_lift": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_water": [
+   { "graphic": "pentagram.water.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_thorny_bush": [
+   { "graphic": "pentagram.grass.1.g201",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_hops": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_platform_u": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_platform_v": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_spider": [
+   { "graphic": "pentagram.creature.1.g198",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_well": [
+   { "graphic": "pentagram.well.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_creature": [
+   { "graphic": "pentagram.creature.1.g198",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_water_deep": [
+   { "graphic": "pentagram.water.2",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_cube": [
+   { "graphic": "pentagram.cube.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_crumbles": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_1": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_3": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_4": [
+   { "graphic": "pentagram.block.1.g193",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_paces_u": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_paces_v": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ]
  }
 }

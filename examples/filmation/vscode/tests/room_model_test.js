@@ -1000,16 +1000,25 @@ test('destinationOf: in a table 0 is a room, and only null walls a doorway up', 
   assert.strictEqual(m.destinationOf(pentagram, { number: 5 }, { destination: 0 }, 'n'), null);
 });
 
+// The rooms knightlore128 has from Knight Lore itself. It has Pentagram's rooms
+// too, imported by pentagram_templates.py under free numbers, which no grid
+// arithmetic describes.
+function knightLoreRooms() {
+  return new Set(atlasFor('knightlore').rooms.map(function (r) { return r.number; }));
+}
+
 test(TABLE + ': every doorway leads where Knight Lore\'s grid would take it', function () {
-  // The table was generated from the grid, so each link's destination has to
-  // be the arithmetic's for the same room and wall.
+  // The table was generated from the grid, so each of Knight Lore's own
+  // rooms' links has to be the arithmetic's for the same room and wall.
   const atlas = atlasFor(TABLE);
   const grid = { meta: { game: 'knightlore' } };
   const map = m.roomMap(atlas);
   assert.ok(map.links.length > 200, 'found ' + map.links.length + ' doorways');
   const byNumber = m.byNumber(atlas.rooms);
+  const own = knightLoreRooms();
   const apart = [];
   for (const link of map.links) {
+    if (!own.has(link.from)) continue;
     const expected = m.destinationOf(grid, byNumber.get(link.from), {}, link.side);
     if (expected !== link.to) apart.push(link.from + ' ' + link.side + ': ' + link.to);
   }
@@ -1042,8 +1051,14 @@ test(TABLE + ': the map walked out of the doorways is Knight Lore\'s grid', func
   });
   const layout = m.mapLayout(atlas);
   assert.strictEqual(layout.placed[0].number, atlas.rooms[0].number, 'the walk starts at the first room');
-  assert.deepStrictEqual(layout.unplaced, [], 'every room is reachable and fits');
-  assert.strictEqual(layout.placed.length, atlas.rooms.length);
+  // Every one of Knight Lore's rooms is reachable and fits. Pentagram's two
+  // clusters are joined to nothing yet, so the walk never reaches them.
+  const own = knightLoreRooms();
+  const imported = atlas.rooms.map(function (r) { return r.number; })
+    .filter(function (n) { return !own.has(n); });
+  assert.deepStrictEqual(layout.unplaced.slice().sort(function (a, b) { return a - b; }),
+                         imported, 'only the rooms no doorway from the castle reaches');
+  assert.strictEqual(layout.placed.length, own.size);
 
   const origin = layout.placed[0];
   const apart = [];
@@ -1147,17 +1162,17 @@ test('checkAtlas: a table castle is held to its own rules', function () {
 
 test('checkAtlas: a table\'s two bytes an entry reach the record\'s skip byte', function () {
   // Worked out from rooms_source.py's record rather than read back: the skip
-  // is 2 + two bytes per scenery entry + a group byte and one per position
-  // for each object group. At one byte an entry the 257 below would be 250,
-  // and nothing would be said.
+  // is 2 + two bytes per scenery entry + two group bytes (rules.groupBytes)
+  // and one per position for each object group. At one byte an entry the 256
+  // below would be 249, and nothing would be said.
   const atlas = atlasFor(TABLE);
   const room = atlas.rooms[0];
   room.scenery = [];
   for (let i = 0; i < 7; i++) room.scenery.push({ template: 'scenery_walls_0' });
   room.objects = [];
-  // 2 + 14 = 16 so far; 26 groups of 8 add 26 * 9 = 234, making 250; a
-  // group of 1 more adds 2, to 252; one of 4 adds 5, to 257 -- over.
-  for (let i = 0; i < 26; i++) {
+  // 2 + 14 = 16 so far; 23 groups of 8 add 23 * 10 = 230, making 246; a
+  // group of 1 more adds 3, to 249; one of 5 adds 7, to 256 -- over.
+  for (let i = 0; i < 23; i++) {
     room.objects.push({ template: 'object_block', positions: [] });
     for (let j = 0; j < 8; j++) room.objects[i].positions.push({ u: 0, v: 0, z: 0 });
   }
@@ -1168,8 +1183,9 @@ test('checkAtlas: a table\'s two bytes an entry reach the record\'s skip byte', 
   };
   assert.deepStrictEqual(skips(), []);
   room.objects.push({ template: 'object_block', positions: [{ u: 0, v: 0, z: 0 }, { u: 0, v: 0, z: 0 },
-                                                            { u: 0, v: 0, z: 0 }, { u: 0, v: 0, z: 0 }] });
-  assert.deepStrictEqual(skips(), ['the record is 257 bytes; the skip byte holds 255']);
+                                                            { u: 0, v: 0, z: 0 }, { u: 0, v: 0, z: 0 },
+                                                            { u: 0, v: 0, z: 0 }] });
+  assert.deepStrictEqual(skips(), ['the record is 256 bytes; the skip byte holds 255']);
 });
 
 test('addScenery: a table doorway starts walled up, and anything else has no destination', function () {
