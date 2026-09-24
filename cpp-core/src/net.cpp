@@ -106,8 +106,16 @@ bool Listener::listen(const std::string& host, uint16_t port, std::string& error
         error = "socket() failed";
         return false;
     }
+#ifndef _WIN32
+    // Elsewhere this is what lets a restarted server rebind while the last
+    // one's connections sit in TIME_WAIT. Windows needs no help with that,
+    // and there SO_REUSEADDR means something else entirely: a second socket
+    // may bind a port another is already listening on, and connections go
+    // to either -- which is how a second zx_server started on the same ports
+    // used to come up quietly sharing them with the first.
     int yes = 1;
     ::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&yes), sizeof yes);
+#endif
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -154,5 +162,36 @@ void Listener::close() {
 }
 
 Listener::~Listener() { close(); }
+
+Listener::Listener(Listener&& other) noexcept : handle_(other.handle_) {
+    other.handle_ = INVALID_HANDLE;
+}
+
+Listener& Listener::operator=(Listener&& other) noexcept {
+    if (this != &other) {
+        close();
+        handle_ = other.handle_;
+        other.handle_ = INVALID_HANDLE;
+    }
+    return *this;
+}
+
+bool Listener::valid() const { return handle_ != INVALID_HANDLE; }
+
+uint16_t Listener::port() const {
+    if (!valid()) {
+        return 0;
+    }
+    sockaddr_in addr{};
+#ifdef _WIN32
+    int len = sizeof addr;
+#else
+    socklen_t len = sizeof addr;
+#endif
+    if (::getsockname(as_socket(handle_), reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+        return 0;
+    }
+    return ntohs(addr.sin_port);
+}
 
 } // namespace zx::net

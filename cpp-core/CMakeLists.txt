@@ -105,6 +105,7 @@ add_executable(zx_server
   src/profile_report.cpp
   src/rom_source.cpp
   src/screen_stream.cpp
+  src/server_registry.cpp
 )
 target_link_libraries(zx_server PRIVATE zx_core)
 target_compile_options(zx_server PRIVATE ${ZX_WARNINGS})

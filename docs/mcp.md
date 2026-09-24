@@ -73,6 +73,7 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `set_write_overlay(enabled, opacity_percent, fade_percent)` | Dim the picture and show every byte written to the screen bitmap at full brightness, lifted a chosen amount, cleared each frame or faded across several (see [display-write overlay](vscode-debugging.md#display-write-overlay)) |
 | `set_graphics_view(source, address, format, width, height, count, pin, …)` | Point VS Code's graphics panel at some bytes and say how to draw them, or with `pin` add them to its sheet (see [graphics viewer](vscode-debugging.md#graphics-viewer), and [the atlas](graphics-atlas.md) for what its exports hold). The only tool that moves something in the editor rather than in the machine |
 | `get_audio(duration_ms, include_wav)` | Measure the beeper: sample count, RMS, peak and pitch in Hz (C++ core only) |
+| `server_info()` | Which emulator this is: its pid, the DAP, MCP, screen and audio ports it is really on, when it started, its ROMs and the program last loaded by path, and where it advertises itself (see [more than one emulator](vscode-debugging.md#more-than-one-emulator)) |
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border, call stack, and `rewind` (built with it), `in_past` and `behind_tstates` |
 | `resolve_symbol(name)` | Symbol name → address (loaded program's own debug info first, then the ROM's) |
 | `resolve_address(addr)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |

@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
+#include <utility>
 
 namespace zx {
 namespace {
@@ -71,7 +72,10 @@ void serve_screen_stream(Engine& engine, const std::string& host, uint16_t port)
     }
     std::printf("Screen stream server listening on %s:%u\n", host.c_str(), unsigned(port));
     std::fflush(stdout);
+    serve_screen_stream(engine, std::move(listener));
+}
 
+void serve_screen_stream(Engine& engine, net::Listener listener) {
     for (;;) {
         net::Socket sock = listener.accept();
         if (!sock.valid()) {

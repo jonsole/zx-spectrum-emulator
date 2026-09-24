@@ -24,7 +24,15 @@ const { activateAsmLanguage } = require('./asm_language');
 const { activateProfile } = require('./profile_view');
 const { activateRewind } = require('./rewind_view');
 const { activateWatchpoints } = require('./watchpoint_view');
-const { activateServer, deactivateServer, ports: serverPorts } = require('./server_view');
+const http = require('http');
+const {
+  activateServer,
+  deactivateServer,
+  ports: serverPorts,
+  servers: liveServers,
+  portsOfSession,
+} = require('./server_view');
+const { describeServer, detailServer, sameServer, fromServerInfo } = require('./server_registry');
 const { activatePrograms } = require('./program_view');
 const { activateTapeDesigner } = require('./tape_view');
 const graphicsModel = require('./graphics_model');
@@ -41,9 +49,11 @@ const {
   normaliseView,
 } = require('./screen_scaling');
 
-// The screen and audio ports are zxspectrum.server.screenPort and .audioPort
-// (serverPorts()), the same settings a server the extension starts is given.
+// Each screen panel's ports are those of the server it shows -- asked of the
+// session, or read from the server's advert -- and zxspectrum.server.*Port
+// (serverPorts()) only until one of those has answered.
 const SCREEN_HOST = '127.0.0.1';
+const SCREEN_VIEW_TYPE = 'zxspectrumScreen';
 const RECONNECT_DELAY_MS = 1000;
 
 // How often the row counter is refreshed while a capture runs. traceStatus
@@ -65,7 +75,6 @@ const GRAPHICS_POLL_MS = 250;
 // paced for the eye. It only ticks while the pane is actually visible.
 const TAPE_POLL_MS = 400;
 
-let panel;
 let tracePanel;
 let graphicsPanel;
 let graphicsFile;   // the file "Choose file..." last picked
@@ -93,19 +102,11 @@ let graphicsAppliedVersion = 0;
 let traceFile;      // the .zxtrace currently shown
 let traceWatcher;   // reloads the panel when that file is recaptured
 let tracePoll;      // ticks while a live capture is running
-let socket;
-let reconnectTimer;
-let recvBuffer = Buffer.alloc(0);
-
 let tapeProvider;   // the block list shown in the debug sidebar
 let tapeView;
 let tapePoll;       // ticks while that pane is visible
 const uiContextKeys = new Map(); // last value pushed for each when-clause key
 
-let audioSocket;
-let audioReconnectTimer;
-let audioBuffer = Buffer.alloc(0);
-let audioPreambleSeen = false;
 // The screen panel's volume, which reaches both the panel's own playback and
 // the server's native sound device; 0 is mute, and the level before a mute is
 // kept so the speaker button can go back to it. Both are kept across reloads,
@@ -137,7 +138,8 @@ function activate(context) {
   activateRewind(context, zxDebugSession);
   activateWatchpoints(context, zxDebugSession);
   context.subscriptions.push(
-    vscode.commands.registerCommand('zxspectrum.showScreen', () => showScreenPanel(context))
+    vscode.commands.registerCommand('zxspectrum.showScreen', () => showScreenPanel(context)),
+    vscode.commands.registerCommand('zxspectrum.showServerScreen', () => pickServerScreen(context))
   );
   context.subscriptions.push(
     vscode.commands.registerCommand('zxspectrum.showTrace', () => showTracePanel(context))
@@ -163,9 +165,11 @@ function activate(context) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       // Whoever changed it -- the title-bar button, the Settings editor, a
-      // settings.json edit -- the open panel follows.
-      if (panel && event.affectsConfiguration('zxspectrum.screen')) {
-        panel.webview.postMessage({ view: screenView() });
+      // settings.json edit -- every open panel follows.
+      if (event.affectsConfiguration('zxspectrum.screen')) {
+        for (const screen of screenPanels()) {
+          screen.post({ view: screenView() });
+        }
       }
     })
   );
@@ -275,7 +279,9 @@ function activate(context) {
         // A new server's graphics-view version restarts at 0, so what this
         // session has already applied must not be held against it.
         graphicsAppliedVersion = 0;
+        zxSessions.set(session.id, { session, server: null });
         showScreenPanel(context);
+        followActiveSession();
         startTapePolling();
       }
       refreshSpeedStatus();
@@ -287,7 +293,11 @@ function activate(context) {
   // capture's story too -- the panel goes back to "no debug session" rather
   // than sitting on a row count that has stopped moving.
   context.subscriptions.push(
-    vscode.debug.onDidTerminateDebugSession(() => {
+    vscode.debug.onDidTerminateDebugSession((session) => {
+      // The following panel stays on the server it was showing: a restart
+      // comes straight back to it, and the picture should not blink away
+      // in between.
+      zxSessions.delete(session.id);
       stopTracePolling();
       stopTapePolling();
       refreshTape(undefined);
@@ -333,6 +343,9 @@ function activate(context) {
       // A server that has just started is at full volume, whatever the
       // panel says.
       sendVolume();
+      // A second session can be on a second machine; the screen goes with
+      // whichever is being debugged.
+      followActiveSession();
       // A view can be set over MCP before VS Code is there to hear it. This is
       // the event that reliably has a session to ask, so it is where the
       // catching up happens.
@@ -444,32 +457,390 @@ async function pickSpeed() {
   await applySpeed(choice.uncapped ? { uncapped: true } : { multiplier: choice.multiplier });
 }
 
-function showScreenPanel(context) {
-  if (panel) {
-    panel.reveal(vscode.ViewColumn.Beside);
+// ---- screen panels -----------------------------------------------------------
+//
+// One panel per emulator being watched. The first -- "the" screen panel, which
+// a launch opens and Show Screen brings back -- follows the debugger: it shows
+// whichever server the active zxspectrum session is on, and with no session,
+// the last one it showed. Show Screen of... opens more, each on a server
+// picked from the ones advertised on this machine (server_registry.js), and
+// each stays on that server until it is closed.
+//
+// Which server a session is on is asked of the session itself (serverInfo),
+// since a launch can name ports of its own or ask for free ones; the ports it
+// was pointed at stand in for a server too old to answer.
+
+let followPanel;               // the ScreenPanel that follows the debugger
+const pinnedPanels = new Set(); // the ones opened on a server of their own
+// Every zxspectrum session there is, by id, with the server it is on once
+// known -- VS Code keeps no list of sessions to ask.
+const zxSessions = new Map();
+
+// The server in the settings, known by its ports alone: what the panel shows
+// before any session has said otherwise.
+function settingsServer() {
+  return { pid: null, host: SCREEN_HOST, ports: Object.assign({}, serverPorts()), program: null };
+}
+
+// The server a session is on. Asked once and remembered; until the session
+// can answer (it may not have initialised yet), the ports it was started
+// against, which are the right ones for everything but a server too old to
+// say.
+async function serverOfSession(session) {
+  const entry = zxSessions.get(session.id);
+  if (entry && entry.server) {
+    return entry.server;
+  }
+  let server = null;
+  try {
+    server = fromServerInfo(await session.customRequest('serverInfo'));
+  } catch (err) {
+    // not initialised yet, or an older server
+  }
+  if (!server) {
+    const p = portsOfSession(session);
+    return p ? { pid: null, host: SCREEN_HOST, ports: Object.assign({}, p), program: null }
+      : settingsServer();
+  }
+  if (entry) {
+    entry.server = server;
+  }
+  return server;
+}
+
+// A zxspectrum session on `server`, preferring the active one: where a
+// panel's keys and volume go.
+function sessionOnServer(server) {
+  const active = zxDebugSession();
+  const activeEntry = active && zxSessions.get(active.id);
+  const matches = (entry) => {
+    if (entry.server) {
+      return sameServer(entry.server, server);
+    }
+    const p = portsOfSession(entry.session);
+    return !!p && p.dap === server.ports.dap;
+  };
+  if (activeEntry && matches(activeEntry)) {
+    return active;
+  }
+  for (const entry of zxSessions.values()) {
+    if (matches(entry)) {
+      return entry.session;
+    }
+  }
+  return undefined;
+}
+
+// Moves the following panel to the active session's server.
+async function followActiveSession() {
+  const session = zxDebugSession();
+  if (!followPanel || !session) {
     return;
   }
-  panel = vscode.window.createWebviewPanel(
-    'zxspectrumScreen',
-    'ZX Spectrum Screen',
-    vscode.ViewColumn.Beside,
-    { enableScripts: true, retainContextWhenHidden: true }
-  );
-  // In the page itself rather than posted after it: a message sent before the
-  // webview's script has run is not guaranteed to arrive.
-  panel.webview.html = getHtml(screenView(), audioVolume, audioVolumeBeforeMute);
-  panel.onDidDispose(
-    () => {
-      panel = undefined;
-      disconnectStream();
-      disconnectAudioStream();
-    },
-    null,
-    context.subscriptions
-  );
-  panel.webview.onDidReceiveMessage(handleWebviewMessage, null, context.subscriptions);
-  connectStream();
-  connectAudioStream();
+  const server = await serverOfSession(session);
+  if (followPanel && zxDebugSession() === session) {
+    followPanel.retarget(server);
+  }
+}
+
+class ScreenPanel {
+  constructor(context, server, follows) {
+    this.server = server;
+    this.follows = follows;
+    this.screenSocket = undefined;
+    this.screenTimer = undefined;
+    this.screenBuffer = Buffer.alloc(0);
+    this.audioSocket = undefined;
+    this.audioTimer = undefined;
+    this.audioBuffer = Buffer.alloc(0);
+    this.audioPreambleSeen = false;
+    // One connection at a time for keys sent over MCP, so a key's release
+    // can never overtake its press.
+    this.mcpAgent = new http.Agent({ keepAlive: true, maxSockets: 1 });
+    this.panel = vscode.window.createWebviewPanel(
+      SCREEN_VIEW_TYPE,
+      this.title(),
+      vscode.ViewColumn.Beside,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    // In the page itself rather than posted after it: a message sent before
+    // the webview's script has run is not guaranteed to arrive.
+    this.panel.webview.html = getHtml(screenView(), audioVolume, audioVolumeBeforeMute);
+    this.panel.onDidDispose(() => this.dispose(), null, context.subscriptions);
+    this.panel.webview.onDidReceiveMessage((message) => this.onMessage(message), null,
+      context.subscriptions);
+    this.connect();
+  }
+
+  title() {
+    const s = this.server;
+    // The usual case, one emulator on the usual ports, keeps the plain name.
+    if (this.follows && s.ports.dap === serverPorts().dap) {
+      return 'ZX Spectrum Screen';
+    }
+    return `ZX Spectrum Screen — ${s.pid ? describeServer(s) : ':' + s.ports.dap}`;
+  }
+
+  // Brought forward where it already is, never moved. Beside means beside
+  // the active editor, and on a restart that is wherever the last session
+  // stopped -- so revealing Beside carried the panel into another group,
+  // resizing it or burying it behind a source tab. Already on show, it is
+  // left alone, and focus stays in the editor either way.
+  show() {
+    if (!this.panel.visible) {
+      this.panel.reveal(this.panel.viewColumn, true);
+    }
+  }
+
+  // Points the panel at `server`, reconnecting only if its streams moved:
+  // the same server described better (its pid, its program) just retitles.
+  retarget(server) {
+    const moved = server.ports.screen !== this.server.ports.screen
+      || server.ports.audio !== this.server.ports.audio
+      || (server.host || SCREEN_HOST) !== (this.server.host || SCREEN_HOST);
+    this.server = server;
+    this.panel.title = this.title();
+    if (moved) {
+      this.disconnect();
+      this.connect();
+    }
+  }
+
+  post(message) {
+    this.panel.webview.postMessage(message);
+  }
+
+  connect() {
+    this.connectScreen();
+    if (this.server.ports.audio) {
+      this.connectAudio();
+    }
+  }
+
+  disconnect() {
+    for (const kind of ['screen', 'audio']) {
+      const socket = this[kind + 'Socket'];
+      if (socket) {
+        socket.removeAllListeners();
+        socket.destroy();
+        this[kind + 'Socket'] = undefined;
+      }
+      if (this[kind + 'Timer']) {
+        clearTimeout(this[kind + 'Timer']);
+        this[kind + 'Timer'] = undefined;
+      }
+    }
+  }
+
+  // The server gets restarted often during development (a code change needs
+  // a fresh process) -- reconnecting automatically instead of giving up on
+  // the first drop means the panel recovers on its own instead of needing to
+  // be closed and reopened every time.
+  reconnectLater(kind) {
+    if (this.disposed || this[kind + 'Timer']) {
+      return;
+    }
+    this[kind + 'Timer'] = setTimeout(() => {
+      this[kind + 'Timer'] = undefined;
+      if (!this.disposed) {
+        if (kind === 'screen') {
+          this.connectScreen();
+        } else {
+          this.connectAudio();
+        }
+      }
+    }, RECONNECT_DELAY_MS);
+  }
+
+  connectScreen() {
+    this.screenBuffer = Buffer.alloc(0);
+    const socket = net.connect(this.server.ports.screen, this.server.host || SCREEN_HOST);
+    this.screenSocket = socket;
+    socket.on('data', (chunk) => {
+      this.screenBuffer = Buffer.concat([this.screenBuffer, chunk]);
+      // A frame is a 4-byte big-endian length prefix + that many PNG bytes
+      // (see cpp-core/src/screen_stream.cpp) -- loop in case several frames
+      // arrived in one chunk, and leave a partial frame buffered for the
+      // next 'data' event rather than assuming chunk boundaries line up with
+      // frame boundaries (they generally won't).
+      while (this.screenBuffer.length >= 4) {
+        const length = this.screenBuffer.readUInt32BE(0);
+        if (this.screenBuffer.length < 4 + length) break;
+        const frame = this.screenBuffer.subarray(4, 4 + length);
+        this.screenBuffer = this.screenBuffer.subarray(4 + length);
+        this.post({ image: frame.toString('base64') });
+      }
+    });
+    socket.on('error', () => this.reconnectLater('screen'));
+    socket.on('close', () => this.reconnectLater('screen'));
+  }
+
+  connectAudio() {
+    this.audioBuffer = Buffer.alloc(0);
+    this.audioPreambleSeen = false;
+    const socket = net.connect(this.server.ports.audio, this.server.host || SCREEN_HOST);
+    this.audioSocket = socket;
+    socket.on('data', (chunk) => {
+      this.audioBuffer = Buffer.concat([this.audioBuffer, chunk]);
+
+      // A one-off preamble: "ZXA2", a big-endian u32 sample rate, then the
+      // server's target latency in ms. Both travel with the stream so
+      // neither is hardcoded here, and so the server's --audio-latency-ms is
+      // the single knob for how deep the panel buffers too.
+      if (!this.audioPreambleSeen) {
+        if (this.audioBuffer.length < 12) return;
+        const magic = this.audioBuffer.subarray(0, 4).toString('latin1');
+        const rate = this.audioBuffer.readUInt32BE(4);
+        const latencyMs = this.audioBuffer.readUInt32BE(8);
+        this.audioBuffer = this.audioBuffer.subarray(12);
+        this.audioPreambleSeen = true;
+        if (magic !== 'ZXA2') {
+          // An older server, or something else altogether listening on that
+          // port. Stop rather than feed the speakers whatever it is sending.
+          socket.removeAllListeners();
+          socket.destroy();
+          this.audioSocket = undefined;
+          return;
+        }
+        this.post({ audioRate: rate, audioLatencyMs: latencyMs });
+      }
+
+      // Then [4-byte big-endian byte length][mono int16 LE samples] blocks,
+      // reassembled exactly the way the screen's PNG frames are.
+      while (this.audioBuffer.length >= 4) {
+        const length = this.audioBuffer.readUInt32BE(0);
+        if (this.audioBuffer.length < 4 + length) break;
+        const block = this.audioBuffer.subarray(4, 4 + length);
+        this.audioBuffer = this.audioBuffer.subarray(4 + length);
+        this.post({ audio: block.toString('base64') });
+      }
+    });
+    socket.on('error', () => this.reconnectLater('audio'));
+    socket.on('close', () => this.reconnectLater('audio'));
+  }
+
+  // Keys typed into the panel (see getHtml()'s script) and its volume
+  // slider. Keys go to the machine this panel shows: through a debug session
+  // on it when there is one (dap.cpp's keyDown/keyUp), and otherwise
+  // straight to its MCP port -- a server nobody is debugging can still be
+  // played. Failures are dropped quietly: this fires on every keystroke, and
+  // a popup per keypress would be far too noisy.
+  async onMessage(message) {
+    if (message.type === 'setVolume') {
+      audioVolume = clampPercent(message.volume, audioVolume);
+      audioVolumeBeforeMute = clampPercent(message.before, audioVolumeBeforeMute) || 100;
+      // Stored when a drag ends rather than at every step of it.
+      if (message.persist) {
+        volumeState.update(VOLUME_KEY, audioVolume);
+        volumeState.update(VOLUME_BEFORE_MUTE_KEY, audioVolumeBeforeMute);
+      }
+      sendVolume(sessionOnServer(this.server));
+      return;
+    }
+    if (message.type !== 'keyDown' && message.type !== 'keyUp') return;
+    const session = sessionOnServer(this.server);
+    if (session) {
+      try {
+        await session.customRequest(message.type, { key: message.key });
+      } catch (err) {
+        // Most likely cause: a server too old to have keyDown/keyUp.
+      }
+      return;
+    }
+    if (this.server.ports.mcp) {
+      callMcpTool(this.server, this.mcpAgent, message.type === 'keyDown' ? 'key_down' : 'key_up',
+        { key: message.key });
+    }
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.disconnect();
+    this.mcpAgent.destroy();
+    if (followPanel === this) {
+      followPanel = undefined;
+    }
+    pinnedPanels.delete(this);
+  }
+}
+
+// Every open screen panel.
+function screenPanels() {
+  const all = Array.from(pinnedPanels);
+  if (followPanel) {
+    all.unshift(followPanel);
+  }
+  return all;
+}
+
+// One MCP tool call, fire and forget. MCP here is plain JSON-RPC over HTTP
+// POST with nothing kept per session (mcp_server.cpp), so a call needs no
+// handshake first.
+function callMcpTool(server, agent, name, args) {
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+    params: { name, arguments: args } });
+  const request = http.request({
+    host: server.host || SCREEN_HOST,
+    port: server.ports.mcp,
+    path: '/mcp',
+    method: 'POST',
+    agent,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'Content-Length': Buffer.byteLength(body)
+    }
+  }, (response) => response.resume());
+  request.on('error', () => {});
+  request.end(body);
+}
+
+function showScreenPanel(context) {
+  if (followPanel) {
+    followPanel.show();
+    return;
+  }
+  followPanel = new ScreenPanel(context, settingsServer(), true);
+  followActiveSession();
+}
+
+// Show Screen of...: every emulator advertised on this machine, and a panel
+// on the one picked -- brought forward if one is already showing it.
+async function pickServerScreen(context) {
+  const list = liveServers();
+  if (list.length === 0) {
+    vscode.window.showInformationMessage('No ZX Spectrum emulator is running -- or none new ' +
+      'enough to advertise itself (a zx_server built before server adverts, 2026-09-23).');
+    return;
+  }
+  const items = list.map((server) => {
+    const marks = [];
+    if (sessionOnServer(server)) {
+      marks.push('$(debug) debugging');
+    }
+    if (screenPanels().some((p) => sameServer(p.server, server))) {
+      marks.push('$(eye) on screen');
+    }
+    return { label: describeServer(server), description: marks.join('  '),
+      detail: detailServer(server), server };
+  });
+  const pick = await vscode.window.showQuickPick(items, {
+    title: 'ZX Spectrum: Show Screen of...',
+    placeHolder: 'Every emulator running on this machine, newest first'
+  });
+  if (!pick) {
+    return;
+  }
+  const showing = screenPanels().find((p) => sameServer(p.server, pick.server));
+  if (showing) {
+    showing.retarget(pick.server);
+    showing.show();
+    return;
+  }
+  pinnedPanels.add(new ScreenPanel(context, pick.server, false));
 }
 
 // How the screen panel draws the picture, from the settings -- see
@@ -574,35 +945,6 @@ function percentItems(items, setting, current, presets, name) {
   });
 }
 
-// Forwards a keydown/keyup captured by the webview (see getHtml()'s script)
-// to the emulator via a DAP custom request (server-side: dap.cpp's
-// "keyDown"/"keyUp" handlers). Silently drops the keypress if there's no
-// active zxspectrum session -- nothing sensible to do with it otherwise,
-// and this fires on every keystroke so a warning popup per keypress would
-// be far too noisy.
-async function handleWebviewMessage(message) {
-  if (message.type === 'setVolume') {
-    audioVolume = clampPercent(message.volume, audioVolume);
-    audioVolumeBeforeMute = clampPercent(message.before, audioVolumeBeforeMute) || 100;
-    // Stored when a drag ends rather than at every step of it.
-    if (message.persist) {
-      volumeState.update(VOLUME_KEY, audioVolume);
-      volumeState.update(VOLUME_BEFORE_MUTE_KEY, audioVolumeBeforeMute);
-    }
-    sendVolume();
-    return;
-  }
-  if (message.type !== 'keyDown' && message.type !== 'keyUp') return;
-  const session = vscode.debug.activeDebugSession;
-  if (!session || session.type !== 'zxspectrum') return;
-  try {
-    await session.customRequest(message.type, { key: message.key });
-  } catch (err) {
-    // Most likely cause: a server too old to have the keyDown/keyUp custom
-    // requests.
-  }
-}
-
 // A whole percentage from 0 to 100, or `fallback` when it is not a number.
 function clampPercent(value, fallback) {
   const n = Math.round(Number(value));
@@ -610,65 +952,16 @@ function clampPercent(value, fallback) {
   return n < 0 ? 0 : n > 100 ? 100 : n;
 }
 
-// Tells the server how loud its native sound device should be. Quietly does
-// nothing without a session, and against a server too old to know the request
-// -- the panel's own playback follows the slider either way.
-async function sendVolume() {
-  const session = vscode.debug.activeDebugSession;
-  if (!session || session.type !== 'zxspectrum') return;
+// Tells a server how loud its native sound device should be, through a
+// session on it -- the active one when none is named. Quietly does nothing
+// without one, and against a server too old to know the request: the panel's
+// own playback follows the slider either way.
+async function sendVolume(session = zxDebugSession()) {
+  if (!session) return;
   try {
     await session.customRequest('setAudioVolume', { volume: audioVolume });
   } catch (err) {
     // an older server
-  }
-}
-
-function connectStream() {
-  recvBuffer = Buffer.alloc(0);
-  socket = net.connect(serverPorts().screen, SCREEN_HOST);
-
-  socket.on('data', (chunk) => {
-    recvBuffer = Buffer.concat([recvBuffer, chunk]);
-    // A frame is a 4-byte big-endian length prefix + that many PNG bytes
-    // (see zxspectrum/server/screen_stream.py) -- loop in case multiple
-    // frames arrived in one chunk, and leave a partial frame buffered for
-    // the next 'data' event rather than assuming chunk boundaries line up
-    // with frame boundaries (they generally won't).
-    while (recvBuffer.length >= 4) {
-      const length = recvBuffer.readUInt32BE(0);
-      if (recvBuffer.length < 4 + length) break;
-      const frame = recvBuffer.subarray(4, 4 + length);
-      recvBuffer = recvBuffer.subarray(4 + length);
-      if (panel) {
-        panel.webview.postMessage({ image: frame.toString('base64') });
-      }
-    }
-  });
-  socket.on('error', scheduleReconnect);
-  socket.on('close', scheduleReconnect);
-}
-
-function scheduleReconnect() {
-  // The server gets restarted often during development (a code change
-  // needs a fresh process) -- reconnecting automatically instead of giving
-  // up on the first drop means the panel recovers on its own instead of
-  // needing to be closed and reopened every time.
-  if (!panel || reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = undefined;
-    if (panel) connectStream();
-  }, RECONNECT_DELAY_MS);
-}
-
-function disconnectStream() {
-  if (socket) {
-    socket.removeAllListeners();
-    socket.destroy();
-    socket = undefined;
-  }
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = undefined;
   }
 }
 
@@ -2192,70 +2485,6 @@ function webviewHtml(file) {
     .replace('<script>', '<script nonce="' + nonce + '">');
 }
 
-function connectAudioStream() {
-  audioBuffer = Buffer.alloc(0);
-  audioPreambleSeen = false;
-  audioSocket = net.connect(serverPorts().audio, SCREEN_HOST);
-
-  audioSocket.on('data', (chunk) => {
-    audioBuffer = Buffer.concat([audioBuffer, chunk]);
-
-    // A one-off preamble: "ZXA2", a big-endian u32 sample rate, then the
-    // server's target latency in ms. Both travel with the stream so neither
-    // is hardcoded here, and so the server's --audio-latency-ms is the single
-    // knob for how deep the panel buffers too.
-    if (!audioPreambleSeen) {
-      if (audioBuffer.length < 12) return;
-      const magic = audioBuffer.subarray(0, 4).toString('latin1');
-      const rate = audioBuffer.readUInt32BE(4);
-      const latencyMs = audioBuffer.readUInt32BE(8);
-      audioBuffer = audioBuffer.subarray(12);
-      audioPreambleSeen = true;
-      if (magic !== 'ZXA2') {
-        // An older server, or something else altogether listening on that
-        // port. Stop rather than feed the speakers whatever it is sending.
-        disconnectAudioStream();
-        return;
-      }
-      if (panel) panel.webview.postMessage({ audioRate: rate, audioLatencyMs: latencyMs });
-    }
-
-    // Then [4-byte big-endian byte length][mono int16 LE samples] blocks,
-    // reassembled exactly the way the screen's PNG frames are.
-    while (audioBuffer.length >= 4) {
-      const length = audioBuffer.readUInt32BE(0);
-      if (audioBuffer.length < 4 + length) break;
-      const block = audioBuffer.subarray(4, 4 + length);
-      audioBuffer = audioBuffer.subarray(4 + length);
-      if (panel) {
-        panel.webview.postMessage({ audio: block.toString('base64') });
-      }
-    }
-  });
-  audioSocket.on('error', scheduleAudioReconnect);
-  audioSocket.on('close', scheduleAudioReconnect);
-}
-
-function scheduleAudioReconnect() {
-  if (!panel || audioReconnectTimer) return;
-  audioReconnectTimer = setTimeout(() => {
-    audioReconnectTimer = undefined;
-    if (panel) connectAudioStream();
-  }, RECONNECT_DELAY_MS);
-}
-
-function disconnectAudioStream() {
-  if (audioSocket) {
-    audioSocket.removeAllListeners();
-    audioSocket.destroy();
-    audioSocket = undefined;
-  }
-  if (audioReconnectTimer) {
-    clearTimeout(audioReconnectTimer);
-    audioReconnectTimer = undefined;
-  }
-}
-
 function getNonce() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let text = '';
@@ -2681,8 +2910,9 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
 
 function deactivate() {
   deactivateServer();
-  disconnectStream();
-  disconnectAudioStream();
+  for (const screen of screenPanels()) {
+    screen.dispose();
+  }
   stopWatchingTrace();
   stopTracePolling();
   stopTapePolling();

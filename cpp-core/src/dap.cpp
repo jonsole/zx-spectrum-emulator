@@ -28,6 +28,7 @@
 #include "profile_report.h"
 #include "register_names.h"
 #include "rom_source.h"
+#include "server_registry.h"
 
 #include <nlohmann/json.hpp>
 
@@ -1222,6 +1223,10 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                          json{{"message", load_error}});
             }
         }
+        // What a list of servers calls this one: the tape when there is one,
+        // since an auto-started tape is what ends up running, and otherwise
+        // the snapshot -- or nothing, for a bare reset into the ROM.
+        note_program(!tape_path.empty() ? tape_path : snapshot_path);
 
         // Leaves the machine sitting in the ROM loader with no tape, ready for
         // one to be inserted later. Skipped when a tape was inserted AND
@@ -1767,6 +1772,14 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         }
         body = json{{"volume", engine.device_volume()}};
 
+    } else if (command == "serverInfo") {
+        // Not standard DAP: which server this is -- its pid, the ports it is
+        // really on and what it last loaded -- so the screen panel can follow
+        // a session to its own emulator rather than assume the ports in the
+        // settings. The advert's content, from server_registry.h; touches no
+        // machine state, so it answers mid-run.
+        body = server_info();
+
     } else if (command == "watchpoints") {
         body = watchpoints_json(engine, sources);
 
@@ -2199,6 +2212,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
             return envelope_response(conn, request_seq, command, false,
                                      json{{"message", load_error}});
         }
+        note_program(path);
         body = tape_body(engine.tape_status(), engine.tape_blocks());
 
     } else if (command == "saveSnapshot") {
@@ -2322,17 +2336,8 @@ void handle_connection(std::shared_ptr<Connection> conn, Engine& engine, Sources
 
 } // namespace
 
-void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16_t port,
+void serve_dap(Engine& engine, Sources& sources, net::Listener listener,
                bool exit_on_disconnect) {
-    net::Listener listener;
-    std::string error;
-    if (!listener.listen(host, port, error)) {
-        std::fprintf(stderr, "DAP server failed to start: %s\n", error.c_str());
-        return;
-    }
-    std::printf("DAP server listening on %s:%u\n", host.c_str(), unsigned(port));
-    std::fflush(stdout);
-
     engine.on_stopped([&engine, &sources](StopReason reason, uint16_t pc) {
         // A watchpoint stop is the one kind where the address is not the
         // interesting part: what changed, and what changed it, is. Read back

@@ -3,6 +3,7 @@
 // screen_stream.h.
 
 #include "engine.h"
+#include "net.h"
 
 #include <cstdint>
 #include <string>
@@ -25,5 +26,7 @@ namespace zx {
 /// samples.
 void serve_audio_stream(Engine& engine, const std::string& host, uint16_t port,
                         uint32_t latency_ms);
+/// The same, on a listener already bound (see serve_screen_stream).
+void serve_audio_stream(Engine& engine, net::Listener listener, uint32_t latency_ms);
 
 } // namespace zx

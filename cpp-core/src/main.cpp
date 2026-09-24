@@ -8,10 +8,13 @@
 #include "rom_source.h"
 #include "audio_device.h"
 #include "audio_stream.h"
+#include "net.h"
 #include "screen_stream.h"
+#include "server_registry.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -104,6 +107,9 @@ struct Args {
     /// default: a short-lived diagnostic script connecting alongside a
     /// long-running server shouldn't take the whole thing down.
     bool exit_on_disconnect = false;
+    /// Leaves out the advert (server_registry.h) that lets the VS Code
+    /// extension find this server without being told its ports.
+    bool no_advertise = false;
 };
 
 bool parse_args(int argc, char** argv, Args& args) {
@@ -184,6 +190,8 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.uncapped = true;
         } else if (flag == "--exit-on-disconnect") {
             args.exit_on_disconnect = true;
+        } else if (flag == "--no-advertise") {
+            args.no_advertise = true;
         } else {
             std::fprintf(stderr, "unknown argument: %s\n", flag.c_str());
             return false;
@@ -227,6 +235,37 @@ int main(int argc, char** argv) {
     Args args;
     if (!parse_args(argc, argv, args)) {
         return 2;
+    }
+
+    // Every port bound before anything else happens, and any that cannot be
+    // is the end of this process. They used to be bound each on its own
+    // thread, where a failure only stopped that one server -- so a second
+    // zx_server started on ports already taken lost its DAP, MCP and screen
+    // but lived on, holding the audio port and the sound card, with nothing
+    // to talk to it through. Binding here is also what makes a port of 0
+    // (any free one) reportable: the listener knows which it was given.
+    zx::net::Listener dap_listener;
+    zx::net::Listener mcp_listener;
+    zx::net::Listener screen_listener;
+    zx::net::Listener audio_listener;
+    {
+        std::string error;
+        if (!dap_listener.listen(args.dap_host, args.dap_port, error)) {
+            std::fprintf(stderr, "DAP server failed to start: %s\n", error.c_str());
+            return 1;
+        }
+        if (!mcp_listener.listen(args.mcp_host, args.mcp_port, error)) {
+            std::fprintf(stderr, "MCP server failed to start: %s\n", error.c_str());
+            return 1;
+        }
+        if (!screen_listener.listen(args.screen_host, args.screen_port, error)) {
+            std::fprintf(stderr, "Screen stream server failed to start: %s\n", error.c_str());
+            return 1;
+        }
+        if (!args.no_audio && !audio_listener.listen(args.audio_host, args.audio_port, error)) {
+            std::fprintf(stderr, "Audio stream server failed to start: %s\n", error.c_str());
+            return 1;
+        }
     }
 
     zx::Engine engine;
@@ -373,23 +412,73 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::thread audio_thread;
-    if (!args.no_audio) {
-        audio_thread = std::thread(
-            [&] {
-                zx::serve_audio_stream(engine, args.audio_host, args.audio_port,
-                                       args.audio_latency_ms);
-            });
+    // The ports as bound, which is what anyone looking for this server needs
+    // -- not what the command line said, when it said 0.
+    zx::ServerIdentity identity;
+    identity.host = args.dap_host;
+    identity.ports.dap = dap_listener.port();
+    identity.ports.mcp = mcp_listener.port();
+    identity.ports.screen = screen_listener.port();
+    identity.ports.audio = audio_listener.port();
+    identity.exe = argv[0];
+    {
+        std::error_code ec;
+        const std::filesystem::path exe = std::filesystem::absolute(argv[0], ec);
+        if (!ec) {
+            identity.exe = exe.u8string();
+        }
+    }
+    identity.roms = args.roms;
+    identity.audio_device = args.audio_device;
+    zx::set_server_identity(identity);
+    if (!args.tape.empty()) {
+        zx::note_program(args.tape);
     }
 
-    std::thread screen_thread(
-        [&] { zx::serve_screen_stream(engine, args.screen_host, args.screen_port); });
-    std::thread mcp_thread(
-        [&] { zx::serve_mcp(engine, sources, args.mcp_host, args.mcp_port); });
+    std::printf("DAP server listening on %s:%u\n", args.dap_host.c_str(),
+                unsigned(identity.ports.dap));
+    std::printf("MCP server listening on %s:%u (streamable-HTTP, /mcp)\n",
+                args.mcp_host.c_str(), unsigned(identity.ports.mcp));
+    std::printf("Screen stream server listening on %s:%u\n", args.screen_host.c_str(),
+                unsigned(identity.ports.screen));
+    if (!args.no_audio) {
+        std::printf("Audio stream server listening on %s:%u (%u Hz mono s16, %ums buffer)\n",
+                    args.audio_host.c_str(), unsigned(identity.ports.audio),
+                    unsigned(engine.audio_sample_rate()), unsigned(args.audio_latency_ms));
+    }
+    std::fflush(stdout);
+
+    std::thread audio_thread;
+    if (!args.no_audio) {
+        audio_thread = std::thread([&engine, &args, l = std::move(audio_listener)]() mutable {
+            zx::serve_audio_stream(engine, std::move(l), args.audio_latency_ms);
+        });
+    }
+    std::thread screen_thread([&engine, l = std::move(screen_listener)]() mutable {
+        zx::serve_screen_stream(engine, std::move(l));
+    });
+    std::thread mcp_thread([&engine, &sources, l = std::move(mcp_listener)]() mutable {
+        zx::serve_mcp(engine, sources, std::move(l));
+    });
+
+    // Last of all, so that an advert is a promise every server behind it is
+    // accepting: a launch waiting on the advert to learn its ports connects
+    // the moment it appears.
+    if (!args.no_advertise) {
+        std::string error;
+        const std::string dir = zx::advert_directory();
+        if (zx::advertise(dir, error)) {
+            zx::withdraw_on_exit();
+            std::printf("Advertised in %s\n", dir.c_str());
+        } else {
+            std::fprintf(stderr, "Not advertised: %s\n", error.c_str());
+        }
+        std::fflush(stdout);
+    }
 
     // DAP last and on this thread: it is the one that can end the process
     // (--exit-on-disconnect), and it is what the launch is waiting on.
-    zx::serve_dap(engine, sources, args.dap_host, args.dap_port, args.exit_on_disconnect);
+    zx::serve_dap(engine, sources, std::move(dap_listener), args.exit_on_disconnect);
     mcp_thread.join();
     screen_thread.join();
     if (audio_thread.joinable()) {

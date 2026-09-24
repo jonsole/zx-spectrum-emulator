@@ -14,6 +14,7 @@
   "main": "./extension.js",
   "activationEvents": [
     "onCommand:zxspectrum.showScreen",
+    "onCommand:zxspectrum.showServerScreen",
     "onCommand:zxspectrum.showTrace",
     "onCommand:zxspectrum.showGraphics",
     "onCommand:zxspectrum.showSelectionAsGraphics",
@@ -326,6 +327,10 @@
       {
         "command": "zxspectrum.showScreen",
         "title": "ZX Spectrum: Show Screen"
+      },
+      {
+        "command": "zxspectrum.showServerScreen",
+        "title": "ZX Spectrum: Show Screen of..."
       },
       {
         "command": "zxspectrum.showTrace",
@@ -928,6 +933,22 @@
         "configurationAttributes": {
           "launch": {
             "properties": {
+              "ports": {
+                "description": "Which emulator this session is on. Left out, the one on zxspectrum.server.*Port, started if nothing is there. \"auto\" starts a new one on free ports for this session alone, stopped when it ends -- so a second session is a second machine. An object names ports ({ \"dap\": 14711, \"screen\": 18500 }): whatever is listening there is joined, or a server is started on them; a port left out is the setting's. Ignored with debugServer.",
+                "oneOf": [
+                  { "type": "string", "enum": ["auto"] },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "dap": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "mcp": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "screen": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "audio": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "rom": {
                 "type": "string",
                 "description": "Path to a ROM image to load: 16K for the 48K, or 32K (ROM 0 then ROM 1, the usual 128.rom) for the 128K. Either can be loaded whatever machine is selected."
@@ -983,6 +1004,22 @@
           },
           "attach": {
             "properties": {
+              "ports": {
+                "description": "Which emulator this session is on. Left out, the one on zxspectrum.server.*Port, started if nothing is there. \"auto\" starts a new one on free ports for this session alone, stopped when it ends -- so a second session is a second machine. An object names ports ({ \"dap\": 14711, \"screen\": 18500 }): whatever is listening there is joined, or a server is started on them; a port left out is the setting's. Ignored with debugServer.",
+                "oneOf": [
+                  { "type": "string", "enum": ["auto"] },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "dap": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "mcp": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "screen": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                      "audio": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "sld": {
                 "type": "string",
                 "description": "Path to an sjasmplus SLD file, for source-level debugging of the program already running on the attached machine. Requires asm."
@@ -1010,6 +1047,18 @@
               "name": "ZX Spectrum: ${1:My program}",
               "type": "zxspectrum",
               "request": "launch",
+              "rom": "^\"\\${workspaceFolder}/roms/48.rom\"",
+              "snapshot": "^\"\\${workspaceFolder}/${2:program.sna}\""
+            }
+          },
+          {
+            "label": "ZX Spectrum: Launch on a new emulator",
+            "description": "Start an emulator of its own on free ports, beside any already running, and load a snapshot into it. Stopped when the session ends.",
+            "body": {
+              "name": "ZX Spectrum: ${1:My program} (own emulator)",
+              "type": "zxspectrum",
+              "request": "launch",
+              "ports": "auto",
               "rom": "^\"\\${workspaceFolder}/roms/48.rom\"",
               "snapshot": "^\"\\${workspaceFolder}/${2:program.sna}\""
             }

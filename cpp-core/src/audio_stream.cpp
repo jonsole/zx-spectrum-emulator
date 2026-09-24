@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace zx {
@@ -91,7 +92,10 @@ void serve_audio_stream(Engine& engine, const std::string& host, uint16_t port,
                 host.c_str(), unsigned(port), unsigned(engine.audio_sample_rate()),
                 unsigned(latency_ms));
     std::fflush(stdout);
+    serve_audio_stream(engine, std::move(listener), latency_ms);
+}
 
+void serve_audio_stream(Engine& engine, net::Listener listener, uint32_t latency_ms) {
     for (;;) {
         net::Socket sock = listener.accept();
         if (!sock.valid()) {

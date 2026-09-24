@@ -13,6 +13,10 @@
 // when VS Code closes (zxspectrum.server.stopOnExit). A server something else
 // started is only ever joined, and only stopped when asked, after a question.
 //
+// A configuration's `ports` points it at another server instead: named ports,
+// joined or started like the settings' server, or "auto" -- a server of the
+// session's own on free ports, stopped with it (see "other servers" below).
+//
 // The pure half -- where the executable is, how it is started -- is
 // server_launch.js.
 
@@ -23,7 +27,9 @@ const cp = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const os = require('os');
+const path = require('path');
 const launch = require('./server_launch');
+const registry = require('./server_registry');
 
 const HOST = '127.0.0.1';
 const START_TIMEOUT_MS = 20000;
@@ -142,7 +148,12 @@ async function ensureServer() {
   return starting;
 }
 
-async function startServer() {
+// Starts zx_server on `p` -- a port of 0 meaning any free one -- with the
+// settings' sound, ROMs and extra arguments. Resolves once it is serving,
+// with the process, a promise of its exit, and the ports it really got: read
+// back from its advert when any were 0, since only the server knows which
+// it was given. `onExit` hears about the exit whenever it comes.
+async function spawnServer(p, onExit) {
   const { exe, configured, exists } = locateServer();
   if (!exe) {
     const where = configured
@@ -152,7 +163,6 @@ async function startServer() {
     throw new StartError('Could not find the ZX Spectrum emulator (' +
       launch.exeName(process.platform) + '). ' + where);
   }
-  const p = ports();
   const root = launch.serverRoot(exe, folders());
   const config = settings();
   const args = launch.serverArgs({
@@ -162,32 +172,26 @@ async function startServer() {
     extra: config.get('args', [])
   });
 
-  setState('starting');
   output.appendLine(`> ${exe} ${args.join(' ')}`);
   output.appendLine(`  in ${root}`);
   let proc;
   try {
     proc = cp.spawn(exe, args, { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (err) {
-    setState('stopped');
     throw new StartError(`Could not start ${exe}: ${err.message}`);
   }
-  child = proc;
   proc.stdout.on('data', (chunk) => log(chunk.toString()));
   proc.stderr.on('data', (chunk) => log(chunk.toString()));
   let exitInfo = null;
-  childExit = new Promise((resolve) => {
+  const exited = new Promise((resolve) => {
     const finish = (code, signal) => {
       if (exitInfo) {
         return;
       }
       exitInfo = { code, signal };
-      output.appendLine(`[zx_server exited${code !== null ? ' with code ' + code : ''}` +
+      output.appendLine(`[zx_server ${proc.pid || ''} exited${code !== null ? ' with code ' + code : ''}` +
                         `${signal ? ' (' + signal + ')' : ''}]`);
-      if (child === proc) {
-        child = null;
-        refreshState();
-      }
+      onExit(proc);
       resolve();
     };
     proc.once('exit', finish);
@@ -197,25 +201,134 @@ async function startServer() {
     });
   });
 
+  // Fixed ports are ready when the DAP port answers. Free ones are only
+  // known once the server says, which it does by advertising -- and it
+  // advertises once everything is bound, so the advert is the readiness
+  // signal too.
+  const anyPort = !p.dap || !p.mcp || !p.screen || !p.audio;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (exitInfo) {
-      setState('stopped');
       output.show(true);
       throw new StartError('The ZX Spectrum emulator stopped as it started -- see the ' +
         '"ZX Spectrum Emulator" output for why (a port in use, or a ROM it could not read).');
     }
-    if (await probe(p.dap, 300)) {
-      setState('running');
-      return;
+    if (anyPort) {
+      const server = advertOf(proc.pid);
+      if (server) {
+        return { proc, exited, server };
+      }
+    } else if (await probe(p.dap, 300)) {
+      return { proc, exited, server: advertOf(proc.pid) || { pid: proc.pid, ports: p } };
     }
     await new Promise((r) => setTimeout(r, 150));
   }
   proc.kill();
-  setState('stopped');
   output.show(true);
-  throw new StartError(`The ZX Spectrum emulator did not start listening on port ${p.dap} ` +
-    `within ${START_TIMEOUT_MS / 1000} seconds.`);
+  throw new StartError(anyPort
+    ? `The ZX Spectrum emulator did not say which ports it was given within ${START_TIMEOUT_MS / 1000} ` +
+      `seconds -- it writes them to ${advertDir()}, which a build older than the extension does not.`
+    : `The ZX Spectrum emulator did not start listening on port ${p.dap} ` +
+      `within ${START_TIMEOUT_MS / 1000} seconds.`);
+}
+
+async function startServer() {
+  setState('starting');
+  try {
+    const started = await spawnServer(ports(), (proc) => {
+      if (child === proc) {
+        child = null;
+        refreshState();
+      }
+    });
+    child = started.proc;
+    childExit = started.exited;
+    setState('running');
+  } catch (err) {
+    setState('stopped');
+    throw err;
+  }
+}
+
+// ---- other servers -----------------------------------------------------------
+//
+// A launch configuration can name a server of its own with `ports`: a set of
+// ports (joined if something is there, started if not), or "auto" -- a new
+// server on free ports, for that session alone, stopped when it ends. What
+// makes a second debug session a second machine rather than a second view of
+// the first. The status bar item stays about the server in the settings.
+
+// Servers this window started other than the one in the settings, by pid:
+// { proc, sessionId } -- sessionId set for an "auto" server, which lives and
+// dies with its session.
+const extraServers = new Map();
+// The ports each session was pointed at, by session id: what the screen
+// panel falls back on for a server too old to answer serverInfo.
+const sessionPorts = new Map();
+
+function advertDir() {
+  return registry.advertDirectory({
+    env: process.env, platform: process.platform, home: os.homedir(), tmp: os.tmpdir()
+  });
+}
+
+function advertOf(pid) {
+  const dir = advertDir();
+  try {
+    const server = registry.parseAdvert(fs.readFileSync(path.join(dir, `${pid}.json`), 'utf8'));
+    return server && server.pid === pid ? server : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Every server advertised on this machine that is still running.
+function servers() {
+  return registry.liveServers(advertDir(), {
+    readdir: (dir) => fs.readdirSync(dir),
+    readFile: (file) => fs.readFileSync(file, 'utf8'),
+    unlink: (file) => fs.unlinkSync(file),
+    alive: registry.processAlive
+  });
+}
+
+async function spawnExtra(p, sessionId) {
+  const started = await spawnServer(p, (proc) => extraServers.delete(proc.pid));
+  extraServers.set(started.proc.pid, { proc: started.proc, sessionId });
+  return started.server;
+}
+
+// A server on these ports: whatever is listening there, or a new one.
+async function ensureServerOn(p) {
+  const defaults = ports();
+  if (['dap', 'mcp', 'screen', 'audio'].every((key) => p[key] === defaults[key])) {
+    await ensureServer();
+    return;
+  }
+  if (await probe(p.dap)) {
+    return;
+  }
+  if (!settings().get('autoStart', true)) {
+    throw new StartError(`Nothing is listening on port ${p.dap}, and ` +
+      'zxspectrum.server.autoStart is off. Start the emulator, or turn the setting on.');
+  }
+  await spawnExtra(p, null);
+}
+
+// A new server for one session. A restart comes back here with the same
+// session, and gets a fresh machine rather than the old one's leftovers.
+async function startSessionServer(session) {
+  stopSessionServers(session.id);
+  return spawnExtra({ dap: 0, mcp: 0, screen: 0, audio: 0 }, session.id);
+}
+
+function stopSessionServers(sessionId) {
+  for (const [pid, entry] of extraServers) {
+    if (entry.sessionId === sessionId) {
+      extraServers.delete(pid);
+      entry.proc.kill();
+    }
+  }
 }
 
 // Ends the zxspectrum debug session first: stopping its server under it
@@ -323,10 +436,12 @@ async function commandMenu() {
     ? [
         { label: '$(debug-restart) Restart Emulator', command: 'zxspectrum.serverRestart' },
         { label: '$(debug-stop) Stop Emulator', command: 'zxspectrum.serverStop' },
+        { label: '$(device-desktop) Show Screen of...', command: 'zxspectrum.showServerScreen' },
         { label: '$(output) Show Emulator Log', command: 'zxspectrum.serverLog' }
       ]
     : [
         { label: '$(play) Start Emulator', command: 'zxspectrum.serverStart' },
+        { label: '$(device-desktop) Show Screen of...', command: 'zxspectrum.showServerScreen' },
         { label: '$(output) Show Emulator Log', command: 'zxspectrum.serverLog' }
       ];
   const pick = await vscode.window.showQuickPick(items, { placeHolder: statusItem.tooltip });
@@ -343,17 +458,36 @@ function activateServer(context) {
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory('zxspectrum', {
-      async createDebugAdapterDescriptor() {
+      async createDebugAdapterDescriptor(session) {
         // A failure is thrown rather than shown: VS Code reports a launch
         // that could not start itself, and a second notice would repeat it.
         try {
-          await ensureServer();
+          const asked = registry.launchPorts(session.configuration.ports, ports());
+          if (asked.error) {
+            throw new StartError(asked.error);
+          }
+          let p;
+          if (!asked.request) {
+            await ensureServer();
+            p = ports();
+          } else if (asked.request.auto) {
+            const server = await startSessionServer(session);
+            p = Object.assign({}, server.ports);
+          } else {
+            await ensureServerOn(asked.request.ports);
+            p = asked.request.ports;
+          }
+          sessionPorts.set(session.id, p);
+          return new vscode.DebugAdapterServer(p.dap, HOST);
         } catch (err) {
           output.appendLine(`[${err.message}]`);
           throw err;
         }
-        return new vscode.DebugAdapterServer(ports().dap, HOST);
       }
+    }),
+    vscode.debug.onDidTerminateDebugSession((session) => {
+      sessionPorts.delete(session.id);
+      stopSessionServers(session.id);
     }),
     vscode.commands.registerCommand('zxspectrum.serverStart', commandStart),
     vscode.commands.registerCommand('zxspectrum.serverStop', () => stopServer()),
@@ -380,11 +514,24 @@ function activateServer(context) {
   return { ports, ensureServer };
 }
 
-// Called from the extension's deactivate: the window is closing.
+// Called from the extension's deactivate: the window is closing. A session's
+// own server goes whatever the setting says -- nothing else knows it is
+// there to stop it.
 function deactivateServer() {
-  if (child && settings().get('stopOnExit', true)) {
+  const stopAll = settings().get('stopOnExit', true);
+  if (child && stopAll) {
     child.kill();
+  }
+  for (const entry of extraServers.values()) {
+    if (stopAll || entry.sessionId) {
+      entry.proc.kill();
+    }
   }
 }
 
-module.exports = { activateServer, deactivateServer, ports };
+// The ports a session was pointed at when it started, or undefined.
+function portsOfSession(session) {
+  return session ? sessionPorts.get(session.id) : undefined;
+}
+
+module.exports = { activateServer, deactivateServer, ports, servers, portsOfSession };

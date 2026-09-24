@@ -102,6 +102,8 @@ supply first. See [INSTALL.md, step 7](../INSTALL.md#step-7--optional-extras).
 The panel shows the Spectrum's display, border included, and updates live as
 the machine runs. It opens with every session. To reopen it, run
 **ZX Spectrum: Show Screen** from the Command Palette (Ctrl+Shift+P).
+With two emulators running, it shows the one the active debug session is on;
+**ZX Spectrum: Show Screen of...** opens a panel on any other.
 
 ![The ZX Spectrum Screen panel showing a room from the Knight Lore remake](images/user-guide/screen-panel.png)
 *The screen panel. Its title bar has the display-writes eye and the scaling magnifier; the speaker in the corner is the volume.*
@@ -581,7 +583,7 @@ same time. Both see and control the same machine. See
 | Launch hangs before connecting | Read the emulator's terminal. The usual causes are a build error, or another program using port 4711, 8000 or 8500 |
 | Build fails with *LNK1168* | An emulator is still running and holds the file open. Stop it, then launch again |
 | Keys do nothing | Click the screen panel so it has focus |
-| Screen panel stays black | Check `roms/48.rom` is present: 16,384 bytes, first byte `F3`. An emulator started on other ports needs the `zxspectrum.server.screenPort` setting to match |
+| Screen panel stays black | Check `roms/48.rom` is present: 16,384 bytes, first byte `F3`. An emulator on other ports is shown once a session is on it, or picked with **ZX Spectrum: Show Screen of...** |
 | No sound | Speed must be 1x, and the volume not muted |
 | Breakpoints in `.asm` files are ignored | Open the repository root folder: its workspace settings allow breakpoints in assembly files |
 | Stops show disassembly, not your source | Check `sld` and `asm` in the configuration. For the ROM, build the ROM disassembly |

@@ -37,7 +37,7 @@ MCP client or another window -- is joined as it is, whatever they say.
 | `zxspectrum.server.stopOnExit` | boolean | `true` | Stop the emulator this window started when the window closes. Either way it keeps running between debug sessions |
 | `zxspectrum.server.dapPort` | port | `4711` | The debug adapter port (`--dap-port`) |
 | `zxspectrum.server.mcpPort` | port | `8000` | The MCP port (`--mcp-port`) |
-| `zxspectrum.server.screenPort` | port | `8500` | The screen stream (`--screen-port`), which the screen panel reads |
+| `zxspectrum.server.screenPort` | port | `8500` | The screen stream (`--screen-port`), which the screen panel reads until a session says which server it is on |
 | `zxspectrum.server.audioPort` | port | `8501` | The audio stream (`--audio-port`), which the screen panel plays with `"panel"` sound |
 
 ```jsonc

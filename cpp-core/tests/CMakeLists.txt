@@ -95,6 +95,20 @@ target_compile_options(profile_report_tests PRIVATE ${ZX_WARNINGS})
 add_test(NAME profile_report_tests COMMAND profile_report_tests
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 add_dependencies(zx_tests profile_report_tests)
+# And for the server's advert and the listener it reports the ports of, which
+# are zx_server's sockets and JSON rather than zx_core's.
+add_executable(server_registry_tests server_registry_tests.cpp ${ZX_SRC}/server_registry.cpp
+                                     ${ZX_SRC}/net.cpp)
+target_link_libraries(server_registry_tests PRIVATE zx_core)
+target_include_directories(server_registry_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(server_registry_tests SYSTEM PRIVATE ${ZX_THIRD_PARTY})
+target_compile_options(server_registry_tests PRIVATE ${ZX_WARNINGS})
+if(WIN32)
+  target_link_libraries(server_registry_tests PRIVATE ws2_32)
+endif()
+add_test(NAME server_registry_tests COMMAND server_registry_tests
+         WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+add_dependencies(zx_tests server_registry_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
 target_compile_definitions(tracelog_tests

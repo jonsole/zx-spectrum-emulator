@@ -143,9 +143,9 @@ needs:
   `rom_disassembly/` is.
 - **How.** The ports, the sound (`device`, `panel` or `off`), the ROMs to boot
   with and any extra flags are settings -- see [Starting the
-  emulator](vscode-settings.md#starting-the-emulator). The screen and audio
-  panels connect to the same port settings, so a server on other ports is seen
-  by the panel too.
+  emulator](vscode-settings.md#starting-the-emulator). The screen panel asks
+  each session which server it is on, so it follows a server on other ports
+  too (see [More than one emulator](#more-than-one-emulator)).
 - **Joined, not replaced.** Anything already listening on the port -- a
   task's server, an MCP client's, another window's -- is used as it is. A
   start in progress is shared by sessions that ask at once.
@@ -164,6 +164,79 @@ needs:
 
 A configuration with a `debugServer` never reaches any of this: VS Code
 connects to that port itself, before an extension is asked.
+
+## More than one emulator
+
+Two debug sessions on the same server are two views of **one** machine: the
+second `launch` resets it and loads its own program over the first's. To
+debug two programs at once, give each its own emulator with `ports`:
+
+```json
+{ "name": "Filmation (own emulator)", "type": "zxspectrum", "request": "launch",
+  "ports": "auto",
+  "rom": "${workspaceFolder}/roms/48.rom",
+  "snapshot": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.z80" }
+```
+
+- **`"ports": "auto"`** starts a new `zx_server` on free ports, for this
+  session alone. It is stopped when the session ends, and a restart gets a
+  fresh one. The snippet **ZX Spectrum: Launch on a new emulator** writes it.
+- **`"ports": { "dap": 14711, "screen": 18500 }`** is that server: joined if
+  something is listening on the DAP port, started on those ports if not. Any
+  port left out is the setting's. It outlives the session, the way the
+  settings' server does. An attach takes `ports` too, which is how to debug a
+  server started by hand on other ports -- the `zx-verifier`'s on 14711, say.
+- **Left out**, it is the server on `zxspectrum.server.*Port`, as before.
+  `ports` is ignored with a `debugServer`, which names its own.
+
+### The screen follows the session
+
+The screen panel shows the server of whichever session is **active** --
+the one picked in the Call Stack view or the debug toolbar's dropdown -- and
+moves when you pick another. Its title names the server when it is not the
+one on the usual ports (`ZX Spectrum Screen — knightlore.z80 on :62251`).
+With no session at all, it stays on the last server it showed, so a restart
+does not blank it.
+
+**ZX Spectrum: Show Screen of...** (also in the **Spectrum** status bar
+menu) lists every emulator running on this machine -- debugged or not,
+started by this window, a task, a terminal, an MCP client or another window
+-- with what each has loaded and its ports, and opens a second panel on the
+one you pick, to watch two machines side by side. That panel stays on its
+server until closed. Keys typed into it go to that machine: through a debug
+session on it when there is one, and otherwise straight to its MCP port.
+
+### How a server is found
+
+Each `zx_server` says which ports it is on in two ways:
+
+- **`serverInfo`** -- a DAP request (and the `server_info` MCP tool) that
+  answers with its pid, its four ports, when it started, its ROMs and the
+  program it last loaded by path. That is how the panel learns a session's
+  server.
+- **An advert** -- `<pid>.json` in `%LOCALAPPDATA%\zx-spectrum\servers`
+  (`$XDG_RUNTIME_DIR` or `~/.cache` elsewhere; `ZX_SERVER_ADVERT_DIR`
+  overrides both) holding the same thing, written once every port is bound
+  and removed when the server exits. That is how **Show Screen of...** finds
+  servers nobody is debugging, and how an `"auto"` launch learns which free
+  ports it was given (`--dap-port 0` and so on). `--no-advertise` leaves it
+  out.
+
+A server that is killed outright -- `taskkill /F`, the rebuild task's
+`Stop-Process` -- cannot remove its advert, so the extension checks each
+one's process is still alive and deletes those that are not.
+
+Every port is bound before a server does anything else, and one already in
+use stops it with an error. A second server started on the same ports used to
+come up anyway -- on Windows sharing the ports with the first, so a
+connection could reach either.
+
+Not done: the program a list shows is the last one loaded **by path** (a
+launch's `snapshot` or `tape`, a tape inserted from VS Code or MCP). A
+snapshot sent over MCP's `load_snapshot` arrives as bytes with no name, and
+leaves the previous name showing. A panel on a server with no debug session
+cannot set its sound device's volume, which only DAP reaches. The status bar's
+**Spectrum** item is still about the server in the settings alone.
 
 ## Opening snapshots and tapes
 
@@ -263,7 +336,9 @@ alongside your code, fed by a third server port (`--screen-port`, default
 `8500`) that streams the screen as a continuous sequence of PNG frames (10fps)
 to any connected client. The extension bridges that stream into a webview
 panel; watch it update in real time as you step, run, or drive the machine
-over MCP.
+over MCP. With more than one emulator running, the panel follows the active
+session's, and **Show Screen of...** opens more -- see [More than one
+emulator](#more-than-one-emulator).
 
 This port is a plain, independent front-end onto the shared `Engine` — the
 same standalone-server design as DAP and MCP, not something that only works

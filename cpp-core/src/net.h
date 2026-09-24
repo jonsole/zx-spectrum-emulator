@@ -42,12 +42,22 @@ private:
 /// A listening socket.
 class Listener {
 public:
-    /// Binds and listens. Returns false and fills `error` on failure.
+    Listener() = default;
+    ~Listener();
+    Listener(Listener&& other) noexcept;
+    Listener& operator=(Listener&& other) noexcept;
+    Listener(const Listener&) = delete;
+    Listener& operator=(const Listener&) = delete;
+
+    /// Binds and listens. Returns false and fills `error` on failure. Port 0
+    /// asks the system for any free port, and port() then says which.
     bool listen(const std::string& host, uint16_t port, std::string& error);
+    /// The port actually bound, or 0 when not listening.
+    uint16_t port() const;
+    bool valid() const;
     /// Blocks for the next connection. Returns an invalid Socket on failure.
     Socket accept();
     void close();
-    ~Listener();
 
 private:
     uintptr_t handle_ = ~uintptr_t(0);

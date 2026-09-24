@@ -24,6 +24,7 @@
 #include "profile_report.h"
 #include "register_names.h"
 #include "screen_stream.h"
+#include "server_registry.h"
 #include "snapshot.h"
 
 #include <nlohmann/json.hpp>
@@ -625,6 +626,12 @@ json tools_list() {
         no_params());
 #endif
     add("pause", "Pause an in-flight run", no_params());
+    add("server_info",
+        "Which emulator this is: its process id, the DAP, MCP, screen and audio ports it is "
+        "really on, when it started, its ROMs and the program last loaded by path. Several "
+        "can run at once; each also advertises this in a <pid>.json file for the VS Code "
+        "extension to find.",
+        no_params());
     add("set_watchpoint",
         "Stop the machine when the program reads or writes an address -- what wrote that? "
         "Covers a single byte or a range (an object record, a buffer), and by default stops "
@@ -1309,6 +1316,12 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     if (name == "pause") {
         engine.pause();
         return text_result("paused");
+    }
+
+    if (name == "server_info") {
+        json info = server_info();
+        info["advertDirectory"] = advert_directory();
+        return json_result(info);
     }
 
 #if ZX_REWIND
@@ -2197,6 +2210,7 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (!message.empty()) {
             return error_result(message);
         }
+        note_program(path);
         return json_result(tape_status_json(engine.tape_status(), engine.tape_blocks()));
     }
 
@@ -2380,20 +2394,10 @@ void handle_connection(net::Socket sock, Engine& engine, Sources& sources) {
 
 } // namespace
 
-void serve_mcp(Engine& engine, Sources& sources, const std::string& host, uint16_t port) {
+void serve_mcp(Engine& engine, Sources& sources, net::Listener listener) {
     // Up front, so audio is already accumulating whenever get_audio is first
     // asked -- see capture_ring().
     capture_ring(engine);
-    net::Listener listener;
-    std::string error;
-    if (!listener.listen(host, port, error)) {
-        std::fprintf(stderr, "MCP server failed to start: %s\n", error.c_str());
-        return;
-    }
-    std::printf("MCP server listening on %s:%u (streamable-HTTP, /mcp)\n", host.c_str(),
-                unsigned(port));
-    std::fflush(stdout);
-
     for (;;) {
         net::Socket sock = listener.accept();
         if (!sock.valid()) {
