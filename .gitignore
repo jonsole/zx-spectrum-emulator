@@ -171,6 +171,8 @@ examples/filmation/pentagram/output/
 # knightlore/'s unpacked sheet, and everything listed here is what build.py
 # assembles from them.
 examples/filmation/knightlore128/sprite_data.s
+examples/filmation/knightlore128/sprite_library.s
+examples/filmation/knightlore128/room_sprites.s
 examples/filmation/knightlore128/sprite_table.s
 examples/filmation/knightlore128/sprite_adj_gen.s
 examples/filmation/knightlore128/graphics_gen.s

@@ -1,5 +1,6 @@
 """The sprite sheet back into assembler: sprites.png and sprites.json ->
-sprite_data.s, sprite_table.s and sprite_adj_gen.s.
+sprite_data.s, sprite_library.s, sprite_table.s, room_sprites.s,
+sprite_adj_gen.s and graphics_gen.s.
 
     python sprite_source.py
 
@@ -21,9 +22,16 @@ the total is rounded up to a boundary either way. Emitted separately, the
 table goes where a 512 boundary already falls and the bitmaps go last, with
 nothing after them that has to be aligned.
 
-    sprite_data.s       the sprites, bottom row first, mask and data
-                        interleaved, with the blank bottom rows trimmed off
-    sprite_table.s      256 pointers, indexed by Knight Lore's graphic number
+    sprite_data.s       the resident sprites, bottom row first, mask and data
+                        interleaved, with the blank bottom rows trimmed off;
+                        bank 0, for good
+    sprite_library.s    the sprites loaded room by room, in banks 1, 3 and 7,
+                        each with the graphics that draw it and its length
+    sprite_table.s      256 pointers, indexed by Knight Lore's graphic number,
+                        as they are before any room is entered
+    room_sprites.s      bank 4: that table again, to start each room from; the
+                        library's directory; and each room's list of what it
+                        loads -- see room_page.s
     sprite_adj_gen.s    the pixel nudges from graphics.json
     graphics_gen.s      a GFX_ label for every graphic number
 
@@ -46,6 +54,7 @@ import sprite_sheet as game
 from sprite_sheet import GRAPHIC_COUNT
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import castle                                                   # noqa: E402
 import sheet                                                    # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -89,36 +98,52 @@ def check(sprites, facts, animated):
             "would be overrun by a later one" % (frames, sorted(sizes)))
 
 
-def emit_bitmaps(sprites, animated):
+def record_size(sprite):
+    """A sprite record's bytes: its two header bytes, then a mask and a data
+    byte for every column of every row."""
+    return 2 + sprite["w"] * sprite["h"] * 2
+
+
+def emit_record(n, sprite, animated):
+    """One sprite record, header and rows, with no label and no alignment."""
+    out = []
+    # The blit index, not a width: (width - 2) scaled by the stride of a
+    # sprite_jump_table group, which puts the width class in bits 4 to 6
+    # and leaves bit 0 for the mirrored flag. Bit 7 is what tells
+    # shift_alloc to round an animated sprite's buffer up to eights;
+    # scenery keeps its buffers exact. The height is what is left of the
+    # sprite once its blank bottom rows are off.
+    flag = 0x80 if n in animated else 0
+    out.append("\t\t\tDB\t{},{}".format((sprite["w"] - 2) * 16 | flag, sprite["h"]))
+    # Top row first -- the game's own data is upside down, and the sheet
+    # is the right way up -- with the mask inverted: a set bit there keeps
+    # the screen, which is what the blit's `and mask : xor data` wants.
+    # The comment beside each row is the row as it looks.
+    for data, mask in zip(sprite["data"], sprite["mask"]):
+        picture = ""
+        for d, m in zip(data, mask):
+            m_bits = "{0:08b}".format(255 ^ m)
+            d_bits = "{0:08b}".format(d)
+            for b in range(0, 8):
+                picture += ('  ' if m_bits[b] == '1'
+                            else '..' if d_bits[b] == '0' else '##')
+        out.append('\t\t\tDB\t' + ','.join(
+            '0b{0:08b},0b{1:08b}'.format(255 ^ m, d)
+            for d, m in zip(data, mask)) + ' ;' + picture)
+    return out
+
+
+def emit_bitmaps(sprites, animated, resident):
+    """sprite_data.s: the resident sprites, where they are drawn from."""
     out = []
     for n, sprite in enumerate(sprites):
+        if n not in resident:
+            continue
         # ALIGN 4 so the blit can use INC L / DEC L to move between the width,
         # the height and the start of the mask and data.
         out.append("\t\t\tALIGN 4")
         out.append(sprite["name"] + ":")
-        # The blit index, not a width: (width - 2) scaled by the stride of a
-        # sprite_jump_table group, which puts the width class in bits 4 to 6
-        # and leaves bit 0 for the mirrored flag. Bit 7 is what tells
-        # shift_alloc to round an animated sprite's buffer up to eights;
-        # scenery keeps its buffers exact. The height is what is left of the
-        # sprite once its blank bottom rows are off.
-        flag = 0x80 if n in animated else 0
-        out.append("\t\t\tDB\t{},{}".format((sprite["w"] - 2) * 16 | flag, sprite["h"]))
-        # Top row first -- the game's own data is upside down, and the sheet
-        # is the right way up -- with the mask inverted: a set bit there keeps
-        # the screen, which is what the blit's `and mask : xor data` wants.
-        # The comment beside each row is the row as it looks.
-        for data, mask in zip(sprite["data"], sprite["mask"]):
-            picture = ""
-            for d, m in zip(data, mask):
-                m_bits = "{0:08b}".format(255 ^ m)
-                d_bits = "{0:08b}".format(d)
-                for b in range(0, 8):
-                    picture += ('  ' if m_bits[b] == '1'
-                                else '..' if d_bits[b] == '0' else '##')
-            out.append('\t\t\tDB\t' + ','.join(
-                '0b{0:08b},0b{1:08b}'.format(255 ^ m, d)
-                for d, m in zip(data, mask)) + ' ;' + picture)
+        out += emit_record(n, sprite, animated)
 
     # Graphic 1 is Knight Lore's way of drawing nothing: it is what the
     # knight's top half wears while he changes between man and wolf, and the
@@ -130,6 +155,19 @@ def emit_bitmaps(sprites, animated):
     out.append("sprite_blank:")
     out.append("\t\t\tDB\t0,1")
     out.append("\t\t\tDB\t0b11111111,0b00000000,0b11111111,0b00000000 ;" + "  " * 16)
+
+    # What a graphic draws when its sprite is in the library and the room
+    # being played has not loaded it: a checked square, two bytes by eight
+    # rows, so that a graphic the rules in sprite_sheet.py missed shows as
+    # itself on the screen rather than as whatever the page last held there.
+    # The tests put a read watchpoint on it.
+    out.append("\t\t\tALIGN 4")
+    out.append("sprite_missing:")
+    out.append("\t\t\tDB\t0,8")
+    for row in range(8):
+        data = 0xAA if row % 2 == 0 else 0x55
+        cells = ",".join("0b00000000,0b{0:08b}".format(data) for _ in range(2))
+        out.append("\t\t\tDB\t" + cells)
     return out
 
 
@@ -146,7 +184,7 @@ def graphic_top(facts):
                    if gmap[g] is not None or g == facts["blankGraphic"])
 
 
-def emit_table(sprites, facts):
+def emit_table(sprites, facts, resident, label="sprite_table", align=True):
     # The table is indexed by KNIGHT LORE's graphic number, not by our sprite
     # number. Its own table at $7112 is 256 pointers into sprite memory and
     # several graphic numbers share a bitmap -- 186 valid graphics across 103
@@ -160,13 +198,15 @@ def emit_table(sprites, facts):
     gmap = facts["graphicMap"]
     blank = facts["blankGraphic"]
     top = (graphic_top(facts) + 3) & ~3
-    out = ["\t\t\tALIGN\t512", "sprite_table:"]
+    out = (["\t\t\tALIGN\t512"] if align else []) + [label + ":"]
     for row in range(0, top, 4):
         cells = []
         for g in range(row, row + 4):
             n = gmap[g]
             cells.append('sprite_blank' if g == blank
-                         else sprites[n]["name"] if n is not None else '0')
+                         else '0' if n is None
+                         else sprites[n]["name"] if n in resident
+                         else 'sprite_missing')
         out.append('\t\t\tDW\t' + ', '.join(cells) + '\t; $%02X' % row)
     return out
 
@@ -319,6 +359,148 @@ def emit_adj(sprites, facts):
     return out
 
 
+# ---------------------------------------------------------------------------
+# The room page: which sprites are loaded room by room, and what each room
+# loads.
+
+# Where the library goes, in the order it fills them. Bank 6 is kept for the
+# backdrop and banks 0, 2, 4 and 5 are spoken for -- see knightlore128.s.
+LIBRARY_BANKS = (1, 3, 7)
+BANK_SIZE = 0x4000
+
+
+def group_of(name):
+    """A sprite's group: its sheet name up to the last dot."""
+    return name.rsplit(".", 1)[0]
+
+
+def split(entries):
+    """Sprite numbers in the library, in the order they are laid out there."""
+    library = []
+    for n, entry in enumerate(entries):
+        if entry["name"].split(".")[0] in game.ROOM_GROUPS:
+            library.append(n)
+    return library
+
+
+def room_loads(atlas, entries, facts, library):
+    """room number -> the library sprites the room loads, in library order.
+
+    What the room's templates name, each widened to its whole group -- see
+    ROOM_GROUPS in sprite_sheet.py for why a group and not a sprite."""
+    number_of = {entry["graphic"]: g for g, entry in facts["graphics"].items()}
+    gmap = facts["graphicMap"]
+    in_library = set(library)
+    groups = {}
+    for n in library:
+        groups.setdefault(group_of(entries[n]["name"]), []).append(n)
+
+    loads = {}
+    for room in atlas["rooms"]:
+        named = []
+        for ref in room["scenery"]:
+            named += [piece["graphic"] for piece in atlas["sceneryTemplates"][ref["template"]]]
+        for ref in room["objects"]:
+            named += [entry["graphic"] for entry in atlas["objectTemplates"][ref["template"]]]
+        wanted = set()
+        for graphic in named:
+            n = gmap[number_of[graphic]] if graphic in number_of else None
+            if n in in_library:
+                wanted.update(groups[group_of(entries[n]["name"])])
+        loads[room["number"]] = [n for n in library if n in wanted]
+    return loads
+
+
+def aligned(size):
+    return (size + 3) & ~3
+
+
+def emit_library(sprites, entries, facts, animated, library):
+    """sprite_library.s, and which bank each library sprite went to."""
+    gmap = facts["graphicMap"]
+    top = graphic_top(facts)
+    out = ["; Generated by sprite_source.py from sprites.png -- do not edit.",
+           ";",
+           "; The sprites a room loads into the room page as it is entered. Each is",
+           "; the graphic numbers that draw it -- a count, then the numbers -- its",
+           "; length, and then the sprite record exactly as the page will hold it.",
+           "; room_page_fill copies the record and points those graphics at it.",
+           ""]
+    bank_of = {}
+    banks = list(LIBRARY_BANKS)
+    used = BANK_SIZE                        # nothing open yet
+    for n in library:
+        graphics = [g for g in range(top) if gmap[g] == n]
+        assert graphics, "%s is drawn by no graphic" % entries[n]["name"]
+        size = 1 + len(graphics) + 2 + record_size(sprites[n])
+        if used + size > BANK_SIZE:
+            if not banks:
+                raise SystemExit("the library is bigger than banks %s" % (LIBRARY_BANKS,))
+            bank = banks.pop(0)
+            out.append("\t\t\tMMU\t3, %d, $C000" % bank)
+            used = 0
+        used += size
+        bank_of[n] = bank
+        out.append("lib_" + sprites[n]["name"] + ":")
+        out.append("\t\t\tDB\t%d, %s\t\t; drawn by" % (
+            len(graphics), ", ".join("$%02X" % g for g in graphics)))
+        out.append("\t\t\tDW\t%d" % record_size(sprites[n]))
+        out += emit_record(n, sprites[n], animated)
+    out.append("\t\t\tMMU\t3, PAGE_PLAY")
+    return out, bank_of
+
+
+def emit_rooms(sprites, entries, facts, resident, library, bank_of, loads):
+    """room_sprites.s: bank 4's half of the room page."""
+    out = ["; Generated by sprite_source.py from sprites.json and rooms.json -- do not",
+           "; edit. Read by room_page_fill, with bank 4 paged in -- see room_page.s.",
+           "",
+           "; sprite_table as every room starts from it: the resident sprites where",
+           "; they are, and every graphic whose sprite is in the library on",
+           "; sprite_missing until the room loads it.",
+           ""]
+    out += emit_table(sprites, facts, resident, label="sprite_base", align=False)
+    out.append("SPRITE_TABLE_SIZE\tEQU\t$ - sprite_base")
+    out.append("")
+    out.append("; The library's directory, by library number: the bank each record is")
+    out.append("; in, and where.")
+    out.append("\t\t\tALIGN\t256")
+    out.append("library_bank:")
+    for n in library:
+        out.append("\t\t\tDB\t%d\t\t; %s" % (bank_of[n], entries[n]["name"]))
+    out.append("\t\t\tALIGN\t512")
+    out.append("library_at:")
+    for n in library:
+        out.append("\t\t\tDW\tlib_%s" % sprites[n]["name"])
+    out.append("")
+    out.append("; What each room loads, by room number: a count, then library numbers.")
+    out.append("; A number with no room points at the empty list.")
+    out.append("\t\t\tALIGN\t512")
+    out.append("room_sprites_at:")
+    for row in range(0, 256, 4):
+        cells = ["room_sprites_%02X" % r if r in loads else "room_sprites_none"
+                 for r in range(row, row + 4)]
+        out.append("\t\t\tDW\t" + ", ".join(cells))
+    out.append("room_sprites_none:")
+    out.append("\t\t\tDB\t0")
+    index = {n: i for i, n in enumerate(library)}
+    most, fullest = 0, None
+    for number in sorted(loads):
+        ids = loads[number]
+        size = sum(aligned(record_size(sprites[n])) for n in ids)
+        if size > most:
+            most, fullest = size, number
+        out.append("room_sprites_%02X:" % number)
+        out.append("\t\t\tDB\t%d%s\t\t; %d bytes: %s" % (
+            len(ids), "".join(", %d" % index[n] for n in ids), size,
+            ", ".join(sorted({group_of(entries[n]["name"]) for n in ids})) or "nothing"))
+    out.append("")
+    out.append("ROOM_PAGE_MOST\t\tEQU\t%d\t\t; room $%02X, the fullest" % (most, fullest))
+    out.append("LIBRARY_COUNT\t\tEQU\t%d" % len(library))
+    out.append("LIBRARY_LARGEST\t\tEQU\t%d" % max(record_size(sprites[n]) for n in library))
+    return out, most, fullest
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Turn the sprite sheet into the game's sprite sources.")
@@ -350,8 +532,24 @@ def main():
     sheet.trim(sprites, whole)
     check(sprites, facts, animated)
 
-    for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated)),
-                        ("sprite_table.s", emit_table(sprites, facts)),
+    # Which sprites are resident and which loaded room by room, and what each
+    # room loads.
+    library = split(entries)
+    assert len(library) <= 256, "a library number is a byte"
+    resident = set(range(len(sprites))) - set(library)
+    atlas = castle.read_castle(HERE)
+    loads = room_loads(atlas, entries, facts, library)
+    library_lines, bank_of = emit_library(sprites, entries, facts, animated, library)
+    room_lines, most, fullest = emit_rooms(sprites, entries, facts, resident,
+                                           library, bank_of, loads)
+    kept = sum(aligned(record_size(sprites[n])) for n in resident)
+    print("resident %d sprites, %d bytes; library %d sprites; the fullest room, $%02X, "
+          "loads %d bytes" % (len(resident), kept, len(library), fullest, most))
+
+    for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated, resident)),
+                        ("sprite_library.s", library_lines),
+                        ("room_sprites.s", room_lines),
+                        ("sprite_table.s", emit_table(sprites, facts, resident)),
                         ("graphics_gen.s", emit_labels(facts)),
                         ("sprite_adj_gen.s", emit_adj(sprites, facts))):
         (args.out_dir / name).write_text(chr(10).join(lines) + chr(10), encoding="utf-8")

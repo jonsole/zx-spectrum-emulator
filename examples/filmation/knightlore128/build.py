@@ -107,9 +107,12 @@ def generate_sprite_data() -> None:
     # the frame check and the pixel colours are sheet.py's, and what animates
     # and what keeps its blank rows are sprite_sheet.py's.
     code = [GAME.parent / "sheet.py", GAME / "sprite_sheet.py"]
+    # ...and so is the castle, since what each room loads into the room page
+    # comes from the templates it places.
+    code += [GAME / "rooms.json", GAME / "templates.json", GAME.parent / "castle.py"]
     generated = [GAME / name for name in
-                 ("sprite_data.s", "sprite_table.s", "graphics_gen.s",
-                  "sprite_adj_gen.s")]
+                 ("sprite_data.s", "sprite_library.s", "sprite_table.s",
+                  "room_sprites.s", "graphics_gen.s", "sprite_adj_gen.s")]
 
     if not sheet.is_file() or not atlas.is_file():
         sys.exit(f"{sheet.name} and {atlas.name} are the graphics this game is "

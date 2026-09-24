@@ -69,6 +69,7 @@ room_build:			ld		c,a
 					; its own successor
 
 					push	hl		; the record
+					call	room_page_fill		; C is still the room: its sprites
 
 					; Nothing survives a room change.
 					call	shift_reset

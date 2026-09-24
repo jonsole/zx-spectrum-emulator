@@ -40,45 +40,71 @@ starts.
 | 0 | the fork: Knight Lore's game and data, building byte for byte as Knight Lore | done |
 | 1 | the 128K shell: a 128K device and snapshot, paging through `page.s`, Knight Lore unchanged | done |
 | 2a | room data to bank 4, the sprites to bank 0 on their own, the stack below $C000, and the menu and the end screens down to $6000 | done |
-| 2b | the graphics library in banks 1, 3 and 7, and each room's graphics copied into the room page in bank 0 | |
+| 2b | the graphics library in bank 1 (3 and 7 as it grows), and each room's graphics copied into the room page in bank 0 | done |
 | 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | |
 | 4 | one sprite sheet holding every Knight Lore and every Pentagram sprite, with Pentagram's scenery, creatures and mechanics | |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
 
-Stage 2 is in two halves. 2a, the reshuffle below, is done. 2b turns bank 0
-into a room page, holding only what the room being played draws, and moves
-the sprites into a library in the other banks. It is needed once the sheet
-outgrows one bank, which Pentagram's sprites will make it do.
-
-### Where memory is now (stage 2a)
+### Where memory is now (stage 2)
 
 | Bank | At | Holds | Free |
 |---|---|---|---|
-| 5 | $4000 | the screen; the room builder at $5B00; the room templates, the tables, the font, `room_find`, `page.s`, the menu and the end screens from $6000; the view buffer, the object pool and the aligned tables from $7400 | 10 at $5B00, about 710 at $6000, 20 at $7400 |
+| 5 | $4000 | the screen; the room builder at $5B00; the room templates, the tables, the font, `room_find`, `room_page_fill`, `page.s`, the menu and the end screens from $6000; the view buffer, the object pool, `sprite_table` and the other aligned tables from $7400 | 16 at $5B00, about 600 at $6000, 20 at $7400 |
 | 2 | $8000 | the code that runs every turn and the rotation arena, then the stack below $C000 | about 350 |
-| 0 | $C000 | the sprites, all 15.2K of them; paged in for the whole of play | about 1,180 |
-| 4 | $C000 | the rooms (`room_list.s`), paged in only while `room_find` copies one out | about 14,000 |
+| 0 | $C000 | the **room page**: the resident sprites (8.9K), then the room being played's own; paged in for the whole of play | 3,224 after the fullest room |
+| 4 | $C000 | the rooms (`room_list.s`), and what each loads into the room page (`room_sprites.s`) | about 10,000 |
+| 1 | $C000 | the **library**: the sprites loaded room by room (6.2K) | about 10,000 |
 
-Banks 1, 3, 6 and 7 are empty.
+Banks 3, 6 and 7 are empty. The library moves on into banks 3 and 7 when it
+outgrows bank 1; `sprite_source.py` does that by itself.
+
+**Resident or loaded.** `ROOM_GROUPS` in `sprite_sheet.py` names the sprite
+groups loaded room by room: the walls, the doors, the scenery, and the art of
+the movers rooms place (guard, wizard, fires, balls, ghost, gate). Everything
+else is drawn by the code in any room, so it is resident in bank 0 for good.
+That covers the knight and the wolf, the spells and the twinkle, the
+collectables, the sun, the window, the panel and the menu. A room that names
+any sprite in a loaded group gets the whole group, which covers a mover
+cycling through its frames without a list of which frames each mover uses.
+The fullest room, $01, loads 4,220 bytes.
+
+**Entering a room.** `room_build` calls `room_page_fill` (`room_page.s`)
+once `room_find` has the record. It pages bank 4 in and resets `sprite_table`
+from `sprite_base`. Resident graphics then point at their sprites, and every
+library graphic points at `sprite_missing`, a checked square. Then, for each
+library sprite the room loads, it:
+- pages that sprite's bank in;
+- points the sprite's graphics at where it is about to go in the page;
+- copies it into the rotation arena, past the knight's kept buffers;
+- pages bank 0 in and copies it on into the page.
+
+The library and the page are both at $C000, which is why the copy goes
+through the arena. That is about 4K of copying on entering the fullest room,
+two or three frames.
+
+A graphic the rules missed draws the checked square, not whatever the page
+last held. The check below puts a read watchpoint on it.
 
 `page.s` puts a bank at $C000 and keeps a copy of what it wrote, because
-$7FFD cannot be read back. The only thing that pages anything in play is
-`room_find`. It pages bank 4 in, copies the wanted record into `room_record`
-and pages bank 0 back before the builder places anything. The stack is at the
-top of bank 2, so a RET never depends on what is paged in.
+$7FFD cannot be read back. Only `room_find` and `room_page_fill` page
+anything, both while a room is built, and both put bank 0 back before they
+return. The stack is at the top of bank 2, so a RET never depends on what is
+paged in.
 
-The menu and the end screens moved down to the $6000 region, which is cold
-code in contended memory. That moved the rooms-seen bitmap across a page
-boundary, and `room_seen` indexed it with L alone. Its bits then landed a page
-lower, in the room templates, and the tally read 63% after two rooms. It now
-carries into H.
+In stage 2a the menu and the end screens moved down to the $6000 region, which
+is cold code in contended memory. That moved the rooms-seen bitmap across a
+page boundary, and `room_seen` indexed it with L alone. Its bits then landed a
+page lower, in the room templates, and the tally read 63% after two rooms. It
+now carries into H.
 
 What was checked:
 - In a 128K emulator, all 127 rooms build the same objects as Knight Lore
-  48K's. Sprite, buffer and list pointers are compared by the label they point
-  at, since those addresses moved.
-- A game starts, crosses rooms and picks up a charm.
+  48K's. Sprite, buffer and list pointers are compared by the sprite or label
+  they point at, since every address moved.
+- Each room then runs for 40 turns, movers and all, with a read watchpoint on
+  `sprite_missing`. Nothing read it.
+- A game starts, walks through a doorway and picks up a charm.
 - Losing the last life shows a right tally and goes back to the menu.
 - $7FFD is $10 whenever the game is running.

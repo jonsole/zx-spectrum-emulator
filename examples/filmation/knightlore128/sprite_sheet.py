@@ -214,6 +214,24 @@ FIXED_NUDGES = {}
 # bitmap for it, and ours points at a sprite that covers nothing instead.
 BLANK_GRAPHIC = 1
 
+# The sprite groups that are loaded room by room on the 128K. They live in the
+# library in banks 1, 3 and 7, and a room's are copied into the room page in
+# bank 0 as it is entered -- see room_page.s. Every other group is resident: in
+# bank 0 for good, because the code draws it by number, in any room -- the
+# knight and the wolf, the spells and the twinkle, the collectables, the sun,
+# the window, the panel and the menu.
+#
+# A room that names any sprite in one of these groups gets the WHOLE group
+# (the name up to its last dot: all of "scenery", all of "wall.castle"). That
+# is what covers a mover or a piece of scenery that changes its graphic within
+# its own group -- a fire's two frames, the cauldron and its lid -- without a
+# list of which graphics each one cycles through. Nothing here is drawn by the
+# code except as a frame of something a room placed; a graphic that is would
+# show the placeholder sprite_missing instead, and must move to a resident
+# group.
+ROOM_GROUPS = ("wall", "door", "scenery", "guard", "wizard", "fires", "balls",
+               "ghost", "gate")
+
 
 def main():
     sheet.make(sys.modules[__name__])

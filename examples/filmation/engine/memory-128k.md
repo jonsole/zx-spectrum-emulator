@@ -18,6 +18,7 @@ profiler on 2026-09-18.
 6. [The backdrop](#6-the-backdrop)
 7. [What the map forces](#7-what-the-map-forces)
 8. [Open questions](#8-open-questions)
+9. [What was built, and where it differs](#9-what-was-built-and-where-it-differs)
 
 ---
 
@@ -207,3 +208,32 @@ measured.
   flipping as he turns.
 - Tape: about 58K more to load, some five minutes at ROM speed. The .z80 is
   unaffected; a turbo loader or compression would help the .tzx.
+
+## 9. What was built, and where it differs
+
+Built in `../knightlore128/` on 2026-09-24 (stage 2 in its README), with no
+change to any engine file. Where it departs from the plan above:
+
+- **The resident graphics are assembled into bank 0, not copied there.** They
+  sit at $C000 from the start, and the room page proper begins after them.
+- **The library is in bank 1 alone for now.** Knight Lore's loaded sprites
+  come to 6.2K. The generator moves on into banks 3 and 7 when it needs to.
+- **Each room's list is stored, in bank 4.** It is a count and a library
+  number per sprite, about 20 bytes a room. §7.4 argued against stored lists,
+  but bank 4 has room for them, and the build then knows each room's exact
+  load and fails when a room overfills the page.
+- **Resident or loaded is decided by sprite group, and a room loads whole
+  groups.** That replaces the table of mover frames in §7.4. The groups are
+  `ROOM_GROUPS` in `sprite_sheet.py`. Anything missed draws `sprite_missing`,
+  which a read watchpoint catches.
+- **The bounce buffer is the arena past the knight's kept buffers**, one
+  record at a time, as §7.2 has it. The arena stayed in the middle of bank 2,
+  where `shift.s` puts it, because there was no need to move it.
+- **The room's record is copied into `room_record`, in bank 5**, not into
+  the page, and the templates stay in the $6000 region, always visible.
+  Nothing of the room's data is in bank 0.
+- **The stack is at $C000** (SP), in bank 2, and the menu, the end screens and
+  the tune player moved down to $6000, as §7.1 foresaw.
+- **Not yet built:** the backdrop in bank 6, and the room data at three times
+  the size. The room list is in bank 4, but the castle is still Knight Lore's
+  128 rooms.

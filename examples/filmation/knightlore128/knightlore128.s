@@ -6,13 +6,18 @@
 ;                   aligned tables from $7400
 ;   bank 2, $8000   the code that runs every turn, the rotation arena, and the
 ;                   stack at the top, below $C000
-;   bank 0, $C000   the sprites -- paged in for the whole of play
-;   bank 4, $C000   the rooms, paged in only while room_find copies one out
+;   bank 0, $C000   the room page, paged in for the whole of play: the
+;                   resident sprites, then the room being played's own
+;   bank 4, $C000   the rooms, and what each loads into the room page; paged
+;                   in only while a room is looked up and loaded
+;   bank 1, $C000   the library: the sprites loaded room by room (3 and 7
+;                   follow when it outgrows one bank)
 ;
-; Banks 1, 3, 6 and 7 are empty so far. ../engine/memory-128k.md is the plan
-; for them, and README.md says how far it has got. The device's default mapping
-; is the 128K's own at power-on -- banks 5, 2 and 0 -- and everything is
-; assembled into it except the room list, which MMU puts in bank 4.
+; Banks 3, 6 and 7 are empty so far. ../engine/memory-128k.md is the plan for
+; them, and README.md says how far it has got. The device's default mapping is
+; the 128K's own at power-on -- banks 5, 2 and 0 -- and everything is
+; assembled into it except the rooms and the library, which MMU puts in their
+; own banks.
 					DEVICE ZXSPECTRUM128
 
 
@@ -120,6 +125,7 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 
 ; Looking a room up in bank 4, and the paging it needs.
                     INCLUDE "room_find.s"
+                    INCLUDE "room_page.s"
                     INCLUDE "page.s"
 
 room_data_end:
@@ -182,23 +188,32 @@ cold_end:
                     DISPLAY "data, cold code $6000..", /H, cold_end, "   free: ", /D, $7400 - cold_end
 
 ; ---------------------------------------------------------------------------
-; The sprites, in bank 0 at $C000: the bank that stays paged in for the whole
-; of play, since every turn draws from them. Bank 0 is uncontended on every
-; 128K model, the +2A and +3 included.
+; The room page, in bank 0 at $C000: the bank that stays paged in for the whole
+; of play, since every turn draws from it. Bank 0 is uncontended on every 128K
+; model, the +2A and +3 included. The resident sprites are assembled into it
+; for good; room_page, after them, is where each room's own are loaded -- see
+; room_page.s.
                     ORG     $C000
 sprite_start:
 					INCLUDE "sprite_data.s"
 sprite_end:
-                    ASSERT  $ <= $10000
-                    DISPLAY "sprites, bank 0 $C000..", /H, sprite_end, "   free: ", /D, $10000 - sprite_end
+                    ALIGN   4
+room_page:
+                    ASSERT  room_page + ROOM_PAGE_MOST <= $10000
+                    DISPLAY "room page, bank 0: resident to ", /H, room_page, ", the fullest room to ", /H, room_page + ROOM_PAGE_MOST, "   free: ", /D, $10000 - room_page - ROOM_PAGE_MOST
 
 ; ---------------------------------------------------------------------------
 ; The rooms, in bank 4 at $C000. Only room_find reads them, with bank 4 paged
 ; in for as long as it takes to copy one record out -- see room_find.s.
                     MMU     3, ROOM_BANK, $C000
                     INCLUDE "room_list.s"
+                    INCLUDE "room_sprites.s"    ; what each room loads -- see room_page.s
 room_list_end:
                     DISPLAY "rooms, bank 4   $C000..", /H, room_list_end, "   free: ", /D, $10000 - room_list_end
+
+; The library, from bank 1 on: the sprites rooms load. sprite_library.s pages
+; each bank in for itself, and leaves bank 0 in.
+                    INCLUDE "sprite_library.s"
                     MMU     3, PAGE_PLAY
 
 ; ---------------------------------------------------------------------------
