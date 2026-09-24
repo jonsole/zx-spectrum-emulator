@@ -229,8 +229,14 @@ BLANK_GRAPHIC = 1
 # code except as a frame of something a room placed; a graphic that is would
 # show the placeholder sprite_missing instead, and must move to a resident
 # group.
+#
+# "pentagram" is all of Pentagram's art, merged in by pentagram_merge.py: its
+# walls and archways, its scenery, its creatures and the things its mechanics
+# put up. Its groups (pentagram.wall.trees, pentagram.block ...) are what a room
+# loads whole. Anything of it the code comes to draw in any room moves out to
+# a resident group then.
 ROOM_GROUPS = ("wall", "door", "scenery", "guard", "wizard", "fires", "balls",
-               "ghost", "gate")
+               "ghost", "gate", "pentagram")
 
 
 def main():

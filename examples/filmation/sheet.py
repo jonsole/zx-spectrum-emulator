@@ -387,38 +387,57 @@ def sprites_json(game, sprites, bands, labels, graphic_map):
                                      "w": s["w"] * 8, "h": s["h"],
                                      "trim": s["trim"]}
 
+    animations = {}
+    if game.ANIMATIONS:
+        for frames in game.ANIMATIONS:
+            names = tuple(labels[graphic_map[g]] for g in frames)
+            # The same animation, drawn elsewhere, is listed once.
+            animations.setdefault(game.ANIMATION_NAMES[names], list(names))
+    return format_sheet(tree, animations)
+
+
+def format_sheet(tree, animations=None):
+    """sprites.json as text, from its group tree and its animations.
+
+    Apart from sprites_json, so that a sheet can be rewritten from what it
+    already says -- a merge of two games' sheets, say -- in the same layout
+    the game's sprite_sheet.py writes. `tree` is the file's own: nodes with a
+    "sprites" mapping and a "group" mapping, either of which may be missing.
+    `animations` maps an animation's name to its frames, in order.
+    """
     def widths(node):
         out = {"name": 0, "x": 1, "y": 1, "w": 1, "h": 1, "trim": 1}
-        for name, box in node["sprites"].items():
+        for name, box in (node.get("sprites") or {}).items():
             out["name"] = max(out["name"], len(name))
             for k in ("x", "y", "w", "h", "trim"):
-                out[k] = max(out[k], len(str(box[k])))
+                out[k] = max(out[k], len(str(box.get(k, 0))))
         return out
 
     def emit(node, depth, lines):
         pad, inner = " " * depth, " " * (depth + 1)
-        if node["sprites"]:
+        sprites, groups = node.get("sprites") or {}, node.get("group") or {}
+        if sprites:
             width = widths(node)
             lines.append('%s"sprites": {' % pad)
-            rows = list(node["sprites"].items())
+            rows = list(sprites.items())
             for i, (name, box) in enumerate(rows):
                 # A sprite that lost nothing says nothing, which is most of
                 # them.
                 keys = ["x", "y", "w", "h"]
-                if any(b["trim"] for _n, b in rows):
+                if any(b.get("trim", 0) for _n, b in rows):
                     keys.append("trim")
-                cells = ", ".join('"%s": %*d' % (k, width[k], box[k])
+                cells = ", ".join('"%s": %*d' % (k, width[k], box.get(k, 0))
                                   for k in keys)
                 lines.append('%s%-*s { %s }%s'
                              % (inner, width["name"] + 3, '"%s":' % name, cells,
                                 "," if i < len(rows) - 1 else ""))
-            lines.append("%s}%s" % (pad, "," if node["group"] else ""))
-        if node["group"]:
+            lines.append("%s}%s" % (pad, "," if groups else ""))
+        if groups:
             lines.append('%s"group": {' % pad)
-            names = list(node["group"])
+            names = list(groups)
             for i, name in enumerate(names):
                 lines.append('%s"%s": {' % (inner, name))
-                emit(node["group"][name], depth + 2, lines)
+                emit(groups[name], depth + 2, lines)
                 lines.append("%s}%s" % (inner, "," if i < len(names) - 1 else ""))
             lines.append("%s}" % pad)
 
@@ -438,23 +457,19 @@ def sprites_json(game, sprites, bands, labels, graphic_map):
               " },"]
     emit(tree, 1, lines)
 
-    if game.ANIMATIONS:
-        seen = []
-        for frames in game.ANIMATIONS:
-            names = tuple(labels[graphic_map[g]] for g in frames)
-            if names not in seen:       # the same animation, drawn elsewhere
-                seen.append(names)
-        width = max(len(game.ANIMATION_NAMES[s]) for s in seen)
+    if animations:
+        width = max(len(name) for name in animations)
         lines[-1] += ","
         lines.append(' "animations": {')
-        for i, names in enumerate(seen):
-            comma = "," if i < len(seen) - 1 else ""
-            one = '  %-*s [ %s ]%s' % (width + 3, '"%s":' % game.ANIMATION_NAMES[names],
+        items = list(animations.items())
+        for i, (name, names) in enumerate(items):
+            comma = "," if i < len(items) - 1 else ""
+            one = '  %-*s [ %s ]%s' % (width + 3, '"%s":' % name,
                                        ", ".join('"%s"' % n for n in names), comma)
             if len(one) <= 96:
                 lines.append(one)
                 continue
-            lines.append('  "%s": [' % game.ANIMATION_NAMES[names])
+            lines.append('  "%s": [' % name)
             for j, n in enumerate(names):
                 lines.append('   "%s"%s' % (n, "," if j < len(names) - 1 else ""))
             lines.append("  ]%s" % comma)

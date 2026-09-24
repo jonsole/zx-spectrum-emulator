@@ -374,11 +374,15 @@ def group_of(name):
     return name.rsplit(".", 1)[0]
 
 
-def split(entries):
-    """Sprite numbers in the library, in the order they are laid out there."""
+def split(entries, drawn):
+    """Sprite numbers in the library, in the order they are laid out there.
+
+    Only sprites some graphic draws: the sheet holds art no graphic number
+    reaches -- Pentagram's own Sabreman and panel, merged in with the rest of
+    its sprites -- and that stays out of the game altogether."""
     library = []
     for n, entry in enumerate(entries):
-        if entry["name"].split(".")[0] in game.ROOM_GROUPS:
+        if n in drawn and entry["name"].split(".")[0] in game.ROOM_GROUPS:
             library.append(n)
     return library
 
@@ -534,9 +538,14 @@ def main():
 
     # Which sprites are resident and which loaded room by room, and what each
     # room loads.
-    library = split(entries)
+    gmap = facts["graphicMap"]
+    drawn = {n for n in gmap if n is not None}
+    library = split(entries, drawn)
     assert len(library) <= 256, "a library number is a byte"
-    resident = set(range(len(sprites))) - set(library)
+    resident = drawn - set(library)
+    unused = len(sprites) - len(drawn)
+    if unused:
+        print("%d sprites in the sheet are drawn by no graphic, and left out" % unused)
     atlas = castle.read_castle(HERE)
     loads = room_loads(atlas, entries, facts, library)
     library_lines, bank_of = emit_library(sprites, entries, facts, animated, library)

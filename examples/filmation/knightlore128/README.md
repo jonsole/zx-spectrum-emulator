@@ -42,10 +42,39 @@ starts.
 | 2a | room data to bank 4, the sprites to bank 0 on their own, the stack below $C000, and the menu and the end screens down to $6000 | done |
 | 2b | the graphics library in bank 1 (3 and 7 as it grows), and each room's graphics copied into the room page in bank 0 | done |
 | 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | done |
-| 4 | one sprite sheet holding every Knight Lore and every Pentagram sprite, with Pentagram's scenery, creatures and mechanics | |
+| 4a | one sprite sheet holding every Knight Lore and every Pentagram sprite; Pentagram's graphics numbered 188 up | done |
+| 4b | Pentagram's scenery and object templates, and rooms that use them | |
+| 4c | Pentagram's creatures and mechanics: its movers, the things that fall from the sky, the bolt, the well | |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
+
+### Both games' art (stage 4a)
+
+`sprites.png` is Knight Lore's sheet with Pentagram's underneath it, all 88
+of its sprites, and `sprites.json` names them under `pentagram`:
+`pentagram.wall.trees`, `pentagram.door.stone`, `pentagram.block` (the plain
+block and the three frames it crumbles through), `pentagram.well` (the well
+and its bucket), `pentagram.dragon`, `pentagram.homer`, `pentagram.faller`
+and the rest. `pentagram_merge.py` did it, once, and says where each sprite
+came from.
+
+Knight Lore's graphic numbers stay 1-187, because its code does arithmetic on
+them. Pentagram's are 188-241: one number for each sprite, nudge and box
+that its rooms place or its code draws. Pentagram gave one sprite several
+numbers, one for each thing its code did with it, but the remake picks a
+behaviour by template, not by graphic, so one is enough. That leaves 14
+numbers free. Stage 6's new art will want more than that, and the room there
+is Knight Lore's scenery graphics: no code refers to them by number, so they
+could be renumbered.
+
+Some of Pentagram's art belongs to its own game and has no number: its
+Sabreman, its panel, the frame round its end screen, its collectables, the
+quest's items and the pentagram's pieces. It is in the sheet, and
+`sprite_source.py` leaves a sprite no graphic draws out of the game: 38 of
+them. Everything under `pentagram` is loaded room by room (`ROOM_GROUPS`); the
+library holds 85 sprites and still fits bank 1. The busy-room code moved to
+the $6000 region to make room for the longer `sprite_table`.
 
 ### How the rooms join (stage 3)
 

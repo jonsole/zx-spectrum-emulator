@@ -128,6 +128,12 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
                     INCLUDE "room_page.s"
                     INCLUDE "page.s"
 
+; The busy rule, which sits monsters out in a crowded room. It was in the space
+; the trimmed sprite table left at $7F00 on the 48K; with Pentagram's graphics
+; the table runs to 242 entries and fills that, and this is the same bank.
+                    INCLUDE "busy.s"            ; its numbers, then the engine's own
+                    INCLUDE "../engine/busy.s"
+
 room_data_end:
                     ; The menu and the end screens follow on from here -- see
                     ; cold_start, below the code.
@@ -300,8 +306,6 @@ bit_reverse_table:
 ; And code that only runs when a key is pressed, in what is left.
                     INCLUDE "pickup.s"
                     INCLUDE "../engine/screen.s"         ; pickup.s falls into it
-                    INCLUDE "busy.s"            ; its numbers, then the engine's own,
-                    INCLUDE "../engine/busy.s"  ; where the trimmed sprite table left room
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
