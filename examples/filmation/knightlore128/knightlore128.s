@@ -1,9 +1,18 @@
-; Knight Lore 128K. For now it is Knight Lore's 48K image laid into a 128K: the
-; device's default mapping puts bank 5 at $4000, bank 2 at $8000 and bank 0 at
-; $C000, which are the three a 128K starts with, so every address below is
-; where it was on the 48K and bank 0 simply stays paged in. The rest of the
-; banks are empty. ../engine/memory-128k.md is the plan for filling them, and
-; README.md says how far that has got.
+; Knight Lore 128K. Where everything goes, bank by bank:
+;
+;   bank 5, $4000   the screen; the room builder at $5B00; the room templates,
+;                   the tables and the cold code (the menu, the end screens)
+;                   from $6000; the view buffer, the object pool and the
+;                   aligned tables from $7400
+;   bank 2, $8000   the code that runs every turn, the rotation arena, and the
+;                   stack at the top, below $C000
+;   bank 0, $C000   the sprites -- paged in for the whole of play
+;   bank 4, $C000   the rooms, paged in only while room_find copies one out
+;
+; Banks 1, 3, 6 and 7 are empty so far. ../engine/memory-128k.md is the plan
+; for them, and README.md says how far it has got. The device's default mapping
+; is the 128K's own at power-on -- banks 5, 2 and 0 -- and everything is
+; assembled into it except the room list, which MMU puts in bank 4.
 					DEVICE ZXSPECTRUM128
 
 
@@ -44,9 +53,10 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ; 0x8000 -- the code, the sprite data and the rotate table -- and what sits
 ; below it is read rarely or is cheap to reach: see the regions further down.
 ;
-; It starts at the very top of memory -- SP = 0, so the first push lands at
-; $FFFE -- and STACK_RESERVE is kept clear below it. It used to start at $FF00
-; with the 256 bytes above it standing empty, and those went to code.
+; It starts at the top of bank 2 -- SP = $C000, so the first push lands at
+; $BFFE -- and STACK_RESERVE is kept clear below it. On the 48K it was at the
+; very top of memory. On the 128K that is the bank that pages, and a RET with
+; another bank in would read its address from that bank.
 ;
 ; The reserve is measured, not guessed: the bytes below the stack are filled
 ; with a pattern, the game is played through the rooms with everything in them
@@ -54,18 +64,15 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ; change of light and a new game -- and the untouched bytes counted afterwards.
 ; That says 34, where it said 26 before the sounds and the panel, which nest
 ; deeper. Anything that adds to the deepest call chain wants re-measuring.
-;
-; On the 128K the top of memory is bank 0, the one that pages, so while the
-; stack is up here nothing may page bank 0 out -- see page.s. It moves below
-; $C000 once the sprite data leaves bank 2 and there is room for it there.
-STACK_TOP			EQU		0x0000
+STACK_TOP			EQU		0xC000
 STACK_RESERVE		EQU		48		; 34 used, 14 spare
 
 ; ---------------------------------------------------------------------------
 ; The castle, in contended memory.
 ;
-; Every room in Knight Lore, the templates they are built from, and the pixel
-; adjustments its own code would have computed. None of it is touched except
+; The templates every room is built from, and the pixel adjustments Knight
+; Lore's own code would have computed. The rooms themselves are in bank 4 --
+; see room_list.s at the foot of this file. None of it is touched except
 ; when a room is built, so it costs nothing to leave it where the ULA fights
 ; the CPU for it -- which is also where the game itself kept it.
 ;
@@ -110,17 +117,18 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 ; The sound effects, which only choose what to play -- see sound.s.
                     INCLUDE "sound_fx.s"
                     INCLUDE "monster_gate.s"    ; where the trimmed index left room
+
+; Looking a room up in bank 4, and the paging it needs.
+                    INCLUDE "room_find.s"
+                    INCLUDE "page.s"
+
 room_data_end:
-                    ASSERT  room_data_end <= $7400      ; clear of the view buffer
-                    DISPLAY "generated data  $6000..", /H, room_data_end, "   free: ", /D, $7400 - room_data_end
+                    ; The menu and the end screens follow on from here -- see
+                    ; cold_start, below the code.
 
                     ORG     $8000
 
 					INCLUDE "../engine/sprite.s"
-sprite_start:
-					INCLUDE "sprite_data.s"
-sprite_end:
-					DISPLAY "sprite_data size ", sprite_end - sprite_start
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
 					INCLUDE "../engine/shift.s"
@@ -133,9 +141,6 @@ sprite_end:
 					INCLUDE "special.s"
 					INCLUDE "../engine/sound.s"
 					INCLUDE "panel.s"
-					INCLUDE "end.s"		; its tunes and their notes, then
-					INCLUDE "../engine/tune.s"		; what plays them
-					INCLUDE "menu.s"
 					INCLUDE "input.s"		; its keys and its bits, then
 					INCLUDE "../engine/input.s"		; the sticks, which are nobody's
 
@@ -153,12 +158,48 @@ sprite_end:
 
 
 
-; The stack grows down from the top of memory, so the image has to stop short of
+; The stack grows down from the top of bank 2, so the code has to stop short of
 ; what it reserves there. This is the check that was missing when the player
 ; pushed the top of the image into the stack.
 image_end:
-                    ASSERT  $ <= $10000 - STACK_RESERVE
-                    DISPLAY "code and data   $8000..", /H, image_end, "   free below the stack: ", /D, $10000 - STACK_RESERVE - image_end
+                    ASSERT  $ <= STACK_TOP - STACK_RESERVE
+                    DISPLAY "code            $8000..", /H, image_end, "   free below the stack: ", /D, STACK_TOP - STACK_RESERVE - image_end
+
+; ---------------------------------------------------------------------------
+; Code that runs between games rather than during one: the end screens and
+; their tunes, what plays the tunes, and the menu. It was up with the rest of
+; the code on the 48K. On the 128K that space went to the stack, and this is
+; cold enough not to mind contended memory, so it goes on the end of the data
+; in the $6000 region. It is assembled down here, after the engine, because
+; menu.s uses sprite_width_class, a macro engine/sprite.s brings in.
+                    ORG     room_data_end
+cold_start:
+                    INCLUDE "end.s"             ; its tunes and their notes, then
+                    INCLUDE "../engine/tune.s"  ; what plays them
+                    INCLUDE "menu.s"
+cold_end:
+                    ASSERT  cold_end <= $7400   ; clear of the view buffer
+                    DISPLAY "data, cold code $6000..", /H, cold_end, "   free: ", /D, $7400 - cold_end
+
+; ---------------------------------------------------------------------------
+; The sprites, in bank 0 at $C000: the bank that stays paged in for the whole
+; of play, since every turn draws from them. Bank 0 is uncontended on every
+; 128K model, the +2A and +3 included.
+                    ORG     $C000
+sprite_start:
+					INCLUDE "sprite_data.s"
+sprite_end:
+                    ASSERT  $ <= $10000
+                    DISPLAY "sprites, bank 0 $C000..", /H, sprite_end, "   free: ", /D, $10000 - sprite_end
+
+; ---------------------------------------------------------------------------
+; The rooms, in bank 4 at $C000. Only room_find reads them, with bank 4 paged
+; in for as long as it takes to copy one record out -- see room_find.s.
+                    MMU     3, ROOM_BANK, $C000
+                    INCLUDE "room_list.s"
+room_list_end:
+                    DISPLAY "rooms, bank 4   $C000..", /H, room_list_end, "   free: ", /D, $10000 - room_list_end
+                    MMU     3, PAGE_PLAY
 
 ; ---------------------------------------------------------------------------
 ; Building a room, down where the ROM keeps its system variables.
@@ -246,7 +287,6 @@ bit_reverse_table:
                     INCLUDE "../engine/screen.s"         ; pickup.s falls into it
                     INCLUDE "busy.s"            ; its numbers, then the engine's own,
                     INCLUDE "../engine/busy.s"  ; where the trimmed sprite table left room
-                    INCLUDE "page.s"            ; the 128K's paging, run once a game
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
@@ -255,6 +295,5 @@ pool_end:
 ; output/knightlore128.z80 with PC at start. Not SAVESNA: a .sna keeps PC on
 ; the stack, where sjasmplus has to push it into whatever is below SP.
                     SAVEDEV "output/knightlore128.banks", 0, 0, $20000
-; ...and the 48K's view of them, $4000 to $FFFF with bank 0 paged in, which is
-; what the image has been until now and what it is compared with.
+; ...and the view from $4000 to $FFFF with bank 0 paged in, as the game runs.
                     SAVEBIN "output/knightlore128.bin", $4000, $C000

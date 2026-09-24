@@ -176,6 +176,7 @@ examples/filmation/knightlore128/sprite_adj_gen.s
 examples/filmation/knightlore128/graphics_gen.s
 examples/filmation/knightlore128/font.s
 examples/filmation/knightlore128/room_data.s
+examples/filmation/knightlore128/room_list.s
 examples/filmation/knightlore128/specials_gen.s
 examples/filmation/knightlore128/output/
 

@@ -211,9 +211,11 @@ The 128th record is the $FF end marker.
 - **Keep him alive while sampling**, or a death in the middle of a
   measurement leaves the game on its end screen, with `room_busy` frozen at
   whatever it last was.
-- **Memory is nearly full:** about 1 byte in the main area, 2 in the $5B00
-  page, 20 in the pool area and 21 in the data area. The sprite table and the
-  nudge index already stop at the last graphic (187).
+- **Memory is banked:** the README's table says what is where and how much
+  is free. `read_memory` reads $C000 up as whatever is paged in, which is
+  bank 0, the sprites, while the game runs; give it `bank: 4` to read the
+  rooms. The sprite table and the nudge index still stop at the last graphic
+  (187).
 
 ## 7. Profiling a turn
 

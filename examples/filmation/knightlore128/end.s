@@ -170,7 +170,9 @@ room_seen:          ld      c,a
                     ld      a,l
                     add     a,c
                     ld      l,a
-                    ld      a,(hl)
+                    jr      nc,.page            ; the table can straddle a page: it
+                    inc     h                   ; did once the menu and the end
+.page:              ld      a,(hl)              ; screens moved down to $6000
                     or      b
                     ld      (hl),a
                     ret

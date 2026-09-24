@@ -11,24 +11,26 @@
 ; wrote. The snapshot starts from the same value: build.py reads bank_port out
 ; of the image for the .z80's header, so the two cannot disagree.
 ;
-; For now bank 0 is the only one ever paged in. The image still sits where the
-; 48K game put it, with the code and sprite data from $C000 up in bank 0, and
-; the stack at the top of bank 0 too. Nothing may page bank 0 out while that
-; stack is in use -- a RET would read its address from the other bank -- so the
-; stack has to move below $C000 before anything else is paged in. See
-; ../engine/memory-128k.md for where everything is going.
+; Bank 0 is the one paged in during play: it holds the sprites, which the
+; drawing reads every turn. Anything else is paged in only for as long as it
+; takes to copy something out of it, and bank 0 goes straight back. The stack is
+; below $C000, so a RET never reads its address from whatever bank is paged in.
+; See ../engine/memory-128k.md for the rest of the plan.
 PAGE_ROM_48         EQU     %00010000   ; bit 4: the 48 BASIC ROM at $0000
+PAGE_PLAY           EQU     0           ; the bank at $C000 during play
 
 ; The last value written to $7FFD.
-bank_port:          DB      PAGE_ROM_48
+bank_port:          DB      PAGE_ROM_48 | PAGE_PLAY
 
 ; Puts a RAM bank at $C000.
 ;
 ; In:  A = the bank, 0-7
-; Out: bank_port = what was written to the port
-; Corrupts: AF, BC
+; Out: A = bank_port, what was written to the port; carry clear
+; Corrupts: F
 page_in:            or      PAGE_ROM_48
                     ld      (bank_port),a
+                    push    bc
                     ld      bc,$7FFD
                     out     (c),a
+                    pop     bc
                     ret
