@@ -48,6 +48,10 @@ COLLIDE_Z			EQU		4
 OBJ_PASSABLE		EQU		$04
 OBJ_FLIP_BIT		EQU		0
 CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 6	; as engine/walker.s has it
+CHARACTER_DZ		EQU		ROOM_STRIDE * 2		; ...and this
+CHARACTER_HALF_U	EQU		5				; as knight.s has them
+CHARACTER_HALF_V	EQU		5
+OBJ_FLIP_H			EQU		1				; as engine/object.s has it
 room_objects		EQU		ROOMS
 
 FG_BLOCK			EQU		$00
@@ -79,6 +83,32 @@ FG_REPEL_SPELL		EQU		$19
 FG_GATE_UD_1		EQU		$1A
 FG_GATE_UD_2		EQU		$1B
 FG_BALL_UD_X		EQU		$1C
+; Pentagram's, which movers.s's mover_of names too. Any values apart from the
+; above will do: nothing here builds a room from them.
+FG_PENTAGRAM_GRASS			EQU	$1D
+FG_PENTAGRAM_THORNS			EQU	$1E
+FG_PENTAGRAM_WATER			EQU	$1F
+FG_PENTAGRAM_WATER_DEEP		EQU	$20
+FG_PENTAGRAM_THORNY_BUSH	EQU	$21
+FG_PENTAGRAM_SPIDER			EQU	$22
+FG_PENTAGRAM_CREATURE		EQU	$23
+FG_PENTAGRAM_DRAGON_PACES_U	EQU	$24
+FG_PENTAGRAM_DRAGON_PACES_V	EQU	$25
+FG_PENTAGRAM_DRAGON_HOPS	EQU	$26
+FG_PENTAGRAM_PLATFORM_U		EQU	$27
+FG_PENTAGRAM_PLATFORM_V		EQU	$28
+FG_PENTAGRAM_LIFT			EQU	$29
+FG_PENTAGRAM_CONVEYOR_1		EQU	$2A
+FG_PENTAGRAM_CONVEYOR_3		EQU	$2B
+FG_PENTAGRAM_CONVEYOR_4		EQU	$2C
+FG_PENTAGRAM_BLOCK_FALLS	EQU	$2D
+FG_PENTAGRAM_BLOCK_CRUMBLES	EQU	$2E
+FG_PENTAGRAM_BLOCK_SINKS	EQU	$2F
+FG_PENTAGRAM_STUMP_PUSHED	EQU	$30
+FG_PENTAGRAM_CUBE_PUSHED	EQU	$31
+FG_PENTAGRAM_TABLE_PUSHED	EQU	$32
+FG_PENTAGRAM_STONE_PUSHED	EQU	$33
+GFX_PENTAGRAM_BLOCK_4		EQU	222		; the crumbling block's last crack
 
 
 ; Run a routine with IX -> REC, as movers_step leaves it, and keep what came
@@ -808,6 +838,74 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	hide_calls, 1, "object_hide"
 					EXPECT_WORD	hide_ix, REC, "...of it"
 
+; --- Pentagram's, beside Knight Lore's ----------------------------------------
+; Where the two games share one of engine/movers.s's movers, movers.s's hooks
+; tell them apart by behaviour.
+
+					TEST	"find: one of Pentagram's templates"
+					call	fresh
+					ld		a,FG_PENTAGRAM_SPIDER
+					call	mover_find
+					call	snap
+					EXPECT_A	MOVE_SPIDER, "the behaviour"
+
+					TEST	"pacer_frame: a fire flickers"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
+					SET		OBJ.GFX, 87
+					RUN		pacer_frame
+					EXPECT_FIELD	OBJ.GFX, 86, "the graphic, bit 0 turned over"
+
+					TEST	"pacer_frame: a platform keeps its frame"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_PLATFORM_U
+					SET		OBJ.GFX, 200
+					RUN		pacer_frame
+					EXPECT_FIELD	OBJ.GFX, 200, "the graphic"
+
+					TEST	"pacer_move: a fire goes its step"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
+					SET		OBJ.U, 100
+					SET		OBJ.DU, 1
+					RUN		pacer_move
+					EXPECT_FIELD	OBJ.U, 101, "U"
+
+					TEST	"pacer_move: a dragon goes twice it"
+					call	fresh
+					SET		OBJ.BEHAVIOUR, MOVE_DRAGON_V
+					SET		OBJ.V, 100
+					SET		OBJ.DV, -1
+					RUN		pacer_move
+					EXPECT_FIELD	OBJ.V, 98, "V"
+
+					TEST	"dragon hops: the balls' top is left as it was"
+					call	fresh
+					ld		a,150
+					ld		(mover_ball_top),a
+					SET		OBJ.BEHAVIOUR, MOVE_DRAGON_HOPS
+					RUN		mover_dragon_hops
+					EXPECT_BYTE	mover_ball_top, 150, "mover_ball_top"
+
+					TEST	"conveyor: the way is the bottom two bits"
+					call	fresh
+					SET		OBJ.GFX, 202		; 2: along +V
+					RUN		mover_conveyor
+					EXPECT_FIELD	OBJ.DU, 0, "DU"
+					EXPECT_FIELD	OBJ.DV, 1, "DV"
+					call	fresh
+					SET		OBJ.GFX, 201		; 1: along -U
+					RUN		mover_conveyor
+					EXPECT_FIELD	OBJ.DU, -1 & $FF, "DU"
+					EXPECT_FIELD	OBJ.DV, 0, "DV"
+
+					TEST	"monster_sits_out: monster_gate has decided already"
+					call	fresh
+					scf
+					call	monster_sits_out
+					call	snap
+					EXPECT_CARRY	0, "carry: it takes its turn"
+
 					call	finish
 					DB		"movers_tests (knightlore128)", 0
 
@@ -1103,8 +1201,8 @@ sound_gate:
 sound_take:
 slide_sound:
 sound_sparkle:
-pacer_sound:
-mover_turned:		ret		; sound_fx.s's, which only choose a sound
+fire_sound:
+fire_turned:		ret		; sound_fx.s's, which only choose a sound
 
 
 					INCLUDE	"../monster_gate.s"

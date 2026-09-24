@@ -1,6 +1,7 @@
 ; ---------------------------------------------------------------------------
 ; Where the monsters' turns go first -- see busy.s. mover_tbl sends every
-; behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL here. In a busy room each
+; behaviour from MOVE_FIRE_U to MOVE_MONSTER_LAST here: Knight Lore's, and
+; Pentagram's spider, creature and pacing dragon's heads. In a busy room each
 ; counts busy_count down, and whichever reaches nought sits the turn out and
 ; starts the count again from room_busy, its step cleared so that nothing
 ; riding it moves without it -- a ghost carries things. Everyone else, and
@@ -33,8 +34,10 @@ monster_gate:       ld      a,(room_busy)
                     ld      l,a
                     jp      (hl)
 
-; What monster_gate goes on to, MOVE_FIRE_U to MOVE_SPIKE_BALL.
+; What monster_gate goes on to, MOVE_FIRE_U to MOVE_MONSTER_LAST.
 monster_movers:     DW      mover_pacer_u, mover_pacer_v, mover_pacer_pair
                     DW      mover_circuit_pair, mover_drifter, mover_hunter
                     DW      mover_spike_ball
-                    ASSERT  ($ - monster_movers) / 2 == MOVE_SPIKE_BALL - MOVE_FIRE_U + 1
+                    DW      mover_scuttler, mover_roamer        ; Pentagram's
+                    DW      mover_pacer_u, mover_pacer_v        ; ...dragons
+                    ASSERT  ($ - monster_movers) / 2 == MOVE_MONSTER_LAST - MOVE_FIRE_U + 1

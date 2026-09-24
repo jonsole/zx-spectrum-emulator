@@ -44,7 +44,7 @@ slide_sound:        ld      a,l
 ;      L  = COLLIDE_U or COLLIDE_V
 ; Out: nothing
 ; Corrupts: AF
-pacer_sound:        bit     1,l                 ; COLLIDE_V
+fire_sound:         bit     1,l                 ; COLLIDE_V
                     jr      z,sound_u
                     ASSERT  COLLIDE_V == 2
                     ;; NB: fall through into sound_v
@@ -185,7 +185,7 @@ sound_sparkle:      cpl
 ;      IX -> the record
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL
-mover_turned:       cp      COLLIDE_V
+fire_turned:        cp      COLLIDE_V
                     ret     nz
                     call    sound_take
                     ret     z

@@ -44,7 +44,8 @@ starts.
 | 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | done |
 | 4a | one sprite sheet holding every Knight Lore and every Pentagram sprite; Pentagram's graphics numbered 188 up | done |
 | 4b | Pentagram's scenery and object templates, and rooms that use them | done |
-| 4c | Pentagram's creatures and mechanics: its movers, the things that fall from the sky, the bolt, the well | |
+| 4c-i | Pentagram's movers for what its rooms place: the spider, the creature, the dragons' heads, platforms, lift, conveyors, and blocks that fall, sink, crumble or are shoved | done |
+| 4c-ii | what Pentagram puts up itself: the things that fall from the sky, the well's bucket, the bolt and the puff | |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
@@ -75,6 +76,55 @@ quest's items and the pentagram's pieces. It is in the sheet, and
 them. Everything under `pentagram` is loaded room by room (`ROOM_GROUPS`); the
 library holds 85 sprites and still fits bank 1. The busy-room code moved to
 the $6000 region to make room for the longer `sprite_table`.
+
+### Pentagram's movers (stage 4c-i)
+
+Pentagram's templates now move as they do there. `mover_of` in `movers.s`
+gives each its behaviour, and the behaviours are numbered in with Knight
+Lore's so that the engine's bands still hold:
+
+| | Knight Lore's | Pentagram's |
+|---|---|---|
+| deadly, no turn (1) | gargoyles, spikes | spiky grass, thorns, water, the thorny bush |
+| deadly monsters, through `monster_gate` (3-13) | fires, guards, the ghost, balls | the spider, the creature, the pacing dragons' heads |
+| deadly (14), crushing (15) | the gate | the bobbing dragon's head |
+| harmless (16-25) | sliding blocks, the spell, the cauldron | platforms, the lift, conveyors, the falling block, the crumbling block |
+| gives way (26-27) | the dropping and collapsing blocks | the sinking block (the same mover) |
+| loose (28 up) | the moveable block, table, chest, charms | stumps, cubes, tables and stones, shoved with their pile |
+
+Knight Lore's numbers from 10 up moved to make room.
+
+Where the two games share one of `engine/movers.s`'s movers but gave it
+different constants and hooks, `movers.s` has a small routine that looks at
+the behaviour:
+- **The pacer:** a fire hums, flickers and steps one; a platform or a dragon
+  is silent, keeps its frame and steps two.
+- **The hopper:** a ball flickers, hums and clicks; a dragon does none of it,
+  and `mover_dragon_hops` gives it its own top, Z 176.
+- **The monsters:** Pentagram's `monster_sits_out` never sits out, because
+  `monster_gate` has already decided.
+
+Three things are not as Pentagram has them:
+- **The thorny bush is deadly but cannot be shoved.** A behaviour is either
+  loose or deadly here: the loose band runs to the top, the deadly one ends
+  where the harmless one starts, and the crushing gate sits at that end. So
+  the spider shut in by bushes in room $16 stays shut in.
+- **The bobbing dragon rises three a turn**, the balls' `HOPPER_RISE`, where
+  Pentagram's rose two. It is the one constant the two cannot both have.
+- **The busy rule is Knight Lore's.** Pentagram's movers sit turns out
+  through `monster_gate`, not their own `monster_sits_out`.
+
+The sun and the moon's code moved from bank 2 to the $6000 region to make
+room for the engine's movers.
+
+What was checked, in a 128K emulator:
+- In the imported rooms, the dragons pace and bob and the creature and the
+  spiders roam. A spider shut in by stumps or cubes stays until something is
+  shoved. A conveyor carries the knight the way its graphic says.
+- Nothing draws `sprite_missing`.
+- Knight Lore's 127 rooms build the same objects as the 48K game, with the
+  behaviour numbers mapped.
+- `tests/movers_tests.s` has eight more tests for the shared hooks.
 
 ### Pentagram's templates and rooms (stage 4b)
 

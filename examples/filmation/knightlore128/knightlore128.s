@@ -134,6 +134,11 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
                     INCLUDE "busy.s"            ; its numbers, then the engine's own
                     INCLUDE "../engine/busy.s"
 
+; The sun and the moon in their window. They move when the clock ticks, one turn
+; in eight, and are redrawn when a redraw reaches the window -- not every turn,
+; so this is where they went when Pentagram's movers filled bank 2.
+                    INCLUDE "sun.s"
+
 room_data_end:
                     ; The menu and the end screens follow on from here -- see
                     ; cold_start, below the code.
@@ -163,7 +168,6 @@ room_data_end:
 					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
 					INCLUDE "player.s"
-					INCLUDE "sun.s"
 					INCLUDE "../engine/redraw.s"
 					INCLUDE "overlay.s"	; redraw_view falls into it
 					INCLUDE "../engine/vid_buff.s"

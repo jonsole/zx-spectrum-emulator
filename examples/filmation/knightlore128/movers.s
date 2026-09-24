@@ -33,21 +33,43 @@ MOVE_GUARD_SQ	EQU		6
 MOVE_GHOST		EQU		7
 MOVE_BOUNCE		EQU		8
 MOVE_SPIKE_BALL	EQU		9
+; Pentagram's monsters, which go through monster_gate as Knight Lore's do: the
+; spider (engine/movers.s's mover_scuttler, $CF22), the creature (mover_roamer,
+; $D1F5) and the dragon's heads that pace (mover_pacer_u and _v, $CEA0).
+MOVE_SPIDER		EQU		10
+MOVE_CREATURE		EQU		11
+MOVE_DRAGON_U		EQU		12
+MOVE_DRAGON_V		EQU		13
+MOVE_MONSTER_LAST	EQU		13		; monster_gate's range ends here
+; ...and the dragon's head that bobs, which Pentagram does not count as a
+; monster: engine/movers.s's mover_hopper, $CE31. See mover_dragon_hops.
+MOVE_DRAGON_HOPS	EQU		14
 
 ; The gates only kill what they come down on. upd_9 sets bit 7 of $0D alone --
 ; "fatal if it hits the player" -- and not bit 5, "fatal if he hits it", so the
 ; clamp at $CBAF only passes it on when the gate is the one moving. Walking into
 ; a gate is safe; standing under one as it drops is not.
-MOVE_CRUSHING	EQU		10
-MOVE_GATE			EQU		10
+MOVE_CRUSHING	EQU		15
+MOVE_GATE			EQU		15
 
-MOVE_HARMLESS	EQU		11		; and from here on, nothing kills
-MOVE_SLIDE_U		EQU		11
-MOVE_SLIDE_V		EQU		12
-MOVE_SPELL		EQU		13
-MOVE_CAULDRON	EQU		14		; what rises out of the pot -- see special.s
-MOVE_DROPPING	EQU		15		; these two give way under a weight: see
-MOVE_COLLAPSING	EQU		16		; object_landed_on, which relies on the order
+MOVE_HARMLESS	EQU		16		; and from here on, nothing kills
+MOVE_SLIDE_U		EQU		16
+MOVE_SLIDE_V		EQU		17
+MOVE_SPELL		EQU		18
+MOVE_CAULDRON	EQU		19		; what rises out of the pot -- see special.s
+; Pentagram's things that move and do no harm: the platforms that pace (the
+; same mover_pacer_u and _v as the fires and the dragons, $CEA3), the lift
+; ($CDBB), the conveyors ($B866), the block that drops and cannot be pushed
+; ($CD75) and the one that cracks under him and goes ($D2AD).
+MOVE_PLATFORM_U	EQU		20
+MOVE_PLATFORM_V	EQU		21
+MOVE_LIFT			EQU		22
+MOVE_CONVEYOR		EQU		23
+MOVE_FALLS		EQU		24
+MOVE_CRUMBLES		EQU		25
+MOVE_DROPPING	EQU		26		; these two give way under a weight: see
+MOVE_COLLAPSING	EQU		27		; object_landed_on, which relies on the order.
+									; Pentagram's block that sinks is the first
 
 ; Everything from here up is loose: it can be carried by whatever it is
 ; standing on and shoved by whatever runs into it. The game says the same
@@ -66,11 +88,18 @@ MOVE_COLLAPSING	EQU		16		; object_landed_on, which relies on the order
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		17
-MOVE_CARRIED		EQU		17
-MOVE_PUSHED		EQU		18
-MOVE_SLIDING		EQU		19
-MOVE_SPECIAL		EQU		20		; a collectable -- see special.s
+MOVE_LOOSE		EQU		28
+MOVE_CARRIED		EQU		28
+MOVE_PUSHED		EQU		29
+MOVE_SLIDING		EQU		30
+MOVE_SPECIAL		EQU		31		; a collectable -- see special.s
+; Pentagram's stumps, cubes, tables and stones: shoved, and taking whatever is
+; piled on them along -- engine/movers.s's mover_shoved_pile, $CD81. Its
+; thorny bush is shoved the same way there AND kills, but a behaviour here is
+; either loose or deadly -- the loose band runs to the top and the deadly one
+; ends where the harmless one starts -- so here the bush is deadly and stays
+; where it grew.
+MOVE_PUSHED_PILE	EQU		32
 
 ; What the engine's contact rules need to know about these numbers. It never
 ; names a behaviour, only the bands above -- see engine/object.s.
@@ -128,6 +157,30 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
 					DB		FG_GARGOYLE, MOVE_STILL
 					DB		FG_SPIKE, MOVE_STILL
+					; Pentagram's, as its own movers.s's mover_of has them.
+					DB		FG_PENTAGRAM_GRASS, MOVE_STILL
+					DB		FG_PENTAGRAM_THORNS, MOVE_STILL
+					DB		FG_PENTAGRAM_WATER, MOVE_STILL
+					DB		FG_PENTAGRAM_WATER_DEEP, MOVE_STILL
+					DB		FG_PENTAGRAM_THORNY_BUSH, MOVE_STILL	; see MOVE_PUSHED_PILE
+					DB		FG_PENTAGRAM_SPIDER, MOVE_SPIDER
+					DB		FG_PENTAGRAM_CREATURE, MOVE_CREATURE
+					DB		FG_PENTAGRAM_DRAGON_PACES_U, MOVE_DRAGON_U
+					DB		FG_PENTAGRAM_DRAGON_PACES_V, MOVE_DRAGON_V
+					DB		FG_PENTAGRAM_DRAGON_HOPS, MOVE_DRAGON_HOPS
+					DB		FG_PENTAGRAM_PLATFORM_U, MOVE_PLATFORM_U
+					DB		FG_PENTAGRAM_PLATFORM_V, MOVE_PLATFORM_V
+					DB		FG_PENTAGRAM_LIFT, MOVE_LIFT
+					DB		FG_PENTAGRAM_CONVEYOR_1, MOVE_CONVEYOR
+					DB		FG_PENTAGRAM_CONVEYOR_3, MOVE_CONVEYOR
+					DB		FG_PENTAGRAM_CONVEYOR_4, MOVE_CONVEYOR
+					DB		FG_PENTAGRAM_BLOCK_FALLS, MOVE_FALLS
+					DB		FG_PENTAGRAM_BLOCK_CRUMBLES, MOVE_CRUMBLES
+					DB		FG_PENTAGRAM_BLOCK_SINKS, MOVE_DROPPING
+					DB		FG_PENTAGRAM_STUMP_PUSHED, MOVE_PUSHED_PILE
+					DB		FG_PENTAGRAM_CUBE_PUSHED, MOVE_PUSHED_PILE
+					DB		FG_PENTAGRAM_TABLE_PUSHED, MOVE_PUSHED_PILE
+					DB		FG_PENTAGRAM_STONE_PUSHED, MOVE_PUSHED_PILE
 					DB		$FF
 
 ; The monsters, MOVE_FIRE_U to MOVE_SPIKE_BALL, go through monster_gate, which
@@ -141,18 +194,30 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		monster_gate		; MOVE_GHOST
 					DW		monster_gate		; MOVE_BOUNCE
 					DW		monster_gate		; MOVE_SPIKE_BALL
+					DW		monster_gate		; MOVE_SPIDER
+					DW		monster_gate		; MOVE_CREATURE
+					DW		monster_gate		; MOVE_DRAGON_U
+					DW		monster_gate		; MOVE_DRAGON_V
+					DW		mover_dragon_hops	; MOVE_DRAGON_HOPS
 					DW		mover_gate			; MOVE_GATE
 					DW		mover_slide_u		; MOVE_SLIDE_U
 					DW		mover_slide_v		; MOVE_SLIDE_V
 					DW		mover_stalker		; MOVE_SPELL: engine/movers.s
 					DW		mover_cauldron	; MOVE_CAULDRON
+					DW		mover_pacer_u		; MOVE_PLATFORM_U: engine/movers.s
+					DW		mover_pacer_v		; MOVE_PLATFORM_V
+					DW		mover_lift		; MOVE_LIFT: engine/movers.s
+					DW		mover_conveyor	; MOVE_CONVEYOR: engine/movers.s
+					DW		mover_falls		; MOVE_FALLS: engine/movers.s
+					DW		mover_crumbles	; MOVE_CRUMBLES: engine/movers.s
 					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
 					DW		mover_shoved		; MOVE_PUSHED: engine/movers.s
 					DW		mover_move		; MOVE_SLIDING: see mover_sliding
 					DW		mover_special	; MOVE_SPECIAL
-					ASSERT	($ - mover_tbl) / 2 == MOVE_SPECIAL - MOVE_BALL + 1
+					DW		mover_shoved_pile	; MOVE_PUSHED_PILE: engine/movers.s
+					ASSERT	($ - mover_tbl) / 2 == MOVE_PUSHED_PILE - MOVE_BALL + 1
 
 
 ; How high the balls in this room bounce. Zero until the first ball takes its
@@ -367,4 +432,156 @@ stalker_speed:		ld		c,SPELL_STEP
 ; Corrupts: AF, BC, DE, HL
 stalker_frame:		call	mover_cycle4
 					jp		sound_uvz
+
+
+; ---------------------------------------------------------------------------
+; Where Knight Lore's movers and Pentagram's share one of engine/movers.s's.
+;
+; The library takes its constants and hooks by name, one of each for the whole
+; game, and the two games gave them different ones: a fire flickers, hums and
+; steps one a turn, and bounces off what turns it; a platform or a dragon's
+; head is still in its frame, silent and steps two. So each hook the two
+; share is a routine here that looks at the behaviour, and Knight Lore's own is
+; what everything that is not Pentagram's gets -- the guards reach
+; mover_turned as well, and must go on reaching Knight Lore's.
+
+; Whether the record at IX is one of Pentagram's pacers: a platform or a
+; pacing dragon's head.
+;
+; In:  IX -> the record
+; Out: Z set if it is
+; Corrupts: AF
+pentagram_pacer:	ld		a,(ix+OBJ.BEHAVIOUR)
+					cp		MOVE_DRAGON_U
+					ret		z
+					cp		MOVE_DRAGON_V
+					ret		z
+					cp		MOVE_PLATFORM_U
+					ret		z
+					cp		MOVE_PLATFORM_V
+					ret
+
+; engine/movers.s's pacer_sound: a fire hums along its axis -- fire_sound, in
+; sound_fx.s -- and Pentagram's pacers make no sound.
+;
+; In:  IX -> the record
+;      L  = COLLIDE_U or COLLIDE_V
+; Out: nothing
+; Corrupts: AF
+pacer_sound:		call	pentagram_pacer
+					ret		z
+					jp		fire_sound
+
+; ...pacer_frame: a fire flickers between its two frames, and Pentagram's
+; pacers keep theirs.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
+pacer_frame:		call	pentagram_pacer
+					ret		z
+					jp		mover_flicker
+
+; ...pacer_move: a fire changes every turn, so it is drawn every turn; a
+; platform or a dragon goes PENTAGRAM_PACER_STEP, twice the fire's step, and is
+; drawn only if it went somewhere.
+;
+; In:  IX -> the record, its step in DU or DV
+; Out: nothing
+; Corrupts: everything but IX
+PENTAGRAM_PACER_STEP	EQU		2
+					ASSERT	PENTAGRAM_PACER_STEP == 2 * PACER_STEP
+pacer_move:			call	pentagram_pacer
+					jp		nz,mover_move_always
+					sla		(ix+OBJ.DU)
+					sla		(ix+OBJ.DV)
+					jp		mover_move
+
+; ...mover_turned: a fire turning on V bounces off what stopped it -- see
+; fire_turned, in sound_fx.s -- and Pentagram's pacers turn in silence.
+;
+; In:  A  = the axis's bit
+;      IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
+mover_turned:		ld		c,a
+					call	pentagram_pacer
+					ret		z
+					ld		a,c
+					jp		fire_turned
+
+
+; A dragon's head that bobs: engine/movers.s's mover_hopper, as a ball bounces,
+; but up to a height of its own -- Z 176, where Pentagram's stops -- where a
+; ball bounces to the height the room's first ball claimed. The library keeps
+; the one top, mover_ball_top, so the dragon puts its own there for its turn
+; and the balls' back afterwards. It rises at HOPPER_RISE, the ball's three a
+; turn, where Pentagram's rose two: the one constant the two cannot both have.
+;
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+DRAGON_HOP_TOP		EQU		176
+mover_dragon_hops:	ld		a,(mover_ball_top)
+					push	af
+					ld		a,DRAGON_HOP_TOP - 1
+					ld		(mover_ball_top),a
+					call	mover_hopper
+					pop		af
+					ld		(mover_ball_top),a
+					ret
+
+; engine/movers.s's hopper_frame: a ball flickers, a dragon keeps its frame.
+; Either way the step along U and V is cleared.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
+hopper_frame:		ld		a,(ix+OBJ.BEHAVIOUR)
+					cp		MOVE_DRAGON_HOPS
+					jp		z,mover_halt
+					jp		mover_flicker
+
+; ...hopper_sound: a ball hums as it goes, a dragon is silent.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF, and what sound_z does
+hopper_sound:		ld		a,(ix+OBJ.BEHAVIOUR)
+					cp		MOVE_DRAGON_HOPS
+					ret		z
+					jp		sound_z
+
+; ...hopper_landed: a ball clicks as it lands, a dragon does not.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
+hopper_landed:		ld		a,(ix+OBJ.BEHAVIOUR)
+					cp		MOVE_DRAGON_HOPS
+					ret		z
+					jp		sound_bounce
+
+
+; Pentagram's monsters ask engine/movers.s whether to sit a turn out, and to
+; double and halve their step when they do move in a busy room. Here
+; monster_gate has already decided before any of them is reached, so none of
+; them sits out a second time, and none goes twice as far.
+;
+; In:  nothing
+; Out: carry clear: it takes its turn
+; Corrupts: F
+monster_sits_out:	or		a
+monster_double:
+monster_halve:		ret
+
+
+; Which way each conveyor carries what stands on it, by the bottom two bits of
+; its graphic -- Pentagram's $D30A, kept by pentagram_merge.py numbering the
+; four conveyors in order from a multiple of four. engine/movers.s's
+; mover_conveyor reads it.
+conveyor_steps:		DB		1, 0
+					DB		-1, 0
+					DB		0, 1
+					DB		0, -1
 

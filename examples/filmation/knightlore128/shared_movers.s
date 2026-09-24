@@ -24,10 +24,10 @@ sound_falls			EQU		sound_chirp
 ; template names the taller of the two -- 181 of 180/181, 87 of 86/87 -- so
 ; the rotation buffer the first frame takes from the arena fits the second.
 ; And it hums along the axis it paces, and bounces off whatever stops it along
-; V -- pacer_sound and mover_turned, in sound_fx.s.
+; V -- fire_sound and fire_turned, in sound_fx.s. Pentagram's platforms and
+; pacing dragon's heads use the same movers, so pacer_sound, pacer_frame,
+; pacer_move and mover_turned are routines in movers.s that tell the two apart.
 PACER_STEP			EQU		FIRE_STEP
-pacer_frame			EQU		mover_flicker
-pacer_move			EQU		mover_move_always		; it changes every turn
 
 
 ; A guard is two records walking as one figure: engine/movers.s's
@@ -92,11 +92,34 @@ collapse_sound		EQU		sound_sparkle
 ; upd_178_179, and bounces to BALL_RISE_TO above where the room's first ball
 ; started -- see there. It flickers where it stands, hums as it goes, and
 ; bounces with a click.
+; Pentagram's bobbing dragon's head uses mover_hopper too, so hopper_frame,
+; hopper_sound and hopper_landed are routines in movers.s that tell the two
+; apart, and mover_dragon_hops there gives it a top of its own.
 hopper_top			EQU		mover_ball_top
 HOPPER_ABOVE		EQU		BALL_RISE_TO
 HOPPER_RISE			EQU		BALL_RISE
-hopper_frame		EQU		mover_flicker
-hopper_sound		EQU		sound_z
 hopper_move			EQU		mover_move_always		; it changes every turn
-hopper_landed		EQU		sound_bounce
 					ASSERT	MOVE_RISING == 1 << HOPPER_RISING
+
+
+; ---------------------------------------------------------------------------
+; What Pentagram's things are given, as its own shared_movers.s gives them.
+
+; The spider and the creature -- mover_scuttler, $CF22, and mover_roamer, $D1F5.
+SCUTTLE_STEP		EQU		4
+ROAM_STEP			EQU		4
+
+; The lift -- mover_lift, $CDBB. It stops at Z 176, climbs two a turn, and hands
+; what rides it four: three of its own and the one its gravity takes back.
+LIFT_TOP			EQU		176
+LIFT_RISE			EQU		2
+LIFT_GIVES_HIM		EQU		4
+
+; A stump, cube, table or stone at rest looks to itself every fourth turn --
+; mover_shoved_pile, $CD81.
+SHOVED_REST_EVERY	EQU		4		; a power of two
+
+; The block that cracks -- mover_crumbles, $D2AD: a step every fourth turn,
+; through its three cracks to the last.
+CRUMBLE_LAST		EQU		GFX_PENTAGRAM_BLOCK_4
+CRUMBLE_EVERY		EQU		4		; a power of two
