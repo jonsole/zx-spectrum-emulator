@@ -155,6 +155,11 @@ shift_arena_next:	DW		shift_arena
 					INCLUDE "player.s"
 					INCLUDE "flyers.s"
                                                      ; here, not Knight Lore's grid arithmetic
+					; What a region starts from: nothing -- engine/redraw.s's own
+					; clear, view_clear_zeroes.
+					MACRO	view_clear
+					view_clear_zeroes
+					ENDM
 					INCLUDE "../engine/redraw.s"
 					INCLUDE "overlay.s"              ; redraw_view falls into it -- the game
                                                      ; must ASSERT $ == redraw_view_end

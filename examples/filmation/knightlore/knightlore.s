@@ -142,6 +142,11 @@ shift_arena_next:	DW		shift_arena
 					INCLUDE "../engine/turn.s"
 					INCLUDE "player.s"
 					INCLUDE "sun.s"
+					; What a region starts from: nothing -- engine/redraw.s's own
+					; clear, view_clear_zeroes.
+					MACRO	view_clear
+					view_clear_zeroes
+					ENDM
 					INCLUDE "../engine/redraw.s"
 					INCLUDE "overlay.s"	; redraw_view falls into it
 					INCLUDE "../engine/vid_buff.s"

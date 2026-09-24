@@ -16,6 +16,53 @@ region_rows:		DB		0
 region_width:		DB		0
 
 
+; How a region starts, before anything is composited into it: its rows of the
+; view buffer cleared to nothing. This is a macro rather than code in
+; redraw_view because the game says what a region starts from: before it
+; includes this file it defines view_clear, which redraw_view expands. Knight
+; Lore's and Pentagram's is this, as it always was. A game that keeps a picture
+; of the room's background -- walls drawn once, when the room is built -- starts
+; each region from that instead, and never draws the walls again.
+;
+; In:  region_rows = the rows, and not zero
+; Out: that many rows of view_buffer are zero
+; Corrupts: AF, B, DE, HL
+					MACRO	view_clear_zeroes
+					; Clear the rows this region uses, by pushing zeroes down through
+					; them. PUSH writes two bytes for 11T against LDIR's 21T per byte,
+					; so even blanking the lot this way beats LDIR over one region.
+					;
+					; It no longer blanks the lot, though. At 512 bytes that would be
+					; 2816T every region, twice what the old 256-byte buffer cost, and
+					; the rows past the region are never read: only the region's own
+					; rows are cleared, four pushes to each of its eight-byte rows.
+					;
+					; The four used to be one entry point into a straight run of 256
+					; `push de`, which cost nothing per row but 256 bytes of image.
+					; A DJNZ round them costs 13T a row -- 390T on a 30-row region,
+					; under half a percent of a turn -- and gives those bytes back.
+					; region_rows cannot be zero: redraw_view returned above if it was.
+					ld		(.restore_sp+1),sp		; save the real stack
+					ld		a,(region_rows)
+					ld		b,a		; a row an iteration
+					ld		l,a
+					ld		h,0
+					add		hl,hl
+					add		hl,hl
+					add		hl,hl		; hl = rows * 8, the bytes they cover
+					ld		de,view_buffer
+					add		hl,de
+					ld		sp,hl		; PUSH pre-decrements, so this fills downwards
+					ld		de,0		; and this is what every push writes
+.clear:				push	de
+					push	de
+					push	de
+					push	de
+					djnz	.clear
+.restore_sp:		ld		sp,0		; operand set just above
+					ENDM
+
+
 ; redraw_orient used to live here: one pass per region, settling every
 ; shared graphic before objects_draw_all ran. That is one decision too few
 ; -- two objects in a region wanting opposite orientations leave whichever
@@ -267,38 +314,9 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 					ld		a,TURN_PER_REGION
 					call	turn_add
 
-					; Clear the rows this region uses, by pushing zeroes down through
-					; them. PUSH writes two bytes for 11T against LDIR's 21T per byte,
-					; so even blanking the lot this way beats LDIR over one region.
-					;
-					; It no longer blanks the lot, though. At 512 bytes that would be
-					; 2816T every region, twice what the old 256-byte buffer cost, and
-					; the rows past the region are never read: only the region's own
-					; rows are cleared, four pushes to each of its eight-byte rows.
-					;
-					; The four used to be one entry point into a straight run of 256
-					; `push de`, which cost nothing per row but 256 bytes of image.
-					; A DJNZ round them costs 13T a row -- 390T on a 30-row region,
-					; under half a percent of a turn -- and gives those bytes back.
-					; region_rows cannot be zero: redraw_view returned above if it was.
-					ld		(.restore_sp+1),sp		; save the real stack
-					ld		a,(region_rows)
-					ld		b,a		; a row an iteration
-					ld		l,a
-					ld		h,0
-					add		hl,hl
-					add		hl,hl
-					add		hl,hl		; hl = rows * 8, the bytes they cover
-					ld		de,view_buffer
-					add		hl,de
-					ld		sp,hl		; PUSH pre-decrements, so this fills downwards
-					ld		de,0		; and this is what every push writes
-.clear:				push	de
-					push	de
-					push	de
-					push	de
-					djnz	.clear
-.restore_sp:		ld		sp,0		; operand set just above
+					; What the region starts from, before anything is drawn into
+					; it: the game's view_clear -- see view_clear_zeroes.
+					view_clear
 
 					; No orientation pass here any more. It settled the shared
 					; graphics once for the whole region, which is one decision
