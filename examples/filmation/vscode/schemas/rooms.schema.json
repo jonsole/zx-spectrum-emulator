@@ -11,7 +11,7 @@
  "properties": {
   "meta": {
    "type": "object",
-   "description": "About the file rather than the castle. rooms_source.py ignores all of it, so nothing here changes one byte of the game.",
+   "description": "About the file rather than the castle -- all but `rules`, which says how the castle's rooms join up. Knight Lore's and Pentagram's rooms_source.py ignore all of it, so nothing here changes one byte of those games.",
    "properties": {
     "version": {
      "type": "integer",
@@ -48,6 +48,29 @@
      "type": "string",
      "pattern": "^[A-Za-z0-9_.-]+[.]json$",
      "description": "The file this castle's templates are in, beside this one. Required: nothing is assumed about where it is, and it has to name this file back in its own meta.rooms."
+    },
+    "rules": {
+     "type": "object",
+     "description": "How this castle's rooms join up and what its builder takes, said here rather than known by the game's name. The room designer reads these; a castle without them -- Knight Lore's, Pentagram's -- keeps the rules the designer has always had for its game. Unlike the rest of meta, the game's own rooms_source.py may insist on them (knightlore128's refuses to build without exits: table).",
+     "properties": {
+      "exits": {
+       "enum": [
+        "table"
+       ],
+       "description": "\"table\": every scenery entry is two bytes, a template and a destination, and a doorway leads to the room its destination names -- 0 included, since 0 is a room -- or nowhere if that is null. Without it, Knight Lore works exits out from the room number and Pentagram reads a byte where 0 means no exit."
+      },
+      "sceneryPerRoom": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 255,
+       "description": "The most scenery entries one room may hold: what the count field in the attribute byte can say."
+      },
+      "lastRoom": {
+       "$ref": "#/definitions/byte",
+       "description": "The number the last room must have. room_find walks the records to the first number at least the one it wants, so there has to be one at the end that every search stops at."
+      }
+     },
+     "additionalProperties": false
     }
    },
    "required": [
@@ -95,7 +118,7 @@
     "properties": {
      "number": {
       "$ref": "#/definitions/byte",
-      "description": "The room's own number. In Knight Lore the map is arithmetic -- a 16 x 16 grid, so the number is a row and a column -- and in Pentagram each doorway carries its destination instead."
+      "description": "The room's own number. In Knight Lore the map is arithmetic -- a 16 x 16 grid, so the number is a row and a column -- and in Pentagram, and any castle whose exits are a table, each doorway carries its destination instead."
      },
      "ink": {
       "type": "integer",
@@ -122,8 +145,15 @@
          "description": "A name from sceneryTemplates."
         },
         "destination": {
-         "$ref": "#/definitions/byte",
-         "description": "Pentagram only: the room a doorway leads to. Knight Lore works its own out from the room number."
+         "anyOf": [
+          {
+           "$ref": "#/definitions/byte"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "The room a doorway leads to, in a castle that stores one: Pentagram on every entry, where 0 means no way out; a castle whose meta.rules.exits is \"table\" on doorways only, where 0 is a room and null is a doorway walled up. Knight Lore works its own out from the room number."
         }
        },
        "additionalProperties": false

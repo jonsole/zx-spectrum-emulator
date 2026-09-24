@@ -353,7 +353,7 @@ for (const game of GAMES) {
       const rows = blocks.get('bg_' + stem) || blocks.get('scn_' + stem) ||
                    blocks.get(name);
       if (!rows) continue;                  // a shared template, emitted once
-      const wanted = m.isBackgroundTemplate(game, name);
+      const wanted = m.isBackgroundTemplate(atlas, name);
       for (let i = 0; i < rows.length && i < pieces.length; i++) {
         const flags = rows[i][rows[i].length - 1];
         assert.strictEqual(!!(flags & BACKGROUND_FLAG), wanted,
@@ -910,6 +910,385 @@ function pythonBoxes(game) {
   }
   return null;
 }
+
+// --- a castle that says its own rules ---------------------------------------
+//
+// knightlore128 is Knight Lore's castle joined by a table of exits rather than
+// the grid, and its files say so in their meta -- rules in rooms.json,
+// doorways and background in templates.json -- instead of the designer
+// knowing the game by name. Its exits were generated from Knight Lore's grid,
+// which is what lets the tests below hold the table to the arithmetic.
+
+const TABLE = 'knightlore128';
+
+test(TABLE + ': writing both files back gives the same bytes', function () {
+  const rooms = textFor(TABLE);
+  const templates = templatesText(TABLE);
+  const atlas = m.withTemplates(m.parseAtlas(rooms), m.parseTemplates(templates));
+  // The templates' meta holds a list, meta.background, which has to come back
+  // on one line with castle.py's spacing.
+  assert.strictEqual(m.serializeTemplates(atlas, m.eolOf(templates)), templates);
+  assert.strictEqual(m.serializeAtlas(atlas, m.eolOf(rooms)), rooms);
+});
+
+test(TABLE + ': the shipped pair names each other and has nothing wrong with it', function () {
+  const atlas = atlasFor(TABLE);
+  assert.strictEqual(m.pairProblem('rooms.json', atlas, 'templates.json',
+                                   { meta: atlas.templatesMeta }), null);
+  assert.deepStrictEqual(m.checkAtlas(atlas).filter(function (p) {
+    return p.severity === 'error';
+  }), []);
+});
+
+test('rulesOf: a castle that says nothing keeps its game\'s rules', function () {
+  // Knight Lore's and Pentagram's files have no meta.rules, and must behave
+  // exactly as they did before castles could say their own.
+  const kl = m.rulesOf({ meta: { game: 'knightlore' } });
+  assert.deepStrictEqual([kl.exits, kl.sceneryPerRoom, kl.lastRoom], ['grid', 7, 0xFF]);
+  assert.strictEqual(kl.lastRoomSaid, false);
+  const pg = m.rulesOf({ meta: { game: 'pentagram' } });
+  assert.deepStrictEqual([pg.exits, pg.sceneryPerRoom, pg.lastRoom], ['byte', 8, null]);
+  const said = m.rulesOf(atlasFor(TABLE));
+  assert.deepStrictEqual([said.exits, said.sceneryPerRoom, said.lastRoom, said.lastRoomSaid],
+                         ['table', 7, 255, true]);
+});
+
+test(TABLE + ': doorways and background come from templates.json, by name', function () {
+  const atlas = atlasFor(TABLE);
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_arch_n'), 'n');
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_high_arch_s'), 's');
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_walls_0'), null);
+  // An exact name, not the built-in prefix: the list is the castle's word.
+  assert.strictEqual(m.isBackgroundTemplate(atlas, 'scenery_walls_0'), true);
+  assert.strictEqual(m.isBackgroundTemplate(atlas, 'scenery_arch_n'), false);
+  const listed = { templatesMeta: { background: ['scenery_walls_0'] }, meta: { game: 'knightlore' } };
+  assert.strictEqual(m.isBackgroundTemplate(listed, 'scenery_walls_1'), false,
+                     'a list, when there is one, is the whole of it');
+
+  // A copy of an arch is no doorway until the list names it -- the builder
+  // reads a table made from the list -- and then it is one wherever it sits.
+  m.duplicateTemplate(atlas, 'sceneryTemplates', 'scenery_arch_n', 'scenery_bridge_n');
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_bridge_n'), null);
+  atlas.templatesMeta.doorways.scenery_bridge_n = 'n';
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_bridge_n'), 'n');
+});
+
+test(TABLE + ': a rename carries the doorway and background lists with it', function () {
+  const atlas = atlasFor(TABLE);
+  const order = Object.keys(atlas.templatesMeta.doorways);
+  assert.ok(m.renameTemplate(atlas, 'scenery_arch_e', 'scenery_east_door') > 0);
+  assert.strictEqual(m.doorwayOf(atlas, 'scenery_east_door'), 'e');
+  assert.deepStrictEqual(Object.keys(atlas.templatesMeta.doorways),
+    order.map(function (name) { return name === 'scenery_arch_e' ? 'scenery_east_door' : name; }),
+    'renamed where it stood, so the file is not reordered');
+  m.renameTemplate(atlas, 'scenery_walls_1', 'scenery_walls_narrow');
+  assert.ok(atlas.templatesMeta.background.indexOf('scenery_walls_narrow') >= 0);
+  assert.strictEqual(m.isBackgroundTemplate(atlas, 'scenery_walls_narrow'), true);
+  assert.deepStrictEqual(m.checkAtlas(atlas).filter(function (p) {
+    return p.severity === 'error';
+  }), []);
+});
+
+test('destinationOf: in a table 0 is a room, and only null walls a doorway up', function () {
+  const atlas = { meta: { game: 'anything', rules: { exits: 'table' } } };
+  assert.strictEqual(m.destinationOf(atlas, { number: 5 }, { destination: 0 }, 'n'), 0);
+  assert.strictEqual(m.destinationOf(atlas, { number: 5 }, { destination: 17 }, 'n'), 17);
+  assert.strictEqual(m.destinationOf(atlas, { number: 5 }, { destination: null }, 'n'), null);
+  assert.strictEqual(m.destinationOf(atlas, { number: 5 }, {}, 'n'), null);
+  // ...where Pentagram's byte still reads 0 as no way out.
+  const pentagram = { meta: { game: 'pentagram' } };
+  assert.strictEqual(m.destinationOf(pentagram, { number: 5 }, { destination: 0 }, 'n'), null);
+});
+
+test(TABLE + ': every doorway leads where Knight Lore\'s grid would take it', function () {
+  // The table was generated from the grid, so each link's destination has to
+  // be the arithmetic's for the same room and wall.
+  const atlas = atlasFor(TABLE);
+  const grid = { meta: { game: 'knightlore' } };
+  const map = m.roomMap(atlas);
+  assert.ok(map.links.length > 200, 'found ' + map.links.length + ' doorways');
+  const byNumber = m.byNumber(atlas.rooms);
+  const apart = [];
+  for (const link of map.links) {
+    const expected = m.destinationOf(grid, byNumber.get(link.from), {}, link.side);
+    if (expected !== link.to) apart.push(link.from + ' ' + link.side + ': ' + link.to);
+  }
+  assert.deepStrictEqual(apart, []);
+  assert.deepStrictEqual(m.unreciprocated(map), []);
+});
+
+test(TABLE + ': the map walked out of the doorways is Knight Lore\'s grid', function () {
+  // The number is a row and a column -- north is +$10, east +1 -- so a room's
+  // place on the grid is (number & $0F, number >> 4). Walking the doorways
+  // from room 0 has to put every room it places at the same offset from room
+  // 0 as the grid does.
+  //
+  // Knight Lore's east and west wrap inside a row, and north and south round
+  // the castle, so a doorway through the grid's edge would lead to a room a
+  // whole grid-width away on the grid but one step away on the walked map.
+  // The shipped castle has none -- no room in an edge column or row has a
+  // doorway out through that edge -- which is why every room lands exactly
+  // where the grid has it. If one is ever added, the room beyond it lands
+  // sixteen squares out (or goes unplaced, if the walk reached that square
+  // some other way first), so the offsets are compared modulo 16 as well as
+  // being required exact while there are no such doorways.
+  const atlas = atlasFor(TABLE);
+  const map = m.roomMap(atlas);
+  const wraps = map.links.filter(function (l) {
+    const column = l.from & 0x0F;
+    const row = l.from >> 4;
+    return (l.side === 'e' && column === 15) || (l.side === 'w' && column === 0) ||
+           (l.side === 'n' && row === 15) || (l.side === 's' && row === 0);
+  });
+  const layout = m.mapLayout(atlas);
+  assert.strictEqual(layout.placed[0].number, atlas.rooms[0].number, 'the walk starts at the first room');
+  assert.deepStrictEqual(layout.unplaced, [], 'every room is reachable and fits');
+  assert.strictEqual(layout.placed.length, atlas.rooms.length);
+
+  const origin = layout.placed[0];
+  const apart = [];
+  for (const cell of layout.placed) {
+    const dx = cell.x - origin.x;
+    const dy = cell.y - origin.y;
+    const gx = (cell.number & 0x0F) - (origin.number & 0x0F);
+    const gy = (cell.number >> 4) - (origin.number >> 4);
+    const exact = dx === gx && dy === gy;
+    const modulo = ((dx - gx) % 16 === 0) && ((dy - gy) % 16 === 0);
+    if (wraps.length ? !modulo : !exact) {
+      apart.push(cell.number + ' at ' + dx + ',' + dy + ', grid ' + gx + ',' + gy);
+    }
+  }
+  assert.deepStrictEqual(apart, []);
+  if (!wraps.length) {
+    // With nothing wrapping, the box is the grid's own sixteen by sixteen.
+    assert.deepStrictEqual([layout.width, layout.height], [16, 16]);
+  } else {
+    console.log('     note: ' + wraps.length + ' doorway(s) wrap round the grid');
+  }
+});
+
+test('mapLayout: a room with no free square, and one never reached, are unplaced', function () {
+  // Built by hand, and not flat: 0 leads north to 1 and east to 2; 1 leads
+  // east to 4, and 2 leads north to 3 -- so 3 and 4 both want the square
+  // north-east of 0. 5 has no way in at all.
+  const doorways = { door_n: 'n', door_e: 'e', door_s: 's', door_w: 'w' };
+  const atlas = {
+    meta: { game: 'test', rules: { exits: 'table' } },
+    templatesMeta: { doorways: doorways },
+    sceneryTemplates: { door_n: [], door_e: [], door_s: [], door_w: [] },
+    objectTemplates: {},
+    roomDimensions: { square: { u: 64, v: 64, z: 128 } },
+    rooms: [
+      { number: 0, scenery: [{ template: 'door_n', destination: 1 },
+                             { template: 'door_e', destination: 2 }], objects: [] },
+      { number: 1, scenery: [{ template: 'door_e', destination: 4 }], objects: [] },
+      { number: 2, scenery: [{ template: 'door_n', destination: 3 }], objects: [] },
+      { number: 3, scenery: [], objects: [] },
+      { number: 4, scenery: [], objects: [] },
+      { number: 5, scenery: [], objects: [] }
+    ]
+  };
+  const layout = m.mapLayout(atlas);
+  const at = {};
+  for (const cell of layout.placed) at[cell.number] = [cell.x, cell.y];
+  // Breadth first: 0's doorways place 1 and 2, then 1's east doorway takes
+  // the square north of 2 for 4 -- so 3, walked from 2 afterwards, finds its
+  // square taken.
+  assert.deepStrictEqual(at, { 0: [0, 0], 1: [0, 1], 2: [1, 0], 4: [1, 1] });
+  assert.deepStrictEqual(layout.unplaced, [3, 5]);
+  assert.deepStrictEqual([layout.minX, layout.maxX, layout.minY, layout.maxY], [0, 1, 0, 1]);
+  assert.deepStrictEqual([layout.width, layout.height], [2, 2]);
+  assert.deepStrictEqual(m.mapLayout(Object.assign({}, atlas, { rooms: [] })).placed, []);
+});
+
+test('checkAtlas: a table castle is held to its own rules', function () {
+  const atlas = atlasFor(TABLE);
+  const errors = function () {
+    return m.checkAtlas(atlas).filter(function (p) { return p.severity === 'error'; })
+      .map(function (p) { return p.text; });
+  };
+  const room = atlas.rooms[0];
+  const kept = JSON.parse(JSON.stringify(room.scenery));
+
+  // A destination on something that is not a doorway.
+  room.scenery[2].destination = 5;
+  assert.ok(errors().some(function (t) { return /is not a doorway, and has a destination/.test(t); }));
+  room.scenery = JSON.parse(JSON.stringify(kept));
+
+  // A doorway to a room that is not there, and one walled up -- which is not
+  // a fault at all, only a door that does not open.
+  const absent = m.firstFreeRoom(atlas);
+  room.scenery[0].destination = absent;
+  assert.ok(errors().some(function (t) {
+    return new RegExp('leads to room ' + absent + ', which is not a room').test(t);
+  }));
+  room.scenery[0].destination = null;
+  assert.deepStrictEqual(errors(), []);
+  // ...though the room that door led to now has a door with no way back.
+  assert.ok(m.checkAtlas(atlas).some(function (p) {
+    return p.severity === 'warning' && /which has no doorway back/.test(p.text);
+  }));
+  room.scenery = JSON.parse(JSON.stringify(kept));
+
+  // The scenery limit is the castle's.
+  atlas.meta.rules.sceneryPerRoom = 2;
+  assert.ok(errors().some(function (t) { return /3 scenery entries; the count field holds 2/.test(t); }));
+  atlas.meta.rules.sceneryPerRoom = 7;
+
+  // The last room is the one the castle names, and the message says which.
+  const last = atlas.rooms.pop();
+  assert.ok(errors().some(function (t) { return /the last room must be \$FF \(255\), as meta\.rules\.lastRoom says/.test(t); }));
+  atlas.rooms.push(last);
+  atlas.meta.rules.lastRoom = 200;
+  assert.ok(errors().some(function (t) { return /the last room must be \$C8 \(200\)/.test(t); }));
+  atlas.meta.rules.lastRoom = 255;
+  assert.deepStrictEqual(errors(), []);
+});
+
+test('checkAtlas: a table\'s two bytes an entry reach the record\'s skip byte', function () {
+  // Worked out from rooms_source.py's record rather than read back: the skip
+  // is 2 + two bytes per scenery entry + a group byte and one per position
+  // for each object group. At one byte an entry the 257 below would be 250,
+  // and nothing would be said.
+  const atlas = atlasFor(TABLE);
+  const room = atlas.rooms[0];
+  room.scenery = [];
+  for (let i = 0; i < 7; i++) room.scenery.push({ template: 'scenery_walls_0' });
+  room.objects = [];
+  // 2 + 14 = 16 so far; 26 groups of 8 add 26 * 9 = 234, making 250; a
+  // group of 1 more adds 2, to 252; one of 4 adds 5, to 257 -- over.
+  for (let i = 0; i < 26; i++) {
+    room.objects.push({ template: 'object_block', positions: [] });
+    for (let j = 0; j < 8; j++) room.objects[i].positions.push({ u: 0, v: 0, z: 0 });
+  }
+  room.objects.push({ template: 'object_block', positions: [{ u: 0, v: 0, z: 0 }] });
+  const skips = function () {
+    return m.checkAtlas(atlas).filter(function (p) { return /skip byte/.test(p.text); })
+      .map(function (p) { return p.text; });
+  };
+  assert.deepStrictEqual(skips(), []);
+  room.objects.push({ template: 'object_block', positions: [{ u: 0, v: 0, z: 0 }, { u: 0, v: 0, z: 0 },
+                                                            { u: 0, v: 0, z: 0 }, { u: 0, v: 0, z: 0 }] });
+  assert.deepStrictEqual(skips(), ['the record is 257 bytes; the skip byte holds 255']);
+});
+
+test('addScenery: a table doorway starts walled up, and anything else has no destination', function () {
+  const atlas = atlasFor(TABLE);
+  const room = atlas.rooms[0];
+  const door = m.addScenery(atlas, room, 'scenery_arch_s', null);
+  const wall = m.addScenery(atlas, room, 'scenery_walls_0', null);
+  assert.deepStrictEqual(room.scenery[door], { template: 'scenery_arch_s', destination: null });
+  assert.deepStrictEqual(room.scenery[wall], { template: 'scenery_walls_0' });
+  // ...and the file says null, which is what rooms_source.py reads as walled up.
+  assert.ok(m.serializeAtlas(atlas, '\n').indexOf(
+    '{ "template": "scenery_arch_s", "destination": null }') >= 0);
+
+  // Knight Lore and Pentagram as before.
+  const kl = { meta: { game: 'knightlore' } };
+  const pg = { meta: { game: 'pentagram' } };
+  const bare = { scenery: [] };
+  m.addScenery(kl, bare, 'scenery_arch_n', null);
+  m.addScenery(pg, bare, 'scenery_00', null);
+  assert.deepStrictEqual(bare.scenery, [{ template: 'scenery_arch_n' },
+                                        { template: 'scenery_00', destination: 0 }]);
+});
+
+test('setSceneryTemplate: in a table the destination goes with being a doorway', function () {
+  const atlas = atlasFor(TABLE);
+  const ref = { template: 'scenery_arch_n', destination: 16 };
+  m.setSceneryTemplate(atlas, ref, 'scenery_walls_0');
+  assert.deepStrictEqual(ref, { template: 'scenery_walls_0' });
+  m.setSceneryTemplate(atlas, ref, 'scenery_arch_e');
+  assert.deepStrictEqual(ref, { template: 'scenery_arch_e', destination: null });
+  // A door changed for another door keeps where it went.
+  ref.destination = 3;
+  m.setSceneryTemplate(atlas, ref, 'scenery_tree_arch_e');
+  assert.strictEqual(ref.destination, 3);
+  // Nothing else is touched outside a table.
+  const kl = { template: 'scenery_arch_n' };
+  m.setSceneryTemplate({ meta: { game: 'knightlore' } }, kl, 'scenery_walls_0');
+  assert.deepStrictEqual(kl, { template: 'scenery_walls_0' });
+});
+
+test('addRoom: refuses a number it cannot have, and says why', function () {
+  const atlas = atlasFor(TABLE);
+  const count = atlas.rooms.length;
+  assert.ok(/already a room 0/.test(m.addRoom(atlas, 0)));
+  assert.ok(/0 to 255/.test(m.addRoom(atlas, 256)));
+  assert.ok(/0 to 255/.test(m.addRoom(atlas, -1)));
+  assert.ok(/0 to 255/.test(m.addRoom(atlas, NaN)));
+  assert.ok(/0 to 255/.test(m.addRoom(atlas, 2.5)));
+  // A castle whose last room is 200 takes nothing after it.
+  const early = atlasFor(TABLE);
+  early.meta.rules.lastRoom = 200;
+  assert.ok(/would come after room \$C8 \(200\)/.test(m.addRoom(early, 201)));
+  assert.strictEqual(atlas.rooms.length, count, 'nothing was added');
+});
+
+test('addRoom: a new room goes in number order, empty, and checks clean', function () {
+  const atlas = atlasFor(TABLE);
+  const numbers = new Set(atlas.rooms.map(function (r) { return r.number; }));
+  let free = 0;
+  while (numbers.has(free)) free++;
+  assert.strictEqual(m.firstFreeRoom(atlas), free);
+
+  const at = m.addRoom(atlas, free);
+  assert.strictEqual(typeof at, 'number');
+  const room = atlas.rooms[at];
+  assert.strictEqual(room.number, free);
+  assert.strictEqual(atlas.rooms[at - 1].number < free, true, 'after the one before');
+  assert.strictEqual(atlas.rooms[at + 1].number > free, true, 'before the one after');
+  assert.deepStrictEqual(Object.keys(room), ['number', 'ink', 'dimensions', 'scenery', 'objects']);
+  assert.strictEqual(room.ink, atlas.rooms[at - 1].ink, 'the ink of the room before it');
+  assert.strictEqual(room.dimensions, Object.keys(atlas.roomDimensions)[0]);
+  assert.deepStrictEqual([room.scenery, room.objects], [[], []]);
+  assert.ok(m.firstFreeRoom(atlas) > free, 'that number is taken now');
+
+  // It builds -- an empty room is only worth a note -- and it is written in
+  // the file's own layout.
+  const problems = m.checkAtlas(atlas).filter(function (p) { return p.room === free; });
+  assert.deepStrictEqual(problems.map(function (p) { return p.severity + ': ' + p.text; }),
+                         ['warning: nothing in it']);
+  assert.ok(m.serializeAtlas(atlas, '\n').indexOf(
+    '  { "number": ' + free + ', "ink": ' + room.ink + ', "dimensions": "' + room.dimensions + '",\n' +
+    '    "scenery": [],\n    "objects": []\n  }') >= 0);
+});
+
+test('addRoom: a table keeps one number free to mean no exit', function () {
+  const atlas = { meta: { game: 'x', rules: { exits: 'table' } },
+                  roomDimensions: { square: {} }, rooms: [] };
+  for (let n = 0; n < 255; n++) atlas.rooms.push({ number: n, ink: 7, dimensions: 'square' });
+  assert.ok(/needed to mean no exit/.test(m.addRoom(atlas, 255)));
+  assert.strictEqual(m.firstFreeRoom(atlas), null);
+  // ...where a castle whose exits are not a table has no such need.
+  atlas.meta.rules = {};
+  assert.strictEqual(m.addRoom(atlas, 255), 255);
+});
+
+test('gameTitle: the games it knows by name, and any other by its own', function () {
+  assert.strictEqual(m.gameTitle({ meta: { game: 'knightlore' } }), 'Knight Lore');
+  assert.strictEqual(m.gameTitle({ meta: { game: 'knightlore128' } }), 'Knight Lore 128K');
+  assert.strictEqual(m.gameTitle({ meta: { game: 'somewhere' } }), 'somewhere');
+  assert.strictEqual(m.gameTitle({ meta: {} }), 'Filmation');
+});
+
+test(TABLE + ': background and flip agree with the generated room_data.s', function () {
+  const atlas = atlasFor(TABLE);
+  const blocks = templatesFromSource(sourceFor(TABLE));
+  let checked = 0;
+  for (const name of Object.keys(atlas.sceneryTemplates)) {
+    const pieces = atlas.sceneryTemplates[name];
+    const rows = blocks.get('bg_' + name.replace(/^scenery_/, '')) || blocks.get(name);
+    if (!rows) continue;
+    const wanted = m.isBackgroundTemplate(atlas, name);
+    for (let i = 0; i < rows.length && i < pieces.length; i++) {
+      const flags = rows[i][rows[i].length - 1];
+      assert.strictEqual(!!(flags & BACKGROUND_FLAG), wanted, name + ' piece ' + i + ': background');
+      checked++;
+    }
+  }
+  assert.ok(checked > 20, 'checked ' + checked + ' pieces');
+});
 
 if (failures) {
   console.log(failures + ' failed');

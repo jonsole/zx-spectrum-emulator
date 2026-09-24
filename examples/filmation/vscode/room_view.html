@@ -49,16 +49,21 @@
             border-radius: 4px; padding: 12px 14px; margin-bottom: 14px; }
 
     /* --- the map --- */
-    #grid { display: grid; gap: 2px; }
-    #grid .cell { aspect-ratio: 1; border-radius: 2px; font-size: 8px; line-height: 1;
-                  display: flex; align-items: center; justify-content: center;
-                  background: var(--vscode-input-background, #3c3c3c); opacity: .35;
-                  cursor: default; color: inherit; border: 1px solid transparent; padding: 0;
-                  min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; }
-    #grid .cell.real { opacity: 1; cursor: pointer; }
-    #grid .cell.real:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
-    #grid .cell.here { background: var(--vscode-button-background, #0e639c); color: #fff; }
-    #grid .cell.linked { background: var(--vscode-textLink-foreground, #3794ff); opacity: .55; }
+    /* #grid is the castle; a castle mapped from its doorways may also have
+       rooms the walk could not place, listed in a second one under it. */
+    .map { display: grid; gap: 2px; }
+    .map .cell { aspect-ratio: 1; border-radius: 2px; font-size: 8px; line-height: 1;
+                 display: flex; align-items: center; justify-content: center;
+                 background: var(--vscode-input-background, #3c3c3c); opacity: .35;
+                 cursor: default; color: inherit; border: 1px solid transparent; padding: 0;
+                 min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; }
+    .map .cell.real { opacity: 1; cursor: pointer; }
+    .map .cell.real:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+    .map .cell.here { background: var(--vscode-button-background, #0e639c); color: #fff; }
+    .map .cell.linked { background: var(--vscode-textLink-foreground, #3794ff); opacity: .55; }
+    #offmap .empty { margin: 8px 0 4px; }
+    #addroom .adder input { width: 56px; }
+    #addroom .empty { margin-top: 4px; }
 
     .exits { margin-top: 12px; }
     .exit { display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
@@ -67,6 +72,7 @@
     .exit .to { flex: 1 1 auto; min-width: 0; white-space: nowrap;
                 overflow: hidden; text-overflow: ellipsis; }
     .exit.broken .to { color: var(--vscode-errorForeground, #f48771); }
+    .exit.walled .way { opacity: .4; }
 
     /* --- the stage --- */
     #stage { position: relative; line-height: 0; }
@@ -143,7 +149,9 @@
     <aside class="rail">
       <div class="card">
         <h3>The castle <span class="spacer"></span><span class="note" id="mapnote"></span></h3>
-        <div id="grid"></div>
+        <div id="grid" class="map"></div>
+        <div id="offmap"></div>
+        <div id="addroom"></div>
         <div class="exits" id="exits"></div>
       </div>
     </aside>
@@ -297,7 +305,8 @@
   let sheetPixels = null;
 
   const el = {};
-  for (const id of ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'exits',
+  for (const id of ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap',
+                    'addroom', 'exits',
                     'mapnote', 'view', 'inks', 'shape', 'showgrid', 'showboxes',
                     'showscenery', 'zoom', 'poolnote', 'checks', 'panel',
                     'game', 'load', 'undo', 'redo', 'templates']) {
@@ -648,9 +657,7 @@
   }
 
   function renderHeader() {
-    const game = gameOf(atlas);
-    el.title.textContent = (game === 'knightlore' ? 'Knight Lore' :
-                            game === 'pentagram' ? 'Pentagram' : game) + ' rooms';
+    el.title.textContent = gameTitle(atlas) + ' rooms';
     if (!room) { el.subtitle.textContent = ''; return; }
     const used = poolUsed(atlas, room);
     const needed = poolNeeded(atlas);
@@ -687,25 +694,17 @@
     }
 
     el.grid.innerHTML = '';
-    // Knight Lore's number IS a place: a row and a column of a sixteen by
-    // sixteen grid, with north a row on. So it is laid out as the castle, north
-    // at the top. Pentagram's numbers mean nothing of the sort -- its map is
-    // the destination bytes -- so they are simply listed in order.
-    const grid = game === 'knightlore';
-    el.grid.style.gridTemplateColumns = 'repeat(' + (grid ? 16 : 12) + ', 1fr)';
-    el.mapnote.textContent = grid ? '16 x 16, north up' : atlas.rooms.length + ' rooms';
+    if (el.offmap) el.offmap.innerHTML = '';
 
-    const cells = [];
-    if (grid) {
-      for (let row = 15; row >= 0; row--) {
-        for (let column = 0; column < 16; column++) cells.push((row << 4) | column);
-      }
-    } else {
-      for (const r of atlas.rooms) cells.push(r.number);
-    }
-
-    for (const number of cells) {
+    // One room on the map, as a button that goes to it -- or, with no number,
+    // an empty place in the castle.
+    function cellIn(parent, number) {
       const cell = document.createElement('button');
+      if (number === null) {
+        cell.className = 'cell';
+        parent.appendChild(cell);
+        return;
+      }
       cell.className = 'cell' + (numbers.has(number) ? ' real' : '') +
                        (room && number === room.number ? ' here' :
                         neighbours.has(number) ? ' linked' : '');
@@ -714,17 +713,119 @@
       if (numbers.has(number)) {
         cell.addEventListener('click', function () { goTo(number); });
       }
-      el.grid.appendChild(cell);
+      parent.appendChild(cell);
     }
 
+    if (rulesOf(atlas).exits === 'table') {
+      renderLaidOut(cellIn);
+    } else {
+      // Knight Lore's number IS a place: a row and a column of a sixteen by
+      // sixteen grid, with north a row on. So it is laid out as the castle,
+      // north at the top. Pentagram's numbers mean nothing of the sort -- its
+      // map is the destination bytes -- so they are simply listed in order.
+      const grid = game === 'knightlore';
+      el.grid.style.gridTemplateColumns = 'repeat(' + (grid ? 16 : 12) + ', 1fr)';
+      el.mapnote.textContent = grid ? '16 x 16, north up' : atlas.rooms.length + ' rooms';
+
+      const cells = [];
+      if (grid) {
+        for (let row = 15; row >= 0; row--) {
+          for (let column = 0; column < 16; column++) cells.push((row << 4) | column);
+        }
+      } else {
+        for (const r of atlas.rooms) cells.push(r.number);
+      }
+      for (const number of cells) cellIn(el.grid, number);
+    }
+
+    renderAddRoom();
     renderExits(map);
+  }
+
+  // A castle joined by a table has numbers that are not places, and only its
+  // doorways to say where anything is -- so the map is walked out of them
+  // (mapLayout in room_model.js), north up, and whatever the walk could not
+  // put on a free square is listed under it rather than left out.
+  function renderLaidOut(cellIn) {
+    const layout = mapLayout(atlas);
+    const at = new Map();
+    for (const cell of layout.placed) at.set(cell.x + ',' + cell.y, cell.number);
+    el.grid.style.gridTemplateColumns = 'repeat(' + Math.max(layout.width, 1) + ', 1fr)';
+    el.mapnote.textContent = layout.width + ' x ' + layout.height +
+                             ' from the doorways, north up';
+    for (let y = layout.maxY; y >= layout.minY; y--) {
+      for (let x = layout.minX; x <= layout.maxX; x++) {
+        const number = at.get(x + ',' + y);
+        cellIn(el.grid, number === undefined ? null : number);
+      }
+    }
+
+    if (!layout.unplaced.length || !el.offmap) return;
+    el.offmap.appendChild(note(layout.unplaced.length + ' room' +
+      (layout.unplaced.length === 1 ? '' : 's') + ' not on the map: the doorways ' +
+      'from the first room never reach ' + (layout.unplaced.length === 1 ? 'it' : 'them') +
+      ', or only onto a square already taken'));
+    const list = document.createElement('div');
+    list.className = 'map';
+    list.style.gridTemplateColumns = 'repeat(12, 1fr)';
+    for (const number of layout.unplaced) cellIn(list, number);
+    el.offmap.appendChild(list);
+  }
+
+  // A new room: a number to give it, the lowest free one to start with, and a
+  // button. Not a prompt, which a webview does not have. It goes through
+  // changed() like every other edit, so it is one undo, and the designer goes
+  // to it -- an empty room, standing on the first floor shape.
+  function renderAddRoom() {
+    if (!el.addroom) return;
+    el.addroom.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'adder';
+    const free = firstFreeRoom(atlas);
+    const number = document.createElement('input');
+    number.type = 'number';
+    number.min = 0;
+    number.max = 255;
+    number.value = free === null ? '' : String(free);
+    number.title = 'the new room’s number';
+    row.appendChild(number);
+    const add = document.createElement('button');
+    add.textContent = 'Add room';
+    add.disabled = free === null;
+    row.appendChild(add);
+    el.addroom.appendChild(row);
+    const why = note(free === null ? 'no number is free for a new room' : '');
+    el.addroom.appendChild(why);
+
+    number.addEventListener('input', function () {
+      why.textContent = addRoomProblem(atlas, wanted()) || '';
+    });
+    add.addEventListener('click', function () {
+      const at = addRoom(atlas, wanted());
+      if (typeof at === 'string') { why.textContent = at; return; }
+      room = atlas.rooms[at];
+      selection = null;
+      if (host.roomChanged) host.roomChanged(room.number);
+      changed('add room');
+    });
+
+    // An empty box is no number at all, rather than room 0.
+    function wanted() {
+      const text = String(number.value).trim();
+      return text === '' ? NaN : Number(text);
+    }
   }
 
   function renderExits(map) {
     el.exits.innerHTML = '';
     if (!room) return;
-    const scenery = byName(atlas.sceneryTemplates);
-    const mine = map.links.filter(function (l) { return l.from === room.number; });
+    const exits = rulesOf(atlas).exits;
+    const table = exits === 'table';
+    // In a table every doorway is listed, walled up or not: one with no
+    // destination yet is the one most in need of an edit, and the map's links
+    // leave it out because it leads nowhere.
+    const mine = table ? doorwaysOf(atlas, room)
+      : map.links.filter(function (l) { return l.from === room.number; });
     const head = document.createElement('h3');
     head.textContent = 'Ways out';
     el.exits.appendChild(head);
@@ -732,17 +833,35 @@
       el.exits.appendChild(note('none — nothing leads out of this room'));
       return;
     }
-    const editable = gameOf(atlas) === 'pentagram';
+    const editable = exits === 'byte' || table;
     for (const link of mine) {
       const line = document.createElement('div');
-      line.className = 'exit' + (link.exists ? '' : ' broken');
+      line.className = 'exit' + (link.to === null ? ' walled'
+        : link.exists ? '' : ' broken');
       const way = document.createElement('span');
       way.className = 'way';
       way.textContent = link.side;
       line.appendChild(way);
       const to = document.createElement('span');
       to.className = 'to';
-      if (editable) {
+      if (table) {
+        // A table's destination is any room, 0 included, so an empty box is
+        // what says "walled up" -- null in the file -- rather than 0.
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = 0; input.max = 255;
+        input.placeholder = 'walled up';
+        input.value = link.to === null ? '' : String(link.to);
+        input.title = link.to === null ? 'walled up: give it a room to lead to'
+          : 'room $' + hex(link.to) + (link.exists ? '' : ', which is not a room');
+        input.addEventListener('change', function () {
+          const text = String(input.value).trim();
+          room.scenery[link.ref].destination = text === '' ? null
+            : clamp(Math.round(Number(text)), 0, 255);
+          changed('doorway');
+        });
+        to.appendChild(input);
+      } else if (editable) {
         // Pentagram's byte is the authority -- one south doorway is an exit in
         // twenty-eight rooms and blocked in one -- so it is what you change.
         const input = document.createElement('input');
@@ -1168,7 +1287,7 @@
       lines.push('stands at U ' + first.u + ', V ' + first.v + ', Z ' + first.z);
       const side = doorwayOf(atlas, templateName);
       if (side) lines.push('a doorway, facing ' + side);
-      if (isBackgroundTemplate(gameOf(atlas), templateName)) {
+      if (isBackgroundTemplate(atlas, templateName)) {
         lines.push('background: drawn first, never sorted');
       }
     } else {
@@ -1292,7 +1411,9 @@
       }
       pick.value = ref.template;
       pick.addEventListener('change', function () {
-        ref.template = pick.value;
+        // Through the model, because in a castle whose exits are a table the
+        // destination field comes and goes with being a doorway.
+        setSceneryTemplate(atlas, ref, pick.value);
         changed('scenery');
       });
       line.appendChild(pick);
@@ -1303,7 +1424,7 @@
       const side = doorwayOf(atlas, ref.template);
       dim.textContent = (template ? template.length + ' pieces' : '?') +
                         (side ? ' · door ' + side : '') +
-                        (isBackgroundTemplate(gameOf(atlas), ref.template)
+                        (isBackgroundTemplate(atlas, ref.template)
                           ? ' · background' : '');
       line.appendChild(dim);
 
@@ -1338,7 +1459,9 @@
     const add = document.createElement('button');
     add.textContent = 'Add';
     add.addEventListener('click', function () {
-      addScenery(atlas, room, pick.value, 0);
+      // No destination: Pentagram's byte starts at 0, its "no way out", and a
+      // table's doorway starts walled up -- 0 would be a room there.
+      addScenery(atlas, room, pick.value, null);
       changed('scenery');
     });
     adder.appendChild(add);

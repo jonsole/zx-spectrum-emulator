@@ -20,7 +20,7 @@ const path = require('path');
 const vm = require('vm');
 
 const EXT = path.join(__dirname, '..');
-const GAMES = ['knightlore', 'pentagram'];
+const GAMES = ['knightlore', 'pentagram', 'knightlore128'];
 const FILMATION = path.join(EXT, '..');
 
 let failures = 0;
@@ -58,7 +58,8 @@ const INLINED = ['sheet_model.js', 'room_model.js', 'room_render.js',
 function assemble(boot) {
   const bootJs = 'window.roomHost = (function () {\n' +
     '  return { boot: ' + JSON.stringify(boot).replace(/</g, '\\u003c') + ',\n' +
-    '    save: function () {}, saveSpecials: function (t) { window.__specials = t; },\n' +
+    '    save: function (t, w) { window.__saved = t; window.__what = w; },\n' +
+    '    saveSpecials: function (t) { window.__specials = t; },\n' +
     '    onReload: function () {}, roomChanged: function () {},\n' +
     '    build: function () {} };\n' +
     '})();\n';
@@ -240,7 +241,8 @@ function fakeDom(ids) {
   return { element, byId, document, listeners, tabs, painted };
 }
 
-const PAGE_IDS = ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'exits',
+const PAGE_IDS = ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap',
+                  'addroom', 'exits',
                   'mapnote', 'view', 'inks', 'shape', 'showgrid', 'showboxes',
                   'showscenery', 'zoom', 'poolnote', 'checks', 'panel',
                   'game', 'load', 'undo', 'redo', 'tab-collectables'];
@@ -277,7 +279,8 @@ function open(boot) {
   };
   sandbox.window.roomHost = {
     boot: boot,
-    save() {},
+    // The last whole file the page handed over, so a test can read an edit back.
+    save(text, what) { sandbox.window.__saved = text; sandbox.window.__what = what; },
     saveSpecials(text) { sandbox.window.__specials = text; },
     onReload() {},
     roomChanged() {},
@@ -455,6 +458,119 @@ for (const game of GAMES) {
               'called ' + blits + ' times');
   });
 }
+
+// --- a castle joined by a table -------------------------------------------
+
+// knightlore128 says its rules in its meta: its exits are a table, so its
+// numbers are not places and its doorways are what it is edited through.
+
+// Every node under one, depth first.
+function nodesIn(node, out) {
+  out = out || [];
+  out.push(node);
+  node.children.forEach(function (child) { nodesIn(child, out); });
+  return out;
+}
+
+function listenerOn(dom, node, kind) {
+  const found = dom.listeners.find((l) => l.node === node && l.kind === kind);
+  assert.ok(found, 'nothing is listening for ' + kind);
+  return found.fn;
+}
+
+test('knightlore128: the map is walked out of the doorways, north up', () => {
+  const { dom } = open(bootFor('knightlore128', 0));
+  assert.strictEqual(dom.byId.title.textContent, 'Knight Lore 128K rooms');
+  assert.ok(/16 x 16 from the doorways, north up/.test(dom.byId.mapnote.textContent),
+            dom.byId.mapnote.textContent);
+  // Its exits were generated from Knight Lore's grid, so the walk lays it out
+  // as that grid: row $F at the top, so the first cell is room $F0.
+  const cells = dom.byId.grid.children;
+  assert.strictEqual(cells.length, 256);
+  assert.strictEqual(cells.filter((c) => c._classes.has('real')).length, 128);
+  const byText = cells.filter((c) => c.textContent === '00')[0];
+  assert.strictEqual(cells.indexOf(byText), 15 * 16, 'room 0 is bottom left');
+  assert.ok(byText._classes.has('here'));
+  // Every room fits, so there is nothing listed under the map.
+  assert.strictEqual(dom.byId.offmap.children.length, 0);
+});
+
+test('knightlore128: a room the walk cannot place is listed under the map', () => {
+  const boot = bootFor('knightlore128', 0);
+  // Room 1 is reached only from 0 (east) and from 2 (west). With both of
+  // those walled up nothing leads to it, so the walk never reaches it -- though
+  // its own doorways still lead out.
+  for (const r of boot.atlas.rooms) {
+    for (const ref of r.scenery) if (ref.destination === 1) ref.destination = null;
+  }
+  const { dom } = open(boot);
+  const listed = nodesIn(dom.byId.offmap).filter((n) => n._classes.has('cell'));
+  assert.ok(listed.some((n) => n.textContent === '01'),
+            'room 1 should be listed off the map');
+  assert.ok(/not on the map/.test(textIn(dom.byId.offmap)));
+});
+
+test('knightlore128: a way out is edited as a room number, and empty walls it up', () => {
+  const page = open(bootFor('knightlore128', 0));
+  const inputs = nodesIn(page.dom.byId.exits).filter((n) => n.tagName === 'INPUT');
+  // Room 0 has two doorways, north to $10 and east to 1.
+  assert.deepStrictEqual(inputs.map((n) => n.value), ['16', '1']);
+
+  // The fake DOM's innerHTML does not empty a node, so the old list is cleared
+  // by hand before the edit renders the new one.
+  inputs[0].value = '';
+  page.dom.byId.exits.children.length = 0;
+  listenerOn(page.dom, inputs[0], 'change')();
+  let saved = JSON.parse(page.sandbox.window.__saved);
+  assert.deepStrictEqual(saved.rooms[0].scenery[0],
+                         { template: 'scenery_arch_n', destination: null });
+
+  // ...and the walled-up doorway is still listed, empty, to be given a room.
+  const again = nodesIn(page.dom.byId.exits).filter((n) => n.tagName === 'INPUT');
+  assert.deepStrictEqual(again.map((n) => n.value), ['', '1']);
+  again[0].value = '0';
+  listenerOn(page.dom, again[0], 'change')();
+  saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(saved.rooms[0].scenery[0].destination, 0, '0 is a room here');
+});
+
+test('knightlore128: Add room makes the lowest free number and goes to it', () => {
+  const page = open(bootFor('knightlore128', 0));
+  const nodes = nodesIn(page.dom.byId.addroom);
+  const number = nodes.filter((n) => n.tagName === 'INPUT')[0];
+  const button = nodes.filter((n) => n.tagName === 'BUTTON')[0];
+  assert.strictEqual(button.textContent, 'Add room');
+  const free = Number(number.value);
+  const taken = new Set(bootFor('knightlore128').atlas.rooms.map((r) => r.number));
+  assert.ok(!taken.has(free), 'prefilled with a free number');
+  for (let n = 0; n < free; n++) assert.ok(taken.has(n), 'and the lowest: ' + n);
+
+  // A number already used is refused, with the reason, and nothing is saved.
+  number.value = '0';
+  listenerOn(page.dom, button, 'click')();
+  assert.strictEqual(page.sandbox.window.__saved, undefined);
+  assert.ok(/already a room 0/.test(textIn(page.dom.byId.addroom)));
+
+  number.value = String(free);
+  listenerOn(page.dom, button, 'click')();
+  const saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(page.sandbox.window.__what, 'add room');
+  const at = saved.rooms.findIndex((r) => r.number === free);
+  assert.ok(at > 0 && saved.rooms[at - 1].number < free && saved.rooms[at + 1].number > free);
+  assert.ok(new RegExp('room \\$' + free.toString(16).toUpperCase().padStart(2, '0')).test(
+    page.dom.byId.subtitle.textContent), page.dom.byId.subtitle.textContent);
+});
+
+test('the older castles keep their maps and their exits as they were', () => {
+  // Knight Lore: the number grid, and exits that are arithmetic, not inputs.
+  const kl = open(bootFor('knightlore', 0)).dom;
+  assert.strictEqual(kl.byId.mapnote.textContent, '16 x 16, north up');
+  assert.strictEqual(nodesIn(kl.byId.exits).filter((n) => n.tagName === 'INPUT').length, 0);
+  // Pentagram: a list, and its destination bytes as inputs.
+  const pg = open(bootFor('pentagram')).dom;
+  assert.ok(/ rooms$/.test(pg.byId.mapnote.textContent), pg.byId.mapnote.textContent);
+  assert.ok(nodesIn(pg.byId.exits).filter((n) => n.tagName === 'INPUT').length > 0);
+});
 
 if (failures) {
   console.log(failures + ' failed');

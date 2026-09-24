@@ -49,7 +49,7 @@ def one(said, wants=None):
 
 CASES = [
     ("rooms.schema.json",
-     ["knightlore/rooms.json", "pentagram/rooms.json"],
+     ["knightlore/rooms.json", "pentagram/rooms.json", "knightlore128/rooms.json"],
      [("an ink of 9", lambda d: d["rooms"][0].__setitem__("ink", 9)),
       ("a room with no floor shape",
        lambda d: d["rooms"][0].pop("dimensions")),
@@ -68,10 +68,18 @@ CASES = [
       ("no word of where the templates are",
        lambda d: d["meta"].pop("templates")),
       ("templates somewhere other than beside it",
-       lambda d: d["meta"].__setitem__("templates", "../templates.json"))]),
+       lambda d: d["meta"].__setitem__("templates", "../templates.json")),
+      # The rules a castle says for itself, and the destination a table holds.
+      ("exits that are a grid by name, which is no rule a castle can say",
+       lambda d: d["meta"].__setitem__("rules", {"exits": "grid"})),
+      ("a last room past a byte",
+       lambda d: d["meta"].__setitem__("rules", {"lastRoom": 256})),
+      ("a destination given as a direction",
+       lambda d: d["rooms"][0]["scenery"][0].__setitem__("destination", "north"))]),
 
     ("templates.schema.json",
-     ["knightlore/templates.json", "pentagram/templates.json"],
+     ["knightlore/templates.json", "pentagram/templates.json",
+      "knightlore128/templates.json"],
      # A template is a LIST of placements, not a record with a name in it.
      [("a template that is a record rather than its pieces",
        lambda d: d["sceneryTemplates"].__setitem__(
@@ -84,7 +92,11 @@ CASES = [
       ("no object templates at all", lambda d: d.pop("objectTemplates")),
       ("a game this castle is not", lambda d: d["meta"].__setitem__("game", "hobbit")),
       ("the rooms put in with the templates", lambda d: d.__setitem__("rooms", [])),
-      ("no word of which rooms they belong to", lambda d: d["meta"].pop("rooms"))]),
+      ("no word of which rooms they belong to", lambda d: d["meta"].pop("rooms")),
+      ("a doorway in a wall there is not",
+       lambda d: d["meta"].__setitem__("doorways", {first_template(d): "up"})),
+      ("a background that is one name rather than a list",
+       lambda d: d["meta"].__setitem__("background", first_template(d)))]),
 
     ("sprites.schema.json",
      ["knightlore/sprites.json", "pentagram/sprites.json"],

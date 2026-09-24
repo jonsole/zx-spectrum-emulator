@@ -285,9 +285,7 @@
   }
 
   function titleOf() {
-    const game = gameOf(atlas);
-    return (game === 'knightlore' ? 'Knight Lore' : game === 'pentagram' ? 'Pentagram'
-      : (game || 'Filmation')) + ' templates';
+    return gameTitle(atlas) + ' templates';
   }
 
   function codeRef(group, at) {
@@ -389,9 +387,13 @@
         : 'no room places it')));
     if (pick.group === 'sceneryTemplates') {
       const side = doorwayOf(atlas, name);
+      // Knight Lore and Pentagram decide it by index; a castle whose file
+      // lists its doorways decides it by that list, which is keyed by name.
+      const listed = !!(atlas.templatesMeta && atlas.templatesMeta.doorways);
       if (side) notes.appendChild(make('div', '', 'a doorway, facing ' + side +
-        ' — decided by its place in the table, not its name'));
-      if (isBackgroundTemplate(gameOf(atlas), name)) {
+        (listed ? ' — as meta.doorways in templates.json says'
+          : ' — decided by its place in the table, not its name')));
+      if (isBackgroundTemplate(atlas, name)) {
         notes.appendChild(make('div', '', 'background: drawn first, never sorted'));
       }
     }

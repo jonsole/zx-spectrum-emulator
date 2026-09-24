@@ -395,7 +395,7 @@ test('knightlore: the arch over a doorway is drawn behind what walks through it'
     // along U, has to come out after it.
     const atlas = castleOf('knightlore');
     assert.ok(atlas.sceneryTemplates.scenery_arch_n, 'the arch is there');
-    assert.ok(!m.isBackgroundTemplate('knightlore', 'scenery_arch_n'),
+    assert.ok(!m.isBackgroundTemplate(atlas, 'scenery_arch_n'),
       'an arch is not background');
   });
 

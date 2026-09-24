@@ -62,6 +62,35 @@ differ is written down in `room_model.js` rather than branched on twice:
 | Object entries | six bytes, the sixth a placement nudge | five bytes, no nudge |
 | Scenery count | in bits 5-7 of the attribute byte | the same, stored less one, so eight fits |
 
+Those two columns are what the designer knows about those two games by name,
+and they are only the fallback. **A castle can say its own rules** in its files'
+`meta`, and then the designer reads those instead of keying anything on the
+game -- which is how `knightlore128`, Knight Lore's castle joined by a table of
+exits rather than the grid, is edited without the designer learning its name.
+In `rooms.json`:
+
+```json
+"rules": { "exits": "table", "sceneryPerRoom": 7, "lastRoom": 255 }
+```
+
+| Key | What it means |
+|---|---|
+| `exits` | `"table"`: every scenery entry is two bytes in the record, a template and a destination, and a doorway leads to the room its `destination` names. **0 is a room** there, unlike Pentagram's byte, so a doorway walled up says `"destination": null` (or has no destination at all). Anything that is not a doorway carries no destination -- the builder refuses one. Without the key, Knight Lore's grid and Pentagram's byte apply as above. |
+| `sceneryPerRoom` | the most scenery entries a room may hold. Without it, 7, or 8 for Pentagram. |
+| `lastRoom` | the number the last room must have: `room_find` walks the records to the first number at least the one it wants, so there has to be one at the end every search stops at. Without it, `$FF` for Knight Lore and nothing for Pentagram. |
+
+And in `templates.json`:
+
+| Key | What it means |
+|---|---|
+| `doorways` | which scenery templates are doorways, by name, and the wall each stands in: `{"scenery_arch_n": "n", ...}`. When it is there it is the whole list -- any template can be a doorway, and no other is one -- and the builder reads a table made from it. Without it, Knight Lore's and Pentagram's rule by table position applies (see [The templates](#the-templates)). |
+| `background` | the scenery templates drawn first and never sorted, by exact name. Without it, each game's built-in names apply. |
+
+`room_model.js`'s `rulesOf` is the one place the rules are read, and
+`castle.py`'s `side_of` makes the same choice for the build. A rename in the
+templates panel carries a template's name across `doorways` and `background`
+as well as the rooms, so it cannot quietly wall up every door made from it.
+
 Anything with a **name** is keyed by that name, and carries no `name` field of
 its own -- the key is the identity, and a copy inside the entry is only
 something to disagree with it. Nor an index: where an ordinal matters to the
@@ -367,11 +396,34 @@ and a column of a sixteen by sixteen grid, north a row on -- so its map is laid
 out as the castle, north at the top, with the rooms this one leads to picked
 out. Pentagram's numbers mean nothing of the sort, so they are simply listed.
 
-**Ways out**, under it, is the room's doorways and where each leads. Knight
+A castle whose exits are a table has numbers that are not places either, but
+its doorways say which way each room lies from the next, so its map is **walked
+out of the doorways**: breadth first from the first room, each room goes one
+square north, east, south or west of the room whose doorway first reaches it
+with that square free. A castle need not be flat -- a doorway can lead round a
+corner the grid cannot draw, or onto a square already taken -- so a room the
+walk cannot place, or never reaches, is listed under the map rather than left
+out. `knightlore128`'s exits were generated from Knight Lore's grid and none of
+them wraps round its edge, so the walk lays it out as exactly that grid.
+
+**Add room**, under the map, is a number -- the lowest free one to start with
+-- and a button. The room it makes is empty, stands on the first floor shape,
+takes the ink of the room before it, and goes in number order, because
+`room_find` walks the records in ascending order; the designer goes to it, and
+it is one undo like any other edit. A number already used, outside 0-255, or
+after the castle's last room (`$FF` in Knight Lore) is refused with the reason
+under the box. A castle whose exits are a table also keeps one number free,
+since its builder needs a number no room has to mean "no exit".
+
+**Ways out**, under that, is the room's doorways and where each leads. Knight
 Lore's are arithmetic and cannot be anything else, so they are shown and not
 editable. Pentagram's are a byte, and the byte is the authority -- one of its
 south doorways is an exit in twenty-eight rooms and walled up in one -- so
-there it is a field you change.
+there it is a field you change. In a castle whose exits are a table every
+doorway is listed, walled up or not, as a room number to change: an empty box
+is walled up (`null` in the file), and 0 is room 0. A doorway added from the
+Scenery tab there starts walled up, and changing a door's template to one that
+is not a doorway drops its destination.
 
 **The room**, in the middle, drawn as the engine would draw it. Click a piece
 to select it and drag it about the floor. The arrow keys nudge it a cell, and
@@ -510,10 +562,13 @@ places it -- anything else would shift every template after it and the code
 would be pointing at the wrong ones. The object table stops at 32, because a
 room's group byte holds the template in five bits.
 
-It also means **a doorway is a position, not a name.** `scenery_arch_e` is a
-doorway because it is template 1, and renaming it changes nothing about that; a
-duplicate of it, on the end of the table, is not a doorway at all, however
-much it looks like one.
+It also means **a doorway is a position, not a name** -- in Knight Lore and
+Pentagram. `scenery_arch_e` is a doorway because it is template 1, and
+renaming it changes nothing about that; a duplicate of it, on the end of the
+table, is not a doorway at all, however much it looks like one. A castle whose
+`templates.json` lists its doorways in `meta.doorways` decides by that list
+instead, so there a duplicate becomes a doorway by being added to it, wherever
+it sits, and the panel says which rule it is going by.
 
 And it means **a copy does not bring the original's behaviour.** Knight Lore's
 `movers.s` gives a template its behaviour by label -- `FG_GUARD_EW` walks up
@@ -530,7 +585,13 @@ piece is, and a rename moves every room that names it.
 **Checks**, at the bottom, is everything that would stop `rooms_source.py`
 emitting the castle or stop the engine building a room: a room out of order, a
 position off the eight-by-eight floor, more scenery than the count field holds,
-a record longer than its skip byte can reach. This room's problems come first.
+a record longer than its skip byte can reach, a doorway to a room that is not
+there, a last room that is not the one the castle needs. In a castle whose
+exits are a table it also catches a destination on something that is not a
+doorway, and a `meta.doorways` naming a template or a wall there is no such
+thing as. A doorway with no way back is a warning rather than an error: it
+builds and plays, you simply cannot return through it. This room's problems
+come first.
 
 ## How the picture is drawn
 
@@ -717,7 +778,10 @@ them.
 - **Movers' behaviour** -- what a guard patrols, which way a ball bounces --
   comes from the object's template and the game's `movers.s`, and the designer
   edits the template's bytes without knowing what they mean.
-- **A new room** cannot be added: the records are walked in ascending order and
-  Knight Lore's list has to end at `$FF`, which the checks enforce but the
-  designer has no button for.
+- **A room cannot be deleted or renumbered.** Add room makes one; taking one
+  away would leave every doorway into it pointing nowhere, and nothing yet
+  offers to deal with those.
+- **The walked map is only a map.** It cannot be edited -- a doorway is changed
+  in Ways out, and the map follows -- and a castle that is not flat has rooms
+  listed under it rather than drawn in some second layer.
 - **Undo outside VS Code** is the editor's, so the browser host has none.

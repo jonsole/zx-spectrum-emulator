@@ -11,7 +11,7 @@
  "properties": {
   "meta": {
    "type": "object",
-   "description": "About the file. The game matters: which templates are doorways is decided by their position in the game's own table, and the two games put them in different places.",
+   "description": "About the file. The game matters unless the file says otherwise: Knight Lore and Pentagram decide which templates are doorways by their position in the game's own table, and put them in different places. A castle that lists its own doorways and background here is taken at its word instead.",
    "properties": {
     "version": {
      "type": "integer"
@@ -20,8 +20,29 @@
      "type": "string",
      "enum": [
       "knightlore",
+      "knightlore128",
       "pentagram"
      ]
+    },
+    "doorways": {
+     "type": "object",
+     "description": "Which scenery templates are doorways, by name, and the wall each stands in. When this is here it is the whole list -- any template may be a doorway and no other is one -- and the builder reads a table made from it; without it the game's own rule by index applies. A rename in the designer carries the name across.",
+     "additionalProperties": {
+      "enum": [
+       "n",
+       "e",
+       "s",
+       "w"
+      ]
+     }
+    },
+    "background": {
+     "type": "array",
+     "description": "The scenery templates drawn first and never sorted, by exact name. When this is here it is the whole list; without it the game's own names apply.",
+     "items": {
+      "type": "string"
+     },
+     "uniqueItems": true
     },
     "comment": {
      "type": "string"

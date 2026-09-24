@@ -6,7 +6,8 @@
 // it and rooms_source.py turns it back into room_data.s, so a change made here
 // reaches the build without going anywhere near the original bytes. Both games
 // write the same schema; where they differ is written down below rather than
-// branched on twice.
+// branched on twice -- and a castle that says its own rules in its meta, as
+// knightlore128's does, is read by those instead (see rulesOf).
 //
 // A room is not a list of objects. It is an attribute byte and a handful of
 // indices naming templates -- pieces of scenery, and groups of objects --
@@ -108,6 +109,10 @@ function graphicNumberOf(numbers, name) {
 // name -- so the same names have to be listed here, or the preview sorts a
 // wall that the game does not. tests/room_model_test.js holds the two together
 // by reading the generated room_data.s back.
+//
+// These are the two original games' rules, and only the fallback: a castle
+// whose templates.json lists its own in meta.background is taken at its word,
+// by exact name, the way knightlore128's rooms_source.py reads the same list.
 const BACKGROUND_TEMPLATES = {
   knightlore: ['scenery_walls_', 'scenery_trees_'],
   pentagram: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21]
@@ -335,9 +340,13 @@ function widest(names) {
   return most;
 }
 
-// One value, the way JSON spells it. Only the scalars a castle holds.
+// One value, the way JSON spells it. Only the scalars a castle holds -- and a
+// list of them, which a templates file's meta.background is, on one line with
+// a space after each comma the way castle.py's _scalar writes it.
+// JSON.stringify would leave the spaces out and rewrite the line on every save.
 function scalar(value) {
   if (typeof value === 'string') return '"' + value + '"';
+  if (Array.isArray(value)) return '[' + value.map(scalar).join(', ') + ']';
   return JSON.stringify(value);
 }
 
@@ -433,6 +442,24 @@ function gameOf(atlas) {
   return (atlas.meta && atlas.meta.game) || '';
 }
 
+// What to call a game in a panel's title. A game not listed is called by the
+// directory name its meta gives, which is at least what it is.
+const GAME_TITLES = {
+  knightlore: 'Knight Lore',
+  knightlore128: 'Knight Lore 128K',
+  pentagram: 'Pentagram'
+};
+
+function gameTitle(atlas) {
+  const game = gameOf(atlas || {});
+  return GAME_TITLES[game] || game || 'Filmation';
+}
+
+// A room number the way the game's source writes it: two hex digits.
+function hexByte(n) {
+  return n.toString(16).toUpperCase().padStart(2, '0');
+}
+
 // Templates, by the name rooms call them by. rooms.json keys them that way
 // already -- a template IS its list of placements -- so this is the file's own
 // mapping, kept as a Map for the has/get the rest of this file does.
@@ -458,8 +485,15 @@ function byNumber(rooms) {
   return out;
 }
 
-function isBackgroundTemplate(game, name) {
-  const names = BACKGROUND_TEMPLATES[game] || [];
+// Whether a scenery template is background: drawn first and never sorted.
+// The castle's own list when its templates file has one, and then only a name
+// on it counts -- the built-in lists match by prefix because they were written
+// for templates rooms.py named, and a castle that says its own has no such
+// naming to lean on.
+function isBackgroundTemplate(atlas, name) {
+  const said = atlas && atlas.templatesMeta && atlas.templatesMeta.background;
+  if (Array.isArray(said)) return said.indexOf(name) >= 0;
+  const names = BACKGROUND_TEMPLATES[gameOf(atlas || {})] || [];
   for (const n of names) if (name === n || name.startsWith(n)) return true;
   return false;
 }
@@ -533,7 +567,6 @@ function sizeOf(atlas, room) {
 // order matters -- it is the order the background run ends up in, and the
 // order the depth list is built from.
 function expandRoom(atlas, room, numbers, sizes) {
-  const game = gameOf(atlas);
   const scenery = byName(atlas.sceneryTemplates);
   const objects = byName(atlas.objectTemplates);
   const floorZ = sizeOf(atlas, room).z;
@@ -542,7 +575,7 @@ function expandRoom(atlas, room, numbers, sizes) {
   room.scenery.forEach(function (ref, refIndex) {
     const template = scenery.get(ref.template);
     if (!template) return;
-    const background = isBackgroundTemplate(game, ref.template);
+    const background = isBackgroundTemplate(atlas, ref.template);
     template.forEach(function (block, i) {
       const piece = pieceFromBlock(block, numbers, sizes, ref.template, i);
       if (piece.graphic < FIRST_REAL_GRAPHIC) return;
@@ -589,6 +622,52 @@ function poolUsed(atlas, room) {
   return n;
 }
 
+// --- the castle's rules ---------------------------------------------------
+//
+// How a castle's rooms join up, and what its builder will take, used to be
+// keyed on the game's name: Knight Lore's rooms are a grid and Pentagram's
+// doorways carry a byte. A castle can now say its own in rooms.json's
+// meta.rules, which is how knightlore128 -- Knight Lore's castle, joined by a
+// table instead of the grid -- gets its rules without the designer learning
+// its name:
+//
+//   exits           "table": every scenery entry is two bytes, a template and
+//                   a destination, and a doorway's destination is the room it
+//                   leads to -- 0 included, since 0 is a room -- or null for
+//                   one walled up. Anything else, or nothing, is the game's
+//                   own rule below.
+//   sceneryPerRoom  the most scenery entries a room may have.
+//   lastRoom        the number the last room must have: a builder that walks
+//                   the records to the first number at least the one it wants
+//                   needs one at the end that every search stops at.
+//
+// A castle that says nothing -- Knight Lore's and Pentagram's -- falls back on
+// what the designer always knew about those two, so their files behave
+// exactly as before. rulesOf is the one place either is read.
+const EXITS_TABLE = 'table';
+
+function isByte(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 0xFF;
+}
+
+function rulesOf(atlas) {
+  const game = gameOf(atlas || {});
+  const said = (atlas && atlas.meta && atlas.meta.rules) || {};
+  // Pentagram stores its scenery count less one, which is what lets a room
+  // have eight; Knight Lore stores it as it is, in three bits.
+  const scenery = game === 'pentagram' ? 8 : 7;
+  return {
+    // 'table' as above; 'byte', Pentagram's destination byte, where 0 is no
+    // way out; 'grid', Knight Lore's arithmetic on the room number.
+    exits: said.exits === EXITS_TABLE ? 'table' : game === 'pentagram' ? 'byte' : 'grid',
+    sceneryPerRoom: isByte(said.sceneryPerRoom) ? said.sceneryPerRoom : scenery,
+    // null when nothing constrains it. Only Knight Lore's walk needed one of
+    // the games that say nothing.
+    lastRoom: isByte(said.lastRoom) ? said.lastRoom : game === 'knightlore' ? 0xFF : null,
+    lastRoomSaid: isByte(said.lastRoom)
+  };
+}
+
 // --- the map --------------------------------------------------------------
 
 // Which way a doorway faces, or null if the template is not one.
@@ -611,6 +690,12 @@ function poolUsed(atlas, room) {
 // today, but a name can be edited in the templates panel and the game's code
 // cannot, so it is not trusted for this. examples/filmation/castle.py has the
 // same table for the build.
+//
+// That is the rule for those two games only. A castle whose templates.json
+// has meta.doorways -- template name to wall -- is taken at its word, by
+// name, as castle.py's side_of takes it: its builder reads a table made from
+// that list rather than testing the index, so any template can be a doorway,
+// and a rename has to carry the name across (renameTemplate does).
 const DOORWAYS = {
   knightlore: (function () {
     const out = new Map();
@@ -628,7 +713,21 @@ const DOORWAYS = {
   }())
 };
 
+// The walls a castle's own templates file names, or null if it names none.
+function doorwaysSaid(atlas) {
+  const said = atlas && atlas.templatesMeta && atlas.templatesMeta.doorways;
+  return said && typeof said === 'object' && !Array.isArray(said) ? said : null;
+}
+
 function doorwayOf(atlas, templateName) {
+  const said = doorwaysSaid(atlas);
+  if (said) {
+    // A wall that is not one of the four is no doorway here; checkAtlas says
+    // so, because the builder refuses it.
+    const side = Object.prototype.hasOwnProperty.call(said, templateName)
+      ? said[templateName] : null;
+    return DIRECTIONS.indexOf(side) >= 0 ? side : null;
+  }
   const rule = DOORWAYS[gameOf(atlas)];
   if (!rule) return null;
   const at = templateIndex(atlas.sceneryTemplates).get(templateName);
@@ -639,9 +738,15 @@ function doorwayOf(atlas, templateName) {
 // column, and the two floor directions wrap inside their own row or column
 // rather than carrying into the next. Pentagram reads the byte, which is the
 // authority -- one of its south doorways is an exit in twenty-eight rooms and
-// walled up in one, and only the byte says which.
+// walled up in one, and only the byte says which. A castle whose exits are a
+// table reads the destination too, but there 0 is a room like any other, so
+// only null (or no destination at all) walls a doorway up.
 function destinationOf(atlas, room, ref, side) {
-  if (gameOf(atlas) === 'pentagram') {
+  const exits = rulesOf(atlas).exits;
+  if (exits === 'table') {
+    return Number.isInteger(ref.destination) ? ref.destination : null;
+  }
+  if (exits === 'byte') {
     return ref.destination || null;
   }
   const row = room.number & 0xF0;
@@ -691,6 +796,101 @@ function unreciprocated(map) {
   });
 }
 
+// Every doorway in one room, walled up or not, in the order the room lists
+// its scenery. roomMap leaves a walled-up doorway out, because it goes nowhere
+// -- but in a castle whose exits are a table, a walled-up doorway is exactly
+// the one someone is about to give a destination, so the designer needs it.
+function doorwaysOf(atlas, room) {
+  const rooms = byNumber(atlas.rooms);
+  const out = [];
+  room.scenery.forEach(function (ref, refIndex) {
+    const side = doorwayOf(atlas, ref.template);
+    if (!side) return;
+    const to = destinationOf(atlas, room, ref, side);
+    out.push({
+      from: room.number, to: to, side: side, ref: refIndex,
+      template: ref.template, exists: to !== null && rooms.has(to)
+    });
+  });
+  return out;
+}
+
+// One cell of the map in each direction, north up: y grows northwards.
+const MAP_STEP = {
+  n: { x: 0, y: 1 },
+  e: { x: 1, y: 0 },
+  s: { x: 0, y: -1 },
+  w: { x: -1, y: 0 }
+};
+
+// A map drawn from the doorways themselves, for a castle whose room numbers
+// are not places. Knight Lore's number is a row and a column, so its map is
+// the number; Pentagram's is a list. A castle joined by a table has only its
+// doorways to say where anything is, so this walks them.
+//
+// Breadth first from the first room, which stands at 0,0: a room goes one
+// cell north, east, south or west of the room whose doorway first reaches it
+// with that cell still free. A castle need not be flat -- a doorway can lead
+// round a corner the grid cannot draw, or back into a cell already taken --
+// so a room no doorway can put in a free cell is left out of the grid and
+// listed in `unplaced`, along with any room no doorway reaches at all. Nothing
+// is moved to make room: the first placement stands, which keeps the layout
+// the same from one render to the next.
+//
+// Returns the placed rooms as {number, x, y} in the order they were placed,
+// the unplaced numbers in the castle's order, and the bounding box of the
+// placed ones.
+function mapLayout(atlas) {
+  const leads = new Map();
+  for (const link of roomMap(atlas).links) {
+    if (!link.exists) continue;
+    if (!leads.has(link.from)) leads.set(link.from, []);
+    leads.get(link.from).push(link);
+  }
+
+  const at = new Map();         // room number -> its cell
+  const taken = new Set();      // "x,y" of every cell with a room in it
+  const placed = [];
+  function place(number, x, y) {
+    at.set(number, { x: x, y: y });
+    taken.add(x + ',' + y);
+    placed.push({ number: number, x: x, y: y });
+  }
+
+  if (atlas.rooms.length) place(atlas.rooms[0].number, 0, 0);
+  // `placed` is the queue as well: a room's doorways are walked once it is
+  // on the map, in the order the rooms went on.
+  for (let next = 0; next < placed.length; next++) {
+    const from = placed[next];
+    for (const link of leads.get(from.number) || []) {
+      if (at.has(link.to)) continue;
+      const step = MAP_STEP[link.side];
+      const x = from.x + step.x;
+      const y = from.y + step.y;
+      if (taken.has(x + ',' + y)) continue;
+      place(link.to, x, y);
+    }
+  }
+
+  const unplaced = [];
+  for (const room of atlas.rooms) {
+    if (!at.has(room.number)) unplaced.push(room.number);
+  }
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  for (const cell of placed) {
+    if (cell.x < minX) minX = cell.x;
+    if (cell.x > maxX) maxX = cell.x;
+    if (cell.y < minY) minY = cell.y;
+    if (cell.y > maxY) maxY = cell.y;
+  }
+  return {
+    placed: placed, unplaced: unplaced,
+    minX: minX, maxX: maxX, minY: minY, maxY: maxY,
+    width: placed.length ? maxX - minX + 1 : 0,
+    height: placed.length ? maxY - minY + 1 : 0
+  };
+}
+
 // --- checks ---------------------------------------------------------------
 
 // Everything that would stop rooms_source.py emitting the castle, or stop the
@@ -698,6 +898,8 @@ function unreciprocated(map) {
 // said early and all at once rather than as a traceback on the next build.
 function checkAtlas(atlas, numbers) {
   const game = gameOf(atlas);
+  const rules = rulesOf(atlas);
+  const table = rules.exits === 'table';
   const problems = [];
   const scenery = byName(atlas.sceneryTemplates);
   const objects = byName(atlas.objectTemplates);
@@ -742,6 +944,36 @@ function checkAtlas(atlas, numbers) {
     }
   }
 
+  // A templates file that names its own doorways names them by template and
+  // wall, and the builder stops on either being wrong: a wall that is not one
+  // of the four, or a template the castle does not have -- which is what a
+  // rename done by hand in one file and not the other leaves behind.
+  const doorways = doorwaysSaid(atlas);
+  for (const name of doorways ? Object.keys(doorways) : []) {
+    if (!scenery.has(name)) {
+      problems.push({
+        room: null, severity: 'error',
+        text: 'templates.json names ' + name + ' as a doorway, and there is no ' +
+              'such scenery template'
+      });
+    } else if (DIRECTIONS.indexOf(doorways[name]) < 0) {
+      problems.push({
+        room: null, severity: 'error',
+        text: 'templates.json gives ' + name + ' the wall ' +
+              JSON.stringify(doorways[name]) + '; a wall is one of ' + DIRECTIONS.join(', ')
+      });
+    }
+  }
+
+  // A destination byte needs a value that means "no way out", and in a table
+  // that is a number no room has -- so one has to be left free.
+  if (table && atlas.rooms.length > 0xFF) {
+    problems.push({
+      room: null, severity: 'error',
+      text: 'every room number is taken, and one is needed to mean no exit'
+    });
+  }
+
   for (const room of atlas.rooms) {
     const n = room.number;
     if (seen.has(n)) fault(n, 'two rooms are numbered ' + n);
@@ -758,8 +990,9 @@ function checkAtlas(atlas, numbers) {
 
     // The scenery count shares the attribute byte with the ink and the shape.
     // Knight Lore stores it as it is, in bits 5-7; Pentagram stores it less
-    // one, which is what lets a room have eight.
-    const most = game === 'pentagram' ? 8 : 7;
+    // one, which is what lets a room have eight. A castle that says its own
+    // limit in meta.rules is held to that instead.
+    const most = rules.sceneryPerRoom;
     if (room.scenery.length > most) {
       fault(n, room.scenery.length + ' scenery entries; the count field holds ' + most);
     }
@@ -771,6 +1004,19 @@ function checkAtlas(atlas, numbers) {
     for (const ref of room.scenery) {
       const t = scenery.get(ref.template);
       if (!t) { fault(n, 'no scenery template called ' + ref.template); continue; }
+      if (table) {
+        // Every entry is a template and a destination, doorway or not: the
+        // builder reads the pair and asks the template whether it is a door.
+        body += 2;
+        const going = ref.destination !== undefined && ref.destination !== null;
+        if (!doorwayOf(atlas, ref.template)) {
+          if (going) fault(n, ref.template + ' is not a doorway, and has a destination');
+        } else if (going && !isByte(ref.destination)) {
+          fault(n, 'the ' + ref.template + ' doorway leads to ' +
+                   JSON.stringify(ref.destination) + ', which is not a room number');
+        }
+        continue;
+      }
       body += game === 'pentagram' && t.doorway ? 2 : 1;
     }
     for (const group of room.objects) {
@@ -808,7 +1054,14 @@ function checkAtlas(atlas, numbers) {
     if (used === 0) note(n, 'nothing in it');
   }
 
-  if (game === 'knightlore' && previous !== 0xFF) {
+  if (rules.lastRoomSaid && previous !== rules.lastRoom) {
+    problems.push({
+      room: null, severity: 'error',
+      text: 'the last room must be $' + hexByte(rules.lastRoom) + ' (' + rules.lastRoom +
+            '), as meta.rules.lastRoom says: the walk stops at the first number ' +
+            'at least the one it wants, so every search has to meet it'
+    });
+  } else if (!rules.lastRoomSaid && game === 'knightlore' && previous !== 0xFF) {
     problems.push({
       room: null, severity: 'error',
       text: 'the last room must be $FF: the walk has no end marker and stops at ' +
@@ -885,16 +1138,94 @@ function retemplateObject(room, ref, slot, templateName) {
 // only emits it for Pentagram, and rooms_source.py asserts it is zero on
 // anything that is not a doorway -- so it is only added where the file already
 // has the field.
+//
+// A castle whose exits are a table has the field on doorways only: its
+// builder refuses a destination on anything else. A new doorway there is
+// walled up -- null -- until someone says where it goes, because 0 is a room
+// and would quietly send it to one.
 function addScenery(atlas, room, templateName, destination) {
   const entry = { template: templateName };
-  if (gameOf(atlas) === 'pentagram') entry.destination = destination || 0;
+  const exits = rulesOf(atlas).exits;
+  if (exits === 'table') {
+    if (doorwayOf(atlas, templateName)) {
+      entry.destination = isByte(destination) ? destination : null;
+    }
+  } else if (exits === 'byte') {
+    entry.destination = destination || 0;
+  }
   room.scenery.push(entry);
   return room.scenery.length - 1;
+}
+
+// Which template a scenery entry places. In a castle whose exits are a table
+// the destination field goes with being a doorway: a door changed into a wall
+// loses it, since the builder refuses one there, and a wall changed into a
+// door gains one, walled up until it is set.
+function setSceneryTemplate(atlas, ref, templateName) {
+  ref.template = templateName;
+  if (rulesOf(atlas).exits !== 'table') return ref;
+  if (!doorwayOf(atlas, templateName)) delete ref.destination;
+  else if (ref.destination === undefined) ref.destination = null;
+  return ref;
 }
 
 function removeScenery(room, ref) {
   if (!room.scenery[ref]) return null;
   return room.scenery.splice(ref, 1)[0];
+}
+
+// --- adding a room --------------------------------------------------------
+
+// Why a room cannot be numbered this, or null if it can. Unlike the edits
+// above, these are refused rather than left to checkAtlas: a number is the
+// room's identity, and a room made under a number it cannot have is not on
+// its way to anything legal.
+function addRoomProblem(atlas, number) {
+  if (!isByte(number)) return 'a room number is 0 to 255';
+  if (byNumber(atlas.rooms).has(number)) return 'there is already a room ' + number;
+  const rules = rulesOf(atlas);
+  if (rules.lastRoom !== null && number > rules.lastRoom) {
+    return 'room ' + number + ' would come after room $' + hexByte(rules.lastRoom) +
+           ' (' + rules.lastRoom + '), which has to be the last';
+  }
+  // A table's "no exit" is a number no room has, so one is always kept free.
+  if (rules.exits === 'table' && atlas.rooms.length >= 0xFF) {
+    return 'the last free number is needed to mean no exit';
+  }
+  return null;
+}
+
+// The lowest number a new room could have, or null if there is none.
+function firstFreeRoom(atlas) {
+  for (let n = 0; n <= 0xFF; n++) {
+    if (!addRoomProblem(atlas, n)) return n;
+  }
+  return null;
+}
+
+// A new, empty room: no scenery, no objects, standing on the first floor
+// shape. Its ink is the room before it's, or failing that the one after --
+// every room the games ship is ink 2 to 7, bright on black, and taking a
+// neighbour's keeps it one you can see and in keeping with the rooms around
+// it. The rooms stay in ascending order, because room_find walks them and
+// stops at the first number at least the one it wants.
+//
+// Returns the new room's index in atlas.rooms, or why it could not be made.
+function addRoom(atlas, number) {
+  const problem = addRoomProblem(atlas, number);
+  if (problem) return problem;
+  let at = 0;
+  while (at < atlas.rooms.length && atlas.rooms[at].number < number) at++;
+  const beside = atlas.rooms[at - 1] || atlas.rooms[at];
+  const room = {
+    number: number,
+    ink: beside ? beside.ink : 7,
+    dimensions: Object.keys(atlas.roomDimensions || {})[0],
+    scenery: [],
+    objects: []
+  };
+  atlas.rooms.splice(at, 0, room);
+  return at;
 }
 
 // Renaming a template is the point of the file being JSON: the names in
@@ -921,6 +1252,28 @@ function renameTemplate(atlas, from, to) {
     for (const name of Object.keys(rebuilt)) group[name] = rebuilt[name];
   }
   if (!moved) return null;
+
+  // A castle that names its doorways and its background in templates.json
+  // names them by template, so those names move too -- or the rename would
+  // quietly wall up every door made from the template. The doorway list is
+  // rebuilt in its own order for the same reason as the table above: the file
+  // is written back in that order.
+  const doorways = doorwaysSaid(atlas);
+  if (doorways && Object.prototype.hasOwnProperty.call(doorways, from)) {
+    const rebuilt = {};
+    for (const name of Object.keys(doorways)) {
+      rebuilt[name === from ? to : name] = doorways[name];
+    }
+    for (const name of Object.keys(doorways)) delete doorways[name];
+    for (const name of Object.keys(rebuilt)) doorways[name] = rebuilt[name];
+  }
+  const background = atlas.templatesMeta && atlas.templatesMeta.background;
+  if (Array.isArray(background)) {
+    for (let i = 0; i < background.length; i++) {
+      if (background[i] === from) background[i] = to;
+    }
+  }
+
   for (const room of atlas.rooms) {
     for (const ref of room.scenery) {
       if (ref.template === from) { ref.template = to; moved++; }
@@ -1224,10 +1577,13 @@ if (typeof module !== 'undefined') {
     ENTRY_FIELDS, FLAG_FIELDS, NUDGE_FIELDS,
     parseAtlas, serializeAtlas, parseTemplates, serializeTemplates,
     withTemplates, templatesFileOf, roomsFileOf, pairProblem, TEMPLATES_FILE, ROOMS_FILE, gameOf, byName, byNumber,
+    GAME_TITLES, gameTitle,
     isBackgroundTemplate, expandRoom, poolUsed, sizeOf, dimensionsOf, eolOf,
-    doorwayOf, destinationOf, roomMap, unreciprocated,
+    rulesOf, doorwayOf, destinationOf, roomMap, unreciprocated, doorwaysOf,
+    MAP_STEP, mapLayout,
     GROUP_LIMIT, addObject, removeObject, moveObject, retemplateObject,
-    addScenery, removeScenery, renameTemplate, refreshUsage,
+    addScenery, setSceneryTemplate, removeScenery, renameTemplate, refreshUsage,
+    addRoomProblem, firstFreeRoom, addRoom,
     setTemplateField, setTemplateGraphic,
     templateUsage,
     checkAtlas, poolNeeded
