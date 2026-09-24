@@ -1026,6 +1026,55 @@ registers. Watching costs nothing measurable while a program runs -- see
 [Testing and performance](testing-and-performance.md#performance) -- so leaving
 one armed is free.
 
+## Logpoints
+
+A logpoint is a breakpoint that reports instead of stopping. Right-click the
+gutter and choose **Add Logpoint...**, and type a message: whenever execution
+reaches that line, the message is filled in and printed in the Debug Console,
+and the program carries on as if nothing had happened.
+
+A message is text with values in braces:
+
+| Written | Gives |
+|---|---|
+| `{A}`, `{HL}`, `{IX}`, `{AF'}` | a register, in hex: `0x41`, `0x9001` |
+| `{(HL)}`, `{(IX+5)}` | the byte at the address in a register pair, with an optional offset |
+| `{(0x5C00)}`, `{($5C00)}`, `{(23552)}` | the byte at an address |
+| `{(PLAYER_X)}`, `{(table+2)}` | the byte at a symbol, from the loaded debug info |
+| `{...:d}` | decimal instead of hex |
+| `{...:c}` | as a character: itself if printable, a new line for `0x0D`, `\xNN` otherwise |
+| `{(...):w}`, `{(...):wd}` | the little-endian word there, in hex or decimal |
+| `{{`, `}}` | a brace |
+
+So `lives {(LIVES):d}, drawing {(IX+2)} at {HL}` on the line that loses a life
+says each time how many are left and what was about to be drawn. A symbol is
+looked up when the logpoint is set, so a misspelt one greys the logpoint out at
+once, with the reason on hover, rather than failing quietly at every hit.
+
+The message is filled in just before the instruction on that line runs, so a
+register it loads still holds its old value. Reading memory for a message
+touches nothing: no watchpoint sees it.
+
+**Many reports.** A logpoint in a busy loop can report hundreds of thousands
+of times a second. Reports are sent in batches, a few a second while the
+program runs and always before a stop is announced, so they read in order with
+everything else in the console; past 20,000 in one batch the rest are counted
+and dropped, and the console says how many.
+
+**For programs rather than people.** An extension that wants to see what a game
+does -- every character a text adventure prints, say -- can set logpoints by
+address without going through the Breakpoints pane, with the adapter's own
+`setLogpoints` request: `{group, logpoints: [{address, message}]}`, where the
+address is a number or anything [an address field](#watchpoints) takes. Each
+call replaces what that connection set under the same group, and the reports
+come back as `zxLog` events -- `{group, lines: [{id, pc, text}], dropped}` --
+rather than in the console. A connection's logpoints go when it closes.
+
+**Not yet:** conditions and hit counts on logpoints; an MCP tool for them; and,
+as with breakpoints, a logpoint on a 128K is on the 16-bit address, whichever
+bank is paged there. A rewind replays the machine without its logpoints, so
+stepping back does not report the same lines again.
+
 ## Stepping backwards
 
 Stopped at a breakpoint or a pause, you can go **backwards** through what the

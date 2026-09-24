@@ -122,6 +122,7 @@ Engine::~Engine() {
 void Engine::on_stopped(StoppedHandler h) { on_stopped_ = std::move(h); }
 void Engine::on_continued(ContinuedHandler h) { on_continued_ = std::move(h); }
 void Engine::on_graphics_view(GraphicsViewHandler h) { on_graphics_view_ = std::move(h); }
+void Engine::on_log(LogHandler h) { on_log_ = std::move(h); }
 
 void Engine::set_graphics_view(const GraphicsView& v) {
     GraphicsViewHandler handler;
@@ -178,8 +179,12 @@ void Engine::submit_void(std::function<void(Spectrum&)> fn, bool during_run) {
     std::future<void> fut = done.get_future();
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
-        queue_.push_back(Job{[fn = std::move(fn), &done](Spectrum& m) {
+        // The log is flushed before the caller is released, because the
+        // caller is what announces a stop: reports from a run have to reach
+        // a client before the stop that ended it does.
+        queue_.push_back(Job{[this, fn = std::move(fn), &done](Spectrum& m) {
                                  fn(m);
+                                 flush_log(true);
                                  done.set_value();
                              },
                              during_run});
@@ -203,7 +208,11 @@ R Engine::submit(std::function<R(Spectrum&)> fn, bool during_run) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         queue_.push_back(
-            Job{[fn = std::move(fn), &result](Spectrum& m) { result.set_value(fn(m)); },
+            Job{[this, fn = std::move(fn), &result](Spectrum& m) {
+                    R value = fn(m);
+                    flush_log(true); // before the caller announces a stop: see submit_void
+                    result.set_value(std::move(value));
+                },
                 during_run});
     }
     queue_cv_.notify_one();
@@ -643,6 +652,7 @@ void Engine::pace_wait() {
 
 void Engine::publish_progress() {
     emulated_hc_.store(machine_.global_hc());
+    flush_log(false);
 }
 
 void Engine::sync_keys() {
@@ -1034,6 +1044,110 @@ MachineState Engine::run() {
         on_stopped_(reason, s.pc);
     }
     return s;
+}
+
+namespace {
+
+/// Reports held for the handler before more are dropped: a logpoint in a
+/// tight loop can report millions of times a second, and nothing downstream
+/// wants them all.
+constexpr size_t MAX_PENDING_LOG = 20000;
+/// How long a run's reports may wait for the next batch. Short enough to read
+/// as live, long enough that a busy logpoint is a few events a second rather
+/// than one per yield.
+constexpr std::chrono::milliseconds LOG_FLUSH_INTERVAL{50};
+
+} // namespace
+
+uint32_t Engine::set_logpoint(Logpoint lp) {
+    uint32_t id = 0;
+    submit_void([this, &lp, &id](Spectrum&) {
+        if (lp.id == 0) {
+            lp.id = next_logpoint_id_++;
+        }
+        id = lp.id;
+        bool replaced = false;
+        for (Logpoint& existing : logpoints_) {
+            if (existing.id == lp.id) {
+                // An edit keeps the count, as a watchpoint's does.
+                lp.hits = existing.hits;
+                existing = lp;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            logpoints_.push_back(lp);
+        }
+        arm_logpoints();
+    });
+    return id;
+}
+
+bool Engine::clear_logpoint(uint32_t id) {
+    bool any = false;
+    submit_void([this, id, &any](Spectrum&) {
+        for (size_t i = logpoints_.size(); i-- > 0;) {
+            if (id == 0 || logpoints_[i].id == id) {
+                logpoints_.erase(logpoints_.begin() + std::ptrdiff_t(i));
+                any = true;
+            }
+        }
+        arm_logpoints();
+    });
+    return any;
+}
+
+std::vector<Logpoint> Engine::logpoints() {
+    return submit<std::vector<Logpoint>>([this](Spectrum&) { return logpoints_; });
+}
+
+void Engine::arm_logpoints() {
+    if (logpoints_.empty()) {
+        logpoint_at_.reset();
+        return;
+    }
+    logpoint_at_ = std::make_unique<uint8_t[]>(0x10000);
+    for (const Logpoint& lp : logpoints_) {
+        logpoint_at_[lp.addr] = 1;
+    }
+}
+
+void Engine::note_logpoints(Spectrum& m) {
+    const uint16_t pc = m.registers().pc;
+    for (Logpoint& lp : logpoints_) {
+        if (lp.addr != pc) {
+            continue;
+        }
+        lp.hits++;
+        if (pending_log_.size() >= MAX_PENDING_LOG) {
+            log_dropped_++;
+            continue;
+        }
+        LogLine line;
+        line.id = lp.id;
+        line.pc = pc;
+        line.text = format_log_message(lp.message, m);
+        pending_log_.push_back(std::move(line));
+    }
+}
+
+void Engine::flush_log(bool now) {
+    if (pending_log_.empty() && log_dropped_ == 0) {
+        return;
+    }
+    const auto t = std::chrono::steady_clock::now();
+    if (!now && t - last_log_flush_ < LOG_FLUSH_INTERVAL) {
+        return;
+    }
+    last_log_flush_ = t;
+    std::vector<LogLine> lines;
+    lines.swap(pending_log_);
+    const uint64_t dropped = log_dropped_;
+    log_dropped_ = 0;
+    if (on_log_) {
+        on_log_(lines, dropped);
+    }
 }
 
 uint32_t Engine::set_watchpoint(Watchpoint w) {

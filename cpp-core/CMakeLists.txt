@@ -44,6 +44,7 @@ add_library(zx_core STATIC
   src/disassembler.cpp
   src/engine.cpp
   src/keyboard.cpp
+  src/logpoint.cpp
   src/memory.cpp
   src/profile.cpp
   src/register_names.cpp

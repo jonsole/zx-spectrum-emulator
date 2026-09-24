@@ -156,6 +156,43 @@ bool set_register(Registers& r, const std::string& raw, uint32_t value, std::str
     return true;
 }
 
+bool get_register(const Registers& r, const std::string& raw, uint32_t& value) {
+    const std::string name = canonical(raw);
+    for (const Byte& b : BYTES) {
+        if (name == b.name) {
+            value = r.*b.field;
+            return true;
+        }
+    }
+    for (const Half& h : HALVES) {
+        if (name == h.name) {
+            value = h.high ? uint32_t(r.*h.field >> 8) : uint32_t(r.*h.field & 0xFF);
+            return true;
+        }
+    }
+    for (const Word& w : WORDS) {
+        if (name == w.name) {
+            value = r.*w.field;
+            return true;
+        }
+    }
+    for (const Pair& p : PAIRS) {
+        if (name == p.name) {
+            value = uint32_t(r.*p.hi << 8) | r.*p.lo;
+            return true;
+        }
+    }
+    if (name == "IFF1" || name == "IFF2") {
+        value = (name == "IFF1" ? r.iff1 : r.iff2) ? 1 : 0;
+        return true;
+    }
+    if (name == "IM") {
+        value = r.im;
+        return true;
+    }
+    return false;
+}
+
 bool set_flag(Registers& r, const std::string& raw, bool value, std::string& error) {
     const std::string name = canonical(raw);
     uint8_t mask = 0;

@@ -112,6 +112,12 @@ struct Connection {
     /// watchpoint set over MCP -- or from the editor's own command -- is not
     /// swept away by a client that has none.
     std::map<std::string, uint32_t> data_breakpoints;
+    /// Logpoints this connection set, as Engine ids: by source path, for the
+    /// breakpoints with a logMessage that setBreakpoints replaces a source at
+    /// a time, and by group, for the ones a program asked for with
+    /// setLogpoints. Cleared when the connection goes.
+    std::map<std::string, std::vector<uint32_t>> source_logpoints;
+    std::map<std::string, std::vector<uint32_t>> group_logpoints;
 
     /// Buffered input, so header lines can be read a line at a time and the
     /// body a block at a time off the same stream.
@@ -806,6 +812,103 @@ void sync_breakpoints(Engine& engine, Connection& conn) {
     conn.known_breakpoints = std::move(desired);
 }
 
+// ---- logpoints --------------------------------------------------------------
+
+/// Where a logpoint's reports go: the connection that set it, and within it
+/// either the Debug Console -- an empty group, for a breakpoint with a
+/// logMessage -- or a `zxLog` event naming the group a program set it under.
+/// Keyed by the Engine's id. The connection is held as a plain pointer and
+/// looked up among g_connections before anything is sent, so a report that
+/// arrives as its connection closes goes nowhere rather than somewhere freed.
+struct LogpointOwner {
+    Connection* conn = nullptr;
+    std::string group;
+};
+std::mutex g_logpoints_mutex;
+std::map<uint32_t, LogpointOwner> g_logpoint_owners;
+
+/// Sets a logpoint at `addr` for `conn`. False, with `error`, for a message
+/// that does not parse -- a symbol in it is resolved now, against whatever
+/// debug info is loaded, so a typo is caught when it is set and not silently
+/// at every hit.
+bool add_logpoint(Engine& engine, const Sources& sources, Connection& conn,
+                  const std::string& group, uint16_t addr, const std::string& message,
+                  uint32_t& id, std::string& error) {
+    Logpoint lp;
+    lp.addr = addr;
+    const SymbolResolver resolve = [&sources](const std::string& name, uint16_t& value) {
+        return sources.symbol_value(name, value);
+    };
+    if (!parse_log_message(message, resolve, lp.message, error)) {
+        return false;
+    }
+    id = engine.set_logpoint(lp);
+    std::lock_guard<std::mutex> lock(g_logpoints_mutex);
+    g_logpoint_owners[id] = LogpointOwner{&conn, group};
+    return true;
+}
+
+/// Clears every logpoint in `ids` and forgets their owners.
+void drop_logpoints(Engine& engine, std::vector<uint32_t>& ids) {
+    for (uint32_t id : ids) {
+        engine.clear_logpoint(id);
+        std::lock_guard<std::mutex> lock(g_logpoints_mutex);
+        g_logpoint_owners.erase(id);
+    }
+    ids.clear();
+}
+
+/// Hands a batch of reports to whoever set each logpoint: a console line for
+/// a breakpoint's logMessage, a `zxLog` event per group for the rest, each
+/// connection's reports in the order they happened.
+void deliver_log(const std::vector<LogLine>& lines, uint64_t dropped) {
+    std::map<Connection*, std::string> console;
+    std::map<std::pair<Connection*, std::string>, json> groups;
+    {
+        std::lock_guard<std::mutex> lock(g_logpoints_mutex);
+        for (const LogLine& line : lines) {
+            auto owner = g_logpoint_owners.find(line.id);
+            if (owner == g_logpoint_owners.end()) {
+                continue; // cleared while its report was on its way
+            }
+            if (owner->second.group.empty()) {
+                console[owner->second.conn] += line.text + "\n";
+            } else {
+                json& batch = groups[{owner->second.conn, owner->second.group}];
+                if (batch.is_null()) {
+                    batch = json::array();
+                }
+                batch.push_back(json{{"id", line.id}, {"pc", line.pc}, {"text", line.text}});
+            }
+        }
+    }
+    std::vector<std::shared_ptr<Connection>> open;
+    {
+        std::lock_guard<std::mutex> lock(g_connections_mutex);
+        open = g_connections;
+    }
+    for (const std::shared_ptr<Connection>& conn : open) {
+        auto text = console.find(conn.get());
+        if (text != console.end()) {
+            std::string out = text->second;
+            if (dropped > 0) {
+                out += "(" + std::to_string(dropped)
+                       + " logpoint reports dropped: they came faster than they could be sent)\n";
+            }
+            send_message(*conn, envelope_event(*conn, "output",
+                                               json{{"category", "console"}, {"output", out}}));
+        }
+        for (const auto& batch : groups) {
+            if (batch.first.first == conn.get()) {
+                send_message(*conn, envelope_event(*conn, "zxLog",
+                                                   json{{"group", batch.first.second},
+                                                        {"lines", batch.second},
+                                                        {"dropped", dropped}}));
+            }
+        }
+    }
+}
+
 // ---- step over -------------------------------------------------------------
 
 /// Instructions a plain single step would step INTO (or, for the block-repeat
@@ -1026,7 +1129,8 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                     // memory inspector offer "Break on Value Change" over a
                     // byte range, which is where one is usually wanted.
                     {"supportsDataBreakpoints", true},
-                    {"supportsDataBreakpointBytes", true}};
+                    {"supportsDataBreakpointBytes", true},
+                    {"supportsLogPoints", true}};
 #if ZX_REWIND
         // What makes VS Code show Step Back and Reverse Continue at all.
         body["supportsStepBack"] = true;
@@ -1232,6 +1336,9 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
 
         std::set<uint16_t> addrs;
         json results = json::array();
+        // This source's logpoints are replaced with its breakpoints, as DAP
+        // says: the list is the whole of what the client wants there now.
+        drop_logpoints(engine, conn.source_logpoints[source_path]);
         const json& list = arg(arguments, "breakpoints");
         if (list.is_array()) {
             for (const json& bp : list) {
@@ -1254,6 +1361,24 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                            {"message", "no instruction at this line"}});
                     continue;
                 }
+                // A logpoint reports and lets the run go on, so it is not one
+                // of the addresses a run stops at.
+                const std::string log_message = arg_str(bp, "logMessage");
+                if (!log_message.empty()) {
+                    uint32_t id = 0;
+                    std::string error;
+                    if (!add_logpoint(engine, sources, conn, "", addr, log_message, id, error)) {
+                        results.push_back(json{{"verified", false},
+                                               {"line", line},
+                                               {"message", "logpoint: " + error}});
+                        continue;
+                    }
+                    conn.source_logpoints[source_path].push_back(id);
+                    results.push_back(json{{"verified", true},
+                                           {"line", actual_line},
+                                           {"instructionReference", hex4(addr)}});
+                    continue;
+                }
                 addrs.insert(addr);
                 // `line` here is the line the breakpoint ACTUALLY landed on,
                 // which may be below the one clicked (see addr_for_line).
@@ -1266,6 +1391,46 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         conn.source_breakpoints[source_path] = std::move(addrs);
         sync_breakpoints(engine, conn);
         body = json{{"breakpoints", results}};
+
+    } else if (command == "setLogpoints") {
+        // Logpoints for a program rather than a person -- a panel that wants
+        // to see something the game does, every time it does it, without the
+        // user's breakpoints or the Debug Console being involved. Like
+        // setBreakpoints, the list replaces everything this connection set
+        // under the same group. Reports come back as `zxLog` events.
+        const std::string group = arg_str(arguments, "group");
+        if (group.empty()) {
+            return envelope_response(conn, request_seq, command, false,
+                                     json{{"message", "setLogpoints needs a group"}});
+        }
+        drop_logpoints(engine, conn.group_logpoints[group]);
+        json results = json::array();
+        const json& list = arg(arguments, "logpoints");
+        if (list.is_array()) {
+            for (const json& lp : list) {
+                const json& where = arg(lp, "address");
+                uint16_t addr = 0;
+                std::string error;
+                bool placed = false;
+                if (where.is_number_integer()) {
+                    addr = uint16_t(where.get<int64_t>());
+                    placed = true;
+                } else if (where.is_string()) {
+                    placed = sources.parse_address(where.get<std::string>(), addr, error);
+                } else {
+                    error = "no address";
+                }
+                uint32_t id = 0;
+                if (placed && add_logpoint(engine, sources, conn, group, addr,
+                                           arg_str(lp, "message"), id, error)) {
+                    conn.group_logpoints[group].push_back(id);
+                    results.push_back(json{{"verified", true}, {"id", id}, {"address", hex4(addr)}});
+                } else {
+                    results.push_back(json{{"verified", false}, {"message", error}});
+                }
+            }
+        }
+        body = json{{"logpoints", results}};
 
     } else if (command == "source") {
         // Only reached when the client could not open the path itself -- one
@@ -2146,6 +2311,12 @@ void handle_connection(std::shared_ptr<Connection> conn, Engine& engine, Sources
     for (uint16_t addr : conn->known_breakpoints) {
         engine.clear_breakpoint(addr);
     }
+    for (auto& entry : conn->source_logpoints) {
+        drop_logpoints(engine, entry.second);
+    }
+    for (auto& entry : conn->group_logpoints) {
+        drop_logpoints(engine, entry.second);
+    }
 }
 
 } // namespace
@@ -2222,6 +2393,7 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
     // "point the graphics panel at sprite_017" becomes a set on the Engine
     // here and an unsolicited event out to every open DAP connection, which is
     // the only route from one to the other.
+    engine.on_log(deliver_log);
     engine.on_graphics_view([](const GraphicsView& v, uint64_t version) {
         broadcast_event("zxGraphicsView", graphics_view_json(v, version));
         log("Graphics view: %s %s as %s", v.source.c_str(),

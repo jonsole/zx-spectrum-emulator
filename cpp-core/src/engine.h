@@ -28,6 +28,7 @@
 // the only moment Play is ever wanted. Those five use atomics and a mutexed
 // snapshot instead.
 
+#include "logpoint.h"
 #include "rewind.h"
 #include "snapshot.h"
 #include "spectrum.h"
@@ -73,6 +74,25 @@ struct Watchpoint {
     bool enabled = true;
     /// Stops it has caused.
     uint64_t hits = 0;
+};
+
+/// A logpoint: a place in the code that reports rather than stops -- see
+/// logpoint.h. When the instruction at `addr` is about to run, the message is
+/// filled in and handed to the log handler, and the run goes on.
+struct Logpoint {
+    /// Assigned by the Engine, and how a client names one later.
+    uint32_t id = 0;
+    uint16_t addr = 0;
+    std::vector<LogSegment> message;
+    /// Times it has reported.
+    uint64_t hits = 0;
+};
+
+/// One report from a logpoint.
+struct LogLine {
+    uint32_t id = 0;
+    uint16_t pc = 0;
+    std::string text;
 };
 
 /// The watchpoint stop a machine is sitting at, if any -- what stopped it and
@@ -377,6 +397,11 @@ public:
     /// Called from whichever thread set the view -- an MCP request thread, in
     /// practice. Same rule as the two above: do not call back into the queue.
     using GraphicsViewHandler = std::function<void(const GraphicsView&, uint64_t version)>;
+    /// Called from the emulator thread with logpoint reports, in the order
+    /// they happened: batched while a run goes on, and always before the stop
+    /// that ends it is announced. `dropped` counts lines lost because too many
+    /// came at once. Same rule: do not call back into the queue.
+    using LogHandler = std::function<void(const std::vector<LogLine>& lines, uint64_t dropped)>;
 
     Engine();
     ~Engine();
@@ -387,6 +412,7 @@ public:
     void on_stopped(StoppedHandler h);
     void on_continued(ContinuedHandler h);
     void on_graphics_view(GraphicsViewHandler h);
+    void on_log(LogHandler h);
 
     // ---- queued: these wait for the actor thread ---------------------------
     /// A 16K image is the 48K ROM, a 32K one the 128K pair. Either can be
@@ -453,6 +479,13 @@ public:
     /// Removes one by id, or (with 0) all of them. True if anything went.
     bool clear_watchpoint(uint32_t id);
     std::vector<Watchpoint> watchpoints();
+    /// Adds a logpoint, or with a known `id` replaces that one. Returns the id.
+    /// Queued, and serviced at a run's yields, so one can be set on a game
+    /// that is already running.
+    uint32_t set_logpoint(Logpoint lp);
+    /// Removes one by id, or (with 0) all of them. True if anything went.
+    bool clear_logpoint(uint32_t id);
+    std::vector<Logpoint> logpoints();
     std::vector<uint8_t> read_memory(uint16_t addr, size_t length);
     void write_memory(uint16_t addr, std::vector<uint8_t> data);
     /// Reads a RAM bank directly, whatever is paged: `offset` is within the
@@ -855,6 +888,26 @@ private:
     uint64_t capture_next_frame_ = 0;
     std::vector<CapturedFrame> capture_frames_;
 
+    /// The logpoints, and a flag per address saying which have one -- null
+    /// when there are none, which keeps a machine without them at one null
+    /// test per instruction. Emulator thread only.
+    std::vector<Logpoint> logpoints_;
+    uint32_t next_logpoint_id_ = 1;
+    std::unique_ptr<uint8_t[]> logpoint_at_;
+    /// Reports not yet handed on, and how many were lost for want of room.
+    std::vector<LogLine> pending_log_;
+    uint64_t log_dropped_ = 0;
+    std::chrono::steady_clock::time_point last_log_flush_{};
+    LogHandler on_log_;
+    /// Rebuilds logpoint_at_ from logpoints_.
+    void arm_logpoints();
+    /// Fills in every logpoint at the current PC. Emulator thread only.
+    void note_logpoints(Spectrum& m);
+    /// Hands pending reports to the handler: at once with `now`, as a job
+    /// ends, or at a run's yield only once a little time has passed, so a busy
+    /// logpoint arrives in batches rather than as a stream of tiny events.
+    void flush_log(bool now);
+
     /// What is being watched, and what the last watchpoint stop was. Emulator
     /// thread only, like everything else the queue serves.
     std::vector<Watchpoint> watchpoints_;
@@ -969,6 +1022,12 @@ private:
     /// and with rewind the history's checkpointing and replay of logged inputs.
     void after_instruction(Spectrum& m) {
         note_frame(m);
+        // Before the history's step, so a logpoint reports the machine as
+        // the program left it. Not while halted: PC then sits after the HALT
+        // for every idle step, and a logpoint there would report each one.
+        if (logpoint_at_ != nullptr && !m.cpu.halted && logpoint_at_[m.registers().pc] != 0) {
+            note_logpoints(m);
+        }
 #if ZX_REWIND
         history_.on_instruction(m);
 #endif

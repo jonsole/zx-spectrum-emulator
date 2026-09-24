@@ -21,6 +21,10 @@ int register_width(const std::string& name);
 /// saying why, for an unknown name or a value too wide for it.
 bool set_register(Registers& r, const std::string& name, uint32_t value, std::string& error);
 
+/// Reads the register called `name` into `value`. Returns false for a name
+/// that is not a register. The same names register_width takes.
+bool get_register(const Registers& r, const std::string& name, uint32_t& value);
+
 /// Sets or clears one bit of F by its flag letter: S, Z, H, P/V (also PV or
 /// P), N or C. Returns false for anything else.
 bool set_flag(Registers& r, const std::string& name, bool value, std::string& error);
