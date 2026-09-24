@@ -62,11 +62,17 @@ WEREWOLF_BODY = [64 + k for k in range(16)]
 
 # Everything that animates, as sprite_source.py checks it: every frame in a
 # group has to rotate into a buffer sized from any other frame in it.
+#
+# Knight Lore gives some of these twice over -- a guard's legs at 144-157, a
+# second fire at 176 and a second ball at 182 -- drawing the same sprites with
+# the same nudges. This game draws them from one set, which gave the numbers
+# back for new art: a guard walks on the knight's own legs, whose leg bits lay
+# out the same way (mover_guard_face in movers.s).
 ANIMATIONS = (
-    (176, 177), (180, 181), (86, 87),                       # fires
-    (178, 179), (182, 183),                                 # balls
+    (180, 181), (86, 87),                                   # fires
+    (178, 179),                                             # balls
     (150, 151), (30, 31), (158, 159),                       # torsos, wizard's legs
-    tuple(range(144, 150)) + tuple(range(152, 158)),        # a guard's legs
+    tuple(SABREMAN_LEGS),                                   # a guard's legs
     (80, 81, 82, 83), (164, 165, 166, 167), (8, 9),         # ghost, spell, gate
 )
 

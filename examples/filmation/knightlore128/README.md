@@ -47,8 +47,44 @@ starts.
 | 4c-i | Pentagram's movers for what its rooms place: the spider, the creature, the dragons' heads, platforms, lift, conveyors, and blocks that fall, sink, crumble or are shoved | done |
 | 4c-ii | what Pentagram puts up itself: the things that fall from the sky, his bolt and the puff | done |
 | 5 | the pre-drawn backdrop in bank 6: the walls drawn once a room, and each redraw starting from them | done |
+| 6a | graphic numbers freed for new art: duplicates of the same sprite merged, 24 numbers free | done |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
+
+### Graphic numbers for new art (stage 6a)
+
+A graphic number is one byte, and stage 4 used all of them but 255. Knight
+Lore gives several things two or three numbers, each drawing the same sprite
+with the same nudge. Nothing in the code tells those numbers apart: a placed
+object's behaviour is its template's, not its graphic's, and what animates
+steps bit 0 of its number (fires, balls, the gate), bits 0 and 1 (the ghost,
+the spell), or a guard's leg bits. So each set was merged into one number:
+
+| Numbers given back | What they drew | Now drawn by |
+|---|---|---|
+| 54, 55, 62, 91, 143 | the plain block, in five templates | 7 |
+| 144-149, 152-157 | a guard's and the wizard's legs | 16-21, 24-29, the knight's own legs |
+| 176, 177 | a second fire | 86, 87 |
+| 182, 183 | a second ball | 178, 179 |
+| 246, 252 | a copy of the puff's last frame; the well's bucket | nothing: neither is drawn |
+
+A guard's legs could become the knight's because `mover_guard_face` reads the
+number's bits: bit 3 is which way the legs face and the low three count the
+walk. Knight Lore laid 16 and 24 out the same way as 144 and 152. Number 16
+takes the guard's box, which only a template placing it reads.
+
+That makes 24 numbers free: 54, 55, 62, 91, 143-149, 152-157, 176, 177, 182,
+183, 246, 252 and 255. Something that animates needs its frames on aligned
+numbers. 144-147 and 152-155 are runs of four, and 54/55, 148/149, 156/157,
+176/177 and 182/183 are pairs.
+
+What was checked, in a 128K emulator:
+- Knight Lore's 127 rooms build the same objects as the 48K game, with the
+  merged numbers mapped.
+- Nothing drew `sprite_missing`.
+- Guards walk through all twelve leg frames, in $01 and $2E. The wizard's legs
+  step in $88, a bouncing ball flickers in $08, and a fire in $93.
+- The designer's tests, the schema tests and the Z80 tests pass.
 
 ### The backdrop (stage 5)
 

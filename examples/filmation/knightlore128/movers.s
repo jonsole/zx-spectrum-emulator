@@ -310,7 +310,7 @@ mover_guard_face:	ld		a,(ix+OBJ.DU)
 					; B says which way the figure faces, C whether it is drawn
 					; mirrored. The torso shows the first in bit 0 of its
 					; graphic and the legs in bit 3, which is their facing
-					; block -- 144 one way and 152 the other.
+					; block -- 16 one way and 24 the other, the knight's own legs.
 					ld		a,(ix+OBJ.GFX)
 					and		~1 & $FF
 					or		b

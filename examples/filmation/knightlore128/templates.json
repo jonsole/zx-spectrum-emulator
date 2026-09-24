@@ -221,7 +221,7 @@
   "scenery_wizard": [
    { "graphic": "wizard.1", "u": 152, "v": 104, "z": 128,
      "flags": { "mirrored": false, "passable": false, "rest": 16 } },
-   { "graphic": "sabreman.legs.1.g144", "u": 160, "v": 96, "z": 128, "sizeU": 5, "sizeV": 5, "sizeZ": 0,
+   { "graphic": "sabreman.legs.1.g16", "u": 160, "v": 96, "z": 128, "sizeU": 5, "sizeV": 5, "sizeZ": 0,
      "flags": { "mirrored": false, "passable": true, "rest": 16 } }
   ],
   "scenery_pot": [
@@ -499,7 +499,7 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_fire": [
-   { "graphic": "fires.1.g176",
+   { "graphic": "fires.1.g86",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -537,7 +537,7 @@
    { "graphic": "guard.1.g150",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } },
-   { "graphic": "sabreman.legs.1.g144",
+   { "graphic": "sabreman.legs.1.g16",
      "flags": { "mirrored": false, "passable": true, "rest": 16 },
      "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
   ],
@@ -565,22 +565,22 @@
    { "graphic": "guard.1.g30",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } },
-   { "graphic": "sabreman.legs.1.g144",
+   { "graphic": "sabreman.legs.1.g16",
      "flags": { "mirrored": false, "passable": true, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_block_ew": [
-   { "graphic": "scenery.block.g54",
+   { "graphic": "scenery.block.g7",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_block_ns": [
-   { "graphic": "scenery.block.g55",
+   { "graphic": "scenery.block.g7",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_moveable_block": [
-   { "graphic": "scenery.block.g62",
+   { "graphic": "scenery.block.g7",
      "flags": { "mirrored": false, "passable": false, "rest": 20 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -605,17 +605,17 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_dropping_block": [
-   { "graphic": "scenery.block.g91",
+   { "graphic": "scenery.block.g7",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_collapsing_block": [
-   { "graphic": "scenery.block.g143",
+   { "graphic": "scenery.block.g7",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_ball_bounce": [
-   { "graphic": "balls.1.g182",
+   { "graphic": "balls.1.g178",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
