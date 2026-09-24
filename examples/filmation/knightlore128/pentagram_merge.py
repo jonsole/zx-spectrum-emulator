@@ -22,7 +22,9 @@ What it does:
                  code did with it; the remake picks behaviour by template, not
                  by graphic, so one number is enough for each sprite and nudge
                  and box, for the graphics its rooms place and its code
-                 draws (WANTED, below).
+                 draws (WANTED, below) -- except where its code counts
+                 through a run of numbers or reads their bits (RUNS), which
+                 keep a number each and their place mod 8.
 
 Some of Pentagram's art belongs to its own game and gets no number: its
 Sabreman, its panel and the frame round its end screen, its collectables, the
@@ -110,6 +112,77 @@ DRAWN_BY_CODE = ((17, 90, 141) + tuple(range(48, 52)) + tuple(range(64, 72))
                  + tuple(range(160, 172)))
 WANTED = set(PLACED) | set(DRAWN_BY_CODE)
 
+# Runs of Pentagram's graphic numbers that its code, and the engine's movers
+# it shares, count through or read the low bits of -- so each keeps a number
+# of its own, in order, starting at the same value as Pentagram's modulo the
+# alignment its code needs. Everything else shares a number with whatever
+# draws the same sprite with the same nudge and box.
+RUNS = (
+    ((48, 49, 50, 51), 4),              # a homer: mover_homer ORs its frame into
+    (tuple(range(160, 168)), 4),        # ...the bottom two bits
+    ((140, 141, 142, 143), 4),          # conveyors: the way in the bottom two bits
+    ((168, 169, 170, 171), 4),          # the four-frame faller: its axis in bits 0-1
+    ((16, 17), 2),                      # the creature: along U or V in bit 0
+    ((80, 81), 2),                      # the faller: its axis is bit 0
+    (tuple(range(64, 71)), 1),          # the puff, counted through by mover_poof
+    ((136, 137, 138, 139), 1),          # a block, then its cracks: mover_crumbles
+    ((149, 150, 151), 1),               # the bolt, counted down
+)
+
+
+def numbering(said, first=FIRST_NUMBER):
+    """Pentagram's graphic numbers -> (our name, our number, its entry), for
+    every graphic WANTED: RUNS a number each, the rest one a kind."""
+    by_number = {}
+    for name, entry in said.items():
+        sprite = entry.get("sprite")
+        if sprite is None or entry["number"] not in WANTED:
+            continue
+        ours = "pentagram." + NAMES[int(sprite.split(".")[1])]
+        if ours.split(".")[1] not in NOT_DRAWN:
+            by_number[entry["number"]] = (ours, entry)
+    in_run = {n: (run, align) for run, align in RUNS for n in run}
+
+    def kind(pg):
+        ours, entry = by_number[pg]
+        return (ours, entry.get("x", 0), entry.get("y", 0),
+                json.dumps(entry.get("mirrored")), json.dumps(entry.get("size")))
+
+    # Which numbers become one: a graphic in a run is its own; the rest group
+    # by what they draw. The runs come first, the most aligned first, so that
+    # none has to be padded out to its boundary.
+    groups, seen = [], {}
+    for run, align in RUNS:
+        groups.append((align, [[n] for n in run if n in by_number]))
+    for pg in sorted(by_number):
+        if pg in in_run:
+            continue
+        k = kind(pg)
+        if k in seen:
+            seen[k].append(pg)
+        else:
+            seen[k] = [pg]
+            groups.append((1, [seen[k]]))
+
+    out, number = {}, first
+    uses = {}
+    for align, members in groups:
+        start = members[0][0]
+        while number % align != start % align:
+            number += 1
+        for pgs in members:
+            ours, entry = by_number[pgs[0]]
+            uses[ours] = uses.get(ours, 0) + 1
+            for pg in pgs:
+                out[pg] = {"name": ours, "sprite": ours, "number": number, "entry": entry}
+            number += 1
+    # A sprite drawn by one number is named after the sprite; by several, each
+    # carries its number, as graphics.json names Knight Lore's.
+    for said in out.values():
+        if uses[said["sprite"]] > 1:
+            said["name"] = "%s.g%d" % (said["sprite"], said["number"])
+    return out, number
+
 
 def main():
     atlas_path, sheet_path = HERE / "sprites.json", HERE / "sprites.png"
@@ -146,43 +219,35 @@ def main():
         node.setdefault("sprites", {})[path[-1]] = box
     ours["group"]["pentagram"] = group
 
-    # The numbers: one for each sprite, nudge and box a drawn graphic has.
+    # The numbers.
     said = json.loads((PENTAGRAM / "graphics.json").read_text(encoding="utf-8"))["graphics"]
     table = json.loads(table_path.read_text(encoding="utf-8"))["graphics"]
-    kinds = {}
-    for name, entry in sorted(said.items(), key=lambda kv: kv[1]["number"]):
-        sprite = entry.get("sprite")
-        if sprite is None or entry["number"] not in WANTED:
-            continue
-        ours_name = "pentagram." + NAMES[int(sprite.split(".")[1])]
-        if ours_name.split(".")[1] in NOT_DRAWN:
-            continue
-        kind = (ours_name, entry.get("x", 0), entry.get("y", 0),
-                json.dumps(entry.get("mirrored")), json.dumps(entry.get("size")))
-        kinds.setdefault(kind, []).append(entry)
-    per_sprite = {}
-    for kind in kinds:
-        per_sprite[kind[0]] = per_sprite.get(kind[0], 0) + 1
-    number = FIRST_NUMBER
-    for kind, entries in kinds.items():
-        sprite, first = kind[0], entries[0]
-        name = sprite if per_sprite[sprite] == 1 else "%s.g%d" % (sprite, number)
-        if name in table:
-            sys.exit("graphics.json has a %s already" % name)
-        new = {"number": number, "sprite": sprite}
-        for field in ("size", "x", "y", "mirrored"):
-            if first.get(field) is not None:
-                new[field] = first[field]
-        table[name] = new
-        number += 1
+    numbers, number = numbering(said)
     if number > 256:
         sys.exit("Pentagram's graphics need numbers up to %d, and a number is a byte" % (number - 1))
+    add_numbers(table, numbers)
 
     merged.save(sheet_path)
     atlas_path.write_text(sheet.format_sheet(ours, ours.get("animations")), encoding="utf-8")
     table_path.write_text(gfx.format_table(table), encoding="utf-8")
     print("merged %d sprites below row %d; %d graphics numbered %d to %d"
           % (len(boxes), below, number - FIRST_NUMBER, FIRST_NUMBER, number - 1))
+
+
+def add_numbers(table, numbers):
+    """numbering()'s graphics into graphics.json's table, one entry a number."""
+    done = set()
+    for said in sorted(numbers.values(), key=lambda s: s["number"]):
+        if said["number"] in done:
+            continue
+        done.add(said["number"])
+        if said["name"] in table:
+            sys.exit("graphics.json has a %s already" % said["name"])
+        new = {"number": said["number"], "sprite": said["sprite"]}
+        for field in ("size", "x", "y", "mirrored"):
+            if said["entry"].get(field) is not None:
+                new[field] = said["entry"][field]
+        table[said["name"]] = new
 
 
 if __name__ == "__main__":

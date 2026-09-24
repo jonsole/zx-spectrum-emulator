@@ -40,7 +40,7 @@ HERE = Path(__file__).resolve().parent
 PENTAGRAM = HERE.parent / "pentagram"
 sys.path.insert(0, str(HERE.parent))
 import castle                                                   # noqa: E402
-from pentagram_merge import NAMES                               # noqa: E402
+from pentagram_merge import numbering                           # noqa: E402
 
 SIDES = ("n", "e", "s", "w")
 
@@ -82,25 +82,13 @@ OBJECTS = {
 CLUSTERS = ((29, 22, 12, 11, 13, 10, 14, 9), (95, 96, 97, 108, 82, 98))
 
 
-def graphic_names(ours):
-    """Pentagram's graphic name -> ours, matched on sprite, nudge and box."""
+def graphic_names():
+    """Pentagram's graphic name -> ours, by its number: pentagram_merge.py's
+    numbering, which keeps the runs its code counts through apart."""
     theirs = json.loads((PENTAGRAM / "graphics.json").read_text(encoding="utf-8"))["graphics"]
-    mine = json.loads((HERE / "graphics.json").read_text(encoding="utf-8"))["graphics"]
-
-    def kind(entry, sprite):
-        return (sprite, entry.get("x", 0), entry.get("y", 0),
-                json.dumps(entry.get("mirrored")), json.dumps(entry.get("size")))
-
-    by_kind = {kind(e, e["sprite"]): name for name, e in mine.items() if e.get("sprite")}
-    out = {}
-    for name, entry in theirs.items():
-        sprite = entry.get("sprite")
-        if sprite:
-            here = "pentagram." + NAMES[int(sprite.split(".")[1])]
-            found = by_kind.get(kind(entry, here))
-            if found:
-                out[name] = found
-    return out
+    numbers, _top = numbering(theirs)
+    return {name: numbers[entry["number"]]["name"] for name, entry in theirs.items()
+            if entry["number"] in numbers}
 
 
 def main():
@@ -108,7 +96,7 @@ def main():
     if any(name in ours["sceneryTemplates"] for name in SCENERY.values()):
         sys.exit("templates.json has Pentagram's templates already")
     theirs = castle.read_castle(PENTAGRAM)
-    names = graphic_names(ours)
+    names = graphic_names()
 
     def converted(pieces, whose):
         out = []

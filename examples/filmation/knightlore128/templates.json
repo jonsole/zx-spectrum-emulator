@@ -645,7 +645,7 @@
      "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_block": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -655,7 +655,7 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_grass": [
-   { "graphic": "pentagram.grass.1.g200",
+   { "graphic": "pentagram.grass.1.g236",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -685,22 +685,22 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_block_falls": [
-   { "graphic": "pentagram.block.1.g224",
+   { "graphic": "pentagram.block.1.g253",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_block_sinks": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_stone_pushed": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 20 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_lift": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -710,7 +710,7 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_thorny_bush": [
-   { "graphic": "pentagram.grass.1.g201",
+   { "graphic": "pentagram.grass.1.g237",
      "flags": { "mirrored": false, "passable": false, "rest": 20 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -720,17 +720,17 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_platform_u": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_platform_v": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g231",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_spider": [
-   { "graphic": "pentagram.creature.1.g198",
+   { "graphic": "pentagram.creature.1.g251",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -740,7 +740,7 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_creature": [
-   { "graphic": "pentagram.creature.1.g198",
+   { "graphic": "pentagram.creature.1.g208",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
@@ -755,22 +755,22 @@
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_block_crumbles": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g219",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_conveyor_1": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g200",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_conveyor_3": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g202",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
   "object_pentagram_conveyor_4": [
-   { "graphic": "pentagram.block.1.g193",
+   { "graphic": "pentagram.block.1.g203",
      "flags": { "mirrored": false, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ],
