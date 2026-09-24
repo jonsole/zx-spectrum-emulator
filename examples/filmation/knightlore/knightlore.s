@@ -113,6 +113,11 @@ sprite_end:
 					DISPLAY "sprite_data size ", sprite_end - sprite_start
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
+					; The rotation arena, at 4,992 bytes -- see ../engine/shift.s
+					; for what it is and how that was measured.
+SHIFT_ARENA_SIZE	EQU		4992
+shift_arena:		DS		SHIFT_ARENA_SIZE
+shift_arena_next:	DW		shift_arena
 					INCLUDE "../engine/shift.s"
 					INCLUDE "../engine/walker.s"
 					INCLUDE "knight.s"

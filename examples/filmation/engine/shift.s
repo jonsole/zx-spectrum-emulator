@@ -68,7 +68,15 @@
 ; fourth hungriest room -- $87, the gates -- has no high scenery at all, so
 ; there is nothing there to win.
 
-SHIFT_ARENA_SIZE	EQU		4992
+; The arena itself is the game's to reserve, because its size is: a game puts
+;
+;   SHIFT_ARENA_SIZE  EQU  ...
+;   shift_arena:      DS   SHIFT_ARENA_SIZE
+;   shift_arena_next: DW   shift_arena
+;
+; just before it includes this file. Knight Lore and Pentagram keep the 4,992
+; measured above. A 128K game with its walls in a pre-drawn backdrop wants less,
+; and has other uses for the room.
 
 ; Every buffer carries two bytes in front of it saying what is in it: the
 ; graphic, and then the shift and the way round with bit 7 set, or zero for
@@ -77,9 +85,6 @@ SHIFT_ARENA_SIZE	EQU		4992
 ; change what is rotated at all: a ghost going diagonally moves U and V
 ; together, so the screen x moves in whole bytes and the shift never changes.
 ; That was 14,000 T a step for a block.
-
-shift_arena:		DS		SHIFT_ARENA_SIZE
-shift_arena_next:	DW		shift_arena
 
 
 ; The one buffer every OBJ_SHARED_SHIFT object rotates into, on its way to
