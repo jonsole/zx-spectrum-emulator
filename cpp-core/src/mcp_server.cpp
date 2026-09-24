@@ -31,7 +31,10 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <deque>
 #include <functional>
+#include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -153,6 +156,80 @@ json watchpoints_json(const std::vector<Watchpoint>& list) {
         out.push_back(watchpoint_json(w));
     }
     return json{{"watchpoints", out}};
+}
+
+// ---- logpoints ---------------------------------------------------------------
+
+/// What the logpoints set over MCP have reported, for get_log to hand out: MCP
+/// is request and response, so reports are kept here, numbered, until asked
+/// for. Only this front end's logpoints -- a VS Code logpoint's reports go to
+/// the Debug Console, not here. The oldest go once there are too many.
+struct McpLog {
+    struct Line {
+        uint64_t seq = 0;
+        uint32_t id = 0;
+        uint16_t pc = 0;
+        std::string text;
+    };
+    std::mutex mutex;
+    std::set<uint32_t> ids;
+    std::deque<Line> lines;
+    uint64_t next_seq = 1;
+    uint64_t dropped = 0;
+    bool listening = false;
+};
+McpLog g_mcp_log;
+/// Report lines kept for get_log before the oldest are dropped.
+constexpr size_t MCP_LOG_KEEP = 20000;
+/// Lines one get_log returns unless asked for another number.
+constexpr size_t MCP_LOG_PAGE = 500;
+
+/// Starts keeping MCP's logpoints' reports, the first time one is set. Added
+/// then rather than when the server starts, so a server nobody sets a
+/// logpoint on keeps nothing.
+void listen_to_log(Engine& engine) {
+    {
+        std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+        if (g_mcp_log.listening) {
+            return;
+        }
+        g_mcp_log.listening = true;
+    }
+    engine.add_log_handler([](const std::vector<LogLine>& lines, uint64_t dropped) {
+        std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+        for (const LogLine& line : lines) {
+            if (g_mcp_log.ids.count(line.id) == 0) {
+                continue;
+            }
+            g_mcp_log.lines.push_back(McpLog::Line{g_mcp_log.next_seq++, line.id, line.pc, line.text});
+            if (g_mcp_log.lines.size() > MCP_LOG_KEEP) {
+                g_mcp_log.lines.pop_front();
+                g_mcp_log.dropped++;
+            }
+        }
+        // Dropped before they were ever handed out: not ours to know whose,
+        // so they are counted against everyone's.
+        g_mcp_log.dropped += dropped;
+    });
+}
+
+json logpoints_json(const std::vector<Logpoint>& list, const Sources& sources) {
+    json out = json::array();
+    std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+    for (const Logpoint& lp : list) {
+        json entry{{"id", lp.id},
+                   {"address", lp.addr},
+                   {"message", lp.text},
+                   {"hits", lp.hits},
+                   {"set_by", g_mcp_log.ids.count(lp.id) ? "mcp" : "debugger"}};
+        std::string name;
+        uint16_t offset = 0;
+        if (sources.resolve_symbol(lp.addr, name, offset)) {
+            entry["symbol"] = name + (offset ? "+" + std::to_string(offset) : "");
+        }
+        out.push_back(entry);
+    }
+    return json{{"logpoints", out}};
 }
 
 /// The watchpoint stop a machine is sitting at, or null.
@@ -575,6 +652,34 @@ json tools_list() {
                {}));
     add("list_watchpoints", "What is being watched, each with how often it has stopped the machine",
         no_params());
+    add("set_logpoint",
+        "Report a message every time execution reaches an address, without stopping: a "
+        "breakpoint that logs. The message is text with values in braces -- {A}, {HL} a "
+        "register; {(HL)}, {(IX+5)}, {(0x5C00)}, {(LABEL)} the byte at an address; :d decimal, "
+        ":c a character, :w a little-endian word ({(PTR):w}) -- filled in just before the "
+        "instruction runs. Reports are kept for get_log. Can be set on a running machine.",
+        schema(json{{"address", address_prop("Address or symbol expression to report at.")},
+                    {"message", string_prop("What to report, with {value} holes, e.g. "
+                                            "\"lives {(LIVES):d} at {HL}\".")},
+                    {"id", integer_prop("Edit this existing logpoint instead of adding one.")}},
+               {"address", "message"}));
+    add("clear_logpoint", "Remove a logpoint set over MCP by id, or all of them",
+        schema(json{{"id", integer_prop("Which one, as set_logpoint or list_logpoints gave it. "
+                                        "Omit to clear every logpoint MCP set.")}},
+               {}));
+    add("list_logpoints",
+        "Every logpoint: its address, message and how often it has reported, and whether it "
+        "was set over MCP or in the debugger (VS Code's own logpoints report to its console, "
+        "not to get_log)",
+        no_params());
+    add("get_log",
+        "What MCP's logpoints have reported, oldest first, each numbered: pass the `next` "
+        "from one call as `since` in the next to get only what is new. Keeps the latest "
+        "20000 lines; `dropped` counts any lost before they were read.",
+        schema(json{{"since", integer_prop("Only lines numbered this or later (default: every "
+                                           "line kept).")},
+                    {"max", integer_prop("At most this many lines (default 500).")}},
+               {}));
     add("set_breakpoint", "Set a breakpoint at an address",
         schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
     add("clear_breakpoint", "Clear a breakpoint at an address",
@@ -1354,6 +1459,100 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "list_watchpoints") {
         return json_result(watchpoints_json(engine.watchpoints()));
+    }
+
+    if (name == "set_logpoint") {
+        Logpoint lp;
+        bool present = false;
+        if (!arg_opt_address(args, "address", sources, present, lp.addr, error)) {
+            return error_result(error);
+        }
+        const json& message = arg(args, "message");
+        if (!present || !message.is_string()) {
+            return error_result("'address' and 'message' are required");
+        }
+        lp.text = message.get<std::string>();
+        // Symbols in the message are looked up now, so a misspelt one is an
+        // error here and not a silent nothing at every hit.
+        const SymbolResolver resolve = [&sources](const std::string& symbol, uint16_t& value) {
+            return sources.symbol_value(symbol, value);
+        };
+        if (!parse_log_message(lp.text, resolve, lp.message, error)) {
+            return error_result("message: " + error);
+        }
+        const json& id = arg(args, "id");
+        if (id.is_number_integer()) {
+            lp.id = uint32_t(id.get<int64_t>());
+            std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+            if (g_mcp_log.ids.count(lp.id) == 0) {
+                return error_result("logpoint " + std::to_string(lp.id) + " was not set over MCP");
+            }
+        }
+        listen_to_log(engine);
+        lp.id = engine.set_logpoint(lp);
+        {
+            std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+            g_mcp_log.ids.insert(lp.id);
+        }
+        json out = logpoints_json(engine.logpoints(), sources);
+        out["id"] = lp.id;
+        return json_result(out);
+    }
+
+    if (name == "clear_logpoint") {
+        const json& id = arg(args, "id");
+        std::vector<uint32_t> which;
+        {
+            std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+            if (id.is_number_integer()) {
+                const uint32_t one = uint32_t(id.get<int64_t>());
+                if (g_mcp_log.ids.count(one) == 0) {
+                    return error_result("logpoint " + std::to_string(one) + " was not set over MCP");
+                }
+                which.push_back(one);
+            } else {
+                which.assign(g_mcp_log.ids.begin(), g_mcp_log.ids.end());
+            }
+            for (uint32_t one : which) {
+                g_mcp_log.ids.erase(one);
+            }
+        }
+        for (uint32_t one : which) {
+            engine.clear_logpoint(one);
+        }
+        json out = logpoints_json(engine.logpoints(), sources);
+        out["removed"] = which.size();
+        return json_result(out);
+    }
+
+    if (name == "list_logpoints") {
+        return json_result(logpoints_json(engine.logpoints(), sources));
+    }
+
+    if (name == "get_log") {
+        const json& since_arg = arg(args, "since");
+        const json& max_arg = arg(args, "max");
+        const uint64_t since = since_arg.is_number_integer() && since_arg.get<int64_t>() > 0
+                                   ? uint64_t(since_arg.get<int64_t>())
+                                   : 0;
+        const size_t most = max_arg.is_number_integer() && max_arg.get<int64_t>() > 0
+                                ? size_t(max_arg.get<int64_t>())
+                                : MCP_LOG_PAGE;
+        json lines = json::array();
+        std::lock_guard<std::mutex> lock(g_mcp_log.mutex);
+        uint64_t next = g_mcp_log.next_seq;
+        for (const McpLog::Line& line : g_mcp_log.lines) {
+            if (line.seq < since) {
+                continue;
+            }
+            if (lines.size() >= most) {
+                next = line.seq;
+                break;
+            }
+            lines.push_back(json{{"seq", line.seq}, {"id", line.id}, {"pc", line.pc},
+                                 {"text", line.text}});
+        }
+        return json_result(json{{"lines", lines}, {"next", next}, {"dropped", g_mcp_log.dropped}});
     }
 
     if (name == "set_breakpoint" || name == "clear_breakpoint") {

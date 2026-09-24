@@ -836,6 +836,7 @@ bool add_logpoint(Engine& engine, const Sources& sources, Connection& conn,
                   uint32_t& id, std::string& error) {
     Logpoint lp;
     lp.addr = addr;
+    lp.text = message;
     const SymbolResolver resolve = [&sources](const std::string& name, uint16_t& value) {
         return sources.symbol_value(name, value);
     };
@@ -2393,7 +2394,7 @@ void serve_dap(Engine& engine, Sources& sources, const std::string& host, uint16
     // "point the graphics panel at sprite_017" becomes a set on the Engine
     // here and an unsolicited event out to every open DAP connection, which is
     // the only route from one to the other.
-    engine.on_log(deliver_log);
+    engine.add_log_handler(deliver_log);
     engine.on_graphics_view([](const GraphicsView& v, uint64_t version) {
         broadcast_event("zxGraphicsView", graphics_view_json(v, version));
         log("Graphics view: %s %s as %s", v.source.c_str(),

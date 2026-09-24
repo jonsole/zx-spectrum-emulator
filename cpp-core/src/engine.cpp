@@ -122,7 +122,10 @@ Engine::~Engine() {
 void Engine::on_stopped(StoppedHandler h) { on_stopped_ = std::move(h); }
 void Engine::on_continued(ContinuedHandler h) { on_continued_ = std::move(h); }
 void Engine::on_graphics_view(GraphicsViewHandler h) { on_graphics_view_ = std::move(h); }
-void Engine::on_log(LogHandler h) { on_log_ = std::move(h); }
+void Engine::add_log_handler(LogHandler h) {
+    std::lock_guard<std::mutex> lock(log_handlers_mutex_);
+    log_handlers_.push_back(std::move(h));
+}
 
 void Engine::set_graphics_view(const GraphicsView& v) {
     GraphicsViewHandler handler;
@@ -1145,8 +1148,13 @@ void Engine::flush_log(bool now) {
     lines.swap(pending_log_);
     const uint64_t dropped = log_dropped_;
     log_dropped_ = 0;
-    if (on_log_) {
-        on_log_(lines, dropped);
+    std::vector<LogHandler> handlers;
+    {
+        std::lock_guard<std::mutex> lock(log_handlers_mutex_);
+        handlers = log_handlers_;
+    }
+    for (const LogHandler& handler : handlers) {
+        handler(lines, dropped);
     }
 }
 

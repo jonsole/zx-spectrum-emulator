@@ -84,6 +84,8 @@ struct Logpoint {
     uint32_t id = 0;
     uint16_t addr = 0;
     std::vector<LogSegment> message;
+    /// The message as it was written, for a client listing what is set.
+    std::string text;
     /// Times it has reported.
     uint64_t hits = 0;
 };
@@ -400,7 +402,9 @@ public:
     /// Called from the emulator thread with logpoint reports, in the order
     /// they happened: batched while a run goes on, and always before the stop
     /// that ends it is announced. `dropped` counts lines lost because too many
-    /// came at once. Same rule: do not call back into the queue.
+    /// came at once. Every handler gets every report -- DAP's and MCP's each
+    /// pick out the logpoints their own clients set. Same rule: do not call
+    /// back into the queue.
     using LogHandler = std::function<void(const std::vector<LogLine>& lines, uint64_t dropped)>;
 
     Engine();
@@ -412,7 +416,8 @@ public:
     void on_stopped(StoppedHandler h);
     void on_continued(ContinuedHandler h);
     void on_graphics_view(GraphicsViewHandler h);
-    void on_log(LogHandler h);
+    /// Adds a handler for logpoint reports; any thread, at any time.
+    void add_log_handler(LogHandler h);
 
     // ---- queued: these wait for the actor thread ---------------------------
     /// A 16K image is the 48K ROM, a 32K one the 128K pair. Either can be
@@ -898,7 +903,11 @@ private:
     std::vector<LogLine> pending_log_;
     uint64_t log_dropped_ = 0;
     std::chrono::steady_clock::time_point last_log_flush_{};
-    LogHandler on_log_;
+    /// Guards log_handlers_: a front end adds one from its own thread (MCP's
+    /// when its first logpoint is set) while the emulator thread hands out
+    /// reports.
+    std::mutex log_handlers_mutex_;
+    std::vector<LogHandler> log_handlers_;
     /// Rebuilds logpoint_at_ from logpoints_.
     void arm_logpoints();
     /// Fills in every logpoint at the current PC. Emulator thread only.

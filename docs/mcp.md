@@ -61,6 +61,8 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `set_breakpoint(addr)` / `clear_breakpoint(addr)` | PC breakpoints |
 | `set_watchpoint(address, length, access, on_change, value, not_value)` | Stop when the program reads or writes an address or range -- what wrote that? (see [watchpoints](#watchpoints)) |
 | `clear_watchpoint(id=None)` / `list_watchpoints()` | Remove one or all; what is being watched, with hit counts |
+| `set_logpoint(address, message, id=None)` | Report a message every time execution reaches an address, without stopping (see [logpoints](#logpoints)) |
+| `clear_logpoint(id=None)` / `list_logpoints()` / `get_log(since, max)` | Remove one or all of MCP's; every logpoint set, with hit counts; what MCP's have reported since a given line |
 | `read_memory(addr, length, bank=None)` / `write_memory(addr, data_hex)` | Memory access (hex-encoded), as the CPU sees it -- or with `bank`, straight out of one of a 128K's eight RAM banks whether or not it is paged in |
 | `get_registers()` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. Every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
@@ -137,6 +139,31 @@ slot catches whatever overwrote a return address. A `write_memory` of your own
 does not, and neither does executing a watched address (that is a breakpoint).
 With rewind, `reverse_continue` also stops at the last watchpoint access before
 where you are.
+
+## Logpoints
+
+`set_logpoint` is a breakpoint that reports instead of stopping: every time
+execution reaches the address, its message is filled in from the machine and
+kept, and the program runs on. The message is text with values in braces, as
+in VS Code's own logpoints (see [logpoints](vscode-debugging.md#logpoints)):
+`{A}` or `{HL}` a register, `{(HL)}`, `{(IX+5)}`, `{(0x5C00)}` or
+`{(LABEL)}` the byte at an address, with `:d` for decimal, `:c` for a
+character and `:w` for the word there. Symbols in it are looked up when it is
+set, so a misspelt one is an error then.
+
+`get_log` hands out what MCP's logpoints have reported, oldest first, each line
+numbered; the `next` it returns is the `since` for the next call, which then
+gets only what is new. The server keeps the latest 20,000 lines, and `dropped`
+counts any lost before they were read. A VS Code logpoint reports to the
+Debug Console instead: `list_logpoints` shows every one, marked `mcp` or
+`debugger`, but `clear_logpoint` only removes MCP's.
+
+```
+set_logpoint {address: "PRINT_CHAR", message: "{A:c}"}   # every character a game prints
+run
+get_log {}                                               # -> lines 1..n, next: n+1
+get_log {since: n+1}                                     # only what came since
+```
 
 ## Stepping backwards
 

@@ -82,7 +82,7 @@ struct Collected {
 };
 
 void start_counter(Engine& engine, Collected& got) {
-    engine.on_log([&got](const std::vector<LogLine>& lines, uint64_t dropped) {
+    engine.add_log_handler([&got](const std::vector<LogLine>& lines, uint64_t dropped) {
         std::lock_guard<std::mutex> lock(got.mutex);
         got.lines.insert(got.lines.end(), lines.begin(), lines.end());
         got.dropped += dropped;
@@ -180,6 +180,25 @@ TEST(the_engine_reports_each_time_round_and_does_not_stop) {
     // 18 that LD A,(HL) is about to read, before anything adds to it.
     CHECK_EQ(int(engine.registers().pc), int(LOOP));
     CHECK_EQ(int(engine.read_memory(DATA, 1)[0]), 18);
+}
+
+TEST(every_log_handler_hears_every_report) {
+    // DAP and MCP each add one; each picks out its own clients' logpoints.
+    Engine engine;
+    Collected got;
+    start_counter(engine, got);
+    Collected second;
+    engine.add_log_handler([&second](const std::vector<LogLine>& lines, uint64_t) {
+        std::lock_guard<std::mutex> lock(second.mutex);
+        second.lines.insert(second.lines.end(), lines.begin(), lines.end());
+    });
+    engine.set_logpoint(logpoint(LOOP, "count {(HL):d}"));
+    engine.step(11);
+    std::lock_guard<std::mutex> a(got.mutex);
+    std::lock_guard<std::mutex> b(second.mutex);
+    CHECK_EQ(got.lines.size(), size_t(3));
+    CHECK_EQ(second.lines.size(), size_t(3));
+    CHECK_EQ(second.lines[2].text, std::string("count 18"));
 }
 
 TEST(a_cleared_logpoint_reports_nothing) {
