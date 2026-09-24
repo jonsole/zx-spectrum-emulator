@@ -88,10 +88,11 @@ NOT_A_DOORWAY = 0x80
 # Templates whose pieces rotate at draw time instead of holding a buffer for
 # the life of the room.
 #
-# Nothing, now. The walls and trees were marked for a while, to keep the
-# rotation arena small; it cost more in redrawing than it saved in memory --
-# see SHIFT_ARENA_SIZE in shift.s. The flag and the machinery behind it are
-# still there, and object_place falls back on them when the arena runs out.
+# Nothing by template. The walls and trees were marked for a while in Knight
+# Lore, to keep the rotation arena small; it cost more in redrawing than it
+# saved in memory -- see the head of ../engine/shift.s. Here the background is
+# marked anyway, in our_flags, because the backdrop draws it once and never
+# again. object_place also falls back on the flag when the arena runs out.
 SHARED_SHIFT_TEMPLATES = ()
 
 # The three room shapes, in the order room_size_tbl holds them.
@@ -248,8 +249,11 @@ def our_flags(entry, cached, label=""):
         ours |= CACHE_FLAG
     if SHARED_SHIFT_TEMPLATES and label.startswith(SHARED_SHIFT_TEMPLATES):
         ours |= SHARED_SHIFT_FLAG
+    # The background is drawn once, into the backdrop, as the room is built
+    # (backdrop.s), so it rotates through the shared buffer that once rather
+    # than keeping a buffer of its own in the arena all room long.
     if label in BACKGROUND:
-        ours |= BACKGROUND_FLAG
+        ours |= BACKGROUND_FLAG | SHARED_SHIFT_FLAG
     return ours
 
 

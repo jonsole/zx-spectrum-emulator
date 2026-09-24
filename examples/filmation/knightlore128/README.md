@@ -46,9 +46,86 @@ starts.
 | 4b | Pentagram's scenery and object templates, and rooms that use them | done |
 | 4c-i | Pentagram's movers for what its rooms place: the spider, the creature, the dragons' heads, platforms, lift, conveyors, and blocks that fall, sink, crumble or are shoved | done |
 | 4c-ii | what Pentagram puts up itself: the things that fall from the sky, his bolt and the puff | done |
-| 5 | the pre-drawn backdrop in bank 6 | |
+| 5 | the pre-drawn backdrop in bank 6: the walls drawn once a room, and each redraw starting from them | done |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
+
+### The backdrop (stage 5)
+
+**The walls are drawn once a room** (`backdrop.s`, `backdrop_build.s`). Nothing
+can get behind a room's walls and the trees along its back. These are the
+pieces `templates.json` names in `meta.background`, which the build marks
+`OBJ_BACKGROUND`. `room_show_backdrop` draws them alone onto the screen,
+while the attributes still hold it black, and copies the pixels into bank 6.
+That copy is the backdrop: 6,144 bytes, 32 a row, top row first. The
+background pieces then leave the depth list, the rest of the room is drawn
+over the backdrop, and the room is shown.
+
+After that, a region the knight or a monster disturbs starts from the
+backdrop's bytes for its rows instead of from nothing. Engine/redraw.s calls
+the game's `view_clear` where it used to clear the buffer. The draw walk only
+has what stands in front of the walls. The pieces stay in the pool, so they
+still stop things.
+
+The copy is 165 T a row against the clear's 57, so a region only takes it
+when it needs it. `backdrop_band` keeps, for each of the 32 columns, the first
+row with anything of the backdrop in it and one past the last. A region clear
+of the walls in every one of its columns is cleared the old way. That covers
+most of what moves out on the floor.
+
+The walls also need no rotation buffers now. They are drawn once, so they
+rotate through the shared buffer at build time (`OBJ_SHARED_SHIFT`, set by
+`rooms_source.py`), and the arena is left to what moves. What moves still fills
+it, though. Played for sixty turns a room, the arena reaches 4,224 of its 4,288
+bytes in $13 (Pentagram's trees and piles) and 4,134 in $87 (the gates), each
+with one piece short, which rotates at draw time. So it stays the size it was.
+
+**What it saves.** The redraw was measured on its own, because two builds
+with different layouts play the same keys out differently, and a turn's cost
+is mostly what happens in it. In each of nine rooms, redraw_view was called on
+sixteen 8x48 tiles covering the screen, and on a knight-sized region out on
+the floor, in both builds:
+
+| Room | The whole screen | A region on the floor |
+|---|---|---|
+| $01 | -17.5% | -5.4% |
+| $41 | -16.5% | -27.4% |
+| $CF | -20.0% | -6.3% |
+| $97 | -19.9% | -5.4% |
+| $87 | -16.8% | -72.6% |
+| $88 | -5.6% | -2.9% |
+| $07 | -4.5% | -2.9% |
+| $13 | -3.6% | -2.0% |
+| $1C | -8.3% | -7.2% |
+
+A floor region is cheaper even where it misses the walls, because the depth
+list is shorter. It is much cheaper where the floor region's box reaches the
+walls behind it, as in $87 and $41. The only tiles that cost more, by about
+2,500 T, are the low corners at the sides of the screen. They reach the foot
+of a side wall and pay for the copy there, against the little wall they would
+otherwise have drawn.
+
+Per turn, with the knight walking about, the two builds came out between
+37% faster ($87) and 9% slower ($01). That is play diverging, not the
+backdrop: the same room swung from 15% faster to 5% slower between two
+measurements, across a change that can only make it cheaper.
+
+**Where it lives.** `backdrop_clear` is in the $6000 region with the cold
+code, because bank 2 has no room for it. It has to come after
+`engine/redraw.s`, whose `view_clear_zeroes` it expands. It runs once a
+region, so it is not cold, and on a real 128K it pays for contended memory.
+The emulator does not model that yet.
+
+What was checked, in a 128K emulator:
+- Nine rooms redrawn in full from the backdrop, with walls, trees, arches and
+  gates as before.
+- Knight Lore's 127 rooms build the same objects as the 48K game. The only
+  differences are the depth-list links and the rotation fields.
+- Nothing drew `sprite_missing`.
+- Pentagram's movers, the flyers and the bolt, a game over back to the menu,
+  and a charm picked up.
+- Both 48K images are byte-identical after the engine's `view_clear` hook.
+- The Z80 tests pass.
 
 ### Both games' art (stage 4a)
 
@@ -120,8 +197,8 @@ changes made space:
   That gave bank 0 back about 2K.
 - **The rotation arena is 4,288 bytes, not 4,992.** The arena is now the
   game's to reserve (an engine change; Knight Lore and Pentagram keep 4,992,
-  byte for byte). With less of it, more wall pieces rotate at draw time:
-  slower, but drawn right. Stage 5's backdrop takes the walls out of rotation
+  byte for byte). With less of it, more wall pieces rotated at draw time:
+  slower, but drawn right. Stage 5's backdrop took the walls out of rotation
   altogether.
 - **The pickup code, `screen_sprite` and the menu moved into bank 0.** The
   pool's four new slots had pushed the aligned tables at $7400 a page on.
@@ -276,17 +353,18 @@ What was checked for stage 3, in a 128K emulator:
 - All 127 rooms still build the same objects as Knight Lore 48K's, and no
   graphic drew `sprite_missing`.
 
-### Where memory is now (stage 4c-ii)
+### Where memory is now (stage 5)
 
 | Bank | At | Holds | Free |
 |---|---|---|---|
-| 5 | $4000 | the screen; the room builder at $5B00; from $6000 the room shapes and this room's templates, the tables, the font, `room_find`, `room_page_fill`, `page.s`, the busy rule, the sun, the sky, the end screens; from $7400 the view buffer, the object pool, `sprite_table` and the other aligned tables | 28 at $5B00, about 630 at $6000, none at $7400 |
+| 5 | $4000 | the screen; the room builder at $5B00; from $6000 the room shapes and this room's templates, the tables, the font, `room_find`, `room_page_fill`, `page.s`, the busy rule, the sun, the sky, the backdrop's copy and its build, the end screens; from $7400 the view buffer, the object pool, `sprite_table` and the other aligned tables | 28 at $5B00, about 265 at $6000, none at $7400 |
 | 2 | $8000 | the code that runs every turn and the rotation arena (4,288), then the stack below $C000 | about 100 |
 | 0 | $C000 | the **room page**: the resident sprites, the pickup code and the menu, then the room being played's own; paged in for the whole of play | about 650 after the fullest room |
 | 4 | $C000 | the rooms and every template (`room_list.s`), and what each room loads into the room page (`room_sprites.s`) | about 6,000 |
 | 1 | $C000 | the **library**: the sprites loaded room by room, both games' | about 2,000; it goes on into bank 3 by itself |
+| 6 | $C000 | the **backdrop**: the room's walls, 6,144 bytes | about 10K |
 
-Banks 3, 6 and 7 are empty. The library moves on into banks 3 and 7 when it
+Banks 3 and 7 are empty. The library moves on into banks 3 and 7 when it
 outgrows bank 1; `sprite_source.py` does that by itself.
 
 **Resident or loaded.** `ROOM_GROUPS` in `sprite_sheet.py` names the sprite
@@ -317,9 +395,10 @@ A graphic the rules missed draws the checked square, not whatever the page
 last held. The check below puts a read watchpoint on it.
 
 `page.s` puts a bank at $C000 and keeps a copy of what it wrote, because
-$7FFD cannot be read back. Only `room_find` and `room_page_fill` page
-anything, both while a room is built, and both put bank 0 back before they
-return. The stack is at the top of bank 2, so a RET never depends on what is
+$7FFD cannot be read back. `room_find` and `room_page_fill` page while a
+room is built, and so does the backdrop's capture. `backdrop_clear` pages
+bank 6 in for a region that takes the backdrop, which is the one paging
+during play. All of them put bank 0 back before they return. The stack is at the top of bank 2, so a RET never depends on what is
 paged in.
 
 In stage 2a the menu and the end screens moved down to the $6000 region, which

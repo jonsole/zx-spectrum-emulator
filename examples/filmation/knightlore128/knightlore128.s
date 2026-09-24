@@ -153,13 +153,15 @@ room_data_end:
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
 					; The rotation arena -- see ../engine/shift.s. Knight Lore's
-					; is 4,992 bytes, which leaves sixteen rooms a piece or two
-					; short; this one is 704 less, which Pentagram's movers took
-					; in this bank. More rooms go short, and rotate those pieces
-					; at draw time, slower but right, until the walls go into the
-					; pre-drawn backdrop and stop needing buffers at all (stage
-					; 5, and ../engine/memory-128k.md, which puts the arena at
-					; about 4K then).
+					; is 4,992 bytes; this one is 704 less, which Pentagram's
+					; movers took in this bank. The walls need none of it now:
+					; they rotate once, into the backdrop (backdrop.s). Every
+					; room was entered and played for sixty turns, reading
+					; shift_arena_next each turn, and what moves still fills it:
+					; $13, Pentagram's trees and piles, reaches 4,224 and $87, the
+					; gates, 4,134, each with a piece short, which rotates at draw
+					; time -- slower, but right. The next are $17 at 3,788 and $07
+					; at 3,284. So the backdrop freed nothing here to give back.
 SHIFT_ARENA_SIZE	EQU		4288
 shift_arena:		DS		SHIFT_ARENA_SIZE
 shift_arena_next:	DW		shift_arena
@@ -183,6 +185,11 @@ shift_arena_next:	DW		shift_arena
 					INCLUDE "main.s"
 					INCLUDE "../engine/turn.s"
 					INCLUDE "player.s"
+					; What a region starts from: the room's backdrop, once it is
+					; built -- see backdrop.s.
+					MACRO	view_clear
+					call	backdrop_clear
+					ENDM
 					INCLUDE "../engine/redraw.s"
 					INCLUDE "overlay.s"	; redraw_view falls into it
 					INCLUDE "../engine/vid_buff.s"
@@ -205,6 +212,10 @@ image_end:
 ; menu.s uses sprite_width_class, a macro engine/sprite.s brings in.
                     ORG     room_data_end
 cold_start:
+                    ; Not cold, this one: what every region starts from. Bank 2
+                    ; is full, and it comes after redraw.s for its macro.
+                    INCLUDE "backdrop.s"
+                    INCLUDE "backdrop_build.s"  ; the room's walls, drawn once
                     INCLUDE "end.s"             ; its tunes and their notes, then
                     INCLUDE "../engine/tune.s"  ; what plays them
 cold_end:

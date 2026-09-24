@@ -142,7 +142,7 @@ room_build:			ld		c,a
 					call	room_scenery
 					call	room_objects_of
 
-					call	room_show
+					call	room_show_backdrop	; room_show, with the walls drawn once
 					ld		a,(room_number)
 					call	room_seen		; for the percentage at the end
 					scf				; built

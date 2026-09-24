@@ -211,8 +211,11 @@ measured.
 
 ## 9. What was built, and where it differs
 
-Built in `../knightlore128/` on 2026-09-24 (stage 2 in its README), with no
-change to any engine file. Where it departs from the plan above:
+Built in `../knightlore128/` on 2026-09-24 (stages 2 and 5 in its README).
+Two engine changes went with it, and both leave Knight Lore's and Pentagram's
+images byte for byte as they were: the game reserves the rotation arena, and
+the game says what a region starts from (`view_clear`, in `redraw.s`). Where it
+departs from the plan above:
 
 - **The resident graphics are assembled into bank 0, not copied there.** They
   sit at $C000 from the start, and the room page proper begins after them.
@@ -235,10 +238,26 @@ change to any engine file. Where it departs from the plan above:
   into `room_templates`, in bank 5, as §3 planned for the page. Bank 5 was
   chosen because bank 4 is paged in while they are copied.
 - **The arena is the game's to reserve** (`shift_arena`, `SHIFT_ARENA_SIZE`,
-  just before `engine/shift.s`). knightlore128's is 4,288 until the backdrop
-  takes the walls out of rotation.
+  just before `engine/shift.s`). knightlore128's is 4,288. The backdrop took the walls out of it, but what
+  moves fills it still: played for sixty turns, rooms $13 and $87 reach 4,224
+  and 4,134, so there was nothing to give back.
 - **The stack is at $C000** (SP), in bank 2, and the menu, the end screens and
   the tune player moved down to $6000, as §7.1 foresaw.
-- **Not yet built:** the backdrop in bank 6, and the room data at three times
-  the size. The room list is in bank 4, but the castle is still Knight Lore's
-  128 rooms.
+- **The backdrop is captured from the screen**, not drawn into bank 6. The
+  background alone is drawn to the screen while its attributes still hold it
+  black, and the pixels are copied into bank 6 in row order. The existing
+  draw code then needs no second destination.
+- **A region takes the backdrop only where it has something.** The copy is
+  165 T a row against the clear's 57. A table of each column's first and last
+  rows with backdrop in them lets a region clear of the walls in every column
+  be cleared as before. §6's 6% counted the copy on every region.
+- **What it saved**, measured on the redraw alone in nine of Knight Lore's
+  rooms: a full-screen redraw 3.6% to 20% cheaper, and a knight-sized region
+  on the floor 2% to 73% cheaper. Where a region misses the walls, the gain is
+  the shorter depth list. A turn's own cost could not be compared, because the
+  two builds play the same keys out differently. See the fork's README.
+- **The copy runs from contended memory**, in the $6000 region, because
+  bank 2 was full.
+- **Not yet built:** the room data at three times the size. The room list is
+  in bank 4, but the castle is still Knight Lore's 128 rooms, with Pentagram's
+  beside them.
