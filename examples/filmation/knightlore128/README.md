@@ -45,7 +45,7 @@ starts.
 | 4a | one sprite sheet holding every Knight Lore and every Pentagram sprite; Pentagram's graphics numbered 188 up | done |
 | 4b | Pentagram's scenery and object templates, and rooms that use them | done |
 | 4c-i | Pentagram's movers for what its rooms place: the spider, the creature, the dragons' heads, platforms, lift, conveyors, and blocks that fall, sink, crumble or are shoved | done |
-| 4c-ii | what Pentagram puts up itself: the things that fall from the sky, the well's bucket, the bolt and the puff | |
+| 4c-ii | what Pentagram puts up itself: the things that fall from the sky, his bolt and the puff | done |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
@@ -76,6 +76,69 @@ quest's items and the pentagram's pieces. It is in the sheet, and
 them. Everything under `pentagram` is loaded room by room (`ROOM_GROUPS`); the
 library holds 85 sprites and still fits bank 1. The busy-room code moved to
 the $6000 region to make room for the longer `sprite_table`.
+
+### The sky and the bolt (stage 4c-ii)
+
+**Things fall out of the sky** (`flyers.s`), as in Pentagram. After 255
+turns in a room with a sky, each turn has a one-in-four chance of dropping
+something from Z 216 near the middle. It is one of eight: mostly homers,
+which fly at him and do no harm, and fallers of two and four frames, which
+roam and kill. After a drop the wait is 24 turns. There are two at most, in
+two slots kept after the room's own objects.
+
+A room has a sky when `rooms.json` says `"sky": true`. `rooms_source.py`
+makes `room_sky`, a bit a room, from that, and a sky room loads the flyers'
+sprites (`SKY_GROUPS` in `sprite_sheet.py`). So only a sky room can drop
+anything. The imported Pentagram rooms have a sky, except the well's, where
+Pentagram drops nothing. Knight Lore's rooms have none, so it plays as
+before. Each flyer slot sizes its one rotation buffer from
+`sprite_sky_largest`, a two-byte header the generator makes the size of the
+largest flyer frame: the frames themselves are in the library at room entry.
+
+**He can fire a bolt** (`player_fire`, in `player.s`). On the keyboard the
+top row is split as Pentagram splits it, alternately: Q E T  U O jump,
+W R  Y I P fire. The two halves are read separately, because the port Knight
+Lore reads ORs them together. One press is one bolt, and he has at most two
+in flight. A bolt goes the way he faces, eight a turn, and hurts only what
+fell from the sky: it puts a flyer out in a puff, and puffs out itself
+against anything else. There is no score. On a joystick the button still
+jumps, as in Knight Lore, and nothing fires.
+
+The bolt and the puff are resident (`RESIDENT_GROUPS`), since he fires in any
+room.
+
+**Not brought across:** the well and its bucket. Shooting the well 32 times
+brings the bucket out, and the bucket flies to a quest item and marks it
+done. That is Pentagram's quest, which this game does not have, so the well
+here is only scenery.
+
+**Making room for it.** It filled all three places at once, and four
+changes made space:
+- **The room templates moved to bank 4.** `room_find` copies the ones a room
+  names into `room_templates`, at most 214 bytes, and points `room_bg_at`
+  and `room_fg_at` at the copies, which is where `room_build` looks now.
+  That gave bank 0 back about 2K.
+- **The rotation arena is 4,288 bytes, not 4,992.** The arena is now the
+  game's to reserve (an engine change; Knight Lore and Pentagram keep 4,992,
+  byte for byte). With less of it, more wall pieces rotate at draw time:
+  slower, but drawn right. Stage 5's backdrop takes the walls out of rotation
+  altogether.
+- **The pickup code, `screen_sprite` and the menu moved into bank 0.** The
+  pool's four new slots had pushed the aligned tables at $7400 a page on.
+- **`sun.s` and `flyers.s` are in the $6000 region.**
+
+What was checked, in a 128K emulator:
+- In sky room $06, with the wait forced, a two-frame and a four-frame faller
+  fall and roam. In room $B3, which has no sky, nothing falls.
+- W fires a bolt, which flies eight a turn with its three frames and puffs out
+  at the wall through all seven puff frames.
+- Knight Lore's 127 rooms build the same objects as the 48K game. The only
+  differences are which pieces have their own rotation buffers, from the
+  smaller arena.
+- Nothing drew `sprite_missing`. `room_page_fill` reading the library at the
+  same address is set aside.
+- A game over reaches the menu, and a charm is picked up.
+- `movers_tests` has three more tests, for the bolt (74 pass).
 
 ### Pentagram's movers (stage 4c-i)
 
@@ -213,15 +276,15 @@ What was checked for stage 3, in a 128K emulator:
 - All 127 rooms still build the same objects as Knight Lore 48K's, and no
   graphic drew `sprite_missing`.
 
-### Where memory is now (stage 2)
+### Where memory is now (stage 4c-ii)
 
 | Bank | At | Holds | Free |
 |---|---|---|---|
-| 5 | $4000 | the screen; the room builder at $5B00; the room templates, the tables, the font, `room_find`, `room_page_fill`, `page.s`, the menu and the end screens from $6000; the view buffer, the object pool, `sprite_table` and the other aligned tables from $7400 | 16 at $5B00, about 600 at $6000, 20 at $7400 |
-| 2 | $8000 | the code that runs every turn and the rotation arena, then the stack below $C000 | about 350 |
-| 0 | $C000 | the **room page**: the resident sprites (8.9K), then the room being played's own; paged in for the whole of play | 3,224 after the fullest room |
-| 4 | $C000 | the rooms (`room_list.s`), and what each loads into the room page (`room_sprites.s`) | about 10,000 |
-| 1 | $C000 | the **library**: the sprites loaded room by room (6.2K) | about 10,000 |
+| 5 | $4000 | the screen; the room builder at $5B00; from $6000 the room shapes and this room's templates, the tables, the font, `room_find`, `room_page_fill`, `page.s`, the busy rule, the sun, the sky, the end screens; from $7400 the view buffer, the object pool, `sprite_table` and the other aligned tables | 28 at $5B00, about 630 at $6000, none at $7400 |
+| 2 | $8000 | the code that runs every turn and the rotation arena (4,288), then the stack below $C000 | about 100 |
+| 0 | $C000 | the **room page**: the resident sprites, the pickup code and the menu, then the room being played's own; paged in for the whole of play | about 650 after the fullest room |
+| 4 | $C000 | the rooms and every template (`room_list.s`), and what each room loads into the room page (`room_sprites.s`) | about 6,000 |
+| 1 | $C000 | the **library**: the sprites loaded room by room, both games' | about 2,000; it goes on into bank 3 by itself |
 
 Banks 3, 6 and 7 are empty. The library moves on into banks 3 and 7 when it
 outgrows bank 1; `sprite_source.py` does that by itself.

@@ -382,13 +382,19 @@ def main():
     _, bg_refs = shared_labels(scenery)
     for name, ref in zip(scenery, bg_refs):
         assert (ref in BACKGROUND) == (label_of(name) in BACKGROUND), name
-    emit_templates(out, scenery, "blocks", SCENERY_STRIDE, "piece", cached)
-    line(out, "background_type_tbl:", "", "")
+    tpl = ["; --- the templates, in bank 4 --------------------------------------------------",
+           ";",
+           "; Every template in the castle, and where each is. room_find copies the ones a",
+           "; room names into room_templates, and points room_bg_at and room_fg_at at the",
+           "; copies, which is where room_build finds them -- see room_find.s.",
+           ""]
+    emit_templates(tpl, scenery, "blocks", SCENERY_STRIDE, "piece", cached)
+    line(tpl, "background_type_tbl:", "", "")
     # The index a room names a template by is where that template sits in the
     # castle: rooms.json keys them by name, in the game's own table order.
     for index, ref in enumerate(bg_refs):
-        line(out, "", "DW", ref, "$%02X" % index)
-    out.append("")
+        line(tpl, "", "DW", ref, "$%02X" % index)
+    tpl.append("")
     for index, name in enumerate(scenery):
         line(out, "BG_" + bare(name).upper(), "EQU", "$%02X" % index)
     out.append("")
@@ -431,16 +437,17 @@ def main():
     reached = {label_of(name) for name, ref in zip(objects, fg_refs)
                if name in named}
     reached |= {ref for name, ref in zip(objects, fg_refs) if name in named}
-    emit_templates(out, objects, "entries", OBJECT_STRIDE, "sprite", cached,
+    emit_templates(tpl, objects, "entries", OBJECT_STRIDE, "sprite", cached,
                    only=reached)
-    line(out, "block_type_tbl:", "", "")
+    line(tpl, "block_type_tbl:", "", "")
     for index, (name, ref) in enumerate(zip(objects, fg_refs)):
         if ref in reached:
-            line(out, "", "DW", ref, "$%02X - %s" % (index, bare(name)))
+            line(tpl, "", "DW", ref, "$%02X - %s" % (index, bare(name)))
         else:
-            line(out, "", "DW", "0",
+            line(tpl, "", "DW", "0",
                  "$%02X - %s: no room names it" % (index, bare(name)))
-    out.append("")
+    tpl.append("")
+    tpl.append("")
     for index, name in enumerate(objects):
         line(out, "FG_" + bare(name).upper(), "EQU", "$%02X" % index)
     out.append("")
@@ -545,12 +552,42 @@ def main():
                  "%d x %s" % (n, bare(o["template"])))
         out.append("")
     out.append("")
-    listing = header + out[list_start:]
+    listing = header + tpl + out[list_start:]
     del out[list_start:]
 
     line(out, "ROOM_SCN_SHIFT", "EQU", "%d" % ROOM_SCN_SHIFT,
          "the scenery count, above the attribute")
     line(out, "ROOM_COUNT", "EQU", "%d" % len(rooms))
+
+    # The most template bytes one room names, counting a template once for every
+    # time the room names it, as room_find copies it: a scenery template is
+    # eight bytes a piece and an object template six an entry, each ending in
+    # a byte of 0.
+    most_templates = 0
+    for r in rooms:
+        size = sum(SCENERY_STRIDE * len(scn_by_name[s["template"]]) + 1 for s in r["scenery"])
+        size += sum(OBJECT_STRIDE * len(obj_by_name[o["template"]]) + 1 for o in r["objects"])
+        most_templates = max(most_templates, size)
+    out.append("")
+    out.append("; The room being built's templates, copied out of bank 4 by room_find, and")
+    out.append("; where each is: room_build looks a template up in these, by index.")
+    line(out, "SCENERY_TEMPLATES", "EQU", "%d" % len(scenery))
+    line(out, "OBJECT_TEMPLATES", "EQU", "%d" % len(objects))
+    line(out, "ROOM_TEMPLATES_MOST", "EQU", "%d" % most_templates,
+         "the most one room names")
+    line(out, "room_bg_at:", "DS", "2 * SCENERY_TEMPLATES")
+    line(out, "room_fg_at:", "DS", "2 * OBJECT_TEMPLATES")
+    line(out, "room_templates:", "DS", "ROOM_TEMPLATES_MOST")
+    out.append("")
+    out.append("; The rooms with a sky, which things can fall out of -- see flyers.s:")
+    out.append("; a bit a room, room N at bit N & 7 of byte N >> 3.")
+    sky = [0] * 32
+    for r in rooms:
+        if r.get("sky"):
+            sky[r["number"] >> 3] |= 1 << (r["number"] & 7)
+    line(out, "room_sky:", "", "")
+    for row in range(0, 32, 8):
+        line(out, "", "DB", ", ".join("$%02X" % b for b in sky[row:row + 8]))
     line(out, "ROOM_NO_EXIT", "EQU", "$%02X" % no_exit,
          "no room has this number: a doorway with nowhere to go")
     line(out, "ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")

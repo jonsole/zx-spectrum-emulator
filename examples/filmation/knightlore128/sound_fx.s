@@ -191,6 +191,41 @@ fire_turned:        cp      COLLIDE_V
                     ret     z
                     ;; NB: fall through into sound_bounce
 
+; His bolt going off -- Pentagram's $D65B: a falling sweep of thirty-two
+; cycles.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC
+sound_fire:         ld      c,32
+.cycle:             ld      b,c
+                    call    sound_cycle
+                    dec     c
+                    jr      nz,.cycle
+                    ret
+
+; A puff's crackle -- Pentagram's $D64E: four cycles, pitched by four bytes of
+; the ROM in a row from somewhere random in its first 8K.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, B, E, HL
+sound_poof:         call    mover_rand
+                    ld      e,a
+                    call    mover_rand
+                    and     $1F
+                    ld      h,a
+                    ld      l,e
+                    ld      e,4
+.cycle:             ld      a,(hl)
+                    inc     hl
+                    and     $7F
+                    ld      b,a
+                    call    sound_cycle
+                    dec     e
+                    jr      nz,.cycle
+                    ret
+
 ; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
 ; are DI, XOR A and LD DE,$FFFF, with the top two bits set.
 ;

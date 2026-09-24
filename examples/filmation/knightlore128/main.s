@@ -79,6 +79,7 @@ start:              di
                     ld      a,(enter_dir)       ; kept for starting the room over
                     ld      (entered_by),a
                     call    special_room_enter
+                    call    flyer_room_enter    ; the four slots for the sky and his bolts
                     call    player_add
 
                     ; The room is drawn, still black: now it appears, all at
@@ -123,6 +124,7 @@ start:              di
                     ; he did, and he was drawn pressed up against it every turn,
                     ; his legs under its top.
                     call    special_step
+                    call    flyer_step          ; something from the sky?
                     call    player_step
                     call    movers_step
                     call    day_step

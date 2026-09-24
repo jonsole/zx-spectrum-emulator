@@ -89,6 +89,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; repository carries, not the packed files kl_extract.py first pulled them
 ; out of.
                     ORG     $6000
+                    INCLUDE "room_data.s"      ; the shapes, and this room's templates
                     INCLUDE "panel_data.s"
                     INCLUDE "sprite_adj_gen.s"
                     INCLUDE "graphics_gen.s"   ; GFX_* -- generated from graphics.json
@@ -139,6 +140,9 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 ; so this is where they went when Pentagram's movers filled bank 2.
                     INCLUDE "sun.s"
 
+; What falls out of the sky, Pentagram's -- once a turn, and mostly a countdown.
+                    INCLUDE "flyers.s"
+
 room_data_end:
                     ; The menu and the end screens follow on from here -- see
                     ; cold_start, below the code.
@@ -148,6 +152,17 @@ room_data_end:
 					INCLUDE "../engine/sprite.s"
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
+					; The rotation arena -- see ../engine/shift.s. Knight Lore's
+					; is 4,992 bytes, which leaves sixteen rooms a piece or two
+					; short; this one is 704 less, which Pentagram's movers took
+					; in this bank. More rooms go short, and rotate those pieces
+					; at draw time, slower but right, until the walls go into the
+					; pre-drawn backdrop and stop needing buffers at all (stage
+					; 5, and ../engine/memory-128k.md, which puts the arena at
+					; about 4K then).
+SHIFT_ARENA_SIZE	EQU		4288
+shift_arena:		DS		SHIFT_ARENA_SIZE
+shift_arena_next:	DW		shift_arena
 					INCLUDE "../engine/shift.s"
 					INCLUDE "../engine/walker.s"
 					INCLUDE "knight.s"
@@ -192,8 +207,6 @@ image_end:
 cold_start:
                     INCLUDE "end.s"             ; its tunes and their notes, then
                     INCLUDE "../engine/tune.s"  ; what plays them
-                    INCLUDE "menu.s"
-                    INCLUDE "end_at.s"          ; where both of them put a character
 cold_end:
                     ASSERT  cold_end <= $7400   ; clear of the view buffer
                     DISPLAY "data, cold code $6000..", /H, cold_end, "   free: ", /D, $7400 - cold_end
@@ -209,15 +222,17 @@ sprite_start:
 					INCLUDE "sprite_data.s"
 sprite_end:
 
-; The templates every room is built from, and the tables that go with them. They
-; were in the $6000 region; Pentagram's doubled them, and that region is full.
-; Bank 0 is paged in all the time a room is being built and played, and nothing
-; reads a template while room_find or room_page_fill has another bank in, so
-; they can sit here, ahead of the room page. If the page runs short, the plan's
-; next step is to copy only the templates a room names out of bank 4, as
-; room_find copies its record -- see ../engine/memory-128k.md.
-                    INCLUDE "room_data.s"
-room_templates_end:
+; Code that only runs when a key is pressed: picking up and putting down, and
+; the screen_sprite the panel and the menu draw with. It was in the $7400
+; region; four more pool slots for the sky pushed that region's aligned tables
+; a page on. Bank 0 is paged in whenever any of it runs.
+                    INCLUDE "pickup.s"
+                    INCLUDE "../engine/screen.s"         ; pickup.s falls into it
+; ...and the menu, which runs between games, and where it and the end screens
+; put a character: they came here from the $6000 region when the room
+; templates' copy buffer went in there.
+                    INCLUDE "menu.s"
+                    INCLUDE "end_at.s"
                     ALIGN   4
 room_page:
                     ASSERT  room_page + ROOM_PAGE_MOST <= $10000
@@ -280,7 +295,7 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms_source.py works out while generating room_data.s.
 ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
-POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS
+POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS + EXTRA_SLOTS   ; flyers.s's
                     ALIGN   32
 room_objects:
                 REPT    POOL_SLOTS
@@ -317,9 +332,6 @@ bit_reverse_table:
                     ALIGN   512
                     INCLUDE "sprite_table.s"
 
-; And code that only runs when a key is pressed, in what is left.
-                    INCLUDE "pickup.s"
-                    INCLUDE "../engine/screen.s"         ; pickup.s falls into it
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end

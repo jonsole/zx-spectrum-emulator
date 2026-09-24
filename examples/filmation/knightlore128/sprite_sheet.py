@@ -238,6 +238,15 @@ BLANK_GRAPHIC = 1
 ROOM_GROUPS = ("wall", "door", "scenery", "guard", "wizard", "fires", "balls",
                "ghost", "gate", "pentagram")
 
+# ...except these, which the code puts up in any room: his bolt, and the puff a
+# bolt or a flyer goes out in. They are resident, like the knight.
+RESIDENT_GROUPS = ("pentagram.bolt", "pentagram.puff")
+
+# What falls out of the sky -- see flyers.s. It can fall into any room whose
+# rooms.json entry says "sky": true, and only those, so only those load it:
+# the groups here go into a sky room's load as if its templates named them.
+SKY_GROUPS = ("pentagram.homer", "pentagram.faller")
+
 
 def main():
     sheet.make(sys.modules[__name__])

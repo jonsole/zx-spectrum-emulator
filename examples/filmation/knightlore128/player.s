@@ -238,6 +238,7 @@ player_step:        ld      ix,player
 .keys:              call    input_read
                     call    special_keys
                     ld      ix,player
+                    call    player_fire
 
                     ; The jump key first, because gravity asks about it in the
                     ; same turn: holding it is what makes the difference
@@ -641,4 +642,121 @@ player_legs_height: ld      (ix+OBJ.SIZE_Z),a
 player_form:        ld      (player + CHARACTER_LEGS),a
                     add     a,PLAYER_BODY_GFX - PLAYER_LEGS_GFX
                     ld      (player + CHARACTER_BODY_G),a
+                    ret
+
+
+; ---------------------------------------------------------------------------
+; His bolts -- Pentagram's, from ../pentagram/player.s.
+BOLT_STEP           EQU     8
+BOLT_UP             EQU     4
+BOLT_START_GFX      EQU     GFX_PENTAGRAM_BOLT_2
+BOLT_LARGEST        EQU     sprite_pentagram_puff_3 ; 3x17: the largest of its
+                                            ; frames and of its puff's
+
+fire_held:          DB      0
+
+; The step for each facing, as character_steps orders them.
+bolt_steps:         DB      -BOLT_STEP, 0       ; 0  -U
+                    DB      0, BOLT_STEP        ; 1  +V
+                    DB      BOLT_STEP, 0        ; 2  +U
+                    DB      0, -BOLT_STEP       ; 3  -V
+
+; Fire a bolt, if fire has just been pressed and he has one to spare --
+; Pentagram's $C126.
+;
+; A press, not a hold: it is latched until the key is let go. Two bolts at
+; most, in the two slots after the flyers' -- see flyers.s. It goes the way he
+; faces, eight a turn, from two turns' flight ahead of him and four up; if that
+; is outside the room there is no shot.
+;
+; In:  IX -> the legs record
+; Out: nothing
+; Corrupts: everything but IX
+player_fire:        ld      a,(input_now)
+                    and     INPUT_FIRE
+                    ld      hl,fire_held
+                    jr      nz,.pressed
+                    ld      (hl),a              ; let go: the next press counts
+                    ret
+.pressed:           ld      a,(hl)
+                    or      a
+                    ret     nz                  ; still the same press
+                    ld      (hl),1
+
+                    push    ix
+                    ld      iy,(flyer_slots)
+                    ld      de,FLYER_SLOTS * ROOM_STRIDE
+                    add     iy,de
+                    ld      a,(iy+OBJ.GFX)
+                    or      a
+                    jr      z,.free
+                    ld      de,ROOM_STRIDE
+                    add     iy,de
+                    ld      a,(iy+OBJ.GFX)
+                    or      a
+                    jp      nz,.none            ; both in flight
+
+.free:              ld      a,(ix+CHARACTER_FACING)
+                    add     a,a
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,bolt_steps
+                    add     hl,de
+                    ld      b,(hl)              ; B - the step in U
+                    inc     hl
+                    ld      c,(hl)              ; C - the step in V
+
+                    ; Two steps ahead of him, and inside the room.
+                    ld      a,b
+                    add     a,a
+                    add     a,(ix+OBJ.U)
+                    ld      d,a
+                    sub     128
+                    call    character_door_find.abs
+                    ld      hl,room_half_u
+                    cp      (hl)
+                    jr      nc,.none
+                    ld      a,c
+                    add     a,a
+                    add     a,(ix+OBJ.V)
+                    ld      e,a
+                    sub     128
+                    call    character_door_find.abs
+                    ld      hl,room_half_v
+                    cp      (hl)
+                    jr      nc,.none
+
+                    ld      (iy+OBJ.U),d
+                    ld      (iy+OBJ.V),e
+                    ld      a,(ix+OBJ.Z)
+                    add     a,BOLT_UP
+                    ld      (iy+OBJ.Z),a
+                    ld      (iy+BOLT_DU),b
+                    ld      (iy+BOLT_DV),c
+                    ld      (iy+OBJ.GFX),BOLT_START_GFX
+                    ld      (iy+OBJ.BEHAVIOUR),MOVE_BOLT
+                    ld      (iy+OBJ.SIZE_U),CHARACTER_HALF_U
+                    ld      (iy+OBJ.SIZE_V),CHARACTER_HALF_V
+                    ld      (iy+OBJ.SIZE_Z),8
+                    xor     a
+                    ld      (iy+OBJ.FLAGS),a
+                    ld      (iy+OBJ.DU),a
+                    ld      (iy+OBJ.DV),a
+                    ld      (iy+OBJ.DZ),a
+                    ld      (iy+OBJ.MOVE_STATE),a
+
+                    push    iy
+                    pop     ix
+                    ld      a,(ix+OBJ.BUF_H)
+                    or      a
+                    jr      nz,.buffered
+                    ld      hl,BOLT_LARGEST
+                    call    shift_alloc
+.buffered:          call    room_adjust
+                    call    object_place
+                    call    depth_insert
+                    call    redraw_object
+                    call    sound_fire
+
+.none:              pop     ix
                     ret

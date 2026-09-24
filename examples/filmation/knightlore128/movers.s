@@ -40,35 +40,45 @@ MOVE_SPIDER		EQU		10
 MOVE_CREATURE		EQU		11
 MOVE_DRAGON_U		EQU		12
 MOVE_DRAGON_V		EQU		13
-MOVE_MONSTER_LAST	EQU		13		; monster_gate's range ends here
+; What falls out of the sky and kills -- see flyers.s: engine/movers.s's
+; mover_faller ($D1FD, two frames) and mover_faller4 ($D251, four).
+MOVE_FALLER		EQU		14
+MOVE_FALLER4		EQU		15
+MOVE_MONSTER_LAST	EQU		15		; monster_gate's range ends here
 ; ...and the dragon's head that bobs, which Pentagram does not count as a
 ; monster: engine/movers.s's mover_hopper, $CE31. See mover_dragon_hops.
-MOVE_DRAGON_HOPS	EQU		14
+MOVE_DRAGON_HOPS	EQU		16
 
 ; The gates only kill what they come down on. upd_9 sets bit 7 of $0D alone --
 ; "fatal if it hits the player" -- and not bit 5, "fatal if he hits it", so the
 ; clamp at $CBAF only passes it on when the gate is the one moving. Walking into
 ; a gate is safe; standing under one as it drops is not.
-MOVE_CRUSHING	EQU		15
-MOVE_GATE			EQU		15
+MOVE_CRUSHING	EQU		17
+MOVE_GATE			EQU		17
 
-MOVE_HARMLESS	EQU		16		; and from here on, nothing kills
-MOVE_SLIDE_U		EQU		16
-MOVE_SLIDE_V		EQU		17
-MOVE_SPELL		EQU		18
-MOVE_CAULDRON	EQU		19		; what rises out of the pot -- see special.s
+MOVE_HARMLESS	EQU		18		; and from here on, nothing kills
+MOVE_SLIDE_U		EQU		18
+MOVE_SLIDE_V		EQU		19
+MOVE_SPELL		EQU		20
+MOVE_CAULDRON	EQU		21		; what rises out of the pot -- see special.s
 ; Pentagram's things that move and do no harm: the platforms that pace (the
 ; same mover_pacer_u and _v as the fires and the dragons, $CEA3), the lift
 ; ($CDBB), the conveyors ($B866), the block that drops and cannot be pushed
 ; ($CD75) and the one that cracks under him and goes ($D2AD).
-MOVE_PLATFORM_U	EQU		20
-MOVE_PLATFORM_V	EQU		21
-MOVE_LIFT			EQU		22
-MOVE_CONVEYOR		EQU		23
-MOVE_FALLS		EQU		24
-MOVE_CRUMBLES		EQU		25
-MOVE_DROPPING	EQU		26		; these two give way under a weight: see
-MOVE_COLLAPSING	EQU		27		; object_landed_on, which relies on the order.
+MOVE_PLATFORM_U	EQU		22
+MOVE_PLATFORM_V	EQU		23
+MOVE_LIFT			EQU		24
+MOVE_CONVEYOR		EQU		25
+MOVE_FALLS		EQU		26
+MOVE_CRUMBLES		EQU		27
+; What falls out of the sky and flies at him, harmless -- mover_homer, $CC4B;
+; his bolt -- mover_bolt, below; and the puff a bolt or a flyer goes out in --
+; mover_poof, $C111. See flyers.s and player_fire.
+MOVE_HOMER		EQU		28
+MOVE_BOLT			EQU		29
+MOVE_POOF			EQU		30
+MOVE_DROPPING	EQU		31		; these two give way under a weight: see
+MOVE_COLLAPSING	EQU		32		; object_landed_on, which relies on the order.
 									; Pentagram's block that sinks is the first
 
 ; Everything from here up is loose: it can be carried by whatever it is
@@ -88,18 +98,18 @@ MOVE_COLLAPSING	EQU		27		; object_landed_on, which relies on the order.
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		28
-MOVE_CARRIED		EQU		28
-MOVE_PUSHED		EQU		29
-MOVE_SLIDING		EQU		30
-MOVE_SPECIAL		EQU		31		; a collectable -- see special.s
+MOVE_LOOSE		EQU		33
+MOVE_CARRIED		EQU		33
+MOVE_PUSHED		EQU		34
+MOVE_SLIDING		EQU		35
+MOVE_SPECIAL		EQU		36		; a collectable -- see special.s
 ; Pentagram's stumps, cubes, tables and stones: shoved, and taking whatever is
 ; piled on them along -- engine/movers.s's mover_shoved_pile, $CD81. Its
 ; thorny bush is shoved the same way there AND kills, but a behaviour here is
 ; either loose or deadly -- the loose band runs to the top and the deadly one
 ; ends where the harmless one starts -- so here the bush is deadly and stays
 ; where it grew.
-MOVE_PUSHED_PILE	EQU		32
+MOVE_PUSHED_PILE	EQU		37
 
 ; What the engine's contact rules need to know about these numbers. It never
 ; names a behaviour, only the bands above -- see engine/object.s.
@@ -198,6 +208,8 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		monster_gate		; MOVE_CREATURE
 					DW		monster_gate		; MOVE_DRAGON_U
 					DW		monster_gate		; MOVE_DRAGON_V
+					DW		monster_gate		; MOVE_FALLER
+					DW		monster_gate		; MOVE_FALLER4
 					DW		mover_dragon_hops	; MOVE_DRAGON_HOPS
 					DW		mover_gate			; MOVE_GATE
 					DW		mover_slide_u		; MOVE_SLIDE_U
@@ -210,6 +222,9 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_conveyor	; MOVE_CONVEYOR: engine/movers.s
 					DW		mover_falls		; MOVE_FALLS: engine/movers.s
 					DW		mover_crumbles	; MOVE_CRUMBLES: engine/movers.s
+					DW		mover_homer		; MOVE_HOMER: engine/movers.s
+					DW		mover_bolt		; MOVE_BOLT
+					DW		mover_poof		; MOVE_POOF: engine/movers.s
 					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
@@ -574,6 +589,112 @@ hopper_landed:		ld		a,(ix+OBJ.BEHAVIOUR)
 monster_sits_out:	or		a
 monster_double:
 monster_halve:		ret
+
+
+; ---------------------------------------------------------------------------
+; His bolt -- Pentagram's $C1C5. It flies straight on at the velocity it was
+; fired with, eight a turn, a little above the floor -- it stops falling at
+; BOLT_LOW -- cycling through its three frames. The only things it hurts are
+; what fell from the sky: it tests the two flyer slots, and not the room. Hit
+; one and that one goes out in a puff and the bolt is simply gone; hit
+; anything else across its path and the bolt puffs out itself. Pentagram
+; scores the hit; there is no score here.
+;
+; BOLT_DU, BOLT_DV and BOLT_LOW are engine/movers.s's; its BOLT_FIRST and
+; BOLT_LAST are Pentagram's own numbers, so the frames here have names of
+; their own.
+BOLT_GFX_FIRST		EQU		GFX_PENTAGRAM_BOLT_1
+BOLT_GFX_LAST		EQU		GFX_PENTAGRAM_BOLT_3
+
+; In:  IX -> the record; mover_ix names it too
+; Out: nothing
+; Corrupts: everything
+mover_bolt:			ld		a,(ix+OBJ.GFX)
+					dec		a
+					cp		BOLT_GFX_FIRST
+					jr		nc,.frame
+					ld		a,BOLT_GFX_LAST
+.frame:				ld		(ix+OBJ.GFX),a
+
+					ld		a,(ix+BOLT_DU)
+					ld		(ix+OBJ.DU),a
+					ld		a,(ix+BOLT_DV)
+					ld		(ix+OBJ.DV),a
+					ld		a,(ix+OBJ.Z)
+					cp		BOLT_LOW + 1
+					jr		nc,.moving		; above it: let it fall
+					ld		(ix+OBJ.DZ),1		; ...down to it: hold it there
+.moving:			call	mover_move_always
+
+					; Has it reached something that fell from the sky?
+					ld		iy,(flyer_slots)
+					ld		b,FLYER_SLOTS
+.flyer:				call	bolt_hits
+					jr		c,.hit
+					ld		de,ROOM_STRIDE
+					add		iy,de
+					djnz	.flyer
+
+					ld		a,(collide_hit)
+					and		COLLIDE_U | COLLIDE_V
+					ret		z
+					jp		mover_poof_start	; stopped by anything else
+
+.hit:				push	ix
+					push	iy
+					pop		ix		; the flyer
+					call	mover_poof_start	; goes out in a puff
+					pop		ix
+					jp		object_hide		; and the bolt is gone
+
+
+; Whether the bolt at IX overlaps the flyer at IY: centres closer on each
+; axis than their two sizes and a little -- $C216. An empty slot, or one
+; already going out, is not hit.
+;
+; In:  IX -> the bolt
+;      IY -> the slot
+; Out: carry set for a hit
+; Corrupts: A, C
+bolt_hits:			ld		a,(iy+OBJ.GFX)
+					or		a
+					ret		z		; carry clear
+					ld		a,(iy+OBJ.BEHAVIOUR)
+					cp		MOVE_POOF
+					jr		z,.miss
+					ld		a,(iy+OBJ.U)
+					sub		(ix+OBJ.U)
+					call	character_door_find.abs
+					ld		c,a
+					ld		a,(iy+OBJ.SIZE_U)
+					add		a,(ix+OBJ.SIZE_U)
+					add		a,2
+					cp		c
+					jr		c,.miss		; too far apart along U
+					jr		z,.miss
+					ld		a,(iy+OBJ.V)
+					sub		(ix+OBJ.V)
+					call	character_door_find.abs
+					ld		c,a
+					ld		a,(iy+OBJ.SIZE_V)
+					add		a,(ix+OBJ.SIZE_V)
+					add		a,2
+					cp		c
+					jr		c,.miss
+					jr		z,.miss
+					ld		a,(iy+OBJ.Z)
+					sub		(ix+OBJ.Z)
+					call	character_door_find.abs
+					ld		c,a
+					ld		a,(iy+OBJ.SIZE_Z)
+					add		a,(ix+OBJ.SIZE_Z)
+					cp		c
+					jr		c,.miss
+					jr		z,.miss
+					scf
+					ret
+.miss:				or		a
+					ret
 
 
 ; Which way each conveyor carries what stands on it, by the bottom two bits of

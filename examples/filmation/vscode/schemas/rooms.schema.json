@@ -137,6 +137,10 @@
       "minLength": 1,
       "description": "Which of `roomDimensions` gives this room its floor, by name."
      },
+     "sky": {
+      "type": "boolean",
+      "description": "knightlore128: whether things can fall into this room out of the sky, as they do in Pentagram. A sky room loads the flyers' sprites as well as its own. Left out means no sky."
+     },
      "scenery": {
       "type": "array",
       "description": "The scenery templates this room is built from, in the order they are drawn.",

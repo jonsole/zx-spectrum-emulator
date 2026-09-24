@@ -258,7 +258,7 @@ def format_templates(atlas):
 
 def _room(room, pad):
     """One room: what it is on a line, then what stands in it."""
-    head = [key for key in ("number", "ink", "dimensions") if key in room]
+    head = [key for key in ("number", "ink", "dimensions", "sky") if key in room]
     lines = ["%s{ %s," % (pad, ", ".join('"%s": %s' % (k, _scalar(room[k]))
                                          for k in head))]
 

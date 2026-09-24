@@ -179,7 +179,7 @@
      ] }
     ]
   },
-  { "number": 6, "ink": 5, "dimensions": "square",
+  { "number": 6, "ink": 5, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_s", "destination": 7 },
      { "template": "scenery_pentagram_trunk_arch_n", "destination": 5 },
@@ -193,7 +193,7 @@
      ] }
     ]
   },
-  { "number": 7, "ink": 7, "dimensions": "square",
+  { "number": 7, "ink": 7, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_n", "destination": 6 },
      { "template": "scenery_pentagram_trunk_arch_e", "destination": 19 },
@@ -437,7 +437,7 @@
      ] }
     ]
   },
-  { "number": 17, "ink": 6, "dimensions": "narrowV",
+  { "number": 17, "ink": 6, "dimensions": "narrowV", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_e", "destination": 7 },
      { "template": "scenery_pentagram_trunk_arch_w", "destination": 21 },
@@ -499,7 +499,7 @@
      ] }
     ]
   },
-  { "number": 19, "ink": 2, "dimensions": "narrowV",
+  { "number": 19, "ink": 2, "dimensions": "narrowV", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_e", "destination": 22 },
      { "template": "scenery_pentagram_trunk_arch_w", "destination": 7 },
@@ -563,7 +563,7 @@
      ] }
     ]
   },
-  { "number": 21, "ink": 5, "dimensions": "narrowV",
+  { "number": 21, "ink": 5, "dimensions": "narrowV", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_e", "destination": 17 },
      { "template": "scenery_pentagram_trunk_arch_w", "destination": 23 },
@@ -571,7 +571,7 @@
     ],
     "objects": []
   },
-  { "number": 22, "ink": 3, "dimensions": "square",
+  { "number": 22, "ink": 3, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_n", "destination": null },
      { "template": "scenery_pentagram_trunk_arch_w", "destination": 19 },
@@ -590,7 +590,7 @@
      ] }
     ]
   },
-  { "number": 23, "ink": 5, "dimensions": "square",
+  { "number": 23, "ink": 5, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_trunk_arch_n", "destination": null },
      { "template": "scenery_pentagram_trunk_arch_e", "destination": 21 },
@@ -636,7 +636,7 @@
      ] }
     ]
   },
-  { "number": 25, "ink": 7, "dimensions": "square",
+  { "number": 25, "ink": 7, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_e", "destination": 26 },
      { "template": "scenery_pentagram_stone_arch_w", "destination": null },
@@ -645,7 +645,7 @@
     ],
     "objects": []
   },
-  { "number": 26, "ink": 2, "dimensions": "square",
+  { "number": 26, "ink": 2, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_n", "destination": 28 },
      { "template": "scenery_pentagram_stone_arch_e", "destination": 27 },
@@ -669,7 +669,7 @@
      ] }
     ]
   },
-  { "number": 27, "ink": 3, "dimensions": "square",
+  { "number": 27, "ink": 3, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_n", "destination": null },
      { "template": "scenery_pentagram_stone_arch_e", "destination": 35 },
@@ -680,7 +680,7 @@
     ],
     "objects": []
   },
-  { "number": 28, "ink": 2, "dimensions": "square",
+  { "number": 28, "ink": 2, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_s", "destination": 26 },
      { "template": "scenery_pentagram_trees_0" },
@@ -748,7 +748,7 @@
      ] }
     ]
   },
-  { "number": 30, "ink": 6, "dimensions": "square",
+  { "number": 30, "ink": 6, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_n", "destination": 27 },
      { "template": "scenery_pentagram_stone_0" },
@@ -878,7 +878,7 @@
      ] }
     ]
   },
-  { "number": 35, "ink": 4, "dimensions": "square",
+  { "number": 35, "ink": 4, "dimensions": "square", "sky": true,
     "scenery": [
      { "template": "scenery_pentagram_stone_arch_s", "destination": null },
      { "template": "scenery_pentagram_stone_arch_w", "destination": 27 },

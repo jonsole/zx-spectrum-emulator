@@ -83,7 +83,12 @@ function graphicsFor(game) {
 function sourceFor(game) {
   const file = path.join(FILMATION, game, 'room_data.s');
   if (!fs.existsSync(file)) skip(game + '/room_data.s has not been generated');
-  return fs.readFileSync(file, 'utf8');
+  // knightlore128 keeps its templates with its rooms, in bank 4 -- room_list.s --
+  // and room_data.s holds only the room's own copies of them.
+  const rooms = path.join(FILMATION, game, 'room_list.s');
+  const listed = game === 'knightlore128' && fs.existsSync(rooms)
+    ? '\n' + fs.readFileSync(rooms, 'utf8') : '';
+  return fs.readFileSync(file, 'utf8') + listed;
 }
 
 // --- what the file is -----------------------------------------------------

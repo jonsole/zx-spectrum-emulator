@@ -379,7 +379,7 @@ function placement(piece, indent) {
 
 // One room: what it is on a line, then what stands in it.
 function roomLines(room, indent) {
-  const head = ['number', 'ink', 'dimensions'].filter(function (key) {
+  const head = ['number', 'ink', 'dimensions', 'sky'].filter(function (key) {
     return room[key] !== undefined;
   }).map(function (key) { return '"' + key + '": ' + scalar(room[key]); });
   const lines = [indent + '{ ' + head.join(', ') + ','];

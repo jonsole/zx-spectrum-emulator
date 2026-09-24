@@ -230,8 +230,13 @@ change to any engine file. Where it departs from the plan above:
   record at a time, as §7.2 has it. The arena stayed in the middle of bank 2,
   where `shift.s` puts it, because there was no need to move it.
 - **The room's record is copied into `room_record`, in bank 5**, not into
-  the page, and the templates stay in the $6000 region, always visible.
-  Nothing of the room's data is in bank 0.
+  the page. With Pentagram's templates beside Knight Lore's (stage 4), the
+  templates moved to bank 4 as well. `room_find` copies the ones a room names
+  into `room_templates`, in bank 5, as §3 planned for the page. Bank 5 was
+  chosen because bank 4 is paged in while they are copied.
+- **The arena is the game's to reserve** (`shift_arena`, `SHIFT_ARENA_SIZE`,
+  just before `engine/shift.s`). knightlore128's is 4,288 until the backdrop
+  takes the walls out of rotation.
 - **The stack is at $C000** (SP), in bank 2, and the menu, the end screens and
   the tune player moved down to $6000, as §7.1 foresaw.
 - **Not yet built:** the backdrop in bank 6, and the room data at three times

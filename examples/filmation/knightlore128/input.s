@@ -35,13 +35,16 @@ INPUT_FORWARD       EQU     1 << INPUT_FORWARD_B
 INPUT_JUMP          EQU     1 << INPUT_JUMP_B
 INPUT_PICKUP        EQU     1 << INPUT_PICKUP_B
 INPUT_PICKUP_DIR    EQU     1 << 5
+INPUT_FIRE_B        EQU     6                   ; his bolt: see player_fire
+INPUT_FIRE          EQU     1 << INPUT_FIRE_B
 
 ; The keyboard's half-rows. Knight Lore takes whole rows rather than single
 ; keys, so any of A to ENTER walks him forward and any of Q to P jumps.
 KEY_ROW_SHIFT_V     EQU     $FEFE               ; SHIFT, Z, X, C, V
 KEY_ROW_SPACE_B     EQU     $7FFE               ; SPACE, SYM SHIFT, M, N, B
 KEY_ROWS_A_ENTER    EQU     $BDFE               ; A to G and H to ENTER
-KEY_ROWS_Q_P        EQU     $DBFE               ; Q to T and Y to P
+KEY_ROW_Q_T         EQU     $FBFE               ; Q, W, E, R, T in bits 0-4
+KEY_ROW_Y_P         EQU     $DFFE               ; P, O, I, U, Y in bits 0-4
 KEY_ROWS_1_0        EQU     $E7FE               ; 1 to 5 and 6 to 0
 KEY_ROWS_Z_B        EQU     $7EFE               ; the letters of the bottom row
 KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to ENTER
@@ -49,7 +52,13 @@ KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to E
 ; The keyboard. Left and right are Z, X, C and V along the bottom row and
 ; SYM SHIFT, M, N and B beside them -- Z, C, M and B turn him one way and
 ; X, V, SYM and N the other. Any letter of the middle row walks him forward,
-; any of the top row jumps, and any number picks up or puts down.
+; the top row jumps and fires by turns, and any number picks up or puts down.
+;
+; The top row is Pentagram's, key by key and alternately -- Q E T  U O jump,
+; W R  Y I P fire -- so each half is read on its own: the one port $DBFE would
+; OR them together, and give Q and P the same bit. Knight Lore jumps on the
+; whole row, and has no bolt to fire. On a joystick the button still jumps, as
+; it does there, and nothing fires.
 ;
 ; In:  nothing
 ; Out: input_now = what the player is asking for
@@ -91,12 +100,29 @@ input_keyboard:     ld      bc,KEY_ROW_SHIFT_V
                     and     $1F
                     jr      z,.jump
                     set     2,e
-.jump:              ld      bc,KEY_ROWS_Q_P
+.jump:              ld      bc,KEY_ROW_Q_T
                     in      a,(c)
                     cpl
-                    and     $1F
+                    ld      d,a                 ; Q W E R T
+                    ld      b,high KEY_ROW_Y_P
+                    in      a,(c)
+                    cpl
+                    ld      b,a                 ; P O I U Y
+                    and     $0A                 ; O and U
+                    ld      c,a
+                    ld      a,d
+                    and     $15                 ; Q, E and T
+                    or      c
+                    jr      z,.fire
+                    set     INPUT_JUMP_B,e
+.fire:              ld      a,b
+                    and     $15                 ; P, I and Y
+                    ld      c,a
+                    ld      a,d
+                    and     $0A                 ; W and R
+                    or      c
                     jr      z,.pickup
-                    set     3,e
+                    set     INPUT_FIRE_B,e
 .pickup:            ld      bc,KEY_ROWS_1_0
                     in      a,(c)
                     cpl

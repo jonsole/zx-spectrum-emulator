@@ -253,7 +253,7 @@ room_scenery:		ld		a,(room_scenery_left)
 					; flags already: see rooms_source.py.
 
 					add		hl,hl
-					ld		de,background_type_tbl
+					ld		de,room_bg_at		; this room's copies: see room_find
 					add		hl,de
 					ld		e,(hl)
 					inc		hl
@@ -428,7 +428,7 @@ room_objects_of:	ld		a,(room_bytes_left)
 					ld		l,a
 					ld		h,0
 					add		hl,hl
-					ld		de,block_type_tbl
+					ld		de,room_fg_at
 					add		hl,de
 					ld		e,(hl)
 					inc		hl

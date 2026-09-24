@@ -123,3 +123,23 @@ SHOVED_REST_EVERY	EQU		4		; a power of two
 ; through its three cracks to the last.
 CRUMBLE_LAST		EQU		GFX_PENTAGRAM_BLOCK_4
 CRUMBLE_EVERY		EQU		4		; a power of two
+
+; What falls out of the sky -- see flyers.s: the homer that flies at him
+; (mover_homer, $CC4B) and the two fallers that roam (mover_faller and
+; mover_faller4, $D1FD and $D251). The homer keeps its velocity in sixteenths
+; in two bytes of its record past OBJ, and its Z's in MOVE_STATE.
+HOMER_ACC_U			EQU		30
+HOMER_ACC_V			EQU		31
+HOMER_ACC_Z			EQU		OBJ.MOVE_STATE
+					ASSERT	OBJ <= HOMER_ACC_U && HOMER_ACC_V < ROOM_STRIDE
+HOMER_PULL			EQU		3
+HOMER_MOST			EQU		$38		; +56
+HOMER_LEAST			EQU		$B8		; -72
+FALLER_STEP			EQU		4
+
+; The puff a bolt or a flyer goes out in -- mover_poof, $C111: its frames a
+; turn each, and then the slot is empty.
+POOF_FIRST			EQU		GFX_PENTAGRAM_PUFF_1
+POOF_LAST			EQU		GFX_PENTAGRAM_PUFF_4_G218
+POOF_BEHAVIOUR		EQU		MOVE_POOF
+poof_sound			EQU		sound_poof

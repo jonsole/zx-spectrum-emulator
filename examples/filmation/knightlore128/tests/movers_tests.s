@@ -7,7 +7,7 @@
 ; routines themselves are engine/tests/movers_tests.s's; and
 ; knightlore128/monster_gate.s. That last one is here rather than stubbed because
 ; it is not something movers.s calls, it is where mover_tbl SENDS the monsters:
-; every behaviour from MOVE_FIRE_U to MOVE_SPIKE_BALL is dispatched through it.
+; every behaviour from MOVE_FIRE_U to MOVE_MONSTER_LAST is dispatched through it.
 ; Stubbing it would mean writing that dispatch a second time, and a table
 ; pointing at a stub proves nothing about where a monster's turn really goes.
 ; What is stubbed instead is busy.s's two bytes, which fresh zeroes -- so every
@@ -109,6 +109,12 @@ FG_PENTAGRAM_CUBE_PUSHED	EQU	$31
 FG_PENTAGRAM_TABLE_PUSHED	EQU	$32
 FG_PENTAGRAM_STONE_PUSHED	EQU	$33
 GFX_PENTAGRAM_BLOCK_4		EQU	222		; the crumbling block's last crack
+GFX_PENTAGRAM_BOLT_1		EQU	223		; the bolt's three frames
+GFX_PENTAGRAM_BOLT_3		EQU	225
+GFX_PENTAGRAM_PUFF_1		EQU	212		; the puff's first and last
+GFX_PENTAGRAM_PUFF_4_G218	EQU	218
+CHARACTER_BODY		EQU		ROOM_STRIDE		; as engine/walker.s has it
+FLYER_SLOTS			EQU		2			; as flyers.s has it
 
 
 ; Run a routine with IX -> REC, as movers_step leaves it, and keep what came
@@ -906,8 +912,48 @@ start:				ld		sp,$FE00
 					call	snap
 					EXPECT_CARRY	0, "carry: it takes its turn"
 
+					TEST	"bolt: its frames count down, and round again"
+					call	fresh
+					call	no_flyers
+					SET		OBJ.GFX, 225
+					SET		OBJ.Z, 140
+					RUN		mover_bolt
+					EXPECT_FIELD	OBJ.GFX, 224, "the graphic, one down"
+					call	fresh
+					call	no_flyers
+					SET		OBJ.GFX, 223
+					SET		OBJ.Z, 140
+					RUN		mover_bolt
+					EXPECT_FIELD	OBJ.GFX, 225, "the graphic, from the first to the last"
+
+					TEST	"bolt: its step is the one it was fired with"
+					call	fresh
+					call	no_flyers
+					SET		OBJ.GFX, 224
+					SET		OBJ.Z, 140
+					SET		OBJ.U, 100
+					SET		BOLT_DU, -8
+					RUN		mover_bolt
+					EXPECT_FIELD	OBJ.U, 92, "U"
+
+					TEST	"bolt: a flyer's slot that is empty is not hit"
+					call	fresh
+					call	no_flyers
+					ld		ix,REC
+					ld		iy,ROOMS
+					call	bolt_hits
+					call	snap
+					EXPECT_CARRY	0, "carry: no hit"
+
 					call	finish
 					DB		"movers_tests (knightlore128)", 0
+
+; The flyer slots empty: their graphics zero, so mover_bolt's search finds
+; nothing to hit.
+no_flyers:			xor		a
+					ld		(ROOMS + OBJ.GFX),a
+					ld		(ROOMS + ROOM_STRIDE + OBJ.GFX),a
+					ret
 
 
 ; ---------------------------------------------------------------------------
@@ -1202,7 +1248,11 @@ sound_take:
 slide_sound:
 sound_sparkle:
 fire_sound:
-fire_turned:		ret		; sound_fx.s's, which only choose a sound
+fire_turned:
+sound_poof:			ret		; sound_fx.s's, which only choose a sound
+
+; flyers.s's: the first of the two flyer slots, which the bolt tests.
+flyer_slots:		DW		ROOMS
 
 
 					INCLUDE	"../monster_gate.s"
