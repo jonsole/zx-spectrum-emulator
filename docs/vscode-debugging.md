@@ -1070,7 +1070,11 @@ call replaces what that connection set under the same group, and the reports
 come back as `zxLog` events -- `{group, lines: [{id, pc, text}], dropped}` --
 rather than in the console. A connection's logpoints go when it closes.
 
-**Not yet:** conditions and hit counts on logpoints; an MCP tool for them; and,
+Over MCP, `set_logpoint`, `get_log` and their companions do the same for an
+agent, the reports kept on the server until read (see
+[logpoints](mcp.md#logpoints)).
+
+**Not yet:** conditions and hit counts on logpoints; and,
 as with breakpoints, a logpoint on a 128K is on the 16-bit address, whichever
 bank is paged there. A rewind replays the machine without its logpoints, so
 stepping back does not report the same lines again.
