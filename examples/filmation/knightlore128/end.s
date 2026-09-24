@@ -8,9 +8,10 @@
 ; that -- and waits for a key before starting again.
 ;
 ; The percentage is the game's own sum, calc_and_display_percent: every room
-; seen counts one and every charm two, against 128 rooms and 14 charms, so the
-; two together make 100%. The rooms come out of a bitmap marked as each is
-; built. Exploring counts for as much as collecting.
+; seen counts one and every charm two, against all the rooms (ROOM_COUNT --
+; Knight Lore's 128) and 14 charms, so the two together make 100%. The rooms
+; come out of a bitmap marked as each is built. Exploring counts for as much as
+; collecting.
 ;
 ; The words are the game's, character codes and all: our font is its font, so
 ; a code is its own index. The colours and the places are its too.
@@ -387,9 +388,18 @@ end_bcd:            cp      10
                     ret
 
 
-; The percentage of the quest -- calc_and_display_percent. $A41A is a
-; hundredth of the 156 that one room and two-a-charm add up to, counted in BCD
-; as it goes; the $28 at the end is what rounds the last of them up to 100.
+; The percentage of the quest -- calc_and_display_percent. Knight Lore adds
+; $A41A for each room seen and two for each charm: in sixteen bits, a
+; hundredth of the 156 that its 128 rooms and fourteen charms add up to,
+; carried into A in BCD as it goes. The $28 at the end is what rounds the last
+; of them up to 100. Both come from END_TOTAL here, so they follow the castle
+; as it grows; for 128 rooms they are Knight Lore's own.
+;
+; E counts rooms and charms together, so the total has to fit a byte.
+END_TOTAL           EQU     ROOM_COUNT + 2 * SPECIAL_WANTED
+END_STEP            EQU     6553600 / END_TOTAL                 ; a 65536th of a whole
+END_ROUND           EQU     6553600 - END_TOTAL * END_STEP      ; what the last falls short by
+                    ASSERT  END_TOTAL < 256
 ;
 ; In:  nothing
 ; Out: nothing
@@ -399,7 +409,7 @@ end_percent:        call    end_seen
                     add     a,a
                     add     a,e
                     ld      e,a
-                    ld      bc,$A41A
+                    ld      bc,END_STEP
                     ld      hl,0
                     xor     a
 .count:             add     hl,bc
@@ -407,7 +417,7 @@ end_percent:        call    end_seen
                     daa
                     dec     e
                     jr      nz,.count
-                    ld      bc,$0028
+                    ld      bc,END_ROUND
                     add     hl,bc
                     adc     a,0
                     daa
@@ -424,20 +434,26 @@ end_percent:        call    end_seen
 
 
 ; What it makes of it: the quarter of the castle he saw, and whether the wizard
-; ever had everything.
+; ever had everything. Knight Lore took the quarter as the count over 32, which
+; is a quarter of its 128 rooms; this compares with the quarters of
+; ROOM_COUNT, which comes to the same for 128.
 ;
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL
 end_rating:         call    end_seen
                     ld      a,e
-                    rrca
-                    rrca
-                    rrca
-                    rrca
-                    rrca
-                    and     3
-                    ld      c,a
+                    ld      c,0
+                    cp      ROOM_COUNT / 4
+                    jr      c,.quarter
+                    inc     c
+                    cp      ROOM_COUNT / 2
+                    jr      c,.quarter
+                    inc     c
+                    cp      ROOM_COUNT * 3 / 4
+                    jr      c,.quarter
+                    inc     c
+.quarter:
                     ld      a,(special_count)
                     cp      SPECIAL_WANTED
                     ld      a,c

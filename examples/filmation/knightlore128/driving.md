@@ -132,6 +132,7 @@ grep -E "\|F\|room_number$" output/knightlore128.sld | cut -d'|' -f6
 | Symbol | What |
 |---|---|
 | `room_number` | Write a room here and the main loop builds it on its next turn. Poking it is the designed way to move the castle about. A number no record carries leaves the old room up. |
+| `room_door_to` | where each side's doorway leads, N/E/S/W, as the builder read it from the room's record. Only a side `room_door_z` says has a doorway means anything. |
 | `room_shown` | The room that's built. Don't write it: rooms left are written back under it. |
 | `enter_dir` | The side he comes in by; $FF for none, which puts him in the middle. |
 | `entered_by` | Kept for starting a room over after a death. |
@@ -185,6 +186,11 @@ Every recipe starts the same way:
    `room_number`. Only then write anything.
 
 **Another room.** Write `room_number`, and poll `room_shown` until it matches.
+Set `player_state` to 0 as well: a room forced while he is dying or arriving
+keeps that state, and the death count then runs on from whatever walk frame the
+new room gives his legs, through other graphics. To put him somewhere in the
+new room, let it run two or three turns first: a position written at
+`start.entered` is overwritten when he is placed.
 For a room that doesn't build, `room_shown` stays where it was: check it.
 
 **Keeping him alive** while you watch. Each turn, write 0 to `player_touched`,

@@ -278,11 +278,13 @@ player_step:        ld      ix,player
 ; Knight Lore's, at screen_west and its three neighbours ($CA9A): out when the
 ; whole of him has passed the wall, not when he touches it.
 ;
-; The castle is sixteen rooms by sixteen, and the number is a row and a column
-; in it: north is a row on, east a column, and east and west wrap inside the
-; row rather than carrying into it. Every one of the 260 doorways in the data
-; has a matching one in the room that arithmetic lands on, which is as good a
-; proof of it as measuring the game would be.
+; Where it leads is read, not worked out: the builder kept each doorway's
+; destination in room_door_to as the scenery went by. Knight Lore's castle is
+; sixteen rooms by sixteen and its player_exit adds $10 for north and 1 for
+; east; this castle is joined by a table instead, so that a bridge or a tower
+; can join any two rooms. Pentagram's player_exit reads its doorways the same
+; way. Every one of Knight Lore's 286 doorways was given the room that
+; arithmetic lands on, and has a matching one back.
 ;
 ; In:  IX -> the player's legs
 ; Out: room_number and enter_dir = where he goes, if he has left
@@ -323,27 +325,11 @@ player_exit:        ld      a,(ix+CHARACTER_DOOR)
                     cp      d
                     ret     nc                      ; not below it yet
 
-.out:               ld      a,(room_number)
-                    bit     0,c
-                    jr      nz,.column
-                    bit     1,c
-                    jr      nz,.south
-                    add     a,$10                   ; north, a row on
-                    jr      .go
-.south:             sub     $10
-                    jr      .go
-.column:            ld      e,a
-                    inc     a                       ; east
-                    bit     1,c
-                    jr      z,.wrap
-                    dec     a
-                    dec     a                       ; west
-.wrap:              and     $0F
-                    ld      d,a
-                    ld      a,e
-                    and     $F0
-                    or      d
-.go:                ld      (room_number),a
+.out:               ld      b,0
+                    ld      hl,room_door_to
+                    add     hl,bc
+                    ld      a,(hl)
+                    ld      (room_number),a
 
                     ; He comes in by the opposite wall of the new room.
                     ld      a,c

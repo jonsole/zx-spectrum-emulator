@@ -41,11 +41,54 @@ starts.
 | 1 | the 128K shell: a 128K device and snapshot, paging through `page.s`, Knight Lore unchanged | done |
 | 2a | room data to bank 4, the sprites to bank 0 on their own, the stack below $C000, and the menu and the end screens down to $6000 | done |
 | 2b | the graphics library in bank 1 (3 and 7 as it grows), and each room's graphics copied into the room page in bank 0 | done |
-| 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | |
+| 3 | exits from a table, one destination per doorway as Pentagram has, instead of Knight Lore's 16x16 grid; up to 255 rooms | done |
 | 4 | one sprite sheet holding every Knight Lore and every Pentagram sprite, with Pentagram's scenery, creatures and mechanics | |
 | 5 | the pre-drawn backdrop in bank 6 | |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
+
+### How the rooms join (stage 3)
+
+Knight Lore works out where a doorway leads: the room number is a row and a
+column of a 16 x 16 grid, so north is +$10 and east +1. This castle reads it
+instead, so that a bridge or a tower can join any two rooms.
+
+- **In `rooms.json`**, every doorway's scenery entry says the room it leads to:
+  `{ "template": "scenery_arch_n", "destination": 16 }`. Room 0 is a real
+  room, so a doorway with no way through says `null`, or leaves the
+  destination out. It is then drawn but walled up.
+  `meta.rules.exits: "table"` says the castle works this way.
+- **In `templates.json`**, `meta.doorways` names the doorway templates and
+  the wall each stands in, and `meta.background` names the walls and trees.
+  Knight Lore decided both by the template's position in the table. Here any
+  template can be a doorway, a new arch or a bridge, by adding it to the list.
+- **In the room record**, a scenery entry is two bytes: the template and the
+  room it leads to. `ROOM_NO_EXIT`, a number no room has, stands for nowhere.
+- **In the code.** `room_door_note` looks each template's wall up in
+  `scenery_door_side`, a table the generator makes from `meta.doorways`, and
+  keeps the destination in `room_door_to`. `player_exit` reads it back.
+  Pentagram's builder and exit work the same way.
+- **The checks.** `rooms_source.py` stops on a destination that is not a room,
+  or one on scenery that is not a doorway. It says, without stopping, when a
+  doorway has no door back or a room has no way in.
+
+Knight Lore's 286 doorways were each given the room its arithmetic lands on.
+Every one leads back, and every room can be reached from the four start rooms.
+The end screen's percentage and rating are worked out from `ROOM_COUNT`, not
+from 128. For 128 rooms that gives Knight Lore's own `$A41A` and `$28`.
+
+What was checked for stage 3, in a 128K emulator:
+- After each of the 128 rooms is built, `room_door_z` and `room_door_at` agree
+  with Knight Lore 48K's for every side with a doorway, and `room_door_to`
+  holds each doorway's destination from the table.
+- The knight was put inside each doorway and walked out, in both builds.
+  In each build, 107 doorways took him to the room the table names, by the
+  right side. The rest stalled against something in the room, and 152 of
+  them stalled in both builds; one more in each build stalled where the other
+  got through, which is the random start. That is the test's placement and
+  not the exits: none took him anywhere wrong.
+- All 127 rooms still build the same objects as Knight Lore 48K's, and no
+  graphic drew `sprite_missing`.
 
 ### Where memory is now (stage 2)
 

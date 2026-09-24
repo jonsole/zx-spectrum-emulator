@@ -183,6 +183,7 @@ cold_start:
                     INCLUDE "end.s"             ; its tunes and their notes, then
                     INCLUDE "../engine/tune.s"  ; what plays them
                     INCLUDE "menu.s"
+                    INCLUDE "end_at.s"          ; where both of them put a character
 cold_end:
                     ASSERT  cold_end <= $7400   ; clear of the view buffer
                     DISPLAY "data, cold code $6000..", /H, cold_end, "   free: ", /D, $7400 - cold_end
@@ -234,7 +235,6 @@ room_list_end:
                     INCLUDE "room_build.s"
                     INCLUDE "../engine/room.s"
                     INCLUDE "glance.s"
-                    INCLUDE "end_at.s"
 room_code_end:
                     ASSERT  room_code_end <= $6000
                     DISPLAY "room builder     $5B00..", /H, room_code_end, "   free: ", /D, $6000 - room_code_end

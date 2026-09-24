@@ -169,6 +169,10 @@ def _scalar(value):
         return "null"
     if isinstance(value, str):
         return '"%s"' % value
+    if isinstance(value, list):
+        # One line, the way JSON spells it: str() would write a Python list,
+        # quoted with apostrophes, which no JSON reader takes.
+        return "[%s]" % ", ".join(_scalar(item) for item in value)
     return str(value)
 
 
@@ -327,7 +331,15 @@ DOORWAYS = {
 
 
 def side_of(atlas, name):
-    """The wall a scenery template stands in, or None if it is not a doorway."""
+    """The wall a scenery template stands in, or None if it is not a doorway.
+
+    A castle whose templates.json says which of its templates are doorways --
+    meta.doorways, template name to wall -- is taken at its word, and then any
+    template can be one; knightlore128's builder reads a table made from it.
+    The two games whose builders test the index fall back to DOORWAYS."""
+    said = (atlas.get("templatesMeta") or {}).get("doorways")
+    if said is not None:
+        return said.get(name)
     rule = DOORWAYS.get((atlas.get("meta") or {}).get("game"), {})
     for index, key in enumerate(atlas["sceneryTemplates"]):
         if key == name:

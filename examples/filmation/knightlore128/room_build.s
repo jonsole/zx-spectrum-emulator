@@ -45,6 +45,13 @@ room_stage:			DS		8
 room_group_move:	DB		0
 
 
+; Where each side's doorway leads, indexed by ROOM_DOOR_N/E/S/W: the
+; destination byte of the arch in that wall, kept as the scenery goes by for
+; player_exit to read. Only a side room_door_z says has a doorway means
+; anything; the rest are whatever the last room left.
+room_door_to:		DS		4
+
+
 ; ---------------------------------------------------------------------------
 ; room_find, which looks a record up, is in room_find.s: the rooms are in
 ; another bank, and it copies the one wanted out into room_record.
@@ -105,6 +112,7 @@ room_build:			ld		c,a
 					rlca		; three left is five right
 					and		7
 					ld		(room_scenery_left),a
+					add		a,a		; two bytes a scenery entry
 					neg
 					add		a,c		; and the rest of the body is objects
 					ld		(room_bytes_left),a
@@ -233,10 +241,13 @@ room_scenery:		ld		a,(room_scenery_left)
 
 					ld		a,(de)
 					inc		de
-					push	de
 					ld		c,a		; which template, kept for room_door_note
+					ld		a,(de)
+					inc		de
+					ld		b,a		; and where it leads, if it is a doorway
+					push	de
 
-					ld		l,a
+					ld		l,c
 					ld		h,0
 					; Which pieces are background -- walls and trees -- is in their
 					; flags already: see rooms_source.py.
@@ -296,7 +307,8 @@ room_scenery_move:	xor		a
 					ret		
 
 
-; If this piece of scenery is an arch, remember the doorway it makes.
+; If this piece of scenery is a doorway, remember it: which wall, how far out,
+; what height, and where it leads.
 ;
 ; Knight Lore keeps the same three facts -- which side, how far out, what
 ; height -- but reaches them from the other end: each arch is an object with
@@ -309,22 +321,35 @@ room_scenery_move:	xor		a
 ; its opening is centred thirteen units from that leaf, which is the middle
 ; of the room -- so its position is the one to keep.
 ;
+; Which templates are doorways, and in which wall, is scenery_door_side's,
+; made from templates.json's meta.doorways, so any template can be one. Knight
+; Lore tested the index instead: 0-7 the arches, and two high ones. Where each
+; leads is the byte beside the template in the room's record. A doorway leading
+; to ROOM_NO_EXIT is walled up: drawn, but not a way through, so it is not
+; noted and nothing walks into it.
+;
 ; In:  C  = the scenery template index
+;      B  = the room it leads to, or ROOM_NO_EXIT
 ;      HL -> the template
-; Out: room_door_z and room_door_at = the doorway, if it is an arch
-; Corrupts: AF, BC
-room_door_note:		ld		a,c
-					cp		8		; 0-7 are the four arches, plain and
-					jr		c,.plain		; among the trees; the side is in bit 0-1
-					cp		BG_HIGH_ARCH_E
-					ret		c
-					cp		BG_HIGH_ARCH_S + 1
-					ret		nc		; not an arch at all
-					; The two high arches are a doorway on the walkway of a
-					; tall room, and they only ever face east or south.
-					sub		BG_HIGH_ARCH_E - ROOM_DOOR_E
-					jr		.have
-.plain:				and		3
+; Out: room_door_z, room_door_at and room_door_to = the doorway, if it is one
+; Corrupts: AF, BC, DE
+room_door_note:		ld		a,b
+					cp		ROOM_NO_EXIT
+					ret		z		; no way out here, whatever is drawn
+					ld		e,c
+					ld		d,0
+					push	hl
+					ld		hl,scenery_door_side
+					add		hl,de
+					ld		a,(hl)		; its wall, or SCENERY_NOT_A_DOORWAY
+					or		a
+					jp		m,.not
+					ld		e,a
+					ld		hl,room_door_to
+					add		hl,de
+					ld		(hl),b
+.not:				pop		hl
+					ret		m
 .have:				push	hl
 					ld		c,a
 					ld		b,0

@@ -1,14 +1,19 @@
 {
  "meta": {
   "version": 1,
-  "game": "knightlore",
-  "comment": "Written by rooms.py from room_data.bin; the same schema Pentagram's rooms.py writes.",
+  "game": "knightlore128",
+  "comment": "Knight Lore's castle, forked for the 128K on 2026-09-24; the same schema Pentagram's rooms.py writes.",
   "sprites": {
    "sheet": "sprites.png",
    "atlas": "sprites.json",
    "graphics": "graphics.json"
   },
-  "templates": "templates.json"
+  "templates": "templates.json",
+  "rules": {
+   "exits": "table",
+   "sceneryPerRoom": 7,
+   "lastRoom": 255
+  }
  },
 
  "roomDimensions": {
@@ -20,8 +25,8 @@
  "rooms": [
   { "number": 0, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_n", "destination": 16 },
+     { "template": "scenery_arch_e", "destination": 1 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -51,8 +56,8 @@
   },
   { "number": 1, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 2 },
+     { "template": "scenery_arch_w", "destination": 0 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -78,17 +83,17 @@
   },
   { "number": 2, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 18 },
+     { "template": "scenery_arch_e", "destination": 3 },
+     { "template": "scenery_arch_w", "destination": 1 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 3, "ink": 6, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 4 },
+     { "template": "scenery_arch_w", "destination": 2 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -120,8 +125,8 @@
   },
   { "number": 4, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 20 },
+     { "template": "scenery_arch_w", "destination": 3 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -145,8 +150,8 @@
   },
   { "number": 8, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_n", "destination": 24 },
+     { "template": "scenery_tree_arch_e", "destination": 9 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -179,8 +184,8 @@
   },
   { "number": 9, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 10 },
+     { "template": "scenery_tree_arch_w", "destination": 8 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" },
      { "template": "scenery_gate_1" },
@@ -194,8 +199,8 @@
   },
   { "number": 10, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 11 },
+     { "template": "scenery_tree_arch_w", "destination": 9 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -225,8 +230,8 @@
   },
   { "number": 11, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 12 },
+     { "template": "scenery_tree_arch_w", "destination": 10 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -234,8 +239,8 @@
   },
   { "number": 12, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 13 },
+     { "template": "scenery_tree_arch_w", "destination": 11 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -263,17 +268,17 @@
   },
   { "number": 13, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 29 },
+     { "template": "scenery_arch_e", "destination": 14 },
+     { "template": "scenery_arch_w", "destination": 12 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 14, "ink": 5, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 15 },
+     { "template": "scenery_arch_w", "destination": 13 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -287,8 +292,8 @@
   },
   { "number": 15, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 31 },
+     { "template": "scenery_arch_w", "destination": 14 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -322,8 +327,8 @@
   },
   { "number": 16, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 32 },
+     { "template": "scenery_high_arch_s", "destination": 0 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -354,8 +359,8 @@
   },
   { "number": 18, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 34 },
+     { "template": "scenery_arch_s", "destination": 2 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -383,8 +388,8 @@
   },
   { "number": 20, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 36 },
+     { "template": "scenery_high_arch_s", "destination": 4 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -416,8 +421,8 @@
   },
   { "number": 24, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 40 },
+     { "template": "scenery_arch_s", "destination": 8 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -438,8 +443,8 @@
   },
   { "number": 29, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 45 },
+     { "template": "scenery_high_arch_s", "destination": 13 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -473,8 +478,8 @@
   },
   { "number": 31, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 47 },
+     { "template": "scenery_arch_s", "destination": 15 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -502,9 +507,9 @@
   },
   { "number": 32, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 48 },
+     { "template": "scenery_arch_e", "destination": 33 },
+     { "template": "scenery_high_arch_s", "destination": 16 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_0" }
     ],
@@ -526,9 +531,9 @@
   },
   { "number": 33, "ink": 6, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_high_arch_e", "destination": 34 },
      { "template": "scenery_high_arch_e_base" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_w", "destination": 32 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -562,8 +567,8 @@
   },
   { "number": 34, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_s", "destination": 18 },
+     { "template": "scenery_arch_w", "destination": 33 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -595,8 +600,8 @@
   },
   { "number": 36, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 52 },
+     { "template": "scenery_arch_s", "destination": 20 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -624,7 +629,7 @@
   },
   { "number": 39, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_n", "destination": 55 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -644,8 +649,8 @@
   },
   { "number": 40, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 56 },
+     { "template": "scenery_high_arch_s", "destination": 24 },
      { "template": "scenery_walls_2" },
      { "template": "scenery_high_arch_s_base" }
     ],
@@ -666,8 +671,8 @@
   },
   { "number": 45, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_high_arch_e", "destination": 46 },
+     { "template": "scenery_arch_s", "destination": 29 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_0" }
     ],
@@ -695,8 +700,8 @@
   },
   { "number": 46, "ink": 5, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 47 },
+     { "template": "scenery_arch_w", "destination": 45 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -717,17 +722,17 @@
   },
   { "number": 47, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 63 },
+     { "template": "scenery_arch_s", "destination": 31 },
+     { "template": "scenery_arch_w", "destination": 46 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 48, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 64 },
+     { "template": "scenery_arch_s", "destination": 32 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -754,8 +759,8 @@
   },
   { "number": 52, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 68 },
+     { "template": "scenery_arch_s", "destination": 36 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -783,8 +788,8 @@
   },
   { "number": 55, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 71 },
+     { "template": "scenery_arch_s", "destination": 39 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -802,8 +807,8 @@
   },
   { "number": 56, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 72 },
+     { "template": "scenery_high_arch_s", "destination": 40 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -833,8 +838,8 @@
   },
   { "number": 63, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_n", "destination": 79 },
+     { "template": "scenery_tree_arch_s", "destination": 47 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -864,8 +869,8 @@
   },
   { "number": 64, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_e", "destination": 65 },
+     { "template": "scenery_high_arch_s", "destination": 48 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_0" }
@@ -889,8 +894,8 @@
   },
   { "number": 65, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 66 },
+     { "template": "scenery_arch_w", "destination": 64 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -918,8 +923,8 @@
   },
   { "number": 66, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 67 },
+     { "template": "scenery_arch_w", "destination": 65 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -945,8 +950,8 @@
   },
   { "number": 67, "ink": 6, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 68 },
+     { "template": "scenery_arch_w", "destination": 66 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -979,18 +984,18 @@
   },
   { "number": 68, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 84 },
+     { "template": "scenery_arch_e", "destination": 69 },
+     { "template": "scenery_arch_s", "destination": 52 },
+     { "template": "scenery_arch_w", "destination": 67 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 69, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 70 },
+     { "template": "scenery_arch_w", "destination": 68 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1026,8 +1031,8 @@
   },
   { "number": 70, "ink": 6, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 71 },
+     { "template": "scenery_arch_w", "destination": 69 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1061,17 +1066,17 @@
   },
   { "number": 71, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 87 },
+     { "template": "scenery_arch_s", "destination": 55 },
+     { "template": "scenery_arch_w", "destination": 70 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 72, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 88 },
+     { "template": "scenery_high_arch_s", "destination": 56 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -1100,8 +1105,8 @@
   },
   { "number": 79, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_n", "destination": 95 },
+     { "template": "scenery_tree_arch_s", "destination": 63 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -1126,8 +1131,8 @@
   },
   { "number": 84, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 100 },
+     { "template": "scenery_arch_s", "destination": 68 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1155,8 +1160,8 @@
   },
   { "number": 87, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 103 },
+     { "template": "scenery_arch_s", "destination": 71 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1180,8 +1185,8 @@
   },
   { "number": 88, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 104 },
+     { "template": "scenery_high_arch_s", "destination": 72 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -1196,8 +1201,8 @@
   },
   { "number": 94, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_n", "destination": 110 },
+     { "template": "scenery_tree_arch_e", "destination": 95 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -1219,17 +1224,17 @@
   },
   { "number": 95, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 111 },
+     { "template": "scenery_tree_arch_s", "destination": 79 },
+     { "template": "scenery_tree_arch_w", "destination": 94 },
      { "template": "scenery_trees_0" }
     ],
     "objects": []
   },
   { "number": 100, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 116 },
+     { "template": "scenery_high_arch_s", "destination": 84 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -1251,8 +1256,8 @@
   },
   { "number": 103, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 119 },
+     { "template": "scenery_arch_s", "destination": 87 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1276,8 +1281,8 @@
   },
   { "number": 104, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 120 },
+     { "template": "scenery_arch_s", "destination": 88 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1308,16 +1313,16 @@
   },
   { "number": 106, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_n", "destination": 122 },
+     { "template": "scenery_arch_e", "destination": 107 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 107, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e", "destination": 108 },
+     { "template": "scenery_arch_w", "destination": 106 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_1" }
     ],
@@ -1338,8 +1343,8 @@
   },
   { "number": 108, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 109 },
+     { "template": "scenery_arch_w", "destination": 107 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1367,8 +1372,8 @@
   },
   { "number": 109, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 110 },
+     { "template": "scenery_tree_arch_w", "destination": 108 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -1397,9 +1402,9 @@
   },
   { "number": 110, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 111 },
+     { "template": "scenery_tree_arch_s", "destination": 94 },
+     { "template": "scenery_tree_arch_w", "destination": 109 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -1407,8 +1412,8 @@
   },
   { "number": 111, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_s", "destination": 95 },
+     { "template": "scenery_tree_arch_w", "destination": 110 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -1433,8 +1438,8 @@
   },
   { "number": 116, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_e", "destination": 117 },
+     { "template": "scenery_arch_s", "destination": 100 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1463,8 +1468,8 @@
   },
   { "number": 117, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 118 },
+     { "template": "scenery_arch_w", "destination": 116 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1483,8 +1488,8 @@
   },
   { "number": 118, "ink": 6, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e", "destination": 119 },
+     { "template": "scenery_arch_w", "destination": 117 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_1" }
     ],
@@ -1510,20 +1515,20 @@
   },
   { "number": 119, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 135 },
+     { "template": "scenery_arch_e", "destination": 120 },
+     { "template": "scenery_arch_s", "destination": 103 },
+     { "template": "scenery_arch_w", "destination": 118 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 120, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 136 },
+     { "template": "scenery_arch_e", "destination": 121 },
+     { "template": "scenery_arch_s", "destination": 104 },
+     { "template": "scenery_arch_w", "destination": 119 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1551,8 +1556,8 @@
   },
   { "number": 121, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 122 },
+     { "template": "scenery_arch_w", "destination": 120 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1579,8 +1584,8 @@
   },
   { "number": 122, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_s", "destination": 106 },
+     { "template": "scenery_arch_w", "destination": 121 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1607,16 +1612,16 @@
   },
   { "number": 131, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_n", "destination": 147 },
+     { "template": "scenery_arch_e", "destination": 132 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 132, "ink": 5, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 133 },
+     { "template": "scenery_arch_w", "destination": 131 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1644,8 +1649,8 @@
   },
   { "number": 133, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e", "destination": 134 },
+     { "template": "scenery_arch_w", "destination": 132 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_1" }
     ],
@@ -1675,8 +1680,8 @@
   },
   { "number": 134, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e", "destination": 135 },
+     { "template": "scenery_arch_w", "destination": 133 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_1" }
     ],
@@ -1691,10 +1696,10 @@
   },
   { "number": 135, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 151 },
+     { "template": "scenery_arch_e", "destination": 136 },
+     { "template": "scenery_arch_s", "destination": 119 },
+     { "template": "scenery_arch_w", "destination": 134 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1722,10 +1727,10 @@
   },
   { "number": 136, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 152 },
+     { "template": "scenery_arch_e", "destination": 137 },
+     { "template": "scenery_arch_s", "destination": 120 },
+     { "template": "scenery_arch_w", "destination": 135 },
      { "template": "scenery_wizard" },
      { "template": "scenery_pot" },
      { "template": "scenery_walls_0" }
@@ -1745,8 +1750,8 @@
   },
   { "number": 137, "ink": 5, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 138 },
+     { "template": "scenery_arch_w", "destination": 136 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1771,8 +1776,8 @@
   },
   { "number": 138, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 139 },
+     { "template": "scenery_arch_w", "destination": 137 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1800,17 +1805,17 @@
   },
   { "number": 139, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 155 },
+     { "template": "scenery_arch_e", "destination": 140 },
+     { "template": "scenery_arch_w", "destination": 138 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 140, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 141 },
+     { "template": "scenery_arch_w", "destination": 139 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -1841,8 +1846,8 @@
   },
   { "number": 141, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 142 },
+     { "template": "scenery_arch_w", "destination": 140 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1875,8 +1880,8 @@
   },
   { "number": 142, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e", "destination": 143 },
+     { "template": "scenery_arch_w", "destination": 141 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_1" }
     ],
@@ -1892,16 +1897,16 @@
   },
   { "number": 143, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 159 },
+     { "template": "scenery_arch_w", "destination": 142 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 147, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 163 },
+     { "template": "scenery_arch_s", "destination": 131 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1926,8 +1931,8 @@
   },
   { "number": 151, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 167 },
+     { "template": "scenery_arch_s", "destination": 135 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1947,8 +1952,8 @@
   },
   { "number": 152, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 168 },
+     { "template": "scenery_arch_s", "destination": 136 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -1980,8 +1985,8 @@
   },
   { "number": 155, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 171 },
+     { "template": "scenery_high_arch_s", "destination": 139 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -2010,8 +2015,8 @@
   },
   { "number": 159, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 175 },
+     { "template": "scenery_arch_s", "destination": 143 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2040,8 +2045,8 @@
   },
   { "number": 163, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 179 },
+     { "template": "scenery_high_arch_s", "destination": 147 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -2076,15 +2081,15 @@
   },
   { "number": 167, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 183 },
+     { "template": "scenery_arch_s", "destination": 151 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 168, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_s", "destination": 152 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2114,8 +2119,8 @@
   },
   { "number": 170, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_n", "destination": 186 },
+     { "template": "scenery_arch_e", "destination": 171 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2145,17 +2150,17 @@
   },
   { "number": 171, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 187 },
+     { "template": "scenery_arch_s", "destination": 155 },
+     { "template": "scenery_arch_w", "destination": 170 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 175, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 191 },
+     { "template": "scenery_high_arch_s", "destination": 159 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_2" }
     ],
@@ -2173,16 +2178,16 @@
   },
   { "number": 179, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 195 },
+     { "template": "scenery_arch_e", "destination": 180 },
+     { "template": "scenery_arch_s", "destination": 163 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 180, "ink": 4, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_w", "destination": 179 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2207,8 +2212,8 @@
   },
   { "number": 183, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 199 },
+     { "template": "scenery_arch_s", "destination": 167 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2226,8 +2231,8 @@
   },
   { "number": 186, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_e", "destination": 187 },
+     { "template": "scenery_arch_s", "destination": 170 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2257,8 +2262,8 @@
   },
   { "number": 187, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_s", "destination": 171 },
+     { "template": "scenery_arch_w", "destination": 186 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2273,8 +2278,8 @@
   },
   { "number": 191, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 207 },
+     { "template": "scenery_high_arch_s", "destination": 175 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_0" }
     ],
@@ -2310,8 +2315,8 @@
   },
   { "number": 195, "ink": 3, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 211 },
+     { "template": "scenery_arch_s", "destination": 179 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2335,8 +2340,8 @@
   },
   { "number": 199, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_arch_n", "destination": 215 },
+     { "template": "scenery_high_arch_s", "destination": 183 },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_0" }
     ],
@@ -2351,8 +2356,8 @@
   },
   { "number": 207, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 223 },
+     { "template": "scenery_arch_s", "destination": 191 },
      { "template": "scenery_gate_0" },
      { "template": "scenery_gate_2" },
      { "template": "scenery_walls_2" }
@@ -2365,8 +2370,8 @@
   },
   { "number": 208, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_n", "destination": 224 },
+     { "template": "scenery_arch_e", "destination": 209 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2396,8 +2401,8 @@
   },
   { "number": 209, "ink": 4, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 210 },
+     { "template": "scenery_arch_w", "destination": 208 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -2418,8 +2423,8 @@
   },
   { "number": 210, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 226 },
+     { "template": "scenery_arch_w", "destination": 209 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2445,8 +2450,8 @@
   },
   { "number": 211, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 227 },
+     { "template": "scenery_arch_s", "destination": 195 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2470,8 +2475,8 @@
   },
   { "number": 214, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_n", "destination": 230 },
+     { "template": "scenery_tree_arch_e", "destination": 215 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -2497,10 +2502,10 @@
   },
   { "number": 215, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 231 },
+     { "template": "scenery_tree_arch_e", "destination": 216 },
+     { "template": "scenery_tree_arch_s", "destination": 199 },
+     { "template": "scenery_tree_arch_w", "destination": 214 },
      { "template": "scenery_trees_0" }
     ],
     "objects": [
@@ -2516,25 +2521,25 @@
   },
   { "number": 216, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 232 },
+     { "template": "scenery_tree_arch_e", "destination": 217 },
+     { "template": "scenery_tree_arch_w", "destination": 215 },
      { "template": "scenery_trees_0" }
     ],
     "objects": []
   },
   { "number": 217, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 233 },
+     { "template": "scenery_tree_arch_w", "destination": 216 },
      { "template": "scenery_trees_0" }
     ],
     "objects": []
   },
   { "number": 221, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_n", "destination": 237 },
+     { "template": "scenery_high_arch_e", "destination": 222 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_walls_0" }
     ],
@@ -2559,17 +2564,17 @@
   },
   { "number": 222, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 223 },
+     { "template": "scenery_arch_w", "destination": 221 },
      { "template": "scenery_walls_1" }
     ],
     "objects": []
   },
   { "number": 223, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_n", "destination": 239 },
+     { "template": "scenery_arch_s", "destination": 207 },
+     { "template": "scenery_arch_w", "destination": 222 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2595,8 +2600,8 @@
   },
   { "number": 224, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 240 },
+     { "template": "scenery_arch_s", "destination": 208 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2617,8 +2622,8 @@
   },
   { "number": 226, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 242 },
+     { "template": "scenery_arch_s", "destination": 210 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2644,8 +2649,8 @@
   },
   { "number": 227, "ink": 6, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 243 },
+     { "template": "scenery_arch_s", "destination": 211 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2678,9 +2683,9 @@
   },
   { "number": 230, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_n", "destination": 246 },
+     { "template": "scenery_tree_arch_e", "destination": 231 },
+     { "template": "scenery_tree_arch_s", "destination": 214 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" }
     ],
@@ -2688,10 +2693,10 @@
   },
   { "number": 231, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 247 },
+     { "template": "scenery_tree_arch_e", "destination": 232 },
+     { "template": "scenery_tree_arch_s", "destination": 215 },
+     { "template": "scenery_tree_arch_w", "destination": 230 },
      { "template": "scenery_trees_0" }
     ],
     "objects": [
@@ -2709,10 +2714,10 @@
   },
   { "number": 232, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 248 },
+     { "template": "scenery_tree_arch_e", "destination": 233 },
+     { "template": "scenery_tree_arch_s", "destination": 216 },
+     { "template": "scenery_tree_arch_w", "destination": 231 },
      { "template": "scenery_trees_0" }
     ],
     "objects": [
@@ -2736,17 +2741,17 @@
   },
   { "number": 233, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_n" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_n", "destination": 249 },
+     { "template": "scenery_tree_arch_s", "destination": 217 },
+     { "template": "scenery_tree_arch_w", "destination": 232 },
      { "template": "scenery_trees_0" }
     ],
     "objects": []
   },
   { "number": 237, "ink": 4, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 253 },
+     { "template": "scenery_arch_s", "destination": 221 },
      { "template": "scenery_walls_2" }
     ],
     "objects": [
@@ -2770,16 +2775,16 @@
   },
   { "number": 239, "ink": 5, "dimensions": "narrowU",
     "scenery": [
-     { "template": "scenery_arch_n" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_n", "destination": 255 },
+     { "template": "scenery_arch_s", "destination": 223 },
      { "template": "scenery_walls_2" }
     ],
     "objects": []
   },
   { "number": 240, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_high_arch_e" },
-     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_e", "destination": 241 },
+     { "template": "scenery_high_arch_s", "destination": 224 },
      { "template": "scenery_high_arch_e_base" },
      { "template": "scenery_high_arch_s_base" },
      { "template": "scenery_walls_0" }
@@ -2812,8 +2817,8 @@
   },
   { "number": 241, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 242 },
+     { "template": "scenery_arch_w", "destination": 240 },
      { "template": "scenery_gate_1" },
      { "template": "scenery_gate_3" },
      { "template": "scenery_walls_1" }
@@ -2826,17 +2831,17 @@
   },
   { "number": 242, "ink": 5, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 243 },
+     { "template": "scenery_arch_s", "destination": 226 },
+     { "template": "scenery_arch_w", "destination": 241 },
      { "template": "scenery_walls_0" }
     ],
     "objects": []
   },
   { "number": 243, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_s", "destination": 227 },
+     { "template": "scenery_arch_w", "destination": 242 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2865,8 +2870,8 @@
   },
   { "number": 246, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_e", "destination": 247 },
+     { "template": "scenery_tree_arch_s", "destination": 230 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_1" },
      { "template": "scenery_trees_2" }
@@ -2891,9 +2896,9 @@
   },
   { "number": 247, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 248 },
+     { "template": "scenery_tree_arch_s", "destination": 231 },
+     { "template": "scenery_tree_arch_w", "destination": 246 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -2918,9 +2923,9 @@
   },
   { "number": 248, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_e" },
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_e", "destination": 249 },
+     { "template": "scenery_tree_arch_s", "destination": 232 },
+     { "template": "scenery_tree_arch_w", "destination": 247 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -2928,8 +2933,8 @@
   },
   { "number": 249, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_tree_arch_s" },
-     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_tree_arch_s", "destination": 233 },
+     { "template": "scenery_tree_arch_w", "destination": 248 },
      { "template": "scenery_trees_0" },
      { "template": "scenery_trees_2" }
     ],
@@ -2952,8 +2957,8 @@
   },
   { "number": 253, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_e", "destination": 254 },
+     { "template": "scenery_arch_s", "destination": 237 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -2974,8 +2979,8 @@
   },
   { "number": 254, "ink": 3, "dimensions": "narrowV",
     "scenery": [
-     { "template": "scenery_arch_e" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_e", "destination": 255 },
+     { "template": "scenery_arch_w", "destination": 253 },
      { "template": "scenery_walls_1" }
     ],
     "objects": [
@@ -2998,8 +3003,8 @@
   },
   { "number": 255, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_s" },
-     { "template": "scenery_arch_w" },
+     { "template": "scenery_arch_s", "destination": 239 },
+     { "template": "scenery_arch_w", "destination": 254 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [

@@ -76,9 +76,14 @@ BACKGROUND_FLAG = 0x40      # OBJ_BACKGROUND: drawn first and never sorted
 # Walls and trees are scenery: solid, never walked through, and so never worth
 # sorting against anything. Arches and gates are doorways the knight passes
 # behind, and the wizard and the pot are objects in their own right -- all of
-# those keep their place in the sort. The room builder used to work this out
-# from the template's index every time it built a room.
-BACKGROUND_TEMPLATES = ("bg_walls_", "bg_trees_")
+# those keep their place in the sort. templates.json lists them by name, in
+# meta.background; main() fills this with their labels.
+BACKGROUND = set()
+
+# The walls a doorway can stand in, in the order room.s numbers them.
+SIDES = ("n", "e", "s", "w")
+# A template that is not a doorway, in scenery_door_side.
+NOT_A_DOORWAY = 0x80
 
 # Templates whose pieces rotate at draw time instead of holding a buffer for
 # the life of the room.
@@ -243,7 +248,7 @@ def our_flags(entry, cached, label=""):
         ours |= CACHE_FLAG
     if SHARED_SHIFT_TEMPLATES and label.startswith(SHARED_SHIFT_TEMPLATES):
         ours |= SHARED_SHIFT_FLAG
-    if label.startswith(BACKGROUND_TEMPLATES):
+    if label in BACKGROUND:
         ours |= BACKGROUND_FLAG
     return ours
 
@@ -313,8 +318,15 @@ def main():
     # The rooms and the templates they place, as one castle -- found through
     # rooms.json's own meta, which says where its templates are.
     atlas = castle.read_castle(HERE)
-    if atlas.get("meta", {}).get("game") != "knightlore":
-        sys.exit("%s is not Knight Lore's" % ATLAS.name)
+    meta = atlas.get("meta") or {}
+    if meta.get("game") != "knightlore128":
+        sys.exit("%s is not Knight Lore 128K's" % ATLAS.name)
+    if (meta.get("rules") or {}).get("exits") != "table":
+        sys.exit("%s does not say its exits are a table (meta.rules.exits), and "
+                 "room_build.s reads a destination with every scenery entry" % ATLAS.name)
+    templates_meta = atlas.get("templatesMeta") or {}
+    BACKGROUND.update(label_of(name) for name in templates_meta.get("background") or [])
+    doorways = templates_meta.get("doorways") or {}
 
     resolve_graphics(atlas)
     scenery = atlas["sceneryTemplates"]
@@ -365,8 +377,7 @@ def main():
     # so background has to be all or nothing across them.
     _, bg_refs = shared_labels(scenery)
     for name, ref in zip(scenery, bg_refs):
-        assert ref.startswith(BACKGROUND_TEMPLATES) == \
-            label_of(name).startswith(BACKGROUND_TEMPLATES), name
+        assert (ref in BACKGROUND) == (label_of(name) in BACKGROUND), name
     emit_templates(out, scenery, "blocks", SCENERY_STRIDE, "piece", cached)
     line(out, "background_type_tbl:", "", "")
     # The index a room names a template by is where that template sits in the
@@ -376,6 +387,26 @@ def main():
     out.append("")
     for index, name in enumerate(scenery):
         line(out, "BG_" + bare(name).upper(), "EQU", "$%02X" % index)
+    out.append("")
+
+    # Which templates are doorways, and in which wall: templates.json's
+    # meta.doorways, by name. room_door_note reads this rather than testing the
+    # index, so any template can be made a doorway -- a bridge, a new arch.
+    for name in doorways:
+        if name not in scenery:
+            sys.exit("templates.json names %s as a doorway, and there is no such "
+                     "scenery template" % name)
+        if doorways[name] not in SIDES:
+            sys.exit("templates.json gives %s the wall %r; a wall is one of %s"
+                     % (name, doorways[name], ", ".join(SIDES)))
+    out.append("; The wall each scenery template is a doorway in, as room.s numbers them")
+    out.append("; (0 N, 1 E, 2 S, 3 W), or $%02X for one that is not a doorway." % NOT_A_DOORWAY)
+    line(out, "scenery_door_side:", "", "")
+    for index, name in enumerate(scenery):
+        side = doorways.get(name)
+        line(out, "", "DB", "$%02X" % (SIDES.index(side) if side else NOT_A_DOORWAY),
+             "$%02X - %s" % (index, bare(name)))
+    line(out, "SCENERY_NOT_A_DOORWAY", "EQU", "$%02X" % NOT_A_DOORWAY)
     out.append("")
     out.append("")
 
@@ -424,7 +455,10 @@ def main():
     out.append(";     skip                  bytes from here to the next record")
     out.append(";     attribute             colour in bits 0-2, room shape in bits 3-4,")
     out.append(";                           and how many scenery indices in bits 5-7")
-    out.append(";     scenery type indices")
+    out.append(";     scenery entries       two bytes each: the template's index, and the")
+    out.append(";                           room it leads to if it is a doorway -- or")
+    out.append(";                           ROOM_NO_EXIT, for a doorway walled up and for")
+    out.append(";                           everything that is not a doorway")
     out.append(";     object groups         a type-and-count byte, then that many")
     out.append(";                           packed positions: U cell in bits 0-2,")
     out.append(";                           V cell in bits 3-5, Z level in bits 6-7")
@@ -448,11 +482,32 @@ def main():
     numbers = [r["number"] for r in rooms]
     assert numbers == sorted(numbers), "the walk needs them in ascending order"
     assert numbers[-1] == 0xFF, "room_find stops at the first number >= its own"
+    # The number a destination byte holds for no way out: one no room has.
+    numbers_used = set(numbers)
+    free = [n for n in range(256) if n not in numbers_used]
+    if not free:
+        sys.exit("every room number is taken, and one is needed to mean no exit")
+    no_exit = free[0]
+
+    # Where every doorway leads, checked: to a room that exists, and only
+    # from a doorway.
+    def destination(room, ref):
+        to = ref.get("destination")
+        if ref["template"] not in doorways:
+            if to is not None:
+                sys.exit("room %d: %s is not a doorway, and has a destination"
+                         % (room["number"], ref["template"]))
+            return None
+        if to is not None and to not in numbers_used:
+            sys.exit("room %d: the %s doorway leads to room %d, which is not a room"
+                     % (room["number"], ref["template"], to))
+        return to
+
     line(out, "room_list:", "", "")
     for r in rooms:
         scn, obs = r["scenery"], r["objects"]
         object_bytes = sum(1 + len(o["positions"]) for o in obs)
-        biggest = max(biggest, len(scn) + object_bytes)
+        biggest = max(biggest, 2 * len(scn) + object_bytes)
         placed = sum(len(scn_by_name[s["template"]]) for s in scn)
         placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]])
                       for o in obs)
@@ -460,15 +515,18 @@ def main():
 
         attr = r["ink"] | (castle.shape_index(atlas, r["dimensions"],
                                        "room %d" % r["number"]) << 3)
-        skip = 2 + len(scn) + object_bytes
+        skip = 2 + 2 * len(scn) + object_bytes
         assert len(scn) < 8 and attr < 0x20 and skip < 256, r["number"]
         line(out, "room_%02X:" % r["number"], "DB", "$%02X, %d, $%02X"
              % (r["number"], skip, len(scn) << ROOM_SCN_SHIFT | attr),
              "attr %d, %s, %d scenery, %d object bytes"
              % (r["ink"], r["dimensions"], len(scn), object_bytes))
-        if scn:
-            line(out, "", "DB",
-                 ", ".join("BG_" + bare(s["template"]).upper() for s in scn))
+        for s in scn:
+            to = destination(r, s)
+            line(out, "", "DB", "BG_%s, %s" % (bare(s["template"]).upper(),
+                                               "$%02X" % to if to is not None else "ROOM_NO_EXIT"),
+                 "to room $%02X" % to if to is not None else
+                 ("walled up" if s["template"] in doorways else ""))
         for o in obs:
             n = len(o["positions"])
             group = object_index[o["template"]] << 3 | (n - 1)
@@ -484,6 +542,8 @@ def main():
     line(out, "ROOM_SCN_SHIFT", "EQU", "%d" % ROOM_SCN_SHIFT,
          "the scenery count, above the attribute")
     line(out, "ROOM_COUNT", "EQU", "%d" % len(rooms))
+    line(out, "ROOM_NO_EXIT", "EQU", "$%02X" % no_exit,
+         "no room has this number: a doorway with nowhere to go")
     line(out, "ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")
     line(out, "ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,
          "the fullest room, so the object pool")
@@ -495,6 +555,26 @@ def main():
                       ("BACKGROUND", BACKGROUND_FLAG)):
         line(out, "ROOM_FLAG_" + name, "EQU", "$%02X" % bit)
     out.append("")
+
+    # The map, checked as a whole: a doorway with no door back is a one-way
+    # trip, and a room no doorway leads to can only be started in. Neither
+    # stops the build -- a castle being drawn has both for a while -- but
+    # both are said.
+    leads = {}
+    for r in rooms:
+        for s in r["scenery"]:
+            to = s.get("destination")
+            if s["template"] in doorways and to is not None:
+                leads.setdefault(r["number"], set()).add(to)
+    for number, tos in sorted(leads.items()):
+        for to in sorted(tos):
+            if number not in leads.get(to, ()):
+                print("note: room $%02X leads to room $%02X, which has no door back"
+                      % (number, to))
+    led_to = set().union(*leads.values()) if leads else set()
+    for number in numbers:
+        if number not in led_to:
+            print("note: no doorway leads to room $%02X" % number)
 
     OUT.write_text("\n".join(out) + "\n", encoding="utf-8")
     LIST_OUT.write_text("\n".join(listing) + "\n", encoding="utf-8")

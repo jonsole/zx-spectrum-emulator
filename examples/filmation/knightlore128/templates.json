@@ -1,9 +1,22 @@
 {
  "meta": {
   "version": 1,
-  "game": "knightlore",
+  "game": "knightlore128",
   "rooms": "rooms.json",
-  "comment": "The castle's templates: pieces every room naming one is built from. rooms.json places them."
+  "comment": "The castle's templates: pieces every room naming one is built from. rooms.json places them.",
+  "doorways": {
+   "scenery_arch_n": "n",
+   "scenery_arch_e": "e",
+   "scenery_arch_s": "s",
+   "scenery_arch_w": "w",
+   "scenery_tree_arch_n": "n",
+   "scenery_tree_arch_e": "e",
+   "scenery_tree_arch_s": "s",
+   "scenery_tree_arch_w": "w",
+   "scenery_high_arch_e": "e",
+   "scenery_high_arch_s": "s"
+  },
+  "background": ["scenery_walls_0", "scenery_walls_1", "scenery_walls_2", "scenery_trees_0", "scenery_trees_1", "scenery_trees_2"]
  },
 
  "sceneryTemplates": {
