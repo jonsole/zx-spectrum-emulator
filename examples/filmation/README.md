@@ -14,6 +14,11 @@ with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
 built on it. `knightlore/knightlore.s` joins the two -- it lays out memory
 and includes both.
 
+Two more games are built on the same engine. [`pentagram/`](pentagram/) is a
+remake of Ultimate's *Pentagram*. [`knightlore128/`](knightlore128/README.md)
+is Knight Lore on the 128K, with a bigger castle and Pentagram's graphics
+beside its own; its README says how far it has got.
+
 Unlike the other examples here it is a real, multi-file program, which is the
 point of it being in the tree: the SLD it produces maps addresses into nearly
 forty source files across two folders. That is exactly the case a single flat
@@ -57,8 +62,8 @@ the game once, before the first build:
 ```
 
 The unit tests assemble single files against stubs and run them headless --
-the engine's in `engine/tests`, the games' in `knightlore/tests` and
-`pentagram/tests`, and one command for all of them:
+the engine's in `engine/tests`, the games' in `knightlore/tests`,
+`pentagram/tests` and `knightlore128/tests`, and one command for all of them:
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\filmation\engine\tests\run_tests.py

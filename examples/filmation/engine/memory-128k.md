@@ -1,6 +1,7 @@
 # The 128K memory map
 
-A plan, not yet built. The 48K builds keep the map in the
+A plan, being built in [`../knightlore128/`](../knightlore128/README.md), whose
+README says which parts exist so far. The 48K builds keep the map in the
 [README](README.md#laying-out-memory); this is the layout a 128K build of the
 engine would use, so that a game can carry three times Knight Lore's room data
 and three times its graphics. The sizes are Knight Lore's and Pentagram's,
@@ -111,16 +112,26 @@ run with the wrong bank in.
 
 ## 5. The room page budget
 
-From `python room_budget.py`:
+From `python room_budget.py`, as of 2026-09-24:
 
 | | Knight Lore | Pentagram |
 |---|---|---|
-| resident graphics (named by no room) | 9,084 | 9,098 |
-| room page left for one room's graphics | 6,788 | 6,774 |
-| drawn during play, busiest room | 2,458 (room 103) | 1,758 (room 71) |
+| resident graphics (named by no room) | 7,700 | 8,806 |
+| room page left for one room's graphics | 8,172 | 7,066 |
+| drawn during play, busiest room | 2,278 (room 1) | 1,758 (room 71) |
 | drawn during play, median room | 908 | 866 |
 | pieces that go into the backdrop | 49% | 54% |
-| headroom over the busiest room | 2.8x | 3.9x |
+| headroom over the busiest room | 3.6x | 4.0x |
+
+The first measurement, on 2026-09-18, gave resident 9,084 and 9,098, and
+Knight Lore's busiest room as 2,458 (room 103). Two things have changed since,
+and neither is a change in the rooms:
+- The sheets now hold each sprite with its blank bottom rows trimmed off. That
+  is 508 bytes of Knight Lore and 292 of Pentagram, which is all of
+  Pentagram's difference.
+- Knight Lore's mover frames now come from the `animations` block in its
+  `sprites.json`, not from the sheet groups that were read before. That
+  groups the frames more tightly.
 
 "Resident" is everything no room's templates name. That overcounts: it sweeps
 in the animation frames of movers that rooms place, and the panel's graphics,

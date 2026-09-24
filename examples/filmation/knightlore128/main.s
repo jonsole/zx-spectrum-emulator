@@ -16,6 +16,7 @@ start:              di
                     ld      sp,STACK_TOP        ; off the contended stack, first thing
                     xor     a                   ; the border black and the speaker
                     out     ($FE),a             ; still, as clear_scrn leaves them
+                    call    page_in             ; bank 0 at $C000, as the snapshot has it
 
                     ; The menu first, every time: a game that ends comes back
                     ; through here, and the game itself goes back to its menu.

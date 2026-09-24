@@ -1,4 +1,10 @@
-					DEVICE ZXSPECTRUM48
+; Knight Lore 128K. For now it is Knight Lore's 48K image laid into a 128K: the
+; device's default mapping puts bank 5 at $4000, bank 2 at $8000 and bank 0 at
+; $C000, which are the three a 128K starts with, so every address below is
+; where it was on the 48K and bank 0 simply stays paged in. The rest of the
+; banks are empty. ../engine/memory-128k.md is the plan for filling them, and
+; README.md says how far that has got.
+					DEVICE ZXSPECTRUM128
 
 
 					ORG	0x8000
@@ -48,6 +54,10 @@ VIEW_BUF_ROWS		EQU		512 / VIEW_BUF_WIDTH
 ; change of light and a new game -- and the untouched bytes counted afterwards.
 ; That says 34, where it said 26 before the sounds and the panel, which nest
 ; deeper. Anything that adds to the deepest call chain wants re-measuring.
+;
+; On the 128K the top of memory is bank 0, the one that pages, so while the
+; stack is up here nothing may page bank 0 out -- see page.s. It moves below
+; $C000 once the sprite data leaves bank 2 and there is room for it there.
 STACK_TOP			EQU		0x0000
 STACK_RESERVE		EQU		48		; 34 used, 14 spare
 
@@ -236,11 +246,15 @@ bit_reverse_table:
                     INCLUDE "../engine/screen.s"         ; pickup.s falls into it
                     INCLUDE "busy.s"            ; its numbers, then the engine's own,
                     INCLUDE "../engine/busy.s"  ; where the trimmed sprite table left room
+                    INCLUDE "page.s"            ; the 128K's paging, run once a game
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
 
-; All of RAM, for build.py to wrap as output/knightlore128.z80 with PC at start.
-; Not SAVESNA: a 48K .sna keeps PC on the stack, and sjasmplus puts it at the
-; bottom of the screen to get it there.
+; All eight RAM banks, bank 0 first, for build.py to wrap as
+; output/knightlore128.z80 with PC at start. Not SAVESNA: a .sna keeps PC on
+; the stack, where sjasmplus has to push it into whatever is below SP.
+                    SAVEDEV "output/knightlore128.banks", 0, 0, $20000
+; ...and the 48K's view of them, $4000 to $FFFF with bank 0 paged in, which is
+; what the image has been until now and what it is compared with.
                     SAVEBIN "output/knightlore128.bin", $4000, $C000

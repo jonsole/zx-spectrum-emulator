@@ -6,11 +6,12 @@ Lore grows into a 128K castle: Pentagram's art beside Knight Lore's, a bigger
 map joined by a table of exits, and new scenery. README.md says how far it has
 got. The 48K Knight Lore in ../knightlore/ is left as it is.
 
-sjasmplus writes the RAM with the SAVEBIN at the bottom of knightlore128.s,
+sjasmplus writes the RAM with the SAVEDEV at the bottom of knightlore128.s,
 the SLD that maps addresses to source lines, and a listing. It runs here, so
 the SLD names the game's sources relative to knightlore128.s, which is where
-the debugger resolves them. This wraps the RAM as a version 3 .z80 that starts
-at `start` -- sjasmplus has no .z80 output of its own.
+the debugger resolves them. This wraps the RAM as a version 3 128K .z80 that
+starts at `start`, with ../z80file.py -- sjasmplus has no .z80 output of its
+own.
 
 sprite_data.s, font.s, specials_gen.s and room_data.s are generated rather than
 hand-written -- see sprite_source.py, font_source.py, specials_source.py and
@@ -38,6 +39,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import z80file                                                  # noqa: E402
 
 # The game's sources, its data and the scripts that turn the data into
 # source all live here, beside this script.
@@ -196,10 +200,15 @@ def assemble(sjasmplus: str, defines: list[str]) -> None:
         cwd=GAME,
         check=True,
     )
-    ram = (OUT_DIR / "knightlore128.bin").read_bytes()
-    start = find_label(OUT_DIR / "knightlore128.sld", "start")
-    (OUT_DIR / "knightlore128.z80").write_bytes(z80_snapshot(ram, start))
-    print(f"Wrote {OUT_DIR / 'knightlore128.z80'} (PC {start:04X}) and {OUT_DIR / 'knightlore128.sld'}")
+    banks = (OUT_DIR / "knightlore128.banks").read_bytes()
+    sld = OUT_DIR / "knightlore128.sld"
+    start = find_label(sld, "start")
+    # The paging the game starts with is whatever page.s says, read out of the
+    # image rather than written down twice. bank_port is in bank 5, at $4000.
+    port = banks[5 * z80file.BANK_SIZE + find_label(sld, "bank_port") - 0x4000]
+    (OUT_DIR / "knightlore128.z80").write_bytes(z80file.snapshot_128k(banks, start, port))
+    print(f"Wrote {OUT_DIR / 'knightlore128.z80'} (128K, PC {start:04X}, $7FFD {port:02X}) "
+          f"and {sld}")
 
 
 def find_label(sld: Path, name: str) -> int:
@@ -211,57 +220,6 @@ def find_label(sld: Path, name: str) -> int:
             if len(parts) > 2 and parts[1] == name and parts[2] == "":
                 return int(fields[5])
     sys.exit(f"no label {name} in {sld}")
-
-
-# Version 3 .z80, 48K: a 30-byte header with PC zeroed, 54 more bytes, then
-# the three RAM pages, each compressed -- page 8 is $4000, 4 is $8000 and 5 is
-# $C000. The same layout cpp-core's save_z80 writes.
-Z80_V3_EXTRA = 54
-Z80_PAGES = ((8, 0x0000), (4, 0x4000), (5, 0x8000))  # page, offset into RAM
-
-
-def z80_compress(data: bytes) -> bytes:
-    """ED ED n b for a run of five or more, or of two or more EDs. A lone ED
-    goes out literally along with the byte after it, so that no decoder can
-    take the pair for a run marker."""
-    out = bytearray()
-    i = 0
-    while i < len(data):
-        b = data[i]
-        run = 1
-        while i + run < len(data) and data[i + run] == b and run < 255:
-            run += 1
-        if run >= 5 or (b == 0xED and run >= 2):
-            out += bytes((0xED, 0xED, run, b))
-            i += run
-        elif b == 0xED:
-            out += data[i:i + 2]
-            i += 2
-        else:
-            out.append(b)
-            i += 1
-    return bytes(out)
-
-
-def z80_snapshot(ram: bytes, pc: int) -> bytes:
-    """48K of RAM from $4000, as a machine about to run from `pc`.
-
-    Everything else is what start sets for itself anyway: it disables
-    interrupts and loads SP first thing, and blacks the border.
-    """
-    assert len(ram) == 0xC000, len(ram)
-    header = bytearray(30 + 2 + Z80_V3_EXTRA)
-    header[10] = 0x3F                  # I, as the ROM leaves it
-    header[29] = 1                     # IM 1; IFF1 and IFF2 stay 0
-    header[30:32] = Z80_V3_EXTRA.to_bytes(2, "little")
-    header[32:34] = pc.to_bytes(2, "little")
-    header[34] = 0                     # hardware: 48K
-    header[61] = header[62] = 0xFF     # the ROM is paged in
-    body = bytearray()
-    for page, offset in Z80_PAGES:
-        packed = z80_compress(ram[offset:offset + 0x4000])
-        body += len(packed).to_bytes(2, "little") + bytes((page,)) + packed
-    return bytes(header + body)
 
 
 def generate_room_data() -> None:

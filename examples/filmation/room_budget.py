@@ -17,19 +17,20 @@ Graphics that no room's templates name are counted as resident: the player,
 collectables, and whatever the game's code puts up. That also sweeps in the
 extra animation frames of movers a room places, so resident is an
 overestimate and each room's own share an underestimate, but the sum is right.
-For Knight Lore a mover's whole animation group is counted with the room.
+Where the game's sprites.json lists its animations, as Knight Lore's does, a
+sprite that is one frame of an animation brings the whole animation with it.
 
-Reads the gitignored files kl_extract.py and pg_extract.py produce, and
-prints a report; it writes nothing.
+Reads the carried files -- rooms.json, templates.json, graphics.json and
+sprites.json -- and prints a report; it writes nothing.
 
-    python room_budget.py [knightlore|pentagram] [--rooms]
+    python room_budget.py [knightlore|pentagram|knightlore128] [--rooms]
 """
 import json
-
-import castle
-import re
 import sys
 from pathlib import Path
+
+import castle
+import graphics as gfx
 
 HERE = Path(__file__).resolve().parent
 
@@ -39,78 +40,73 @@ CENTRE = 128                    # world U and V of the middle of every room
 
 # Doorways are walked into, so nothing in one can be backdrop.
 DOOR_WORDS = ("arch", "gate", "door")
-# Knight Lore's movers animate through a group of frames the room data does
-# not list; see sprite_sheet.py's groups.
-ANIMATED_GROUPS = ("ghost_spell_gate", "balls", "fires", "torsos_and_wizard")
-# What Knight Lore marks OBJ_BACKGROUND, in rooms.py's BACKGROUND_TEMPLATES.
+# What Knight Lore marks OBJ_BACKGROUND: rooms_source.py's BACKGROUND_TEMPLATES,
+# which it spells bg_ where templates.json spells scenery_.
 KL_BACKGROUND = ("scenery_walls_", "scenery_trees_")
 
 
 def load_sprites(game):
-    """name -> (bytes, group) from sprites.json, and the graphic -> name table."""
-    frames = json.loads((HERE / game / "sprites.json").read_text())["frames"]
-    sprites = {}
-    for frame in frames.values():
-        match = re.search(r"sprite_(\d+)$", frame["zx"]["sprite"])
-        if match is None:
-            continue
-        width = frame["sourceSize"]["w"] // 8
-        height = frame["sourceSize"]["h"]
-        # Two header bytes, then a mask and a data byte per column per row.
-        sprites["sprite_" + match.group(1)] = (width * height * 2 + 2, frame["zx"]["group"])
+    """sprite name -> its size in bytes, from the group tree in sprites.json,
+    and sprite name -> every sprite in the animations it is a frame of."""
+    sheet = json.loads((HERE / game / "sprites.json").read_text(encoding="utf-8"))
+    sizes = {}
 
-    table = []
-    for line in (HERE / game / "sprite_table.s").read_text().splitlines():
-        if "DW" not in line:
-            continue
-        for label in line.split(";")[0].split("DW")[1].split(","):
-            table.append(label.strip())
-    return sprites, table
+    def walk(node, path):
+        for key, box in (node.get("sprites") or {}).items():
+            # Two header bytes, then a mask and a data byte per column per
+            # row. The sheet holds each sprite already trimmed, so its box is
+            # what the build emits.
+            sizes[".".join(path + [key])] = box["w"] // 8 * box["h"] * 2 + 2
+        for group, sub in (node.get("group") or {}).items():
+            walk(sub, path + [group])
+
+    walk(sheet, [])
+    frames_of = {}
+    for frames in (sheet.get("animations") or {}).values():
+        for frame in frames:
+            frames_of.setdefault(frame, set()).update(frames)
+    return sizes, frames_of
 
 
-def is_backdrop(block, half_u, half_v):
-    u, v, z, size_u, size_v = block["bytes"][1:6]
-    if u + size_u <= CENTRE - half_u:
+def is_backdrop(piece, box, half_u, half_v):
+    if piece["u"] + box["u"] <= CENTRE - half_u:
         return True
-    if v - size_v >= CENTRE + half_v:
+    if piece["v"] - box["v"] >= CENTRE + half_v:
         return True
     return False
 
 
 def main():
-    games = ["knightlore", "pentagram"]
+    games = ["knightlore", "pentagram", "knightlore128"]
     show_rooms = "--rooms" in sys.argv
     for arg in sys.argv[1:]:
         if arg in games:
             games = [arg]
 
     for game in games:
-        sprites, table = load_sprites(game)
+        sprites, frames_of = load_sprites(game)
         rooms = castle.read_castle(HERE / game)
-        shapes = {s["name"]: s for s in rooms["roomDimensions"]}
-        scenery = {t["name"]: t for t in rooms["sceneryTemplates"]}
-        objects = {t["name"]: t for t in rooms["objectTemplates"]}
-
-        groups = {}
-        for name, (size, group) in sprites.items():
-            groups.setdefault(group, []).append(name)
+        shapes = rooms["roomDimensions"]
+        scenery = rooms["sceneryTemplates"]
+        objects = rooms["objectTemplates"]
+        table = json.loads((HERE / game / "graphics.json").read_text(encoding="utf-8"))["graphics"]
+        boxes = gfx.sizes(HERE / game)
 
         def names_of(graphics):
+            """The sprites a set of graphic names draws, animations and all."""
             found = set()
             for graphic in graphics:
-                if graphic >= len(table) or table[graphic] not in sprites:
+                name = (table.get(graphic) or {}).get("sprite")
+                if name is None or name not in sprites:
                     continue
-                name = table[graphic]
                 found.add(name)
-                group = sprites[name][1]
-                if game == "knightlore" and group in ANIMATED_GROUPS:
-                    found.update(groups[group])
+                found.update(frames_of.get(name, ()))
             return found
 
         def bytes_of(names):
             total = 0
             for name in names:
-                total += sprites[name][0]
+                total += sprites[name]
             return total
 
         # Pass one: what every room draws, to find what no room names.
@@ -127,18 +123,20 @@ def main():
             for ref in room["scenery"]:
                 template = scenery[ref["template"]]
                 door = any(word in ref["template"] for word in DOOR_WORDS)
-                for block in template["blocks"]:
+                for piece in template:
                     pieces += 1
-                    backdrop = not door and is_backdrop(block, half_u, half_v)
-                    if game == "knightlore" and backdrop != ref["template"].startswith(KL_BACKGROUND):
-                        mismatches.append((room["number"], ref["template"], block["bytes"][1:4]))
+                    box = gfx.box_of(boxes, piece, ref["template"])
+                    backdrop = not door and is_backdrop(piece, box, half_u, half_v)
+                    if game.startswith("knightlore") and backdrop != ref["template"].startswith(KL_BACKGROUND):
+                        mismatches.append((room["number"], ref["template"],
+                                           (piece["u"], piece["v"], piece["z"])))
                     if backdrop:
                         back_pieces += 1
-                        back_graphics.add(block["graphic"])
+                        back_graphics.add(piece["graphic"])
                     else:
-                        play_graphics.add(block["graphic"])
+                        play_graphics.add(piece["graphic"])
             for ref in room["objects"]:
-                for entry in objects[ref["template"]]["entries"]:
+                for entry in objects[ref["template"]]:
                     pieces += len(ref["positions"])
                     play_graphics.add(entry["graphic"])
 
@@ -152,7 +150,7 @@ def main():
         room_space = PAGE - resident - ROOM_DATA
 
         print("%s: %d graphics, %d bytes in all" % (game, len(sprites), bytes_of(set(sprites))))
-        if game == "knightlore":
+        if game.startswith("knightlore"):
             if mismatches:
                 print("  rule disagrees with OBJ_BACKGROUND on %d pieces, e.g. %s"
                       % (len(mismatches), mismatches[:3]))
