@@ -1,0 +1,391 @@
+{
+ "meta": {
+  "version": 1,
+  "game": "knightlore",
+  "rooms": "rooms.json",
+  "comment": "The castle's templates: pieces every room naming one is built from. rooms.json places them."
+ },
+
+ "sceneryTemplates": {
+  "scenery_arch_n": [
+   { "graphic": "door.castle.1", "u": 141, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_e": [
+   { "graphic": "door.castle.1", "u": 196, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 196, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_s": [
+   { "graphic": "door.castle.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_w": [
+   { "graphic": "door.castle.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_n": [
+   { "graphic": "door.forest.1", "u": 141, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 115, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_e": [
+   { "graphic": "door.forest.1", "u": 196, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 196, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_s": [
+   { "graphic": "door.forest.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_w": [
+   { "graphic": "door.forest.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_0": [
+   { "graphic": "gate.1.g8", "u": 128, "v": 190, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_1": [
+   { "graphic": "gate.1.g8", "u": 190, "v": 128, "z": 160,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_2": [
+   { "graphic": "gate.1.g8", "u": 128, "v": 65, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_3": [
+   { "graphic": "gate.1.g8", "u": 65, "v": 128, "z": 160,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_0": [
+   { "graphic": "wall.castle.4", "u": 63, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 73, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 73, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 192, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 92, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 63, "v": 92, "z": 152,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 63, "v": 160, "z": 152,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 164, "v": 192, "z": 152,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 63, "v": 109, "z": 177,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 96, "v": 192, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 144, "v": 192, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_1": [
+   { "graphic": "wall.castle.4", "u": 63, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 99, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 99, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.4", "u": 63, "v": 152, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 160, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 208,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 128, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 63, "v": 126, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 96, "v": 160, "z": 144,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 96, "v": 160, "z": 184,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 160, "v": 160, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_2": [
+   { "graphic": "wall.castle.4", "u": 95, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 103, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 157, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.4", "u": 95, "v": 184, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 103, "v": 192, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 157, "v": 192, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 208,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 95, "v": 144, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 132, "v": 192, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 95, "v": 96, "z": 144,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 95, "v": 104, "z": 184,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 95, "v": 160, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_0": [
+   { "graphic": "wall.forest.1", "u": 63, "v": 73, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 63, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 63, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 63, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_1": [
+   { "graphic": "wall.forest.1", "u": 63, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_2": [
+   { "graphic": "wall.forest.1", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_wizard": [
+   { "graphic": "wizard.1", "u": 152, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sabreman.legs.1.g144", "u": 160, "v": 96, "z": 128, "sizeU": 5, "sizeV": 5, "sizeZ": 0,
+     "flags": { "mirrored": false, "passable": true, "rest": 16 } }
+  ],
+  "scenery_pot": [
+   { "graphic": "scenery.cauldron", "u": 128, "v": 128, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.cauldron_lid", "u": 128, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": true, "rest": 16 } }
+  ],
+  "scenery_high_arch_e": [
+   { "graphic": "door.castle.1", "u": 196, "v": 115, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 196, "v": 141, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_s": [
+   { "graphic": "door.castle.1", "u": 141, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_e_base": [
+   { "graphic": "scenery.block.g7", "u": 200, "v": 120, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.block.g7", "u": 200, "v": 136, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_s_base": [
+   { "graphic": "scenery.block.g7", "u": 120, "v": 56, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.block.g7", "u": 136, "v": 56, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ]
+ },
+
+ "objectTemplates": {
+  "object_block": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_fire": [
+   { "graphic": "fires.1.g176",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_ud_y": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_rock": [
+   { "graphic": "scenery.wood_block",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gargoyle": [
+   { "graphic": "scenery.gargoyle",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike": [
+   { "graphic": "scenery.floor_spike",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_chest": [
+   { "graphic": "scenery.chest",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_table": [
+   { "graphic": "scenery.table",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_guard_ew": [
+   { "graphic": "guard.1.g150",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } },
+   { "graphic": "sabreman.legs.1.g144",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_ghost": [
+   { "graphic": "ghost.3",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_fire_ns": [
+   { "graphic": "fires.2.g181",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_high": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_ball_ud_xy": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_guard_square": [
+   { "graphic": "guard.1.g30",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } },
+   { "graphic": "sabreman.legs.1.g144",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_ew": [
+   { "graphic": "scenery.block.g54",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_ns": [
+   { "graphic": "scenery.block.g55",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_moveable_block": [
+   { "graphic": "scenery.block.g62",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike_high": [
+   { "graphic": "scenery.floor_spike",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_spike_ball": [
+   { "graphic": "scenery.spike_ball",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike_ball_falling": [
+   { "graphic": "scenery.spike_ball",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_fire_ew": [
+   { "graphic": "fires.1.g86",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_dropping_block": [
+   { "graphic": "scenery.block.g91",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_collapsing_block": [
+   { "graphic": "scenery.block.g143",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_bounce": [
+   { "graphic": "balls.1.g182",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_ud": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_repel_spell": [
+   { "graphic": "spell.1.g164",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gate_ud_1": [
+   { "graphic": "gate.1.g8",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gate_ud_2": [
+   { "graphic": "gate.1.g8",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_ball_ud_x": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
+  ]
+ }
+}

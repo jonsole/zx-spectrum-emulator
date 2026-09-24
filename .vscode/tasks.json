@@ -101,6 +101,27 @@
       }
     },
     {
+      // Knight Lore 128K (examples/filmation/knightlore128), the fork of the
+      // Filmation build above that grows into the bigger castle.
+      "label": "knightlore128.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["examples/filmation/knightlore128/build.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/filmation/knightlore128"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
       // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
       // fetched and assembled rather than committed -- see
       // game-disassemblies/scripts/build_fairlight.py. Cheap enough (~0.2s of

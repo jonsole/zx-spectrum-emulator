@@ -1,0 +1,3015 @@
+{
+ "meta": {
+  "version": 1,
+  "game": "knightlore",
+  "comment": "Written by rooms.py from room_data.bin; the same schema Pentagram's rooms.py writes.",
+  "sprites": {
+   "sheet": "sprites.png",
+   "atlas": "sprites.json",
+   "graphics": "graphics.json"
+  },
+  "templates": "templates.json"
+ },
+
+ "roomDimensions": {
+  "square":  { "u": 64, "v": 64, "z": 128 },
+  "narrowU": { "u": 32, "v": 64, "z": 128 },
+  "narrowV": { "u": 64, "v": 32, "z": 128 }
+ },
+
+ "rooms": [
+  { "number": 0, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 2, "z": 0 },
+      { "u": 0, "v": 2, "z": 1 },
+      { "u": 0, "v": 2, "z": 2 },
+      { "u": 1, "v": 2, "z": 0 },
+      { "u": 1, "v": 2, "z": 1 },
+      { "u": 1, "v": 2, "z": 2 },
+      { "u": 2, "v": 1, "z": 0 },
+      { "u": 2, "v": 1, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 1, "z": 2 },
+      { "u": 2, "v": 0, "z": 0 },
+      { "u": 2, "v": 0, "z": 1 },
+      { "u": 2, "v": 0, "z": 2 },
+      { "u": 0, "v": 1, "z": 3 },
+      { "u": 1, "v": 0, "z": 3 },
+      { "u": 0, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 1, "v": 1, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 1, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_guard_ew", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 0, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 2, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 3, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 4, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 8, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 1, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 1, "v": 1, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 9, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" },
+     { "template": "scenery_gate_1" },
+     { "template": "scenery_gate_3" }
+    ],
+    "objects": [
+     { "template": "object_ghost", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 10, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 4, "z": 1 },
+      { "u": 2, "v": 4, "z": 2 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_table", "positions": [
+      { "u": 6, "v": 1, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 11, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": []
+  },
+  { "number": 12, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 0, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 7, "v": 2, "z": 0 },
+      { "u": 5, "v": 1, "z": 0 },
+      { "u": 4, "v": 0, "z": 0 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 4, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 13, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 14, "ink": 5, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_fire_ns", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 15, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 5, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 5, "v": 2, "z": 1 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 },
+      { "u": 4, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 4, "v": 3, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 16, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_block_high", "positions": [
+      { "u": 5, "v": 0, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 5, "v": 0, "z": 1 },
+      { "u": 4, "v": 1, "z": 1 },
+      { "u": 3, "v": 1, "z": 1 },
+      { "u": 2, "v": 1, "z": 1 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 2, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_fire_ns", "positions": [
+      { "u": 2, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 18, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_spike_ball", "positions": [
+      { "u": 2, "v": 7, "z": 3 },
+      { "u": 5, "v": 7, "z": 3 },
+      { "u": 3, "v": 6, "z": 3 },
+      { "u": 4, "v": 6, "z": 3 },
+      { "u": 3, "v": 5, "z": 3 },
+      { "u": 4, "v": 5, "z": 3 },
+      { "u": 3, "v": 4, "z": 3 },
+      { "u": 4, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 4, "v": 3, "z": 3 },
+      { "u": 3, "v": 2, "z": 3 },
+      { "u": 4, "v": 2, "z": 3 },
+      { "u": 3, "v": 1, "z": 3 },
+      { "u": 4, "v": 1, "z": 3 },
+      { "u": 2, "v": 0, "z": 3 },
+      { "u": 5, "v": 0, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 20, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 2, "v": 0, "z": 3 },
+      { "u": 2, "v": 1, "z": 3 },
+      { "u": 2, "v": 2, "z": 3 },
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 4, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 5, "v": 3, "z": 3 },
+      { "u": 5, "v": 4, "z": 3 },
+      { "u": 5, "v": 5, "z": 2 },
+      { "u": 5, "v": 6, "z": 1 },
+      { "u": 5, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 24, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 29, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 },
+      { "u": 4, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 1 },
+      { "u": 4, "v": 1, "z": 2 },
+      { "u": 4, "v": 1, "z": 3 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_block_high", "positions": [
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_block_ns", "positions": [
+      { "u": 4, "v": 2, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 31, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 1 },
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_ball_ud_x", "positions": [
+      { "u": 3, "v": 2, "z": 2 },
+      { "u": 3, "v": 5, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 32, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 3, "z": 0 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 0, "v": 2, "z": 1 },
+      { "u": 0, "v": 1, "z": 2 },
+      { "u": 0, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 0, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 33, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 1, "v": 4, "z": 0 },
+      { "u": 1, "v": 4, "z": 1 },
+      { "u": 2, "v": 4, "z": 2 },
+      { "u": 3, "v": 4, "z": 2 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 6, "v": 4, "z": 1 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 6, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 2, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_ball_ud", "positions": [
+      { "u": 5, "v": 4, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 34, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 6, "z": 0 },
+      { "u": 0, "v": 7, "z": 1 },
+      { "u": 1, "v": 7, "z": 2 },
+      { "u": 2, "v": 7, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 1, "v": 7, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 6, "v": 7, "z": 0 },
+      { "u": 7, "v": 7, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 3, "v": 7, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 36, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 0, "z": 0 },
+      { "u": 5, "v": 0, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 },
+      { "u": 7, "v": 1, "z": 0 },
+      { "u": 0, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 1, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 7, "v": 3, "z": 0 },
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 39, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 40, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_walls_2" },
+     { "template": "scenery_high_arch_s_base" }
+    ],
+    "objects": [
+     { "template": "object_table", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 45, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 7, "v": 3, "z": 3 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_block_ew", "positions": [
+      { "u": 3, "v": 4, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 46, "ink": 5, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_guard_square", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 47, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 48, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 52, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_table", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 },
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 4, "v": 3, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 55, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block_ns", "positions": [
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 56, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 7, "z": 1 },
+      { "u": 2, "v": 6, "z": 3 },
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 2, "v": 0, "z": 3 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 2, "v": 5, "z": 3 },
+      { "u": 2, "v": 4, "z": 3 },
+      { "u": 2, "v": 2, "z": 3 },
+      { "u": 2, "v": 1, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 63, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 0, "v": 3, "z": 0 },
+      { "u": 1, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 7, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 0, "v": 3, "z": 1 },
+      { "u": 1, "v": 3, "z": 1 },
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 },
+      { "u": 6, "v": 3, "z": 1 },
+      { "u": 7, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_gate_ud_1", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 64, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 7, "v": 7, "z": 0 },
+      { "u": 6, "v": 0, "z": 0 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 },
+      { "u": 7, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_guard_square", "positions": [
+      { "u": 0, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 0, "v": 7, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 65, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 6, "v": 2, "z": 1 },
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 6, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_fire_ns", "positions": [
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 66, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 67, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 5, "v": 4, "z": 1 },
+      { "u": 1, "v": 3, "z": 0 },
+      { "u": 1, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 2, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_ball_ud_xy", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 68, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 69, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 5, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 5, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 },
+      { "u": 4, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 4, "v": 3, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 70, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 5, "v": 4, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 4, "v": 4, "z": 3 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 71, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 72, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 },
+      { "u": 4, "v": 1, "z": 3 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 5, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_block_ns", "positions": [
+      { "u": 4, "v": 1, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 79, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 0, "v": 3, "z": 3 },
+      { "u": 1, "v": 3, "z": 3 },
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 4, "v": 3, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 },
+      { "u": 6, "v": 3, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 },
+      { "u": 3, "v": 7, "z": 3 },
+      { "u": 4, "v": 7, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 84, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 1, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_block_ns", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 87, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 2 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 2, "v": 2, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 88, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_ghost", "positions": [
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 5, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 94, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 1, "v": 2, "z": 0 },
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 },
+      { "u": 5, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_repel_spell", "positions": [
+      { "u": 5, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 95, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": []
+  },
+  { "number": 100, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 0 },
+      { "u": 4, "v": 0, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 3, "v": 4, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 103, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_gate_ud_1", "positions": [
+      { "u": 3, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_guard_square", "positions": [
+      { "u": 5, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 104, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 2, "v": 7, "z": 1 },
+      { "u": 2, "v": 7, "z": 2 },
+      { "u": 2, "v": 7, "z": 3 },
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 1 },
+      { "u": 5, "v": 7, "z": 2 },
+      { "u": 5, "v": 7, "z": 3 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 5, "v": 6, "z": 1 }
+     ] },
+     { "template": "object_ball_ud_xy", "positions": [
+      { "u": 3, "v": 4, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 106, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 107, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_fire_ns", "positions": [
+      { "u": 6, "v": 2, "z": 3 },
+      { "u": 5, "v": 5, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 108, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_chest", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 3, "v": 5, "z": 2 },
+      { "u": 3, "v": 4, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 3, "v": 2, "z": 2 },
+      { "u": 3, "v": 5, "z": 3 },
+      { "u": 3, "v": 4, "z": 3 },
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 3, "v": 2, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 109, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 2, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 4, "v": 5, "z": 2 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 4, "v": 2, "z": 3 },
+      { "u": 4, "v": 5, "z": 3 }
+     ] },
+     { "template": "object_table", "positions": [
+      { "u": 1, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_guard_ew", "positions": [
+      { "u": 6, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 110, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": []
+  },
+  { "number": 111, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 6, "v": 5, "z": 1 },
+      { "u": 7, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 5, "v": 7, "z": 1 },
+      { "u": 5, "v": 6, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 116, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 1, "v": 7, "z": 0 },
+      { "u": 0, "v": 6, "z": 0 },
+      { "u": 1, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 2, "v": 7, "z": 1 },
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 0, "v": 5, "z": 1 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 1, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 0, "v": 7, "z": 2 },
+      { "u": 1, "v": 7, "z": 2 },
+      { "u": 0, "v": 6, "z": 2 },
+      { "u": 1, "v": 6, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 117, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_repel_spell", "positions": [
+      { "u": 3, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 118, "ink": 6, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 7, "v": 3, "z": 3 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 5, "z": 3 },
+      { "u": 6, "v": 5, "z": 2 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 7, "v": 2, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 119, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 120, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 1, "v": 7, "z": 0 },
+      { "u": 7, "v": 7, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 1, "v": 2, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 },
+      { "u": 5, "v": 1, "z": 0 },
+      { "u": 6, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_guard_square", "positions": [
+      { "u": 7, "v": 2, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 121, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_ball_ud_xy", "positions": [
+      { "u": 3, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 122, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 0, "v": 6, "z": 1 },
+      { "u": 0, "v": 7, "z": 2 },
+      { "u": 1, "v": 7, "z": 2 },
+      { "u": 7, "v": 7, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 7, "z": 2 },
+      { "u": 4, "v": 7, "z": 2 },
+      { "u": 6, "v": 7, "z": 2 },
+      { "u": 7, "v": 6, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 },
+      { "u": 7, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 3, "v": 7, "z": 3 },
+      { "u": 5, "v": 7, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 131, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 132, "ink": 5, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 2, "v": 5, "z": 2 },
+      { "u": 5, "v": 5, "z": 2 },
+      { "u": 2, "v": 2, "z": 2 },
+      { "u": 5, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_ball_ud_y", "positions": [
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 133, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 1, "v": 5, "z": 1 },
+      { "u": 2, "v": 5, "z": 2 },
+      { "u": 3, "v": 5, "z": 3 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_block_ns", "positions": [
+      { "u": 3, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 134, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_moveable_block", "positions": [
+      { "u": 3, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 135, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 5, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_gate_ud_1", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_gate_ud_2", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 136, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_wizard" },
+     { "template": "scenery_pot" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 5, "v": 1, "z": 0 },
+      { "u": 1, "v": 2, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 137, "ink": 5, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 2 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 4, "v": 5, "z": 3 },
+      { "u": 4, "v": 2, "z": 3 }
+     ] },
+     { "template": "object_fire_ns", "positions": [
+      { "u": 4, "v": 4, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 138, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block_high", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 2, "v": 5, "z": 3 },
+      { "u": 2, "v": 4, "z": 3 },
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 2, "v": 2, "z": 3 },
+      { "u": 5, "v": 5, "z": 3 },
+      { "u": 5, "v": 4, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 },
+      { "u": 5, "v": 2, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 139, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 140, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 2 },
+      { "u": 5, "v": 5, "z": 2 },
+      { "u": 2, "v": 2, "z": 2 },
+      { "u": 5, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_gate_ud_2", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_guard_ew", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 141, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 1 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 6, "z": 2 },
+      { "u": 4, "v": 7, "z": 2 },
+      { "u": 3, "v": 7, "z": 3 },
+      { "u": 5, "v": 7, "z": 3 },
+      { "u": 3, "v": 6, "z": 3 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 7, "z": 3 },
+      { "u": 5, "v": 6, "z": 3 },
+      { "u": 3, "v": 5, "z": 3 },
+      { "u": 5, "v": 5, "z": 3 }
+     ] },
+     { "template": "object_block_high", "positions": [
+      { "u": 4, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_ball_ud_y", "positions": [
+      { "u": 4, "v": 4, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 142, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_table", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 3, "v": 5, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 143, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 147, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 2 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_fire_ew", "positions": [
+      { "u": 3, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 151, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 152, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 3, "v": 4, "z": 2 },
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 155, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 1 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 5, "v": 6, "z": 1 },
+      { "u": 5, "v": 6, "z": 2 },
+      { "u": 5, "v": 6, "z": 3 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_block_ns", "positions": [
+      { "u": 5, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_block_ew", "positions": [
+      { "u": 3, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 159, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 4, "v": 3, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 163, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 1 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 1 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 2, "v": 2, "z": 1 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 5, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 5, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 5, "v": 6, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 167, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 168, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 2, "v": 6, "z": 2 },
+      { "u": 2, "v": 6, "z": 3 },
+      { "u": 6, "v": 6, "z": 0 },
+      { "u": 6, "v": 6, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 6, "v": 6, "z": 2 },
+      { "u": 6, "v": 6, "z": 3 },
+      { "u": 6, "v": 2, "z": 0 },
+      { "u": 6, "v": 2, "z": 1 },
+      { "u": 6, "v": 2, "z": 2 },
+      { "u": 6, "v": 2, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 6, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 170, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 0, "z": 0 },
+      { "u": 0, "v": 1, "z": 1 },
+      { "u": 0, "v": 2, "z": 2 },
+      { "u": 0, "v": 3, "z": 0 },
+      { "u": 0, "v": 3, "z": 1 },
+      { "u": 0, "v": 3, "z": 2 },
+      { "u": 0, "v": 3, "z": 3 },
+      { "u": 1, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 1, "v": 4, "z": 1 },
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 0, "v": 5, "z": 1 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 0, "v": 5, "z": 2 },
+      { "u": 1, "v": 4, "z": 2 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 0, "v": 4, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 171, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 175, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 4, "v": 6, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 179, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 180, "ink": 4, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 4, "z": 2 },
+      { "u": 3, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 5, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_table", "positions": [
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 183, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 186, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 1 },
+      { "u": 3, "v": 5, "z": 2 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 2 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 4, "z": 1 },
+      { "u": 2, "v": 4, "z": 2 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 1 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 4, "z": 2 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 187, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_ghost", "positions": [
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 4, "v": 4, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 191, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 6, "v": 7, "z": 1 },
+      { "u": 6, "v": 7, "z": 2 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 7, "v": 7, "z": 0 },
+      { "u": 7, "v": 6, "z": 0 },
+      { "u": 7, "v": 5, "z": 0 },
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 7, "v": 7, "z": 1 }
+     ] },
+     { "template": "object_moveable_block", "positions": [
+      { "u": 7, "v": 7, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 195, "ink": 3, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 199, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_moveable_block", "positions": [
+      { "u": 3, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 207, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_gate_0" },
+     { "template": "scenery_gate_2" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_ghost", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 208, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 0 },
+      { "u": 2, "v": 0, "z": 1 },
+      { "u": 1, "v": 0, "z": 2 },
+      { "u": 0, "v": 0, "z": 3 },
+      { "u": 0, "v": 1, "z": 3 },
+      { "u": 0, "v": 2, "z": 3 },
+      { "u": 0, "v": 3, "z": 3 },
+      { "u": 0, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 209, "ink": 4, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_guard_square", "positions": [
+      { "u": 6, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 1, "v": 3, "z": 0 },
+      { "u": 1, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 210, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 0, "z": 0 },
+      { "u": 7, "v": 4, "z": 0 },
+      { "u": 4, "v": 0, "z": 1 },
+      { "u": 7, "v": 3, "z": 1 },
+      { "u": 5, "v": 0, "z": 2 },
+      { "u": 7, "v": 2, "z": 2 },
+      { "u": 6, "v": 0, "z": 3 },
+      { "u": 7, "v": 1, "z": 3 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 6, "v": 1, "z": 3 },
+      { "u": 7, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 7, "v": 1, "z": 0 },
+      { "u": 6, "v": 0, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 211, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 5, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 5, "z": 1 },
+      { "u": 5, "v": 5, "z": 1 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_gate_ud_1", "positions": [
+      { "u": 3, "v": 5, "z": 0 }
+     ] },
+     { "template": "object_guard_square", "positions": [
+      { "u": 5, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 214, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 1 },
+      { "u": 4, "v": 5, "z": 2 },
+      { "u": 4, "v": 5, "z": 3 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 }
+     ] },
+     { "template": "object_rock", "positions": [
+      { "u": 4, "v": 2, "z": 2 }
+     ] },
+     { "template": "object_ball_ud_y", "positions": [
+      { "u": 5, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 215, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": [
+     { "template": "object_fire_ns", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_fire_ew", "positions": [
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 216, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": []
+  },
+  { "number": 217, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": []
+  },
+  { "number": 221, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_block_high", "positions": [
+      { "u": 7, "v": 5, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 7, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_table", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 2, "v": 3, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 222, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": []
+  },
+  { "number": 223, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 3 },
+      { "u": 2, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 1 },
+      { "u": 4, "v": 4, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 224, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 },
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 },
+      { "u": 2, "v": 0, "z": 0 },
+      { "u": 5, "v": 0, "z": 0 }
+     ] },
+     { "template": "object_repel_spell", "positions": [
+      { "u": 4, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 226, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_spike_ball", "positions": [
+      { "u": 5, "v": 0, "z": 0 },
+      { "u": 2, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 5, "v": 2, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_spike_ball", "positions": [
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 227, "ink": 6, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_dropping_block", "positions": [
+      { "u": 2, "v": 0, "z": 0 },
+      { "u": 5, "v": 0, "z": 0 },
+      { "u": 2, "v": 1, "z": 1 },
+      { "u": 5, "v": 1, "z": 1 },
+      { "u": 2, "v": 2, "z": 2 },
+      { "u": 5, "v": 2, "z": 2 },
+      { "u": 2, "v": 5, "z": 2 },
+      { "u": 5, "v": 5, "z": 2 }
+     ] },
+     { "template": "object_dropping_block", "positions": [
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 5, "v": 6, "z": 1 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 5, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 2, "v": 3, "z": 3 },
+      { "u": 5, "v": 3, "z": 3 },
+      { "u": 2, "v": 4, "z": 3 },
+      { "u": 5, "v": 4, "z": 3 }
+     ] },
+     { "template": "object_ball_ud_xy", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 230, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" }
+    ],
+    "objects": []
+  },
+  { "number": 231, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 1, "v": 4, "z": 0 },
+      { "u": 1, "v": 3, "z": 0 },
+      { "u": 6, "v": 4, "z": 0 },
+      { "u": 6, "v": 3, "z": 0 },
+      { "u": 3, "v": 1, "z": 0 },
+      { "u": 4, "v": 1, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 232, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 3, "v": 6, "z": 0 },
+      { "u": 1, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 1 },
+      { "u": 3, "v": 4, "z": 2 },
+      { "u": 3, "v": 4, "z": 3 },
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 233, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_n" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" }
+    ],
+    "objects": []
+  },
+  { "number": 237, "ink": 4, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 4, "v": 3, "z": 1 },
+      { "u": 5, "v": 3, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 4, "v": 3, "z": 2 },
+      { "u": 5, "v": 3, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 239, "ink": 5, "dimensions": "narrowU",
+    "scenery": [
+     { "template": "scenery_arch_n" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_2" }
+    ],
+    "objects": []
+  },
+  { "number": 240, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_high_arch_e" },
+     { "template": "scenery_high_arch_s" },
+     { "template": "scenery_high_arch_e_base" },
+     { "template": "scenery_high_arch_s_base" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 7, "v": 3, "z": 3 },
+      { "u": 7, "v": 4, "z": 3 },
+      { "u": 7, "v": 7, "z": 3 },
+      { "u": 6, "v": 7, "z": 3 },
+      { "u": 0, "v": 7, "z": 1 },
+      { "u": 0, "v": 5, "z": 2 },
+      { "u": 0, "v": 2, "z": 3 },
+      { "u": 0, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 1, "v": 0, "z": 3 },
+      { "u": 2, "v": 0, "z": 3 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike", "positions": [
+      { "u": 1, "v": 7, "z": 0 },
+      { "u": 3, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_block_ew", "positions": [
+      { "u": 3, "v": 7, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 241, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_gate_1" },
+     { "template": "scenery_gate_3" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 3, "v": 4, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 242, "ink": 5, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": []
+  },
+  { "number": 243, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 2, "v": 6, "z": 1 },
+      { "u": 2, "v": 7, "z": 1 },
+      { "u": 4, "v": 6, "z": 0 },
+      { "u": 4, "v": 7, "z": 0 },
+      { "u": 4, "v": 6, "z": 1 },
+      { "u": 4, "v": 7, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 3, "v": 6, "z": 2 },
+      { "u": 3, "v": 7, "z": 2 }
+     ] },
+     { "template": "object_ghost", "positions": [
+      { "u": 3, "v": 6, "z": 0 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 3, "v": 5, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 246, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_1" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 3, "v": 3, "z": 0 },
+      { "u": 3, "v": 3, "z": 1 },
+      { "u": 3, "v": 3, "z": 2 },
+      { "u": 3, "v": 3, "z": 3 }
+     ] },
+     { "template": "object_collapsing_block", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 2, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_table", "positions": [
+      { "u": 4, "v": 6, "z": 0 }
+     ] }
+    ]
+  },
+  { "number": 247, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_rock", "positions": [
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 3, "v": 4, "z": 0 },
+      { "u": 4, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 },
+      { "u": 4, "v": 3, "z": 0 },
+      { "u": 2, "v": 2, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_ball_bounce", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_chest", "positions": [
+      { "u": 3, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 248, "ink": 3, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_e" },
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": []
+  },
+  { "number": 249, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_tree_arch_s" },
+     { "template": "scenery_tree_arch_w" },
+     { "template": "scenery_trees_0" },
+     { "template": "scenery_trees_2" }
+    ],
+    "objects": [
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 7, "v": 7, "z": 3 },
+      { "u": 6, "v": 7, "z": 3 },
+      { "u": 6, "v": 6, "z": 3 },
+      { "u": 7, "v": 6, "z": 3 },
+      { "u": 5, "v": 7, "z": 3 },
+      { "u": 7, "v": 5, "z": 3 },
+      { "u": 3, "v": 0, "z": 3 },
+      { "u": 4, "v": 0, "z": 3 }
+     ] },
+     { "template": "object_spike_ball_falling", "positions": [
+      { "u": 0, "v": 3, "z": 3 },
+      { "u": 0, "v": 4, "z": 3 }
+     ] }
+    ]
+  },
+  { "number": 253, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 5, "z": 0 },
+      { "u": 1, "v": 5, "z": 0 },
+      { "u": 2, "v": 5, "z": 0 },
+      { "u": 2, "v": 6, "z": 0 },
+      { "u": 2, "v": 7, "z": 0 },
+      { "u": 0, "v": 6, "z": 1 },
+      { "u": 1, "v": 6, "z": 1 },
+      { "u": 1, "v": 7, "z": 1 }
+     ] },
+     { "template": "object_block", "positions": [
+      { "u": 0, "v": 7, "z": 2 }
+     ] }
+    ]
+  },
+  { "number": 254, "ink": 3, "dimensions": "narrowV",
+    "scenery": [
+     { "template": "scenery_arch_e" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_1" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 5, "v": 4, "z": 0 },
+      { "u": 5, "v": 3, "z": 0 },
+      { "u": 2, "v": 4, "z": 0 },
+      { "u": 2, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_gargoyle", "positions": [
+      { "u": 3, "v": 5, "z": 0 },
+      { "u": 4, "v": 5, "z": 0 },
+      { "u": 3, "v": 2, "z": 0 },
+      { "u": 4, "v": 2, "z": 0 }
+     ] },
+     { "template": "object_ball_ud_xy", "positions": [
+      { "u": 3, "v": 3, "z": 1 }
+     ] }
+    ]
+  },
+  { "number": 255, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_arch_s" },
+     { "template": "scenery_arch_w" },
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_spike", "positions": [
+      { "u": 6, "v": 5, "z": 0 },
+      { "u": 5, "v": 6, "z": 0 },
+      { "u": 7, "v": 6, "z": 0 },
+      { "u": 6, "v": 7, "z": 0 }
+     ] }
+    ]
+  }
+ ]
+}

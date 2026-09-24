@@ -26,7 +26,8 @@ HERE = Path(__file__).resolve().parent
 FILMATION = HERE.parent.parent
 REPO = FILMATION.parent.parent
 OUT_DIR = FILMATION / "output" / "tests"
-SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests", FILMATION / "pentagram" / "tests"]
+SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests", FILMATION / "pentagram" / "tests",
+              FILMATION / "knightlore128" / "tests"]
 
 # The same search knightlore/build.py makes, kept here so that the engine's
 # tests do not reach into the game's build.
@@ -62,7 +63,7 @@ def find_runner() -> Path:
 
 
 def owner(source: Path) -> str:
-    """engine, knightlore or pentagram: the folder above the suite's tests/."""
+    """engine or a game's name: the folder above the suite's tests/."""
     return source.parent.parent.name
 
 

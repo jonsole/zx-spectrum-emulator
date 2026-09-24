@@ -58,6 +58,18 @@
       "preLaunchTask": "filmation.build"
     },
     {
+      // Knight Lore 128K: the fork of the Filmation entry above that grows
+      // into a bigger castle on the 128K (examples/filmation/knightlore128).
+      "name": "ZX Spectrum: Knight Lore 128K",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/filmation/knightlore128/output/knightlore128.z80",
+      "sld": "${workspaceFolder}/examples/filmation/knightlore128/output/knightlore128.sld",
+      "asm": "${workspaceFolder}/examples/filmation/knightlore128/knightlore128.s",
+      "preLaunchTask": "knightlore128.build"
+    },
+    {
       // Fairlight, reassembled on every launch from the disassembly in the
       // game-disassemblies submodule -- run its build script once after a
       // fresh clone, since it fetches what it needs from the network.

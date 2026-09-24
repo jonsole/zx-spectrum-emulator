@@ -166,6 +166,19 @@ examples/filmation/pentagram/sound_data.s
 examples/filmation/pentagram/sound_title.s
 examples/filmation/pentagram/output/
 
+# Knight Lore 128K, a fork of knightlore/ that extracts nothing of its own: its
+# JSON and sheet are carried like the others', its font is read from
+# knightlore/'s unpacked sheet, and everything listed here is what build.py
+# assembles from them.
+examples/filmation/knightlore128/sprite_data.s
+examples/filmation/knightlore128/sprite_table.s
+examples/filmation/knightlore128/sprite_adj_gen.s
+examples/filmation/knightlore128/graphics_gen.s
+examples/filmation/knightlore128/font.s
+examples/filmation/knightlore128/room_data.s
+examples/filmation/knightlore128/specials_gen.s
+examples/filmation/knightlore128/output/
+
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:
