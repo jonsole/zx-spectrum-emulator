@@ -492,13 +492,14 @@ test('knightlore128: the map is walked out of the doorways, north up', () => {
   assert.strictEqual(cells.indexOf(byText), 15 * 16, 'room 0 is bottom left');
   assert.ok(byText._classes.has('here'));
   // Every one of Knight Lore's rooms fits. Pentagram's two clusters, imported
-  // under free numbers and joined to nothing yet, are listed under the map.
+  // under free numbers and joined to nothing yet, are listed under the map,
+  // and so is $25, the room that shows the 128K's own new pieces.
   const listed = dom.byId.offmap.children;
   assert.strictEqual(listed.length, 2, 'a note and the list');
   const unplaced = listed[1].children.map((c) => c.textContent);
   assert.deepStrictEqual(unplaced.slice().sort(),
                          ['05', '06', '07', '11', '13', '15', '16', '17',
-                          '19', '1A', '1B', '1C', '1E', '23']);
+                          '19', '1A', '1B', '1C', '1E', '23', '25']);
 });
 
 test('knightlore128: a room the walk cannot place is listed under the map', () => {

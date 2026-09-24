@@ -783,6 +783,86 @@
    { "graphic": "pentagram.dragon.1",
      "flags": { "mirrored": true, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_torch": [
+   { "graphic": "castle.torch.1",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_torch_m": [
+   { "graphic": "castle.torch.1",
+     "flags": { "mirrored": true, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_barrel": [
+   { "graphic": "castle.barrel.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_chair": [
+   { "graphic": "castle.chair.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_chair_m": [
+   { "graphic": "castle.chair.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bed": [
+   { "graphic": "castle.bed.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bed_m": [
+   { "graphic": "castle.bed.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bench": [
+   { "graphic": "castle.bench.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bench_m": [
+   { "graphic": "castle.bench.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_shelf": [
+   { "graphic": "castle.shelf.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_shelf_m": [
+   { "graphic": "castle.shelf.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_parapet": [
+   { "graphic": "castle.parapet.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_parapet_m": [
+   { "graphic": "castle.parapet.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_deck": [
+   { "graphic": "castle.bridge.deck",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_rail": [
+   { "graphic": "castle.bridge.rail",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 4 } }
+  ],
+  "object_castle_rail_m": [
+   { "graphic": "castle.bridge.rail",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 4 } }
   ]
  }
 }

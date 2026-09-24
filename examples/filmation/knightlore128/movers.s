@@ -77,8 +77,11 @@ MOVE_CRUMBLES		EQU		27
 MOVE_HOMER		EQU		28
 MOVE_BOLT			EQU		29
 MOVE_POOF			EQU		30
-MOVE_DROPPING	EQU		31		; these two give way under a weight: see
-MOVE_COLLAPSING	EQU		32		; object_landed_on, which relies on the order.
+; A torch's flame, this game's own: its four frames, and nothing else -- see
+; mover_flame.
+MOVE_FLAME		EQU		31
+MOVE_DROPPING	EQU		32		; these two give way under a weight: see
+MOVE_COLLAPSING	EQU		33		; object_landed_on, which relies on the order.
 									; Pentagram's block that sinks is the first
 
 ; Everything from here up is loose: it can be carried by whatever it is
@@ -98,18 +101,18 @@ MOVE_COLLAPSING	EQU		32		; object_landed_on, which relies on the order.
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		33
-MOVE_CARRIED		EQU		33
-MOVE_PUSHED		EQU		34
-MOVE_SLIDING		EQU		35
-MOVE_SPECIAL		EQU		36		; a collectable -- see special.s
+MOVE_LOOSE		EQU		34
+MOVE_CARRIED		EQU		34
+MOVE_PUSHED		EQU		35
+MOVE_SLIDING		EQU		36
+MOVE_SPECIAL		EQU		37		; a collectable -- see special.s
 ; Pentagram's stumps, cubes, tables and stones: shoved, and taking whatever is
 ; piled on them along -- engine/movers.s's mover_shoved_pile, $CD81. Its
 ; thorny bush is shoved the same way there AND kills, but a behaviour here is
 ; either loose or deadly -- the loose band runs to the top and the deadly one
 ; ends where the harmless one starts -- so here the bush is deadly and stays
 ; where it grew.
-MOVE_PUSHED_PILE	EQU		37
+MOVE_PUSHED_PILE	EQU		38
 
 ; What the engine's contact rules need to know about these numbers. It never
 ; names a behaviour, only the bands above -- see engine/object.s.
@@ -167,6 +170,9 @@ mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
 					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
 					DB		FG_GARGOYLE, MOVE_STILL
 					DB		FG_SPIKE, MOVE_STILL
+					; This game's own.
+					DB		FG_CASTLE_TORCH, MOVE_FLAME
+					DB		FG_CASTLE_TORCH_M, MOVE_FLAME
 					; Pentagram's, as its own movers.s's mover_of has them.
 					DB		FG_PENTAGRAM_GRASS, MOVE_STILL
 					DB		FG_PENTAGRAM_THORNS, MOVE_STILL
@@ -225,6 +231,7 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_homer		; MOVE_HOMER: engine/movers.s
 					DW		mover_bolt		; MOVE_BOLT
 					DW		mover_poof		; MOVE_POOF: engine/movers.s
+					DW		mover_flame		; MOVE_FLAME
 					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
@@ -576,6 +583,22 @@ hopper_landed:		ld		a,(ix+OBJ.BEHAVIOUR)
 					cp		MOVE_DRAGON_HOPS
 					ret		z
 					jp		sound_bounce
+
+
+; A torch's flame: the next of its four frames on every other turn, and that
+; is all. It stands where it was put, touches nothing and falls nowhere -- a
+; torch hangs on the wall -- so it needs none of the machinery a mover goes
+; through; mover_cycle4 counts the bottom two bits of its graphic round, which
+; is why the frames sit on an aligned run of four. Every turn was a flicker too
+; fast to read as flame.
+;
+; In:  IX -> the record
+; Out: nothing
+; Corrupts: AF
+mover_flame:		ld		a,(move_tick)
+					rra
+					ret		c
+					jp		mover_cycle4
 
 
 ; Pentagram's monsters ask engine/movers.s whether to sit a turn out, and to

@@ -419,6 +419,54 @@
      }
     }
    }
+  },
+  "castle": {
+   "group": {
+    "torch": {
+     "sprites": {
+      "1": { "x":  1, "y": 1269, "w": 16, "h": 25 },
+      "2": { "x": 20, "y": 1269, "w": 16, "h": 25 },
+      "3": { "x": 39, "y": 1269, "w": 16, "h": 25 },
+      "4": { "x": 58, "y": 1269, "w": 16, "h": 25 }
+     }
+    },
+    "barrel": {
+     "sprites": {
+      "1": { "x": 77, "y": 1269, "w": 24, "h": 29 }
+     }
+    },
+    "chair": {
+     "sprites": {
+      "1": { "x": 104, "y": 1269, "w": 24, "h": 31 }
+     }
+    },
+    "bed": {
+     "sprites": {
+      "1": { "x": 131, "y": 1269, "w": 40, "h": 35 }
+     }
+    },
+    "bench": {
+     "sprites": {
+      "1": { "x": 174, "y": 1269, "w": 32, "h": 22 }
+     }
+    },
+    "shelf": {
+     "sprites": {
+      "1": { "x": 209, "y": 1269, "w": 24, "h": 40 }
+     }
+    },
+    "parapet": {
+     "sprites": {
+      "1": { "x": 236, "y": 1269, "w": 32, "h": 31 }
+     }
+    },
+    "bridge": {
+     "sprites": {
+      "deck": { "x": 271, "y": 1269, "w": 32, "h": 21 },
+      "rail": { "x": 306, "y": 1269, "w": 24, "h": 22 }
+     }
+    }
+   }
   }
  },
  "animations": {
@@ -442,6 +490,7 @@
   ],
   "ghost":      [ "ghost.1", "ghost.2", "ghost.3", "ghost.4" ],
   "spell":      [ "spell.1", "spell.2", "spell.3", "spell.2" ],
-  "gate":       [ "gate.1", "gate.1" ]
+  "gate":       [ "gate.1", "gate.1" ],
+  "torch":      [ "castle.torch.1", "castle.torch.2", "castle.torch.3", "castle.torch.4" ]
  }
 }

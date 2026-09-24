@@ -74,6 +74,7 @@ ANIMATIONS = (
     (150, 151), (30, 31), (158, 159),                       # torsos, wizard's legs
     tuple(SABREMAN_LEGS),                                   # a guard's legs
     (80, 81, 82, 83), (164, 165, 166, 167), (8, 9),         # ghost, spell, gate
+    (144, 145, 146, 147),                                   # a torch's flame
 )
 
 # The eight kinds the wizard asks for -- SPECIAL_FIRST to SPECIAL_LIFE in
@@ -242,7 +243,7 @@ BLANK_GRAPHIC = 1
 # loads whole. Anything of it the code comes to draw in any room moves out to
 # a resident group then.
 ROOM_GROUPS = ("wall", "door", "scenery", "guard", "wizard", "fires", "balls",
-               "ghost", "gate", "pentagram")
+               "ghost", "gate", "pentagram", "castle")
 
 # ...except these, which the code puts up in any room: his bolt, and the puff a
 # bolt or a flyer goes out in. They are resident, like the knight.

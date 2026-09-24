@@ -108,6 +108,9 @@ FG_PENTAGRAM_STUMP_PUSHED	EQU	$30
 FG_PENTAGRAM_CUBE_PUSHED	EQU	$31
 FG_PENTAGRAM_TABLE_PUSHED	EQU	$32
 FG_PENTAGRAM_STONE_PUSHED	EQU	$33
+; ...and this game's own torches.
+FG_CASTLE_TORCH				EQU	$34
+FG_CASTLE_TORCH_M			EQU	$35
 GFX_PENTAGRAM_BLOCK_4		EQU	222		; the crumbling block's last crack
 GFX_PENTAGRAM_BOLT_1		EQU	223		; the bolt's three frames
 GFX_PENTAGRAM_BOLT_3		EQU	225
@@ -160,6 +163,13 @@ start:				ld		sp,$FE00
 					call	mover_find
 					call	snap
 					EXPECT_A	MOVE_STILL, "the behaviour"
+
+					TEST	"find: a torch is a flame"
+					call	fresh
+					ld		a,FG_CASTLE_TORCH_M
+					call	mover_find
+					call	snap
+					EXPECT_A	MOVE_FLAME, "the behaviour"
 
 					TEST	"find: one that does not move"
 					call	fresh
@@ -944,6 +954,36 @@ start:				ld		sp,$FE00
 					call	bolt_hits
 					call	snap
 					EXPECT_CARRY	0, "carry: no hit"
+
+; --- mover_flame ---------------------------------------------------------------
+; The torch's four frames are graphics 144 to 147, and the bottom two bits
+; count round -- on even turns only.
+
+					TEST	"flame: an even turn shows the next frame"
+					call	fresh
+					ld		a,2
+					ld		(move_tick),a
+					SET		OBJ.GFX, 145
+					RUN		mover_flame
+					EXPECT_FIELD	OBJ.GFX, 146, "the graphic"
+
+					TEST	"flame: the last frame goes round to the first"
+					call	fresh
+					ld		a,4
+					ld		(move_tick),a
+					SET		OBJ.GFX, 147
+					RUN		mover_flame
+					EXPECT_FIELD	OBJ.GFX, 144, "the graphic"
+
+					TEST	"flame: an odd turn leaves it be"
+					call	fresh
+					ld		a,3
+					ld		(move_tick),a
+					SET		OBJ.GFX, 145
+					SET		OBJ.U, 100
+					RUN		mover_flame
+					EXPECT_FIELD	OBJ.GFX, 145, "the graphic"
+					EXPECT_FIELD	OBJ.U, 100, "U: it never moves"
 
 					call	finish
 					DB		"movers_tests (knightlore128)", 0

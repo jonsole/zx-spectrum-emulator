@@ -48,8 +48,57 @@ starts.
 | 4c-ii | what Pentagram puts up itself: the things that fall from the sky, his bolt and the puff | done |
 | 5 | the pre-drawn backdrop in bank 6: the walls drawn once a room, and each redraw starting from them | done |
 | 6a | graphic numbers freed for new art: duplicates of the same sprite merged, 24 numbers free | done |
+| 6b | the first placeholder art -- torch, barrel, chair, bed, bench, bookcase, parapet, bridge -- and room $25 to show it | done |
 | 6 | new art (placeholders for now) and the bigger castle | |
 | 7 | sound on the AY | |
+
+### The first new art (stage 6b)
+
+Placeholders, drawn for refining: each is in Knight Lore's style, white
+faces with a black outline and the right-hand side checkered, and sits in
+the `castle` band at the foot of `sprites.png`. Edit the picture there and
+rebuild; `sprite_source.py` reads it back as it reads every other sprite.
+
+| Sprite | Graphic | Box (half U, half V, Z) | Templates |
+|---|---|---|---|
+| `castle.torch.1`-`4` | 144-147 | 1, 1, 12 | `object_castle_torch`, `_m` |
+| `castle.barrel.1` | 62 | 6, 6, 16 | `object_castle_barrel` |
+| `castle.chair.1` | 91 | 5, 5, 9 | `object_castle_chair`, `_m` |
+| `castle.bed.1` | 143 | 6, 12, 10 | `object_castle_bed`, `_m` |
+| `castle.bench.1` | 246 | 3, 10, 8 | `object_castle_bench`, `_m` |
+| `castle.shelf.1` | 252 | 3, 8, 28 | `object_castle_shelf`, `_m` |
+| `castle.parapet.1` | 54 | 2, 12, 16 | `object_castle_parapet`, `_m` |
+| `castle.bridge.deck` | 55 | 8, 8, 4 | `object_castle_deck` |
+| `castle.bridge.rail` | 148 | 1, 8, 12 | `object_castle_rail`, `_m` |
+
+Each one faces one way, and the `_m` template draws it mirrored, facing the
+other. Unmirrored:
+- the torch hangs on the west wall (U low), the one up and to the left;
+- the bookcase stands against that wall;
+- the chair's back is to the north (V high).
+
+The torch is the one that moves. `MOVE_FLAME` shows the next of its four
+frames every other turn (`mover_flame` in `movers.s`, through the engine's
+`mover_cycle4`), so its frames sit on an aligned run of four. It is a new
+behaviour in the harmless band, number 31, and the seven behaviours above it
+each moved up one. The torch is passable, since it hangs above the floor.
+Everything else is plain scenery: no behaviour, so nothing is shoved, carried
+or kills, and the parapet is an object rather than a wall set for now.
+
+**Room $25** shows every piece: torches on both walls, the bookcase, the
+bed, two chairs, stacked barrels, the bench, a bridge deck with its rails and
+the parapet. It is joined to nothing, like Pentagram's rooms, until the
+castle is laid out. It has Knight Lore's square walls.
+
+That leaves 12 of the 24 graphic numbers free: 149, 152-157, 176, 177, 182,
+183 and 255. 152-155 is the one run of four left.
+
+What was checked, in a 128K emulator:
+- Room $25 builds, and every torch goes through its four frames.
+- Knight Lore's 127 rooms still build the same objects as the 48K game.
+- Nothing drew `sprite_missing`.
+- The mover tests pass, with four new tests for the flame. The designer's
+  tests and the schema tests pass too.
 
 ### Graphic numbers for new art (stage 6a)
 

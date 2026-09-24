@@ -926,6 +926,52 @@
      ] }
     ]
   },
+  { "number": 37, "ink": 6, "dimensions": "square",
+    "scenery": [
+     { "template": "scenery_walls_0" }
+    ],
+    "objects": [
+     { "template": "object_castle_torch", "positions": [
+      { "u": 0, "v": 2, "z": 2 },
+      { "u": 0, "v": 6, "z": 2 }
+     ] },
+     { "template": "object_castle_torch_m", "positions": [
+      { "u": 2, "v": 7, "z": 2 },
+      { "u": 6, "v": 7, "z": 2 }
+     ] },
+     { "template": "object_castle_shelf", "positions": [
+      { "u": 0, "v": 4, "z": 0 }
+     ] },
+     { "template": "object_castle_bed_m", "positions": [
+      { "u": 3, "v": 7, "z": 0 }
+     ] },
+     { "template": "object_castle_chair", "positions": [
+      { "u": 3, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_castle_chair_m", "positions": [
+      { "u": 5, "v": 3, "z": 0 }
+     ] },
+     { "template": "object_castle_barrel", "positions": [
+      { "u": 7, "v": 6, "z": 0 },
+      { "u": 7, "v": 7, "z": 0 },
+      { "u": 7, "v": 7, "z": 1 }
+     ] },
+     { "template": "object_castle_bench", "positions": [
+      { "u": 4, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_castle_deck", "positions": [
+      { "u": 1, "v": 0, "z": 0 },
+      { "u": 2, "v": 0, "z": 0 }
+     ] },
+     { "template": "object_castle_rail_m", "positions": [
+      { "u": 1, "v": 0, "z": 0 },
+      { "u": 2, "v": 0, "z": 0 }
+     ] },
+     { "template": "object_castle_parapet", "positions": [
+      { "u": 7, "v": 2, "z": 0 }
+     ] }
+    ]
+  },
   { "number": 39, "ink": 6, "dimensions": "square",
     "scenery": [
      { "template": "scenery_arch_n", "destination": 55 },
