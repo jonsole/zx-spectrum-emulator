@@ -1,0 +1,12 @@
+{
+  "sheet": "blocks.png",
+  "colours": {
+    "ink": "#000000",
+    "paper": "#ffffff",
+    "clear": "#ff00ff"
+  },
+  "blocks": {
+    "views 0 and 2": {"at": [0, 0]},
+    "views 1 and 3": {"at": [16, 0]}
+  }
+}

@@ -182,6 +182,11 @@ examples/filmation/knightlore128/room_list.s
 examples/filmation/knightlore128/specials_gen.s
 examples/filmation/knightlore128/output/
 
+# isoblocks: everything build.py generates -- the view tables, the block
+# drawers, the map's bytes, the assembled demo -- is rebuilt from art/, maps/
+# and isogeom.py.
+examples/isoblocks/output/
+
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:

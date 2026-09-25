@@ -1,0 +1,12 @@
+{
+  "sheet": "sprites.png",
+  "colours": {
+    "ink": "#000000",
+    "paper": "#ffffff",
+    "clear": "#ff00ff"
+  },
+  "sprites": {
+    "figure": {"at": [0, 0]},
+    "ball": {"at": [16, 0]}
+  }
+}
