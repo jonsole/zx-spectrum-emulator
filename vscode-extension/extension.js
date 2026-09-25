@@ -188,7 +188,8 @@ function activate(context) {
   context.subscriptions.push(speedStatus);
   context.subscriptions.push(
     vscode.commands.registerCommand('zxspectrum.loadTape', () => loadTape(context)),
-    vscode.commands.registerCommand('zxspectrum.saveSnapshot', saveSnapshot)
+    vscode.commands.registerCommand('zxspectrum.saveSnapshot', saveSnapshot),
+    vscode.commands.registerCommand('zxspectrum.pickFile', pickFile)
   );
   for (const [name, enabled] of [
     ['zxspectrum.writeOverlayOn', true],
@@ -1035,6 +1036,29 @@ async function saveSnapshot() {
   } catch (err) {
     vscode.window.showErrorMessage(`Could not save the snapshot: ${err.message}`);
   }
+}
+
+// A file browser for tasks.json, as an input of type "command":
+//
+//   { "id": "copy", "type": "command", "command": "zxspectrum.pickFile",
+//     "args": { "title": "...", "filters": { "Snapshot": ["sna", "z80"] } } }
+//
+// A task input can only prompt for text or pick from a fixed list, so this is
+// how the Filmation example workspaces' Extract task asks for the user's copy
+// of the game. It opens in the workspace folder, where the README says to put
+// the copy. Cancelling returns undefined, which cancels the task.
+async function pickFile(args) {
+  const options = args || {};
+  const folders = vscode.workspace.workspaceFolders;
+  const chosen = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    canSelectFolders: false,
+    title: options.title,
+    openLabel: options.openLabel || 'Choose',
+    filters: options.filters,
+    defaultUri: folders && folders.length > 0 ? folders[0].uri : undefined,
+  });
+  return chosen && chosen.length > 0 ? chosen[0].fsPath : undefined;
 }
 
 async function loadTape(context) {

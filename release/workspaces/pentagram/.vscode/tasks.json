@@ -1,7 +1,7 @@
 {
   // "Extract Pentagram": once, first. Makes the game's artwork and tables out of
   // your own copy of the original (.tzx, .tap, .sna or .z80) and checks them -- see
-  // README.md. Leave the path empty to use a copy in this folder.
+  // README.md. It asks for the file.
   //
   // "Build Pentagram": assembles the game into examples/filmation/pentagram/output/,
   // with sjasmplus from the PATH or fetched by the ZX Spectrum Debug extension
@@ -48,10 +48,17 @@
   ],
   "inputs": [
     {
+      // A file browser: an extension command that opens VS Code's Open dialog
+      // (tasks can only prompt for text themselves). Cancelling it cancels
+      // the task.
       "id": "copy",
-      "type": "promptString",
-      "description": "Your copy of Pentagram (.tzx, .tap, .sna or .z80) -- or leave it empty to use one in this folder",
-      "default": ""
+      "type": "command",
+      "command": "zxspectrum.pickFile",
+      "args": {
+        "title": "Your copy of Pentagram",
+        "openLabel": "Extract",
+        "filters": { "Pentagram tape or snapshot": ["tzx", "tap", "sna", "z80"] }
+      }
     }
   ]
 }

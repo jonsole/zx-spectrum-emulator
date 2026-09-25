@@ -36,6 +36,7 @@
     "onCommand:zxspectrum.serverRestart",
     "onCommand:zxspectrum.serverLog",
     "onCommand:zxspectrum.sjasmplusPath",
+    "onCommand:zxspectrum.pickFile",
     "onCommand:zxspectrum.runProgram",
     "onCommand:zxspectrum.debugProgram",
     "onCustomEditor:zxspectrum.program",

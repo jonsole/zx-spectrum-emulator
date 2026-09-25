@@ -22,9 +22,9 @@ copy of the original**, once, and the workspace checks they came out right.
 ## First: extract the game from your copy
 
 Open this folder in VS Code (**File > Open Folder...**, the folder this README
-is in). Put your copy in it, then run **Terminal > Run Task... > Extract
-Pentagram** and press Enter at the prompt (or type the path to a copy
-elsewhere).
+is in), then run **Terminal > Run Task... > Extract Pentagram** and choose
+your copy in the file browser it opens. Putting the copy in this folder first
+saves looking for it; anywhere will do.
 
 It pulls the artwork and tables out of your copy, turns them into the files
 the build reads (`sprites.png`, `sprites.json`, `rooms.json`, ...), and checks

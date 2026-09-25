@@ -1,7 +1,7 @@
 {
   // "Extract Knight Lore": once, first. Makes the game's artwork and tables out of
   // your own copy of the original (.sna or .z80) and checks them -- see
-  // README.md. Leave the path empty to use a copy in this folder.
+  // README.md. It asks for the file.
   //
   // "Build Knight Lore": assembles the game into examples/filmation/knightlore/output/,
   // with sjasmplus from the PATH or fetched by the ZX Spectrum Debug extension
@@ -48,10 +48,17 @@
   ],
   "inputs": [
     {
+      // A file browser: an extension command that opens VS Code's Open dialog
+      // (tasks can only prompt for text themselves). Cancelling it cancels
+      // the task.
       "id": "copy",
-      "type": "promptString",
-      "description": "Your copy of Knight Lore (.sna or .z80) -- or leave it empty to use one in this folder",
-      "default": ""
+      "type": "command",
+      "command": "zxspectrum.pickFile",
+      "args": {
+        "title": "Your copy of Knight Lore",
+        "openLabel": "Extract",
+        "filters": { "Knight Lore snapshot": ["sna", "z80"] }
+      }
     }
   ]
 }
