@@ -46,6 +46,18 @@ jobs:
       - name: Fetch the ROMs
         run: python scripts/fetch_roms.py
 
+      # What the packages carry besides the build: the tape designer's fast
+      # loader (a submodule), and for the ROM example, the commented ROM
+      # disassembly -- built here with sjasmplus and SkoolKit, which refuses
+      # to write one that does not reassemble the ROM byte for byte.
+      - name: Fetch the tape loader and build the ROM disassembly
+        run: |
+          git submodule update --init examples/zx-tape-loader
+          python scripts/fetch_sjasmplus.py
+          $env:PATH = "$PWD/tools/sjasmplus;$env:PATH"
+          python -m pip install --quiet skoolkit==10.1
+          python scripts/build_rom_source.py
+
       - name: Build and test the emulator
         run: |
           $suffix = '${{ steps.tag.outputs.suffix }}'

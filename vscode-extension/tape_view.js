@@ -451,7 +451,8 @@ async function build(document, post, andRun) {
   if (tape.scheme === 'zx-tape-loader' &&
       ((tape.loaderAddress !== null && tape.loaderAddress !== model.LOADER_DEFAULT) ||
        (tape.stack !== null && tape.stack !== model.STACK_DEFAULT))) {
-    args.push('--sjasmplus', shared.findSjasmplus(builder));
+    args.push('--sjasmplus', shared.findSjasmplus(builder) ||
+      await vscode.commands.executeCommand('zxspectrum.sjasmplusPath'));
   }
   const task = new vscode.Task(
     { type: 'zxspectrum-tape', tape: document.uri.fsPath },

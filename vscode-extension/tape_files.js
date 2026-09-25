@@ -102,7 +102,8 @@ function setting(name) {
 
 // scripts/build_tape.py: the setting, or the one in the repository this
 // extension is part of -- it is installed as a link to vscode-extension/, so
-// the scripts are beside it -- or one in a workspace folder.
+// the scripts are beside it -- or one in a workspace folder, or the copy a
+// release carries in its own builder/ folder, with the fast loader beside it.
 function findBuilder() {
   const set = setting('builder');
   if (set) {
@@ -112,6 +113,7 @@ function findBuilder() {
   for (const folder of vscode.workspace.workspaceFolders || []) {
     candidates.push(path.join(folder.uri.fsPath, 'scripts', 'build_tape.py'));
   }
+  candidates.push(path.join(__dirname, 'builder', 'build_tape.py'));
   return candidates.find(fileExists) || null;
 }
 
@@ -140,7 +142,9 @@ function findPython(builder) {
 }
 
 // sjasmplus, which the zx-tape-loader scheme needs only to move its loader:
-// the setting, tools/sjasmplus beside the builder, or the PATH.
+// the setting, or tools/sjasmplus beside the builder in a checkout -- or
+// null, for the caller to ask zxspectrum.sjasmplusPath, which finds one on
+// the PATH or fetches one.
 function findSjasmplus(builder) {
   const set = setting('sjasmplus');
   if (set) {
@@ -148,12 +152,17 @@ function findSjasmplus(builder) {
   }
   const exe = process.platform === 'win32' ? 'sjasmplus.exe' : 'sjasmplus';
   const guess = path.join(path.dirname(path.dirname(builder || '')), 'tools', 'sjasmplus', exe);
-  return fileExists(guess) ? guess : 'sjasmplus';
+  return fileExists(guess) ? guess : null;
 }
 
 // zx-tape-loader's own loader.tap, for timing its BASIC bootstrap.
 function fastLoaderTap(builder) {
-  const tap = path.join(path.dirname(path.dirname(builder || '')), 'examples', 'zx-tape-loader', 'loader.tap');
+  // The submodule in a checkout, or the copy beside a release's builder.
+  const taps = [
+    path.join(path.dirname(path.dirname(builder || '')), 'examples', 'zx-tape-loader', 'loader.tap'),
+    path.join(path.dirname(builder || ''), 'zx-tape-loader', 'loader.tap'),
+  ];
+  const tap = taps.find(fileExists) || taps[0];
   try {
     return fs.readFileSync(tap);
   } catch (err) {

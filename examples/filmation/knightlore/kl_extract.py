@@ -1,8 +1,14 @@
 """Pull the room tables and the graphic map out of a Knight Lore snapshot.
 
-Run this once, by hand, against your own copy of the game:
+Run this once, by hand, against your own copy of the game -- a 48K .sna or
+.z80 of it, from before a game is started (at the menu, say):
 
     python kl_extract.py "path/to/Knight Lore.sna"
+
+A snapshot rather than the tape: the tape's bytes are not the game's until its
+loader has decoded them. Load the tape in the emulator and save a snapshot at
+the menu to get one. Sprites the game has already mirrored are turned back
+(original.py), so the snapshot need not be taken the instant it loads.
 
 It writes five files next to itself, and those are what the build uses
 -- the snapshot itself is never needed again and is not in this repository:
@@ -43,6 +49,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+import original                                                 # noqa: E402
 
 FONT_START = 0x6108
 FONT_END = 0x6248               # exclusive, and the room data starts here
@@ -60,12 +68,29 @@ GRAPHIC_COUNT = 256
 NO_SPRITE = 255
 
 
-def load_sna(path):
-    """A 48K .sna is a 27-byte header then RAM from $4000."""
-    raw = Path(path).read_bytes()
-    if len(raw) != 49179:
-        sys.exit("%s is %d bytes; a 48K .sna is 49179" % (path, len(raw)))
-    return raw[27:]
+def load_ram(path):
+    """RAM from $4000, out of a .sna or .z80, with every sprite the way round
+    the tape holds it."""
+    if Path(path).suffix.lower() in (".tap", ".tzx"):
+        sys.exit("Knight Lore's tape is encoded until its loader has run: load it "
+                 "in the emulator and save a snapshot at the menu, then extract "
+                 "from that")
+    try:
+        memory = original.load_snapshot(path)
+    except original.OriginalError as err:
+        sys.exit(str(err))
+    p = SPRITES_START
+    turned = 0
+    while p < SPRITES_END:
+        width = memory[p] & 0x1F
+        height = memory[p + 1]
+        if width and height and original.unmirror(memory, p, MIRRORED):
+            turned += 1
+        p += 2 + width * height * 2
+    if turned:
+        print("turned back %d sprite%s the game had mirrored"
+              % (turned, "" if turned == 1 else "s"))
+    return bytes(memory[0x4000:])
 
 
 def sprites(ram):
@@ -215,7 +240,7 @@ def write_specials(ram):
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    ram = load_sna(sys.argv[1])
+    ram = load_ram(sys.argv[1])
 
     font = ram[FONT_START - 0x4000:FONT_END - 0x4000]
     (HERE / "font.bin").write_bytes(font)

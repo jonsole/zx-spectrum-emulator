@@ -54,12 +54,35 @@ It writes `knightlore/output/knightlore.z80`, a version 3 snapshot that
 lines with and a `.lst` listing. `output/` is gitignored; everything in it is
 regenerated.
 
-Knight Lore's own data is not in the repository. Take it from your own copy of
-the game once, before the first build:
+What the repository carries of the games' own data is the JSON and the sprite
+sheet; the packed forms and the font come from your own copy of the game, once,
+before the first build:
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\filmation\knightlore\kl_extract.py "path\to\Knight Lore.sna"
 ```
+
+The release's example workspaces carry none of it, and make all of it with
+`extract.py` instead, which runs the extractor and the steps after it and
+checks what comes out against the game's `original.json` -- the hashes a right
+copy gives:
+
+```powershell
+.\.venv-win\Scripts\python.exe examples\filmation\extract.py knightlore "path\to\your\copy"
+.\.venv-win\Scripts\python.exe examples\filmation\extract.py pentagram "path\to\your\copy"
+```
+
+Both read a copy through `original.py`: a 48K `.sna` or `.z80` (versions 1 to
+3), or for Pentagram, whose tape holds the game as it is, a `.tzx` or `.tap`.
+Knight Lore's tape is decoded by its loader as it loads, so it needs a snapshot
+-- load the tape in the emulator and use **ZX Spectrum: Save Snapshot...** at
+the menu. The games flip sprites in place as they draw them and record it in
+each sprite's width byte (bit 6 left to right, and in Pentagram bit 7 upside
+down); `original.py` turns them back, so a snapshot need not be taken the
+instant the game loads -- but it must be from before a game is played, which
+changes the tables. A change to the carried data -- a room moved in the
+designer -- stops the next release, since extraction could not reproduce it
+(`original.json`'s `carried` hashes).
 
 The unit tests assemble single files against stubs and run them headless --
 the engine's in `engine/tests`, the games' in `knightlore/tests`,

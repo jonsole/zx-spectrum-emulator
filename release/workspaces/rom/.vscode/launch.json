@@ -1,0 +1,31 @@
+{
+  // Stepping through the Spectrum's own ROM, in its commented disassembly.
+  //
+  // The emulator, zx_server, and the ROMs come with the ZX Spectrum Debug
+  // extension; rom_disassembly/ is here, and the emulator finds it because the
+  // extension starts it in this folder. Breakpoints go in rom_disassembly/rom.asm.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // A 48K from power-on, stopped at its first instruction, DI at $0000.
+      // Step, or set a breakpoint in rom.asm and continue.
+      "name": "Step through the 48K ROM",
+      "type": "zxspectrum",
+      "request": "launch"
+    },
+    {
+      // The 128K: its menu is ROM 0, and 48 BASIC is ROM 1 -- the same code as
+      // the 48K's, so rom.asm follows it there.
+      "name": "Step through the 128K ROM",
+      "type": "zxspectrum",
+      "request": "launch",
+      "machine": "128"
+    },
+    {
+      // Join the emulator as it is, without resetting it.
+      "name": "Attach to the running emulator",
+      "type": "zxspectrum",
+      "request": "attach"
+    }
+  ]
+}

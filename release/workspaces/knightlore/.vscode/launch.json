@@ -1,0 +1,25 @@
+{
+  // Knight Lore, remade on the Filmation engine, stepped in its own source.
+  //
+  // The emulator and the ROMs come with the ZX Spectrum Debug extension. The
+  // game's artwork and tables are not here: run the "Extract Knight Lore" task once,
+  // on your own copy of the original, first (README.md). After that, this
+  // builds the game and runs it -- rebuilding whatever changed each time.
+  //
+  // `asm` names the entry source only: knightlore.s INCLUDEs the rest of
+  // knightlore/ and ../engine/, and the .sld says which file each address is
+  // in, so stepping lands in whichever file the code actually is.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Knight Lore",
+      "type": "zxspectrum",
+      "request": "launch",
+      "snapshot": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.z80",
+      "sld": "${workspaceFolder}/examples/filmation/knightlore/output/knightlore.sld",
+      "asm": "${workspaceFolder}/examples/filmation/knightlore/knightlore.s",
+      "stopOnEntry": false,
+      "preLaunchTask": "Build Knight Lore"
+    }
+  ]
+}

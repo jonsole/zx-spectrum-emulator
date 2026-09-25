@@ -30,6 +30,7 @@ const os = require('os');
 const path = require('path');
 const launch = require('./server_launch');
 const registry = require('./server_registry');
+const sjasmplus = require('./sjasmplus_fetch');
 
 const HOST = '127.0.0.1';
 const START_TIMEOUT_MS = 20000;
@@ -39,6 +40,8 @@ let statusItem;
 // Where the extension is installed: a release carries zx_server in bin/ and
 // the ROMs in roms/ beneath it.
 let extensionPath;
+// The extension's own storage, where a fetched sjasmplus is kept.
+let storagePath;
 let child = null;          // the server this extension started, while it runs
 let childExit = null;      // resolves when it exits
 let state = 'stopped';     // stopped | starting | running | external
@@ -457,6 +460,7 @@ async function commandMenu() {
 
 function activateServer(context) {
   extensionPath = context.extensionPath;
+  storagePath = context.globalStorageUri && context.globalStorageUri.fsPath;
   output = vscode.window.createOutputChannel('ZX Spectrum Emulator');
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   statusItem.command = 'zxspectrum.serverMenu';
@@ -512,6 +516,10 @@ function activateServer(context) {
     vscode.commands.registerCommand('zxspectrum.serverStop', () => stopServer()),
     vscode.commands.registerCommand('zxspectrum.serverRestart', commandRestart),
     vscode.commands.registerCommand('zxspectrum.serverLog', () => output.show(true)),
+    // For tasks.json, as ${command:zxspectrum.sjasmplusPath}, and for the tape
+    // designer: an sjasmplus to assemble with, so an example workspace builds
+    // with none of its own. See ensureSjasmplus.
+    vscode.commands.registerCommand('zxspectrum.sjasmplusPath', () => ensureSjasmplus()),
     vscode.commands.registerCommand('zxspectrum.serverMenu', commandMenu),
     vscode.debug.onDidStartDebugSession(() => refreshState()),
     vscode.debug.onDidTerminateDebugSession(() => refreshState()),
@@ -545,6 +553,68 @@ function deactivateServer() {
     if (stopAll || entry.sessionId) {
       entry.proc.kill();
     }
+  }
+}
+
+// ---- sjasmplus ---------------------------------------------------------------
+//
+// One on the PATH is used as it is: whoever put it there chose it. Otherwise,
+// on Windows, the pinned release is fetched once into the extension's own
+// storage (sjasmplus_fetch.js) -- a release does not carry it. Elsewhere there
+// is no prebuilt one to fetch, so the bare name goes back and the task says
+// what is missing.
+
+let fetching = null; // the fetch in progress, so two builds share it
+
+function onPath(name) {
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    for (const ext of exts) {
+      const candidate = path.join(dir.trim(), name + ext);
+      if (dir.trim() && fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+async function ensureSjasmplus() {
+  const found = onPath('sjasmplus');
+  if (found) {
+    return found;
+  }
+  if (process.platform !== 'win32' || !storagePath) {
+    return 'sjasmplus';
+  }
+  const target = path.join(storagePath, `sjasmplus-${sjasmplus.SJASMPLUS.version}`, 'sjasmplus.exe');
+  if (fs.existsSync(target)) {
+    return target;
+  }
+  if (!fetching) {
+    fetching = vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification,
+        title: `Fetching sjasmplus ${sjasmplus.SJASMPLUS.version}, the Z80 assembler` },
+      async () => {
+        const zip = await sjasmplus.download(sjasmplus.SJASMPLUS.url);
+        const exe = sjasmplus.unpackSjasmplus(zip);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        // Beside it and renamed into place, so a fetch cut short never
+        // leaves half an executable where the next build would run it.
+        fs.writeFileSync(target + '.part', exe);
+        fs.renameSync(target + '.part', target);
+        output.appendLine(`[fetched sjasmplus ${sjasmplus.SJASMPLUS.version} into ${target}]`);
+        return target;
+      }).finally(() => {
+      fetching = null;
+    });
+  }
+  try {
+    return await fetching;
+  } catch (err) {
+    vscode.window.showErrorMessage(`Could not fetch sjasmplus: ${err.message}. Put sjasmplus on the ` +
+      'PATH (https://github.com/z00m128/sjasmplus/releases) and try again.');
+    return 'sjasmplus';
   }
 }
 

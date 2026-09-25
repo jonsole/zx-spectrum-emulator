@@ -35,6 +35,7 @@ Run it directly, or via the "filmation.build" VS Code task that
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -69,6 +70,11 @@ INSTALL_HELP = (
 
 
 def find_sjasmplus() -> str:
+    # Named outright first: an example workspace's build task passes the copy
+    # the VS Code extension carries, since there is no repository around it.
+    named = os.environ.get("SJASMPLUS")
+    if named and Path(named).is_file():
+        return named
     for candidate in SJASMPLUS_CANDIDATES:
         if candidate.is_file():
             return str(candidate)
@@ -330,6 +336,23 @@ def generate_room_data() -> None:
     subprocess.run([sys.executable, str(emitter)], cwd=PENTAGRAM, check=True)
 
 
+def require_extracted() -> None:
+    """Stops, saying how to get it, when the game's data is not here.
+
+    A release's example workspace carries none of it -- only extract.py,
+    which makes it from your own copy of the original -- and a checkout
+    without the carried files is in the same place. Said once, here, rather
+    than by whichever generator happens to find the first file missing.
+    """
+    pins = json.loads((HERE / "original.json").read_text(encoding="utf-8"))
+    missing = [name for name in pins["carried"] if not (HERE / name).is_file()]
+    if missing:
+        sys.exit(f"{', '.join(missing)} missing: Pentagram's data comes from your own copy "
+                 f"of the original.\nPut it in the workspace and run the \"Extract Pentagram\" "
+                 f"task, or:\n    python examples/filmation/extract.py pentagram "
+                 f"path/to/your/copy")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Assemble the Filmation engine.")
     parser.add_argument("--debug-room", action="store_true",
@@ -337,6 +360,7 @@ def main() -> None:
     args = parser.parse_args()
     defines = ["DEBUG_ROOM"] if args.debug_room else []
 
+    require_extracted()
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
     generate_font_data()

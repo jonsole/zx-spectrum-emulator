@@ -1,0 +1,16 @@
+{
+  "_what": "The SHA-256 of what extract.py gets out of an original copy of Knight Lore: 'extracted' is the extractor's own output, which says the copy is the right one; 'carried' is the files the repository carries, which a right copy gives back byte for byte. package_release.py refuses a release when the carried files have moved away from these -- an edit extraction cannot reproduce. JSON is hashed with its line endings as LF, since Python writes the platform's own.",
+  "extracted": {
+    "font.bin": "a2be2b043eb8d1f1a567b274d6e395329eab6d020cabf6571cd2ff7dca334aea",
+    "room_data.bin": "7676c070cb53599448d0165921b4eab617f1558854b835044b21fb2e6726e357",
+    "sprite_data.bin": "b3b8d75be9937939d19e9d6ef4fbbdc6efed9e6ce304d0ed1ebf1322552888be",
+    "specials.json": "4b232fc1d000fff71fda53722302e6b8cbd5aecf6a448f62fee19ffa4b4f63cc"
+  },
+  "carried": {
+    "sprites.png": "ab34a804c01192238563ee502b0399fbb2e1cbee898ccdd888a2ac62fffe990c",
+    "sprites.json": "e39b9c1d7f6f3b1a50521de11fa06a339bf8a9e42547d55c74f5bd6a80ca0417",
+    "rooms.json": "9ee6ed0a0ba12a57a2acf8b22c97db657c150d465bb94d44492f455c6f2f4dab",
+    "templates.json": "8a802a33c38240b46cf3e5357d564624c3cd361f66d706e7722d098eed94154e",
+    "specials.json": "4b232fc1d000fff71fda53722302e6b8cbd5aecf6a448f62fee19ffa4b4f63cc"
+  }
+}

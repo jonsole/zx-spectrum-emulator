@@ -187,7 +187,8 @@ function activate(context) {
   speedStatus.command = 'zxspectrum.setSpeed';
   context.subscriptions.push(speedStatus);
   context.subscriptions.push(
-    vscode.commands.registerCommand('zxspectrum.loadTape', () => loadTape(context))
+    vscode.commands.registerCommand('zxspectrum.loadTape', () => loadTape(context)),
+    vscode.commands.registerCommand('zxspectrum.saveSnapshot', saveSnapshot)
   );
   for (const [name, enabled] of [
     ['zxspectrum.writeOverlayOn', true],
@@ -1006,6 +1007,35 @@ async function sendVolume(session = zxDebugSession()) {
 // A tape can also be named in launch.json ("tape"), which is the better route
 // when it is always the same image; this command is for reaching for a
 // different one mid-session.
+
+// Saves the machine as it is now, .z80 or .sna by the name given -- the same
+// request the graphics panel's exports use. What turns a tape into a snapshot
+// the Filmation examples can extract from (Knight Lore's tape is encoded until
+// its loader has run), and a way to keep any moment worth coming back to.
+async function saveSnapshot() {
+  const session = zxDebugSession();
+  if (!session) {
+    vscode.window.showErrorMessage('Start a ZX Spectrum debug session first.');
+    return;
+  }
+  const folders = vscode.workspace.workspaceFolders;
+  const chosen = await vscode.window.showSaveDialog({
+    saveLabel: 'Save snapshot',
+    filters: { 'Z80 snapshot': ['z80'], 'SNA snapshot': ['sna'] },
+    defaultUri: folders && folders.length > 0
+      ? vscode.Uri.joinPath(folders[0].uri, 'snapshot.z80') : undefined,
+  });
+  if (!chosen) {
+    return;
+  }
+  try {
+    const body = await session.customRequest('saveSnapshot', { path: chosen.fsPath });
+    vscode.window.showInformationMessage(
+      `Saved ${path.basename(chosen.fsPath)} (${body && body.bytes ? body.bytes + ' bytes' : 'done'}).`);
+  } catch (err) {
+    vscode.window.showErrorMessage(`Could not save the snapshot: ${err.message}`);
+  }
+}
 
 async function loadTape(context) {
   const session = vscode.debug.activeDebugSession;

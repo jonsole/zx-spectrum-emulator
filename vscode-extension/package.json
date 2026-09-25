@@ -35,6 +35,7 @@
     "onCommand:zxspectrum.serverStop",
     "onCommand:zxspectrum.serverRestart",
     "onCommand:zxspectrum.serverLog",
+    "onCommand:zxspectrum.sjasmplusPath",
     "onCommand:zxspectrum.runProgram",
     "onCommand:zxspectrum.debugProgram",
     "onCustomEditor:zxspectrum.program",
@@ -360,6 +361,10 @@
         "enablement": "zxspectrum.tapeSession",
         "title": "ZX Spectrum: Load Tape...",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "zxspectrum.saveSnapshot",
+        "title": "ZX Spectrum: Save Snapshot..."
       },
       {
         "command": "zxspectrum.tapePlay",

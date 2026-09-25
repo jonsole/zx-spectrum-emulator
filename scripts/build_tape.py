@@ -26,7 +26,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+# The fast loader: the submodule in a checkout, or the copy a release of the VS
+# Code extension carries beside this script (its builder/ folder).
 FAST_LOADER = os.path.join(ROOT, 'examples', 'zx-tape-loader')
+if not os.path.isfile(os.path.join(FAST_LOADER, 'loader.py')):
+    FAST_LOADER = os.path.join(HERE, 'zx-tape-loader')
 sys.path.insert(0, HERE)
 
 import tape_rom  # noqa: E402

@@ -1,0 +1,57 @@
+{
+  // "Extract Pentagram": once, first. Makes the game's artwork and tables out of
+  // your own copy of the original (.tzx, .tap, .sna or .z80) and checks them -- see
+  // README.md. Leave the path empty to use a copy in this folder.
+  //
+  // "Build Pentagram": assembles the game into examples/filmation/pentagram/output/,
+  // with sjasmplus from the PATH or fetched by the ZX Spectrum Debug extension
+  // the first time (the command in "env" below). The launch runs it first;
+  // Ctrl+Shift+B runs it on its own.
+  //
+  // Both need Python 3 on the PATH with Pillow (pip install pillow). The build's
+  // problem matcher is sjasmplus's error format, so a bad line lands in the
+  // Problems panel at the file and line it came from.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Extract Pentagram",
+      "type": "process",
+      "command": "python",
+      "args": ["examples/filmation/extract.py", "pentagram", "${input:copy}"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Pentagram",
+      "type": "process",
+      "command": "python",
+      "args": ["examples/filmation/pentagram/build.py"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "SJASMPLUS": "${command:zxspectrum.sjasmplusPath}" }
+      },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/filmation/pentagram"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "copy",
+      "type": "promptString",
+      "description": "Your copy of Pentagram (.tzx, .tap, .sna or .z80) -- or leave it empty to use one in this folder",
+      "default": ""
+    }
+  ]
+}

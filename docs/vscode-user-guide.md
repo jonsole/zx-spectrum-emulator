@@ -227,6 +227,9 @@ A 128K snapshot switches the machine to a 128K on its own. That needs the
   resets, types `LOAD ""` and plays the tape. `tapeAutoStart` and
   `tapeFastLoad` change that.
 - **During a session:** run **ZX Spectrum: Load Tape...** and pick a file.
+- **Keeping a moment:** **ZX Spectrum: Save Snapshot...** saves the machine
+  as it is, as a `.z80` or `.sna` -- a tape loaded and run to its menu, say,
+  to open straight there next time.
 
 **Fast load** is on by default: ordinary tape blocks load instantly. Turbo
 loaders and custom loaders always play in real time, as do `.wav` and `.csw`

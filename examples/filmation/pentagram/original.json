@@ -1,0 +1,16 @@
+{
+  "_what": "The SHA-256 of what extract.py gets out of an original copy of Pentagram: 'extracted' is the extractor's own output, which says the copy is the right one; 'carried' is the files the repository carries, which a right copy gives back byte for byte. package_release.py refuses a release when the carried files have moved away from these -- an edit extraction cannot reproduce. JSON is hashed with its line endings as LF, since Python writes the platform's own.",
+  "extracted": {
+    "font.bin": "391f885ab52d552cb4a64a7ceda8a19dce6da948df3d4ed65163fdc85d687791",
+    "room_data.bin": "459356883384b36faee0304c7c64d7d7dcfe74c26468f575c80cf389fc2a0cf3",
+    "sprite_data.bin": "5213295713ea9b0ab4160a0b9eeb501c98193b42e722397ca1cb64d383bfc9c7",
+    "quest.bin": "2646065aa513e713d3397a05a1cfca8d4bcc28100c03dd4588c25ca376917137",
+    "sound.bin": "4a9b2afd4632d086af3d528d9563d848a9bd13e951aaa9638e1e39e96963711a"
+  },
+  "carried": {
+    "sprites.png": "9bf4af562903b0e44c638ca85632629ef148972451db338f773750324fcb3f8d",
+    "sprites.json": "8138c7ce36df2316dee6ad1872597f9b75385e587b4c7c8eeff1f695aa26e592",
+    "rooms.json": "f6211b5d6ccf885007cfc2adb6e4dc710228e8c08e1f394a18fd9e06a94b5adf",
+    "templates.json": "b3706756c5996ed757a85cbeb6c08750f0009a9e5e68fde09bb3566d47078033"
+  }
+}

@@ -22,6 +22,18 @@ The first release: the emulator and the VS Code extension, packaged.
 - **More than one emulator at once**, each announcing its ports, with the
   screen panel following whichever the debugger is on.
 - **MCP:** the same machine driven by an AI agent, alongside the debugger.
+- **Example workspaces**, each its own zip: stepping through the ROM in its
+  commented disassembly, and the Knight Lore and Pentagram remakes on the
+  Filmation engine. The remakes' workspaces carry none of Ultimate's data: an
+  Extract task makes it from your own copy of the original (`.sna`, `.z80`,
+  and for Pentagram `.tzx` or `.tap`) and checks it came out right.
+- **The Filmation designer** -- the room, templates and graphic-map editors --
+  released as its own `.vsix`.
+- **Works outside the repository:** Run and Debug on a snapshot, F5 with no
+  `launch.json`, the trace viewer and the tape designer's Build all work in any
+  folder. sjasmplus, which the examples and the tape designer assemble with,
+  is fetched the first time it is needed.
+- **ZX Spectrum: Save Snapshot...** saves the machine as a `.z80` or `.sna`.
 - `zx_server --version`, and a version in `serverInfo`; the extension warns
   when a server is older than it.
 - MIT licence; third-party terms in `THIRD_PARTY_NOTICES.md`.

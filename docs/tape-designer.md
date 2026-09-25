@@ -59,7 +59,11 @@ Opening a `.tape.json` shows the picture as it will look once loaded, and beside
 - **Build & Run** saves the tape and its screen, builds it, and loads it into the
   emulator: a `rom` tape's `.tap` loads at once; a `zx-tape-loader` tape plays at
   tape speed, which is the point. **Build** only builds it. Either runs
-  `build_tape.py` as a task, so its output is in the terminal panel.
+  `build_tape.py` as a task, so its output is in the terminal panel. It needs
+  Python 3 (and numpy for the fast loader). In this repository the builder is
+  `scripts/build_tape.py`; an installed release carries its own copy, with the
+  fast loader beside it, and fetches sjasmplus the first time a moved loader
+  needs assembling.
 - **Loading scheme** -- which one, and what it means.
 - **Loading screen** -- the screen file, its picture, its rectangles and their
   time. **Design screen...** opens the designer (below); **Picture...** chooses

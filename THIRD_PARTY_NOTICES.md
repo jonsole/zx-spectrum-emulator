@@ -1,9 +1,10 @@
 # Third-party notices
 
 The project's own code is under the MIT licence in [LICENSE](LICENSE). The
-parts below are other people's, carried under their own terms. A release
-(`zx_server.exe` and the VS Code extension's `.vsix`) contains the first four;
-the last is in this repository but in no release.
+parts below are other people's, carried under their own terms. Each section
+says which parts of a release carry it: `zx_server.exe` and its zip, the VS
+Code extension's `.vsix`, and the example workspaces' zips. The last is in
+this repository but in no release.
 
 ## ZX Spectrum ROMs
 
@@ -103,6 +104,78 @@ screen stream's PNG frames). Public domain, or at your choice:
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
+
+## sjasmplus 1.23.1
+
+Not in any release. The VS Code extension fetches the official Windows build
+from sjasmplus's own GitHub release the first time the example workspaces or
+the tape designer need an assembler, checked against a pinned SHA-256, and
+keeps it in its own storage; `scripts/fetch_sjasmplus.py` fetches the same one
+into a checkout, and is what assembles the ROM disassembly and the Filmation
+games a release carries. Its licence, for anyone passing a copy on:
+<https://github.com/z00m128/sjasmplus>
+
+> Copyright (c) 2016, aprisobal
+> All rights reserved.
+>
+> Redistribution and use in source and binary forms, with or without
+> modification, are permitted provided that the following conditions are met:
+>
+> * Redistributions of source code must retain the above copyright notice, this
+>   list of conditions and the following disclaimer.
+>
+> * Redistributions in binary form must reproduce the above copyright notice,
+>   this list of conditions and the following disclaimer in the documentation
+>   and/or other materials provided with the distribution.
+>
+> * Neither the name of sjasmplus nor the names of its
+>   contributors may be used to endorse or promote products derived from
+>   this software without specific prior written permission.
+>
+> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+> AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+> IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+> DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+> FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+> DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+> SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+> CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+> OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+> OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## zx-tape-loader
+
+`builder/zx-tape-loader/` in the extension's `.vsix`: the fast tape loader the
+tape designer builds with -- its Python and its Z80 source. The same author's
+own project, <https://github.com/jonsole/zx-tape-loader>, checked out in this
+repository as the `examples/zx-tape-loader` submodule.
+
+## The Complete Spectrum ROM Disassembly
+
+`rom_disassembly/rom.asm` and `rom.sld` in the ROM example workspace's zip.
+*The Complete Spectrum ROM Disassembly* is by Dr Ian Logan and Dr Frank
+O'Hara; the text here is Richard Dymond's SkoolKit edition of it,
+<https://github.com/skoolkid/rom>, converted to assembly source by SkoolKit's
+`skool2asm.py` and assembled with sjasmplus by `scripts/build_rom_source.py`.
+The ROM it describes is copyright Amstrad. The disassembly's text remains its
+authors'; it is published with no licence of its own, and is not in this
+repository.
+
+## Knight Lore and Pentagram (Ultimate Play the Game)
+
+*Knight Lore* (1984) and *Pentagram* (1986) are copyright Ultimate Play the
+Game. The remakes' code and the Filmation engine are this project's own (MIT).
+Their art -- the sprites, the font -- and their worlds' data -- the rooms,
+what is in them -- come from the original games.
+
+The Knight Lore and Pentagram example workspaces' zips carry **none** of it:
+each makes it from the user's own copy of the original
+(`examples/filmation/extract.py`), checked against `original.json`, which
+holds only hashes. What they carry of the games is `graphics.json` -- which
+sprite each graphic number draws and the nudge that places it, the remake's
+own table. This repository carries the extracted JSON and `sprites.png` for
+`examples/filmation/knightlore/` and `pentagram/`, as the editable source the
+builds read.
 
 ## floooh/chips (repository only)
 

@@ -1,16 +1,17 @@
 """Pull the room tables, the font and the sprites out of a Pentagram tape.
 
-Run this once, by hand, against your own copy of the game:
+Run this once, by hand, against your own copy of the game -- its tape, .tzx or
+.tap, or a 48K .sna or .z80 from before a game is started:
 
     python pg_extract.py "path/to/Pentagram.tzx"
 
-Unlike Knight Lore's kl_extract.py this reads the tape rather than a snapshot,
-and that is not a stylistic choice. Pentagram's `game` block is 31,390 bytes
+The tape is the better source, and that is not a stylistic choice. Pentagram's `game` block is 31,390 bytes
 loaded verbatim to $5E00-$D89D, so the shipped tape *is* the memory map -- but
 the game mirrors sprites in place as it draws them and records which way round
 one is now in the top bits of its width byte. By the time the machine reaches
 the menu four sprites have already been turned and rewritten, so any snapshot,
-however early, bakes that in. The tape cannot: every header flag in it is $00.
+however early, bakes that in. The tape cannot: every header flag in it is $00. A snapshot still works:
+original.py turns those four back, using the flag the game set on each.
 
 It writes four files next to itself, and those are what the build uses -- the
 tape itself is never needed again and is not in this repository:
@@ -59,6 +60,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+import original                                                 # noqa: E402
 
 GAME_START = 0x5E00             # where the tape's `game` block loads
 GAME_NAME = "game"
@@ -78,8 +81,9 @@ SPRITE_RUNS = ((0x6F2F, 0x8355), (0x8547, 0x9395), (0x9397, 0xA709),
                # than in address order so that adding it, which came late,
                # left every other sprite's number where it was.
                (0x84AD, 0x853F))
-MIRRORED = 0xE0                 # width-byte flags; bit 7 is the one the game
-                                # toggles in place as it mirrors a sprite
+MIRRORED = 0xE0                 # width-byte flags, set as the game flips a
+FLIP_LEFT_RIGHT = 0x40          # sprite in place: bit 6 left to right, bit 7
+FLIP_UPSIDE_DOWN = 0x80         # upside down (checked against a menu snapshot)
 NO_SPRITE = 255
 
 # The quest's own tables, for quest.bin -- see quest_source.py:
@@ -98,39 +102,6 @@ SOUND_TUNES = 0xD7CF            #   where the first tune begins
 SOUND_TUNES_END = 0xD88F        # the five tunes, each ending $FF
 
 
-def tape_blocks(path):
-    """The data blocks of a .tzx, standard speed (ID $10) and turbo (ID $11).
-
-    Only the block types Pentagram's tape actually uses are decoded; anything
-    else stops the walk rather than being silently skipped, so a tape that is
-    not this one fails loudly instead of yielding half a game.
-    """
-    raw = Path(path).read_bytes()
-    if raw[:8] != b"ZXTape!\x1a":
-        sys.exit("%s is not a TZX file" % path)
-
-    blocks = []
-    at = 10                     # 8-byte signature, then major/minor version
-    while at < len(raw):
-        block_id = raw[at]
-        at += 1
-        if block_id == 0x10:                    # standard speed data
-            length = raw[at + 2] | (raw[at + 3] << 8)
-            blocks.append(raw[at + 4:at + 4 + length])
-            at += 4 + length
-        elif block_id == 0x11:                  # turbo speed data
-            length = raw[at + 0x0F] | (raw[at + 0x10] << 8) | (raw[at + 0x11] << 16)
-            blocks.append(raw[at + 0x12:at + 0x12 + length])
-            at += 0x12 + length
-        elif block_id == 0x30:                  # text description
-            at += 1 + raw[at]
-        elif block_id == 0x32:                  # archive info
-            at += 2 + (raw[at] | (raw[at + 1] << 8))
-        else:
-            sys.exit("%s: unexpected TZX block $%02X at %d" % (path, block_id, at - 1))
-    return blocks
-
-
 def load_tape(path):
     """The 48K address space with the tape's `game` block loaded into it.
 
@@ -139,7 +110,10 @@ def load_tape(path):
     called `game`; the block after it is its bytes, between a flag and a
     checksum.
     """
-    blocks = tape_blocks(path)
+    try:
+        blocks = original.tape_blocks(path)
+    except original.OriginalError as err:
+        sys.exit(str(err))
     for n, block in enumerate(blocks):
         if len(block) != 19 or block[0] != 0x00:
             continue
@@ -156,6 +130,32 @@ def load_tape(path):
               % (len(data), address, address + len(data) - 1))
         return memory
     sys.exit("%s has no CODE block called `%s`" % (path, GAME_NAME))
+
+
+def load_original(path):
+    """The address space from the tape, or from a snapshot with the sprites
+    the game has mirrored turned back."""
+    if Path(path).suffix.lower() in (".tap", ".tzx"):
+        return load_tape(path)
+    try:
+        memory = original.load_snapshot(path)
+    except original.OriginalError as err:
+        sys.exit(str(err))
+    turned = 0
+    for start, end in SPRITE_RUNS:
+        at = start
+        while at < end:
+            width = memory[at] & 0x1F
+            height = memory[at + 1]
+            if not width or not height:
+                break               # sprites() below says where it lost its place
+            if original.unmirror(memory, at, FLIP_LEFT_RIGHT, FLIP_UPSIDE_DOWN):
+                turned += 1
+            at += 2 + width * height * 2
+    if turned:
+        print("turned back %d sprite%s the game had mirrored"
+              % (turned, "" if turned == 1 else "s"))
+    return memory
 
 
 def sprites(memory):
@@ -262,7 +262,7 @@ def write_graphic_map(gmap):
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    memory = load_tape(sys.argv[1])
+    memory = load_original(sys.argv[1])
 
     rooms = memory[ROOM_DATA_START:ROOM_DATA_END]
     (HERE / "room_data.bin").write_bytes(rooms)

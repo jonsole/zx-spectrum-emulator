@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -85,10 +86,17 @@ def require_skool2asm() -> str:
     # used for this: on Windows it only matches PATHEXT extensions
     # (.EXE/.BAT/...), so a bare .py script on PATH is invisible to it
     # even though `python skool2asm.py` runs it fine.
-    candidate = Path(sys.executable).parent / "skool2asm.py"
-    if not candidate.exists():
-        sys.exit(f"error: skool2asm.py not found at {candidate}.\nInstall with: pip install skoolkit")
-    return str(candidate)
+    #
+    # In a virtual environment the interpreter is itself in Scripts/, so
+    # its own folder is the place; a plain install -- the release
+    # workflow's -- keeps python.exe at the top and its scripts in the
+    # folder sysconfig names.
+    candidates = [Path(sysconfig.get_path("scripts")) / "skool2asm.py",
+                  Path(sys.executable).parent / "skool2asm.py"]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    sys.exit(f"error: skool2asm.py not found at {candidates[0]}.\nInstall with: pip install skoolkit")
 
 
 def build_asm(skool_path: Path, skool2asm_path: str) -> str:

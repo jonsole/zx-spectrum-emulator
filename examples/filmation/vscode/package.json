@@ -4,6 +4,12 @@
   "description": "Editors for the Filmation remakes in examples/filmation: the room designer on rooms.json, the templates the rooms are built from, the graphic map, and JSON schemas for every file a remake is built from. Independent of the emulator extension.",
   "version": "0.0.1",
   "publisher": "jonsole",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonsole/zx-spectrum-emulator",
+    "directory": "examples/filmation/vscode"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

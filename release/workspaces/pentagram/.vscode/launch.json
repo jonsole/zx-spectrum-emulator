@@ -1,0 +1,25 @@
+{
+  // Pentagram, remade on the Filmation engine, stepped in its own source.
+  //
+  // The emulator and the ROMs come with the ZX Spectrum Debug extension. The
+  // game's artwork and tables are not here: run the "Extract Pentagram" task once,
+  // on your own copy of the original, first (README.md). After that, this
+  // builds the game and runs it -- rebuilding whatever changed each time.
+  //
+  // `asm` names the entry source only: pentagram.s INCLUDEs the rest of
+  // pentagram/ and ../engine/, and the .sld says which file each address is
+  // in, so stepping lands in whichever file the code actually is.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Pentagram",
+      "type": "zxspectrum",
+      "request": "launch",
+      "snapshot": "${workspaceFolder}/examples/filmation/pentagram/output/pentagram.z80",
+      "sld": "${workspaceFolder}/examples/filmation/pentagram/output/pentagram.sld",
+      "asm": "${workspaceFolder}/examples/filmation/pentagram/pentagram.s",
+      "stopOnEntry": false,
+      "preLaunchTask": "Build Pentagram"
+    }
+  ]
+}
