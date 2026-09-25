@@ -491,6 +491,19 @@ function activateServer(context) {
         }
       }
     }),
+    // F5 in a folder with no launch.json: VS Code asks which debugger, then
+    // hands over an empty configuration, and without this nothing happens at
+    // all -- the first thing someone does after installing a release. What
+    // it gets is the Spectrum booting into BASIC, on the ROMs the server was
+    // started with, which is also what the generated launch.json does.
+    vscode.debug.registerDebugConfigurationProvider('zxspectrum', {
+      resolveDebugConfiguration(folder, config) {
+        if (!config.type && !config.request && !config.name) {
+          return { type: 'zxspectrum', request: 'launch', name: 'ZX Spectrum' };
+        }
+        return config;
+      }
+    }),
     vscode.debug.onDidTerminateDebugSession((session) => {
       sessionPorts.delete(session.id);
       stopSessionServers(session.id);

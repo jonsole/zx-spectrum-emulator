@@ -1044,8 +1044,7 @@
           {
             "name": "ZX Spectrum",
             "type": "zxspectrum",
-            "request": "launch",
-            "rom": "${workspaceFolder}/roms/48.rom"
+            "request": "launch"
           }
         ],
         "configurationSnippets": [
@@ -1056,7 +1055,6 @@
               "name": "ZX Spectrum: ${1:My program}",
               "type": "zxspectrum",
               "request": "launch",
-              "rom": "^\"\\${workspaceFolder}/roms/48.rom\"",
               "snapshot": "^\"\\${workspaceFolder}/${2:program.sna}\""
             }
           },
@@ -1068,7 +1066,6 @@
               "type": "zxspectrum",
               "request": "launch",
               "ports": "auto",
-              "rom": "^\"\\${workspaceFolder}/roms/48.rom\"",
               "snapshot": "^\"\\${workspaceFolder}/${2:program.sna}\""
             }
           },

@@ -39,15 +39,23 @@ function fileSize(file) {
   }
 }
 
+// Where the extension is installed: a release carries zx_server in bin/ and
+// the ROMs in roms/ beneath it (server_launch.js).
+let extensionPath;
+
 // The ROMs a program can be given: the server settings' list, or the roms/
-// folder of each workspace folder and of the emulator's own checkout.
+// folder of each workspace folder and of the emulator's own checkout -- and
+// failing those, the ones an installed release carries, without which a
+// release opened on any other folder could run nothing.
 function romCandidates() {
   const config = vscode.workspace.getConfiguration('zxspectrum.server');
   const folders = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath);
   const roots = folders.slice();
+  const bundledRoms = extensionPath && path.join(extensionPath, 'roms');
   const found = launch.serverCandidates({
     setting: config.get('path'), folders, pathEnv: process.env.PATH,
-    platform: process.platform, home: os.homedir()
+    platform: process.platform, home: os.homedir(),
+    bundled: extensionPath && path.join(extensionPath, 'bin')
   });
   const exe = launch.findServer(found.candidates, fileExists);
   if (exe) {
@@ -55,7 +63,7 @@ function romCandidates() {
   }
   const listed = [];
   for (const root of roots) {
-    for (const rom of launch.serverRoms(config.get('roms'), root, os.homedir(), fileExists)) {
+    for (const rom of launch.serverRoms(config.get('roms'), root, os.homedir(), fileExists, bundledRoms)) {
       if (!listed.includes(rom)) {
         listed.push(rom);
       }
@@ -340,6 +348,7 @@ function trackStopOnEntry() {
 }
 
 function activatePrograms(context) {
+  extensionPath = context.extensionPath;
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(VIEW_TYPE, new ProgramEditorProvider(), {
       supportsMultipleEditorsPerDocument: true
