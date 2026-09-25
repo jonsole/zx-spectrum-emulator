@@ -62,3 +62,24 @@ detail yet -- just captured here so they don't get lost.
       much data this could be), and a decision on whether tracing is
       always-on (cost every single tick, even when nobody's looking) or a
       runtime toggle. No Python reference for this one either.
+
+- [ ] **A simple Filmation example: one room with a soldier, a ball and a
+      block.** The first thing to open for someone new to the engine, much
+      smaller than the Knight Lore and Pentagram remakes: one room, the
+      player walking it from the keyboard, a guard patrolling (the engine's
+      pacer mover), a bouncing ball, and a block to push -- enough to show
+      input, collision, pushing and the depth sort, and little else in the
+      way. Decided (2026-09-25):
+      - **Our own artwork**, drawn in the same sprite-sheet format
+        (`sprites.png` + `sprites.json`): the soldier's walk frames, the
+        player's, a ball, a block, and the wall and floor pieces the room
+        needs. Knight Lore's guard, ball and block are Ultimate's, and a
+        simple example should run with nothing extracted from anyone's copy.
+      - **A player** to walk around, not only the three moving on their own.
+      - **`examples/filmation/demo/`**, a third game beside `knightlore/` and
+        `pentagram/` on the shared engine, built the same way, and a fourth
+        example workspace zip in each release (`release/workspaces/`,
+        `scripts/package_release.py`) -- one that needs no Extract step.
+      Worth settling when it is picked up: whether the art is drawn here or
+      by hand, and how much game code (a menu? lives?) a "simple" example
+      should carry.
