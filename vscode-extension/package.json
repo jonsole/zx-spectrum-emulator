@@ -2,7 +2,7 @@
   "name": "zxspectrum-debug",
   "displayName": "ZX Spectrum Debug",
   "description": "Debug ZX Spectrum programs in VS Code on a bundled, cycle-accurate emulator: breakpoints, stepping backwards, watchpoints, source-level Z80 assembly, a live screen, a profiler, and tape and graphics tools.",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "publisher": "jonsole",
   "license": "MIT",
   "repository": {
