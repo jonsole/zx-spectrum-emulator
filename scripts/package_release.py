@@ -73,6 +73,8 @@ FILMATION_GAMES = ["knightlore", "pentagram"]
 # examples/filmation's own subfolders that are games or the designer: each
 # example carries the engine, the shared files and its own game only.
 FILMATION_OTHERS = ["knightlore", "knightlore128", "pentagram", "vscode"]
+# Pictures of the games running, left out of the examples (see below).
+FILMATION_MEDIA = "examples/filmation/media/"
 
 SERVER_README = """ZX Spectrum emulator {version} -- zx_server
 
@@ -227,7 +229,7 @@ def json_hash(path):
     return hashlib.sha256(data).hexdigest()
 
 
-def build_filmation_example(path, top, game):
+def build_filmation_example(path, top, game, ref):
     """The engine, the shared tools and one game's code -- but none of
     Ultimate's data. original.json names the files the repository carries that
     came out of the game; the workspace makes them from the user's own copy
@@ -249,10 +251,19 @@ def build_filmation_example(path, top, game):
                          "undo it.")
     leave_out = {f"{base}/{name}" for name in pins["carried"]}
     others = [f"examples/filmation/{other}/" for other in FILMATION_OTHERS if other != game]
+    # media/ too: a recording of the game running is Ultimate's artwork on
+    # the screen. The README that shows it links to the copy on GitHub instead.
+    others.append(FILMATION_MEDIA)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         add_workspace_template(z, top, game)
         for rel in tracked_files("examples/filmation"):
             if rel in leave_out or any(rel.startswith(prefix) for prefix in others):
+                continue
+            if rel == "examples/filmation/README.md":
+                with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+                    text = f.read()
+                text = text.replace("](media/", f"]({REPO_URL}/raw/{ref}/{FILMATION_MEDIA}")
+                z.writestr(f"{top}/{rel}", text)
                 continue
             z.write(os.path.join(ROOT, rel), f"{top}/{rel}")
 
@@ -295,7 +306,7 @@ def main():
     for game in FILMATION_GAMES:
         top = f"zx-spectrum-example-{game}"
         zip_path = os.path.join(args.out, f"{top}-{version}.zip")
-        build_filmation_example(zip_path, top, game)
+        build_filmation_example(zip_path, top, game, args.ref)
         written.append(zip_path)
 
     if not args.no_vsix:
