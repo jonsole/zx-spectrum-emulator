@@ -5,6 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The C and C++ runtime linked in, not loaded from MSVCP140.dll and
+# VCRUNTIME140.dll: a released zx_server.exe has to start on a Windows that has
+# never had the Visual C++ Redistributable installed, and it is the one file we
+# ship. Every target, since zx_core and the others link into it and all of
+# them must agree.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Link-time optimisation for optimised builds. This is not a micro-tweak here:
 # the emulator's hot loop crosses a translation-unit boundary on every single
 # half-clock (Spectrum48K::clock -> Ula::clock -> Memory::read -> Z80::clock,
@@ -109,6 +116,30 @@ add_executable(zx_server
 )
 target_link_libraries(zx_server PRIVATE zx_core)
 target_compile_options(zx_server PRIVATE ${ZX_WARNINGS})
+
+# The version zx_server reports (--version, serverInfo, its advert). One number
+# for the emulator and the VS Code extension, since they ship together and talk
+# through requests only a matching server has -- so it is read from the
+# extension's package.json rather than kept twice. A build that is not a
+# release says so with -dev: the same number on a build with unreleased
+# changes in it would otherwise claim to be something it is not.
+# scripts/release.py sets the number; the release workflow builds with the
+# suffix empty, or -rc1 and so on for a release candidate
+# (build.ps1 -Distribution [-Prerelease rc1]).
+set(ZX_VERSION_SUFFIX "-dev" CACHE STRING
+    "Appended to package.json's version: -dev for any build that is not a release")
+set(ZX_PACKAGE_JSON ${CMAKE_CURRENT_SOURCE_DIR}/../vscode-extension/package.json)
+set(ZX_VERSION 0.0.0)
+if(EXISTS ${ZX_PACKAGE_JSON})
+  file(READ ${ZX_PACKAGE_JSON} ZX_PACKAGE)
+  string(JSON ZX_VERSION GET ${ZX_PACKAGE} version)
+  # Reconfigure when the version is bumped, so a build never reports the last one.
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ZX_PACKAGE_JSON})
+endif()
+string(APPEND ZX_VERSION "${ZX_VERSION_SUFFIX}")
+message(STATUS "zx_server version ${ZX_VERSION}")
+# On main.cpp alone, so a version bump recompiles one file rather than the server.
+set_source_files_properties(src/main.cpp PROPERTIES COMPILE_DEFINITIONS "ZX_VERSION=\"${ZX_VERSION}\"")
 if(WIN32)
   target_link_libraries(zx_server PRIVATE ws2_32)
 endif()

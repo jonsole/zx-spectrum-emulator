@@ -30,8 +30,8 @@ MCP client or another window -- is joined as it is, whatever they say.
 | Setting | Values | Default | What it does |
 |---|---|---|---|
 | `zxspectrum.server.autoStart` | boolean | `true` | Start the emulator when a session needs it and nothing is listening. Off, such a session fails with a message instead |
-| `zxspectrum.server.path` | path | `""` | Where `zx_server` is. `${workspaceFolder}`, `${userHome}` and `~` are expanded. Empty: each workspace folder's `cpp-core/build/RelWithDebInfo/`, then `PATH` |
-| `zxspectrum.server.roms` | list of paths | `[]` | ROMs to load at start (`--rom`). Empty: `roms/48.rom` and `roms/128.rom` in the emulator's checkout, when they are there. A launch configuration's `rom` still applies to its own session |
+| `zxspectrum.server.path` | path | `""` | Where `zx_server` is. `${workspaceFolder}`, `${userHome}` and `~` are expanded. Empty: each workspace folder's `cpp-core/build/RelWithDebInfo/`, then the one an installed release carries, then `PATH` |
+| `zxspectrum.server.roms` | list of paths | `[]` | ROMs to load at start (`--rom`). Empty: `roms/48.rom` and `roms/128.rom` in the emulator's checkout, each when it is there, and otherwise the ones an installed release carries. A launch configuration's `rom` still applies to its own session |
 | `zxspectrum.server.sound` | `"device"`, `"panel"`, `"off"` | `"device"` | Sound out of the computer's sound card, through the screen panel, or not at all |
 | `zxspectrum.server.args` | list of strings | `[]` | More command-line flags, after the ones the settings make -- `["--ffmpeg", "C:/tools/ffmpeg.exe"]`, say |
 | `zxspectrum.server.stopOnExit` | boolean | `true` | Stop the emulator this window started when the window closes. Either way it keeps running between debug sessions |

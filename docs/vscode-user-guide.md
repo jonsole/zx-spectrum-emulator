@@ -37,17 +37,26 @@ pages for the full detail:
 
 ## Before you start
 
-You need three things. [INSTALL.md](../INSTALL.md) walks through each one,
-with a check at every step:
+**From a release** (Windows x64): download `zxspectrum-debug-<version>-win32-x64.vsix`
+from the [releases page](https://github.com/jonsole/zx-spectrum-emulator/releases)
+and run **Extensions: Install from VSIX...**. That is everything: the
+extension carries the emulator, `zx_server.exe`, and the 48K and 128K ROMs
+(copyright Amstrad, who allow their distribution). Open any folder and start
+a session -- see [Your first session](#your-first-session).
+
+**From the repository**, to work on the emulator itself, you need three
+things. [INSTALL.md](../INSTALL.md) walks through each one, with a check at
+every step:
 
 1. **The emulator**, `zx_server.exe`, built from `cpp-core/`.
-2. **A real Spectrum ROM** at `roms/48.rom`, and `roms/128.rom` if you want the
-   128K. ROMs are not included, because they are copyrighted.
-3. **This extension**, copied into your VS Code extensions folder.
+2. **The Spectrum ROMs** at `roms/48.rom` and `roms/128.rom`. They are not in
+   the repository; `python scripts/fetch_roms.py` fetches them.
+3. **This extension**, linked into your VS Code extensions folder.
 
 Then open the **repository folder itself** in VS Code. The launch
 configurations and tasks in `.vscode/` use paths relative to it, so they break
-if you open a parent folder or a subfolder.
+if you open a parent folder or a subfolder. A checkout's own build and ROMs
+are used before any an installed release carries.
 
 You don't start the emulator yourself. Starting a debug session, or opening a
 snapshot, starts it if it isn't already running. It keeps running after the
@@ -55,7 +64,8 @@ debug session ends, so an MCP client (an AI agent, say) can keep using the same
 machine, and it stops when you close the window. The **Spectrum** item in the
 status bar shows it is running and has Stop, Restart and its log.
 
-In another folder, VS Code needs to be told where the emulator is: set
+With a build of your own and no release installed, VS Code needs to be told
+where the emulator is when you work in another folder: set
 **`zxspectrum.server.path`** to your `zx_server.exe` (see [Starting the
 emulator](vscode-settings.md#starting-the-emulator)).
 

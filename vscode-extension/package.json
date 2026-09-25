@@ -1,9 +1,18 @@
 {
   "name": "zxspectrum-debug",
   "displayName": "ZX Spectrum Debug",
-  "description": "Registers the 'zxspectrum' debugger type so launch.json's debugServer field can connect directly to zx-spectrum-emulator's DAP server, and provides a live screen viewer fed by the emulator's screen-stream port. No adapter code -- debugServer overrides how VS Code connects to the debugger itself.",
+  "description": "Debug ZX Spectrum programs in VS Code on a bundled, cycle-accurate emulator: breakpoints, stepping backwards, watchpoints, source-level Z80 assembly, a live screen, a profiler, and tape and graphics tools.",
   "version": "0.0.2",
   "publisher": "jonsole",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonsole/zx-spectrum-emulator"
+  },
+  "homepage": "https://github.com/jonsole/zx-spectrum-emulator#readme",
+  "bugs": {
+    "url": "https://github.com/jonsole/zx-spectrum-emulator/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

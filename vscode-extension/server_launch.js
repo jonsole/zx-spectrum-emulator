@@ -37,8 +37,11 @@ function expandVariables(text, workspaceFolder, home) {
 
 // Where to look for the server, in order: the setting, then each workspace
 // folder's own RelWithDebInfo build (so this repository needs no setup at
-// all), then every directory on PATH.
-function serverCandidates({ setting, folders, pathEnv, platform, home }) {
+// all), then the one a release bundles in the extension's own bin/ (`bundled`,
+// that directory), then every directory on PATH. The bundled one comes after
+// a checkout's build on purpose: working on the emulator means running what
+// you just built, not what was released.
+function serverCandidates({ setting, folders, pathEnv, platform, home, bundled }) {
   const name = exeName(platform);
   const candidates = [];
   const configured = expandVariables(setting, folders[0], home);
@@ -47,6 +50,9 @@ function serverCandidates({ setting, folders, pathEnv, platform, home }) {
   }
   for (const folder of folders) {
     candidates.push(path.join(folder, 'cpp-core', 'build', 'RelWithDebInfo', name));
+  }
+  if (bundled) {
+    candidates.push(path.join(bundled, name));
   }
   const separator = platform === 'win32' ? ';' : ':';
   for (const dir of String(pathEnv || '').split(separator)) {
@@ -95,18 +101,27 @@ function serverPorts(get) {
   };
 }
 
-// The ROMs to load: the setting's, or else roms/48.rom and roms/128.rom
-// beside the server's root when they are there. A launch configuration's own
-// `rom` still wins for its session; these are what an attach, or a snapshot
-// opened from the Explorer, boots with.
-function serverRoms(setting, root, home, exists) {
+// The ROMs to load: the setting's, or else roms/48.rom and roms/128.rom --
+// each from beside the server's root when it is there, and otherwise from the
+// ones a release bundles in the extension's own roms/ (`bundled`, that
+// directory). A launch configuration's own `rom` still wins for its session;
+// these are what an attach, or a snapshot opened from the Explorer, boots
+// with.
+function serverRoms(setting, root, home, exists, bundled) {
   const listed = Array.isArray(setting) ? setting : [];
   if (listed.length > 0) {
     return listed.map((rom) => expandVariables(rom, root, home)).filter(Boolean);
   }
-  return ['48.rom', '128.rom']
-    .map((name) => path.join(root, 'roms', name))
-    .filter((rom) => exists(rom));
+  const roms = [];
+  for (const name of ['48.rom', '128.rom']) {
+    const own = path.join(root, 'roms', name);
+    if (exists(own)) {
+      roms.push(own);
+    } else if (bundled && exists(path.join(bundled, name))) {
+      roms.push(path.join(bundled, name));
+    }
+  }
+  return roms;
 }
 
 // The command line. Sound is one of three: out of the host's sound card (the

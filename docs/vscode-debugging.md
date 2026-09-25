@@ -139,7 +139,9 @@ needs:
 
 - **Which server.** `zxspectrum.server.path`, or else
   `cpp-core/build/RelWithDebInfo/zx_server.exe` in any workspace folder, or
-  else `PATH`. It runs in the root of the checkout it was built in, where
+  else the one an installed [release](releasing.md) carries in its `bin/`, or
+  else `PATH`. The ROMs likewise: the setting's, else the workspace's `roms/`,
+  else the release's. It runs in the root of the checkout it was built in, where
   `rom_disassembly/` is.
 - **How.** The ports, the sound (`device`, `panel` or `off`), the ROMs to boot
   with and any extra flags are settings -- see [Starting the
@@ -211,8 +213,8 @@ session on it when there is one, and otherwise straight to its MCP port.
 Each `zx_server` says which ports it is on in two ways:
 
 - **`serverInfo`** -- a DAP request (and the `server_info` MCP tool) that
-  answers with its pid, its four ports, when it started, its ROMs and the
-  program it last loaded by path. That is how the panel learns a session's
+  answers with its pid, its build version, its four ports, when it started,
+  its ROMs and the program it last loaded by path. That is how the panel learns a session's
   server.
 - **An advert** -- `<pid>.json` in `%LOCALAPPDATA%\zx-spectrum\servers`
   (`$XDG_RUNTIME_DIR` or `~/.cache` elsewhere; `ZX_SERVER_ADVERT_DIR`

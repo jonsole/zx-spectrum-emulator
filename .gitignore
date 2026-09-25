@@ -196,3 +196,8 @@ examples/isoblocks/output/
 # game snapshots above. Clone it yourself:
 #   git clone https://github.com/simon-frankau/head-over-heels vendor/head-over-heels
 vendor/head-over-heels/
+
+# What scripts/package_release.py stages into a copy of the extension for a
+# release -- never into the extension itself, but kept out in case.
+vscode-extension/bin/
+vscode-extension/roms/

@@ -1,0 +1,88 @@
+# Publishes a release when a v* tag is pushed: the emulator and the VS Code
+# extension, built, tested, packaged and attached to a GitHub Release.
+#
+# scripts/release.py makes the tag (see docs/releasing.md); pushing it is what
+# starts this. v1.2.3-rc1 publishes a pre-release. Nothing here runs on an
+# ordinary push -- ci.yml does that.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # to create the release and upload its files
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      # Python writes UTF-8 even when redirected: the release notes are
+      # markdown, and a dash in them would otherwise fail on cp1252.
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Refuses a tag that is not package.json's version, and says whether it
+      # is a release candidate.
+      - name: Check the tag
+        id: tag
+        run: python scripts/release.py check "${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+
+      # Before the build, so the tests that need a real ROM run rather than
+      # skip -- and the same files go into the packages.
+      - name: Fetch the ROMs
+        run: python scripts/fetch_roms.py
+
+      - name: Build and test the emulator
+        run: |
+          $suffix = '${{ steps.tag.outputs.suffix }}'
+          if ($suffix) {
+            ./cpp-core/build.ps1 -Release -Distribution -Prerelease $suffix -Test
+          } else {
+            ./cpp-core/build.ps1 -Release -Distribution -Test
+          }
+
+      # What the release is called and what the server says it is must agree.
+      - name: Check the server's version
+        run: |
+          $expected = 'zx_server ' + '${{ github.ref_name }}'.Substring(1)
+          $actual = & ./cpp-core/build/RelWithDebInfo/zx_server.exe --version
+          if ($actual -ne $expected) { throw "zx_server says '$actual', expected '$expected'" }
+          Write-Host $actual
+
+      - name: Test the extension
+        run: |
+          foreach ($test in Get-ChildItem vscode-extension/tests/*_test.js) {
+            node $test.FullName
+            if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
+          }
+
+      - name: Package
+        run: |
+          python scripts/package_release.py --server cpp-core/build/RelWithDebInfo/zx_server.exe `
+            --roms roms --ref "${{ github.ref_name }}"
+          python scripts/release.py notes "${{ github.ref_name }}" > dist/notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $files = @(Get-ChildItem dist/*.vsix, dist/*.zip | ForEach-Object FullName)
+          $flags = @()
+          if ('${{ steps.tag.outputs.prerelease }}' -eq 'true') { $flags += '--prerelease' }
+          gh release create $tag @files --title "ZX Spectrum emulator $($tag.Substring(1))" `
+            --notes-file dist/notes.md @flags

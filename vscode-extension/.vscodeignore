@@ -1,0 +1,5 @@
+# What a release's .vsix leaves out (scripts/package_release.py stages the
+# extension and runs vsce on the copy). The tests run from a checkout, not
+# from an installed extension.
+tests/**
+.vscodeignore

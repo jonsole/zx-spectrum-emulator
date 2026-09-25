@@ -37,6 +37,9 @@ struct ServerPorts {
 /// Everything that tells one server apart from another, fixed at startup.
 struct ServerIdentity {
     uint32_t pid = 0;
+    /// The build's version: package.json's, with -dev on anything that is
+    /// not a release build (see CMakeLists.txt).
+    std::string version;
     std::string host;
     ServerPorts ports;
     /// When it started, ISO 8601 UTC, so a list of servers can say which is

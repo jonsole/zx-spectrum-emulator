@@ -9,6 +9,13 @@ Host assumed: **Windows 11 + VS Code + Visual Studio 2022 Build Tools**. That is
 the verified path. See [Other platforms](#other-platforms) before attempting
 anything else.
 
+> **Only want to use it?** A [release](https://github.com/jonsole/zx-spectrum-emulator/releases)
+> is one file: `zxspectrum-debug-<version>-win32-x64.vsix`, installed with
+> VS Code's **Extensions: Install from VSIX...**, carries the extension, the
+> emulator and the ROMs. Nothing below is needed for that. This page is for
+> building from the repository -- to work on the emulator, or on a platform a
+> release does not cover yet.
+
 ## What you are installing
 
 Three separate things, in this order. They are independent — a mistake in one
@@ -65,8 +72,16 @@ cd zx-spectrum-emulator
 ## Step 2 — Supply a 48K ROM
 
 The emulator boots a genuine Sinclair 48K ROM, which is Amstrad-copyrighted and
-therefore **not** in the repo (all of `roms/` except `.gitkeep` is gitignored).
-Obtain a `48.rom` image and put it at `roms/48.rom`.
+**not** in the repo (all of `roms/` except `.gitkeep` is gitignored). Amstrad
+allow the ROMs to be distributed, and a release bundles them; in a checkout,
+fetch the same files the release does -- from the Fuse emulator's source,
+checked against pinned SHA-256 hashes:
+
+```powershell
+.venv-win\Scripts\python.exe scripts\fetch_roms.py    # writes roms\48.rom and roms\128.rom
+```
+
+Or obtain a `48.rom` image yourself and put it at `roms/48.rom`.
 
 ```powershell
 # Verify it is the real thing: exactly 16384 bytes, first byte 0xF3 (DI, the
@@ -84,8 +99,9 @@ editor/menu, then ROM 1, 48K BASIC) at `roms/128.rom`, exactly 32768 bytes
 and again starting `F3`. Without it the emulator is a 48K only; 128K snapshots
 and the `--machine 128` / `"machine": "128"` options need it.
 
-Do not download a ROM from an arbitrary source without asking the user; that is
-their call, not the installer's.
+`fetch_roms.py` fetches both, already joined. Do not download a ROM from any
+other source without asking the user; that is their call, not the
+installer's.
 
 ## Step 3 — Build the emulator
 

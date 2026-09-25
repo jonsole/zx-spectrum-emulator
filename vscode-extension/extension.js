@@ -32,7 +32,16 @@ const {
   servers: liveServers,
   portsOfSession,
 } = require('./server_view');
-const { describeServer, detailServer, sameServer, fromServerInfo } = require('./server_registry');
+const {
+  describeServer,
+  detailServer,
+  sameServer,
+  fromServerInfo,
+  serverIsOlder,
+} = require('./server_registry');
+// This extension's version, which is the version of the zx_server it was
+// released with (cpp-core/CMakeLists.txt reads the same package.json).
+const EXTENSION_VERSION = require('./package.json').version;
 const { activatePrograms } = require('./program_view');
 const { activateTapeDesigner } = require('./tape_view');
 const graphicsModel = require('./graphics_model');
@@ -505,7 +514,27 @@ async function serverOfSession(session) {
   if (entry) {
     entry.server = server;
   }
+  warnIfOlder(server);
   return server;
+}
+
+// Servers already warned about, by pid: once each is enough.
+const warnedOlder = new Set();
+
+// Says so when a session's server is an older build than this extension --
+// a zx_server left running across an update, or a checkout's own build that
+// has not been rebuilt -- since it may lack requests the extension relies on.
+function warnIfOlder(server) {
+  if (!server.pid || warnedOlder.has(server.pid)
+      || !serverIsOlder(server.version, EXTENSION_VERSION)) {
+    return;
+  }
+  warnedOlder.add(server.pid);
+  vscode.window.showWarningMessage(
+    `The ZX Spectrum emulator on port ${server.ports.dap} is ` +
+    `${server.version ? 'version ' + server.version : 'a build from before versions'}, and this ` +
+    `extension is ${EXTENSION_VERSION}. Some features may not work until it is restarted ` +
+    'from a matching build.');
 }
 
 // A zxspectrum session on `server`, preferring the active one: where a

@@ -52,6 +52,35 @@ test('the setting is tried first, then each folder\'s build, then PATH', () => {
   assert.strictEqual(unix.configured, null);
 });
 
+test('a release\'s bundled server comes after a checkout\'s build and before PATH', () => {
+  const EXT = path.join(HOME, '.vscode', 'extensions', 'jonsole.zxspectrum-debug-0.3.0-win32-x64');
+  const found = s.serverCandidates({
+    setting: '', folders: [REPO], pathEnv: 'C:\\tools', platform: 'win32', home: HOME,
+    bundled: path.join(EXT, 'bin')
+  });
+  assert.deepStrictEqual(found.candidates, [
+    path.join(REPO, 'cpp-core', 'build', 'RelWithDebInfo', 'zx_server.exe'),
+    path.join(EXT, 'bin', 'zx_server.exe'),
+    path.join('C:\\tools', 'zx_server.exe')
+  ]);
+});
+
+test('the bundled ROMs stand in for each one the workspace lacks', () => {
+  const BUNDLED = path.join(HOME, 'ext', 'roms');
+  const has = (files) => (f) => files.includes(f);
+  // Nothing in the workspace: both bundled.
+  assert.deepStrictEqual(
+    s.serverRoms([], REPO, HOME, has([path.join(BUNDLED, '48.rom'), path.join(BUNDLED, '128.rom')]), BUNDLED),
+    [path.join(BUNDLED, '48.rom'), path.join(BUNDLED, '128.rom')]);
+  // The workspace's own 48K wins; the 128K it lacks comes from the bundle.
+  assert.deepStrictEqual(
+    s.serverRoms([], REPO, HOME,
+      has([path.join(REPO, 'roms', '48.rom'), path.join(BUNDLED, '48.rom'), path.join(BUNDLED, '128.rom')]), BUNDLED),
+    [path.join(REPO, 'roms', '48.rom'), path.join(BUNDLED, '128.rom')]);
+  // The setting beats both.
+  assert.deepStrictEqual(s.serverRoms(['~/mine.rom'], REPO, HOME, () => true, BUNDLED), [HOME + '/mine.rom']);
+});
+
 test('the first candidate that exists wins', () => {
   const there = new Set(['b', 'c']);
   assert.strictEqual(s.findServer(['a', 'b', 'c'], (f) => there.has(f)), 'b');

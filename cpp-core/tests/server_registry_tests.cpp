@@ -32,6 +32,7 @@ nlohmann::json read_json(const fs::path& path) {
 
 ServerIdentity sample_identity() {
     ServerIdentity id;
+    id.version = "0.3.0-dev";
     id.host = "127.0.0.1";
     id.ports.dap = 14711;
     id.ports.mcp = 18000;
@@ -67,6 +68,7 @@ TEST(advert_names_the_server_and_its_ports) {
     CHECK(advert["program"].is_null());
     CHECK(advert["audioDevice"].get<bool>());
     CHECK(!advert["started"].get<std::string>().empty());
+    CHECK_EQ(advert["serverVersion"].get<std::string>(), std::string("0.3.0-dev"));
 
     // Nothing left behind by the write-then-rename.
     size_t files = 0;

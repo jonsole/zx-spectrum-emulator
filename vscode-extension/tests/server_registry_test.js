@@ -147,6 +147,28 @@ test('serverInfo reads the same as an advert', () => {
   assert.strictEqual(r.fromServerInfo(undefined), null);
 });
 
+test('a server\'s build version is read, and shown in its detail', () => {
+  const server = r.parseAdvert(advert(7, { serverVersion: '0.3.0' }));
+  assert.strictEqual(server.version, '0.3.0');
+  assert.ok(r.detailServer(server).includes('v0.3.0'));
+  assert.strictEqual(r.parseAdvert(advert(7)).version, null);
+});
+
+test('a server older than the extension is noticed; -dev is its release\'s equal', () => {
+  assert.deepStrictEqual(r.versionNumbers('0.3.1-dev'), [0, 3, 1]);
+  assert.strictEqual(r.versionNumbers('dev'), null);
+  assert.strictEqual(r.serverIsOlder('0.2.9', '0.3.0'), true);
+  assert.strictEqual(r.serverIsOlder('0.2.10', '0.3.0'), true);
+  assert.strictEqual(r.serverIsOlder('0.3.0', '0.3.0'), false);
+  assert.strictEqual(r.serverIsOlder('0.3.0-dev', '0.3.0'), false);
+  assert.strictEqual(r.serverIsOlder('0.10.0', '0.9.0'), false);
+  assert.strictEqual(r.serverIsOlder('1.0.0', '0.9.9'), false);
+  // No version at all: a server from before versions were reported.
+  assert.strictEqual(r.serverIsOlder(null, '0.3.0'), true);
+  // Something unreadable is not worth a warning.
+  assert.strictEqual(r.serverIsOlder('custom', '0.3.0'), false);
+});
+
 if (failures > 0) {
   console.log(`\n${failures} failed`);
   process.exit(1);

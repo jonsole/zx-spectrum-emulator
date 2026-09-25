@@ -21,6 +21,13 @@
 #                                        tests or tools (ZX_BUILD_TESTS=OFF),
 #                                        into build\<config>-notests
 #   .\build.ps1 -BuildDir <path>         build somewhere else entirely
+#   .\build.ps1 -Distribution            a build for a release: zx_server
+#                                        reports package.json's version as it
+#                                        is, not version-dev. What the release
+#                                        workflow builds
+#   .\build.ps1 -Distribution -Prerelease rc1
+#                                        ...for a release candidate: the
+#                                        version with -rc1 after it
 #
 # -BuildDir exists for one specific job: building a change while the user's
 # own zx_server.exe is still running. Windows will not let the linker
@@ -34,11 +41,16 @@ param(
     [string]$Target,
     [string]$BuildDir,
     [switch]$NoRewind,
-    [switch]$NoTests
+    [switch]$NoTests,
+    [switch]$Distribution,
+    [string]$Prerelease
 )
 
 $ErrorActionPreference = 'Stop'
 
+if ($Prerelease -and -not $Distribution) {
+    throw "-Prerelease names a release candidate, so it needs -Distribution"
+}
 if ($NoTests -and ($Test -or $Slow)) {
     throw "-NoTests builds no tests, so there is nothing for -Test or -Slow to run"
 }
@@ -76,11 +88,15 @@ if ($NoTests) { $defaultDir += '-notests' }
 $buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $srcDir $defaultDir }
 $rewind = if ($NoRewind) { 'OFF' } else { 'ON' }
 $tests = if ($NoTests) { 'OFF' } else { 'ON' }
+# What follows package.json's version in the one zx_server reports. Passed
+# every time: CMake caches it, so leaving it out would let one -Distribution
+# build stamp every later build in that directory as a release.
+$versionSuffix = if (-not $Distribution) { '-dev' } elseif ($Prerelease) { "-$Prerelease" } else { '' }
 
 # The -D argument is quoted: unquoted, PowerShell can pass it through with
 # $buildType unexpanded, which CMake then takes as a literal config name and
 # Ninja chokes on ("expected newline, got lexing error").
-cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType" "-DZX_REWIND=$rewind" "-DZX_BUILD_TESTS=$tests"
+cmake -S $srcDir -B $buildDir -G Ninja "-DCMAKE_BUILD_TYPE=$buildType" "-DZX_REWIND=$rewind" "-DZX_BUILD_TESTS=$tests" "-DZX_VERSION_SUFFIX=$versionSuffix"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
 if ($Target) {

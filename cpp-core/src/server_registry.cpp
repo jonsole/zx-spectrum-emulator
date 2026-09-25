@@ -81,6 +81,7 @@ nlohmann::json info_locked() {
     return nlohmann::json{
         {"version", SERVER_ADVERT_VERSION},
         {"pid", g_identity.pid},
+        {"serverVersion", g_identity.version},
         {"host", g_identity.host},
         {"ports", ports},
         {"started", g_identity.started},

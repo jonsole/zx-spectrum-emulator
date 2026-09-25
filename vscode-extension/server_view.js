@@ -36,6 +36,9 @@ const START_TIMEOUT_MS = 20000;
 
 let output;
 let statusItem;
+// Where the extension is installed: a release carries zx_server in bin/ and
+// the ROMs in roms/ beneath it.
+let extensionPath;
 let child = null;          // the server this extension started, while it runs
 let childExit = null;      // resolves when it exits
 let state = 'stopped';     // stopped | starting | running | external
@@ -114,7 +117,8 @@ function locateServer() {
     folders: folders(),
     pathEnv: process.env.PATH,
     platform: process.platform,
-    home: os.homedir()
+    home: os.homedir(),
+    bundled: extensionPath && path.join(extensionPath, 'bin')
   });
   const exists = (file) => {
     try {
@@ -168,7 +172,8 @@ async function spawnServer(p, onExit) {
   const args = launch.serverArgs({
     ports: p,
     sound: config.get('sound', 'device'),
-    roms: launch.serverRoms(config.get('roms'), root, os.homedir(), exists),
+    roms: launch.serverRoms(config.get('roms'), root, os.homedir(), exists,
+      extensionPath && path.join(extensionPath, 'roms')),
     extra: config.get('args', [])
   });
 
@@ -451,6 +456,7 @@ async function commandMenu() {
 }
 
 function activateServer(context) {
+  extensionPath = context.extensionPath;
   output = vscode.window.createOutputChannel('ZX Spectrum Emulator');
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   statusItem.command = 'zxspectrum.serverMenu';

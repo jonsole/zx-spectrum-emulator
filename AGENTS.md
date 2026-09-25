@@ -203,3 +203,9 @@ pointer"); the body says what changed and why, what it was checked against, and
 anything left out. Add files by name -- the working tree often holds other
 people's uncommitted work -- and say in your summary which changes you left
 uncommitted.
+
+A change worth telling users about goes under **Unreleased** in
+`CHANGELOG.md`, in the same commit. Releases are cut with
+`scripts/release.py` and published by pushing its `v*` tag
+([docs/releasing.md](docs/releasing.md)) -- only ever when asked, since a
+pushed tag publishes a release.

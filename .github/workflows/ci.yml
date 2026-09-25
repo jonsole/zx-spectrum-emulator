@@ -1,0 +1,57 @@
+# Builds and tests the emulator and the VS Code extension on every push to
+# master, so a release tag never finds a broken build for the first time.
+# It also packages them as a release would -- the staging, the zip and vsce's
+# checks -- without publishing anything.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # Python writes UTF-8 even when redirected: the release notes are
+      # markdown, and a dash in them would otherwise fail on cp1252.
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # So the tests that need a real ROM run rather than skip.
+      - name: Fetch the ROMs
+        run: python scripts/fetch_roms.py
+
+      # Debug, as a change is built and tested locally: quicker to build than
+      # the link-time-optimised release build, and the fast suite is the same.
+      - name: Build and test the emulator
+        run: ./cpp-core/build.ps1 -Test
+
+      - name: Build without rewind
+        run: ./cpp-core/build.ps1 -NoRewind -Target zx_server
+
+      - name: Test the extension
+        run: |
+          foreach ($test in Get-ChildItem vscode-extension/tests/*_test.js) {
+            node $test.FullName
+            if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
+          }
+
+      - name: Package, as a release would
+        run: |
+          python scripts/package_release.py --server cpp-core/build/Debug/zx_server.exe `
+            --roms roms --ref "${{ github.sha }}"

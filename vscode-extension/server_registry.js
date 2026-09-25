@@ -66,7 +66,9 @@ function parseAdvert(text) {
     program: typeof info.program === 'string' && info.program ? info.program : null,
     exe: typeof info.exe === 'string' ? info.exe : '',
     cwd: typeof info.cwd === 'string' ? info.cwd : '',
-    audioDevice: info.audioDevice === true
+    audioDevice: info.audioDevice === true,
+    // The build's version; absent from servers that predate it.
+    version: typeof info.serverVersion === 'string' && info.serverVersion ? info.serverVersion : null
   };
 }
 
@@ -138,7 +140,11 @@ function describeServer(server) {
 
 // The longer line under it in a list.
 function detailServer(server) {
-  const parts = [`pid ${server.pid}`, `screen :${server.ports.screen}`];
+  const parts = [`pid ${server.pid}`];
+  if (server.version) {
+    parts.push(`v${server.version}`);
+  }
+  parts.push(`screen :${server.ports.screen}`);
   if (server.ports.mcp) {
     parts.push(`MCP :${server.ports.mcp}`);
   }
@@ -197,7 +203,39 @@ function launchPorts(value, defaults) {
   return { request: { ports } };
 }
 
+// A version as numbers to compare: "0.3.1-dev" -> [0, 3, 1]. The -dev on a
+// build that is not a release is left out -- it is the same code as the
+// release it is heading for, or newer.
+function versionNumbers(text) {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(text || ''));
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+// Whether a server is older than the extension talking to it, and so may
+// lack requests the extension relies on. A server that reports no version
+// predates versions altogether. Unreadable versions are given the benefit of
+// the doubt rather than warned about.
+function serverIsOlder(serverVersion, extensionVersion) {
+  const theirs = versionNumbers(serverVersion);
+  const ours = versionNumbers(extensionVersion);
+  if (!ours) {
+    return false;
+  }
+  if (!serverVersion) {
+    return true;
+  }
+  if (!theirs) {
+    return false;
+  }
+  for (let i = 0; i < 3; i++) {
+    if (theirs[i] !== ours[i]) {
+      return theirs[i] < ours[i];
+    }
+  }
+  return false;
+}
+
 module.exports = {
   ADVERT_VERSION, advertDirectory, parseAdvert, processAlive, liveServers, describeServer,
-  detailServer, sameServer, fromServerInfo, launchPorts
+  detailServer, sameServer, fromServerInfo, launchPorts, versionNumbers, serverIsOlder
 };

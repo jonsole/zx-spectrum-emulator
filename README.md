@@ -283,13 +283,22 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |
 | [Testing and performance](docs/testing-and-performance.md) | The test suites, ZEXALL/ZEXDOC, and measured throughput |
 | [Project layout](docs/project-layout.md) | What lives where in the tree |
+| [Releasing](docs/releasing.md) | Cutting a release: the version, the changelog, the tag, and what the release workflow builds and publishes |
 | [Status & roadmap](docs/status.md) | What is done, what is next |
 
-Installing from scratch is a separate, checkable procedure: **[INSTALL.md](INSTALL.md)**.
+To use it, install a **[release](https://github.com/jonsole/zx-spectrum-emulator/releases)**:
+one `.vsix` that carries the VS Code extension, the emulator and the ROMs.
+Building from scratch is a separate, checkable procedure:
+**[INSTALL.md](INSTALL.md)**.
 
 ## License
 
-This project's own code has no license file yet. The vendored
-`vendor/chips/z80.h` and `vendor/chips/z80_desc.yml` are
-[floooh/chips](https://github.com/floooh/chips), zlib-licensed. No ROM image
-is included or distributed — you must supply your own.
+This project's own code is MIT-licensed -- see [LICENSE](LICENSE). The
+third-party code it carries (nlohmann/json, miniz and stb_image_write in the
+server; floooh/chips, zlib-licensed, in the tests) is listed with its terms in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+No ROM image is in this repository: a checkout needs its own in `roms/`. A
+[release](docs/releasing.md) does bundle the 48K and 128K ROMs, which are
+copyright Amstrad, who allow their distribution -- the notices file has the
+terms.

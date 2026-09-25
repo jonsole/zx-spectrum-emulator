@@ -225,6 +225,15 @@ bool trace_address(const zx::Sources& sources, const char* flag, const std::stri
 } // namespace
 
 int main(int argc, char** argv) {
+    // Before anything is printed, so the answer is the whole of the output --
+    // what a script (or the release workflow's check) reads back.
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--version") {
+            std::printf("zx_server %s\n", ZX_VERSION);
+            return 0;
+        }
+    }
+
     // Deterministic marker for VS Code's background-task problem matcher
     // (.vscode/tasks.json's beginsPattern) -- printed unconditionally,
     // before any other work, so it fires whether or not the build step
@@ -236,6 +245,7 @@ int main(int argc, char** argv) {
     if (!parse_args(argc, argv, args)) {
         return 2;
     }
+    std::printf("Version %s\n", ZX_VERSION);
 
     // Every port bound before anything else happens, and any that cannot be
     // is the end of this process. They used to be bound each on its own
@@ -415,6 +425,7 @@ int main(int argc, char** argv) {
     // The ports as bound, which is what anyone looking for this server needs
     // -- not what the command line said, when it said 0.
     zx::ServerIdentity identity;
+    identity.version = ZX_VERSION;
     identity.host = args.dap_host;
     identity.ports.dap = dap_listener.port();
     identity.ports.mcp = mcp_listener.port();
