@@ -229,7 +229,27 @@ screenshots with SendUserFile at each step that matters.
   version is this" from the code, and write what differs into the notes.
 - **Use the game's own code as the instrument** -- to draw a room, render a
   sprite, record a sound -- on a fresh machine each time, and measure extents
-  by logging which bytes it reads.
+  by logging which bytes it reads. Knight Lore's `knightlore_pages.py` is the
+  worked example: it runs main's set-up routines in SkoolKit's simulator
+  (skipping the menu), then `build_screen_objects` and one frame per room,
+  and draws scenery and templates on their own by writing a one-off room
+  record where the room finder looks first. What that took:
+  - **Carry the registers from one call to the next.** A routine may find its
+    data through a register an earlier one left set (IX on the player's
+    record); calling each on a fresh simulator gave empty rooms with no error.
+  - **Stop where the picture is actually complete, and read it from where it
+    is.** The first stop point was before the new-room copy; the panel turned
+    out to be drawn into the same buffer as the room. Read the code between
+    the build and the display copy, then stop just before the panel and decode
+    the buffer (its own layout: bottom line first) rather than the screen.
+  - **A one-off scene inherits the game's state.** A borrowed room number
+    brought its charm along; pick values nothing else refers to.
+  - Look at every generated picture before believing it: three of these four
+    failures were black or wrong images from a build that reported success.
+- **Look at the pages as a reader will.** Headless Edge screenshots a built
+  page: `msedge.exe --headless --disable-gpu --window-size=1100,1600
+  --user-data-dir=<scratch> --screenshot=<png> file:///<page>` (the old
+  `--headless`, and its own profile directory, or it writes nothing).
 
 ## Rules of evidence
 
