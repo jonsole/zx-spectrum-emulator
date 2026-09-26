@@ -253,6 +253,12 @@ screenshots with SendUserFile at each step that matters.
     stop, so stopping at the same routine repeatedly catches every call), and
     read what the game left: rectangles off the stack where it pushed them,
     the object being drawn from IX.
+  - **A whole-game map** is the room pictures placed by the game's own
+    projection and room-number arithmetic (Knight Lore's `castle_map`): find
+    which way each exit moves the room number, give each room a floor tile,
+    draw back to front with black transparent, and crop to the content. Show
+    a page-width overview with an image map scaled to it, and link the full
+    size -- a 4000-pixel picture at its own size opens on empty ground.
   - Look at every generated picture before believing it: three of these four
     failures were black or wrong images from a build that reported success.
 - **Look at the pages as a reader will.** Headless Edge screenshots a built
