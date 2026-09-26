@@ -382,7 +382,12 @@ README's index lists every file, and each topic's open questions are current.
 
 - Coverage at 100%: every byte in a block, every routine named and described,
   every address a label, the round trip green, `check_structure` clean, no new
-  build warnings.
+  build warnings. Count it rather than trust the README: entries still titled
+  "Routine at", "Data block at" or "Message at" (sna2ctl's placeholders), and
+  entries with no `@label` at all. Every memory map shows a Label column
+  (`LabelColumn=1` in each `[MemoryMap:*]`), but SkoolKit drops the column from
+  a map in which no entry is labelled -- which is how Ant Attack's 216
+  placeholder data and message blocks came to light.
 - The README table and `docs/game-examples.md` describe the build; the notes
   describe the game.
 - `--html` built and looked at (routines list, a few routine pages, every
