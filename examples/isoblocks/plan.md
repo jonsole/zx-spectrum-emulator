@@ -1,8 +1,44 @@
 # Plan: an isometric block engine for the 128K
 
-Status: **stage 1 works, is faster, and has a second renderer to compare, 2026-09-25** (uncommitted). The painter now draws onto the 128K's two screens, with no copy. This file is the brief
-for the sessions that do the work: what is decided, what is proposed, and what
-is still the user's to choose.
+Status: **two versions of the same demo, 2026-09-25**: the painter
+(`painter/`) and the ray renderer (`rays/`), each with its own engine, build
+and check, sharing the map, the art, the models and the demo (`shared/`).
+This file is the brief for the sessions that do the work: what is decided,
+what is proposed, and what is still the user's to choose. The sections below
+are in the order the work happened, so the older ones name files as they
+were then (`engine/paint.s` is now `painter/engine/paint.s`, `check_ray.py`
+`rays/check.py`, `harte_cast.s`, `harte_tiles.s`, `harte_scroll.s` and
+`harte_macros.s` are `rays/engine/cast.s`, `tiles.s`, `scroll.s` and
+`map_steps.s`, and his map and its heights are `colours.bin` and
+`heights.bin`).
+
+## Two versions, one demo (2026-09-25)
+
+The user asked for the two renderers split so that either can be built and
+run, both the same demo by different methods. `shared/demo.s` is the demo --
+the test map, the figure Q, A, O and P walk with the view following, the
+three sprites standing about -- and each version's `demo.s` includes it with
+its own engine. One view (the user's choice): the painter's engine still
+turns four ways, but the demo does not.
+
+That gave the painter sprites (`painter/engine/sprites.s`), as this plan
+always meant them: a sprite is painted in the turn a block in its cell and
+height would have -- the height's lists, at the block's place -- so what is
+painted after it covers it and it covers what came before, with no depth
+test. order_sprites keys each sprite (list, place, number) and sorts the
+keys; paint takes a slower path only in a list with a sprite due in it.
+The blocks left out as covered whole stay rightly left out: what covers one
+is painted after it, and covers a sprite there too. isogeom.render paints
+the sprites in the same turns, and painter/check.py compares 31 frames of
+the same walk as the rays' check -- all match, pixel for pixel, as do the 56
+without sprites. Live, both versions run the walk.
+
+On the walk with the four sprites, T-states a frame: the painter 118.7-325.4k,
+168.7k on average (order_sprites 2.3k, paint 65.9k against 61.0k without
+sprites); the rays 59.3-190.9k, 107.3k on average.
+
+Our own first ray renderer, `engine/ray.s`, was deleted in the split; it is
+in the history at 1601fb7.
 
 ## Stage 1: done
 
@@ -251,8 +287,25 @@ sprite frames match, and live on the emulator, where the paging is real.
 
 Every move with four sprites is now inside two TV frames. What is left of a
 move's cast is nearly all the slide (about 17k, LDI at 16 T-states a byte).
-Next, if more room is wanted: the sprites (about 9.5k each) -- sort them once
-a frame, trim a cell's setup and a strip's, and skip a picture's empty rows.
+
+**Sprite trims.** The sprites are sorted once a frame -- a key each, and five
+compare-and-swaps on (key, number) words, stable as the model's sort is --
+instead of searching the table before each one. What a sprite's strips share
+is worked out once a sprite (the first row's screen address, the first line
+of sight but the strip's part, the first band's depth); what a strip's cells
+share, once a strip (its visibility table, its tiles' jump table, its slots'
+low byte, the band steps, written into both copies of the band tests, which
+are now inline). The rows run in IYH and IYL, and the screen address steps
+32 a row; the compiled tiles' common bytes are loaded once a frame; and a
+buffer's screen address and output_map entry sit side by side a page apart
+(RAY_CELL_SCREENS, RAY_CELL_ENTRIES). About 1k a sprite: four sprites in
+view went from 36.5-39.5k to 32.5-35.1k, and the worst move with them from
+138.4k to 133.9k -- 7.9k inside two TV frames. All 36 sprite frames still
+match the model, and it runs live.
+
+Still to try, for sprites: skipping a picture's empty rows, and a blend
+without the visibility mask for cells wholly in view -- both help a typical
+frame more than the worst.
 
 ### Sprites for the rays (2026-09-25)
 

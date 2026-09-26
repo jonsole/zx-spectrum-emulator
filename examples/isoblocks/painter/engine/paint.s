@@ -20,7 +20,7 @@
 ; with the same picture, whatever its height, so the places' marks are all it
 ; takes -- and it is safe even when one of the three is itself left out,
 ; because what covers that is painted later still, over the same ground. The
-; picture cannot change; check_render.py compares every frame with a model
+; picture cannot change; check.py compares every frame with a model
 ; that paints every block.
 ;
 ; read_view clears the rows of places just outside the view after it has
@@ -129,16 +129,15 @@ sort_places:
 
 
 ; ---------------------------------------------------------------------------
-; paint: the lists, in order, onto the hidden screen. Uses everything but IX
-; and IY.
+; paint: the lists, in order, onto the hidden screen -- and the sprites in
+; their turns (sprites.s): a list with a sprite due in it compares each
+; entry's place with the sprite's, and one without goes as fast as before.
+; Uses everything but IX and IY.
 
 paint:
 					ld		hl,LIST_ENDS
-.list:				ld		a,(hl)
-					or		a
-					jr		z,.done_list
-					push	hl
-					ld		b,a					; the list's length
+.list:				push	hl
+					ld		b,(hl)				; the list's length
 					ld		a,l
 					add		a,high LISTS
 					ld		d,a
@@ -152,6 +151,12 @@ paint:
 					ld		a,(back_high)		; ...and so which third of the screen:
 					add		a,c					; place rows 0-7 are character rows
 					ld		c,a					; 0-7, and 8-15 are 8-15
+					ld		a,(sprite_due)
+					cp		l
+					jr		z,.with_sprites
+.entries:			inc		b
+					dec		b
+					jr		z,.done_list
 .entry:				ld		a,(de)				; the place's low byte
 					inc		e
 					push	bc
@@ -160,12 +165,43 @@ paint:
 					pop		de
 					pop		bc
 					djnz	.entry
-					pop		hl
-.done_list:			inc		l
+.done_list:			pop		hl
+					inc		l
 					ld		a,l
 					cp		16
 					jr		nz,.list
 					ret
+
+					; A sprite is due in this list: each entry whose place comes
+					; before the sprite's first, then the sprite.
+.with_sprites:		inc		b
+					dec		b
+					jr		z,.sprite			; no entries left: the sprite now
+					ld		a,(sprite_due_place)
+					ex		de,hl
+					cp		(hl)				; the sprite's place against the entry's
+					ex		de,hl
+					jr		c,.sprite			; the sprite's comes first
+					ld		a,(de)
+					inc		e
+					push	bc
+					push	de
+					call	paint_place
+					pop		de
+					pop		bc
+					dec		b
+					jr		.with_sprites
+.sprite:			push	bc
+					push	de
+					call	paint_next_sprite
+					pop		de
+					pop		bc
+					pop		hl					; the list's number
+					push	hl
+					ld		a,(sprite_due)
+					cp		l
+					jr		z,.with_sprites		; another due in this list
+					jr		.entries			; the rest of the entries as usual
 
 
 ; Paint the block at a place. In: A the place's low byte, C the high byte of

@@ -1,15 +1,17 @@
-; isoblocks demo, stage 1: the renderer on a still map.
-;
-; Q, A, O and P move the view a cell along the map's y and x; 1 to 4 pick the
-; view. Nothing else moves yet -- objects and sprites are stage 2.
+; isoblocks, the painter: the demo (shared/demo.s) with the painter's engine
+; -- the view read and sorted by height, painted lowest first onto the hidden
+; one of the 128K's two screens, the sprites in their turns, and the screens
+; switched at the interrupt.
 ;
 ;   bank 2, $8000   this, the engine, and its work space (engine/layout.s)
 ;   bank 5, $4000   the first screen
-;   bank 0, $C000   the map (output/map.bin, built from maps/test.json)
+;   bank 0, $C000   the map (output/map.bin, from shared/maps/test.json)
 ;   bank 7          the second screen, paged in at $C000 to be painted
 					DEVICE	ZXSPECTRUM128
 
-					INCLUDE	"../engine/layout.s"
+					INCLUDE	"engine/layout.s"
+
+DEMO_SPRITES		EQU		sprites				; the engine's table (engine/sprites.s)
 
 					ORG		$8000
 
@@ -28,57 +30,24 @@ start:
 					im		2
 					call	make_place_tables
 					call	clear_screens
+					call	demo_start
 					ei
 
 frame:
-					call	read_keys
+					call	demo_keys
+					; The view follows the figure.
+					ld		a,(sprites + 0)
+					ld		(focus_x),a
+					ld		a,(sprites + 1)
+					ld		(focus_y),a
 					call	view_update
 					call	read_view
 					call	sort_places
+					call	order_sprites
 					call	clear_back
 					call	paint
 					call	show_back
 					jr		frame
-
-
-; Q/A/O/P move the focus, 1-4 choose the view. A key held moves a cell a
-; frame; view_update keeps the focus on the map.
-read_keys:
-					ld		bc,$FBFE			; Q W E R T
-					in		a,(c)
-					rra
-					jr		c,.not_q
-					ld		hl,focus_y
-					dec		(hl)
-.not_q:				ld		b,$FD				; A S D F G
-					in		a,(c)
-					rra
-					jr		c,.not_a
-					ld		hl,focus_y
-					inc		(hl)
-.not_a:				ld		b,$DF				; P O I U Y
-					in		a,(c)
-					rra
-					jr		c,.not_p
-					ld		hl,focus_x
-					inc		(hl)
-.not_p:				rra
-					jr		c,.not_o
-					ld		hl,focus_x
-					dec		(hl)
-.not_o:				ld		b,$F7				; 1 2 3 4 5
-					in		a,(c)
-					ld		e,0
-					ld		d,4
-.view_key:			rra
-					jr		nc,.pick
-					inc		e
-					dec		d
-					jr		nz,.view_key
-					ret
-.pick:				ld		a,e
-					ld		(view_number),a
-					ret
 
 
 ; Both screens black everywhere but the view, which is black on white like
@@ -126,12 +95,15 @@ clear_screen:
 					djnz	.row
 					ret
 
-					INCLUDE	"../engine/view.s"
-					INCLUDE	"../engine/read_view.s"
-					INCLUDE	"../engine/paint.s"
-					INCLUDE	"../engine/present.s"
-					INCLUDE	"../output/view_tables.s"
-					INCLUDE	"../output/blocks_gen.s"
+					INCLUDE	"../shared/demo.s"
+					INCLUDE	"engine/view.s"
+					INCLUDE	"engine/read_view.s"
+					INCLUDE	"engine/paint.s"
+					INCLUDE	"engine/sprites.s"
+					INCLUDE	"engine/present.s"
+					INCLUDE	"output/view_tables.s"
+					INCLUDE	"output/blocks_gen.s"
+					INCLUDE	"output/sprite_pictures.s"
 code_end:
 					ASSERT	code_end <= LISTS
 					DISPLAY	"code $8000-", /H, code_end, "  free to the lists: ", /D, LISTS - code_end
@@ -157,7 +129,7 @@ frames:				EQU		IM2_ROUTINE - 2
 
 ; The map, in bank 0 at $C000: the device's own mapping at power-on.
 					ORG		MAP
-					INCBIN	"../output/map.bin"
+					INCBIN	"output/map.bin"
 
-					SAVEDEV	"../output/demo.banks", 0, 0, $20000
-					SAVEBIN	"../output/demo.bin", $4000, $C000
+					SAVEDEV	"output/painter.banks", 0, 0, $20000
+					SAVEBIN	"output/painter.bin", $4000, $C000

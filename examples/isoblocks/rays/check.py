@@ -7,7 +7,7 @@
    painter here has no view to fall off the edge of: it paints every cube in
    the map, lowest height first, then top to bottom, then left to right.
 
-    python check_ray.py
+    python rays/build.py && python rays/check.py
 """
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ import json
 import sys
 from pathlib import Path
 
-import isogeom
-import raycast
-
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "shared"))
+from common import read_map                                       # noqa: E402
+
+import isogeom                                                    # noqa: E402
+import raycast                                                    # noqa: E402
 
 
 def painted(cells: bytes, focus: tuple[int, int], block: list) -> list[bytes]:
@@ -117,8 +119,8 @@ def check_engine(cells: bytes, focuses: list) -> int:
     from build import OUT, find_label
 
     memory = bytearray(65536)
-    memory[0x4000:] = (OUT / "ray_demo.bin").read_bytes()
-    sld = OUT / "ray_demo.sld"
+    memory[0x4000:] = (OUT / "rays.bin").read_bytes()
+    sld = OUT / "rays.sld"
     labels = {name: find_label(sld, name)
               for name in RAY_ROUTINES + ["ray_forget", "ray_focus_x", "ray_focus_y"]}
     limits = ray_limits()
@@ -168,7 +170,7 @@ def check_engine(cells: bytes, focuses: list) -> int:
 
 
 def main() -> int:
-    cells = isogeom.rasterise(json.loads((HERE / "maps" / "test.json").read_text(encoding="utf-8"))["boxes"])
+    cells = read_map()
     low_x, high_x, low_y, high_y = isogeom.focus_limits(0)
     focuses = [(64, 64), (40, 40), (90, 90), (70, 60), (45, 80), (60, 95), (85, 50),
                (low_x, low_y), (high_x, high_y)]
@@ -238,8 +240,8 @@ def check_engine_sprites(cells: bytes) -> int:
     from build import OUT, find_label, read_sprites
 
     memory = bytearray(65536)
-    memory[0x4000:] = (OUT / "ray_demo.bin").read_bytes()
-    sld = OUT / "ray_demo.sld"
+    memory[0x4000:] = (OUT / "rays.bin").read_bytes()
+    sld = OUT / "rays.sld"
     routines = ["ray_update", "ray_cast", "ray_sprites_prepare", "ray_tiles", "ray_sprites_show"]
     labels = {name: find_label(sld, name)
               for name in routines + ["ray_forget", "ray_sprites_forget", "ray_focus_x", "ray_focus_y", "ray_sprites"]}
@@ -274,7 +276,7 @@ def check_engine_sprites(cells: bytes) -> int:
     # at $C000 the map each routine pages in -- the heights for the sprites,
     # his map of colours for the rest.
     colours = bytes(memory[0xC000:])
-    heights = (OUT / "harte_heights.bin").read_bytes()
+    heights = (OUT / "heights.bin").read_bytes()
     failures, times = 0, {name: [] for name in routines}
     for x, y, fx, fy in path:
         sprites = [(x, y, 0, 0)] + still

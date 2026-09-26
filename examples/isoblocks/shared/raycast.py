@@ -162,7 +162,7 @@ def flat_block() -> list:
     Rows of (mask, bits) byte pairs, as build.read_blocks gives them: the top
     diamond, the left face and the right face, each triangle of the grid in
     its face's pattern. Painted by the painter, it must give the picture the
-    rays give -- which is what check_ray.py tests."""
+    rays give -- which is what rays/check.py tests."""
     kind = {}
     # A block's picture is 16 wide, its top diamond's edge at x = 8, y = 0-8.
     for y in range(16):

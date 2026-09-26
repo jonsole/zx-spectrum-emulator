@@ -1,8 +1,8 @@
 """The geometry of an isoblocks view, and a model of how the engine draws one.
 
-build.py makes the engine's view tables from this, so the Z80 and the model
+painter/build.py makes the engine's view tables from this, so the Z80 and the model
 cannot disagree about which cells a view reads or where they land; and
-check_render.py draws frames with render() and compares them, pixel for pixel,
+painter/check.py draws frames with render() and compares them, pixel for pixel,
 with what the engine drew. The model is written for clarity, the Z80 for
 speed, and the check is what keeps the two saying the same thing.
 
@@ -119,12 +119,38 @@ def place_address(p: int) -> int:
     return (8 * row + 4 * half) * 32 + 2 * column + half
 
 
-def render(cells: bytes, view: int, focus: tuple[int, int], blocks: list) -> bytearray:
+def sprite_place(view: int, focus: tuple[int, int], u: int, v: int, h: int) -> int | None:
+    """The place a sprite standing in cell (u, v) at height h is painted at --
+    where a block there would be -- or None if that is not in the view."""
+    sx, sy = start_from_focus(view)
+    du, dv = turn((u - focus[0] - sx, v - focus[1] - sy), 4 - view)   # as in view 0
+    b = (dv - du) & 1
+    r = (dv - du - b) // 2
+    a = du + r
+    row = r - h
+    if 0 <= a < 16 and 0 <= row < VIEW_ROWS:
+        return 32 * row + 16 * b + a
+    return None
+
+
+def render(cells: bytes, view: int, focus: tuple[int, int], blocks: list,
+           sprites: list = ()) -> bytearray:
     """The render buffer after a frame: blocks[view & 1] is 16 rows of
-    (mask, bits) byte pairs, mask bits set where the block is clear."""
+    (mask, bits) byte pairs, mask bits set where the block is clear.
+
+    sprites are (u, v, h, picture), a picture 16 rows of (opaque, ink) 16-bit
+    pairs, bit 15 the leftmost pixel. A sprite is painted in the turn a block
+    in its cell and height would have -- its height, then its place -- so what
+    is painted after it covers it, and it covers what was painted before.
+    Sprites in the same turn go in the list's order."""
     buffer = bytearray(BUFFER_ROWS * 32 + 64)
     block = blocks[view & 1]
     marks = places(cells, view, focus)
+    turns = {}
+    for u, v, h, picture in sprites:
+        p = sprite_place(view, focus, u, v, h)
+        if p is not None and h < HEIGHTS:
+            turns.setdefault((h + 1, p), []).append(picture)
     for value in range(1, HEIGHTS + 1):
         for p in range(PLACES):
             if marks[p] == value:
@@ -134,6 +160,14 @@ def render(cells: bytes, view: int, focus: tuple[int, int], blocks: list) -> byt
                         mask, bits = block[row][byte]
                         at = address + 32 * row + byte
                         buffer[at] = (buffer[at] & mask) | bits
+            for picture in turns.get((value, p), ()):
+                address = place_address(p)
+                for row, (opaque, ink) in enumerate(picture):
+                    for byte in range(2):
+                        shift = 8 * (1 - byte)
+                        solid, bits = opaque >> shift & 0xFF, ink >> shift & 0xFF
+                        at = address + 32 * row + byte
+                        buffer[at] = (buffer[at] & ~solid & 0xFF) | (bits & solid)
     return buffer
 
 

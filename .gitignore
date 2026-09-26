@@ -182,10 +182,11 @@ examples/filmation/knightlore128/room_list.s
 examples/filmation/knightlore128/specials_gen.s
 examples/filmation/knightlore128/output/
 
-# isoblocks: everything build.py generates -- the view tables, the block
-# drawers, the map's bytes, the assembled demo -- is rebuilt from art/, maps/
-# and isogeom.py.
-examples/isoblocks/output/
+# isoblocks: everything painter/build.py and rays/build.py generate -- the
+# tables, the drawers and compiled tiles, the maps' bytes, the assembled demos
+# -- is rebuilt from shared/ and the Python models.
+examples/isoblocks/painter/output/
+examples/isoblocks/rays/output/
 
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its

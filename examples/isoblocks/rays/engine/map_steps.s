@@ -3,7 +3,7 @@
 ; 6d48476), used as public domain.
 ;
 ; In isoblocks' terms, his map is our shifted map with U mirrored: his x is
-; our V, his y is 127 - U (build.py, write_harte_map). So his x + 1 is a row
+; our V, his y is 127 - U (build.py, write_maps). So his x + 1 is a row
 ; of the map on, 128 bytes, and his y + 1 a byte on along the row.
 ;
 ; Changed for isoblocks: his macros keep x and y wrapping round within the

@@ -1,11 +1,8 @@
-; isoblocks ray demo: the second renderer on the test map, built on Tom
-; Harte's caster, tile drawer and scrolling (engine/harte_*.s).
-;
-; Q, A, O and P walk a figure a cell along the map's y and x, and the view
-; follows it. Three more sprites stand about: a ball on a column, one on the
-; bridge, and a figure in the courtyard of the house. One view only, so far:
-; the map is shifted for view 0. Nothing stops the figure walking into walls
-; yet -- that wants the map itself, which is stage 2.
+; isoblocks, the ray renderer: the demo (shared/demo.s) with the engine built
+; on Tom Harte's caster, tile drawer and scrolling (engine/cast.s, tiles.s, scroll.s and map_steps.s) -- each
+; triangle of a fixed grid from the colours worked out for its diamond, the
+; triangles kept from frame to frame, and only the tiles that change drawn.
+; One view: the map is shifted for view 0.
 ;
 ;   bank 2, $8000   this and the engine
 ;           $9A00   the compiled tiles' jump tables, one a way round
@@ -16,9 +13,10 @@
 ;                   tiles, the sprite buffers and tables, the routine at
 ;                   $BBBB, and the stack (build.py, the ray layout)
 ;   bank 5, $4000   the screen
-;   bank 0, $C000   his map (output/harte_map.bin): each diamond's colours,
+;   bank 0, $C000   his map (output/colours.bin, from shared/maps/test.json):
+;                   each diamond's colours,
 ;                   paged in by ray_cast
-;   bank 4, $C000   the heights (output/harte_heights.bin), paged in by
+;   bank 4, $C000   the heights (output/heights.bin), paged in by
 ;                   ray_sprites_prepare
 					DEVICE	ZXSPECTRUM128
 
@@ -26,7 +24,9 @@ MAP					EQU		$C000
 IM2_ROUTINE			EQU		$BBBB
 STACK_TOP			EQU		$C000
 
-					INCLUDE	"../output/ray_layout.s"
+					INCLUDE	"output/ray_layout.s"
+
+DEMO_SPRITES		EQU		ray_sprites			; the engine's table (engine/ray_sprites.s)
 
 					ORG		$8000
 
@@ -44,14 +44,11 @@ start:
 					call	clear_screen
 					call	ray_forget
 					call	ray_sprites_forget
-					ld		hl,demo_sprites
-					ld		de,ray_sprites
-					ld		bc,4 * 4
-					ldir
+					call	demo_start
 					ei
 
 frame:
-					call	read_keys
+					call	demo_keys
 					; The view follows the figure.
 					ld		a,(ray_sprites + 0)
 					ld		(ray_focus_x),a
@@ -63,39 +60,6 @@ frame:
 					call	ray_tiles
 					call	ray_sprites_show
 					jr		frame
-
-; x, y, height, picture.
-demo_sprites:		DB		64, 64, 0, RAY_PICTURE_FIGURE		; the one that walks
-					DB		52, 70, 5, RAY_PICTURE_BALL			; on column 5
-					DB		77, 60, 4, RAY_PICTURE_BALL			; on the bridge
-					DB		75, 80, 0, RAY_PICTURE_FIGURE		; in the courtyard
-
-
-read_keys:
-					ld		bc,$FBFE			; Q W E R T
-					in		a,(c)
-					rra
-					jr		c,.not_q
-					ld		hl,ray_sprites + 1
-					dec		(hl)
-.not_q:				ld		b,$FD				; A S D F G
-					in		a,(c)
-					rra
-					jr		c,.not_a
-					ld		hl,ray_sprites + 1
-					inc		(hl)
-.not_a:				ld		b,$DF				; P O I U Y
-					in		a,(c)
-					rra
-					jr		c,.not_p
-					ld		hl,ray_sprites + 0
-					inc		(hl)
-.not_p:				rra
-					ret		c
-					ld		hl,ray_sprites + 0
-					dec		(hl)
-					ret
-
 
 ; Black everywhere but the view, which is black on white.
 clear_screen:
@@ -124,18 +88,19 @@ clear_screen:
 					out		($FE),a
 					ret
 
-					INCLUDE	"../output/ray_tables.s"
-					INCLUDE	"../engine/harte_macros.s"
-					INCLUDE	"../engine/harte_cast.s"
-					INCLUDE	"../engine/harte_tiles.s"
-					INCLUDE	"../engine/harte_scroll.s"
-					INCLUDE	"../engine/ray_view.s"
-					INCLUDE	"../engine/ray_sprites.s"
+					INCLUDE	"../shared/demo.s"
+					INCLUDE	"output/ray_tables.s"
+					INCLUDE	"engine/map_steps.s"
+					INCLUDE	"engine/cast.s"
+					INCLUDE	"engine/tiles.s"
+					INCLUDE	"engine/scroll.s"
+					INCLUDE	"engine/ray_view.s"
+					INCLUDE	"engine/ray_sprites.s"
 code_end:
 					ASSERT	code_end <= TILE_JUMPS_0
 					DISPLAY	"code $8000-", /H, code_end, "  free to the jump tables: ", /D, TILE_JUMPS_0 - code_end
 
-					INCLUDE	"../output/ray_data.s"
+					INCLUDE	"output/ray_data.s"
 					ASSERT	IM2_TABLE + 257 <= triangle_map
 					ASSERT	triangle_map + 256 * triangle_rows <= STACK_TOP
 
@@ -153,10 +118,10 @@ frames:				EQU		IM2_ROUTINE - 2
 
 					MMU		$C000, RAY_HEIGHT_BANK
 					ORG		MAP
-					INCBIN	"../output/harte_heights.bin"
+					INCBIN	"output/heights.bin"
 					MMU		$C000, RAY_COLOUR_BANK
 					ORG		MAP
-					INCBIN	"../output/harte_map.bin"
+					INCBIN	"output/colours.bin"
 
-					SAVEDEV	"../output/ray_demo.banks", 0, 0, $20000
-					SAVEBIN	"../output/ray_demo.bin", $4000, $C000
+					SAVEDEV	"output/rays.banks", 0, 0, $20000
+					SAVEBIN	"output/rays.bin", $4000, $C000

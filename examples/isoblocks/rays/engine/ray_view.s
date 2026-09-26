@@ -1,14 +1,14 @@
 ; isoblocks: the ray view -- the focus, and what Tom Harte's caster
-; (harte_cast.s, harte_scroll.s) and tile drawer (harte_tiles.s) are asked to
+; (cast.s, scroll.s) and tile drawer (tiles.s) are asked to
 ; do each frame.
 ;
 ; His caster keeps its triangles from frame to frame. When the view moves a
 ; cell, one of his eight moves slides them along and casts only what has come
 ; into view; when it has not moved, nothing is cast; anything else -- the
 ; first frame, a jump -- casts the whole view. His map is our shifted map
-; with U mirrored (harte_macros.s), so his x is the focus's y and his y goes
+; with U mirrored (map_steps.s), so his x is the focus's y and his y goes
 ; the other way to its x. It holds each diamond's colours, worked out by the
-; build (harte_cast.s); the heights are a second map, in another bank, for
+; build (cast.s); the heights are a second map, in another bank, for
 ; the sprites. ray_cast pages the colours in.
 ;
 ; A frame is ray_update, ray_cast and ray_tiles.

@@ -6,7 +6,7 @@
 ; Changed for isoblocks, to be quicker:
 ; - His cast_diamond read four lines of sight and compared them to choose
 ;   each half's colour. That choice depends only on the map, so the build
-;   makes it, with his rule (build.py, write_harte_maps), and his map now
+;   makes it, with his rule (build.py, write_maps), and his map now
 ;   holds its answers: each byte the colours of the diamond whose front line
 ;   it is, the left half's in bits 7 and 4 and the right half's in bits 6
 ;   and 3. A triangle is one read and a mask: AND $90 for a left half, ADD

@@ -18,7 +18,7 @@
 ; sprite does not flicker. A cell that had a sprite last frame and has none
 ; now is marked for ray_tiles to redraw.
 ;
-; The heights are his map's (build.py, write_harte_maps): our shifted map
+; The heights are his map's (build.py, write_maps): our shifted map
 ; with U mirrored, each byte the nearest height on its line of sight plus
 ; one, and map_location the view's (U0, V0) in it. They are in their own
 ; bank, which ray_sprites_prepare pages in at $C000 in place of the colours.
@@ -33,37 +33,43 @@
 ;                   0. All 0 between frames.
 ; and the buffers at RAY_BUFFERS: buffer i's 8 rows at + i of 8 pages, a page
 ; apart, like the screen's -- so the compiled tiles draw into them as they do
-; onto the screen. Buffer i's screen address is at RAY_CELL_SCREENS + 2i.
+; onto the screen. Buffer i's screen address is at RAY_CELL_SCREENS + 2i, and
+; its cell's output_map entry at RAY_CELL_ENTRIES + 2i: the same low byte, the
+; next page.
 
 RAY_SPRITE_MAX		EQU		4
+					ASSERT	RAY_SPRITE_MAX == 4		; order_sprites sorts four
 					ASSERT	low RAY_BUFFERS + RAY_CELLS_MAX <= 256
 					ASSERT	low RAY_BUFFERS != 0		; 0 in a slot means none
+					ASSERT	RAY_CELL_ENTRIES == RAY_CELL_SCREENS + 256
 
-; Opcodes place_strip writes into ray_band_pair for the way down a strip.
+; Opcodes place_strip writes into its band tests for the way down a strip.
 OP_ADD_HL_DE		EQU		$19
 OP_INC_HL			EQU		$23
 
 ray_sprites:		DS		RAY_SPRITE_MAX * 4, $FF
+ray_order:			DS		RAY_SPRITE_MAX * 2	; farthest first: each its number, then key
 ray_cell_count:		DB		0
 ray_prev_count:		DB		0
 ray_prev:			DS		RAY_CELLS_MAX * 2		; last frame's cells' output_map entries
-ray_now_end:		DW		0
-ray_now:			DS		RAY_CELLS_MAX * 2		; this frame's
 
 ; The sprite being placed.
 spr_c:				DB		0			; its top's diamond: strip of the edge...
 spr_r:				DB		0			; ...and band
 spr_deep:			DB		0			; r_s + 3h + 3
+spr_deep_first:		DB		0			; ...less the first band tested, 2j - 3
 spr_first_row:		DB		0			; the character rows it covers in the view
 spr_rows:			DB		0
 spr_picture:		DW		0			; its left byte's rows, from the first row's
-spr_done:			DB		0			; a bit for each sprite placed already
-; The strip being drawn.
+spr_screen:			DW		0			; the first row's screen address, column 0
+spr_line:			DW		0			; band 2j - 3's line of sight, less 127 (s >> 1)
+; The strip being drawn -- and IYH its character row, IYL the rows left.
 strip_s:			DB		0
-strip_row:			DB		0
-strip_rows:			DB		0			; rows left
-strip_picture:		DW		0			; the picture's rows for strip_row
-strip_visible:		DW		0			; RAY_VISIBLE for the strip's way round
+strip_picture:		DW		0			; the picture's rows for the row
+strip_screen:		DW		0			; the row's cell's screen address
+strip_visible:		DB		0			; the low byte of RAY_VISIBLE for its way round
+strip_jumps:		DB		0			; the high byte of its tiles' jump table
+strip_slot:			DB		0			; TRI_SLOTS + s, a cell's slot's low byte
 
 
 ; One band's test: HL its line of sight, C deep - k (1 at least), B the tests
@@ -145,79 +151,84 @@ ray_sprites_prepare:
 					djnz	.restore
 .restored:			xor		a
 					ld		(ray_cell_count),a
-					ld		(spr_done),a
-					ld		hl,ray_now
-					ld		(ray_now_end),hl
-					; The sprites, farthest first: each time, the one not yet placed
-					; with the least v - u + h.
+					; The compiled tiles' common bytes, for start_cell.
+					exx
+					ld		bc,TILE_B * 256 + TILE_C
+					ld		e,TILE_E
+					exx
+					; The sprites, farthest first (order_sprites).
+					call	order_sprites
+					ld		hl,ray_order
 					ld		b,RAY_SPRITE_MAX
 .next_sprite:		push	bc
-					call	farthest_left
-					jr		c,.all_placed
-					call	place_sprite
+					push	hl
+					ld		a,(hl)				; its number
+					add		a,a
+					add		a,a
+					ld		e,a
+					ld		d,0
+					ld		ix,ray_sprites
+					add		ix,de
+					ld		a,(ix+3)
+					inc		a					; $FF: no sprite
+					call	nz,place_sprite
+					pop		hl
+					inc		hl
+					inc		hl
 					pop		bc
 					djnz	.next_sprite
-					jr		.done
-.all_placed:		pop		bc
-.done:				pop		iy
+					pop		iy
 					pop		ix
 					ret
 
 
-; The sprite not yet placed that is farthest away: IX its entry, and its bit
-; set in spr_done. Carry set if there is none.
-farthest_left:
-					ld		iy,0				; none found yet
-					ld		hl,ray_sprites
-					ld		b,RAY_SPRITE_MAX
-					ld		c,1					; this sprite's bit
-					ld		e,$FF				; the least depth so far, biased
-.sprite:			ld		a,(spr_done)
-					and		c
-					jr		nz,.skip
-					push	hl
-					inc		hl
-					inc		hl
-					inc		hl
-					ld		a,(hl)				; its picture: $FF, none
-					pop		hl
-					inc		a
-					jr		z,.skip
-					; v - u + h, biased by $80 so an unsigned compare orders it.
-					inc		hl
-					ld		a,(hl)				; v
-					dec		hl
-					sub		(hl)				; - u
-					inc		hl
-					inc		hl
-					add		a,(hl)				; + h
-					dec		hl
-					dec		hl
+; Put ray_order's entries at first_place and second_place in order: as
+; words, the key high and the number low, the smaller first.
+					MACRO	RAY_ORDER_PAIR first_place, second_place
+					ld		hl,(ray_order + 2 * first_place)
+					ld		de,(ray_order + 2 * second_place)
+					or		a
+					sbc		hl,de
+					jr		c,.in_order			; already the farther first
+					add		hl,de
+					ld		(ray_order + 2 * first_place),de
+					ld		(ray_order + 2 * second_place),hl
+.in_order:
+					ENDM
+
+; The sprites in the order to place them, farthest first, into ray_order:
+; each its number, then its key -- v - u + h, biased by $80 so that an
+; unsigned compare orders it, $FF for no sprite. As a word the key is the
+; high byte and the number the low, so no two are equal, and sprites of equal
+; keys keep the table's order, as the model's sort does. Five compare-and-
+; swaps sort four.
+order_sprites:
+					ld		ix,ray_sprites
+					ld		hl,ray_order
+					ld		b,0					; the sprite's number
+.key:				ld		a,(ix+3)
+					inc		a					; no picture: no sprite
+					ld		a,$FF
+					jr		z,.none
+					ld		a,(ix+1)
+					sub		(ix+0)
+					add		a,(ix+2)
 					xor		$80
-					cp		e
-					jr		nc,.skip			; no nearer than the farthest so far
-					ld		e,a
-					push	hl
-					pop		iy
-					ld		d,c
-.skip:				inc		hl
+.none:				ld		(hl),b
 					inc		hl
+					ld		(hl),a
 					inc		hl
-					inc		hl
-					sla		c
-					djnz	.sprite
-					push	iy
-					pop		hl
-					ld		a,h
-					or		l
-					scf
-					ret		z
-					push	iy
-					pop		ix
-					ld		a,(spr_done)
-					or		d
-					ld		(spr_done),a
-					or		a					; carry clear
+					ld		de,4
+					add		ix,de
+					inc		b
+					ld		a,b
+					cp		RAY_SPRITE_MAX
+					jr		nz,.key
+					RAY_ORDER_PAIR 0, 1
+					RAY_ORDER_PAIR 2, 3
+					RAY_ORDER_PAIR 0, 2
+					RAY_ORDER_PAIR 1, 3
+					RAY_ORDER_PAIR 1, 2
 					ret
 
 
@@ -304,6 +315,43 @@ place_sprite:
 					ld		l,low RAY_PICTURES
 					add		hl,de
 					ld		(spr_picture),hl
+					; The first row's screen address, column 0: each strip adds s.
+					ld		a,c
+					dec		a
+					add		a,a
+					ld		e,a
+					ld		d,0
+					ld		hl,ray_screen_rows
+					add		hl,de
+					ld		a,(hl)
+					inc		hl
+					ld		h,(hl)
+					ld		l,a
+					ld		(spr_screen),hl
+					; Band 2j - 3's line of sight in strip s -- the diamond (s | 1,
+					; 2j - 3), U' = (s >> 1) + 2 - j and V' = (s >> 1) + j - 1 -- is
+					; map_location + 129j - 130 + 127 (s >> 1): the sprite's part
+					; here, the strip's in place_strip.
+					ld		d,c
+					ld		e,0
+					srl		d
+					rr		e					; 128j
+					ld		hl,(map_location)
+					add		hl,de
+					ld		e,c
+					ld		d,0
+					add		hl,de				; 129j
+					ld		de,-130
+					add		hl,de
+					ld		(spr_line),hl
+					; The sprite's depth against band 2j - 3: deep - 2j + 3.
+					ld		a,c
+					add		a,a
+					ld		b,a
+					ld		a,(spr_deep)
+					sub		b
+					add		a,3
+					ld		(spr_deep_first),a
 					; Its two strips: c - 1 has the picture's left byte, c its right.
 					xor		a
 					call	place_strip
@@ -321,14 +369,14 @@ place_sprite:
 ; So going down the strip a band at a time, a band's line of sight is one row
 ; of the map on (+128) from a band of the first kind, one cell back along U
 ; (+1, mirrored) from one of the second; and each band's side line is the
-; band before's own, and its line
-; above the band before that's. A line whose height is v wins with nearness
-; 3v as a band's own, 3v - 1 as the next band's side, and 3v - 2 as the one
-; after's above; the sprite, n < deep - k, is three bands shallower by then as
-; well -- so every line of sight has a single test, made when it is a band's
-; own: v is 0, or 3v < deep - k. A band lets the sprite show if its own line
-; and the two before pass. A character cell's triangles are bands 2j - 1, 2j
-; and 2j + 1, so it needs the tests of bands 2j - 3 to 2j + 1.
+; band before's own, and its line above the band before that's. A line whose
+; height is v wins with nearness 3v as a band's own, 3v - 1 as the next
+; band's side, and 3v - 2 as the one after's above; the sprite, n < deep - k,
+; is three bands shallower by then as well -- so every line of sight has a
+; single test, made when it is a band's own: v is 0, or 3v < deep - k. A band
+; lets the sprite show if its own line and the two before pass. A character
+; cell's triangles are bands 2j - 1, 2j and 2j + 1, so it needs the tests of
+; bands 2j - 3 to 2j + 1.
 place_strip:
 					ld		b,a
 					ld		a,(spr_c)
@@ -338,45 +386,50 @@ place_strip:
 					dec		a
 					cp		RAY_STRIPS			; strips 1 to 30
 					ret		nc
+					inc		a
+					ld		c,a					; s, for what follows
+					add		a,TRI_SLOTS
+					ld		(strip_slot),a
 					; The picture: the right byte's rows 64 bytes on.
 					ld		hl,(spr_picture)
 					ld		a,b
 					rrca
 					rrca
-					ld		e,a
-					ld		d,0
-					add		hl,de
+					add		a,l
+					ld		l,a
 					ld		(strip_picture),hl
-					ld		a,(spr_first_row)
-					ld		(strip_row),a
-					ld		a,(spr_rows)
-					ld		(strip_rows),a
-					; The strip's way round: its triangles' pixels, and its steps.
-					; Band 2j - 3 is of the first kind in an odd strip, so its bands
-					; go +128, +1, +128... and in an even strip +1, +128, +1...
-					ld		a,(strip_s)
+					; The screen: the first row's, and s.
+					ld		hl,(spr_screen)
+					ld		a,l
+					add		a,c
+					ld		l,a
+					ld		(strip_screen),hl
+					; Its way round: its triangles' pixels, its tiles' jump table,
+					; and its steps. Band 2j - 3 is of the first kind in an odd
+					; strip, so its bands go +128, +1, +128... and in an even strip
+					; +1, +128, +1...
+					ld		a,c
 					and		1
 					rrca
 					rrca						; 64 x the way round
-					ld		l,a
-					ld		h,0
-					ld		de,RAY_VISIBLE
-					add		hl,de
-					ld		(strip_visible),hl
-					ld		a,(strip_s)
+					add		a,low RAY_VISIBLE
+					ld		(strip_visible),a
+					ld		a,c
 					rra
-					ld		a,OP_ADD_HL_DE
-					ld		b,OP_INC_HL
+					ld		a,high TILE_JUMPS_1
+					ld		de,OP_ADD_HL_DE + 256 * OP_INC_HL
 					jr		c,.odd
-					ld		a,OP_INC_HL
-					ld		b,OP_ADD_HL_DE
-.odd:				ld		(ray_band_pair.step_even),a
-					ld		a,b
-					ld		(ray_band_pair.step_odd),a
-					; Band 2j - 3's line of sight, j the first row: the diamond is
-					; (s | 1, 2j - 3), which is U' = (s >> 1) + 2 - j and V' =
-					; (s >> 1) + j - 1, at 127 (s >> 1) + 129j - 130.
-					ld		a,(strip_s)
+					ld		a,high TILE_JUMPS_0
+					ld		de,OP_INC_HL + 256 * OP_ADD_HL_DE
+.odd:				ld		(strip_jumps),a
+					ld		a,e
+					ld		(.first_even),a
+					ld		(.row_even),a
+					ld		a,d
+					ld		(.first_odd),a
+					ld		(.row_odd),a
+					; Band 2j - 3's line of sight: the sprite's part, and 127 (s >> 1).
+					ld		a,c
 					srl		a
 					ld		e,a
 					ld		d,0
@@ -386,32 +439,27 @@ place_strip:
 					rr		l					; 128 (s >> 1)
 					or		a
 					sbc		hl,de				; 127 (s >> 1)
-					ld		de,-130
+					ld		de,(spr_line)
 					add		hl,de
+					; The rows: IYH the character row, IYL how many are left.
 					ld		a,(spr_first_row)
-					ld		d,a
-					ld		e,0
-					srl		d
-					rr		e					; 128j
-					add		hl,de
-					ld		e,a
-					ld		d,0
-					add		hl,de				; 129j
-					ld		de,(map_location)
-					add		hl,de
-					; The sprite's depth against band 2j - 3: deep - 2j + 3.
-					add		a,a
-					ld		c,a
-					ld		a,(spr_deep)
-					sub		c
-					add		a,3
-					ld		c,a
+					ld		iyh,a
+					ld		a,(spr_rows)
+					ld		iyl,a
+					ld		a,(spr_deep_first)
+					ld		c,a					; the depth against band 2j - 3
 					ld		de,128
 					ld		b,0					; each band's test, the latest in bit 0
 					RAY_BAND_TEST				; band 2j - 3
-					call	ray_band_pair		; 2j - 2 and 2j - 1
+.first_even:		add		hl,de				; (these four steps as written above)
+					RAY_BAND_TEST				; 2j - 2
+.first_odd:			inc		hl
+					RAY_BAND_TEST				; 2j - 1
 .row:				ld		de,128
-					call	ray_band_pair		; 2j and 2j + 1
+.row_even:			add		hl,de
+					RAY_BAND_TEST				; 2j
+.row_odd:			inc		hl
+					RAY_BAND_TEST				; 2j + 1
 					; The cell's triangles: a band shows if it and the two before it
 					; passed. Bits 4 to 0 are bands 2j - 3 to 2j + 1, so this leaves
 					; 4 the top, 2 the middle and 1 the bottom.
@@ -431,47 +479,38 @@ place_strip:
 .next_row:			ld		a,(strip_picture)
 					add		a,16				; 8 rows on, in its 64-byte block
 					ld		(strip_picture),a
-					ld		a,(strip_row)		; (HL is the line of sight)
-					inc		a
-					ld		(strip_row),a
-					ld		a,(strip_rows)
-					dec		a
-					ld		(strip_rows),a
+					ld		a,(strip_screen)	; a character row down the screen...
+					add		a,32
+					ld		(strip_screen),a
+					jr		nc,.same_third
+					ld		a,(strip_screen + 1)
+					add		a,8					; ...into the next third
+					ld		(strip_screen + 1),a
+.same_third:		inc		iyh
+					dec		iyl
 					jr		nz,.row
 					ret
 
 
-
-; The next two bands down a strip: one of each kind, the steps between them
-; written by place_strip. DE is 128.
-ray_band_pair:
-.step_even:			add		hl,de
-					RAY_BAND_TEST
-.step_odd:			inc		hl
-					RAY_BAND_TEST
-					ret
-
-
-; The sprite's strip into the cell (strip_row, strip_s), A its triangles that
-; let it show (4 top, 2 middle, 1 bottom). Keeps nothing.
+; The sprite's strip into the cell (IYH, strip_s), A its triangles that let
+; it show (4 top, 2 middle, 1 bottom). Keeps IY.
 draw_cell:
-					; Those triangles' pixels, a byte a row.
+					; Those triangles' pixels, a byte a row: RAY_VISIBLE for the
+					; strip's way round, 8 bytes a set.
 					add		a,a
 					add		a,a
 					add		a,a
-					ld		hl,(strip_visible)
-					add		a,l
-					ld		l,a
-					push	hl
-					pop		ix
+					ld		hl,strip_visible
+					add		a,(hl)
+					ld		ixl,a
+					ld		ixh,high RAY_VISIBLE
 					; The cell's slot: TRI_SLOTS + s on its tile row's bottom
 					; triangles' page, row 2j of triangle_map.
-					ld		a,(strip_row)
+					ld		a,iyh
 					add		a,a
 					add		a,high triangle_map
 					ld		h,a
-					ld		a,(strip_s)
-					add		a,TRI_SLOTS
+					ld		a,(strip_slot)
 					ld		l,a
 					ld		a,(hl)
 					or		a
@@ -508,57 +547,39 @@ start_cell:
 					ld		a,c
 					add		a,low RAY_BUFFERS
 					ld		(hl),a				; the slot: the buffer
-					; Its output_map entry, on the same page, remembered to be put
-					; back next frame.
+					; Its output_map entry, on the same page.
 					ld		a,l
 					sub		TRI_SLOTS - TRI_OUTPUT
 					ld		l,a
-					ex		de,hl
-					ld		hl,(ray_now_end)
-					ld		(hl),e
-					inc		hl
-					ld		(hl),d
-					inc		hl
-					ld		(ray_now_end),hl
-					ex		de,hl
 					; Its tile, marked as shown: ray_tiles leaves it.
 					call	cell_tile
 					ld		(hl),a
-					; The tile's code, as draw_tiles would call it, into the buffer.
+					ex		de,hl				; DE the entry
+					; The tile's code, as draw_tiles would call it, into the buffer
+					; (ray_sprites_prepare put its common bytes in B', C', E').
 					ld		l,a
-					ld		a,(strip_s)
-					rra
-					ld		h,high TILE_JUMPS_0
-					jr		nc,.way
-					ld		h,high TILE_JUMPS_1
-.way:				ld		a,c
+					ld		a,(strip_jumps)
+					ld		h,a
+					ld		a,c
 					add		a,low RAY_BUFFERS
 					exx
 					ld		l,a
 					ld		h,high RAY_BUFFERS
-					ld		bc,TILE_B * 256 + TILE_C
-					ld		e,TILE_E
 					exx
 					call	jump_hl				; keeps the main registers
-					; The cell's screen address, for ray_sprites_show.
-					ld		a,(strip_row)
-					dec		a
-					add		a,a
-					ld		e,a
-					ld		d,0
-					ld		hl,ray_screen_rows
-					add		hl,de
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					ld		a,(strip_s)
-					add		a,e
-					ld		e,a					; DE the screen address
+					; The entry, to be put back next frame, and the screen address,
+					; for ray_sprites_show: side by side, a page apart.
 					ld		a,c
 					add		a,a
 					add		a,low RAY_CELL_SCREENS
 					ld		l,a
-					ld		h,high RAY_CELL_SCREENS
+					ld		h,high RAY_CELL_ENTRIES
+					ld		(hl),e
+					inc		l
+					ld		(hl),d
+					dec		l
+					dec		h					; RAY_CELL_SCREENS
+					ld		de,(strip_screen)
 					ld		(hl),e
 					inc		l
 					ld		(hl),d
@@ -619,16 +640,17 @@ ray_sprites_show:
 					pop		hl
 					inc		c
 					djnz	.cell
-					; Their slots, empty for the next frame.
+					; Their slots, empty for the next frame: each entry's page,
+					; TRI_SLOTS - TRI_OUTPUT on.
 					ld		a,(ray_cell_count)
 					ld		b,a
-					ld		hl,ray_now
+					ld		hl,RAY_CELL_ENTRIES
 .slot:				ld		a,(hl)
-					inc		hl
+					inc		l
 					add		a,TRI_SLOTS - TRI_OUTPUT
 					ld		e,a
 					ld		d,(hl)
-					inc		hl
+					inc		l
 					xor		a
 					ld		(de),a
 					djnz	.slot
@@ -639,7 +661,7 @@ ray_sprites_show:
 					ret		z
 					ld		c,a
 					ld		b,0
-					ld		hl,ray_now
+					ld		hl,RAY_CELL_ENTRIES
 					ld		de,ray_prev
 					ldir
 					ret
