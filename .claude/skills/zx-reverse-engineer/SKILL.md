@@ -243,7 +243,16 @@ screenshots with SendUserFile at each step that matters.
     the build and the display copy, then stop just before the panel and decode
     the buffer (its own layout: bottom line first) rather than the screen.
   - **A one-off scene inherits the game's state.** A borrowed room number
-    brought its charm along; pick values nothing else refers to.
+    brought its charm along; pick values nothing else refers to. And the
+    game's own checks react to what you changed: emptying the player's
+    records to keep him out of the pictures was fine for one frame, but a
+    trace that ran on hit `next_frame_or_die`, which read it as a death and
+    restarted in another room.
+  - **To follow a frame through a pipeline,** stop at each stage's address in
+    turn (the simulator runs at least one instruction before it checks the
+    stop, so stopping at the same routine repeatedly catches every call), and
+    read what the game left: rectangles off the stack where it pushed them,
+    the object being drawn from IX.
   - Look at every generated picture before believing it: three of these four
     failures were black or wrong images from a build that reported success.
 - **Look at the pages as a reader will.** Headless Edge screenshots a built
