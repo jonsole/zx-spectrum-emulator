@@ -564,6 +564,108 @@ function dimensionsOf(atlas) {
   return out;
 }
 
+// --- floor shapes ---------------------------------------------------------
+//
+// A shape is three numbers: how far the floor reaches from the middle, $80,
+// along U and along V, and how high it stands. The games copy them into the
+// room's half-sizes and floor height, and everything that bounds a room reads
+// those -- the walls you cannot walk through, where you come in, how far you
+// go through an arch before you are in the next room. What they do not move is
+// what you see: the walls and arches are scenery, at coordinates of their own,
+// and wallFit below says when the two no longer agree.
+
+const SHAPE_LIMIT = 4;
+const SHAPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+// A half-size keeps $80 plus and minus it inside a byte; a floor is any height.
+const SHAPE_RANGE = { u: [1, 127], v: [1, 127], z: [0, 255] };
+
+function shapeValueProblem(field, value) {
+  const range = SHAPE_RANGE[field];
+  if (!range) return 'a shape has u, v and z';
+  if (!Number.isInteger(value) || value < range[0] || value > range[1]) {
+    return field + ' is ' + range[0] + ' to ' + range[1];
+  }
+  return null;
+}
+
+// The rooms standing on a shape, by number.
+function roomsOfShape(atlas, name) {
+  return atlas.rooms.filter(function (r) { return r.dimensions === name; })
+    .map(function (r) { return r.number; });
+}
+
+function setShapeField(atlas, name, field, value) {
+  const shape = (atlas.roomDimensions || {})[name];
+  if (!shape) return 'there is no shape ' + name;
+  const problem = shapeValueProblem(field, value);
+  if (problem) return problem;
+  shape[field] = value;
+  return null;
+}
+
+function addShapeProblem(atlas, name) {
+  if (!SHAPE_NAME.test(name || '')) {
+    return 'a name is letters, digits and underscores, starting with a letter';
+  }
+  const shapes = atlas.roomDimensions || {};
+  if (shapes[name]) return 'there is already a shape ' + name;
+  const limit = rulesOf(atlas).shapeLimit;
+  if (Object.keys(shapes).length >= limit) return 'a room can name ' + limit + ' shapes at most';
+  return null;
+}
+
+// A new shape, a copy of `from` to start from. It goes on the end: the order
+// is the game's table order, and a shape added anywhere else would renumber
+// every room standing on one after it.
+function addShape(atlas, name, from) {
+  const problem = addShapeProblem(atlas, name);
+  if (problem) return problem;
+  const base = atlas.roomDimensions[from] || { u: 64, v: 64, z: 128 };
+  atlas.roomDimensions[name] = { u: base.u, v: base.v, z: base.z };
+  return null;
+}
+
+function deleteShapeProblem(atlas, name) {
+  const shapes = atlas.roomDimensions || {};
+  if (!shapes[name]) return 'there is no shape ' + name;
+  if (Object.keys(shapes).length === 1) return 'a castle needs at least one shape';
+  const using = roomsOfShape(atlas, name).length;
+  if (using) return using + ' room' + (using === 1 ? ' stands' : 's stand') + ' on it';
+  return null;
+}
+
+function deleteShape(atlas, name) {
+  const problem = deleteShapeProblem(atlas, name);
+  if (problem) return problem;
+  delete atlas.roomDimensions[name];
+  return null;
+}
+
+// Where a room's walls and arches stand against its floor. In both games'
+// castles every wall and arch piece has its inner face within a unit of the
+// edge it stands on -- the far walls just outside it, the arches just inside
+// -- so a piece further off than that, one way or the other, is one the shape
+// has been changed under, and the walls you see are not the walls you walk
+// into. One finding a template: the piece furthest off.
+function wallFit(atlas, room, numbers, sizes) {
+  const floor = sizeOf(atlas, room);
+  if (!floor) return [];
+  const worst = new Map();
+  for (const p of expandRoom(atlas, room, numbers, sizes)) {
+    if (p.kind !== 'scenery') continue;
+    if (!isBackgroundTemplate(atlas, p.template) && !doorwayOf(atlas, p.template)) continue;
+    const du = Math.abs(p.u - 0x80) - p.sizeU - floor.u;
+    const dv = Math.abs(p.v - 0x80) - p.sizeV - floor.v;
+    const alongU = du >= dv;
+    const by = alongU ? du : dv;
+    if (Math.abs(by) <= 1) continue;
+    const side = alongU ? (p.u >= 0x80 ? 'east' : 'west') : (p.v >= 0x80 ? 'north' : 'south');
+    const had = worst.get(p.template);
+    if (!had || Math.abs(by) > Math.abs(had.by)) worst.set(p.template, { template: p.template, side: side, by: by });
+  }
+  return Array.from(worst.values());
+}
+
 function sizeOf(atlas, room) {
   const shapes = dimensionsOf(atlas);
   return shapes.get(room.dimensions) || shapes.values().next().value;
@@ -681,7 +783,11 @@ function rulesOf(atlas) {
     // pool to the fullest room. The original Knight Lore's table is fixed:
     // thirty-six records between $5C88 and the font, which the game zeroes
     // until it meets the font exactly, so one more overruns it.
-    poolLimit: isByte(said.poolLimit) && said.poolLimit > 0 ? said.poolLimit : null
+    poolLimit: isByte(said.poolLimit) && said.poolLimit > 0 ? said.poolLimit : null,
+    // How many floor shapes the attribute byte can name. The remakes' builders
+    // keep the shape in bits 3 and 4, beside the scenery count, so four; the
+    // original Knight Lore reads bits 3 to 7, and its castle says 32.
+    shapeLimit: isByte(said.shapeLimit) && said.shapeLimit > 0 ? said.shapeLimit : SHAPE_LIMIT
   };
 }
 
@@ -1070,8 +1176,32 @@ function checkAtlas(atlas, numbers, sizes) {
 
     const used = poolUsed(atlas, room);
     if (used === 0) note(n, 'nothing in it');
+    // One line a room, however many of its walls are off: a shape changed
+    // under forty rooms is forty lines, not a hundred and sixty.
+    const off = wallFit(atlas, room, numbers, sizes);
+    if (off.length) {
+      note(n, 'the walls you see are not where its ' + room.dimensions + ' floor ends: ' +
+              off.map(function (o) {
+                return o.template + ' ' + Math.abs(o.by) + (o.by > 0 ? ' outside' : ' inside') +
+                       ' the ' + o.side + ' edge';
+              }).join(', '));
+    }
     if (rules.poolLimit !== null && used > rules.poolLimit) {
       fault(n, 'it fills ' + used + ' records; the object table holds ' + rules.poolLimit);
+    }
+  }
+
+  // The shapes: no more than the attribute byte can name, and each one's
+  // numbers in range.
+  const shapeNames = Object.keys(atlas.roomDimensions || {});
+  if (shapeNames.length > rules.shapeLimit) {
+    problems.push({ room: null, severity: 'error',
+      text: shapeNames.length + ' floor shapes; a room can name ' + rules.shapeLimit + ' at most' });
+  }
+  for (const name of shapeNames) {
+    for (const field of ['u', 'v', 'z']) {
+      const why = shapeValueProblem(field, atlas.roomDimensions[name][field]);
+      if (why) problems.push({ room: null, severity: 'error', text: 'the shape ' + name + ': ' + why });
     }
   }
 
@@ -1720,6 +1850,7 @@ if (typeof module !== 'undefined') {
     setTemplateField, setTemplateGraphic,
     templateUsage,
     checkAtlas, poolNeeded, startRoomsOf, START_SPOT, startBlockers, startRoomProblem,
-    setStartRoom
+    setStartRoom, SHAPE_LIMIT, SHAPE_RANGE, shapeValueProblem, roomsOfShape, setShapeField,
+    addShapeProblem, addShape, deleteShapeProblem, deleteShape, wallFit
   };
 }

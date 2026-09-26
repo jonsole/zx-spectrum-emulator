@@ -69,6 +69,12 @@
        "$ref": "#/definitions/byte",
        "description": "The number the last room must have. room_find walks the records to the first number at least the one it wants, so there has to be one at the end that every search stops at."
       },
+      "shapeLimit": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 32,
+       "description": "The most floor shapes a room can name. Without it, 4: the remakes' builders keep the shape in bits 3 and 4 of the attribute byte. The original Knight Lore reads bits 3 to 7, and its castle says 32."
+      },
       "poolLimit": {
        "type": "integer",
        "minimum": 1,

@@ -1368,6 +1368,65 @@ test('startBlockers: what stands in the middle of the floor, where Sabreman star
   }));
 });
 
+test('shapes: edited, added and deleted, and held to the castle’s limit', function () {
+  const atlas = atlasFor('knightlore');
+  assert.strictEqual(m.rulesOf(atlas).shapeLimit, 4, 'the remakes keep a shape in two bits');
+  assert.deepStrictEqual(Object.keys(atlas.roomDimensions), ['square', 'narrowU', 'narrowV']);
+
+  // A value out of range is refused and nothing changes.
+  assert.strictEqual(m.setShapeField(atlas, 'square', 'u', 128), 'u is 1 to 127');
+  assert.strictEqual(m.setShapeField(atlas, 'square', 'u', 0), 'u is 1 to 127');
+  assert.strictEqual(atlas.roomDimensions.square.u, 64);
+  assert.strictEqual(m.setShapeField(atlas, 'square', 'z', 120), null);
+  assert.strictEqual(atlas.roomDimensions.square.z, 120);
+  atlas.roomDimensions.square.z = 128;
+
+  // A new one is a copy of the one named, on the end; a fifth is refused here,
+  // and allowed where the castle says so.
+  assert.strictEqual(m.addShape(atlas, 'small', 'narrowU'), null);
+  assert.deepStrictEqual(Object.keys(atlas.roomDimensions), ['square', 'narrowU', 'narrowV', 'small']);
+  assert.deepStrictEqual(atlas.roomDimensions.small, { u: 32, v: 64, z: 128 });
+  assert.ok(/already a shape/.test(m.addShape(atlas, 'small', 'square')));
+  assert.ok(/letters, digits/.test(m.addShape(atlas, '9x', 'square')));
+  assert.ok(/4 shapes at most/.test(m.addShape(atlas, 'more', 'square')));
+  atlas.meta.rules = { shapeLimit: 32 };
+  assert.strictEqual(m.addShape(atlas, 'more', 'square'), null);
+
+  // Only a shape nothing stands on goes, and never the last.
+  assert.ok(/rooms stand on it/.test(m.deleteShape(atlas, 'square')));
+  assert.strictEqual(m.deleteShape(atlas, 'more'), null);
+  assert.ok(!('more' in atlas.roomDimensions));
+  assert.deepStrictEqual(m.checkAtlas(atlas).filter(function (p) { return /shape/.test(p.text); }), []);
+  atlas.meta.rules = {};
+  assert.ok(m.checkAtlas(atlas).some(function (p) { return p.severity === 'error' && /4 floor shapes; a room can name 4/.test(p.text); }) === false);
+  atlas.roomDimensions.big = { u: 64, v: 64, z: 128 };
+  assert.ok(m.checkAtlas(atlas).some(function (p) {
+    return p.severity === 'error' && p.text === '5 floor shapes; a room can name 4 at most';
+  }));
+});
+
+test('wallFit: the walls and arches of every castle as shipped sit on their floors’ edges', function () {
+  for (const game of ['knightlore', 'pentagram', TABLE]) {
+    const atlas = atlasFor(game);
+    const numbers = m.graphicNumbers(sheetFor(game), graphicsFor(game));
+    const sizes = m.graphicBoxes(sheetFor(game), graphicsFor(game));
+    for (const room of atlas.rooms) {
+      assert.deepStrictEqual(m.wallFit(atlas, room, numbers, sizes), [], game + ' room ' + room.number);
+    }
+    if (game !== 'knightlore') continue;
+    // Narrow the square floor by eight: its east arch now stands seven outside
+    // the edge (its inner face was one inside), and the west wall nine.
+    atlas.roomDimensions.square.u = 56;
+    const off = m.wallFit(atlas, atlas.rooms.find(function (r) { return r.number === 0; }), numbers, sizes);
+    assert.deepStrictEqual(off.map(function (o) { return o.template + ' ' + o.side + ' ' + o.by; }).sort(),
+                           ['scenery_arch_e east 7', 'scenery_walls_0 west 9']);
+    assert.ok(m.checkAtlas(atlas, numbers, sizes).some(function (p) {
+      return p.room === 0 && p.severity === 'warning' &&
+             /the walls you see are not where its square floor ends: .*scenery_walls_0 9 outside the west edge/.test(p.text);
+    }));
+  }
+});
+
 test('addRoom: a new room goes in number order, empty, and checks clean', function () {
   const atlas = atlasFor(TABLE);
   const numbers = new Set(atlas.rooms.map(function (r) { return r.number; }));

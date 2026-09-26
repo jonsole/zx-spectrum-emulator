@@ -197,6 +197,7 @@
           <button data-tab="objects" class="on">Objects</button>
           <button data-tab="scenery">Scenery</button>
           <button data-tab="collectables" id="tab-collectables" style="display:none">Collectables</button>
+          <button data-tab="shapes">Shapes</button>
         </div>
         <div id="panel"></div>
       </div>
@@ -1305,12 +1306,98 @@
 
   }
 
+  // --- floor shapes -----------------------------------------------------------
+  //
+  // The castle's floor shapes, every one: how far the floor reaches from the
+  // middle along U and V, and how high it stands. A shape is the castle's, not
+  // the room's -- changing one changes every room standing on it -- and what
+  // it moves is what bounds the room, not the walls drawn round it, which are
+  // scenery. The checks say which rooms' walls no longer line up.
+  function renderShapes() {
+    const shapes = atlas.roomDimensions || {};
+    const names = Object.keys(shapes);
+    const limit = rulesOf(atlas).shapeLimit;
+    el.panel.appendChild(note(names.length + ' of ' + limit + ' shapes. Changing one moves where ' +
+      'every room on it is bounded, not the walls you see: those are scenery, and the checks ' +
+      'say when they no longer line up.'));
+
+    for (const name of names) {
+      const shape = shapes[name];
+      const block = document.createElement('div');
+      block.className = 'group';
+      const head = document.createElement('div');
+      head.className = 'head';
+      const title = document.createElement('span');
+      title.className = 'name';
+      title.textContent = name + (room && room.dimensions === name ? ' (this room)' : '');
+      head.appendChild(title);
+      const using = roomsOfShape(atlas, name).length;
+      head.appendChild(note(using + ' room' + (using === 1 ? '' : 's')));
+      const remove = document.createElement('button');
+      remove.className = 'small';
+      remove.textContent = 'Delete';
+      const why = deleteShapeProblem(atlas, name);
+      remove.disabled = Boolean(why);
+      remove.title = why || 'delete the shape ' + name;
+      remove.addEventListener('click', function () {
+        if (!deleteShape(atlas, name)) changed('delete shape');
+      });
+      head.appendChild(remove);
+      block.appendChild(head);
+
+      const fields = document.createElement('div');
+      fields.className = 'head';
+      const said = note('');
+      for (const field of ['u', 'v', 'z']) {
+        const label = document.createElement('label');
+        label.textContent = field === 'z' ? 'floor Z ' : 'half ' + field.toUpperCase() + ' ';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = SHAPE_RANGE[field][0];
+        input.max = SHAPE_RANGE[field][1];
+        input.value = shape[field];
+        input.addEventListener('change', function () {
+          const problem = setShapeField(atlas, name, field, Number(input.value));
+          if (problem) { said.textContent = problem; input.value = shape[field]; return; }
+          changed('shape');
+        });
+        label.appendChild(input);
+        fields.appendChild(label);
+      }
+      block.appendChild(fields);
+      block.appendChild(said);
+      el.panel.appendChild(block);
+    }
+
+    // A new shape starts as a copy of this room's, to be changed from there.
+    const adder = document.createElement('div');
+    adder.className = 'adder';
+    const field = document.createElement('input');
+    field.type = 'text';
+    field.placeholder = 'new_shape';
+    adder.appendChild(field);
+    const add = document.createElement('button');
+    add.textContent = 'Add shape';
+    adder.appendChild(add);
+    el.panel.appendChild(adder);
+    const why = note(names.length >= limit ? 'a room can name ' + limit + ' shapes at most' : '');
+    el.panel.appendChild(why);
+    add.disabled = names.length >= limit;
+    add.addEventListener('click', function () {
+      const name = String(field.value).trim();
+      const problem = addShape(atlas, name, room ? room.dimensions : names[0]);
+      if (problem) { why.textContent = problem; return; }
+      changed('add shape');
+    });
+  }
+
   function renderPanel() {
     el.panel.innerHTML = '';
     if (!room) return;
     if (tab === 'objects') renderObjects();
     else if (tab === 'scenery') renderScenery();
     else if (tab === 'collectables' && specials) renderCollectables();
+    else if (tab === 'shapes') renderShapes();
     else renderObjects();
   }
 

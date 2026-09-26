@@ -221,7 +221,7 @@ function fakeDom(ids) {
   // The tab strip, which is in the static HTML this does not parse. The page
   // finds it with querySelectorAll('.tabs button') and hangs a listener on
   // each, so faking it is what lets a test open a tab and see what it renders.
-  const tabs = ['objects', 'scenery', 'collectables'].map((name) => {
+  const tabs = ['objects', 'scenery', 'collectables', 'shapes'].map((name) => {
     const button = element('button');
     button.dataset.tab = name;
     if (name === 'collectables') byId['tab-collectables'] = button;
@@ -708,6 +708,42 @@ test('selecting an object points the Place picker at its template', () => {
   // ...and it stays on it once the selection has gone.
   listenerOn(page.dom, nodesIn(page.dom.byId.grid).find((n) => n.textContent === '01'), 'click')();
   assert.strictEqual(placer().value, group[index].template);
+});
+
+test('the Shapes tab edits, adds and deletes the castle’s floor shapes', () => {
+  const page = open(bootFor('knightlore', 0));
+  const panel = openTab(page, 'shapes');
+  const inputs = () => nodesIn(page.dom.byId.panel).filter((n) => n.tagName === 'INPUT');
+  const buttons = () => nodesIn(page.dom.byId.panel).filter((n) => n.tagName === 'BUTTON');
+  assert.ok(/3 of 4 shapes/.test(textIn(panel)), textIn(panel));
+  assert.ok(/square \(this room\)/.test(textIn(page.dom.byId.panel)));
+
+  // The square's half U, as a number, changes every room on it.
+  const halfU = inputs().filter((n) => n.type === 'number')[0];
+  assert.strictEqual(String(halfU.value), '64');
+  halfU.value = '60';
+  listenerOn(page.dom, halfU, 'change')();
+  let saved = JSON.parse(page.sandbox.window.__saved);
+  assert.deepStrictEqual(saved.roomDimensions.square, { u: 60, v: 64, z: 128 });
+  assert.strictEqual(page.sandbox.window.__what, 'shape');
+
+  // A shape rooms stand on cannot go.
+  const deletes = buttons().filter((b) => b.textContent === 'Delete');
+  assert.strictEqual(deletes.length, 3);
+  assert.ok(deletes.every((b) => b.disabled));
+
+  // Add one, a copy of this room's; it can go again, since nothing stands on it.
+  const name = inputs().find((n) => n.type === 'text');
+  name.value = 'small';
+  listenerOn(page.dom, buttons().find((b) => b.textContent === 'Add shape'), 'click')();
+  saved = JSON.parse(page.sandbox.window.__saved);
+  assert.deepStrictEqual(Object.keys(saved.roomDimensions), ['square', 'narrowU', 'narrowV', 'small']);
+  assert.deepStrictEqual(saved.roomDimensions.small, { u: 60, v: 64, z: 128 });
+  const last = buttons().filter((b) => b.textContent === 'Delete')[3];
+  assert.strictEqual(last.disabled, false);
+  listenerOn(page.dom, last, 'click')();
+  saved = JSON.parse(page.sandbox.window.__saved);
+  assert.deepStrictEqual(Object.keys(saved.roomDimensions), ['square', 'narrowU', 'narrowV']);
 });
 
 test('a castle that lists no starting rooms shows none', () => {

@@ -79,6 +79,7 @@ In `rooms.json`:
 | `sceneryPerRoom` | the most scenery entries a room may hold. Without it, 7, or 8 for Pentagram. |
 | `lastRoom` | the number the last room must have: `room_find` walks the records to the first number at least the one it wants, so there has to be one at the end every search stops at. Without it, `$FF` for Knight Lore and nothing for Pentagram. |
 | `poolLimit` | the most object records one room may expand to -- every entry of every template it places. A room over it is a fault, and the header's pool reads "of" the limit. Without it there is no limit, because the remakes size their pool to the fullest room. The original Knight Lore's castle, edited by `game-disassemblies/scripts/knightlore_rooms.py` (see its `docs/knightlore-rooms.md`), says 36: what the game's object table holds. |
+| `shapeLimit` | the most floor shapes a room can name. Without it, 4: the remakes' builders keep the shape in bits 3 and 4 of the attribute byte. The original Knight Lore's castle says 32, which is what bits 3 to 7 of its attribute byte can name. |
 
 And in `templates.json`:
 
@@ -447,6 +448,24 @@ it is one undo like any other edit. A number already used, outside 0-255, or
 after the castle's last room (`$FF` in Knight Lore) is refused with the reason
 under the box. A castle whose exits are a table also keeps one number free,
 since its builder needs a number no room has to mean "no exit".
+
+**Shapes**, a tab beside Objects, is the castle's floor shapes: for each,
+how far the floor reaches from the middle along U and V, and the floor's
+height, as numbers to change, with how many rooms stand on it. A shape is the
+castle's, so a change moves every room on it; **Add shape** makes a copy of
+this room's to change from, and **Delete** takes one nothing stands on. A
+room is put on one with the **Shape** picker under the picture. The castle's
+`shapeLimit` rule says how many there may be.
+
+What a shape moves is what bounds a room -- the walls you cannot walk
+through, where you come in, how far into an arch takes you to the next room
+-- and not the walls and arches you see, which are scenery at coordinates of
+their own. So the checks look at every wall and arch piece: in both games'
+castles as shipped, each one's inner face is within a unit of the edge of the
+floor it stands on, and a piece further off than that, inside or out, is
+reported as a warning on its room -- one line a room, naming each template
+and how far off it stands. The fix is in the templates editor, or a wall
+template of the new shape's own.
 
 **Ways out**, under that, is the room's doorways and where each leads. Knight
 Lore's are arithmetic and cannot be anything else, so they are shown and not
