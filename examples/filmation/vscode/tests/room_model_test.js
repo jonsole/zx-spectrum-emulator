@@ -1165,6 +1165,31 @@ test('checkAtlas: a table castle is held to its own rules', function () {
   assert.deepStrictEqual(errors(), []);
 });
 
+test('checkAtlas: a castle that says its pool size is held to it', function () {
+  // The original Knight Lore expands a room into a fixed table, so its castle
+  // says how many records that is; a room one over is a fault, one at it is
+  // not. Without the rule nothing is said, as for the remakes.
+  const atlas = atlasFor(TABLE);
+  const errors = function () {
+    return m.checkAtlas(atlas).filter(function (p) { return p.severity === 'error'; })
+      .map(function (p) { return p.text; });
+  };
+  const used = m.poolNeeded(atlas).slots;
+  assert.ok(used > 1);
+  assert.strictEqual(m.rulesOf(atlas).poolLimit, null);
+  atlas.meta.rules.poolLimit = used - 1;
+  const over = m.checkAtlas(atlas).filter(function (p) { return p.severity === 'error'; });
+  assert.ok(over.length >= 1);
+  assert.ok(over.some(function (p) {
+    return p.room === m.poolNeeded(atlas).room &&
+      p.text === 'it fills ' + used + ' records; the object table holds ' + (used - 1);
+  }));
+  atlas.meta.rules.poolLimit = used;
+  assert.deepStrictEqual(errors(), []);
+  atlas.meta.rules.poolLimit = 0;
+  assert.strictEqual(m.rulesOf(atlas).poolLimit, null);
+});
+
 test('checkAtlas: a table\'s two bytes an entry reach the record\'s skip byte', function () {
   // Worked out from rooms_source.py's record rather than read back: the skip
   // is 2 + two bytes per scenery entry + two group bytes (rules.groupBytes)
@@ -1244,6 +1269,103 @@ test('addRoom: refuses a number it cannot have, and says why', function () {
   early.meta.rules.lastRoom = 200;
   assert.ok(/would come after room \$C8 \(200\)/.test(m.addRoom(early, 201)));
   assert.strictEqual(atlas.rooms.length, count, 'nothing was added');
+});
+
+test('deleteRoom: takes a room out, and refuses one the castle needs', function () {
+  const atlas = atlasFor(TABLE);
+  const count = atlas.rooms.length;
+  // A room from the middle, which has a room on each side of it.
+  const at = Math.floor(count / 2);
+  const number = atlas.rooms[at].number;
+  const before = atlas.rooms[at - 1].number;
+  assert.strictEqual(m.deleteRoomProblem(atlas, number), null);
+  assert.strictEqual(m.deleteRoom(atlas, number), at - 1, 'shows the room before it');
+  assert.strictEqual(atlas.rooms.length, count - 1);
+  assert.strictEqual(atlas.rooms[at - 1].number, before);
+  assert.ok(!atlas.rooms.some(function (r) { return r.number === number; }));
+  assert.ok(/no room/.test(m.deleteRoom(atlas, number)), 'and it is gone');
+
+  // The first room shows the one that is first after it.
+  const first = atlas.rooms[0].number;
+  assert.strictEqual(m.deleteRoom(atlas, first), 0);
+
+  // A room the game can start in, the room every search stops at, and the
+  // only room there is are refused, and stay.
+  atlas.startRooms = [atlas.rooms[3].number];
+  assert.ok(/can start in room/.test(m.deleteRoom(atlas, atlas.rooms[3].number)));
+  atlas.meta.rules.lastRoom = atlas.rooms[atlas.rooms.length - 1].number;
+  assert.ok(/has to be the last room/.test(m.deleteRoom(atlas, m.rulesOf(atlas).lastRoom)));
+  const one = { meta: { game: 'x' }, roomDimensions: {}, rooms: [{ number: 7 }] };
+  assert.ok(/at least one room/.test(m.deleteRoom(one, 7)));
+});
+
+test('startRooms: listed, checked, and written only when a castle has them', function () {
+  const atlas = atlasFor(TABLE);
+  assert.deepStrictEqual(m.startRoomsOf(atlas), []);
+  assert.strictEqual(m.serializeAtlas(atlas, '\n').indexOf('startRooms'), -1);
+  const numbers = atlas.rooms.map(function (r) { return r.number; });
+  atlas.startRooms = [numbers[2], numbers[0]];
+  assert.deepStrictEqual(m.startRoomsOf(atlas), [numbers[2], numbers[0]]);
+  const text = m.serializeAtlas(atlas, '\n');
+  assert.ok(text.indexOf(' "startRooms": [' + numbers[2] + ', ' + numbers[0] + '],') >= 0);
+  assert.deepStrictEqual(m.parseAtlas(text).startRooms, [numbers[2], numbers[0]]);
+  assert.deepStrictEqual(m.checkAtlas(atlas).filter(function (p) { return /start/.test(p.text); }), []);
+  const absent = m.firstFreeRoom(atlas);
+  atlas.startRooms.push(absent);
+  assert.ok(m.checkAtlas(atlas).some(function (p) {
+    return p.severity === 'error' && p.text === 'the game can start in room ' + absent + ', which is not a room';
+  }));
+});
+
+test('startBlockers: what stands in the middle of the floor, where Sabreman starts', function () {
+  // One object template of one 8 x 8 x 12 block, on a floor at 128. Worked
+  // out by hand: cell 3 is 3 * 16 + 72 = 120 along U and V, eight short of
+  // the middle, and 8 + 5 is more than 8 -- so it meets his box. Cell 2 is at
+  // 104, 24 short, and does not. Level 2 stands at 128 + 24 = 152, which is
+  // above his 128 + 23.
+  const sizes = new Map([['blk', { u: 8, v: 8, z: 12 }]]);
+  const numbers = new Map([[7, 'blk']]);
+  const atlas = {
+    meta: { game: 'knightlore' },
+    roomDimensions: { square: { u: 64, v: 64, z: 128 } },
+    sceneryTemplates: {},
+    objectTemplates: {
+      block: [{ graphic: 'blk', flags: { mirrored: false, passable: false, rest: 0 },
+                offsets: { halfU: false, halfV: false, raiseZ: 0 } }],
+      ghost: [{ graphic: 'blk', flags: { mirrored: false, passable: true, rest: 0 },
+                offsets: { halfU: false, halfV: false, raiseZ: 0 } }]
+    },
+    startRooms: [1, 2, 3, 4],
+    rooms: [5, 1, 2, 3, 4].map(function (n) {
+      return { number: n, ink: 7, dimensions: 'square', scenery: [], objects: [] };
+    })
+  };
+  const room = atlas.rooms[0];
+  const at = function (u, v, z) { room.objects = [{ template: 'block', positions: [{ u: u, v: v, z: z }] }]; };
+  const graphicNumbers = new Map([['blk', 7]]);
+  const blockers = function () { return m.startBlockers(atlas, room, graphicNumbers, sizes).length; };
+  at(3, 3, 0); assert.strictEqual(blockers(), 1);
+  at(4, 4, 0); assert.strictEqual(blockers(), 1);
+  at(2, 3, 0); assert.strictEqual(blockers(), 0);
+  at(3, 3, 1); assert.strictEqual(blockers(), 1, '140 is inside 128 to 151');
+  at(3, 3, 2); assert.strictEqual(blockers(), 0);
+  room.objects = [{ template: 'ghost', positions: [{ u: 3, v: 3, z: 0 }] }];
+  assert.strictEqual(blockers(), 0, 'a passable piece stands in nobody’s way');
+
+  // setStartRoom swaps a room into a slot, and refuses a blocked one.
+  at(3, 3, 0);
+  assert.ok(/Sabreman starts in the middle of the floor, and block at 3,3,0 stands there/.test(
+    m.setStartRoom(atlas, 0, 5, graphicNumbers, sizes)));
+  assert.deepStrictEqual(atlas.startRooms, [1, 2, 3, 4]);
+  at(0, 0, 0);
+  assert.strictEqual(m.setStartRoom(atlas, 2, 5, graphicNumbers, sizes), null);
+  assert.deepStrictEqual(atlas.startRooms, [1, 2, 5, 4]);
+  assert.ok(/a starting room already/.test(m.setStartRoom(atlas, 0, 5, graphicNumbers, sizes)));
+  // ...and checkAtlas says so of a starting room something has since moved into.
+  at(3, 3, 0);
+  assert.ok(m.checkAtlas(atlas, graphicNumbers, sizes).some(function (p) {
+    return p.room === 5 && p.severity === 'error' && /it is a starting room, and sabreman starts/.test(p.text);
+  }));
 });
 
 test('addRoom: a new room goes in number order, empty, and checks clean', function () {

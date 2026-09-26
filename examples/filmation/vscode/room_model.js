@@ -278,6 +278,13 @@ function serializeAtlas(atlas, eol) {
   });
   out.push(' },');
 
+  // Only a castle that names its starting rooms has the key, so every file
+  // written before it existed comes back out byte for byte.
+  if (Array.isArray(atlas.startRooms)) {
+    out.push('');
+    out.push(' "startRooms": [' + atlas.startRooms.join(', ') + '],');
+  }
+
   out.push('');
   out.push(' "rooms": [');
   (atlas.rooms || []).forEach(function (room, i) {
@@ -669,7 +676,12 @@ function rulesOf(atlas) {
     // in the top five bits and the count in the bottom three; 2 for a castle
     // whose builder reads the template and the count as a byte each, which is
     // what lets it have more than 32 object templates.
-    groupBytes: said.groupBytes === 2 ? 2 : 1
+    groupBytes: said.groupBytes === 2 ? 2 : 1,
+    // The most records one room may fill, or null when the builder sizes its
+    // pool to the fullest room. The original Knight Lore's table is fixed:
+    // thirty-six records between $5C88 and the font, which the game zeroes
+    // until it meets the font exactly, so one more overruns it.
+    poolLimit: isByte(said.poolLimit) && said.poolLimit > 0 ? said.poolLimit : null
   };
 }
 
@@ -901,7 +913,7 @@ function mapLayout(atlas) {
 // Everything that would stop rooms_source.py emitting the castle, or stop the
 // engine building a room once it had. These are the emitters' own assertions,
 // said early and all at once rather than as a traceback on the next build.
-function checkAtlas(atlas, numbers) {
+function checkAtlas(atlas, numbers, sizes) {
   const game = gameOf(atlas);
   const rules = rulesOf(atlas);
   const table = rules.exits === 'table';
@@ -1058,6 +1070,24 @@ function checkAtlas(atlas, numbers) {
 
     const used = poolUsed(atlas, room);
     if (used === 0) note(n, 'nothing in it');
+    if (rules.poolLimit !== null && used > rules.poolLimit) {
+      fault(n, 'it fills ' + used + ' records; the object table holds ' + rules.poolLimit);
+    }
+  }
+
+  // A game that starts in a room the castle has not got starts nowhere.
+  if (atlas.startRooms !== undefined) {
+    const said = Array.isArray(atlas.startRooms) ? atlas.startRooms : [];
+    const rooms = byNumber(atlas.rooms);
+    for (const n of said) {
+      if (!isByte(n) || !rooms.has(n)) {
+        problems.push({ room: null, severity: 'error',
+          text: 'the game can start in room ' + n + ', which is not a room' });
+        continue;
+      }
+      const why = startRoomProblem(atlas, rooms.get(n), numbers, sizes);
+      if (why) fault(n, 'it is a starting room, and ' + why.charAt(0).toLowerCase() + why.slice(1));
+    }
   }
 
   if (rules.lastRoomSaid && previous !== rules.lastRoom) {
@@ -1232,6 +1262,37 @@ function addRoom(atlas, number) {
   };
   atlas.rooms.splice(at, 0, room);
   return at;
+}
+
+// --- deleting a room ------------------------------------------------------
+
+// Why a room cannot be deleted, or null if it can. Refused rather than left to
+// checkAtlas, as adding is: these are rooms the castle cannot be built
+// without. A doorway that led into it is not one of them -- it goes on
+// leading there, and checkAtlas says it now leads nowhere.
+function deleteRoomProblem(atlas, number) {
+  if (!byNumber(atlas.rooms).has(number)) return 'there is no room ' + number;
+  if (atlas.rooms.length === 1) return 'a castle needs at least one room';
+  const rules = rulesOf(atlas);
+  if (rules.lastRoom !== null && number === rules.lastRoom) {
+    return 'room $' + hexByte(number) + ' has to be the last room: every search ' +
+           'for a room stops at it';
+  }
+  if (startRoomsOf(atlas).indexOf(number) >= 0) {
+    return 'the game can start in room $' + hexByte(number);
+  }
+  return null;
+}
+
+// Takes the room out. Returns the index of the room to show next -- the one
+// before it, or the first if it was the first -- or why it could not go.
+function deleteRoom(atlas, number) {
+  const problem = deleteRoomProblem(atlas, number);
+  if (problem) return problem;
+  let at = 0;
+  while (atlas.rooms[at].number !== number) at++;
+  atlas.rooms.splice(at, 1);
+  return Math.max(0, at - 1);
 }
 
 // Renaming a template is the point of the file being JSON: the names in
@@ -1564,6 +1625,65 @@ function roomsUsing(atlas, name) {
   return out;
 }
 
+// Where Sabreman stands when a game starts, whichever starting room it is:
+// Knight Lore's plyr_spr_init_data at $D1A1 puts his legs at U $80, V $80 and
+// Z $80 -- the middle of the floor -- in a box 5 either way and $17 high, and
+// his head inside the same box. Nothing moves him out of the way, so a
+// starting room needs that box empty.
+const START_SPOT = { u: 0x80, v: 0x80, z: 0x80, sizeU: 5, sizeV: 5, sizeZ: 0x17 };
+
+// The pieces of a room that stand in START_SPOT: any it collides with, which
+// leaves out a passable one. A box is half-widths along U and V from the
+// piece's centre, and a height up from its Z.
+function startBlockers(atlas, room, numbers, sizes) {
+  const templates = { scenery: byName(atlas.sceneryTemplates), object: byName(atlas.objectTemplates) };
+  const s = START_SPOT;
+  return expandRoom(atlas, room, numbers, sizes).filter(function (p) {
+    const entry = ((templates[p.kind].get(p.template)) || [])[p.entry] || {};
+    if (entry.flags && entry.flags.passable) return false;
+    return Math.abs(p.u - s.u) < p.sizeU + s.sizeU &&
+           Math.abs(p.v - s.v) < p.sizeV + s.sizeV &&
+           p.z < s.z + s.sizeZ && p.z + p.sizeZ > s.z;
+  });
+}
+
+// Why a room cannot be one a game starts in, or null if it can: something in
+// the middle of its floor, which is where Sabreman is put.
+function startRoomProblem(atlas, room, numbers, sizes) {
+  const blockers = startBlockers(atlas, room, numbers, sizes);
+  if (!blockers.length) return null;
+  const p = blockers[0];
+  const what = p.kind === 'object'
+    ? p.template + ' at ' + p.cell.u + ',' + p.cell.v + ',' + p.cell.z
+    : p.template;
+  return 'Sabreman starts in the middle of the floor, and ' + what + ' stands there' +
+         (blockers.length > 1 ? ' (and ' + (blockers.length - 1) + ' more)' : '');
+}
+
+// The rooms a game can start in, as the castle lists them -- the original
+// Knight Lore picks one of four at random -- or none, for a castle that does
+// not say. Only numbers that could be rooms; checkAtlas says when one is not.
+function startRoomsOf(atlas) {
+  const said = atlas && atlas.startRooms;
+  return Array.isArray(said) ? said.filter(isByte) : [];
+}
+
+// Puts a room in one of the starting slots, in place of the room that was
+// there. The number of slots is the game's -- four, picked by two bits of a
+// random number -- so a room is swapped in, never added. Returns why not, or
+// null once it is done.
+function setStartRoom(atlas, slot, number, numbers, sizes) {
+  const starts = atlas.startRooms;
+  if (!Array.isArray(starts) || slot < 0 || slot >= starts.length) return 'there is no such slot';
+  const room = byNumber(atlas.rooms).get(number);
+  if (!room) return 'there is no room ' + number;
+  if (starts.indexOf(number) >= 0) return 'room $' + hexByte(number) + ' is a starting room already';
+  const why = startRoomProblem(atlas, room, numbers, sizes);
+  if (why) return why;
+  starts[slot] = number;
+  return null;
+}
+
 // The fullest room, which is what the object pool has to hold: ROOM_MAX_OBJECTS
 // in the generated source, and ROOM_SLOTS in the game's memory map.
 function poolNeeded(atlas) {
@@ -1596,9 +1716,10 @@ if (typeof module !== 'undefined') {
     MAP_STEP, mapLayout,
     GROUP_LIMIT, addObject, removeObject, moveObject, retemplateObject,
     addScenery, setSceneryTemplate, removeScenery, renameTemplate, refreshUsage,
-    addRoomProblem, firstFreeRoom, addRoom,
+    addRoomProblem, firstFreeRoom, addRoom, deleteRoomProblem, deleteRoom,
     setTemplateField, setTemplateGraphic,
     templateUsage,
-    checkAtlas, poolNeeded
+    checkAtlas, poolNeeded, startRoomsOf, START_SPOT, startBlockers, startRoomProblem,
+    setStartRoom
   };
 }

@@ -217,6 +217,12 @@ def format_rooms(atlas):
                                     "," if i < len(shapes) - 1 else ""))
     out.append(' },')
 
+    # Only a castle that names its starting rooms has the key, the same way
+    # room_model.js writes it.
+    if "startRooms" in atlas:
+        out.append('')
+        out.append(' "startRooms": [%s],' % ", ".join(str(n) for n in atlas["startRooms"]))
+
     out.append('')
     out.append(' "rooms": [')
     rooms = atlas["rooms"]

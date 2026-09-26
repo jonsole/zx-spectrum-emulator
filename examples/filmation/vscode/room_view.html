@@ -60,11 +60,27 @@
     .map .cell.real { opacity: 1; cursor: pointer; }
     .map .cell.real:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
     .map .cell.here { background: var(--vscode-button-background, #0e639c); color: #fff; }
+    /* A number that is a place but not yet a room: click it to add one. */
+    .map .cell.free { cursor: pointer; }
+    .map .cell.free:hover { opacity: .7; }
+    .map .cell.picked { opacity: 1; outline: 1px dashed var(--vscode-focusBorder, #007fd4);
+                        background: transparent; }
+    #addroom .actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
     .map .cell.linked { background: var(--vscode-textLink-foreground, #3794ff); opacity: .55; }
     #offmap .empty { margin: 8px 0 4px; }
     #addroom .adder input { width: 56px; }
     #addroom .empty { margin-top: 4px; }
 
+    #starts { margin-top: 12px; }
+    #starts .rooms { display: flex; gap: 6px; flex-wrap: wrap; }
+    #starts button { font-variant-numeric: tabular-nums; }
+    #starts button.here { color: var(--vscode-button-foreground, #fff);
+                          background: var(--vscode-button-background, #0e639c); }
+    #starts .change { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    /* Choosing a room for a starting slot: the map is what you click, and a
+       room that cannot be one is dimmed, with the reason on hover. */
+    #grid.choosing .cell.real { cursor: crosshair; }
+    #grid.choosing .cell.nostart { opacity: .35; cursor: not-allowed; }
     .exits { margin-top: 12px; }
     .exit { display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
             font-variant-numeric: tabular-nums; }
@@ -72,6 +88,7 @@
     .exit .to { flex: 1 1 auto; min-width: 0; white-space: nowrap;
                 overflow: hidden; text-overflow: ellipsis; }
     .exit.broken .to { color: var(--vscode-errorForeground, #f48771); }
+    .exit .to button.go { font-variant-numeric: tabular-nums; }
     .exit.walled .way { opacity: .4; }
 
     /* --- the stage --- */
@@ -151,6 +168,7 @@
         <h3>The castle <span class="spacer"></span><span class="note" id="mapnote"></span></h3>
         <div id="grid" class="map"></div>
         <div id="offmap"></div>
+        <div id="starts"></div>
         <div id="addroom"></div>
         <div class="exits" id="exits"></div>
       </div>
@@ -282,6 +300,12 @@
   // template's: graphics.json holds it, and a mirrored piece swaps U and V.
   let boxes = graphicBoxes(sheet, graphics);
   let selection = null;          // {kind:'object', ref, slot} or {kind:'scenery', ref}
+  let freePick = null;           // an empty place on the map, picked to add a room
+  let startChange = null;        // the starting slot a room is being chosen for
+  // What the Place and Add pickers offer, kept across redraws: the template of
+  // whatever was last selected in the room, or last chosen in the picker.
+  const pickerChoice = { object: null, scenery: null };
+  let startSaid = '';            // why the last room chosen for it was refused
   let tab = 'objects';
   let templatePick = null;       // {kind, name} while the Templates tab is open
   // Knight Lore's collectables, out of the specials.json beside the rooms --
@@ -306,7 +330,7 @@
 
   const el = {};
   for (const id of ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap',
-                    'addroom', 'exits',
+                    'addroom', 'exits', 'starts',
                     'mapnote', 'view', 'inks', 'shape', 'showgrid', 'showboxes',
                     'showscenery', 'zoom', 'poolnote', 'checks', 'panel',
                     'game', 'load', 'undo', 'redo', 'templates']) {
@@ -462,7 +486,7 @@
     // "nearer" is simply "later", and the last selected item is the mark --
     // an object can be drawn from several sprites and they all count as it.
     let inFront = -1;
-    if (selection && selection.kind === 'object') {
+    if (selection && (selection.kind === 'object' || selection.kind === 'collectable')) {
       for (let i = 0; i < lastDrawList.length; i++) {
         if (isSelected(lastDrawList[i])) inFront = i;
       }
@@ -554,21 +578,38 @@
   // the air, because the projection sends V up the screen and Z up it too --
   // so this marks the floor cell it is over and draws the riser between the
   // two. That pair is what makes its place readable at a glance.
+  //
+  // A collectable gets the same: it stands at world U, V and Z of its own
+  // rather than on a cell, so the marker is under exactly that point and the
+  // riser goes up to its Z.
   function drawFooting() {
-    if (!selection || selection.kind !== 'object') return;
-    const group = room.objects[selection.ref];
-    const position = group && group.positions[selection.slot];
-    if (!position) return;
-
-    // Where the piece really stands, which is not always the middle of the
-    // cell its position names: a template carries a nudge of half a cell in U
-    // and V, and object_ball_ud_xy uses both, so the ball it places sits on
-    // the corner BETWEEN four cells. Marking the raw cell instead would put
-    // the marker half a cell from the thing it is meant to be under.
-    const standing = lastDrawList.filter(isSelected)[0];
+    if (!selection) return;
     const floorZ = sizeOf(atlas, room).z;
-    const middleU = standing ? standing.piece.u : CELL_ORIGIN + position.u * CELL;
-    const middleV = standing ? standing.piece.v : CELL_ORIGIN + position.v * CELL;
+    const standing = lastDrawList.filter(isSelected)[0];
+    let middleU;
+    let middleV;
+    let height;
+    if (selection.kind === 'object') {
+      const group = room.objects[selection.ref];
+      const position = group && group.positions[selection.slot];
+      if (!position) return;
+      // Where the piece really stands, which is not always the middle of the
+      // cell its position names: a template carries a nudge of half a cell in
+      // U and V, and object_ball_ud_xy uses both, so the ball it places sits
+      // on the corner BETWEEN four cells. Marking the raw cell instead would
+      // put the marker half a cell from the thing it is meant to be under.
+      middleU = standing ? standing.piece.u : CELL_ORIGIN + position.u * CELL;
+      middleV = standing ? standing.piece.v : CELL_ORIGIN + position.v * CELL;
+      height = floorZ + position.z * LEVEL_Z;
+    } else if (selection.kind === 'collectable' && specials) {
+      const entry = collectablesOf(specials)[selection.ref];
+      if (!entry || entry.room !== room.number) return;
+      middleU = entry.u;
+      middleV = entry.v;
+      height = entry.z;
+    } else {
+      return;
+    }
     const quad = footprint(middleU, middleV, floorZ);
     ctx.beginPath();
     ctx.moveTo(quad[0].x + .5, quad[0].y + .5);
@@ -583,9 +624,9 @@
     // The riser, from the middle of that cell up to the height it stands at.
     // The projection puts Z on the screen's Y alone, so this is a plain
     // vertical line however far across the room the cell is.
-    if (!position.z) return;
+    if (height <= floorZ) return;
     const foot = floorPoint(middleU, middleV, floorZ);
-    const head = floorPoint(middleU, middleV, floorZ + position.z * LEVEL_Z);
+    const head = floorPoint(middleU, middleV, height);
     ctx.setLineDash([2, 2]);
     ctx.beginPath();
     ctx.moveTo(foot.x + .5, foot.y + .5);
@@ -666,7 +707,9 @@
       ' — ' + room.scenery.length + ' scenery, ' +
       room.objects.length + ' object group' + (room.objects.length === 1 ? '' : 's') +
       ', ' + used + ' records';
-    el.poolnote.textContent = 'pool ' + needed.slots + ' (room $' + hex(needed.room) + ')';
+    const limit = rulesOf(atlas).poolLimit;
+    el.poolnote.textContent = 'pool ' + needed.slots + (limit === null ? '' : ' of ' + limit) +
+      ' (room $' + hex(needed.room) + ')';
     // Only where this page is what saves. In the editor the tab carries its
     // own dirty mark, and a second one here would say "unsaved" over a
     // document that had just been saved with ctrl+S.
@@ -705,13 +748,33 @@
         parent.appendChild(cell);
         return;
       }
-      cell.className = 'cell' + (numbers.has(number) ? ' real' : '') +
-                       (room && number === room.number ? ' here' :
+      const real = numbers.has(number);
+      const barred = real && startChange !== null ? whyNotStart(number) : null;
+      cell.className = 'cell' + (real ? ' real' : ' free') + (barred ? ' nostart' : '') +
+                       (!real && number === freePick ? ' picked' :
+                        room && number === room.number ? ' here' :
                         neighbours.has(number) ? ' linked' : '');
       cell.textContent = hex(number);
-      cell.title = 'room $' + hex(number) + ' (' + number + ')';
-      if (numbers.has(number)) {
-        cell.addEventListener('click', function () { goTo(number); });
+      cell.title = barred ? 'room $' + hex(number) + ': ' + barred
+        : real ? 'room $' + hex(number) + ' (' + number + ')'
+        : 'no room $' + hex(number) + ' yet -- click to add one';
+      if (real) {
+        cell.addEventListener('click', function () {
+          if (startChange !== null) chooseStart(number);
+          else goTo(number);
+        });
+      } else {
+        // An empty place is picked rather than filled at once: a stray click
+        // on the map should not make a room.
+        cell.addEventListener('click', function () {
+          if (startChange !== null) {
+            startSaid = 'there is no room $' + hex(number) + ' to start in';
+            renderMap();
+            return;
+          }
+          freePick = freePick === number ? null : number;
+          renderMap();
+        });
       }
       parent.appendChild(cell);
     }
@@ -738,8 +801,96 @@
       for (const number of cells) cellIn(el.grid, number);
     }
 
+    renderStarts();
     renderAddRoom();
     renderExits(map);
+  }
+
+  // The rooms a game starts in, under the map, for a castle that lists them:
+  // one button each, which goes there. Nothing is shown for one that does not.
+  function renderStarts() {
+    el.starts.innerHTML = '';
+    el.grid.classList.toggle('choosing', startChange !== null);
+    const starts = startRoomsOf(atlas);
+    if (!starts.length) return;
+    const head = document.createElement('h3');
+    head.textContent = 'Starting rooms';
+    el.starts.appendChild(head);
+    const row = document.createElement('div');
+    row.className = 'rooms';
+    const real = new Set(atlas.rooms.map(function (r) { return r.number; }));
+    for (const number of starts) {
+      const button = document.createElement('button');
+      button.className = 'small' + (room && room.number === number ? ' here' : '');
+      button.textContent = '$' + hex(number);
+      button.title = 'room $' + hex(number) + ' (' + number + ')' +
+                     (real.has(number) ? '' : ', which is not a room');
+      button.disabled = !real.has(number);
+      button.addEventListener('click', function () { goTo(number); });
+      row.appendChild(button);
+    }
+    el.starts.appendChild(row);
+
+    // Change swaps the starting room on screen for another, chosen on the
+    // map. The game has four and picks one at random, so a room takes a slot
+    // rather than being added beside them.
+    const line = document.createElement('div');
+    line.className = 'change';
+    const change = document.createElement('button');
+    change.className = 'small';
+    const slot = room ? starts.indexOf(room.number) : -1;
+    if (startChange === null) {
+      change.textContent = 'Change';
+      change.disabled = slot < 0;
+      change.title = slot < 0 ? 'go to a starting room to change it'
+        : 'choose another room on the map to start in instead of $' + hex(room.number);
+      change.addEventListener('click', function () {
+        startChange = slot;
+        startSaid = '';
+        renderMap();
+      });
+    } else {
+      change.textContent = 'Cancel';
+      change.addEventListener('click', cancelStartChange);
+    }
+    line.appendChild(change);
+    el.starts.appendChild(line);
+    if (startChange !== null) {
+      el.starts.appendChild(note('click the room on the map to start in instead of $' +
+                                 hex(starts[startChange])));
+    }
+    if (startSaid) el.starts.appendChild(note(startSaid));
+  }
+
+  // Why a room cannot take the slot being changed, or null if it can.
+  function whyNotStart(number) {
+    const starts = startRoomsOf(atlas);
+    if (starts.indexOf(number) >= 0) {
+      return number === starts[startChange] ? 'the one being changed'
+        : 'a starting room already';
+    }
+    return startRoomProblem(atlas, byNumber(atlas.rooms).get(number), numbers, boxes);
+  }
+
+  function chooseStart(number) {
+    const problem = setStartRoom(atlas, startChange, number, numbers, boxes);
+    if (problem) {
+      startSaid = 'not $' + hex(number) + ': ' + problem;
+      renderMap();
+      return;
+    }
+    startChange = null;
+    startSaid = '';
+    room = byNumber(atlas.rooms).get(number);
+    selection = null;
+    if (host.roomChanged) host.roomChanged(number);
+    changed('starting room');
+  }
+
+  function cancelStartChange() {
+    startChange = null;
+    startSaid = '';
+    renderMap();
   }
 
   // A castle joined by a table has numbers that are not places, and only its
@@ -779,6 +930,75 @@
   function renderAddRoom() {
     if (!el.addroom) return;
     el.addroom.innerHTML = '';
+    // Knight Lore's numbers are places on the map, so a room is added by
+    // clicking where it goes and a box to type one in would say it twice. A
+    // castle whose numbers are not places keeps the box.
+    if (!(gameOf(atlas) === 'knightlore' && rulesOf(atlas).exits !== 'table')) renderNumberAdder();
+
+    const row = document.createElement('div');
+    row.className = 'actions';
+    const why = note('');
+    let offered = true;
+    if (freePick !== null) {
+      const number = freePick;
+      const add = document.createElement('button');
+      add.textContent = 'Add room $' + hex(number);
+      const problem = addRoomProblem(atlas, number);
+      add.disabled = Boolean(problem);
+      why.textContent = problem || '';
+      add.addEventListener('click', function () {
+        const at = addRoom(atlas, number);
+        if (typeof at === 'string') { why.textContent = at; return; }
+        room = atlas.rooms[at];
+        selection = null;
+        freePick = null;
+        if (host.roomChanged) host.roomChanged(room.number);
+        changed('add room');
+      });
+      row.appendChild(add);
+    } else if (room) {
+      const number = room.number;
+      const remove = document.createElement('button');
+      remove.textContent = 'Delete room $' + hex(number);
+      const problem = deleteRoomProblem(atlas, number);
+      remove.disabled = Boolean(problem);
+      why.textContent = problem || leftBehind(number);
+      remove.addEventListener('click', function () {
+        const next = deleteRoom(atlas, number);
+        if (typeof next === 'string') { why.textContent = next; return; }
+        room = atlas.rooms[next];
+        selection = null;
+        if (host.roomChanged) host.roomChanged(room.number);
+        changed('delete room');
+      });
+      row.appendChild(remove);
+    } else {
+      offered = false;
+    }
+    if (offered) {
+      el.addroom.appendChild(row);
+      el.addroom.appendChild(why);
+    }
+  }
+
+  // What deleting a room would leave pointing at nothing: the doorways that
+  // lead into it and the collectables that start in it. Said before, rather
+  // than found afterwards among the checks; undo brings the room back.
+  function leftBehind(number) {
+    const doors = roomMap(atlas).links.filter(function (l) {
+      return l.to === number && l.from !== number;
+    }).length;
+    const found = specials ? collectablesOf(specials).filter(function (c) {
+      return c.room === number;
+    }).length : 0;
+    const parts = [];
+    if (doors) parts.push(doors + ' doorway' + (doors === 1 ? '' : 's'));
+    if (found) parts.push(found + ' collectable' + (found === 1 ? '' : 's'));
+    return parts.length ? 'deleting it leaves ' + parts.join(' and ') + ' pointing nowhere' : '';
+  }
+
+  // A number typed in, for a castle whose map has no empty places to click.
+  function renderNumberAdder() {
     const row = document.createElement('div');
     row.className = 'adder';
     const free = firstFreeRoom(atlas);
@@ -874,16 +1094,29 @@
         });
         to.appendChild(input);
       } else {
-        // Knight Lore's is arithmetic and cannot be anything else.
-        to.textContent = '→ $' + hex(link.to) + (link.exists ? '' : ' (no such room)');
+        // Knight Lore's is arithmetic and cannot be anything else, so the
+        // number is not a field -- and is what you click to go there.
+        to.appendChild(document.createTextNode('→ '));
+        const there = document.createElement('button');
+        there.className = 'small go';
+        there.textContent = '$' + hex(link.to);
+        there.disabled = !link.exists;
+        there.title = link.exists ? 'go to room $' + hex(link.to) : 'there is no room $' + hex(link.to);
+        there.addEventListener('click', function () { goTo(link.to); });
+        to.appendChild(there);
+        if (!link.exists) to.appendChild(document.createTextNode(' (no such room)'));
       }
       line.appendChild(to);
-      const go = document.createElement('button');
-      go.className = 'small';
-      go.textContent = 'go';
-      go.disabled = !link.exists;
-      go.addEventListener('click', function () { goTo(link.to); });
-      line.appendChild(go);
+      // A number in a field is for editing, so going there is a button of
+      // its own.
+      if (editable) {
+        const go = document.createElement('button');
+        go.className = 'small';
+        go.textContent = 'go';
+        go.disabled = !link.exists;
+        go.addEventListener('click', function () { goTo(link.to); });
+        line.appendChild(go);
+      }
       el.exits.appendChild(line);
       line.title = link.template;
     }
@@ -961,8 +1194,9 @@
     const head = document.createElement('div');
     head.className = 'group';
     const sums = summary(specials);
-    head.appendChild(note(sums.rows + ' collectables over ' + sums.rooms +
-                          ' rooms; the wizard asks for ' + sums.wanted));
+    // The wizard's list is in the file too, and goes back into the game as it
+    // is, but it is not edited here.
+    head.appendChild(note(sums.rows + ' collectables over ' + sums.rooms + ' rooms'));
 
     // The kind to draw them as, which is a view setting and not an edit: the
     // game deals these itself and nothing here can choose them.
@@ -1069,31 +1303,6 @@
       el.panel.appendChild(block);
     }
 
-    // The wizard's list. Fourteen kinds, in the order he asks; special_init
-    // turns it round four to seven places before a game, so this is only
-    // where the turning starts.
-    const wizard = document.createElement('div');
-    wizard.className = 'group';
-    wizard.appendChild(note('The wizard wants, in order \u2014 turned round ' +
-                            'four to seven places at the start of a game:'));
-    const list = document.createElement('div');
-    list.className = 'head';
-    wantedOf(specials).forEach(function (kind, at) {
-      const box = document.createElement('input');
-      box.type = 'number';
-      box.min = 0;
-      box.max = KINDS - 1;
-      box.value = kind;
-      box.style.width = '38px';
-      box.title = 'The ' + (at + 1) + 'th he asks for';
-      box.addEventListener('change', function () {
-        specials = setWanted(specials, at, Number(box.value));
-        specialsChanged();
-      });
-      list.appendChild(box);
-    });
-    wizard.appendChild(list);
-    el.panel.appendChild(wizard);
   }
 
   function renderPanel() {
@@ -1168,6 +1377,7 @@
       option.textContent = name + (named.has(name) ? '' : ' (unused)');
       pick.appendChild(option);
     }
+    followSelection(pick, 'object', room.objects);
     adder.appendChild(pick);
     const add = document.createElement('button');
     add.textContent = 'Place';
@@ -1188,7 +1398,7 @@
     preview.className = 'preview';
     el.panel.appendChild(preview);
     const show = function () { renderTemplatePreview(preview, 'object', pick.value); };
-    pick.addEventListener('change', show);
+    pick.addEventListener('change', function () { pickerChoice.object = pick.value; show(); });
     show();
   }
 
@@ -1455,6 +1665,7 @@
       option.textContent = name;
       pick.appendChild(option);
     }
+    followSelection(pick, 'scenery', room.scenery);
     adder.appendChild(pick);
     const add = document.createElement('button');
     add.textContent = 'Add';
@@ -1474,15 +1685,25 @@
     preview.className = 'preview';
     el.panel.appendChild(preview);
     const show = function () { renderTemplatePreview(preview, 'scenery', pick.value); };
-    pick.addEventListener('change', show);
+    pick.addEventListener('change', function () { pickerChoice.scenery = pick.value; show(); });
     show();
+  }
+
+  // Points a Place or Add picker at the template of the piece selected in the
+  // room -- clicking an object is the quickest way to say "another of those"
+  // -- or, with nothing of that kind selected, at the last one it showed.
+  function followSelection(pick, kind, refs) {
+    const chosen = selection && selection.kind === kind && refs[selection.ref];
+    if (chosen) pickerChoice[kind] = chosen.template;
+    const group = kind === 'object' ? atlas.objectTemplates : atlas.sceneryTemplates;
+    if (pickerChoice[kind] && group[pickerChoice[kind]]) pick.value = pickerChoice[kind];
   }
 
   function renderChecks() {
     el.checks.innerHTML = '';
     const head = document.createElement('h3');
     el.checks.appendChild(head);
-    const problems = checkAtlas(atlas, numbers);
+    const problems = checkAtlas(atlas, numbers, boxes);
     const errors = problems.filter(function (p) { return p.severity === 'error'; });
     head.textContent = 'Checks';
     const summary = document.createElement('span');
@@ -1567,6 +1788,9 @@
     if (!found) return;
     room = found;
     selection = null;
+    freePick = null;
+    startChange = null;
+    startSaid = '';
     // So that a reload -- an undo, or the file changing under us -- comes back
     // to the room being looked at rather than the first one.
     if (host.roomChanged) host.roomChanged(number);
@@ -1592,7 +1816,12 @@
     // and Z are: nothing else in the page shows them.
     if (piece.kind === 'collectable') showTab('collectables');
     if (piece.kind === 'object') {
-      dragging = { ref: piece.ref, slot: piece.slot, level: piece.cell.z, moved: false };
+      dragging = { kind: 'object', ref: piece.ref, slot: piece.slot, level: piece.cell.z,
+                   moved: false };
+    } else if (piece.kind === 'collectable') {
+      const entry = collectablesOf(specials)[piece.collectable];
+      dragging = { kind: 'collectable', index: piece.collectable, start: at,
+                   from: { u: entry.u, v: entry.v }, moved: false };
     }
     refresh();
   });
@@ -1600,6 +1829,7 @@
   window.addEventListener('mousemove', function (event) {
     if (!dragging) return;
     const at = pointIn(event);
+    if (dragging.kind === 'collectable') return dragCollectable(at);
     const cell = cellAt(at.x, at.y, dragging.level);
     if (!cell) return;
     const group = room.objects[dragging.ref];
@@ -1612,12 +1842,35 @@
     refresh();
   });
 
+  // A collectable is not on a cell: its table holds world units, so the
+  // pointer's travel on screen is turned back into U and V -- the same
+  // arithmetic the templates editor drags scenery with -- and added to where
+  // it started. Its height stays; ctrl with the arrows is for that.
+  function dragCollectable(at) {
+    const move = screenToWorld(at.x - dragging.start.x, at.y - dragging.start.y);
+    const entry = collectablesOf(specials)[dragging.index];
+    const u = Math.max(0, Math.min(255, dragging.from.u + move.u));
+    const v = Math.max(0, Math.min(255, dragging.from.v + move.v));
+    if (!entry || (entry.u === u && entry.v === v)) return;
+    // Held here until it is let go, so that one drag is one step of undo.
+    specials = moveCollectable(specials, dragging.index, { u: u, v: v });
+    dragging.moved = true;
+    refresh();
+  }
+
   window.addEventListener('mouseup', function () {
-    if (dragging && dragging.moved) changed('drag');
+    if (dragging && dragging.moved) {
+      if (dragging.kind === 'collectable') specialsChanged();
+      else changed('drag');
+    }
     dragging = null;
   });
 
   window.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && startChange !== null) {
+      cancelStartChange();
+      return;
+    }
     if (!room || !selection) return;
     if (event.target && /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
     if (selection.kind === 'collectable') return collectableKey(event);

@@ -178,7 +178,11 @@ function fakeDom(ids) {
     const node = {
       tagName: String(tag).toUpperCase(), children: [], style: {}, dataset: {},
       _classes: new Set(), value: '', textContent: '', title: '', id: '',
-      type: '', min: '', max: '', checked: true, disabled: false, innerHTML: '',
+      type: '', min: '', max: '', checked: true, disabled: false, _html: '',
+      // Setting it empties the node, as a real one does: the page clears a
+      // list that way before it renders it again.
+      set innerHTML(v) { this._html = v; if (v === '') this.children = []; },
+      get innerHTML() { return this._html; },
       width: 256, height: 192,
       set className(v) { this._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
       get className() { return Array.from(this._classes).join(' '); },
@@ -242,7 +246,7 @@ function fakeDom(ids) {
 }
 
 const PAGE_IDS = ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap',
-                  'addroom', 'exits',
+                  'addroom', 'exits', 'starts',
                   'mapnote', 'view', 'inks', 'shape', 'showgrid', 'showboxes',
                   'showscenery', 'zoom', 'poolnote', 'checks', 'panel',
                   'game', 'load', 'undo', 'redo', 'tab-collectables'];
@@ -344,7 +348,8 @@ test('the Collectables tab lists the ones that start in this room', () => {
     assert.ok(text.includes('collectable ' + one.index),
               'the panel should name collectable ' + one.index + ', got: ' + text);
   }
-  assert.ok(/the wizard asks for 14/.test(text), text);
+  assert.ok(/32 collectables over \d+ rooms/.test(text), text);
+  assert.ok(!/wizard/.test(text), 'the wizard’s list is not edited here');
 
   // ...and a room with none says so rather than showing the last room's.
   const empty = boot.atlas.rooms
@@ -523,10 +528,7 @@ test('knightlore128: a way out is edited as a room number, and empty walls it up
   // Room 0 has two doorways, north to $10 and east to 1.
   assert.deepStrictEqual(inputs.map((n) => n.value), ['16', '1']);
 
-  // The fake DOM's innerHTML does not empty a node, so the old list is cleared
-  // by hand before the edit renders the new one.
   inputs[0].value = '';
-  page.dom.byId.exits.children.length = 0;
   listenerOn(page.dom, inputs[0], 'change')();
   let saved = JSON.parse(page.sandbox.window.__saved);
   assert.deepStrictEqual(saved.rooms[0].scenery[0],
@@ -566,6 +568,151 @@ test('knightlore128: Add room makes the lowest free number and goes to it', () =
   assert.ok(at > 0 && saved.rooms[at - 1].number < free && saved.rooms[at + 1].number > free);
   assert.ok(new RegExp('room \\$' + free.toString(16).toUpperCase().padStart(2, '0')).test(
     page.dom.byId.subtitle.textContent), page.dom.byId.subtitle.textContent);
+});
+
+test('knightlore: an empty place on the map adds a room there; a room offers Delete', () => {
+  const boot = bootFor('knightlore', 0);
+  const taken = new Set(boot.atlas.rooms.map((r) => r.number));
+  let free = 0;
+  while (taken.has(free)) free++;
+  const label = free.toString(16).toUpperCase().padStart(2, '0');
+  const page = open(boot);
+  const cells = () => nodesIn(page.dom.byId.grid).filter((n) => n.tagName === 'BUTTON');
+  const buttons = () => nodesIn(page.dom.byId.addroom).filter((n) => n.tagName === 'BUTTON');
+
+  // Knight Lore's map is its numbers, so there is no box to type one in, and
+  // on a room the one button is Delete.
+  assert.strictEqual(nodesIn(page.dom.byId.addroom).filter((n) => n.tagName === 'INPUT').length, 0);
+  assert.deepStrictEqual(buttons().map((b) => b.textContent), ['Delete room $00']);
+
+  // An empty place is picked, not filled...
+  const empty = cells().find((c) => c.textContent === label);
+  assert.ok(/\bfree\b/.test(empty.className), empty.className);
+  listenerOn(page.dom, empty, 'click')();
+  assert.strictEqual(page.sandbox.window.__saved, undefined, 'a click alone makes nothing');
+  assert.ok(/picked/.test(cells().find((c) => c.textContent === label).className));
+  assert.deepStrictEqual(buttons().map((b) => b.textContent), ['Add room $' + label]);
+
+  // ...and Add makes the room and goes to it.
+  listenerOn(page.dom, buttons()[0], 'click')();
+  let saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(page.sandbox.window.__what, 'add room');
+  assert.ok(saved.rooms.some((r) => r.number === free));
+  assert.ok(new RegExp('room \\$' + label).test(page.dom.byId.subtitle.textContent));
+  assert.deepStrictEqual(buttons().map((b) => b.textContent), ['Delete room $' + label]);
+
+  // Delete takes it out again, and shows the room before it.
+  listenerOn(page.dom, buttons()[0], 'click')();
+  saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(page.sandbox.window.__what, 'delete room');
+  assert.ok(!saved.rooms.some((r) => r.number === free));
+  assert.ok(/\bfree\b/.test(cells().find((c) => c.textContent === label).className));
+});
+
+test('knightlore: Delete says what would lead nowhere, and a start room cannot go', () => {
+  const boot = bootFor('knightlore', 0);
+  boot.atlas.startRooms = [0x2F, 0x44, 0xB3, 0x8F];
+  const page = open(boot);
+  const buttons = () => nodesIn(page.dom.byId.addroom).filter((n) => n.tagName === 'BUTTON');
+  // Room $00 is joined to $01 and $10, which have doorways back into it, and
+  // a collectable starts there.
+  assert.ok(textIn(page.dom.byId.addroom).indexOf(
+    'deleting it leaves 2 doorways and 1 collectable pointing nowhere') >= 0,
+    textIn(page.dom.byId.addroom));
+
+  // The starting rooms are listed under the map, and one goes to its room --
+  // where Delete is refused, with the reason.
+  const starts = nodesIn(page.dom.byId.starts).filter((n) => n.tagName === 'BUTTON' &&
+                                                          /^\$/.test(n.textContent));
+  assert.deepStrictEqual(starts.map((b) => b.textContent), ['$2F', '$44', '$B3', '$8F']);
+  listenerOn(page.dom, starts[2], 'click')();
+  assert.ok(/room \$B3/.test(page.dom.byId.subtitle.textContent), page.dom.byId.subtitle.textContent);
+  const here = nodesIn(page.dom.byId.starts).filter((n) => n.tagName === 'BUTTON')[2];
+  assert.ok(/here/.test(here.className));
+  assert.strictEqual(buttons()[0].textContent, 'Delete room $B3');
+  assert.strictEqual(buttons()[0].disabled, true);
+  assert.ok(/can start in room \$B3/.test(textIn(page.dom.byId.addroom)));
+});
+
+test('knightlore: Change on a starting room, then a room on the map, swaps it in', () => {
+  const boot = bootFor('knightlore', 0);
+  if (!boot.sheet) skip('knightlore/sprites.json has not been unpacked');
+  boot.atlas.startRooms = [0x2F, 0x44, 0xB3, 0x8F];
+  const page = open(boot);
+  const inStarts = (tag) => nodesIn(page.dom.byId.starts).filter((n) => n.tagName === tag);
+  const button = (text) => inStarts('BUTTON').find((b) => b.textContent === text);
+  const cell = (label) => nodesIn(page.dom.byId.grid).find((n) => n.tagName === 'BUTTON' && n.textContent === label);
+  const click = (node) => listenerOn(page.dom, node, 'click')();
+
+  // Room $00 is not a starting room, so there is nothing to change.
+  assert.strictEqual(button('Change').disabled, true);
+
+  // Go to $44 through its button: Change is on, and turns the map into a
+  // chooser, with the rooms that cannot start dimmed and saying why.
+  click(button('$44'));
+  assert.ok(/room \$44/.test(page.dom.byId.subtitle.textContent));
+  assert.strictEqual(button('Change').disabled, false);
+  click(button('Change'));
+  assert.ok(button('Cancel'), 'Change becomes Cancel');
+  assert.ok(/instead of \$44/.test(textIn(page.dom.byId.starts)));
+  assert.ok(/nostart/.test(cell('03').className), 'a spike in the middle of $03');
+  assert.ok(/Sabreman starts/.test(cell('03').title), cell('03').title);
+  assert.ok(!/nostart/.test(cell('00').className), '$00 is clear');
+
+  // A blocked room is refused, and the chooser stays open for another.
+  click(cell('03'));
+  assert.strictEqual(page.sandbox.window.__saved, undefined);
+  assert.ok(/not \$03: Sabreman starts in the middle of the floor/.test(textIn(page.dom.byId.starts)));
+  assert.ok(button('Cancel'));
+
+  // A clear one takes the slot, and the designer goes to it.
+  click(cell('00'));
+  const saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(page.sandbox.window.__what, 'starting room');
+  assert.deepStrictEqual(saved.startRooms, [0x2F, 0x00, 0xB3, 0x8F]);
+  assert.ok(/room \$00/.test(page.dom.byId.subtitle.textContent));
+  assert.ok(button('Change') && !button('Cancel'));
+
+  // Cancel leaves everything as it was.
+  click(button('$2F'));
+  click(button('Change'));
+  click(button('Cancel'));
+  assert.ok(button('Change'));
+  assert.ok(!/nostart/.test(cell('03').className), 'the map is itself again');
+});
+
+test('knightlore: a way out is its room number, which goes there', () => {
+  const page = open(bootFor('knightlore', 0));
+  const links = nodesIn(page.dom.byId.exits).filter((n) => n.tagName === 'BUTTON');
+  // Room $00 leads north to $10 and east to $01, and there is no "go".
+  assert.deepStrictEqual(links.map((b) => b.textContent), ['$10', '$01']);
+  listenerOn(page.dom, links[0], 'click')();
+  assert.ok(/room \$10/.test(page.dom.byId.subtitle.textContent), page.dom.byId.subtitle.textContent);
+});
+
+test('selecting an object points the Place picker at its template', () => {
+  const page = open(bootFor('knightlore', 0));
+  const placer = () => nodesIn(page.dom.byId.panel)
+    .find((n) => n.tagName === 'DIV' && /\badder\b/.test(n.className))
+    .children.find((n) => n.tagName === 'SELECT');
+  const first = Object.keys(bootFor('knightlore').templates.objectTemplates)[0];
+  // Room $00's third group is the dropping block; select one of its objects.
+  const spots = nodesIn(page.dom.byId.panel).filter((n) => /\bspot\b/.test(n.className));
+  const group = bootFor('knightlore').atlas.rooms[0].objects;
+  const index = group.findIndex((g) => g.template !== first);
+  assert.ok(index >= 0, 'room $00 has a group of something else');
+  let at = 0;
+  for (let g = 0; g < index; g++) at += group[g].positions.length;
+  listenerOn(page.dom, spots[at], 'click')();
+  assert.strictEqual(placer().value, group[index].template);
+  // ...and it stays on it once the selection has gone.
+  listenerOn(page.dom, nodesIn(page.dom.byId.grid).find((n) => n.textContent === '01'), 'click')();
+  assert.strictEqual(placer().value, group[index].template);
+});
+
+test('a castle that lists no starting rooms shows none', () => {
+  const page = open(bootFor('knightlore', 0));
+  assert.strictEqual(page.dom.byId.starts.children.length, 0);
 });
 
 test('the older castles keep their maps and their exits as they were', () => {

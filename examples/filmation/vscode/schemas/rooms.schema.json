@@ -69,6 +69,12 @@
        "$ref": "#/definitions/byte",
        "description": "The number the last room must have. room_find walks the records to the first number at least the one it wants, so there has to be one at the end that every search stops at."
       },
+      "poolLimit": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 255,
+       "description": "The most records one room may expand to -- every entry of every template it places. Without it the builder sizes its pool to the fullest room; the original Knight Lore's is fixed at 36, and a room over it overwrites the font."
+      },
       "groupBytes": {
        "enum": [
         2
@@ -82,6 +88,11 @@
    "required": [
     "templates"
    ]
+  },
+  "startRooms": {
+   "type": "array",
+   "items": { "$ref": "#/definitions/byte" },
+   "description": "The rooms a game can start in, for a castle that says. The original Knight Lore picks one of four at random, from start_locations at $D1E2. The room designer lists them under its map; each has to be a room."
   },
   "roomDimensions": {
    "type": "object",

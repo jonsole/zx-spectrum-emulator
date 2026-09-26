@@ -78,6 +78,7 @@ In `rooms.json`:
 | `exits` | `"table"`: every scenery entry is two bytes in the record, a template and a destination, and a doorway leads to the room its `destination` names. **0 is a room** there, unlike Pentagram's byte, so a doorway walled up says `"destination": null` (or has no destination at all). Anything that is not a doorway carries no destination -- the builder refuses one. Without the key, Knight Lore's grid and Pentagram's byte apply as above. |
 | `sceneryPerRoom` | the most scenery entries a room may hold. Without it, 7, or 8 for Pentagram. |
 | `lastRoom` | the number the last room must have: `room_find` walks the records to the first number at least the one it wants, so there has to be one at the end every search stops at. Without it, `$FF` for Knight Lore and nothing for Pentagram. |
+| `poolLimit` | the most object records one room may expand to -- every entry of every template it places. A room over it is a fault, and the header's pool reads "of" the limit. Without it there is no limit, because the remakes size their pool to the fullest room. The original Knight Lore's castle, edited by `game-disassemblies/scripts/knightlore_rooms.py` (see its `docs/knightlore-rooms.md`), says 36: what the game's object table holds. |
 
 And in `templates.json`:
 
@@ -406,8 +407,40 @@ walk cannot place, or never reaches, is listed under the map rather than left
 out. `knightlore128`'s exits were generated from Knight Lore's grid and none of
 them wraps round its edge, so the walk lays it out as exactly that grid.
 
-**Add room**, under the map, is a number -- the lowest free one to start with
--- and a button. The room it makes is empty, stands on the first floor shape,
+**Starting rooms**, under the map, are the rooms a game can begin in, for a
+castle whose `rooms.json` lists them in `startRooms` -- the original Knight
+Lore's four, which `knightlore_rooms` in `game-disassemblies` reads from the
+game and writes back. Each is a button that goes to its room. A castle that
+lists none shows nothing there, and one that names a room it has not got is a
+fault.
+
+To change one, go to it -- its button, or the map -- and press **Change**.
+The map then chooses instead of going: rooms that cannot start a game are
+dimmed, with the reason on hover, and clicking a room swaps it into that
+slot and goes there. A room that is refused says why, and the choosing stays
+open for another; **Cancel**, Esc, or going to a room some other way, leaves
+it. The game has four and picks one at random, so a room replaces one; the
+count does not change. Sabreman is put in the middle of
+the floor whichever room it is -- U $80, V $80, Z $80, in a box 5 either way
+and $17 high, from `plyr_spr_init_data` at $D1A1 -- so a room with anything
+solid in that box is refused, naming what stands there. Passable pieces do
+not count. A starting room something is later put in the middle of is a fault
+in the checks, and Knight Lore's build refuses it too.
+
+**Adding and deleting.** On Knight Lore's grid a room number is a place, so a
+room is added where it goes: click an empty, greyed square on the map and it is
+picked out, with **Add room $NN** under the map. A click only picks it; the
+button makes the room. On a room, the same place offers **Delete room $NN**,
+and says first what it would leave pointing nowhere: the doorways that lead
+into it and the collectables that start in it. Delete is refused -- the button
+greyed, with the reason -- for a castle's only room, for the room every search
+stops at (`$FF` in Knight Lore), and for a starting room. It is one undo like
+any other edit.
+
+A castle whose numbers are not places -- Pentagram's list, a table's walked
+map -- adds a room by number instead: **Add room**, under the map, is a
+number -- the lowest free one to start with -- and a button. The room it makes
+is empty, stands on the first floor shape,
 takes the ink of the room before it, and goes in number order, because
 `room_find` walks the records in ascending order; the designer goes to it, and
 it is one undo like any other edit. A number already used, outside 0-255, or
@@ -417,7 +450,8 @@ since its builder needs a number no room has to mean "no exit".
 
 **Ways out**, under that, is the room's doorways and where each leads. Knight
 Lore's are arithmetic and cannot be anything else, so they are shown and not
-editable. Pentagram's are a byte, and the byte is the authority -- one of its
+editable, and the room number is what you click to go there. Where the number
+is a field to edit, a **go** button beside it does that instead. Pentagram's are a byte, and the byte is the authority -- one of its
 south doorways is an exit in twenty-eight rooms and walled up in one -- so
 there it is a field you change. In a castle whose exits are a table every
 doorway is listed, walled up or not, as a room number to change: an empty box
@@ -666,7 +700,9 @@ Its U, V and Z are **world bytes**, not floor cells: the game's table holds
 them that way and `special_fill` uses them as they are, without going through
 `room_unpack`'s grid. So the arrow keys move a collectable one unit at a time,
 or eight with shift -- half a floor cell, which is the smallest move the room
-data itself can make.
+data itself can make. **Dragging** one moves it in U and V to follow the
+pointer, to the unit, and leaves its height alone: ctrl with the up and down
+arrows is for that. A drag is one step of undo, however far it goes.
 
 In VS Code it is a second document, so an edit to it is a `WorkspaceEdit` on
 that file and it gets its own dirty mark and its own undo: two files changed is
@@ -778,9 +814,9 @@ them.
 - **Movers' behaviour** -- what a guard patrols, which way a ball bounces --
   comes from the object's template and the game's `movers.s`, and the designer
   edits the template's bytes without knowing what they mean.
-- **A room cannot be deleted or renumbered.** Add room makes one; taking one
-  away would leave every doorway into it pointing nowhere, and nothing yet
-  offers to deal with those.
+- **A room cannot be renumbered**, and deleting one leaves the doorways into
+  it and the collectables in it pointing nowhere: the designer says so before,
+  and the checks after, but does not change them for you.
 - **The walked map is only a map.** It cannot be edited -- a doorway is changed
   in Ways out, and the map follows -- and a castle that is not flat has rooms
   listed under it rather than drawn in some second layer.
