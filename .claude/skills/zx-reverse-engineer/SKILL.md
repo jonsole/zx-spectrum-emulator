@@ -21,7 +21,82 @@ The output is three things, and a game is not done until all three exist:
 2. **The notes** -- `notes/<game>/`, written *while* you work. What the game
    is, how it works, how to drive it, what was measured, what is still open.
    See [Notes](#notes) below; this is not optional and not an afterthought.
-3. **The published pages** -- when the user asks, `scripts/publish_pages.py`.
+3. **The pages** -- the game explained, not just listed: how it works, its
+   world, its graphics, animations and sounds, its bugs and pokes. See
+   [The standard](#the-standard-what-a-finished-game-has); published with
+   `scripts/publish_pages.py` when the user asks.
+
+## The standard: what a finished game has
+
+Knight Lore is the reference: `scripts/build_knightlore.py`,
+`knightlore_data.py` (level data generated at build time),
+`knightlore_pages.py`, `knightlore_howitworks.py`, `knightlore_sounds.py`,
+`knightlore_animations.py`, `knightlore.ref` and `notes/knightlore/`. The
+user expects that level of documentation for every game -- a reader should
+come away knowing how the game works, what is in it and what it looks and
+sounds like, not only what each routine does. A game is not finished until
+it has all of what follows that the game has anything for. Adapt, don't skip:
+a text adventure's world is its room graph, its graphics its pictures, its
+how-it-works pages the parser and the scoring (The Hobbit). Everything built
+from the game's data is generated at build time, by the game's own code
+wherever there is code for it, and never committed.
+
+**The listing.**
+- Every entry described and named, no placeholder titles, every address a
+  label; callers lists (`ListRefs=2`) and labels in every memory map.
+- Tables shown as what they are: data record by record, one entry per record
+  when a reader would look one up (`room8E`, not one `location_tbl`); handler
+  tables as `DEFW` with each entry linked; values as symbolic constants.
+- Pictures in the entries: each room's record shows the room, each sprite's
+  bytes the sprite, each template or background its drawing -- `#HTML`
+  paragraphs from the generated control file, so the .asm stays text.
+- A commented `.asm` download beside the HTML.
+
+**How it works** -- a page per mechanism a player or programmer would ask
+about: drawing (how a moving object gets on screen, traced frame by frame
+through the game's own pipeline with a picture of each stage), depth sorting,
+collision, movement and physics, enemies, the day/night or level cycle, the
+objective and the ending, the score. Each page has the explanation; a diagram
+or table read from the game's data (Knight Lore's 27-case depth table drawn
+as pictures); a worked example run through the game's own code in the
+simulator; `#R` links to every routine it names; and says what is confirmed
+and what is inferred.
+
+**The world** -- a map drawn by the game's own drawing code and put together
+in the game's own layout or projection (the isometric castle, Atic Atac's
+floors), each room clickable to its entry; layers that tick on and off for
+where a game starts, the objective, the collectables and the dangers, each
+read from the game's tables (dangers from the code that makes a thing
+deadly, not from names); the record format as a table; and every room with
+its picture and its contents linked to the graphics pages.
+
+**Graphics** -- every kind of graphic the game has, each on its page and
+linked both ways with where it is used: backgrounds and scenery, the building
+blocks rooms are made of, the object types with their sprites and handlers,
+every sprite, fonts, the panel. **Animations** -- a GIF of each animation the
+game plays (walking, transformations, enemies, effects), frames and timing
+taken from the game's own data and handlers. **Sounds** -- every effect and
+tune recorded to WAV from the game's own routines, on fresh machines or in
+real room runs, each with what plays it and when, how it was recorded, its
+length and pitch.
+
+**Reference** -- how the game is put together (architecture), where the
+disassembly comes from (provenance, credit), **bugs** (each argued from the
+code, and watched where it can be), **pokes** (each tested live against the
+same trial without it, the result stated on the page), and **facts** worth
+knowing, each with its routine.
+
+**The notes** -- the full set under [Notes](#notes), current with all of the
+above.
+
+**Getting there.** Split the generated pages into a module per family, each
+with a `build(memory, html_dir, log)` that returns its sections, and hand the
+families to parallel agents with the interfaces fixed in the brief; each
+tests its module standalone. Check what they report before using it: they
+find wrong annotations (fix and log them) and occasionally report a
+mistake of their own. Check generated numbers against what the code implies
+(a tune's pitches against its frequency table), and look at every page as a
+reader will before publishing.
 
 ## Ground rules
 
@@ -264,7 +339,12 @@ screenshots with SendUserFile at each step that matters.
 - **Look at the pages as a reader will.** Headless Edge screenshots a built
   page: `msedge.exe --headless --disable-gpu --window-size=1100,1600
   --user-data-dir=<scratch> --screenshot=<png> file:///<page>` (the old
-  `--headless`, and its own profile directory, or it writes nothing).
+  `--headless`, and its own profile directory, or it writes nothing). It
+  returns before the file is written: wait for the PNG to appear (a bounded
+  `until [ -f ... ]` loop) before reading it, and give each concurrent shot
+  its own profile directory. To see a page in a state a reader reaches by
+  clicking (a ticked box), screenshot a throwaway copy with the state written
+  in -- and delete the copy from the build before publishing.
 
 ## Rules of evidence
 
@@ -388,6 +468,10 @@ README's index lists every file, and each topic's open questions are current.
   (`LabelColumn=1` in each `[MemoryMap:*]`), but SkoolKit drops the column from
   a map in which no entry is labelled -- which is how Ant Attack's 216
   placeholder data and message blocks came to light.
+- Everything in [The standard](#the-standard-what-a-finished-game-has) that
+  the game has anything for: how-it-works pages, the map with its layers,
+  graphics, animations, sounds, bugs, pokes and facts. Listing them as
+  "could add later" is not finished.
 - The README table and `docs/game-examples.md` describe the build; the notes
   describe the game.
 - `--html` built and looked at (routines list, a few routine pages, every
