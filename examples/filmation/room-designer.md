@@ -78,7 +78,7 @@ In `rooms.json`:
 | `exits` | `"table"`: every scenery entry is two bytes in the record, a template and a destination, and a doorway leads to the room its `destination` names. **0 is a room** there, unlike Pentagram's byte, so a doorway walled up says `"destination": null` (or has no destination at all). Anything that is not a doorway carries no destination -- the builder refuses one. Without the key, Knight Lore's grid and Pentagram's byte apply as above. |
 | `sceneryPerRoom` | the most scenery entries a room may hold. Without it, 7, or 8 for Pentagram. |
 | `lastRoom` | the number the last room must have: `room_find` walks the records to the first number at least the one it wants, so there has to be one at the end every search stops at. Without it, `$FF` for Knight Lore and nothing for Pentagram. |
-| `poolLimit` | the most object records one room may expand to -- every entry of every template it places. A room over it is a fault, and the header's pool reads "of" the limit. Without it there is no limit, because the remakes size their pool to the fullest room. The original Knight Lore's castle, edited by `game-disassemblies/scripts/knightlore_rooms.py` (see its `docs/knightlore-rooms.md`), says 36: what the game's object table holds. |
+| `poolLimit` | the most object records one room may expand to -- every entry of every template it places. A room over it is a fault, and the header's pool reads "of" the limit. Without it there is no limit, because the remakes size their pool to the fullest room. The original games' castles, edited by the room editor in `game-disassemblies` (`scripts/room_editor.py`; see its `docs/room-editor.md`), say what each game's object table holds: 36 for Knight Lore, 48 for Pentagram. |
 | `shapeLimit` | the most floor shapes a room can name. Without it, 4: the remakes' builders keep the shape in bits 3 and 4 of the attribute byte. The original Knight Lore's castle says 32, which is what bits 3 to 7 of its attribute byte can name. |
 
 And in `templates.json`:
@@ -410,8 +410,8 @@ them wraps round its edge, so the walk lays it out as exactly that grid.
 
 **Starting rooms**, under the map, are the rooms a game can begin in, for a
 castle whose `rooms.json` lists them in `startRooms` -- the original Knight
-Lore's four, which `knightlore_rooms` in `game-disassemblies` reads from the
-game and writes back. Each is a button that goes to its room. A castle that
+Lore's four, or Pentagram's, which the room editor in `game-disassemblies`
+reads from the game and writes back. Each is a button that goes to its room. A castle that
 lists none shows nothing there, and one that names a room it has not got is a
 fault.
 
