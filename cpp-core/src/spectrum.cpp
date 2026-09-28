@@ -107,6 +107,17 @@ void Spectrum::write_paging(uint8_t value) {
     ula.set_screen_bank(memory.screen_bank());
 }
 
+void Spectrum::load_paging(uint8_t value) {
+    // Back to the unlocked power-on state first, which is what a load would
+    // start from on a machine that had just been switched to a 128K. Without
+    // it a lock a game set -- Pentagram's stray OUT ($FD) sets one -- made
+    // the write below a no-op, and the snapshot ran on the banks the last
+    // program left paged in.
+    memory.reset_paging();
+    memory.write_paging(value);
+    ula.set_screen_bank(memory.screen_bank());
+}
+
 void Spectrum::reset() {
     Registers regs;
     // Before priming, not after: reset() zeroes the ULA's counters, which

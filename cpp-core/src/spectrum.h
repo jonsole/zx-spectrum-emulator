@@ -160,10 +160,17 @@ public:
     void write_memory(uint16_t addr, const uint8_t* data, size_t length);
 
     /// Writes port 0x7FFD as a program would, paging included -- and tells
-    /// the ULA which bank it is now displaying. What a snapshot loader and a
-    /// debugger use rather than poking the memory map directly, so the two
-    /// cannot disagree. Ignored on a 48K, as the port is.
+    /// the ULA which bank it is now displaying. What the port and a debugger
+    /// use rather than poking the memory map directly, so the two cannot
+    /// disagree. Ignored on a 48K, as the port is, and once paging is locked.
     void write_paging(uint8_t value);
+    /// Sets port 0x7FFD to a snapshot's value outright -- lock or no lock,
+    /// the machine's before or the snapshot's own -- and tells the ULA which
+    /// bank it is displaying. What a snapshot loader uses: a load replaces
+    /// the machine, so a lock a program set before it must not survive it,
+    /// where write_paging (the program's own OUT) rightly leaves a lock be.
+    /// Ignored on a 48K, which has no paging to set.
+    void load_paging(uint8_t value);
 
     /// Last completed frame, RGB, border included.
     const std::vector<uint8_t>& screen() const { return ula.screen(); }

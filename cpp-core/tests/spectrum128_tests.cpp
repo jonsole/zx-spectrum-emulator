@@ -375,6 +375,85 @@ TEST(z80_round_trip_128k_keeps_banks_paging_and_the_ay) {
     CHECK_EQ(int(back.ula.border), 3);
 }
 
+// The tests above load into a fresh 48K, whose switch to a 128K resets the
+// paging on the way. These load into a 128K a program has already locked --
+// Pentagram's stray OUT ($FD) locks it, which is how this was found: the lock
+// outlived the load and the snapshot's paging was thrown away.
+
+// A 128K whose program has paged bank 6 in and locked it there.
+void lock_paging(Spectrum& m) {
+    m.set_model(Model::Spectrum128);
+    out_port(m, 0x7FFD, uint8_t(PAGING_LOCK | 0x06));
+    CHECK(m.memory.paging_locked());
+}
+
+// A snapshot of a 128K paged as `paging`, taken by `save` (.z80 or .sna).
+std::vector<uint8_t> snapshot_paged(uint8_t paging, bool z80) {
+    Spectrum m;
+    m.set_model(Model::Spectrum128);
+    fill_banks(m);
+    out_port(m, 0x7FFD, paging);
+    Registers r = m.registers();
+    r.pc = 0x8000;
+    r.sp = 0xBFF0;
+    m.set_registers(r);
+    std::vector<uint8_t> out;
+    if (z80) {
+        save_z80(m, out);
+    } else {
+        CHECK_EQ(save_sna(m, out), std::string());
+    }
+    return out;
+}
+
+TEST(z80_load_replaces_paging_a_program_locked) {
+    // Bank 3 at 0xC000, ROM 1, the shadow screen -- none of which the lock
+    // would have allowed.
+    const uint8_t paging = uint8_t(PAGING_ROM1 | PAGING_SHADOW_SCREEN | 0x03);
+    const std::vector<uint8_t> z80 = snapshot_paged(paging, true);
+    Spectrum m;
+    lock_paging(m);
+    CHECK_EQ(load_snapshot(m, z80.data(), z80.size()), std::string());
+    CHECK_EQ(int(m.memory.paging()), int(paging));
+    CHECK(!m.memory.paging_locked());
+    CHECK_EQ(int(m.memory.bank_at_c000()), 3);
+    CHECK_EQ(int(m.memory.rom_selected()), 1);
+    CHECK_EQ(int(m.ula.screen_bank()), int(SHADOW_SCREEN_BANK));
+    // Unlocked, so the program can page again.
+    out_port(m, 0x7FFD, 0x04);
+    CHECK_EQ(int(m.memory.bank_at_c000()), 4);
+}
+
+TEST(sna_128k_load_replaces_paging_a_program_locked) {
+    const uint8_t paging = uint8_t(PAGING_ROM1 | 0x01);
+    const std::vector<uint8_t> sna = snapshot_paged(paging, false);
+    Spectrum m;
+    lock_paging(m);
+    CHECK_EQ(load_snapshot(m, sna.data(), sna.size()), std::string());
+    CHECK_EQ(int(m.memory.paging()), int(paging));
+    CHECK(!m.memory.paging_locked());
+    CHECK_EQ(int(m.memory.bank_at_c000()), 1);
+    CHECK_EQ(int(m.memory.rom_selected()), 1);
+    CHECK_EQ(int(m.ula.screen_bank()), int(SCREEN_BANK));
+}
+
+TEST(a_locked_snapshot_loads_locked) {
+    // The lock is part of the snapshot's paging, so it comes back too -- over
+    // a machine locked differently, which it replaces.
+    const uint8_t paging = uint8_t(PAGING_LOCK | 0x02);
+    for (const bool z80 : {true, false}) {
+        const std::vector<uint8_t> file = snapshot_paged(paging, z80);
+        Spectrum m;
+        lock_paging(m);
+        CHECK_EQ(load_snapshot(m, file.data(), file.size()), std::string());
+        CHECK_EQ(int(m.memory.paging()), int(paging));
+        CHECK(m.memory.paging_locked());
+        CHECK_EQ(int(m.memory.bank_at_c000()), 2);
+        out_port(m, 0x7FFD, 0x05);
+        CHECK_EQ(int(m.memory.bank_at_c000()), 2);
+    }
+}
+
 TEST(z80_round_trip_48k_makes_a_48k) {
     Spectrum m;
     for (size_t i = 0; i < RAM_SIZE; i++) {

@@ -145,11 +145,10 @@ std::string load_sna_128k(Spectrum& m, const uint8_t* data, size_t len) {
         copy_bank(m.memory.bank[b], rest);
         rest += BANK_SIZE;
     }
-    // Through the port rather than straight into the map, so the ULA learns
-    // which screen it is showing. The lock bit is honoured on the way in --
-    // a locked snapshot stays locked -- because paging starts from the reset
-    // set_model just did.
-    m.write_paging(paging);
+    // Set outright, lock or no lock: the machine may already have been a
+    // 128K, with paging a program locked, and a load replaces all of that. A
+    // locked snapshot comes back locked, since the lock is in the value.
+    m.load_paging(paging);
     m.set_registers(r);
     m.ula.border = border;
     return {};
@@ -476,7 +475,9 @@ std::string load_z80(Spectrum& m, const uint8_t* data, size_t len) {
         }
     }
     if (is128) {
-        m.write_paging(h[35]);
+        // Outright, as load_sna_128k does: a lock from before the load must
+        // not keep the snapshot's own paging out.
+        m.load_paging(h[35]);
         // Byte 38 is the last OUT to 0xFFFD (the selected register) and
         // 39-54 the sixteen registers. Restored register by register rather
         // than through write(), so the envelope is not retriggered sixteen
