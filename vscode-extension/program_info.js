@@ -96,11 +96,25 @@ function headerName(bytes, at) {
   return name.trimEnd();
 }
 
+// The files a tape's header blocks name, as { flag, data } blocks from
+// tapBlocks or tzxBlocks: a header is flag 0 and 17 bytes between the flag
+// and the checksum.
+function headerFiles(blocks) {
+  const files = [];
+  for (const b of blocks) {
+    if (b.flag === 0 && b.data.length === 17) {
+      const type = b.data[0];
+      files.push((TAP_TYPES[type] || 'Type ' + type) + ': ' + headerName(b.data, 1));
+    }
+  }
+  return files;
+}
+
 // A .tap is length-prefixed blocks; a header block (flag 0, 19 bytes with its
 // checksum) names the file that follows. Plenty of tapes in the wild end in a
 // few stray bytes; those are noted rather than taken as the file being bad.
 function describeTap(bytes) {
-  const files = [];
+  const files = headerFiles(tapBlocks(bytes));
   let blocks = 0;
   let at = 0;
   let stray = 0;
@@ -115,10 +129,6 @@ function describeTap(bytes) {
       break;
     }
     blocks++;
-    if (length === 19 && bytes[start] === 0) {
-      const type = bytes[start + 1];
-      files.push((TAP_TYPES[type] || 'Type ' + type) + ': ' + headerName(bytes, start + 2));
-    }
     at = start + length;
   }
   if (blocks === 0) {
@@ -136,8 +146,19 @@ function describeTzx(bytes) {
   if (signature !== 'ZXTape!' || bytes[7] !== 0x1A) {
     return { kind: 'unknown', problem: 'Not a TZX tape (no "ZXTape!" signature).' };
   }
+  const labels = tzxLabels(bytes);
+  const details = [];
+  const credit = [labels.title, labels.publisher, labels.year].filter(Boolean);
+  if (credit.length) {
+    details.push(credit.join(', '));
+  }
+  details.push(labels.dataBlocks + ' data block' + (labels.dataBlocks === 1 ? '' : 's'));
+  details.push(...headerFiles(tzxBlocks(bytes)));
+  if (labels.dataBlocks) {
+    details.push('Loader: ' + labels.loader);
+  }
   return { kind: 'tape', format: `.tzx version ${bytes[8]}.${String(bytes[9]).padStart(2, '0')}`,
-           model: '48K', needs128: false, details: [] };
+           model: '48K', needs128: false, details };
 }
 
 // What the file is, from its extension and its bytes. `kind` is snapshot,
@@ -310,25 +331,21 @@ function tapBlocks(bytes) {
   return blocks;
 }
 
-function tzxBlocks(bytes) {
-  const blocks = [];
+// Every block of a .tzx in order: visit(id, p) with `p` the offset of the
+// block's body, just past its ID byte.
+function walkTzx(bytes, visit) {
   const dword = (p) => word(bytes, p) + word(bytes, p + 2) * 65536;
   const triple = (p) => word(bytes, p) + bytes[p + 2] * 65536;
-  const data = (start, length) => {
-    if (length >= 2 && start + length <= bytes.length) {
-      blocks.push({ flag: bytes[start], data: bytes.subarray(start + 1, start + length - 1),
-                    raw: bytes.subarray(start, start + length) });
-    }
-  };
   let at = 10;
   while (at < bytes.length) {
     const id = bytes[at];
     const p = at + 1;
+    visit(id, p);
     let next;
     switch (id) {
-      case 0x10: data(p + 4, word(bytes, p + 2)); next = p + 4 + word(bytes, p + 2); break;
-      case 0x11: data(p + 18, triple(p + 15)); next = p + 18 + triple(p + 15); break;
-      case 0x14: data(p + 10, triple(p + 7)); next = p + 10 + triple(p + 7); break;
+      case 0x10: next = p + 4 + word(bytes, p + 2); break;
+      case 0x11: next = p + 18 + triple(p + 15); break;
+      case 0x14: next = p + 10 + triple(p + 7); break;
       case 0x12: next = p + 4; break;
       case 0x13: next = p + 1 + bytes[p] * 2; break;
       case 0x15: next = p + 8 + triple(p + 5); break;
@@ -351,13 +368,105 @@ function tzxBlocks(bytes) {
     }
     at = next;
   }
+}
+
+function tzxBlocks(bytes) {
+  const blocks = [];
+  const data = (start, length) => {
+    if (length >= 2 && start + length <= bytes.length) {
+      blocks.push({ flag: bytes[start], data: bytes.subarray(start + 1, start + length - 1),
+                    raw: bytes.subarray(start, start + length) });
+    }
+  };
+  walkTzx(bytes, (id, p) => {
+    if (id === 0x10) {
+      data(p + 4, word(bytes, p + 2));
+    } else if (id === 0x11) {
+      data(p + 18, word(bytes, p + 15) + bytes[p + 17] * 65536);
+    } else if (id === 0x14) {
+      data(p + 10, word(bytes, p + 7) + bytes[p + 9] * 65536);
+    }
+  });
   return blocks;
+}
+
+// The blocks that put data on the tape, of every encoding: standard, turbo,
+// pure data, direct recording, CSW and generalized.
+const TZX_DATA_IDS = [0x10, 0x11, 0x14, 0x15, 0x18, 0x19];
+
+// Archive info fields (block $32) by ID, from the TZX spec.
+const TZX_TITLE = 0x00;
+const TZX_PUBLISHER = 0x01;
+const TZX_YEAR = 0x03;
+const TZX_LOADER = 0x07;       // "protection scheme / loader"
+
+// What a .tzx says about itself: the archive info's title, publisher and
+// year, how many data blocks it holds, and its loader. The loader is the one
+// the archive info names; failing that, the one its groups are named after --
+// the convention is "SpeedLock 1 Block 1", "SpeedLock 1 Block 2" and so on;
+// failing that, "standard" when every block is at the ROM's timings, which
+// is all that can honestly be said without recognising a loader's code.
+function tzxLabels(bytes) {
+  const info = {};
+  let group = null;
+  let dataBlocks = 0;
+  let standard = true;
+  walkTzx(bytes, (id, p) => {
+    if (TZX_DATA_IDS.includes(id)) {
+      dataBlocks++;
+      standard = standard && id === 0x10;
+    } else if (id === 0x32 && p + 3 <= bytes.length) {
+      let q = p + 3;
+      for (let n = 0; n < bytes[p + 2] && q + 2 <= bytes.length; n++) {
+        info[bytes[q]] = String.fromCharCode(...bytes.subarray(q + 2, q + 2 + bytes[q + 1]))
+          .replace(/\r\n?/g, ' / ').trim();
+        q += 2 + bytes[q + 1];
+      }
+    } else if (id === 0x21 && group === null && p < bytes.length) {
+      const name = String.fromCharCode(...bytes.subarray(p + 1, p + 1 + bytes[p]));
+      const loader = name.match(/^(.+?)\s+block\s+\d+\s*$/i);
+      if (loader) {
+        group = loader[1];
+      }
+    }
+  });
+  let loader = info[TZX_LOADER] || group;
+  if (!loader) {
+    loader = standard ? 'standard (every block at the ROM\'s timings)' : 'custom (the tape doesn\'t name it)';
+  }
+  return { title: info[TZX_TITLE], publisher: info[TZX_PUBLISHER], year: info[TZX_YEAR], dataBlocks, loader };
+}
+
+// Whether 6912 bytes look like a screen's own attributes: FLASH on no more
+// than an eighth of the cells. Loading screens hardly flash -- the Hobbit's,
+// Pentagram's, Sweevo's World's and both Daley Thompson games' have not one
+// flashing cell -- while bytes that are not plain attributes set bit 7 about
+// half the time: an encrypted Speedlock 2 screen (Head Over Heels) on 97% of
+// its cells, Knight Lore's rotated attributes on 48%.
+const MAX_FLASHING = 768 / 8;
+
+function plausibleScreen(screen) {
+  let flashing = 0;
+  for (let i = 6144; i < SCREEN_BYTES; i++) {
+    if (screen[i] & 0x80) {
+      flashing++;
+    }
+  }
+  return flashing <= MAX_FLASHING;
 }
 
 // A tape's loading screen: the data block a SCREEN$ header (a Bytes header
 // for 6912 bytes at 16384) announces, or else the first headerless block
 // that is a flag byte and 6912 bytes, with or without a checksum after them
 // -- which is how most custom loaders carry theirs.
+//
+// A headerless block is only a guess, and a custom loader may not store its
+// screen as the display file does. Knight Lore's (a Speedlock 1 tape) holds
+// every attribute rotated right a bit -- rotated left, they are ZXDB's
+// picture of its screen exactly -- though Ocean's Speedlock 1 tapes store
+// theirs plain; the Speedlock 2 on Head Over Heels encrypts the lot. So a
+// guess whose attributes don't look like attributes is tried with them
+// rotated left, and failing that is no picture rather than a garbled one.
 function tapeScreen(blocks) {
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
@@ -370,7 +479,21 @@ function tapeScreen(blocks) {
   }
   const bare = blocks.find((b) => b.flag !== 0 &&
     (b.raw.length === SCREEN_BYTES + 2 || b.raw.length === SCREEN_BYTES + 1));
-  return bare ? { screen: bare.raw.subarray(1, 1 + SCREEN_BYTES), border: 7, source: 'the tape\'s loading screen' } : null;
+  if (!bare) {
+    return null;
+  }
+  const screen = bare.raw.subarray(1, 1 + SCREEN_BYTES);
+  if (plausibleScreen(screen)) {
+    return { screen, border: 7, source: 'the tape\'s loading screen' };
+  }
+  const rotated = Uint8Array.from(screen);
+  for (let i = 6144; i < SCREEN_BYTES; i++) {
+    rotated[i] = ((rotated[i] << 1) | (rotated[i] >> 7)) & 0xFF;
+  }
+  if (plausibleScreen(rotated)) {
+    return { screen: rotated, border: 7, source: 'the tape\'s loading screen, its attributes rotated back' };
+  }
+  return null;
 }
 
 function programScreen(fileName, bytes) {
@@ -396,5 +519,5 @@ function programScreen(fileName, bytes) {
 
 module.exports = {
   looksLikeText, describeProgram, pickRom, launchConfigFor, debugInfoCandidates,
-  unpackZ80, programScreen, tapBlocks, tzxBlocks
+  unpackZ80, programScreen, tapBlocks, tzxBlocks, tzxLabels
 };

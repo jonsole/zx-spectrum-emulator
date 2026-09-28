@@ -80,10 +80,57 @@ test('a .tap lists its blocks and the files its headers name', () => {
 
 test('a .tzx is recognised by its signature', () => {
   const tzx = Uint8Array.from([...Buffer.from('ZXTape!'), 0x1A, 1, 20, 0x10]);
-  assert.deepStrictEqual(p.describeProgram('t.tzx', tzx),
-    { kind: 'tape', format: '.tzx version 1.20', model: '48K', needs128: false, details: [] });
+  assert.deepStrictEqual(p.describeProgram('t.tzx', tzx.subarray(0, 10)),
+    { kind: 'tape', format: '.tzx version 1.20', model: '48K', needs128: false, details: ['0 data blocks'] });
   assert.strictEqual(p.describeProgram('t.tzx', Buffer.from('not a tape')).kind, 'unknown');
   assert.strictEqual(p.describeProgram('t.bin', new Uint8Array(10)).kind, 'unknown');
+});
+
+// A .tzx from its blocks, each an array of bytes starting with its ID.
+function tzxOf(...blocks) {
+  return Uint8Array.from([...Buffer.from('ZXTape!'), 0x1A, 1, 20, ...blocks.flat()]);
+}
+function standardBlock(flag, data) {
+  const len = data.length + 2;
+  return [0x10, 0xE8, 0x03, len & 0xFF, len >> 8, flag, ...data, 0];
+}
+function turboBlock(flag, data) {
+  const len = data.length + 2;
+  return [0x11, ...new Array(15).fill(1), len & 0xFF, len >> 8, 0, flag, ...data, 0];
+}
+function archiveInfo(fields) {
+  const body = [fields.length];
+  for (const [id, text] of fields) {
+    body.push(id, text.length, ...Buffer.from(text));
+  }
+  return [0x32, body.length & 0xFF, body.length >> 8, ...body];
+}
+function groupStart(name) {
+  return [0x21, name.length, ...Buffer.from(name)];
+}
+
+test('a .tzx names its loader: from its archive info, its groups, or its blocks', () => {
+  const header = [0, ...Buffer.from('KNIGHT    '), 10, 0, 0, 0, 10, 0];
+  const plain = p.describeProgram('t.tzx', tzxOf(standardBlock(0, header), standardBlock(0xFF, [1, 2, 3])));
+  assert.deepStrictEqual(plain.details,
+    ['2 data blocks', 'Program: KNIGHT', 'Loader: standard (every block at the ROM\'s timings)']);
+
+  const turbo = p.describeProgram('t.tzx', tzxOf(standardBlock(0, header), turboBlock(0xFF, [1, 2, 3])));
+  assert.strictEqual(turbo.details[2], 'Loader: custom (the tape doesn\'t name it)');
+
+  const grouped = p.describeProgram('t.tzx', tzxOf(standardBlock(0, header), groupStart('SpeedLock 1 Block 1'),
+    turboBlock(0xFF, [1]), [0x22], groupStart('SpeedLock 1 Block 2'), turboBlock(0xFF, [2]), [0x22]));
+  assert.deepStrictEqual(grouped.details, ['3 data blocks', 'Program: KNIGHT', 'Loader: SpeedLock 1']);
+
+  // A group that is not "<loader> Block <n>" is not taken for a loader.
+  const side = p.describeProgram('t.tzx', tzxOf(groupStart('Side A'), turboBlock(0xFF, [1]), [0x22]));
+  assert.strictEqual(side.details[1], 'Loader: custom (the tape doesn\'t name it)');
+
+  // The archive info's own loader field wins over the groups.
+  const labelled = p.describeProgram('t.tzx', tzxOf(
+    archiveInfo([[0x00, 'Knight Lore'], [0x01, 'Ultimate'], [0x03, '1984'], [0x07, 'Speedlock 1']]),
+    groupStart('SpeedLock 1 Block 1'), turboBlock(0xFF, [1]), [0x22]));
+  assert.deepStrictEqual(labelled.details, ['Knight Lore, Ultimate, 1984', '1 data block', 'Loader: Speedlock 1']);
 });
 
 test('the ROM is picked by size', () => {
@@ -204,12 +251,32 @@ test('a tape\'s SCREEN$ block, and a headerless one', () => {
   assert.strictEqual(r.source, 'the tape\'s loading screen');
   assert.deepStrictEqual(r.screen, screenPattern());
 
-  // A custom loader's block: a flag and 6912 bytes, with no checksum.
-  const bare = [...screenPattern()];
-  const tzxBody = [0x10, 0, 0, 0x01, 0x1B, 0x77, ...bare];
-  const tzx = Uint8Array.from([...Buffer.from('ZXTape!'), 0x1A, 1, 20, ...tzxBody]);
-  const t = p.programScreen('x.tzx', tzx);
-  assert.deepStrictEqual(t && t.screen, screenPattern());
+  // A custom loader's block: a flag and 6912 bytes, with no checksum. Its
+  // attributes are ink and paper with no FLASH, as a real screen's are.
+  const plain = screenPattern();
+  plain.fill(0x38, 6144, 6912);
+  plain[6144] = 0xB8;
+  const bareTzx = (screen) => Uint8Array.from([...Buffer.from('ZXTape!'), 0x1A, 1, 20,
+    0x10, 0, 0, 0x01, 0x1B, 0x77, ...screen]);
+  const t = p.programScreen('x.tzx', bareTzx(plain));
+  assert.deepStrictEqual(t && [t.screen, t.source], [plain, 'the tape\'s loading screen']);
+
+  // Knight Lore's loader holds each attribute rotated right a bit, so an odd
+  // ink comes out as FLASH: $39 (white paper, blue ink) is $9C on the tape,
+  // and $56 (bright red paper, yellow ink) is $2B.
+  const rotated = Uint8Array.from(plain);
+  rotated.fill(0x9C, 6144, 6912);
+  rotated[6145] = 0x2B;
+  const expected = Uint8Array.from(plain);
+  expected.fill(0x39, 6144, 6912);
+  expected[6145] = 0x56;
+  const r2 = p.programScreen('x.tzx', bareTzx(rotated));
+  assert.deepStrictEqual(r2 && [r2.screen, r2.source],
+    [expected, 'the tape\'s loading screen, its attributes rotated back']);
+
+  // Bytes that are not attributes either way -- FLASH on half the cells as
+  // they are and rotated -- are no picture rather than a garbled one.
+  assert.strictEqual(p.programScreen('x.tzx', bareTzx(screenPattern())), null);
 
   assert.strictEqual(p.programScreen('x.tap', Uint8Array.from(tapBlock(0xFF, [1, 2, 3]))), null);
 });
@@ -230,7 +297,10 @@ real('tapes/loading-test.tap', (d) => {
   assert.strictEqual(d.kind, 'tape');
   assert.ok(/blocks?$/.test(d.details[0]), d.details[0]);
 });
-real('tapes/loading-test.tzx', (d) => assert.strictEqual(d.kind, 'tape'));
+real('tapes/loading-test.tzx', (d) => {
+  assert.strictEqual(d.kind, 'tape');
+  assert.strictEqual(d.details[d.details.length - 1], 'Loader: standard (every block at the ROM\'s timings)');
+});
 real('examples/hello_rom_call/test.asm', () => {
   assert.strictEqual(p.looksLikeText(fs.readFileSync(path.join(REPO, 'examples/hello_rom_call/test.asm'))), true);
 });

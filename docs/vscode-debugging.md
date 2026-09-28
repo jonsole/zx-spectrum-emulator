@@ -245,7 +245,18 @@ cannot set its sound device's volume, which only DAP reaches. The status bar's
 `.sna`, `.z80`, `.tap` and `.tzx` files open -- from File > Open, the
 Explorer, or anywhere else -- in a small read-only editor (`program_view.js`)
 that says what the file is: the snapshot format and the Spectrum it needs, or
-the tape's blocks and the files its headers name. Beside that it draws the
+the tape's blocks and the files its headers name. A `.tzx` also gives its
+title, publisher and year when its archive info block has them, and its
+**loader** -- the protection scheme, such as SpeedLock 1 or 2:
+
+- the one the archive info's loader field names, as the tape's author wrote it;
+- failing that, the one its groups are named after, the convention being
+  "SpeedLock 1 Block 1", "SpeedLock 1 Block 2" and so on;
+- failing that, *standard* when every data block is at the ROM's timings, and
+  *custom* otherwise. The loader's code is not recognised, so a tape nobody
+  labelled is only ever called custom.
+
+Beside that it draws the
 program's screen in its border colour, scaled to the editor. The page measures
 itself and puts the picture beside the details or above them, whichever lets
 it be larger with the details -- and the Run button -- still wholly in view,
@@ -258,9 +269,15 @@ and redoes that whenever the editor is resized:
 - **A tape's** is its loading screen: the data block a `SCREEN$` header
   announces, or failing that the first headerless block that is a flag byte and
   6912 bytes, with or without a checksum -- which is how most custom loaders
-  carry theirs. A screen a loader packs or splits (Exolon's, Head Over
-  Heels') is not found, and the page shows none. Tapes carry no border colour,
-  so the border is white.
+  carry theirs. That block is only a guess, so it has to look like a screen:
+  FLASH on no more than an eighth of its attribute cells, where real loading
+  screens have next to none. One that fails is tried with every attribute
+  rotated left a bit, which is how Knight Lore's Speedlock 1 tape stores them,
+  and failing that the page shows no picture rather than a garbled one. A
+  screen a loader packs, encrypts or splits (Exolon's, Head Over Heels'), or
+  loads as the start of one block that fills the whole of memory (Ocean's
+  Speedlock 1 tapes), is not found. Tapes carry no border colour, so the border
+  is white.
 
 A `.tap` with stray bytes after its last block -- common in the wild -- is
 read up to them, and the page says how many were ignored. Its **Run** button starts a

@@ -40,6 +40,10 @@ The first release: the emulator and the VS Code extension, packaged.
   folder. sjasmplus, which the examples and the tape designer assemble with,
   is fetched the first time it is needed.
 - **ZX Spectrum: Save Snapshot...** saves the machine as a `.z80` or `.sna`.
+- **Opening a `.tzx`** shows its loader -- SpeedLock 1, SpeedLock 2 and the like,
+  when the tape names it -- with its title, publisher and year. The loading
+  screen from a custom loader is no longer drawn garbled: Knight Lore's is
+  drawn right, and one that can't be read is left out.
 - `zx_server --version`, and a version in `serverInfo`; the extension warns
   when a server is older than it.
 - MIT licence; third-party terms in `THIRD_PARTY_NOTICES.md`.
