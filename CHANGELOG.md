@@ -32,8 +32,9 @@ The first release: the emulator and the VS Code extension, packaged.
   the map, lists a castle's starting rooms under it and swaps them, drags
   collectables, edits the floor shapes on a Shapes tab and warns when a room's
   walls no longer sit on its floor, and holds a castle to a limit on each
-  room's pieces; it also drives the room editor for the original Knight Lore
-  in `game-disassemblies`.
+  room's pieces; it also drives the room editor for the original Knight Lore,
+  Pentagram and Alien 8 in `game-disassemblies`, a castle stating where it
+  draws, where its player starts and its groups' own nudges.
 - **Works outside the repository:** Run and Debug on a snapshot, F5 with no
   `launch.json`, the trace viewer and the tape designer's Build all work in any
   folder. sjasmplus, which the examples and the tape designer assemble with,

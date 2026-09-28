@@ -60,6 +60,17 @@ function toy(overrides) {
 
 // --- the game's own numbers -----------------------------------------------
 
+test('checkSpecials: a table of its own size, and no wizard where there is none', function () {
+  // Alien 8's places are 36 rows with no wanted list; said so, they check clean.
+  const rows = [];
+  for (let i = 0; i < 36; i++) rows.push({ room: 1, u: 128, v: 128, z: 64 });
+  const said = { game: 'alien8', rows: 36, collectables: rows };
+  const problems = m.checkSpecials(said).filter(function (p) { return !/slots/.test(p); });
+  assert.deepStrictEqual(problems, []);
+  said.collectables.pop();
+  assert.ok(m.checkSpecials(said).some(function (p) { return /There are 35 collectables, not 36/.test(p); }));
+});
+
 test('the constants are the ones special.s defines', () => {
   const file = path.join(KNIGHTLORE, 'special.s');
   if (!fs.existsSync(file)) skip('knightlore/special.s is not here');

@@ -55,13 +55,18 @@ function signedOf(n) {
 // The two ADJ bytes are subtracted and added the way the engine does, in eight
 // bits: ADJ_Y is subtracted because the artwork's Y is bottom-up and the
 // screen's is not.
-function project(piece, adj) {
+//
+// `yOrigin` is the castle's own, unwrapped: 296 -- 40 and a whole byte -- for
+// Knight Lore, Pentagram and the remakes, whose projections subtract 104 from
+// the game's upward Y, and 232 for Alien 8's, which subtracts 40 with its floor
+// 64 lower. Both put a floor at the same row. rules.yOrigin in room_model.js.
+function project(piece, adj, yOrigin) {
   const adjX = adj ? adj.x : 0;
   const adjY = adj ? adj.y : 0;
   const x = byteOf(byteOf(piece.u + piece.v) - WORLD_X_ORIGIN + adjX);
   let a = byteOf(piece.v - piece.u + WORLD_V_BIAS) >> 1;
   a = byteOf(a + piece.z);
-  a = byteOf(WORLD_Y_ORIGIN - a);
+  a = byteOf((yOrigin === undefined ? WORLD_Y_ORIGIN : yOrigin) - a);
   const y = byteOf(a - adjY);
   return { x: x, y: y };
 }
@@ -241,11 +246,11 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined') {
 // and the rectangle to put it in. A piece whose graphic the sheet has nothing
 // for is kept, with no source rectangle, so the designer can say so rather
 // than silently leaving a hole.
-function drawList(pieces, index, adj) {
+function drawList(pieces, index, adj, yOrigin) {
   const ordered = depthOrder(pieces);
   return ordered.map(function (piece) {
     const nudge = adjFor(adj, piece.graphic, piece.mirrored);
-    const at = project(piece, nudge);
+    const at = project(piece, nudge, yOrigin);
     const art = spriteFor(index, piece.graphic);
     const height = art ? art.height : 0;
     return {
@@ -289,21 +294,22 @@ function roomBounds(size) {
 // floor and the sprites standing on it line up.
 const TRUE_Y_ORIGIN = WORLD_Y_ORIGIN + 256;
 
-function floorPoint(u, v, z) {
-  return { x: u + v - WORLD_X_ORIGIN, y: TRUE_Y_ORIGIN - (((v - u + WORLD_V_BIAS) >> 1) + z) };
+function floorPoint(u, v, z, yOrigin) {
+  const origin = yOrigin === undefined ? TRUE_Y_ORIGIN : yOrigin;
+  return { x: u + v - WORLD_X_ORIGIN, y: origin - (((v - u + WORLD_V_BIAS) >> 1) + z) };
 }
 
 // The four corners of a room's floor, as roomBounds says it reaches.
-function floorOutline(size) {
+function floorOutline(size, yOrigin) {
   const b = roomBounds(size);
-  return [floorPoint(b.minU, b.minV, size.z), floorPoint(b.maxU, b.minV, size.z),
-          floorPoint(b.maxU, b.maxV, size.z), floorPoint(b.minU, b.maxV, size.z)];
+  return [floorPoint(b.minU, b.minV, size.z, yOrigin), floorPoint(b.maxU, b.minV, size.z, yOrigin),
+          floorPoint(b.maxU, b.maxV, size.z, yOrigin), floorPoint(b.minU, b.maxV, size.z, yOrigin)];
 }
 
 // The cells a room reaches, each as its four corners. The grid's own measures
 // -- a cell's size, where cell 0's centre is, how many a side -- are the room
 // model's, and passed in rather than declared twice.
-function floorCells(size, grid) {
+function floorCells(size, grid, yOrigin) {
   const b = roomBounds(size);
   const out = [];
   for (let cv = 0; cv < grid.count; cv++) {
@@ -314,9 +320,9 @@ function floorCells(size, grid) {
       if (u < b.minU || u > b.maxU || v < b.minV || v > b.maxV) continue;
       const u0 = u - grid.half;
       const v0 = v - grid.half;
-      out.push([floorPoint(u0, v0, size.z), floorPoint(u0 + grid.cell, v0, size.z),
-                floorPoint(u0 + grid.cell, v0 + grid.cell, size.z),
-                floorPoint(u0, v0 + grid.cell, size.z)]);
+      out.push([floorPoint(u0, v0, size.z, yOrigin), floorPoint(u0 + grid.cell, v0, size.z, yOrigin),
+                floorPoint(u0 + grid.cell, v0 + grid.cell, size.z, yOrigin),
+                floorPoint(u0, v0 + grid.cell, size.z, yOrigin)]);
     }
   }
   return out;

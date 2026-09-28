@@ -679,7 +679,7 @@
       };
     }
     if (view.kind !== 'alone') floor = sizeOf(atlas, room);
-    const items = drawList(expandRoom(atlas, room, numbers, boxes), index, adj)
+    const items = drawList(expandRoom(atlas, room, numbers, boxes), index, adj, rulesOf(atlas).yOrigin)
       .filter(function (item) { return item.sprite; });
     for (const item of items) item.mine = item.piece.template === name;
     return { items: items, floor: floor };
@@ -705,7 +705,7 @@
     const scene = sceneOf(pick.name);
     const items = scene.items;
     const grid = { cell: CELL, origin: CELL_ORIGIN, count: CELLS, half: HALF_CELL };
-    const outline = scene.floor ? floorOutline(scene.floor) : [];
+    const outline = scene.floor ? floorOutline(scene.floor, rulesOf(atlas).yOrigin) : [];
     lastItems = [];
     if (!items.length && !outline.length) {
       canvas.width = STAGE_WIDTH;
@@ -776,7 +776,7 @@
       };
       c.lineWidth = 1;
       c.strokeStyle = 'rgba(255,255,255,.12)';
-      for (const quad of floorCells(scene.floor, grid)) path(quad);
+      for (const quad of floorCells(scene.floor, grid, rulesOf(atlas).yOrigin)) path(quad);
       c.strokeStyle = 'rgba(255,255,255,.35)';
       path(outline);
     }

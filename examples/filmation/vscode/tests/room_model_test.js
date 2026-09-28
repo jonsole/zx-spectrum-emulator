@@ -1427,6 +1427,56 @@ test('wallFit: the walls and arches of every castle as shipped sit on their floo
   }
 });
 
+test('rulesOf: Alien 8\u2019s origin, start spot, group nudge and template limit, and the defaults', function () {
+  const plain = m.rulesOf({ meta: { game: 'knightlore' } });
+  assert.strictEqual(plain.yOrigin, 296);
+  assert.deepStrictEqual(plain.startSpot, m.START_SPOT);
+  assert.strictEqual(plain.groupNudge, false);
+  assert.strictEqual(plain.objectTemplateLimit, null);
+  const spot = { u: 128, v: 128, z: 64, sizeU: 7, sizeV: 7, sizeZ: 23 };
+  const a8 = m.rulesOf({ meta: { game: 'alien8', rules: { yOrigin: 232, startSpot: spot, groupNudge: true,
+                                                          objectTemplateLimit: 60, shapeLimit: 4 } } });
+  assert.strictEqual(a8.yOrigin, 232);
+  assert.deepStrictEqual(a8.startSpot, spot);
+  assert.strictEqual(a8.groupNudge, true);
+  assert.strictEqual(a8.exits, 'grid', 'Knight Lore\u2019s arithmetic, as it is not Pentagram\u2019s byte');
+  assert.strictEqual(m.templateLimit({ meta: { rules: { objectTemplateLimit: 60 } } }, 'objectTemplates'), 60);
+  // A spot missing a field is not one, and the default stands.
+  assert.deepStrictEqual(m.rulesOf({ meta: { rules: { startSpot: { u: 1 } } } }).startSpot, m.START_SPOT);
+  assert.strictEqual(m.gameTitle({ meta: { game: 'alien8' } }), 'Alien 8');
+});
+
+test('a group\u2019s nudge: drawn with it, written with it, and the start spot the castle\u2019s own', function () {
+  // Worked out by hand: a nudge of $31 moves a group half a cell along U
+  // (bit 0) and raises it $30, 48; a floor at 64 and a level of 1 put the
+  // piece at 64 + 12 + 48 = 124, and U at 3 * 16 + 72 + 8 = 128.
+  const sizes = new Map([['blk', { u: 8, v: 8, z: 12 }]]);
+  const numbers = new Map([['blk', 7]]);
+  const atlas = {
+    meta: { game: 'alien8', rules: { startSpot: { u: 128, v: 128, z: 64, sizeU: 7, sizeV: 7, sizeZ: 23 } } },
+    roomDimensions: { square: { u: 64, v: 64, z: 64 } },
+    sceneryTemplates: {},
+    objectTemplates: { block: [{ graphic: 'blk', flags: { mirrored: false, passable: false, rest: 0 },
+                                 offsets: { halfU: false, halfV: false, raiseZ: 0 } }] },
+    startRooms: [1],
+    rooms: [{ number: 1, ink: 7, dimensions: 'square', scenery: [],
+              objects: [{ template: 'block', nudge: 0x31, positions: [{ u: 3, v: 3, z: 1 }] }] }]
+  };
+  const piece = m.expandRoom(atlas, atlas.rooms[0], numbers, sizes)[0];
+  assert.deepStrictEqual([piece.u, piece.v, piece.z], [128, 120, 124]);
+  // Written beside the template, and only where there is one.
+  const text = m.serializeAtlas(atlas, '\n');
+  assert.ok(text.indexOf('{ "template": "block", "nudge": 49, "positions": [') >= 0, text);
+  assert.deepStrictEqual(m.parseAtlas(text).rooms[0].objects[0].nudge, 0x31);
+  // Raised to 124-136 over a floor at 64, it clears Alien 8's start box
+  // (64 to 87); dropped to the floor, it does not.
+  assert.strictEqual(m.startBlockers(atlas, atlas.rooms[0], numbers, sizes).length, 0);
+  delete atlas.rooms[0].objects[0].nudge;
+  atlas.rooms[0].objects[0].positions[0] = { u: 3, v: 3, z: 0 };
+  assert.strictEqual(m.startBlockers(atlas, atlas.rooms[0], numbers, sizes).length, 1);
+  assert.strictEqual(m.serializeAtlas(atlas, '\n').indexOf('nudge'), -1);
+});
+
 test('addRoom: a new room goes in number order, empty, and checks clean', function () {
   const atlas = atlasFor(TABLE);
   const numbers = new Set(atlas.rooms.map(function (r) { return r.number; }));

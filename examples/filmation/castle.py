@@ -287,8 +287,11 @@ def _room(room, pad):
     lines.append('%s  "objects": [' % pad)
     for i, group in enumerate(objects):
         spots = group["positions"]
-        lines.append('%s   { "template": %s, "positions": ['
-                     % (pad, _scalar(group["template"])))
+        # A group's own placement nudge -- Alien 8's -- beside its template,
+        # the way room_model.js writes it.
+        nudge = (', "nudge": %s' % _scalar(group["nudge"])) if group.get("nudge") else ""
+        lines.append('%s   { "template": %s%s, "positions": ['
+                     % (pad, _scalar(group["template"]), nudge))
         for j, spot in enumerate(spots):
             lines.append('%s    %s%s' % (pad, _flat(spot),
                                          "," if j < len(spots) - 1 else ""))

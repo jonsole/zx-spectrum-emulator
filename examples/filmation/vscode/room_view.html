@@ -267,7 +267,8 @@
   // room_render's project(); the floor grid below is the designer's own
   // overlay and nothing draws it, so it uses the unwrapped 296 and gets a
   // continuous diamond instead of one that folds at the far corner.
-  const TRUE_Y_ORIGIN = 296;
+  // The castle's own, from rules.yOrigin: 296 unless it says (Alien 8's 232).
+  function trueYOrigin() { return rulesOf(atlas).yOrigin; }
 
   // The undo stack, which only exists when the host has none of its own. In
   // the editor every change is a WorkspaceEdit and undo is the text editor's,
@@ -415,7 +416,7 @@
 
   // A world point on the floor, unwrapped. See TRUE_Y_ORIGIN.
   function floorPoint(u, v, z) {
-    return { x: u + v - WORLD_X_ORIGIN, y: TRUE_Y_ORIGIN - (((v - u + WORLD_V_BIAS) >> 1) + z) };
+    return { x: u + v - WORLD_X_ORIGIN, y: trueYOrigin() - (((v - u + WORLD_V_BIAS) >> 1) + z) };
   }
 
   // The four corners of one cell, at a height. A cell is CELL units across and
@@ -480,7 +481,7 @@
     // here too, and depth_insert sorts them against the furniture exactly as
     // the game will.
     for (const piece of collectablePieces()) pieces.push(piece);
-    lastDrawList = drawList(pieces, index, adj);
+    lastDrawList = drawList(pieces, index, adj, rulesOf(atlas).yOrigin);
 
     // Anything nearer than the selected object is drawn see-through, so the
     // thing being moved is not lost behind it. The list is furthest first, so
@@ -787,7 +788,7 @@
       // sixteen grid, with north a row on. So it is laid out as the castle,
       // north at the top. Pentagram's numbers mean nothing of the sort -- its
       // map is the destination bytes -- so they are simply listed in order.
-      const grid = game === 'knightlore';
+      const grid = rulesOf(atlas).exits === 'grid';
       el.grid.style.gridTemplateColumns = 'repeat(' + (grid ? 16 : 12) + ', 1fr)';
       el.mapnote.textContent = grid ? '16 x 16, north up' : atlas.rooms.length + ' rooms';
 
@@ -934,7 +935,7 @@
     // Knight Lore's numbers are places on the map, so a room is added by
     // clicking where it goes and a box to type one in would say it twice. A
     // castle whose numbers are not places keeps the box.
-    if (!(gameOf(atlas) === 'knightlore' && rulesOf(atlas).exits !== 'table')) renderNumberAdder();
+    if (rulesOf(atlas).exits !== 'grid') renderNumberAdder();
 
     const row = document.createElement('div');
     row.className = 'actions';
@@ -1432,6 +1433,31 @@
                           (entries ? ' × ' + entries.length + ' sprite' +
                                      (entries.length === 1 ? '' : 's') : '');
       head.appendChild(count);
+
+      // Alien 8 raises the groups after a header by its nudge byte, and the
+      // castle keeps it on each group. The raise is the byte less its two low
+      // bits, which move a group half a cell and are kept as they are.
+      if (rulesOf(atlas).groupNudge) {
+        const label = document.createElement('label');
+        label.className = 'dim';
+        label.textContent = 'raise ';
+        label.title = 'units up, in fours: the placement nudge Alien 8 sets for the groups after a header';
+        const raise = document.createElement('input');
+        raise.type = 'number';
+        raise.min = 0;
+        raise.max = 252;
+        raise.step = 4;
+        raise.value = (group.nudge || 0) & Z_MASK;
+        raise.addEventListener('change', function () {
+          const units = Math.max(0, Math.min(252, Math.round((Number(raise.value) || 0) / 4) * 4));
+          const byte = ((group.nudge || 0) & 3) | units;
+          if (byte) group.nudge = byte;
+          else delete group.nudge;
+          changed('nudge');
+        });
+        label.appendChild(raise);
+        head.appendChild(label);
+      }
       block.appendChild(head);
 
       const spots = document.createElement('div');
@@ -1514,7 +1540,7 @@
       objects: scenery ? [] : [{ template: templateName, positions: [{ u: 3, v: 3, z: 0 }] }]
     };
     const items = drawList(expandRoom(atlas, ghost, numbers, boxes),
-                           index, adj)
+                           index, adj, rulesOf(atlas).yOrigin)
       .filter(function (item) { return item.sprite; });
 
     const what = document.createElement('div');

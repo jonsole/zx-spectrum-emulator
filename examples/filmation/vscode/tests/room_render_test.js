@@ -82,6 +82,18 @@ function box(u, v, z, sizeU, sizeV, sizeZ) {
 //
 // all in eight bits. The numbers below are that arithmetic done by hand.
 
+test('project: Alien 8\u2019s origin with its floor at 64 draws where Knight Lore\u2019s does at 128', function () {
+  // Knight Lore subtracts 104 from the game's upward Y, Alien 8 40 with its
+  // floor 64 lower: the same rows, so an origin 64 less gives the same
+  // picture for pieces 64 lower. 296 is the default, and 40 the same byte.
+  for (const [u, v, z] of [[128, 128, 128], [72, 184, 140], [200, 60, 176]]) {
+    const kl = r.project({ u: u, v: v, z: z }, { x: -12, y: -5 });
+    assert.deepStrictEqual(r.project({ u: u, v: v, z: z }, { x: -12, y: -5 }, 296), kl);
+    assert.deepStrictEqual(r.project({ u: u, v: v, z: z - 64 }, { x: -12, y: -5 }, 232), kl);
+    assert.deepStrictEqual(r.floorPoint(u, v, z - 64, 232), r.floorPoint(u, v, z));
+  }
+});
+
 test('project: the middle of the floor', function () {
   // U 128, V 128, Z 128, no nudge.
   //   x = 128 + 128 - 128 = 128

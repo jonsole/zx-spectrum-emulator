@@ -1,9 +1,9 @@
 {
  "$schema": "http://json-schema.org/draft-07/schema#",
- "title": "Knight Lore collectables",
- "description": "Where each of the thirty-two collectables lies when a game starts, and the order the wizard asks for them in. specials_source.py turns this into specials_gen.s, which knightlore.s INCLUDEs.",
+ "title": "Collectables",
+ "description": "Where each collectable lies when a game starts -- Knight Lore's thirty-two, and the order the wizard asks for them in; or Alien 8's thirty-six places a valve can lie, with no wizard. For Knight Lore's remake specials_source.py turns this into specials_gen.s, which knightlore.s INCLUDEs.",
  "type": "object",
- "required": ["collectables", "wanted"],
+ "required": ["collectables"],
  "properties": {
   "comment": {
    "type": "string",
@@ -15,7 +15,12 @@
   },
   "game": {
    "type": "string",
-   "description": "Which game this belongs to. Only Knight Lore has a collectables table."
+   "description": "Which game this belongs to: Knight Lore, or Alien 8, whose valves lie in the same kind of table."
+  },
+  "rows": {
+   "type": "integer",
+   "minimum": 1,
+   "description": "How many rows the game's table has, where it is not Knight Lore's 32: Alien 8's is 36."
   },
   "collectables": {
    "type": "array",

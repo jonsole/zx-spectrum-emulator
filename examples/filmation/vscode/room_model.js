@@ -412,6 +412,7 @@ function roomLines(room, indent) {
   objects.forEach(function (group, i) {
     const spots = group.positions || [];
     lines.push(indent + '   { "template": ' + scalar(group.template) +
+               (group.nudge ? ', "nudge": ' + scalar(group.nudge) : '') +
                ', "positions": [');
     spots.forEach(function (spot, j) {
       lines.push(indent + '    ' + flat(spot) + (j < spots.length - 1 ? ',' : ''));
@@ -452,6 +453,7 @@ function gameOf(atlas) {
 // What to call a game in a panel's title. A game not listed is called by the
 // directory name its meta gives, which is at least what it is.
 const GAME_TITLES = {
+  alien8: 'Alien 8',
   knightlore: 'Knight Lore',
   knightlore128: 'Knight Lore 128K',
   pentagram: 'Pentagram'
@@ -528,8 +530,14 @@ function pieceFromBlock(block, numbers, sizes, templateName, index) {
 // half a cell along U or V, and a raise in Z, which is the template's and so
 // moves every object drawn from it.
 function pieceFromEntry(entry, position, floorZ, numbers, sizes,
-                        templateName, index) {
-  const nudge = entry.offsets || {};
+                        templateName, index, groupNudge) {
+  // A group's own nudge -- Alien 8's, set by the header before it -- adds to
+  // the template's, the way the builder adds PLACE_NUDGE: bit 0 half a cell in
+  // U, bit 1 in V, the rest to Z.
+  const own = entry.offsets || {};
+  const g = groupNudge || 0;
+  const nudge = { halfU: Boolean(own.halfU) || Boolean(g & 1), halfV: Boolean(own.halfV) || Boolean(g & 2),
+                  raiseZ: (own.raiseZ || 0) + (g & Z_MASK) };
   const box = boxOf(sizes, entry) || { u: 0, v: 0, z: 0 };
   const u = position.u * CELL + (nudge.halfU ? HALF_CELL : 0) + CELL_ORIGIN;
   const v = position.v * CELL + (nudge.halfV ? HALF_CELL : 0) + CELL_ORIGIN;
@@ -700,7 +708,7 @@ function expandRoom(atlas, room, numbers, sizes) {
     group.positions.forEach(function (position, slot) {
       template.forEach(function (entry, i) {
         const piece = pieceFromEntry(entry, position, floorZ, numbers,
-                                     sizes, group.template, i);
+                                     sizes, group.template, i, group.nudge);
         if (piece.graphic < FIRST_REAL_GRAPHIC) return;
         piece.background = false;
         piece.ref = refIndex;
@@ -787,7 +795,19 @@ function rulesOf(atlas) {
     // How many floor shapes the attribute byte can name. The remakes' builders
     // keep the shape in bits 3 and 4, beside the scenery count, so four; the
     // original Knight Lore reads bits 3 to 7, and its castle says 32.
-    shapeLimit: isByte(said.shapeLimit) && said.shapeLimit > 0 ? said.shapeLimit : SHAPE_LIMIT
+    shapeLimit: isByte(said.shapeLimit) && said.shapeLimit > 0 ? said.shapeLimit : SHAPE_LIMIT,
+    // The projection's Y origin, unwrapped: 296 unless the castle says, and
+    // 232 for Alien 8's (room_render.js's project() says why).
+    yOrigin: Number.isInteger(said.yOrigin) && said.yOrigin >= 0 && said.yOrigin < 512 ? said.yOrigin : 296,
+    // Where the player starts, whichever starting room: Knight Lore's and
+    // Pentagram's middle of the floor unless the castle says.
+    startSpot: validSpot(said.startSpot) ? said.startSpot : START_SPOT,
+    // Whether an object group may carry a placement nudge of its own -- Alien
+    // 8's rooms set one with a header of template 0 for the groups after it.
+    groupNudge: said.groupNudge === true,
+    // How many object templates the castle may have, when its builder says.
+    objectTemplateLimit: Number.isInteger(said.objectTemplateLimit) && said.objectTemplateLimit > 0
+      ? said.objectTemplateLimit : null
   };
 }
 
@@ -1598,7 +1618,9 @@ const TEMPLATE_LIMIT = { sceneryTemplates: 255, objectTemplates: 32 };
 // ...and for a particular castle: one whose groups start with two bytes
 // (meta.rules.groupBytes) gives the template a byte of its own, so 255.
 function templateLimit(atlas, group) {
-  if (group === 'objectTemplates' && rulesOf(atlas).groupBytes === 2) return 255;
+  const rules = rulesOf(atlas);
+  if (group === 'objectTemplates' && rules.objectTemplateLimit !== null) return rules.objectTemplateLimit;
+  if (group === 'objectTemplates' && rules.groupBytes === 2) return 255;
   return TEMPLATE_LIMIT[group];
 }
 
@@ -1762,12 +1784,18 @@ function roomsUsing(atlas, name) {
 // starting room needs that box empty.
 const START_SPOT = { u: 0x80, v: 0x80, z: 0x80, sizeU: 5, sizeV: 5, sizeZ: 0x17 };
 
+function validSpot(spot) {
+  return Boolean(spot) && ['u', 'v', 'z', 'sizeU', 'sizeV', 'sizeZ'].every(function (k) {
+    return isByte(spot[k]);
+  });
+}
+
 // The pieces of a room that stand in START_SPOT: any it collides with, which
 // leaves out a passable one. A box is half-widths along U and V from the
 // piece's centre, and a height up from its Z.
 function startBlockers(atlas, room, numbers, sizes) {
   const templates = { scenery: byName(atlas.sceneryTemplates), object: byName(atlas.objectTemplates) };
-  const s = START_SPOT;
+  const s = rulesOf(atlas).startSpot;
   return expandRoom(atlas, room, numbers, sizes).filter(function (p) {
     const entry = ((templates[p.kind].get(p.template)) || [])[p.entry] || {};
     if (entry.flags && entry.flags.passable) return false;

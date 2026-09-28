@@ -75,6 +75,32 @@
        "maximum": 32,
        "description": "The most floor shapes a room can name. Without it, 4: the remakes' builders keep the shape in bits 3 and 4 of the attribute byte. The original Knight Lore reads bits 3 to 7, and its castle says 32."
       },
+      "yOrigin": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 511,
+       "description": "The projection's Y origin, unwrapped: the screen row a point is drawn on is this less half its V less U, plus 64, and its Z. Without it, 296 -- 40 and a whole byte -- which is Knight Lore's and Pentagram's, whose projections subtract 104. Alien 8's subtracts 40 with its floor 64 lower, and says 232."
+      },
+      "startSpot": {
+       "type": "object",
+       "required": ["u", "v", "z", "sizeU", "sizeV", "sizeZ"],
+       "description": "Where the player is put when a game starts, whichever starting room: a starting room needs this box clear. Without it, Knight Lore's and Pentagram's -- the middle of a floor at 128, 5 either way and 23 high. Alien 8's robot starts on a floor at 64, 7 either way.",
+       "properties": {
+        "u": {"$ref": "#/definitions/byte"}, "v": {"$ref": "#/definitions/byte"}, "z": {"$ref": "#/definitions/byte"},
+        "sizeU": {"$ref": "#/definitions/byte"}, "sizeV": {"$ref": "#/definitions/byte"}, "sizeZ": {"$ref": "#/definitions/byte"}
+       },
+       "additionalProperties": false
+      },
+      "groupNudge": {
+       "type": "boolean",
+       "description": "true: an object group may carry a placement nudge of its own (its `nudge`), as Alien 8's rooms set one for the groups after a header."
+      },
+      "objectTemplateLimit": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 255,
+       "description": "The most object templates the castle may have: 32 for the original Knight Lore, 31 for Pentagram, 60 for Alien 8's two pages."
+      },
       "poolLimit": {
        "type": "integer",
        "minimum": 1,
@@ -199,6 +225,10 @@
         "template": {
          "type": "string",
          "description": "A name from objectTemplates."
+        },
+        "nudge": {
+         "$ref": "#/definitions/byte",
+         "description": "Alien 8's placement nudge for this group, where the castle's rules say groupNudge: bit 0 moves it half a cell along U, bit 1 along V, and the rest raises it. The game sets it with a header of template 0 before the group; nothing here when it is 0."
         },
         "positions": {
          "type": "array",

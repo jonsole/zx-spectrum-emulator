@@ -158,15 +158,18 @@ function setWanted(said, at, kind) {
 function checkSpecials(said, atlas) {
   const problems = [];
   const list = collectablesOf(said);
+  // A file can say how many rows its game's table has -- Alien 8's places are
+  // 36 -- and without it the table is Knight Lore's 32.
+  const rows = said && Number.isInteger(said.rows) ? said.rows : ROWS;
 
-  if (list.length !== ROWS) {
-    problems.push('There are ' + list.length + ' collectables, not ' + ROWS +
-                  '. special_init copies the table in one LDIR, so it is a ' +
-                  'fixed ' + ROWS + ' rows and the build will stop.');
+  if (list.length !== rows) {
+    problems.push('There are ' + list.length + ' collectables, not ' + rows +
+                  '. The game\u2019s table is a fixed ' + rows + ' rows, and the build will stop.');
   }
 
+  // Only a game with a wizard has a wanted list: Alien 8's valves have none.
   const wanted = wantedOf(said);
-  if (wanted.length !== WANTED) {
+  if (said && said.wanted !== undefined && wanted.length !== WANTED) {
     problems.push('The wizard asks for ' + wanted.length + ', not ' + WANTED +
                   '. SPECIAL_WANTED in the game is ' + WANTED + ', and he would ' +
                   'read off the end of his own list.');

@@ -746,6 +746,26 @@ test('the Shapes tab edits, adds and deletes the castle’s floor shapes', () =>
   assert.deepStrictEqual(Object.keys(saved.roomDimensions), ['square', 'narrowU', 'narrowV']);
 });
 
+test('a grid castle not Knight Lore’s gets the grid map, and one with group nudges a raise to edit', () => {
+  // Alien 8's castle is Knight Lore's grid with nudged groups; its snapshot is
+  // not committed, so Knight Lore's castle stands in, told it is one.
+  const boot = bootFor('knightlore', 0);
+  boot.atlas.meta.game = 'alien8';
+  boot.atlas.meta.rules = { groupNudge: true };
+  const page = open(boot);
+  assert.strictEqual(page.dom.byId.mapnote.textContent, '16 x 16, north up');
+  assert.ok(/Alien 8 rooms/.test(page.dom.byId.title.textContent));
+  // No number box: the squares are the numbers.
+  assert.strictEqual(nodesIn(page.dom.byId.addroom).filter((n) => n.tagName === 'INPUT').length, 0);
+  const raises = nodesIn(page.dom.byId.panel).filter((n) => n.tagName === 'INPUT' && n.type === 'number');
+  assert.strictEqual(raises.length, boot.atlas.rooms[0].objects.length);
+  raises[0].value = '48';
+  listenerOn(page.dom, raises[0], 'change')();
+  const saved = JSON.parse(page.sandbox.window.__saved);
+  assert.strictEqual(page.sandbox.window.__what, 'nudge');
+  assert.strictEqual(saved.rooms[0].objects[0].nudge, 48);
+});
+
 test('a castle that lists no starting rooms shows none', () => {
   const page = open(bootFor('knightlore', 0));
   assert.strictEqual(page.dom.byId.starts.children.length, 0);
