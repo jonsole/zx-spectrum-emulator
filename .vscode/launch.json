@@ -71,16 +71,19 @@
       "preLaunchTask": "knightlore128.build"
     },
     {
-      // Fairlight, reassembled on every launch from the disassembly in the
-      // game-disassemblies submodule -- run its build script once after a
-      // fresh clone, since it fetches what it needs from the network.
+      // Fairlight, reassembled on every launch from Ville Krumlinde's
+      // disassembly (build_fairlight_krumlinde.py in the game-disassemblies
+      // submodule) -- run its build script once after a fresh clone, since
+      // it fetches what it needs from the network. The project's own
+      // disassembly from the tape is build_fairlight.py, into
+      // game_disassembly/fairlight/.
       "name": "ZX Spectrum: Fairlight",
       "type": "zxspectrum",
       "request": "launch",
       "rom": "${workspaceFolder}/roms/48.rom",
-      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sna",
-      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.sld",
-      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight/fairlight.asm",
+      "snapshot": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight_krumlinde/fairlight.sna",
+      "sld": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight_krumlinde/fairlight.sld",
+      "asm": "${workspaceFolder}/game-disassemblies/game_disassembly/fairlight_krumlinde/fairlight.asm",
       "preLaunchTask": "fairlight.build"
     },
     {
