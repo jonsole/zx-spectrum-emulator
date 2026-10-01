@@ -1,22 +1,21 @@
 ; ---------------------------------------------------------------------------
 ; The end of the game -- game_over at $BA22 and what it prints.
 ;
-; Three things finish a game: the last life lost, the fortieth day, and the
-; wizard getting everything he asked for. Whichever it was, the screen goes
-; black and the game says how it went -- the day it ended on, how much of the
-; quest was finished, how many charms went into the pot, and what it makes of
-; that -- and waits for a key before starting again.
+; For now one thing finishes a game: the last life lost. The screen goes black
+; and the game says how it went -- how much of the castle he saw, and what it
+; makes of that -- and waits for a key before starting again. Knight Lore's
+; screen also has the day it ended on and the charms in the pot, and a verse
+; when the wizard has them all; this game has neither clock nor pot, and its
+; own quest and ending are stage 8 of README.md.
 ;
-; The percentage is the game's own sum, calc_and_display_percent: every room
-; seen counts one and every charm two, against all the rooms (ROOM_COUNT --
-; Knight Lore's 128) and 14 charms, so the two together make 100%. The rooms
-; come out of a bitmap marked as each is built. Exploring counts for as much as
-; collecting.
+; The percentage is Knight Lore's own sum, calc_and_display_percent, less the
+; charms: every room seen counts one, against all the rooms (ROOM_COUNT). The
+; rooms come out of a bitmap marked as each is built.
 ;
 ; The words are the game's, character codes and all: our font is its font, so
 ; a code is its own index. The colours and the places are its too.
 
-END_LINES           EQU     6
+END_LINES           EQU     4
 END_RATING_ATTR     EQU     $42
 END_ROOMS           EQU     32                  ; a bit a room, 256 of them
 
@@ -24,72 +23,39 @@ END_ROOMS           EQU     32                  ; a bit a room, 256 of them
 ; the last of them carrying bit 7.
 end_lines:          DB      $47, 4, 11
                     DB      $10,$0A,$16,$0E,$26,$26,$18,$1F,$0E,$1B + $80
-                    DB      $46, 8, 10          ; GAME  OVER
-                    DB      $1D,$12,$16,$0E,$26,$26,$26,$26,$0D,$0A,$22,$1C + $80
-                    DB      $45, 10, 6          ; TIME    DAYS
+                    DB      $45, 10, 6          ; GAME  OVER
                     DB      $19,$0E,$1B,$0C,$0E,$17,$1D,$0A,$10,$0E,$26,$18,$0F,$26
                     DB      $1A,$1E,$0E,$1C,$1D + $80
                     DB      $45, 12, 8          ; PERCENTAGE OF QUEST
                     DB      $0C,$18,$16,$19,$15,$0E,$1D,$0E,$0D,$26,$26,$26,$26,$26
                     DB      $27 + $80
-                    DB      $43, 14, 6          ; COMPLETED     %
-                    DB      $0C,$11,$0A,$1B,$16,$1C,$26,$0C,$18,$15,$15,$0E,$0C,$1D
-                    DB      $0E,$0D,$26,$26,$26 + $80
-                    DB      $44, 17, 9          ; CHARMS COLLECTED
+                    DB      $44, 17, 9          ; COMPLETED     %
                     DB      $18,$1F,$0E,$1B,$0A,$15,$15,$26,$1B,$0A,$1D,$12,$17,$10 + $80
                                                 ; OVERALL RATING
 
-; What it makes of the game: which quarter of the castle he saw, and whether
-; the wizard ever had everything. The game's own words, in its own order.
+; What it makes of the game: which quarter of the castle he saw. Knight Lore's
+; own words, in its own order; its other four, for when the wizard had
+; everything, are not this game's.
 end_ratings_at:     DB      end_ratings.poor - end_ratings
                     DB      end_ratings.average - end_ratings
                     DB      end_ratings.fair - end_ratings
                     DB      end_ratings.good - end_ratings
-                    DB      end_ratings.excellent - end_ratings
-                    DB      end_ratings.marvellous - end_ratings
-                    DB      end_ratings.hero - end_ratings
-                    DB      end_ratings.adventurer - end_ratings
 end_ratings:
 .poor:              DB      $26,$26,$26,$19,$18,$18,$1B + $80
 .average:           DB      $26,$0A,$1F,$0E,$1B,$0A,$10,$0E + $80
 .fair:              DB      $26,$26,$26,$0F,$0A,$12,$1B + $80
 .good:              DB      $26,$26,$26,$10,$18,$18,$0D + $80
-.excellent:         DB      $0E,$21,$0C,$0E,$15,$15,$0E,$17,$1D + $80
-.marvellous:        DB      $16,$0A,$1B,$1F,$0E,$15,$15,$18,$1E,$1C + $80
-.hero:              DB      $26,$26,$26,$11,$0E,$1B,$18 + $80
-.adventurer:        DB      $0A,$0D,$1F,$0E,$17,$1D,$1E,$1B,$0E,$1B + $80
 
-; And what it says when the wizard has everything -- game_complete_msg, which
-; the game shows before the same tally.
-END_VERSE_LINES     EQU     6
-end_verse:          DB      $47, 7, 8
-                    DB      $1D,$11,$0E,$26,$19,$18,$1D,$12,$18,$17,$26,$0C,$0A,$1C
-                    DB      $1D,$1C + $80       ; THE POTION CASTS
-                    DB      $46, 9, 8
-                    DB      $12,$1D,$1C,$26,$16,$0A,$10,$12,$0C,$26,$1C,$1D,$1B,$18
-                    DB      $17,$10 + $80       ; ITS MAGIC STRONG
-                    DB      $45, 11, 6
-                    DB      $0A,$15,$15,$26,$0E,$1F,$12,$15,$26,$16,$1E,$1C,$1D,$26
-                    DB      $0B,$0E,$20,$0A,$1B,$0E + $80   ; ALL EVIL MUST BEWARE
-                    DB      $44, 13, 6
-                    DB      $1D,$11,$0E,$26,$1C,$19,$0E,$15,$15,$26,$11,$0A,$1C,$26
-                    DB      $0B,$1B,$18,$14,$0E,$17 + $80   ; THE SPELL HAS BROKEN
-                    DB      $43, 15, 10
-                    DB      $22,$18,$1E,$26,$0A,$1B,$0E,$26,$0F,$1B,$0E,$0E + $80
-                    DB      $42, 17, 6          ; YOU ARE FREE
-                    DB      $10,$18,$26,$0F,$18,$1B,$1D,$11,$26,$1D,$18,$26,$16,$12
-                    DB      $1B,$0E,$26,$16,$0A,$1B,$0E + $80   ; GO FORTH TO MIRE MARE
 
-; The two tunes, and the notes they and the menu's need. A note is its number
+; The tune, and the notes it and the menu's need. A note is its number
 ; in bits 0 to 5 and how long to hold it in 6 and 7; the game's frequency table
 ; has an entry for every note in five octaves, and these are the fifteen the
 ; three tunes play -- the half period to count out, and how many of them a
-; beat is. The menu's own notes are in menu.s, with the menu.
+; beat is. Knight Lore's second tune, for the end of the quest, is left out
+; with its notes still here. The menu's own notes are in menu.s, with the menu.
 tune_over:          DB      $2E,$17,$27,$17,$2E,$17,$27,$17,$2C,$19,$27,$19,$2C,$19
                     DB      $27,$19,$2A,$1B,$27,$1B,$2A,$1B,$27,$1B,$2A,$1B,$27,$1B
                     DB      $2A,$1B,$27,$1B,$FF
-tune_complete:      DB      $1B,$1D,$1E,$1B,$1D,$1E,$20,$1D,$1E,$20,$22,$1E,$1D,$1E
-                    DB      $20,$1D,$1B,$1D,$1E,$1B,$1A,$1B,$1D,$1A,$9B,$FF
 
 TUNE_NOTES          EQU     17
 tune_notes:         DB      $14
@@ -186,32 +152,10 @@ room_seen:          ld      c,a
 ; Corrupts: everything
 game_over:          di
                     ld      sp,STACK_TOP
-
-                    ; The spell broken, first, if he broke it.
-                    ld      a,(special_count)
-                    cp      SPECIAL_WANTED
-                    jr      c,.tally
-                    ld      hl,end_verse
-                    ld      b,END_VERSE_LINES
-                    ld      c,0                 ; on black
-                    call    end_show
-                    ld      de,tune_complete    ; all of it, as the game plays
-                    call    tune_play_all       ; it: no key cuts this one
-                    call    end_pause
-
-.tally:             ld      hl,end_lines
+                    ld      hl,end_lines
                     ld      b,END_LINES
                     ld      c,0
                     call    end_show
-
-                    ld      a,(days)            ; the day it ended on
-                    ld      de,8 * 256 + 15
-                    call    end_number
-                    ld      a,(special_count)   ; and the charms in the pot
-                    call    end_bcd
-                    ld      de,14 * 256 + 23
-                    call    end_number
-
                     call    end_percent
                     call    end_rating
 
@@ -376,27 +320,15 @@ end_number:         push    af
                     jp      print_hex
 
 
-; Ten or more of the charms, in BCD, as the game turns them at $BA72.
-;
-; In:  A = the count, up to 19
-; Out: A = the count in BCD
-; Corrupts: F
-end_bcd:            cp      10
-                    ret     c
-                    sub     10
-                    or      $10
-                    ret
-
-
-; The percentage of the quest -- calc_and_display_percent. Knight Lore adds
-; $A41A for each room seen and two for each charm: in sixteen bits, a
+; The percentage of the castle seen -- calc_and_display_percent. Knight Lore
+; adds $A41A for each room seen and two for each charm: in sixteen bits, a
 ; hundredth of the 156 that its 128 rooms and fourteen charms add up to,
 ; carried into A in BCD as it goes. The $28 at the end is what rounds the last
-; of them up to 100. Both come from END_TOTAL here, so they follow the castle
-; as it grows; for 128 rooms they are Knight Lore's own.
+; of them up to 100. Here there are no charms, and both come from END_TOTAL,
+; so they follow the castle as it grows.
 ;
-; E counts rooms and charms together, so the total has to fit a byte.
-END_TOTAL           EQU     ROOM_COUNT + 2 * SPECIAL_WANTED
+; E counts the rooms, so the total has to fit a byte.
+END_TOTAL           EQU     ROOM_COUNT
 END_STEP            EQU     6553600 / END_TOTAL                 ; a 65536th of a whole
 END_ROUND           EQU     6553600 - END_TOTAL * END_STEP      ; what the last falls short by
                     ASSERT  END_TOTAL < 256
@@ -405,10 +337,6 @@ END_ROUND           EQU     6553600 - END_TOTAL * END_STEP      ; what the last 
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL
 end_percent:        call    end_seen
-                    ld      a,(special_count)
-                    add     a,a
-                    add     a,e
-                    ld      e,a
                     ld      bc,END_STEP
                     ld      hl,0
                     xor     a
@@ -433,8 +361,7 @@ end_percent:        call    end_seen
                     jp      end_number
 
 
-; What it makes of it: the quarter of the castle he saw, and whether the wizard
-; ever had everything. Knight Lore took the quarter as the count over 32, which
+; What it makes of it: the quarter of the castle he saw. Knight Lore took the quarter as the count over 32, which
 ; is a quarter of its 128 rooms; this compares with the quarters of
 ; ROOM_COUNT, which comes to the same for 128.
 ;
@@ -453,13 +380,7 @@ end_rating:         call    end_seen
                     cp      ROOM_COUNT * 3 / 4
                     jr      c,.quarter
                     inc     c
-.quarter:
-                    ld      a,(special_count)
-                    cp      SPECIAL_WANTED
-                    ld      a,c
-                    jr      c,.words
-                    add     a,4
-.words:             ld      e,a
+.quarter:           ld      e,c
                     ld      d,0
                     ld      hl,end_ratings_at
                     add     hl,de

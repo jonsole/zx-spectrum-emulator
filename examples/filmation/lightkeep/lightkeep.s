@@ -135,14 +135,6 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
                     INCLUDE "busy.s"            ; its numbers, then the engine's own
                     INCLUDE "../engine/busy.s"
 
-; The sun and the moon in their window. They move when the clock ticks, one turn
-; in eight, and are redrawn when a redraw reaches the window -- not every turn,
-; so this is where they went when Pentagram's movers filled bank 2.
-                    INCLUDE "sun.s"
-
-; What falls out of the sky, Pentagram's -- once a turn, and mostly a countdown.
-                    INCLUDE "flyers.s"
-
 room_data_end:
                     ; The menu and the end screens follow on from here -- see
                     ; cold_start, below the code.
@@ -306,7 +298,7 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms_source.py works out while generating room_data.s.
 ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
-POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS + EXTRA_SLOTS   ; flyers.s's
+POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS
                     ALIGN   32
 room_objects:
                 REPT    POOL_SLOTS
@@ -316,10 +308,9 @@ room_objects:
                     ; object_record lays down only the first twenty bytes of a
                     ; record, and the ALIGN in front of the next one is what gives
                     ; it the rest. The last one has no next one: without this its
-                    ; last twelve bytes were whatever came after the pool -- which
-                    ; is day_step -- and the fullest room's second collectable slot
-                    ; is that record. Blanking it zeroed two of day_step's operands,
-                    ; and the sun never moved again.
+                    ; last twelve bytes were whatever came after the pool, and in
+                    ; Knight Lore 128K blanking the fullest room's second
+                    ; collectable slot zeroed two of the day clock's operands.
                     ALIGN   32
                     ASSERT  $ == room_objects + POOL_SLOTS * ROOM_STRIDE
 
@@ -331,8 +322,6 @@ room_objects:
 ;
 ; sprite_table is read as `ld h,(high sprite_table)/2 / ld l,a / add hl,hl`, so
 ; its page has to be even: a 512 boundary, not merely a 256 one.
-                    INCLUDE "clock.s"
-
                     ALIGN   256
 ; Every byte with its bits the other way round, for mirroring a sprite. Knight
 ; Lore keeps the same table at $F100 and reaches it exactly this way, with the

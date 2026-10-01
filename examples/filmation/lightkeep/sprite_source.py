@@ -156,19 +156,6 @@ def emit_bitmaps(sprites, animated, resident, entries_by_asm):
     out.append("\t\t\tDB\t0,1")
     out.append("\t\t\tDB\t0b11111111,0b00000000,0b11111111,0b00000000 ;" + "  " * 16)
 
-    # A header the size of the largest thing that falls from the sky: flyers.s
-    # hands it to shift_alloc, which reads only a record's first two bytes, to
-    # size the one rotation buffer a flyer's slot keeps -- the flyers' own
-    # sprites are in the library, and not in the page when a room starts.
-    sky = [n for n, e in enumerate(sprites)
-           if group_of(entries_by_asm[e["name"]]) in game.SKY_GROUPS]
-    widest = max(sprites[n]["w"] for n in sky)
-    tallest = max(sprites[n]["h"] for n in sky)
-    out.append("\t\t\tALIGN 4")
-    out.append("sprite_sky_largest:\t\t; %d bytes by %d rows: no picture, only the size"
-               % (widest, tallest))
-    out.append("\t\t\tDB\t{},{}".format((widest - 2) * 16 | 0x80, tallest))
-
     # What a graphic draws when its sprite is in the library and the room
     # being played has not loaded it: a checked square, two bytes by eight
     # rows, so that a graphic the rules in sprite_sheet.py missed shows as
@@ -397,8 +384,6 @@ def split(entries, drawn):
     for n, entry in enumerate(entries):
         if n not in drawn or entry["name"].split(".")[0] not in game.ROOM_GROUPS:
             continue
-        if group_of(entry["name"]) in game.RESIDENT_GROUPS:
-            continue
         library.append(n)
     return library
 
@@ -427,9 +412,6 @@ def room_loads(atlas, entries, facts, library):
             n = gmap[number_of[graphic]] if graphic in number_of else None
             if n in in_library:
                 wanted.update(groups[group_of(entries[n]["name"])])
-        if room.get("sky"):
-            for group in game.SKY_GROUPS:
-                wanted.update(groups.get(group, ()))
         loads[room["number"]] = [n for n in library if n in wanted]
     return loads
 

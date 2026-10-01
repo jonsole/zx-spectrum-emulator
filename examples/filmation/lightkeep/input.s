@@ -35,7 +35,7 @@ INPUT_FORWARD       EQU     1 << INPUT_FORWARD_B
 INPUT_JUMP          EQU     1 << INPUT_JUMP_B
 INPUT_PICKUP        EQU     1 << INPUT_PICKUP_B
 INPUT_PICKUP_DIR    EQU     1 << 5
-INPUT_FIRE_B        EQU     6                   ; his bolt: see player_fire
+INPUT_FIRE_B        EQU     6                   ; nothing yet: the sword, at stage 7
 INPUT_FIRE          EQU     1 << INPUT_FIRE_B
 
 ; The keyboard's half-rows. Knight Lore takes whole rows rather than single

@@ -39,6 +39,5 @@ monster_movers:     DW      mover_pacer_u, mover_pacer_v, mover_pacer_pair
                     DW      mover_circuit_pair, mover_drifter, mover_hunter
                     DW      mover_spike_ball
                     DW      mover_scuttler, mover_roamer        ; Pentagram's
-                    DW      mover_pacer_u, mover_pacer_v        ; ...dragons
-                    DW      mover_faller, mover_faller4         ; ...and fallers
+                    DW      mover_pacer_u, mover_pacer_v        ; ...and dragons
                     ASSERT  ($ - monster_movers) / 2 == MOVE_MONSTER_LAST - MOVE_FIRE_U + 1

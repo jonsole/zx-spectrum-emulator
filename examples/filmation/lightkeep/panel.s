@@ -1,14 +1,15 @@
 ; ---------------------------------------------------------------------------
-; The status panel -- display_panel, display_day, print_lives_gfx and
-; colour_panel, which the game draws every time it shows a room.
+; The status panel -- display_panel, print_lives_gfx and colour_panel, which
+; Knight Lore draws every time it shows a room.
 ;
 ; It is a scroll along the bottom of the screen: a chain of links running down
 ; from each side to the middle, a bar up each edge, and a piece at the bottom
-; either side of the day; the knight's head beside the lives; a word over the
-; day number, in the room's colour turned round. The pieces are ordinary
-; graphics drawn straight onto the screen, as the carried objects are, and
-; their table is down with the room builder in panel_pieces. The two numbers
-; are print_room's, which prints them every turn.
+; either side of the middle; the knight's head beside the lives. Knight Lore
+; has the word DAYS and the day's number in the middle, and the sun and moon
+; in a window to the right; this game has no clock, and leaves both empty.
+; The pieces are ordinary graphics drawn straight onto the screen, as the
+; carried objects are, and their table is down with the room builder in
+; panel_pieces. The lives are print_room's, which prints them every turn.
 ;
 ; The room is drawn over the same rows, so a repaint that reaches a piece wipes
 ; it: redraw_view calls panel_redraw, which puts back only the pieces the
@@ -17,10 +18,6 @@
 
 PANEL_ROW           EQU     SCREEN_ROWS - 64    ; the highest any piece reaches
 
-; A character cell's top pixel row is at $4000 + third * 2048 + row within the
-; third * 32 + column -- the screen's own arrangement, see pixelAddress.
-DAYS_WORD_ROW       EQU     22                  ; four cells, over the day
-DAYS_WORD_COLUMN    EQU     14
 
 
 ; The whole panel.
@@ -95,36 +92,13 @@ panel_draw:         ld      (.region + 1),a
                     pop     bc
                     djnz    .piece
 
-                    ; The word over the day, in the room's colour turned round:
-                    ; display_day works it out as (2 - the colour) and 7.
-                    ld      a,(room_attr)
-                    cpl
-                    add     a,2
-                    and     7
-                    or      $40
-                    ld      hl,$5800 + DAYS_WORD_ROW * 32 + DAYS_WORD_COLUMN
-                    ld      bc,4 << 8 | 1
-                    call    sun_fill
-                    ld      hl,$4000 + (DAYS_WORD_ROW / 8) * 2048 + (DAYS_WORD_ROW % 8) * 32 + DAYS_WORD_COLUMN
-                    ld      de,panel_word
-                    ld      c,4
-.letter:            push    hl
-                    call    print_glyph
-                    pop     hl
-                    inc     hl
-                    dec     c
-                    jr      nz,.letter
-
-                    ; White for the day's number (print_days) and for the knight's
-                    ; head and the lives (print_lives_gfx). colour_panel's black
-                    ; either side of the sun is left out: nothing is drawn there.
+                    ; White for the knight's head and the lives
+                    ; (print_lives_gfx). colour_panel's black either side of the
+                    ; sun is left out: nothing is drawn there.
                     ld      a,$47
-                    ld      hl,$5800 + 23 * 32 + 15
-                    ld      bc,2 << 8 | 1
-                    call    sun_fill
                     ld      hl,$5800 + 18 * 32 + 2
                     ld      bc,2 << 8 | 1
-                    call    sun_fill
+                    call    attr_fill
                     ld      hl,$5800 + 19 * 32 + 2
                     ld      bc,4 << 8 | 1
-                    jp      sun_fill
+                    jp      attr_fill

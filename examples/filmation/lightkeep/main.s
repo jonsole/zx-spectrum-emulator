@@ -1,5 +1,5 @@
 ; ---------------------------------------------------------------------------
-; Knight Lore's main loop: the menu, a new game, and one turn after another.
+; The main loop: the menu, a new game, and one turn after another.
 ; ---------------------------------------------------------------------------
 
 ; Interrupts stay off for good. Every part of the drawing path repurposes
@@ -41,11 +41,6 @@ start:              di
                     ld      (player_state),a
                     xor     a
                     ld      (player_touched),a
-                    ld      (days),a
-                    ld      (night),a
-                    ld      (player_change),a
-                    ld      a,SUN_RISE
-                    ld      (sun_x),a
                     ld      a,PLAYER_LEGS_GFX
                     call    player_form
                     ld      ix,player
@@ -79,18 +74,16 @@ start:              di
                     ld      a,(enter_dir)       ; kept for starting the room over
                     ld      (entered_by),a
                     call    special_room_enter
-                    call    flyer_room_enter    ; the four slots for the sky and his bolts
                     call    player_add
 
                     ; The room is drawn, still black: now it appears, all at
-                    ; once. Then the carried objects and the panel, and the sun
-                    ; window on top as it always was -- drawn now rather than in
-                    ; the dark, so they are drawn once each: drawing a panel
-                    ; piece over itself is not harmless, since a data bit
-                    ; outside its mask XORs back off, as it does in the game.
+                    ; once. Then the carried objects and the panel -- drawn now
+                    ; rather than in the dark, so they are drawn once each:
+                    ; drawing a panel piece over itself is not harmless, since a
+                    ; data bit outside its mask XORs back off, as it does in
+                    ; Knight Lore.
                     call    room_paper
                     call    special_show
-                    call    sun_show_all
 
                     ; Poke room_number from the debugger and the castle turns
                     ; over. The 1 and 2 keys do it from the keyboard, in a
@@ -123,11 +116,8 @@ start:              di
                     ; step clear of him. The other way round, it moved before
                     ; he did, and he was drawn pressed up against it every turn,
                     ; his legs under its top.
-                    call    special_step
-                    call    flyer_step          ; something from the sky?
                     call    player_step
                     call    movers_step
-                    call    day_step
                     call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
                 IFDEF   DEBUG_ROOM

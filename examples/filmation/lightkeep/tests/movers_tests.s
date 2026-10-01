@@ -112,12 +112,7 @@ FG_PENTAGRAM_STONE_PUSHED	EQU	$33
 FG_CASTLE_TORCH				EQU	$34
 FG_CASTLE_TORCH_M			EQU	$35
 GFX_PENTAGRAM_BLOCK_4		EQU	222		; the crumbling block's last crack
-GFX_PENTAGRAM_BOLT_1		EQU	223		; the bolt's three frames
-GFX_PENTAGRAM_BOLT_3		EQU	225
-GFX_PENTAGRAM_PUFF_1		EQU	212		; the puff's first and last
-GFX_PENTAGRAM_PUFF_4_G218	EQU	218
 CHARACTER_BODY		EQU		ROOM_STRIDE		; as engine/walker.s has it
-FLYER_SLOTS			EQU		2			; as flyers.s has it
 
 
 ; Run a routine with IX -> REC, as movers_step leaves it, and keep what came
@@ -922,39 +917,6 @@ start:				ld		sp,$FE00
 					call	snap
 					EXPECT_CARRY	0, "carry: it takes its turn"
 
-					TEST	"bolt: its frames count down, and round again"
-					call	fresh
-					call	no_flyers
-					SET		OBJ.GFX, 225
-					SET		OBJ.Z, 140
-					RUN		mover_bolt
-					EXPECT_FIELD	OBJ.GFX, 224, "the graphic, one down"
-					call	fresh
-					call	no_flyers
-					SET		OBJ.GFX, 223
-					SET		OBJ.Z, 140
-					RUN		mover_bolt
-					EXPECT_FIELD	OBJ.GFX, 225, "the graphic, from the first to the last"
-
-					TEST	"bolt: its step is the one it was fired with"
-					call	fresh
-					call	no_flyers
-					SET		OBJ.GFX, 224
-					SET		OBJ.Z, 140
-					SET		OBJ.U, 100
-					SET		BOLT_DU, -8
-					RUN		mover_bolt
-					EXPECT_FIELD	OBJ.U, 92, "U"
-
-					TEST	"bolt: a flyer's slot that is empty is not hit"
-					call	fresh
-					call	no_flyers
-					ld		ix,REC
-					ld		iy,ROOMS
-					call	bolt_hits
-					call	snap
-					EXPECT_CARRY	0, "carry: no hit"
-
 ; --- mover_flame ---------------------------------------------------------------
 ; The torch's four frames are graphics 144 to 147, and the bottom two bits
 ; count round -- on even turns only.
@@ -987,14 +949,6 @@ start:				ld		sp,$FE00
 
 					call	finish
 					DB		"movers_tests (lightkeep)", 0
-
-; The flyer slots empty: their graphics zero, so mover_bolt's search finds
-; nothing to hit.
-no_flyers:			xor		a
-					ld		(ROOMS + OBJ.GFX),a
-					ld		(ROOMS + ROOM_STRIDE + OBJ.GFX),a
-					ret
-
 
 ; ---------------------------------------------------------------------------
 ; Fixtures.
@@ -1264,7 +1218,6 @@ depth_unlink:		ld		(hide_ix),ix
 
 redraw_view:		ret
 
-mover_cauldron:		ret
 mover_special:		ret
 
 ; character.s's, which the ghost's facing borrows: A, made positive.
@@ -1288,11 +1241,7 @@ sound_take:
 slide_sound:
 sound_sparkle:
 fire_sound:
-fire_turned:
-sound_poof:			ret		; sound_fx.s's, which only choose a sound
-
-; flyers.s's: the first of the two flyer slots, which the bolt tests.
-flyer_slots:		DW		ROOMS
+fire_turned:		ret		; sound_fx.s's, which only choose a sound
 
 
 					INCLUDE	"../monster_gate.s"

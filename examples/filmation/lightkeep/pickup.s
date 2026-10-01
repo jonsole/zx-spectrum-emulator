@@ -8,7 +8,7 @@
 ; port read and a compare.
 ; ---------------------------------------------------------------------------
 
-SUN_FILL_ON         EQU     $11                 ; LD DE,nn: what sun_fill starts with
+ATTR_FILL_ON         EQU     $11                 ; LD DE,nn: what attr_fill starts with
 
 ; Fill a block of attributes -- fill_window, at $C515. While a room is being
 ; drawn in the dark its first byte is a RET, so nothing is coloured in before the
@@ -20,7 +20,7 @@ SUN_FILL_ON         EQU     $11                 ; LD DE,nn: what sun_fill starts
 ;      C  = rows
 ; Out: nothing
 ; Corrupts: F, C, DE, HL -- nothing while it is a RET
-sun_fill:           ld      de,32
+attr_fill:           ld      de,32
 .row:               push    bc
                     push    hl
 .cell:              ld      (hl),a
@@ -136,7 +136,7 @@ special_keys:		ld		a,(input_now)
 ; Put down the oldest thing he is carrying, under his own feet, and stand him
 ; on it. room_to_drop, at $C0B2.
 ;
-; It needs a free slot -- only the first, in the pot's room -- and nothing
+; It needs a free slot and nothing
 ; above his head. And if the last slot is empty there is nothing to put down,
 ; and the press turns the others round instead, which is how you choose what
 ; to drop.
@@ -148,9 +148,6 @@ special_drop:		ld		ix,(special_slots)
 					ld		a,(ix+OBJ.GFX)
 					or		a
 					jr		z,.free
-					ld		a,(room_shown)
-					cp		SPECIAL_POT_ROOM
-					ret		z
 					ld		de,ROOM_STRIDE
 					add		ix,de
 					ld		a,(ix+OBJ.GFX)
@@ -163,16 +160,6 @@ special_drop:		ld		ix,(special_slots)
 					ld		a,(special_head)
 					or		a
 					ret		nz
-
-					; Standing on the pot in its own room, it goes in.
-					ld		a,(room_shown)
-					cp		SPECIAL_POT_ROOM
-					jr		nz,.lift
-					ld		a,(player + OBJ.Z)
-					cp		SPECIAL_POT_TOP
-					jr		c,.lift
-					ld		a,1
-					ld		(special_busy),a
 
 					; Up with him first and in with it after, so that when it is
 					; sorted he is already clear of it.
@@ -187,12 +174,8 @@ special_drop:		ld		ix,(special_slots)
 					call	character_move
 					pop		ix
 
-					ld		a,(special_busy)
-					or		a
 					ld		a,(special_carried + 6)
-					jr		z,.plain
-					add		a,SPECIAL_FLIGHT
-.plain:				ld		hl,special_carried + 7
+					ld		hl,special_carried + 7
 					ld		c,(hl)
 					ld		b,MOVE_SPECIAL
 					ld		hl,special_where_at
@@ -285,7 +268,7 @@ special_show:		ld		hl,special_carried + 2
 ; Corrupts: AF, BC, DE, HL, AF'
 special_show_one:	push	af
 
-					; Its colour, three by three -- through sun_fill, which leaves
+					; Its colour, three by three -- through attr_fill, which leaves
 					; it alone while the room is still being drawn in the dark.
 					and		15
 					ld		e,a
@@ -298,7 +281,7 @@ special_show_one:	push	af
 					add		hl,de
 					push	bc
 					ld		bc,3 << 8 | 3
-					call	sun_fill
+					call	attr_fill
 					pop		bc
 
 					; Blank the place: the bottom 24 rows, three bytes across. A row at

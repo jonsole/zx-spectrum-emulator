@@ -28,7 +28,6 @@ player_lives:       DB      PLAYER_LIVES
 PLAYER_ALIVE        EQU     0
 PLAYER_DYING        EQU     1
 PLAYER_APPEARING    EQU     2
-PLAYER_CHANGING     EQU     3                   ; between man and wolf -- see day_step
 PLAYER_DEATH_GFX    EQU     GFX_SPELL_1_G112
 PLAYER_APPEAR_GFX   EQU     GFX_SPELL_6_G120
 player_state:       DB      PLAYER_APPEARING
@@ -37,42 +36,6 @@ player_state:       DB      PLAYER_APPEARING
 ; top of his next turn, as the game reads its bit 6 in upd_player_bottom.
 player_touched:     DB      0
 deadly_touched      EQU     player_touched      ; what the engine sets
-
-; --- day and night -----------------------------------------------------------
-;
-; Knight Lore's clock is the sun, or the moon, crossing the window in the panel:
-; a pixel every eighth turn from x = $B0, and at $E1 the one gives way to the
-; other and starts back at $B0 -- print_sun_moon and toggle_day_night, at $C397
-; and $C3FF. Forty-nine pixels at eight turns each is 392 turns to a day and as
-; many again to a night. Every change of light asks the knight to change too, and
-; every dawn is a day gone; the fortieth is the end of the game.
-;
-; The clock counts turns, as the game's does, so a day is as many steps long as
-; it was -- which at our pace is about eleven seconds, where Knight Lore's
-; slower turns made it nearer thirty. SUN_TURNS is the knob.
-;
-; The window it crosses is sun_show's. The day number is printed in the top
-; corner beside the lives until the panel has a place for it.
-SUN_TURNS           EQU     8                   ; a power of two
-SUN_RISE            EQU     $B0
-SUN_SET             EQU     $E1
-DAYS_ALLOWED        EQU     $40                 ; in BCD, as the game counts
-PLAYER_WOLF         EQU     $20                 ; what the wolf adds to the knight's
-                                                ; graphics: legs 48, body 64
-PLAYER_CHANGE_GFX   EQU     GFX_TRANSFORM_1                  ; 92 to 95, the twinkle between
-PLAYER_CHANGE_TURNS EQU     8                   ; ...shown this many times,
-PLAYER_HIDDEN_GFX   EQU     GFX_GFX_01                   ; with nothing on top of it
-
-sun_x:              DB      SUN_RISE
-night:              DB      0                   ; PLAYER_WOLF by night
-days:               DB      0                   ; BCD
-
-; Non-zero when the light has changed and the knight has not changed with it,
-; and while he is changing, the twinkles still to come. transform_flag_graphic,
-; less the graphic: the game keeps his legs' graphic there to XOR the wolf into
-; at the end, and ours changes the bases the frames are worked out from instead.
-player_change:      DB      0
-
 
 ; The side he came into this room by, or $FF, and where he stood once he was
 ; in, so that dying puts him back in the doorway he entered by. Knight Lore does
@@ -208,37 +171,12 @@ player_step:        ld      ix,player
                     ; whether the step took him right out.
                     call    character_door_find
 
-                    ; The light has changed. He changes with it as soon as he
-                    ; is standing on something -- chk_and_init_transform will not
-                    ; start it in the air -- and is not waiting on the pot.
-                    ld      a,(special_busy)
-                    or      a
-                    jr      nz,.busy
-                    ld      a,(player_change)
-                    or      a
-                    jr      z,.keys
-                    ld      a,(ix+CHARACTER_STATE)
-                    or      (ix+CHARACTER_DZ)
-                    jp      z,player_changing
-                    jr      .keys
-
-                    ; While something he dropped is on its way into the pot he
-                    ; hangs where he is and nothing he presses counts. The game
-                    ; gives him a dZ of two, which its gravity takes back to
-                    ; nothing -- and ours takes two a turn off a knight who is
-                    ; not holding jump, so the same number does the same.
-.busy:              ld      (ix+CHARACTER_DZ),2
-                    xor     a
-                    ld      (character_jump_held),a
-                    jp      character_stand
-
                     ; Picking up and putting down come first, as the game
                     ; has them. Everything below reads what input_read left,
                     ; so it is read once, here, whatever is steering.
-.keys:              call    input_read
+                    call    input_read
                     call    special_keys
                     ld      ix,player
-                    call    player_fire
 
                     ; The jump key first, because gravity asks about it in the
                     ; same turn: holding it is what makes the difference
@@ -455,9 +393,7 @@ player_die:         ld      a,PLAYER_DYING
 ; Out: nothing -- and when the last life is lost it never returns: game_over
 ;        starts a new game
 ; Corrupts: everything
-player_phase:       cp      PLAYER_CHANGING
-                    jr      z,player_change_turn
-                    cp      PLAYER_DYING
+player_phase:       cp      PLAYER_DYING
                     jr      nz,.appearing
                     ld      a,(ix+OBJ.GFX)
                     cp      PLAYER_DEATH_GFX + 7
@@ -487,11 +423,6 @@ player_phase:       cp      PLAYER_CHANGING
                     ld      bc,(entered_at)
                     ld      (ix+OBJ.U),b
                     ld      (ix+OBJ.V),c
-                    xor     a                   ; and in the shape the light says,
-                    ld      (player_change),a   ; with no change still owing
-                    ld      a,(night)
-                    add     a,PLAYER_LEGS_GFX
-                    call    player_form
                     ld      a,(room_number)
                     cpl                         ; anything but the room it is
                     ld      (room_shown),a
@@ -511,7 +442,7 @@ player_phase:       cp      PLAYER_CHANGING
                     jr      player_sparkle
 
                     ; upd_127: himself again, and whatever touched him while he
-                    ; was arriving forgotten. player_change_turn ends here too.
+                    ; was arriving forgotten.
                     ;
                     ; In:  IX -> the player's legs
                     ; Out: nothing
@@ -543,220 +474,14 @@ player_repaint:     ld      de,0
                     jp      character_move
 
 
-; A turn of changing, upd_92_to_95: something deadly still kills him, and every
-; fourth turn he twinkles on, until the last twinkle turns him into the other one.
+; The knight's two graphic bases. character_frame works each frame out from
+; them. Knight Lore 128K changes them to turn him into the werewolf; this game
+; sets them once, at the start.
 ;
-; In:  IX -> the player's legs
-; Out: nothing
-; Corrupts: everything
-player_change_turn: ld      a,(player_touched)
-                    or      a
-                    jr      z,.alive
-                    call    player_legs_short   ; he dies in two halves again
-                    jp      player_die
-.alive:             ld      a,(move_tick)
-                    and     3
-                    ret     nz
-                    ld      a,(ix+OBJ.GFX)      ; audio_B472
-                    call    sound_change
-                    ld      hl,player_change
-                    dec     (hl)
-                    jr      nz,player_twinkle
-                    call    player_legs_short
-                    ld      a,(ix+CHARACTER_LEGS)
-                    xor     PLAYER_WOLF
-                    call    player_form
-                    ld      a,(ix+OBJ.BUF_H)    ; his own rotation buffer back, if
-                    or      a                   ; he was ever given one
-                    jp      z,player_phase.back
-                    res     3,(ix+OBJ.FLAGS)    ; OBJ_SHARED_SHIFT
-                    jp      player_phase.back
-
-
-; He starts to change: nothing on top, and the legs twinkling. The twinkles are
-; up to 38 rows tall, taller than the buffer his legs rotate into, so they
-; rotate at draw time for the few turns they are up.
-;
-; In:  IX -> the player's legs
-; Out: nothing
-; Corrupts: everything
-player_changing:    ld      a,PLAYER_CHANGING
-                    ld      (player_state),a
-                    ld      a,PLAYER_CHANGE_TURNS
-                    ld      (player_change),a
-                    set     3,(ix+OBJ.FLAGS)    ; OBJ_SHARED_SHIFT
-                    ld      (ix+CHARACTER_BODY+OBJ.GFX),PLAYER_HIDDEN_GFX
-
-                    ; With nothing on top, the twinkle is the whole of him, and
-                    ; it reaches up through where his body was. So his legs are
-                    ; sorted as the whole figure while it is up -- Knight Lore's
-                    ; legs are that all the time, H=23 -- or the block above
-                    ; the one he stands against is drawn over it.
-                    ld      a,COLLIDE_HEIGHT
-                    call    player_legs_height
-
-                    ;; NB: fall through into player_twinkle
-
-
-; One of the four twinkles at random, never the one he already shows, turned
-; the other way round each time -- rand_legs_sprite, at $C357.
-;
-; In:  IX -> the player's legs
-; Out: nothing
-; Corrupts: everything
-player_twinkle:     call    mover_rand
-                    and     3
-                    add     a,PLAYER_CHANGE_GFX
-                    cp      (ix+OBJ.GFX)
-                    jr      nz,.other
-                    xor     1
-.other:             ld      (ix+OBJ.GFX),a
-                    ld      a,(ix+OBJ.FLAGS)
-                    xor     OBJ_FLIP_H
-                    ld      (ix+OBJ.FLAGS),a
-                    jr      player_repaint
-
-
-; How tall his legs are to the depth sort, and his place in it again to match. A
-; step of nothing re-sorts nothing -- depth_step_upper returns early -- so a
-; repaint where he stands would leave him wherever the old height put him.
-;
-; player_legs_short puts back the height the legs have with a body on top of them.
-;
-; In:  A  = the height (player_legs_height only)
-;      IX -> the player's legs
-; Out: nothing
-; Corrupts: AF, BC, DE, HL, IY
-player_legs_short:  ld      a,CHARACTER_BODY_UP
-                    ;; NB: fall through into player_legs_height
-player_legs_height: ld      (ix+OBJ.SIZE_Z),a
-                    jp      depth_relink
-
-
-; The knight's two graphic bases, for man or wolf. character_frame works each
-; frame out from them, so the wolf walks and turns with the knight's own code.
-;
-; In:  A = the legs' base: PLAYER_LEGS_GFX, plus PLAYER_WOLF for the wolf
+; In:  A = the legs' base: PLAYER_LEGS_GFX
 ; Out: nothing
 ; Corrupts: AF
 player_form:        ld      (player + CHARACTER_LEGS),a
                     add     a,PLAYER_BODY_GFX - PLAYER_LEGS_GFX
                     ld      (player + CHARACTER_BODY_G),a
-                    ret
-
-
-; ---------------------------------------------------------------------------
-; His bolts -- Pentagram's, from ../pentagram/player.s.
-BOLT_STEP           EQU     8
-BOLT_UP             EQU     4
-BOLT_START_GFX      EQU     GFX_PENTAGRAM_BOLT_2
-BOLT_LARGEST        EQU     sprite_pentagram_puff_3 ; 3x17: the largest of its
-                                            ; frames and of its puff's
-
-fire_held:          DB      0
-
-; The step for each facing, as character_steps orders them.
-bolt_steps:         DB      -BOLT_STEP, 0       ; 0  -U
-                    DB      0, BOLT_STEP        ; 1  +V
-                    DB      BOLT_STEP, 0        ; 2  +U
-                    DB      0, -BOLT_STEP       ; 3  -V
-
-; Fire a bolt, if fire has just been pressed and he has one to spare --
-; Pentagram's $C126.
-;
-; A press, not a hold: it is latched until the key is let go. Two bolts at
-; most, in the two slots after the flyers' -- see flyers.s. It goes the way he
-; faces, eight a turn, from two turns' flight ahead of him and four up; if that
-; is outside the room there is no shot.
-;
-; In:  IX -> the legs record
-; Out: nothing
-; Corrupts: everything but IX
-player_fire:        ld      a,(input_now)
-                    and     INPUT_FIRE
-                    ld      hl,fire_held
-                    jr      nz,.pressed
-                    ld      (hl),a              ; let go: the next press counts
-                    ret
-.pressed:           ld      a,(hl)
-                    or      a
-                    ret     nz                  ; still the same press
-                    ld      (hl),1
-
-                    push    ix
-                    ld      iy,(flyer_slots)
-                    ld      de,FLYER_SLOTS * ROOM_STRIDE
-                    add     iy,de
-                    ld      a,(iy+OBJ.GFX)
-                    or      a
-                    jr      z,.free
-                    ld      de,ROOM_STRIDE
-                    add     iy,de
-                    ld      a,(iy+OBJ.GFX)
-                    or      a
-                    jp      nz,.none            ; both in flight
-
-.free:              ld      a,(ix+CHARACTER_FACING)
-                    add     a,a
-                    ld      e,a
-                    ld      d,0
-                    ld      hl,bolt_steps
-                    add     hl,de
-                    ld      b,(hl)              ; B - the step in U
-                    inc     hl
-                    ld      c,(hl)              ; C - the step in V
-
-                    ; Two steps ahead of him, and inside the room.
-                    ld      a,b
-                    add     a,a
-                    add     a,(ix+OBJ.U)
-                    ld      d,a
-                    sub     128
-                    call    character_door_find.abs
-                    ld      hl,room_half_u
-                    cp      (hl)
-                    jr      nc,.none
-                    ld      a,c
-                    add     a,a
-                    add     a,(ix+OBJ.V)
-                    ld      e,a
-                    sub     128
-                    call    character_door_find.abs
-                    ld      hl,room_half_v
-                    cp      (hl)
-                    jr      nc,.none
-
-                    ld      (iy+OBJ.U),d
-                    ld      (iy+OBJ.V),e
-                    ld      a,(ix+OBJ.Z)
-                    add     a,BOLT_UP
-                    ld      (iy+OBJ.Z),a
-                    ld      (iy+BOLT_DU),b
-                    ld      (iy+BOLT_DV),c
-                    ld      (iy+OBJ.GFX),BOLT_START_GFX
-                    ld      (iy+OBJ.BEHAVIOUR),MOVE_BOLT
-                    ld      (iy+OBJ.SIZE_U),CHARACTER_HALF_U
-                    ld      (iy+OBJ.SIZE_V),CHARACTER_HALF_V
-                    ld      (iy+OBJ.SIZE_Z),8
-                    xor     a
-                    ld      (iy+OBJ.FLAGS),a
-                    ld      (iy+OBJ.DU),a
-                    ld      (iy+OBJ.DV),a
-                    ld      (iy+OBJ.DZ),a
-                    ld      (iy+OBJ.MOVE_STATE),a
-
-                    push    iy
-                    pop     ix
-                    ld      a,(ix+OBJ.BUF_H)
-                    or      a
-                    jr      nz,.buffered
-                    ld      hl,BOLT_LARGEST
-                    call    shift_alloc
-.buffered:          call    room_adjust
-                    call    object_place
-                    call    depth_insert
-                    call    redraw_object
-                    call    sound_fire
-
-.none:              pop     ix
                     ret

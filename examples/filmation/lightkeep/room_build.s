@@ -123,9 +123,9 @@ room_build:			ld		c,a
 					; appears whole instead of being watched as it draws. Nothing is
 					; wiped: redraw_screen writes every pixel there is.
 					;
-					; Nothing may colour a cell in the meantime, or the panel's DAY
-					; and the sun window turn up before the room they belong to --
-					; and everything that colours one goes through sun_fill. So its
+					; Nothing may colour a cell in the meantime, or the panel turns
+					; up before the room it belongs to -- and everything that
+					; colours one goes through attr_fill. So its
 					; first byte is a RET until room_paper puts the LD back, and so
 					; is the first of redraw_view's panel hook, which would only
 					; draw those again for every tile of the room that reached them.
@@ -133,7 +133,7 @@ room_build:			ld		c,a
 					xor		a
 					call	screen_colour
 					ld		a,$C9		; RET
-					ld		(sun_fill),a
+					ld		(attr_fill),a
 					ld		(redraw_hook),a
 					call	room_shape
 					pop		de
@@ -170,8 +170,8 @@ room_wipe:			ld		hl,16384
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL
-room_paper:			ld		a,SUN_FILL_ON		; colours may go on again
-					ld		(sun_fill),a
+room_paper:			ld		a,ATTR_FILL_ON		; colours may go on again
+					ld		(attr_fill),a
 					ld		a,REDRAW_HOOK_ON		; and the panel be put back
 					ld		(redraw_hook),a
 					ld		a,(room_attr)
@@ -540,11 +540,10 @@ room_unpack:		push	hl
 					ret
 
 
-DAYS_AT				EQU		$4000 + 2 * 2048 + 7 * 32 + 15	; row 23, print_days
 LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives
 
 ; ---------------------------------------------------------------------------
-; The day and the lives in their places on the panel, and -- in a build with
+; The lives in their place on the panel, and -- in a build with
 ; DEBUG_ROOM defined, `build.py --debug-room` -- the room number in the top-left
 ; corner, for finding your way about.
 ;
@@ -557,10 +556,7 @@ LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: AF, B, DE, HL
-print_room:			ld		a,(days)
-					ld		hl,DAYS_AT
-					call	print_hex
-					ld		a,(player_lives)
+print_room:			ld		a,(player_lives)
 					ld		hl,LIVES_AT
 				IFDEF	DEBUG_ROOM
 					call	print_hex
@@ -634,19 +630,16 @@ print_glyph:		ld		b,8
 
 ; Deal the collectables out, at the start of every game. init_special_objects gives
 ; each row a graphic by counting on from a random number, so the kinds come
-; round in turn and every game puts them in different places; and
-; shuffle_objects_required turns the wizard's list round four to seven places.
+; round in turn and every game puts them in different places.
 ;
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL
 special_init:		ld		hl,special_where_start		; every collectable back where it
-					ld		de,special_where		; began, nothing carried and
-					ld		bc,SPECIAL_ROWS * 4		; nothing delivered
+					ld		de,special_where		; began, and nothing carried
+					ld		bc,SPECIAL_ROWS * 4
 					ldir
 					xor		a
-					ld		(special_count),a
-					ld		(special_busy),a
 					ld		(special_key_held),a
 					ld		h,a
 					ld		l,a
@@ -668,26 +661,10 @@ special_init:		ld		hl,special_where_start		; every collectable back where it
 					inc		hl
 					inc		e
 					djnz	.deal
-
-					ld		a,r
-					and		3
-					or		4
-.turn:				push	af
-					ld		hl,special_wanted + 1
-					ld		de,special_wanted
-					ld		a,(de)
-					ld		bc,SPECIAL_WANTED - 1
-					ldir
-					ld		(de),a
-					pop		af
-					dec		a
-					jr		nz,.turn
 					ret
 
 
 ; Write back whatever is lying in the room being left. update_special_objs.
-; Something on its way into the pot is not lying anywhere, and nothing in the
-; second slot of the pot's room belongs to the table.
 ;
 ; In:  nothing
 ; Out: nothing
@@ -733,9 +710,7 @@ special_room_leave:	ld		ix,(special_slots)
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: everything
-special_room_enter:	xor		a
-					ld		(special_busy),a
-					ld		a,(room_shown)
+special_room_enter:	ld		a,(room_shown)
 					ld		(special_room),a
 					ld		a,(room_object_count)
 					ld		l,a

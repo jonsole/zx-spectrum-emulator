@@ -583,15 +583,6 @@ def main():
     line(out, "room_fg_at:", "DS", "2 * OBJECT_TEMPLATES")
     line(out, "room_templates:", "DS", "ROOM_TEMPLATES_MOST")
     out.append("")
-    out.append("; The rooms with a sky, which things can fall out of -- see flyers.s:")
-    out.append("; a bit a room, room N at bit N & 7 of byte N >> 3.")
-    sky = [0] * 32
-    for r in rooms:
-        if r.get("sky"):
-            sky[r["number"] >> 3] |= 1 << (r["number"] & 7)
-    line(out, "room_sky:", "", "")
-    for row in range(0, 32, 8):
-        line(out, "", "DB", ", ".join("$%02X" % b for b in sky[row:row + 8]))
     line(out, "ROOM_NO_EXIT", "EQU", "$%02X" % no_exit,
          "no room has this number: a doorway with nowhere to go")
     line(out, "ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")

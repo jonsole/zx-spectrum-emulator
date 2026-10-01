@@ -41,7 +41,8 @@ starts.
 | Stage | What | State |
 |---|---|---|
 | 0a | the fork: Knight Lore 128K's game and data, building byte for byte as it | done |
-| 0b | what Fairlight has no use for taken out: the werewolf, the forty days and the sun and moon, the cauldron's quest, Pentagram's creatures, rooms, bolt and flyers, and Pentagram's art | |
+| 0b | what Fairlight has no use for taken out of the code: the werewolf, the forty days and the sun and moon, the cauldron's quest, and Pentagram's bolt and what falls from the sky | done |
+| 0c | Pentagram's creatures, rooms and art taken out, and the werewolf's art | |
 | 1 | Melkhior's art, made at build time from your own copy of the game and never committed | |
 | 2 | rooms that remember where things were left | |
 | 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, drop, use, and keys 1-5 for the slot | |
@@ -50,3 +51,32 @@ starts.
 | 6 | LIFE, food and drink | |
 | 7 | the sword, and guards that patrol and then chase | |
 | 8 | the castle and the quest | |
+
+### What stage 0b took out
+
+The code that runs every turn had 107 bytes left below the stack in Knight
+Lore 128K. With these gone it has 1,410, and the $6000 region has 1,318
+where it had 259:
+
+- **The werewolf.** The knight no longer changes at dusk and dawn, so
+  `player_change`, `night` and the twinkle states are gone from `player.s`,
+  and `player_form` sets his graphics once, at the start.
+- **The clock.** `clock.s` and `sun.s` are gone: no days, no sun or moon
+  window, and no DAYS word on the panel. The middle of the panel and the
+  window on the right are empty, for LIFE and the messages in stage 6.
+  `sun_fill`, the attribute fill the panel shares, is `attr_fill` now.
+- **The cauldron.** The wizard's pot and its bubbles, the drop into it and
+  the flash. The collectables are still there to carry, until stage 3
+  replaces them.
+- **The sky and the bolt.** `flyers.s`, `player_fire` and `mover_bolt`, the
+  homer, the fallers and the puff, the four pool slots they kept
+  (`EXTRA_SLOTS`), the rooms' `sky` table, and the bolt and puff that were
+  resident in the room page. The fire key is still read; the sword will use it.
+- **The end screen** says how much of the castle he saw and what it makes of
+  that, without the day or the charms. The quest's own ending is stage 8.
+
+Behaviour numbers were closed up over the six that went, and the mover tests
+lost their three bolt tests. Removing `sound_fire` also fixed a fall-through:
+in Knight Lore 128K, `fire_turned` falls into Pentagram's `sound_fire`, which
+was put in front of the `sound_bounce` it was written to reach, so a fire
+turning plays the bolt's sweep.
