@@ -456,6 +456,7 @@ const GAME_TITLES = {
   alien8: 'Alien 8',
   knightlore: 'Knight Lore',
   knightlore128: 'Knight Lore 128K',
+  lightkeep: 'Lightkeep',
   pentagram: 'Pentagram'
 };
 

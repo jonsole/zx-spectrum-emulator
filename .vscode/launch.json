@@ -98,6 +98,19 @@
       "preLaunchTask": "knightlore128.build"
     },
     {
+      // Lightkeep: a Fairlight-like game forked from Knight Lore 128K
+      // (examples/filmation/lightkeep).
+      "name": "ZX Spectrum: Lightkeep",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/128.rom",
+      "machine": "128",
+      "snapshot": "${workspaceFolder}/examples/filmation/lightkeep/output/lightkeep.z80",
+      "sld": "${workspaceFolder}/examples/filmation/lightkeep/output/lightkeep.sld",
+      "asm": "${workspaceFolder}/examples/filmation/lightkeep/lightkeep.s",
+      "preLaunchTask": "lightkeep.build"
+    },
+    {
       // Fairlight, reassembled on every launch from Ville Krumlinde's
       // disassembly (build_fairlight_krumlinde.py in the game-disassemblies
       // submodule) -- run its build script once after a fresh clone, since

@@ -1,0 +1,215 @@
+{
+ "comment": "The thirty-two collectables: where each one lies at the start of a game, and the order the wizard asks for them in. kl_extract.py pulls both out of Knight Lore -- the positions from the second to fifth bytes of every nine-byte row of special_objs_tbl at $6FF2, and the wanted list from objects_required at $C27D, before the game shuffles it. Which KIND each row is dealt is not here: special_init deals those at the start of every game, counting on from a random number, so no two games are alike.",
+ "game": "knightlore",
+ "collectables": [
+  {
+   "room": 109,
+   "u": 136,
+   "v": 128,
+   "z": 164
+  },
+  {
+   "room": 39,
+   "u": 128,
+   "v": 128,
+   "z": 140
+  },
+  {
+   "room": 208,
+   "u": 136,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 10,
+   "u": 120,
+   "v": 136,
+   "z": 128
+  },
+  {
+   "room": 186,
+   "u": 120,
+   "v": 136,
+   "z": 128
+  },
+  {
+   "room": 66,
+   "u": 136,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 141,
+   "u": 136,
+   "v": 184,
+   "z": 188
+  },
+  {
+   "room": 255,
+   "u": 168,
+   "v": 168,
+   "z": 128
+  },
+  {
+   "room": 135,
+   "u": 128,
+   "v": 128,
+   "z": 128
+  },
+  {
+   "room": 243,
+   "u": 120,
+   "v": 184,
+   "z": 128
+  },
+  {
+   "room": 168,
+   "u": 168,
+   "v": 104,
+   "z": 176
+  },
+  {
+   "room": 210,
+   "u": 184,
+   "v": 72,
+   "z": 176
+  },
+  {
+   "room": 0,
+   "u": 72,
+   "v": 72,
+   "z": 128
+  },
+  {
+   "room": 34,
+   "u": 136,
+   "v": 184,
+   "z": 128
+  },
+  {
+   "room": 122,
+   "u": 184,
+   "v": 184,
+   "z": 176
+  },
+  {
+   "room": 249,
+   "u": 184,
+   "v": 184,
+   "z": 128
+  },
+  {
+   "room": 214,
+   "u": 136,
+   "v": 152,
+   "z": 176
+  },
+  {
+   "room": 232,
+   "u": 120,
+   "v": 136,
+   "z": 176
+  },
+  {
+   "room": 246,
+   "u": 120,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 15,
+   "u": 136,
+   "v": 120,
+   "z": 140
+  },
+  {
+   "room": 111,
+   "u": 184,
+   "v": 184,
+   "z": 128
+  },
+  {
+   "room": 253,
+   "u": 72,
+   "v": 184,
+   "z": 164
+  },
+  {
+   "room": 8,
+   "u": 120,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 187,
+   "u": 136,
+   "v": 136,
+   "z": 164
+  },
+  {
+   "room": 223,
+   "u": 120,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 94,
+   "u": 128,
+   "v": 128,
+   "z": 128
+  },
+  {
+   "room": 180,
+   "u": 120,
+   "v": 136,
+   "z": 176
+  },
+  {
+   "room": 4,
+   "u": 120,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 116,
+   "u": 72,
+   "v": 184,
+   "z": 128
+  },
+  {
+   "room": 64,
+   "u": 128,
+   "v": 128,
+   "z": 128
+  },
+  {
+   "room": 56,
+   "u": 104,
+   "v": 120,
+   "z": 176
+  },
+  {
+   "room": 240,
+   "u": 72,
+   "v": 184,
+   "z": 152
+  }
+ ],
+ "wantedComment": "The fourteen kinds the wizard wants, in order, each 0 to 7 -- matched against a collectable's graphic AND 7. special_init turns this list round four to seven places before a game, so the order here is only where the turning starts.",
+ "wanted": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  3,
+  5,
+  0,
+  6,
+  1,
+  2,
+  4
+ ]
+}

@@ -1,0 +1,868 @@
+{
+ "meta": {
+  "version": 1,
+  "game": "lightkeep",
+  "rooms": "rooms.json",
+  "comment": "The castle's templates: pieces every room naming one is built from. rooms.json places them.",
+  "doorways": {
+   "scenery_arch_n": "n",
+   "scenery_arch_e": "e",
+   "scenery_arch_s": "s",
+   "scenery_arch_w": "w",
+   "scenery_tree_arch_n": "n",
+   "scenery_tree_arch_e": "e",
+   "scenery_tree_arch_s": "s",
+   "scenery_tree_arch_w": "w",
+   "scenery_high_arch_e": "e",
+   "scenery_high_arch_s": "s",
+   "scenery_pentagram_trunk_arch_n": "n",
+   "scenery_pentagram_trunk_arch_e": "e",
+   "scenery_pentagram_trunk_arch_s": "s",
+   "scenery_pentagram_trunk_arch_w": "w",
+   "scenery_pentagram_stone_arch_n": "n",
+   "scenery_pentagram_stone_arch_e": "e",
+   "scenery_pentagram_stone_arch_s": "s",
+   "scenery_pentagram_stone_arch_w": "w"
+  },
+  "background": ["scenery_walls_0", "scenery_walls_1", "scenery_walls_2", "scenery_trees_0", "scenery_trees_1", "scenery_trees_2", "scenery_pentagram_trees_0", "scenery_pentagram_trees_1", "scenery_pentagram_trees_2", "scenery_pentagram_trees_3", "scenery_pentagram_trees_4", "scenery_pentagram_trees_5", "scenery_pentagram_stone_0", "scenery_pentagram_stone_1", "scenery_pentagram_stone_2", "scenery_pentagram_stone_3", "scenery_pentagram_stone_4"]
+ },
+
+ "sceneryTemplates": {
+  "scenery_arch_n": [
+   { "graphic": "door.castle.1", "u": 141, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_e": [
+   { "graphic": "door.castle.1", "u": 196, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 196, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_s": [
+   { "graphic": "door.castle.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_arch_w": [
+   { "graphic": "door.castle.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_n": [
+   { "graphic": "door.forest.1", "u": 141, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 115, "v": 196, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_e": [
+   { "graphic": "door.forest.1", "u": 196, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 196, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_s": [
+   { "graphic": "door.forest.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_tree_arch_w": [
+   { "graphic": "door.forest.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.forest.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_0": [
+   { "graphic": "gate.1.g8", "u": 128, "v": 190, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_1": [
+   { "graphic": "gate.1.g8", "u": 190, "v": 128, "z": 160,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_2": [
+   { "graphic": "gate.1.g8", "u": 128, "v": 65, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_gate_3": [
+   { "graphic": "gate.1.g8", "u": 65, "v": 128, "z": 160,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_0": [
+   { "graphic": "wall.castle.4", "u": 63, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 73, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 73, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 192, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 92, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 63, "v": 92, "z": 152,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 63, "v": 160, "z": 152,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 164, "v": 192, "z": 152,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 63, "v": 109, "z": 177,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 96, "v": 192, "z": 160,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 144, "v": 192, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_1": [
+   { "graphic": "wall.castle.4", "u": 63, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 99, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 63, "v": 99, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.4", "u": 63, "v": 152, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 71, "v": 160, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 184, "v": 160, "z": 208,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 128, "v": 160, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 63, "v": 126, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 96, "v": 160, "z": 144,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 96, "v": 160, "z": 184,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 160, "v": 160, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_walls_2": [
+   { "graphic": "wall.castle.4", "u": 95, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 103, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 157, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.4", "u": 95, "v": 184, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.5", "u": 103, "v": 192, "z": 168,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 172,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 157, "v": 192, "z": 172,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.6", "u": 95, "v": 72, "z": 208,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 95, "v": 144, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 132, "v": 192, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.2", "u": 95, "v": 96, "z": 144,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.1", "u": 95, "v": 104, "z": 184,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.castle.3", "u": 95, "v": 160, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_0": [
+   { "graphic": "wall.forest.1", "u": 63, "v": 73, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 63, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 63, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 63, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.3", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_1": [
+   { "graphic": "wall.forest.1", "u": 63, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 63, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_trees_2": [
+   { "graphic": "wall.forest.1", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "wall.forest.2", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_wizard": [
+   { "graphic": "wizard.1", "u": 152, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "sabreman.legs.1.g16", "u": 160, "v": 96, "z": 128, "sizeU": 5, "sizeV": 5, "sizeZ": 0,
+     "flags": { "mirrored": false, "passable": true, "rest": 16 } }
+  ],
+  "scenery_pot": [
+   { "graphic": "scenery.cauldron", "u": 128, "v": 128, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.cauldron_lid", "u": 128, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": true, "rest": 16 } }
+  ],
+  "scenery_high_arch_e": [
+   { "graphic": "door.castle.1", "u": 196, "v": 115, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 196, "v": 141, "z": 176,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_s": [
+   { "graphic": "door.castle.1", "u": 141, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "door.castle.2", "u": 115, "v": 59, "z": 176,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_e_base": [
+   { "graphic": "scenery.block.g7", "u": 200, "v": 120, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.block.g7", "u": 200, "v": 136, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_high_arch_s_base": [
+   { "graphic": "scenery.block.g7", "u": 120, "v": 56, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "scenery.block.g7", "u": 136, "v": 56, "z": 164,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_n": [
+   { "graphic": "pentagram.door.trees.2", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_e": [
+   { "graphic": "pentagram.door.trees.2", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_s": [
+   { "graphic": "pentagram.door.trees.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trunk_arch_w": [
+   { "graphic": "pentagram.door.trees.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.trees.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_n": [
+   { "graphic": "pentagram.door.stone.2", "u": 115, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 141, "v": 197, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_e": [
+   { "graphic": "pentagram.door.stone.2", "u": 197, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 197, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_s": [
+   { "graphic": "pentagram.door.stone.2", "u": 115, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 141, "v": 59, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_arch_w": [
+   { "graphic": "pentagram.door.stone.2", "u": 59, "v": 141, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.door.stone.1", "u": 59, "v": 115, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_0": [
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_1": [
+   { "graphic": "pentagram.wall.trees.4", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_2": [
+   { "graphic": "pentagram.wall.trees.1", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_3": [
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_4": [
+   { "graphic": "pentagram.wall.trees.4", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_trees_5": [
+   { "graphic": "pentagram.wall.trees.4", "u": 120, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 136, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.1", "u": 72, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 88, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 104, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 152, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.3", "u": 168, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.4", "u": 184, "v": 160, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.trees.2", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_0": [
+   { "graphic": "pentagram.wall.stone.3", "u": 64, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_1": [
+   { "graphic": "pentagram.wall.stone.4", "u": 120, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 136, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_2": [
+   { "graphic": "pentagram.wall.stone.6", "u": 64, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.5", "u": 64, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 64, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 64, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 64, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_3": [
+   { "graphic": "pentagram.wall.stone.1", "u": 72, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 88, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 152, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 168, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 184, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ],
+  "scenery_pentagram_stone_4": [
+   { "graphic": "pentagram.wall.stone.3", "u": 96, "v": 120, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 96, "v": 136, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.6", "u": 96, "v": 72, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 96, "v": 88, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 96, "v": 104, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.4", "u": 96, "v": 152, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.2", "u": 96, "v": 168, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.3", "u": 96, "v": 184, "z": 128,
+     "flags": { "mirrored": false, "passable": false, "rest": 16 } },
+   { "graphic": "pentagram.wall.stone.1", "u": 104, "v": 192, "z": 128,
+     "flags": { "mirrored": true, "passable": false, "rest": 16 } }
+  ]
+ },
+
+ "objectTemplates": {
+  "object_block": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_fire": [
+   { "graphic": "fires.1.g86",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_ud_y": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_rock": [
+   { "graphic": "scenery.wood_block",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gargoyle": [
+   { "graphic": "scenery.gargoyle",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike": [
+   { "graphic": "scenery.floor_spike",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_chest": [
+   { "graphic": "scenery.chest",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_table": [
+   { "graphic": "scenery.table",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_guard_ew": [
+   { "graphic": "guard.1.g150",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } },
+   { "graphic": "sabreman.legs.1.g16",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_ghost": [
+   { "graphic": "ghost.3",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_fire_ns": [
+   { "graphic": "fires.2.g181",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_high": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_ball_ud_xy": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_guard_square": [
+   { "graphic": "guard.1.g30",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } },
+   { "graphic": "sabreman.legs.1.g16",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_ew": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_block_ns": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_moveable_block": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike_high": [
+   { "graphic": "scenery.floor_spike",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_spike_ball": [
+   { "graphic": "scenery.spike_ball",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_spike_ball_falling": [
+   { "graphic": "scenery.spike_ball",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 48 } }
+  ],
+  "object_fire_ew": [
+   { "graphic": "fires.1.g86",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_dropping_block": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_collapsing_block": [
+   { "graphic": "scenery.block.g7",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_bounce": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_ball_ud": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_repel_spell": [
+   { "graphic": "spell.1.g164",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gate_ud_1": [
+   { "graphic": "gate.1.g8",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_gate_ud_2": [
+   { "graphic": "gate.1.g8",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": true, "raiseZ": 0 } }
+  ],
+  "object_ball_ud_x": [
+   { "graphic": "balls.1.g178",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": true, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_grass": [
+   { "graphic": "pentagram.grass.1.g236",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump_pushed": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_thorns": [
+   { "graphic": "pentagram.thorns.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_cube_pushed": [
+   { "graphic": "pentagram.cube.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_table_pushed": [
+   { "graphic": "pentagram.table.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stump_low": [
+   { "graphic": "pentagram.stump.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_falls": [
+   { "graphic": "pentagram.block.1.g253",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_sinks": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_stone_pushed": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_lift": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_water": [
+   { "graphic": "pentagram.water.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_thorny_bush": [
+   { "graphic": "pentagram.grass.1.g237",
+     "flags": { "mirrored": false, "passable": false, "rest": 20 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_hops": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_platform_u": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_platform_v": [
+   { "graphic": "pentagram.block.1.g231",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_spider": [
+   { "graphic": "pentagram.creature.1.g251",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_well": [
+   { "graphic": "pentagram.well.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_creature": [
+   { "graphic": "pentagram.creature.1.g208",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_water_deep": [
+   { "graphic": "pentagram.water.2",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_cube": [
+   { "graphic": "pentagram.cube.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_block_crumbles": [
+   { "graphic": "pentagram.block.1.g219",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_1": [
+   { "graphic": "pentagram.block.1.g200",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_3": [
+   { "graphic": "pentagram.block.1.g202",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_conveyor_4": [
+   { "graphic": "pentagram.block.1.g203",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_paces_u": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_pentagram_dragon_paces_v": [
+   { "graphic": "pentagram.dragon.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_torch": [
+   { "graphic": "castle.torch.1",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_torch_m": [
+   { "graphic": "castle.torch.1",
+     "flags": { "mirrored": true, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_barrel": [
+   { "graphic": "castle.barrel.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_chair": [
+   { "graphic": "castle.chair.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_chair_m": [
+   { "graphic": "castle.chair.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bed": [
+   { "graphic": "castle.bed.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bed_m": [
+   { "graphic": "castle.bed.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bench": [
+   { "graphic": "castle.bench.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_bench_m": [
+   { "graphic": "castle.bench.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_shelf": [
+   { "graphic": "castle.shelf.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_shelf_m": [
+   { "graphic": "castle.shelf.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_parapet": [
+   { "graphic": "castle.parapet.1",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_parapet_m": [
+   { "graphic": "castle.parapet.1",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_deck": [
+   { "graphic": "castle.bridge.deck",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
+  ],
+  "object_castle_rail": [
+   { "graphic": "castle.bridge.rail",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 4 } }
+  ],
+  "object_castle_rail_m": [
+   { "graphic": "castle.bridge.rail",
+     "flags": { "mirrored": true, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 4 } }
+  ]
+ }
+}

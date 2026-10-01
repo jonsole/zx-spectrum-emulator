@@ -23,7 +23,7 @@ sprite that is one frame of an animation brings the whole animation with it.
 Reads the carried files -- rooms.json, templates.json, graphics.json and
 sprites.json -- and prints a report; it writes nothing.
 
-    python room_budget.py [knightlore|pentagram|knightlore128] [--rooms]
+    python room_budget.py [knightlore|pentagram|knightlore128|lightkeep] [--rooms]
 """
 import json
 import sys
@@ -77,7 +77,7 @@ def is_backdrop(piece, box, half_u, half_v):
 
 
 def main():
-    games = ["knightlore", "pentagram", "knightlore128"]
+    games = ["knightlore", "pentagram", "knightlore128", "lightkeep"]
     show_rooms = "--rooms" in sys.argv
     for arg in sys.argv[1:]:
         if arg in games:

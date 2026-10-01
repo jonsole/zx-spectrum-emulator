@@ -21,6 +21,7 @@
      "enum": [
       "knightlore",
       "knightlore128",
+      "lightkeep",
       "pentagram"
      ]
     },

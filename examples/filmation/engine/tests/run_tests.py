@@ -27,7 +27,7 @@ FILMATION = HERE.parent.parent
 REPO = FILMATION.parent.parent
 OUT_DIR = FILMATION / "output" / "tests"
 SUITE_DIRS = [HERE, FILMATION / "knightlore" / "tests", FILMATION / "pentagram" / "tests",
-              FILMATION / "knightlore128" / "tests"]
+              FILMATION / "knightlore128" / "tests", FILMATION / "lightkeep" / "tests"]
 
 # The same search knightlore/build.py makes, kept here so that the engine's
 # tests do not reach into the game's build.
