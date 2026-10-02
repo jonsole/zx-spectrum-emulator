@@ -592,13 +592,21 @@ hopper_landed:		ld		a,(ix+OBJ.BEHAVIOUR)
 ; is why the frames sit on an aligned run of four. Every turn was a flicker too
 ; fast to read as flame.
 ;
-; In:  IX -> the record
+; And then it is repainted. mover_cycle4's other users move every turn, and
+; their move repaints them; a torch never moves, so changing its graphic alone
+; changed nothing on the screen until the knight walked past and his region
+; happened to take the torch in. mover_paint with no step is a repaint: it
+; places the record again -- the new frame's sprite and its own nudge -- and
+; redraws where it was and where it is.
+;
+; In:  IX -> the record; mover_ix names it too
 ; Out: nothing
-; Corrupts: AF
+; Corrupts: everything but IX
 mover_flame:		ld		a,(move_tick)
 					rra
 					ret		c
-					jp		mover_cycle4
+					call	mover_cycle4
+					jp		mover_paint
 
 
 ; Pentagram's monsters ask engine/movers.s whether to sit a turn out, and to
