@@ -30,7 +30,7 @@ Launch **"ZX Spectrum: Lightkeep"** from the Run and Debug view. Its
 It writes `output/lightkeep.z80`, a version 3 128K snapshot, with the `.sld`
 and the `.lst`. A server started by hand wants
 `--rom roms/48.rom --rom roms/128.rom --machine 128`. The font is read from
-`../knightlore/`'s unpacked sheet, as Knight Lore 128K's is. The keys and the
+`../knightlore/extracted/`'s unpacked sheet, as Knight Lore 128K's is. The keys and the
 staging recipes are in [driving.md](driving.md), still Knight Lore 128K's.
 
 ## How far it has got

@@ -27,7 +27,7 @@ writes into dist/:
         Filmation remakes in the repository's own layout, examples/filmation/
         with the engine and the one game's code -- and none of Ultimate's
         data, which each workspace extracts from the user's own copy of the
-        original (examples/filmation/extract.py).
+        original (examples/filmation/scripts/extract.py).
 
 Everything carries LICENSE and THIRD_PARTY_NOTICES.md. The version is
 package.json's, which is also what the server reports (cpp-core/CMakeLists.txt
@@ -72,7 +72,7 @@ FAST_LOADER = ["loader.py", "loader.tap", "loader.s", "basic.s", "tape.s", "coun
 FILMATION_GAMES = ["knightlore", "pentagram"]
 # examples/filmation's own subfolders that are games or the designer: each
 # example carries the engine, the shared files and its own game only.
-FILMATION_OTHERS = ["knightlore", "knightlore128", "pentagram", "vscode"]
+FILMATION_OTHERS = ["knightlore", "knightlore128", "lightkeep", "pentagram", "vscode"]
 # Pictures of the games running, left out of the examples (see below).
 FILMATION_MEDIA = "examples/filmation/media/"
 
@@ -231,8 +231,8 @@ def json_hash(path):
 
 def build_filmation_example(path, top, game, ref):
     """The engine, the shared tools and one game's code -- but none of
-    Ultimate's data. original.json names the files the repository carries that
-    came out of the game; the workspace makes them from the user's own copy
+    Ultimate's data. metadata/original.json names the files the repository
+    carries that came out of the game, by their path in the game's folder; the workspace makes them from the user's own copy
     with extract.py, and they are left out here.
 
     They must still be what extraction gives, or a workspace would build a
@@ -240,7 +240,7 @@ def build_filmation_example(path, top, game, ref):
     (a room moved in the designer, say) is something extraction cannot
     reproduce, so the release stops and says which."""
     base = f"examples/filmation/{game}"
-    with open(os.path.join(ROOT, base, "original.json"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, base, "metadata", "original.json"), encoding="utf-8") as f:
         pins = json.load(f)
     changed = [name for name, digest in pins["carried"].items()
                if json_hash(os.path.join(ROOT, base, name)) != digest]

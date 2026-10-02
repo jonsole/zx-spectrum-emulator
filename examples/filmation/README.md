@@ -59,7 +59,7 @@ sheet; the packed forms and the font come from your own copy of the game, once,
 before the first build:
 
 ```powershell
-.\.venv-win\Scripts\python.exe examples\filmation\knightlore\kl_extract.py "path\to\Knight Lore.sna"
+.\.venv-win\Scripts\python.exe examples\filmation\knightlore\scripts\kl_extract.py "path\to\Knight Lore.sna"
 ```
 
 The release's example workspaces carry none of it, and make all of it with
@@ -68,8 +68,8 @@ checks what comes out against the game's `original.json` -- the hashes a right
 copy gives:
 
 ```powershell
-.\.venv-win\Scripts\python.exe examples\filmation\extract.py knightlore "path\to\your\copy"
-.\.venv-win\Scripts\python.exe examples\filmation\extract.py pentagram "path\to\your\copy"
+.\.venv-win\Scripts\python.exe examples\filmation\scripts\extract.py knightlore "path\to\your\copy"
+.\.venv-win\Scripts\python.exe examples\filmation\scripts\extract.py pentagram "path\to\your\copy"
 ```
 
 Both read a copy through `original.py`: a 48K `.sna` or `.z80` (versions 1 to
@@ -94,7 +94,8 @@ designer -- stops the next release, since extraction could not reproduce it
 
 The unit tests assemble single files against stubs and run them headless --
 the engine's in `engine/tests`, the games' in `knightlore/tests`,
-`pentagram/tests` and `knightlore128/tests`, and one command for all of them:
+`pentagram/tests`, `knightlore128/tests` and `lightkeep/tests`, and one command
+for all of them:
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\filmation\engine\tests\run_tests.py
@@ -123,9 +124,30 @@ rotation arena, dirty-region redraw, collision, characters, movers, sound and
 tunes, busy rooms and the joysticks. Its README lists what a game has to
 supply.
 
-**tools/** is what both games' build scripts share, rather than each keeping a
-copy: the font pipeline lives there, and each game's `font_sheet.py` and
-`font_source.py` say only what its own characters are.
+**scripts/** is the Python every game shares, rather than each keeping a copy:
+`layout.py` (where a game keeps what -- below), `castle.py` (the shape of
+`rooms.json` and `templates.json`), `sheet.py` and `graphics.py` (the sprite
+sheet and the graphic table), `extract.py` and `original.py` (making a game's
+data from your own copy), `z80file.py`, `room_budget.py`, and `tools/`, the
+font pipeline, where each game's `font_sheet.py` and `font_source.py` say only
+what its own characters are.
+
+Every game folder -- `knightlore/`, `pentagram/`, `knightlore128/`,
+`lightkeep/` -- has the same shape, which `scripts/layout.py` names:
+
+| Folder | What is in it | Carried |
+|---|---|---|
+| `<game>/` | `build.py`, the one command; the game's own `.s`; its README and `driving.md` | yes |
+| `scripts/` | the game's Python: its extractor, the generators the build runs, `sprite_sheet.py`'s facts about its art, the harvesters and profilers | yes |
+| `metadata/` | the JSON you edit: `rooms.json`, `templates.json`, `graphics.json`, `sprites.json`, `specials.json`, and `original.json`'s pinned hashes | yes |
+| `art/` | the pictures you edit: `sprites.png` | yes |
+| `generated/` | the `.s` the build writes from `metadata/` and `art/`, which the game's `.s` INCLUDE as `generated/...` | no |
+| `extracted/` | what the extractor pulled from your own copy of the original: the packed `.bin` files, and the font sheet unpacked from them | no |
+| `output/` | what the build makes: the snapshot, the SLD, the listing | no |
+| `tests/` | the game's Z80 unit tests | yes |
+
+A file names its neighbours relative to itself: `rooms.json` says its sheet is
+`../art/sprites.png`, and `sprites.json` says the same of its picture.
 
 **knightlore/** is the game:
 
@@ -150,8 +172,8 @@ copy: the font pipeline lives there, and each game's `font_sheet.py` and
 | `busy.s`, `input.s` | What it gives `engine/busy.s` and `engine/input.s`: how slow a room has to be before its monsters take turns, and its own keys. The joysticks are the engine's |
 | `tests/` | Unit tests for the movers and the arch nudge, run by `engine/tests/run_tests.py` |
 
-The generated files and the scripts that make them are in `knightlore/` too --
-see [The pipeline](#the-pipeline).
+The scripts that make the generated files are in `knightlore/scripts/`, and
+what they make is in `knightlore/generated/` -- see [The pipeline](#the-pipeline).
 
 The blitter is one routine, patched for each sprite: `sprite_blit_setup` writes
 in how many columns of a row land in the region and where the clipped ones end,
@@ -421,16 +443,16 @@ Nothing here is hand-written:
 
 | | |
 |---|---|
-| `knightlore/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin` and `font.bin` packed as the game holds them, and `graphic_map.json` and `specials.json` (where the collectables start, and the order the wizard wants them) as data |
-| `knightlore/rooms.py` | `room_data.bin` -> `rooms.json` and `templates.json`, and folds each piece's box into `graphics.json`; reports the fullest room, which sizes the object pool |
-| `knightlore/rooms_source.py` | `rooms.json` + `templates.json` -> `room_data.s` |
-| `knightlore/specials_source.py` | `specials.json` -> `specials_gen.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `specials.bin` twice |
-| `sheet.py` | the sprite sheet for both games: how `sprites.png` is laid out and framed, how `sprites.json` and `graphics.json` are written, and how the build reads the picture back and checks every sprite's frame. Each game's `sprite_sheet.py` is only what that game knows -- its groups, names, animations and fixed nudges |
-| `knightlore/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.json` -> `sprites.png` and `sprites.json`, the artwork's home, and `graphics.json`, the table saying which sprite each graphic number draws; it reads the nudges back out of `graphics.json` rather than trusting the extraction, so remaking the sheet never costs a harvest |
-| `knightlore/sprite_source.py` | `sprites.png` + `sprites.json` + `graphics.json` -> `sprite_data.s`, `sprite_table.s`, `sprite_adj_gen.s` and `graphics_gen.s` (a `GFX_*` EQU a graphic, so the sources name graphics instead of numbering them) |
-| `knightlore/font_sheet.py` | `font.bin` -> `font.png` and `font.json`, the font sheet: forty 8x8 characters, the digits and letters given to the panel as fonts so it labels each cell with what it draws |
-| `knightlore/font_source.py` | `font.png` + `font.json` -> `font.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `font.bin` |
-| `knightlore/adj.py` | a running game -> the nudges in `graphics.json` (merged in, and carried: they cannot be rebuilt without the game) |
+| `knightlore/scripts/kl_extract.py` | run once against your own game; writes `sprite_data.bin`, `room_data.bin` and `font.bin` packed as the game holds them, and `graphic_map.json` and `specials.json` (where the collectables start, and the order the wizard wants them) as data |
+| `knightlore/scripts/rooms.py` | `room_data.bin` -> `rooms.json` and `templates.json`, and folds each piece's box into `graphics.json`; reports the fullest room, which sizes the object pool |
+| `knightlore/scripts/rooms_source.py` | `rooms.json` + `templates.json` -> `room_data.s` |
+| `knightlore/scripts/specials_source.py` | `specials.json` -> `specials_gen.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `specials.bin` twice |
+| `scripts/sheet.py` | the sprite sheet for every game: how `sprites.png` is laid out and framed, how `sprites.json` and `graphics.json` are written, and how the build reads the picture back and checks every sprite's frame. Each game's `sprite_sheet.py` is only what that game knows -- its groups, names, animations and fixed nudges |
+| `knightlore/scripts/sprite_sheet.py` | `sprite_data.bin` + `graphic_map.json` -> `sprites.png` and `sprites.json`, the artwork's home, and `graphics.json`, the table saying which sprite each graphic number draws; it reads the nudges back out of `graphics.json` rather than trusting the extraction, so remaking the sheet never costs a harvest |
+| `knightlore/scripts/sprite_source.py` | `sprites.png` + `sprites.json` + `graphics.json` -> `sprite_data.s`, `sprite_table.s`, `sprite_adj_gen.s` and `graphics_gen.s` (a `GFX_*` EQU a graphic, so the sources name graphics instead of numbering them) |
+| `knightlore/scripts/font_sheet.py` | `font.bin` -> `font.png` and `font.json`, the font sheet: forty 8x8 characters, the digits and letters given to the panel as fonts so it labels each cell with what it draws |
+| `knightlore/scripts/font_source.py` | `font.png` + `font.json` -> `font.s`, which `knightlore.s` INCLUDEs where it used to INCBIN `font.bin` |
+| `knightlore/scripts/adj.py` | a running game -> the nudges in `graphics.json` (merged in, and carried: they cannot be rebuilt without the game) |
 
 The repository carries no `.bin` at all. What `kl_extract.py` pulls out in the
 game's own packed form is decoded into JSON -- `rooms.json`, `templates.json`, `sprites.json`,
@@ -438,7 +460,7 @@ game's own packed form is decoded into JSON -- `rooms.json`, `templates.json`, `
 build reads, and what you edit.
 
 `sprite_data.bin`, `room_data.bin`, `font.bin` and `graphic_map.json` are
-`kl_extract.py`'s own and are gitignored. None is needed to build: a tree with
+`kl_extract.py`'s own, in `knightlore/extracted/`, and are gitignored. None is needed to build: a tree with
 none of them assembles the game byte for byte. `graphic_map.json` is the one
 that looks like it might be -- it holds the graphic to *packed* sprite index,
 which no other file can give, since `sprites.json` is in the group tree's order

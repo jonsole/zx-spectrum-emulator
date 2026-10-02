@@ -22,8 +22,21 @@ const fs = require('fs');
 const path = require('path');
 const m = require('../room_model');
 const sheetModel = require('../sheet_model');
+const layout = require('../game_layout');
 
 const FILMATION = path.join(__dirname, '..', '..');
+// The shared Python, graphics.py and castle.py among it.
+const SCRIPTS = path.join(FILMATION, 'scripts');
+
+// A game's JSON is in its metadata/, and what its build writes is in its
+// generated/ -- each at the top of the folder for a game laid out flat.
+function metaFile(game, leaf) {
+  return path.join(layout.metadataOf(path.join(FILMATION, game)), leaf);
+}
+
+function generatedFile(game, leaf) {
+  return path.join(layout.generatedOf(path.join(FILMATION, game)), leaf);
+}
 const GAMES = ['knightlore', 'pentagram'];
 
 let failures = 0;
@@ -57,35 +70,35 @@ function atlasFor(game) {
 }
 
 function templatesText(game) {
-  const file = path.join(FILMATION, game, 'templates.json');
+  const file = metaFile(game, 'templates.json');
   if (!fs.existsSync(file)) skip(game + '/templates.json is not here');
   return fs.readFileSync(file, 'utf8');
 }
 
 function textFor(game) {
-  const file = path.join(FILMATION, game, 'rooms.json');
+  const file = metaFile(game, 'rooms.json');
   if (!fs.existsSync(file)) skip(game + '/rooms.json is not here');
   return fs.readFileSync(file, 'utf8');
 }
 
 function sheetFor(game) {
-  const file = path.join(FILMATION, game, 'sprites.json');
+  const file = metaFile(game, 'sprites.json');
   if (!fs.existsSync(file)) skip(game + '/sprites.json has not been unpacked');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
 function graphicsFor(game) {
-  const file = path.join(FILMATION, game, 'graphics.json');
+  const file = metaFile(game, 'graphics.json');
   if (!fs.existsSync(file)) skip(game + '/graphics.json is not here');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
 function sourceFor(game) {
-  const file = path.join(FILMATION, game, 'room_data.s');
+  const file = generatedFile(game, 'room_data.s');
   if (!fs.existsSync(file)) skip(game + '/room_data.s has not been generated');
   // knightlore128 keeps its templates with its rooms, in bank 4 -- room_list.s --
   // and room_data.s holds only the room's own copies of them.
-  const rooms = path.join(FILMATION, game, 'room_list.s');
+  const rooms = generatedFile(game, 'room_list.s');
   const listed = game === 'knightlore128' && fs.existsSync(rooms)
     ? '\n' + fs.readFileSync(rooms, 'utf8') : '';
   return fs.readFileSync(file, 'utf8') + listed;
@@ -557,14 +570,16 @@ for (const game of GAMES) {
     // A template carries a graphic NUMBER, which is the game's own index and
     // means nothing without a sheet numbered the same way. The file says which
     // one rather than leaving whatever opens it to assume.
-    assert.deepStrictEqual(named, m.SPRITE_FILES,
-      'the shipped castles name the files they always used');
-    assert.ok(atlas.meta.sprites, 'and say so in meta, not just by default');
+    assert.ok(atlas.meta.sprites, 'the file says so in meta, not just by default');
+    // The two JSON files are beside it in metadata/; the picture is the game's
+    // art/, one step up -- still inside the game, so a host follows it.
+    assert.deepStrictEqual(named, { sheet: '../art/sprites.png', atlas: m.SPRITE_FILES.atlas,
+                                    graphics: m.SPRITE_FILES.graphics });
+    const here = path.dirname(metaFile(game, 'rooms.json'));
     for (const key of Object.keys(m.SPRITE_FILES)) {
-      const file = path.join(FILMATION, game, named[key]);
-      // sprites.png and sprites.json are gitignored, so only the nudge table
-      // is certain to be here; the others only after a build.
-      if (key === 'adjust') assert.ok(fs.existsSync(file), file + ' is missing');
+      const file = layout.within(here, named[key]);
+      assert.ok(file, named[key] + ' is not followed out of ' + game);
+      assert.ok(fs.existsSync(file), file + ' is missing');
     }
   });
 }
@@ -812,7 +827,7 @@ for (const game of GAMES) {
 
 // --- the two namers agree --------------------------------------------------
 
-// The names come out of the sprite sheet twice: examples/filmation/graphics.py
+// The names come out of the sprite sheet twice: examples/filmation/scripts/graphics.py
 // does it for the build, and room_model.js does it for the designer. If they
 // ever disagreed, rooms_source.py would put a different number in a record
 // from the one the designer drew, and a castle would be built out of the wrong
@@ -842,7 +857,7 @@ for (const game of GAMES) {
 function pythonNames(game) {
   const here = path.join(FILMATION, game);
   const script =
-    'import json, sys; sys.path.insert(0, r"' + FILMATION + '"); ' +
+    'import json, sys; sys.path.insert(0, r"' + SCRIPTS + '"); ' +
     'import graphics; ' +
     'print(json.dumps(graphics.names(r"' + here + '")))';
   for (const python of [
@@ -857,7 +872,7 @@ function pythonNames(game) {
 // --- ...and so do the two box rules ----------------------------------------
 
 // The box a template entry occupies is worked out twice as well:
-// examples/filmation/graphics.py does it for the build, room_model.js for the
+// examples/filmation/scripts/graphics.py does it for the build, room_model.js for the
 // designer. Both read graphics.json, both swap U and V for a mirrored piece,
 // and both let an entry override with one of its own. A disagreement would
 // draw a room whose pieces sort and collide differently from the built game's,
@@ -894,13 +909,15 @@ for (const game of GAMES) {
 }
 
 // graphics.py's own answer, asked of it directly: every template entry's box,
-// keyed by the template it is in and where in it.
+// keyed by the template it is in and where in it. The castle is read the way
+// the build reads it, castle.py's read_castle: the rooms alone have no
+// templates in them since the templates got a file of their own.
 function pythonBoxes(game) {
   const here = path.join(FILMATION, game);
   const script =
-    'import json, sys; sys.path.insert(0, r"' + FILMATION + '"); ' +
+    'import json, sys; sys.path.insert(0, r"' + SCRIPTS + '"); ' +
     'import graphics, castle; ' +
-    'atlas = json.load(open(r"' + path.join(here, 'rooms.json') + '")); ' +
+    'atlas = castle.read_castle(r"' + here + '"); ' +
     'sizes = graphics.sizes(r"' + here + '"); ' +
     'out = {}; ' +
     '[out.__setitem__(t + "#" + str(i), [b["u"], b["v"], b["z"]]) ' +

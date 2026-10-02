@@ -17,7 +17,7 @@
       "label": "Extract Pentagram",
       "type": "process",
       "command": "python",
-      "args": ["examples/filmation/extract.py", "pentagram", "${input:copy}"],
+      "args": ["examples/filmation/scripts/extract.py", "pentagram", "${input:copy}"],
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "problemMatcher": []

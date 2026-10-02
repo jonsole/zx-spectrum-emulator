@@ -51,6 +51,14 @@ GitHub takes its notes from that section.
   `pentagram.html` the Filmation Pentagram, from its tape or a snapshot, every
   part of it from the copy. See [docs/web.md](docs/web.md).
 
+- **The Filmation examples are laid out alike.** Every game folder keeps its
+  `build.py` and its own assembler at the top, its Python in `scripts/`, the
+  JSON you edit in `metadata/`, its sprite sheet in `art/`, what the build
+  writes in `generated/`, and what the Extract task pulls from your copy of the
+  original in `extracted/`; the Python every game shares is in
+  `examples/filmation/scripts/`. The Knight Lore and Pentagram workspaces' Extract
+  task runs `examples/filmation/scripts/extract.py`.
+
 ## 0.1.0 (2026-09-29)
 
 The first release: the emulator and the VS Code extension, packaged.

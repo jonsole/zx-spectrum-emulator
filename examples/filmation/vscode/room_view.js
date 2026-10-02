@@ -1,6 +1,6 @@
 // Designing a Filmation room, in the editor.
 //
-// A game's rooms live in examples/filmation/<game>/rooms.json: rooms.py
+// A game's rooms live in examples/filmation/<game>/metadata/rooms.json: rooms.py
 // decodes the game's own packed tables into it, and rooms_source.py turns it
 // back into room_data.s, which is what the build assembles. So the JSON is the
 // editable form, and this opens it as a picture of the castle rather than
@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const model = require('./room_model');
+const layout = require('./game_layout');
 const { openTemplatesOf } = require('./templates_view');
 
 const VIEW_TYPE = 'filmation.roomDesign';
@@ -52,15 +53,12 @@ const SPECIALS = 'specials.json';
 // third file to find. Without a sheet the page still opens and still edits,
 // and says it has no sheet rather than drawing an empty room.
 //
-// A named path is relative to the rooms.json, and may not climb out of its
-// directory: the file is data, and data does not get to point the editor at
-// something elsewhere on the disk.
-function beside(here, name) {
-  const full = path.resolve(here, name);
-  const inside = path.relative(here, full);
-  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return null;
-  return full;
-}
+// A named path is relative to the rooms.json, and may not climb out of the
+// game's folder: the file is data, and data does not get to point the editor
+// at something elsewhere on the disk. The game's folder is the one above
+// metadata/ -- rooms.json names its picture as ../art/sprites.png -- or, for a
+// castle laid out flat, the rooms.json's own; game_layout.js has the rule.
+const beside = layout.within;
 
 // ...and the ones that are JSON, which is most of them now.
 function readJsonIfThere(file) {
@@ -148,7 +146,7 @@ function bootFor(document, room) {
     room: room === undefined ? null : room,
     // The editor saves the document, so the page needs no Save of its own.
     showSave: false,
-    buildLabel: 'Build ' + path.basename(here)
+    buildLabel: 'Build ' + path.basename(layout.gameDirOf(here))
   };
 }
 
@@ -305,13 +303,14 @@ class RoomSession {
   }
 
   // The game's own build.py, as a task, so its output lands in the terminal
-  // panel where the rest of the build output does.
+  // panel where the rest of the build output does. It is at the top of the
+  // game's folder, which is above the rooms.json when that is in metadata/.
   build() {
-    const here = path.dirname(this.document.uri.fsPath);
+    const here = layout.gameDirOf(path.dirname(this.document.uri.fsPath));
     const build = path.join(here, 'build.py');
     if (!fs.existsSync(build)) {
-      vscode.window.showErrorMessage('No build.py beside ' + path.basename(here) +
-                                     '/rooms.json.');
+      vscode.window.showErrorMessage('No build.py in ' + path.basename(here) +
+                                     ', the game this rooms.json belongs to.');
       return;
     }
     const python = pythonFor(here);
@@ -353,7 +352,8 @@ class RoomSession {
 }
 
 // The repo's own interpreter, which is what its scripts are written against,
-// falling back on whatever `python` is on PATH.
+// falling back on whatever `python` is on PATH. `here` is the game's folder,
+// examples/filmation/<game>, three below the repo.
 function pythonFor(here) {
   const repo = path.resolve(here, '..', '..', '..');
   const venv = path.join(repo, '.venv-win', 'Scripts', 'python.exe');
@@ -409,7 +409,8 @@ async function pickRooms() {
   if (found.length === 1) return found[0];
   const pick = await vscode.window.showQuickPick(
     found.map((uri) => ({
-      label: path.basename(path.dirname(uri.fsPath)),
+      // The game's name, not "metadata".
+      label: path.basename(layout.gameDirOf(path.dirname(uri.fsPath))),
       description: vscode.workspace.asRelativePath(uri),
       uri: uri
     })),

@@ -12,9 +12,14 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const m = require('../specials_model');
+const layout = require('../game_layout');
 
 const FILMATION = path.join(__dirname, '..', '..');
 const KNIGHTLORE = path.join(FILMATION, 'knightlore');
+// Its JSON is in metadata/, what its build writes in generated/, and its own
+// .s -- special.s -- at the top.
+const KNIGHTLORE_JSON = layout.metadataOf(KNIGHTLORE);
+const KNIGHTLORE_GENERATED = layout.generatedOf(KNIGHTLORE);
 
 let failures = 0;
 let skipped = 0;
@@ -41,7 +46,7 @@ function skip(why) {
 }
 
 function realSpecials() {
-  const file = path.join(KNIGHTLORE, 'specials.json');
+  const file = path.join(KNIGHTLORE_JSON, 'specials.json');
   if (!fs.existsSync(file)) skip('knightlore/specials.json is not here');
   return m.parseSpecials(fs.readFileSync(file, 'utf8'));
 }
@@ -80,7 +85,7 @@ test('the constants are the ones special.s defines', () => {
   // so the sources name the graphic instead of spelling its number out. Follow
   // the label where there is one: what this checks is that the model and the
   // game agree on the number, however the game says it.
-  const labels = path.join(KNIGHTLORE, 'graphics_gen.s');
+  const labels = path.join(KNIGHTLORE_GENERATED, 'graphics_gen.s');
   const generated = fs.existsSync(labels) ? fs.readFileSync(labels, 'utf8') : '';
   const equ = (name) => {
     const found = source.match(
@@ -232,7 +237,7 @@ test('serializing keeps the file\'s own line endings', () => {
 // --- the real file --------------------------------------------------------
 
 test('the real specials.json round-trips through parse and serialize', () => {
-  const file = path.join(KNIGHTLORE, 'specials.json');
+  const file = path.join(KNIGHTLORE_JSON, 'specials.json');
   if (!fs.existsSync(file)) skip('knightlore/specials.json is not here');
   const text = fs.readFileSync(file, 'utf8');
   const eol = text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
@@ -241,7 +246,7 @@ test('the real specials.json round-trips through parse and serialize', () => {
 
 test('the real specials.json has nothing wrong with it', () => {
   const said = realSpecials();
-  const roomsFile = path.join(KNIGHTLORE, 'rooms.json');
+  const roomsFile = path.join(KNIGHTLORE_JSON, 'rooms.json');
   const atlas = fs.existsSync(roomsFile)
     ? JSON.parse(fs.readFileSync(roomsFile, 'utf8')) : null;
   assert.deepStrictEqual(m.checkSpecials(said, atlas), []);
@@ -260,7 +265,7 @@ test('the real game puts at most two collectables in any room', () => {
 });
 
 test('every collectable starts in a room the castle has', () => {
-  const roomsFile = path.join(KNIGHTLORE, 'rooms.json');
+  const roomsFile = path.join(KNIGHTLORE_JSON, 'rooms.json');
   if (!fs.existsSync(roomsFile)) skip('knightlore/rooms.json is not here');
   const atlas = JSON.parse(fs.readFileSync(roomsFile, 'utf8'));
   const have = new Set(atlas.rooms.map((r) => r.number));

@@ -168,7 +168,7 @@ The engine names nothing else of the game's.
 | `menu_mode`, `input_keyboard`, `input_stick_done` | byte, routines | input.s | Which control the menu chose; the game's own keys; and the tail every stick reader ends at, which adds whatever else that game reads while a stick is steering and ends at `input_store` |
 | `INPUT_LEFT_B`, `INPUT_RIGHT_B`, `INPUT_FORWARD_B`, `INPUT_DOWN_B`, `INPUT_STICK_FIRE_B` | EQU | input.s | Which BIT of the answer each of a stick's five inputs sets. A stick has five and no more, so what the fifth means is the games' own business: Knight Lore points it at jump, Pentagram at fire |
 | `tune_note_at`, `tune_key` | routines | tune.s | A = a note, 1 to 63: carry set and B, C its half-period with E the cycles one length lasts, or carry clear to skip it; and whether a key is down, which stops a tune |
-| `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/sprite_source.py` |
+| `sprite_table`, `sprite_adj_index`, `sprite_adj_pairs`, `sprite_adj_mirror` | tables | object.s, room.s, screen.s | Generated from the game's artwork by `../knightlore/scripts/sprite_source.py` |
 | `SHIFT_ARENA_SIZE`, `shift_arena`, `shift_arena_next` | EQU, `DS`, `DW` | shift.s, walker.s | The rotation arena, reserved by the game because its size is the game's: see the head of `shift.s` |
 | `view_clear` | macro | redraw.s | What a region starts from, defined before `redraw.s` is included. Knight Lore and Pentagram expand `redraw.s`'s own `view_clear_zeroes`; Knight Lore 128K calls a copy from its pre-drawn backdrop. Given `region_rows`, `region_width` and the extents; must fill that many rows of `view_buffer` |
 

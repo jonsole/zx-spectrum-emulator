@@ -46,6 +46,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The shared Python, examples/filmation/scripts: layout.py says where a
+# game keeps what.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import layout                                                   # noqa: E402
+
 # Knight Lore's sources, its data and the scripts that turn the data into
 # source all live here, beside this script.
 HERE = Path(__file__).resolve().parent
@@ -104,18 +109,18 @@ def generate_sprite_data() -> None:
     a CACHE of graphic_map.json -- and a cache nothing invalidated, so
     re-pointing a graphic changed a file the build had already stopped reading.
     """
-    generator = KNIGHTLORE / "sprite_source.py"
-    sheet = KNIGHTLORE / "sprites.png"
-    atlas = KNIGHTLORE / "sprites.json"
+    generator = KNIGHTLORE / "scripts" / "sprite_source.py"
+    sheet = layout.art(KNIGHTLORE) / "sprites.png"
+    atlas = layout.metadata(KNIGHTLORE) / "sprites.json"
     # The graphic table is an input too, and a change to it reaches further
     # than a change to the artwork: the nudges, the boxes and the GFX_* labels
     # all come out of it.
-    table = KNIGHTLORE / "graphics.json"
+    table = layout.metadata(KNIGHTLORE) / "graphics.json"
     # ...and so is the code that reads the sheet and the game's facts about it:
     # the frame check and the pixel colours are sheet.py's, and what animates
     # and what keeps its blank rows are sprite_sheet.py's.
-    code = [KNIGHTLORE.parent / "sheet.py", KNIGHTLORE / "sprite_sheet.py"]
-    generated = [KNIGHTLORE / name for name in
+    code = [KNIGHTLORE.parent / "scripts" / "sheet.py", KNIGHTLORE / "scripts" / "sprite_sheet.py"]
+    generated = [layout.generated(KNIGHTLORE) / name for name in
                  ("sprite_data.s", "sprite_table.s", "graphics_gen.s",
                   "sprite_adj_gen.s")]
 
@@ -123,8 +128,8 @@ def generate_sprite_data() -> None:
         sys.exit(f"{sheet.name} and {atlas.name} are the graphics this game is "
                  f"built from, and one of them is missing.\n"
                  f"They are made once, from your own copy of the game:\n"
-                 f"    python kl_extract.py \"path/to/Knight Lore\"\n"
-                 f"    python sprite_sheet.py\n"
+                 f"    python scripts/kl_extract.py \"path/to/Knight Lore\"\n"
+                 f"    python scripts/sprite_sheet.py\n"
                  f"After that they are yours to edit and nothing overwrites them.")
 
     newest_input = max(f.stat().st_mtime
@@ -144,12 +149,12 @@ def generate_font_data() -> None:
     that sheet into font.s. Only the first run makes a sheet -- an existing one
     is the artwork, edits and all, and is never overwritten.
     """
-    packed = KNIGHTLORE / "font.bin"
-    unpack = KNIGHTLORE / "font_sheet.py"
-    generator = KNIGHTLORE / "font_source.py"
-    sheet = KNIGHTLORE / "font.png"
-    atlas = KNIGHTLORE / "font.json"
-    generated = KNIGHTLORE / "font.s"
+    packed = layout.extracted(KNIGHTLORE) / "font.bin"
+    unpack = KNIGHTLORE / "scripts" / "font_sheet.py"
+    generator = KNIGHTLORE / "scripts" / "font_source.py"
+    sheet = layout.extracted(KNIGHTLORE) / "font.png"
+    atlas = layout.extracted(KNIGHTLORE) / "font.json"
+    generated = layout.generated(KNIGHTLORE) / "font.s"
 
     if not sheet.is_file() or not atlas.is_file():
         if not packed.is_file():
@@ -174,9 +179,9 @@ def generate_specials() -> None:
     the game once; after that it is the editable form, and moving a collectable
     is an edit to it.
     """
-    data = KNIGHTLORE / "specials.json"
-    generator = KNIGHTLORE / "specials_source.py"
-    generated = KNIGHTLORE / "specials_gen.s"
+    data = layout.metadata(KNIGHTLORE) / "specials.json"
+    generator = KNIGHTLORE / "scripts" / "specials_source.py"
+    generated = layout.generated(KNIGHTLORE) / "specials_gen.s"
 
     if not data.is_file():
         sys.exit(f"{data.name} is missing -- run kl_extract.py against your "
@@ -292,15 +297,15 @@ def generate_room_data() -> None:
     Going back to those is a deliberate act: run rooms.py by hand, which says
     plainly that it overwrites what is there.
     """
-    emitter = KNIGHTLORE / "rooms_source.py"
-    atlas = KNIGHTLORE / "rooms.json"
-    generated = KNIGHTLORE / "room_data.s"
+    emitter = KNIGHTLORE / "scripts" / "rooms_source.py"
+    atlas = layout.metadata(KNIGHTLORE) / "rooms.json"
+    generated = layout.generated(KNIGHTLORE) / "room_data.s"
 
     if not atlas.is_file():
         sys.exit(f"{atlas.name} is the castle this game is built from, and it "
                  f"is missing.\nIt is made once, from your own copy of the "
-                 f"game:\n    python kl_extract.py \"path/to/Knight Lore\"\n"
-                 f"    python rooms.py")
+                 f"game:\n    python scripts/kl_extract.py \"path/to/Knight Lore\"\n"
+                 f"    python scripts/rooms.py")
 
     # The sheet is an input too: rooms.json names its graphics after the
     # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
@@ -310,13 +315,13 @@ def generate_room_data() -> None:
     # ...and the templates the rooms place, a file of their own, wherever
     # rooms.json says it is.
     named = (json.loads(atlas.read_text(encoding="utf-8")).get("meta") or {}).get("templates")
-    templates = KNIGHTLORE / named if named else None
+    templates = layout.metadata(KNIGHTLORE) / named if named else None
     if templates and templates.is_file():
         inputs.append(templates.stat().st_mtime)
-    namer = KNIGHTLORE.parent / "graphics.py"
+    namer = KNIGHTLORE.parent / "scripts" / "graphics.py"
     if namer.is_file():
         inputs.append(namer.stat().st_mtime)
-    sheet = KNIGHTLORE / "sprites.json"
+    sheet = layout.metadata(KNIGHTLORE) / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
 
@@ -335,12 +340,12 @@ def require_extracted() -> None:
     without the carried files is in the same place. Said once, here, rather
     than by whichever generator happens to find the first file missing.
     """
-    pins = json.loads((HERE / "original.json").read_text(encoding="utf-8"))
+    pins = json.loads((layout.metadata(HERE) / "original.json").read_text(encoding="utf-8"))
     missing = [name for name in pins["carried"] if not (HERE / name).is_file()]
     if missing:
         sys.exit(f"{', '.join(missing)} missing: Knight Lore's data comes from your own copy "
                  f"of the original.\nPut it in the workspace and run the \"Extract Knight Lore\" "
-                 f"task, or:\n    python examples/filmation/extract.py knightlore "
+                 f"task, or:\n    python examples/filmation/scripts/extract.py knightlore "
                  f"path/to/your/copy")
 
 

@@ -213,7 +213,7 @@ now.
 
 A `sheet` one is the opposite: it was drawn rather than found, so the bytes in
 the atlas are all there is. That is the source for an atlas written by a tool
-of your own -- `examples/filmation/knightlore/sprite_sheet.py` writes one for
+of your own -- `examples/filmation/knightlore/scripts/sprite_sheet.py` writes one for
 Knight Lore's artwork -- and the panel never asks the host for its bytes, so
 changing its width or its height re-reads nothing. Only **Grab selection** and
 **Re-read** go back to the host. It is offered in the dialog but cannot be

@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const r = require('../room_render');
 const m = require('../room_model');
+const layout = require('../game_layout');
 
 const FILMATION = path.join(__dirname, '..', '..');
 const GAMES = ['knightlore', 'pentagram'];
@@ -56,8 +57,9 @@ function castleOf(game) {
                          m.parseTemplates(fileIn(game, 'templates.json')));
 }
 
+// A game's JSON, from its metadata/ -- or its top, for a game laid out flat.
 function fileIn(game, name) {
-  const file = path.join(FILMATION, game, name);
+  const file = path.join(layout.metadataOf(path.join(FILMATION, game)), name);
   if (!fs.existsSync(file)) skip(game + '/' + name + ' is not here');
   return fs.readFileSync(file, 'utf8');
 }
@@ -324,7 +326,7 @@ function sheetFor(game) {
 }
 
 function graphicsFor(game) {
-  const file = path.join(FILMATION, game, 'graphics.json');
+  const file = path.join(layout.metadataOf(path.join(FILMATION, game)), 'graphics.json');
   if (!fs.existsSync(file)) skip(game + '/graphics.json is not here');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }

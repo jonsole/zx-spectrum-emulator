@@ -1,7 +1,7 @@
 // The room designer's pure half: what a Filmation castle is, what a room
 // expands to, how its rooms join up, and what would stop it building.
 //
-// The file it works on is examples/filmation/<game>/rooms.json, which is the
+// The file it works on is examples/filmation/<game>/metadata/rooms.json, which is the
 // editable form of a game's rooms. rooms.py decodes the game's own tables into
 // it and rooms_source.py turns it back into room_data.s, so a change made here
 // reaches the build without going anywhere near the original bytes. Both games
@@ -50,7 +50,7 @@ const FIRST_REAL_GRAPHIC = 2;
 
 // A template names its graphic; the game knows it by a number, and so do the
 // sprite sheet and the nudge table. The sheet is where the two meet, and this
-// is the same rule examples/filmation/graphics.py uses -- the Python names
+// is the same rule examples/filmation/scripts/graphics.py uses -- the Python names
 // them on the way into rooms.json and puts the numbers back on the way out, so
 // the two have to agree or a castle is built from the wrong pieces.
 // tests/room_model_test.js holds them together.
@@ -69,7 +69,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined') {
 }
 
 // A graphic is named after the sprite it draws, with the number on the end
-// where several graphics draw one sprite. examples/filmation/graphics.py does
+// where several graphics draw one sprite. examples/filmation/scripts/graphics.py does
 // the same in Python for the build, and tests/room_model_test.js requires the
 // two to agree name for name -- a castle built from one and named by the other
 // would be built out of the wrong pieces.
@@ -170,7 +170,7 @@ function spriteFilesOf(atlas) {
 // A castle is two files, one job each: rooms.json is the rooms and the floor
 // shapes, templates.json the castle-wide pieces the rooms place. Both editors
 // work on ONE castle in memory, the two merged -- rooms with the template
-// groups in them -- the way examples/filmation/castle.py's read_castle does
+// groups in them -- the way examples/filmation/scripts/castle.py's read_castle does
 // for the build, and each writes back only the file it owns.
 const TEMPLATE_GROUPS = ['sceneryTemplates', 'objectTemplates'];
 // What rooms.py calls the two when it first writes them. After that each file
@@ -832,7 +832,7 @@ function rulesOf(atlas) {
 // arches), and Pentagram's builder reads a destination byte after exactly the
 // scenery indices in rooms.py's DOOR_INDICES. The names say the same thing
 // today, but a name can be edited in the templates panel and the game's code
-// cannot, so it is not trusted for this. examples/filmation/castle.py has the
+// cannot, so it is not trusted for this. examples/filmation/scripts/castle.py has the
 // same table for the build.
 //
 // That is the rule for those two games only. A castle whose templates.json

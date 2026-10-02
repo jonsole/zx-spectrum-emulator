@@ -7,7 +7,7 @@
 // (No node on the path? VS Code's own will do:
 //   ELECTRON_RUN_AS_NODE=1 "<VS Code>/Code.exe" examples/filmation/vscode/tests/graphic_map_model_test.js)
 //
-// The document is examples/filmation/<game>/graphics.json -- which sprite each
+// The document is examples/filmation/<game>/metadata/graphics.json -- which sprite each
 // graphic number draws, the nudge that lines it up, and the box it occupies.
 // sprites.json is read alongside, for the pictures and the names, and is not
 // edited here; both are passed in, in that order. The small tests stand on
@@ -19,6 +19,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const m = require('../graphic_map_model');
+const layout = require('../game_layout');
 
 const FILMATION = path.join(__dirname, '..', '..');
 const GAMES = ['knightlore', 'pentagram'];
@@ -47,8 +48,9 @@ function skip(why) {
   throw err;
 }
 
+// A game's JSON, from its metadata/ -- or its top, for a game laid out flat.
 function fileIn(game, leaf) {
-  const file = path.join(FILMATION, game, leaf);
+  const file = path.join(layout.metadataOf(path.join(FILMATION, game)), leaf);
   if (!fs.existsSync(file)) skip(game + '/' + leaf + ' has not been unpacked');
   return fs.readFileSync(file, 'utf8');
 }
@@ -280,7 +282,7 @@ for (const game of GAMES) {
   test(game + ': the real table round-trips through parse and serialize', () => {
     // The panel writes whole documents. If writing one back unchanged changed
     // anything, every edit would carry the reflow of the whole file with it --
-    // and examples/filmation/graphics.py's format_table, which writes the same
+    // and examples/filmation/scripts/graphics.py's format_table, which writes the same
     // layout from the other side, would fight it.
     const text = fileIn(game, 'graphics.json');
     const eol = text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';

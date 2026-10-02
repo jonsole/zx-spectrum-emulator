@@ -7,9 +7,12 @@
 
 const fs = require('fs');
 const path = require('path');
+const layout = require('./game_layout');
 
 // Sources the build writes. They define the template labels rather than use
-// them, so they are no evidence that the game's own code depends on one.
+// them, so they are no evidence that the game's own code depends on one. In
+// a game laid out flat they sit among the hand-written ones, so they are
+// named here as well as being out of the way in generated/.
 const GENERATED = new Set(['room_data.s', 'sprite_data.s', 'sprite_table.s',
                            'sprite_adj_gen.s', 'graphics_gen.s', 'font.s',
                            'specials_gen.s']);
@@ -41,9 +44,12 @@ function readIfThere(file) {
 // because Pentagram's object EQUs are byte offsets. room_data.s may be a build
 // behind the document, but a template's position does not move -- nothing
 // renumbers one -- so position is what is reported.
+//
+// `here` is the game's folder, where its hand-written .s are. The generated
+// room_data.s is in its generated/, or beside the rest in a game laid out flat.
 function codeReferences(here) {
   const out = { sceneryTemplates: {}, objectTemplates: {} };
-  const generated = readIfThere(path.join(here, 'room_data.s'));
+  const generated = readIfThere(path.join(layout.generatedOf(here), 'room_data.s'));
   if (!generated) return out;
 
   const labels = new Map();           // label -> { group, index }

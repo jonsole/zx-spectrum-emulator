@@ -11,16 +11,21 @@ inject the same shape, so the page itself has no idea which it is in.
     python examples/filmation/vscode/room_designer.py path/to/rooms.json
     python examples/filmation/vscode/room_designer.py --port 8900 --no-browser
 
-It edits examples/filmation/<game>/rooms.json in place, which is the game's
+It edits examples/filmation/<game>/metadata/rooms.json in place, which is the game's
 rooms in their editable form: rooms.py decodes room_data.bin into it and
 rooms_source.py turns it back into room_data.s, so what the designer writes is
 what the next build assembles. Nothing here regenerates it from the packed
 tables -- that would throw the edits away -- so the round trip is safe.
 
-It also needs the artwork, which is gitignored: sprites.png and sprites.json,
-which the game's own build.py unpacks from sprite_data.bin the first time it
-runs. Without them the page still opens and still edits, and says it has no
-sheet rather than drawing an empty room.
+It also needs the artwork: art/sprites.png, and metadata/sprites.json beside
+the rooms, which a game's sprite_sheet.py writes once from what its extractor
+pulled out of your own copy. Without them the page still opens and still
+edits, and says it has no sheet rather than drawing an empty room.
+
+A game keeps its JSON in metadata/ and its pictures in art/, the way
+examples/filmation/scripts/layout.py lays a game out. A folder with no
+metadata/ in it is taken as flat, its JSON at the top -- the way the room
+editor in game-disassemblies hands over a castle -- and works the same.
 
 Served on localhost only. It writes to a file in your working tree and runs
 build.py on request, so it has no business being reachable from anywhere else.
@@ -49,6 +54,25 @@ INLINED = ("sheet_model.js", "room_model.js", "room_render.js",
 
 DEFAULT_PORT = 8760
 
+# Where a game keeps its JSON. The rule is scripts/layout.py's, kept here in
+# the two lines it takes rather than imported, so the designer still runs
+# against a folder that is not under examples/filmation.
+METADATA = "metadata"
+
+
+def rooms_in(game_dir):
+    """A game's rooms.json, in its metadata/ or, laid out flat, at its top."""
+    inside = game_dir / METADATA
+    return (inside if inside.is_dir() else game_dir) / "rooms.json"
+
+
+def game_of(rooms_json):
+    """The game's folder, from its rooms.json: the folder above metadata/, or
+    the rooms.json's own when the game is flat. It is where build.py is, and
+    the bound no path the castle names may leave."""
+    here = rooms_json.parent
+    return here.parent if here.name.lower() == METADATA else here
+
 
 def find_game(argument):
     """The rooms.json to edit, from a game name or a path."""
@@ -57,7 +81,7 @@ def find_game(argument):
     as_path = Path(argument)
     if as_path.suffix == ".json" and as_path.is_file():
         return as_path.resolve()
-    guess = FILMATION / argument / "rooms.json"
+    guess = rooms_in(FILMATION / argument)
     if guess.is_file():
         return guess
     sys.exit(
@@ -72,13 +96,14 @@ def find_game(argument):
 def find_games():
     """Every game under examples/filmation that has rooms to edit.
 
-    What the Load button offers. A game is a directory with a rooms.json in it,
-    so a new one needs nothing here -- run its rooms.py once and it appears.
+    What the Load button offers. A game is a directory with a rooms.json in
+    its metadata/ (or at its top, laid out flat), so a new one needs nothing
+    here -- run its rooms.py once and it appears.
     """
     if not FILMATION.is_dir():
         return []
     return [child.name for child in sorted(FILMATION.iterdir())
-            if (child / "rooms.json").is_file()]
+            if rooms_in(child).is_file()]
 
 
 def data_uri(path):
@@ -101,30 +126,32 @@ SPRITE_FILES = {
 }
 
 
-def beside(game_dir, name):
+def beside(rooms_json, name):
     """A file the castle names, resolved next to it.
 
-    Relative to the rooms.json, and not allowed out of its directory: the file
-    is data, and data does not get to point the server at the rest of the disk.
+    Relative to the rooms.json, and not allowed out of the game's folder --
+    metadata/rooms.json names its picture as ../art/sprites.png, which is still
+    the game's. The file is data, and data does not get to point the server at
+    the rest of the disk. The same rule as game_layout.js's within.
     """
     if not isinstance(name, str) or not name:
         return None
-    full = (game_dir / name).resolve()
+    full = (rooms_json.parent / name).resolve()
     try:
-        full.relative_to(game_dir.resolve())
+        full.relative_to(game_of(rooms_json).resolve())
     except ValueError:
         return None
     return full
 
 
-def sprite_files(atlas, game_dir):
+def sprite_files(atlas, rooms_json):
     """The artwork files, as the castle names them: the picture, where each
     sprite is in it, and graphics.json -- which sprite each graphic number draws
     and the pixel nudge that lines it up, so the page needs nothing else to
     draw a room the way the game would.
     """
     said = (atlas.get("meta") or {}).get("sprites") or {}
-    return {key: beside(game_dir, said.get(key) or fallback)
+    return {key: beside(rooms_json, said.get(key) or fallback)
             for key, fallback in SPRITE_FILES.items()}
 
 
@@ -148,9 +175,10 @@ def templates_leaf(text):
 
 def boot_for(rooms_json):
     """What the page needs to open: the file, the artwork, and how to save it."""
-    game_dir = rooms_json.parent
+    here = rooms_json.parent
+    game_dir = game_of(rooms_json)
     text = rooms_json.read_text(encoding="utf-8", newline="")
-    art = sprite_files(json.loads(text), game_dir)
+    art = sprite_files(json.loads(text), rooms_json)
     sheet = art["atlas"]
     return {
         "atlas": json.loads(text),
@@ -165,10 +193,10 @@ def boot_for(rooms_json):
         # The templates the rooms place, which are a file of their own. The
         # designer draws with them but never edits them -- that is the
         # templates editor's -- so Save here still writes rooms.json alone.
-        "templates": json.loads((game_dir / templates_leaf(text)).read_text(encoding="utf-8"))
-                     if (game_dir / templates_leaf(text)).is_file() else None,
-        "specials": json.loads((game_dir / SPECIALS).read_text(encoding="utf-8"))
-                    if (game_dir / SPECIALS).is_file() else None,
+        "templates": json.loads((here / templates_leaf(text)).read_text(encoding="utf-8"))
+                     if (here / templates_leaf(text)).is_file() else None,
+        "specials": json.loads((here / SPECIALS).read_text(encoding="utf-8"))
+                    if (here / SPECIALS).is_file() else None,
         "room": None,
         "showSave": True,
         "buildLabel": "Build " + game_dir.name,
@@ -301,7 +329,7 @@ class Designer(http.server.SimpleHTTPRequestHandler):
         except Exception as err:                            # noqa: BLE001
             self._send(400, "not a request: %s" % err)
             return
-        target = FILMATION / str(asked) / "rooms.json"
+        target = rooms_in(FILMATION / str(asked))
         if not target.is_file():
             self._send(404, "no rooms.json for %r" % asked)
             return
@@ -383,9 +411,9 @@ class Designer(http.server.SimpleHTTPRequestHandler):
         if route != "/build":
             self._send(404, "no such thing here")
             return
-        build = self.rooms_json.parent / "build.py"
+        build = game_of(self.rooms_json) / "build.py"
         if not build.is_file():
-            self._send(404, "no build.py beside %s" % self.rooms_json.name)
+            self._send(404, "no build.py in %s" % game_of(self.rooms_json).name)
             return
         done = subprocess.run([sys.executable, str(build)], cwd=str(build.parent),
                               capture_output=True, text=True)
@@ -416,10 +444,10 @@ def main():
         print("Room designer for %s" % rooms_json)
         print("  %s   (ctrl-c to stop)" % url)
         art = sprite_files(json.loads(rooms_json.read_text(encoding="utf-8")),
-                           rooms_json.parent)
+                           rooms_json)
         if not art["sheet"] or not art["sheet"].is_file():
-            print("  no sprite sheet yet -- run %s/build.py once to unpack the artwork"
-                  % rooms_json.parent.name)
+            print("  no sprite sheet yet -- run %s's extractor and sprite_sheet.py "
+                  "once to make the artwork" % game_of(rooms_json).name)
         if not args.no_browser:
             threading.Timer(0.3, webbrowser.open, (url,)).start()
         try:

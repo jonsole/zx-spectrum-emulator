@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const m = require('../room_model');
+const layout = require('../game_layout');
 
 const EXT = path.join(__dirname, '..');
 const FILMATION = path.join(EXT, '..');
@@ -47,19 +48,22 @@ function skip(why) {
   throw err;
 }
 
+// The files where the host finds them: the pair in the game's metadata/, and
+// the artwork wherever rooms.json's meta.sprites says, relative to it.
 function bootFor(game) {
-  const here = path.join(FILMATION, game);
+  const here = layout.metadataOf(path.join(FILMATION, game));
   const rooms = path.join(here, 'rooms.json');
   const templates = path.join(here, 'templates.json');
   if (!fs.existsSync(rooms)) skip(game + '/rooms.json is not here');
   if (!fs.existsSync(templates)) skip(game + '/templates.json is not here');
   const text = fs.readFileSync(rooms, 'utf8');
   const templatesText = fs.readFileSync(templates, 'utf8');
+  const named = m.spriteFilesOf(JSON.parse(text));
   const read = (name) => {
-    const file = path.join(here, name);
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    const file = layout.within(here, name);
+    return file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   };
-  const png = path.join(here, 'sprites.png');
+  const png = layout.within(here, named.sheet) || '';
   // What templates_view.js sends: the document, templates.json, and the
   // rooms beside it.
   return {
@@ -67,8 +71,8 @@ function bootFor(game) {
     rooms: JSON.parse(text),
     eol: templatesText.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
     roomsEol: text.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
-    sheet: read('sprites.json'),
-    graphics: read('graphics.json'),
+    sheet: read(named.atlas),
+    graphics: read(named.graphics),
     sheetPng: fs.existsSync(png)
       ? 'data:image/png;base64,' + fs.readFileSync(png).toString('base64') : null,
     // What templates_view.js's codeReferences finds; the page only reads it.

@@ -170,7 +170,7 @@ what is in them -- come from the original games.
 
 The Knight Lore and Pentagram example workspaces' zips carry **none** of it:
 each makes it from the user's own copy of the original
-(`examples/filmation/extract.py`), checked against `original.json`, which
+(`examples/filmation/scripts/extract.py`), checked against `original.json`, which
 holds only hashes. What they carry of the games is `graphics.json` -- which
 sprite each graphic number draws and the nudge that places it, the remake's
 own table. This repository carries the extracted JSON and `sprites.png` for

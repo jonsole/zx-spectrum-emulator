@@ -16,6 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const model = require('../graphic_map_model');
+const sheetModel = require('../sheet_model');
+const layout = require('../game_layout');
 
 const EXT = path.join(__dirname, '..');
 const FILMATION = path.join(EXT, '..');
@@ -63,15 +65,26 @@ function assemble(boot) {
   return html.replace('/*@host@*/', () => bootJs);
 }
 
-function bootFor(game) {
-  const here = path.join(FILMATION, game);
+// The files the way the host finds them: graphics.json in the game's
+// metadata/, the sheet it names in "sprites" relative to itself, and the
+// picture the sheet names in sheet.file relative to the sheet.
+function filesFor(game) {
+  const here = layout.metadataOf(path.join(FILMATION, game));
   const file = path.join(here, 'graphics.json');
-  const sheetFile = path.join(here, 'sprites.json');
   if (!fs.existsSync(file)) skip(game + '/graphics.json has not been unpacked');
-  if (!fs.existsSync(sheetFile)) skip(game + '/sprites.json has not been unpacked');
+  const graphics = model.parseMap(fs.readFileSync(file, 'utf8'));
+  const sheetFile = layout.within(here, graphics.sprites || 'sprites.json');
+  if (!sheetFile || !fs.existsSync(sheetFile)) skip(game + '/sprites.json has not been unpacked');
+  const sheet = JSON.parse(fs.readFileSync(sheetFile, 'utf8'));
+  const png = layout.within(path.dirname(sheetFile), sheetModel.formatOf(sheet).file);
+  return { graphics: graphics, sheet: sheet, png: png };
+}
+
+function bootFor(game) {
+  const files = filesFor(game);
   return {
-    graphics: model.parseMap(fs.readFileSync(file, 'utf8')),
-    sheet: JSON.parse(fs.readFileSync(sheetFile, 'utf8')),
+    graphics: files.graphics,
+    sheet: files.sheet,
     game: game,
     eol: '\n',
     sheetPng: null,
@@ -192,6 +205,18 @@ test('the page runs against the real map and draws every graphic', () => {
   assert.ok(/^150/.test(textIn(tiles[150]).trim()) ||
             textIn(tiles[150]).includes('150'),
             'and with its number');
+});
+
+test('the picture is where the sheet says, in the game’s art/', () => {
+  // The sheet is in metadata/ and names its picture ../art/sprites.png. The
+  // host follows that, relative to the sheet and no further than the game.
+  for (const game of ['knightlore', 'pentagram']) {
+    const png = filesFor(game).png;
+    assert.ok(png, game + ': the sheet names no picture the host would follow');
+    assert.strictEqual(path.relative(path.join(FILMATION, game), png),
+                       path.join('art', 'sprites.png'), game);
+    assert.ok(fs.existsSync(png), png + ' is missing');
+  }
 });
 
 test('the boot carries the table, the sheet and nothing beside it', () => {

@@ -40,7 +40,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import layout                                                   # noqa: E402
 import z80file                                                  # noqa: E402
 
 # The game's sources, its data and the scripts that turn the data into
@@ -96,21 +97,21 @@ def generate_sprite_data() -> None:
     a CACHE of graphic_map.json -- and a cache nothing invalidated, so
     re-pointing a graphic changed a file the build had already stopped reading.
     """
-    generator = GAME / "sprite_source.py"
-    sheet = GAME / "sprites.png"
-    atlas = GAME / "sprites.json"
+    generator = GAME / "scripts" / "sprite_source.py"
+    sheet = layout.art(GAME) / "sprites.png"
+    atlas = layout.metadata(GAME) / "sprites.json"
     # The graphic table is an input too, and a change to it reaches further
     # than a change to the artwork: the nudges, the boxes and the GFX_* labels
     # all come out of it.
-    table = GAME / "graphics.json"
+    table = layout.metadata(GAME) / "graphics.json"
     # ...and so is the code that reads the sheet and the game's facts about it:
     # the frame check and the pixel colours are sheet.py's, and what animates
     # and what keeps its blank rows are sprite_sheet.py's.
-    code = [GAME.parent / "sheet.py", GAME / "sprite_sheet.py"]
+    code = [GAME.parent / "scripts" / "sheet.py", GAME / "scripts" / "sprite_sheet.py"]
     # ...and so is the castle, since what each room loads into the room page
     # comes from the templates it places.
-    code += [GAME / "rooms.json", GAME / "templates.json", GAME.parent / "castle.py"]
-    generated = [GAME / name for name in
+    code += [layout.metadata(GAME) / "rooms.json", layout.metadata(GAME) / "templates.json", GAME.parent / "scripts" / "castle.py"]
+    generated = [layout.generated(GAME) / name for name in
                  ("sprite_data.s", "sprite_library.s", "sprite_table.s",
                   "room_sprites.s", "graphics_gen.s", "sprite_adj_gen.s")]
 
@@ -118,8 +119,8 @@ def generate_sprite_data() -> None:
         sys.exit(f"{sheet.name} and {atlas.name} are the graphics this game is "
                  f"built from, and one of them is missing.\n"
                  f"They are made once, from your own copy of the game:\n"
-                 f"    python kl_extract.py \"path/to/Knight Lore\"\n"
-                 f"    python sprite_sheet.py\n"
+                 f"    python scripts/kl_extract.py \"path/to/Knight Lore\"\n"
+                 f"    python scripts/sprite_sheet.py\n"
                  f"After that they are yours to edit and nothing overwrites them.")
 
     newest_input = max(f.stat().st_mtime
@@ -139,12 +140,12 @@ def generate_font_data() -> None:
     it there, unpacking it first if Knight Lore's build has not, and writes
     its own font.s here with its own font_source.py.
     """
-    packed = KNIGHTLORE / "font.bin"
-    unpack = KNIGHTLORE / "font_sheet.py"
-    generator = GAME / "font_source.py"
-    sheet = KNIGHTLORE / "font.png"
-    atlas = KNIGHTLORE / "font.json"
-    generated = GAME / "font.s"
+    packed = layout.extracted(KNIGHTLORE) / "font.bin"
+    unpack = KNIGHTLORE / "scripts" / "font_sheet.py"
+    generator = GAME / "scripts" / "font_source.py"
+    sheet = layout.extracted(KNIGHTLORE) / "font.png"
+    atlas = layout.extracted(KNIGHTLORE) / "font.json"
+    generated = layout.generated(GAME) / "font.s"
 
     if not sheet.is_file() or not atlas.is_file():
         if not packed.is_file():
@@ -170,9 +171,9 @@ def generate_specials() -> None:
     the game once; after that it is the editable form, and moving a collectable
     is an edit to it.
     """
-    data = GAME / "specials.json"
-    generator = GAME / "specials_source.py"
-    generated = GAME / "specials_gen.s"
+    data = layout.metadata(GAME) / "specials.json"
+    generator = GAME / "scripts" / "specials_source.py"
+    generated = layout.generated(GAME) / "specials_gen.s"
 
     if not data.is_file():
         sys.exit(f"{data.name} is missing -- run kl_extract.py against your "
@@ -237,15 +238,15 @@ def generate_room_data() -> None:
     Going back to those is a deliberate act: run rooms.py by hand, which says
     plainly that it overwrites what is there.
     """
-    emitter = GAME / "rooms_source.py"
-    atlas = GAME / "rooms.json"
-    generated = GAME / "room_data.s"
+    emitter = GAME / "scripts" / "rooms_source.py"
+    atlas = layout.metadata(GAME) / "rooms.json"
+    generated = layout.generated(GAME) / "room_data.s"
 
     if not atlas.is_file():
         sys.exit(f"{atlas.name} is the castle this game is built from, and it "
                  f"is missing.\nIt is made once, from your own copy of the "
-                 f"game:\n    python kl_extract.py \"path/to/Knight Lore\"\n"
-                 f"    python rooms.py")
+                 f"game:\n    python scripts/kl_extract.py \"path/to/Knight Lore\"\n"
+                 f"    python scripts/rooms.py")
 
     # The sheet is an input too: rooms.json names its graphics after the
     # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
@@ -255,13 +256,13 @@ def generate_room_data() -> None:
     # ...and the templates the rooms place, a file of their own, wherever
     # rooms.json says it is.
     named = (json.loads(atlas.read_text(encoding="utf-8")).get("meta") or {}).get("templates")
-    templates = GAME / named if named else None
+    templates = layout.metadata(GAME) / named if named else None
     if templates and templates.is_file():
         inputs.append(templates.stat().st_mtime)
-    namer = GAME.parent / "graphics.py"
+    namer = GAME.parent / "scripts" / "graphics.py"
     if namer.is_file():
         inputs.append(namer.stat().st_mtime)
-    sheet = GAME / "sprites.json"
+    sheet = layout.metadata(GAME) / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
 

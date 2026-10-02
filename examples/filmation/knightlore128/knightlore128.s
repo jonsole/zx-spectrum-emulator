@@ -89,10 +89,10 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; repository carries, not the packed files kl_extract.py first pulled them
 ; out of.
                     ORG     $6000
-                    INCLUDE "room_data.s"      ; the shapes, and this room's templates
+                    INCLUDE "generated/room_data.s"      ; the shapes, and this room's templates
                     INCLUDE "panel_data.s"
-                    INCLUDE "sprite_adj_gen.s"
-                    INCLUDE "graphics_gen.s"   ; GFX_* -- generated from graphics.json
+                    INCLUDE "generated/sprite_adj_gen.s"
+                    INCLUDE "generated/graphics_gen.s"   ; GFX_* -- generated from graphics.json
 
 ; The game's own font: forty 8x8 characters, which is all the text Knight Lore
 ; has. Digits first and then letters, no lower case and no punctuation beyond
@@ -105,7 +105,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; font.s is generated from the font sheet, font.png and font.json, which is
 ; where the artwork lives -- see font_sheet.py and font_source.py. It opens
 ; the label `font` that print_char reaches for.
-                    INCLUDE "font.s"
+                    INCLUDE "generated/font.s"
 
 ; The collectables: where each of the thirty-two starts, the order the wizard
 ; wants them in, and which graphic each row has been dealt -- see special.s.
@@ -114,7 +114,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; come out of that one file: the two that hold data and the two that only
 ; reserve room, because special_init copies the first over the second in one
 ; LDIR and nothing may come between them.
-                    INCLUDE "specials_gen.s"
+                    INCLUDE "generated/specials_gen.s"
 
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
@@ -230,7 +230,7 @@ cold_end:
 ; room_page.s.
                     ORG     $C000
 sprite_start:
-					INCLUDE "sprite_data.s"
+					INCLUDE "generated/sprite_data.s"
 sprite_end:
 
 ; Code that only runs when a key is pressed: picking up and putting down, and
@@ -253,14 +253,14 @@ room_page:
 ; The rooms, in bank 4 at $C000. Only room_find reads them, with bank 4 paged
 ; in for as long as it takes to copy one record out -- see room_find.s.
                     MMU     3, ROOM_BANK, $C000
-                    INCLUDE "room_list.s"
-                    INCLUDE "room_sprites.s"    ; what each room loads -- see room_page.s
+                    INCLUDE "generated/room_list.s"
+                    INCLUDE "generated/room_sprites.s"    ; what each room loads -- see room_page.s
 room_list_end:
                     DISPLAY "rooms, bank 4   $C000..", /H, room_list_end, "   free: ", /D, $10000 - room_list_end
 
 ; The library, from bank 1 on: the sprites rooms load. sprite_library.s pages
 ; each bank in for itself, and leaves bank 0 in.
-                    INCLUDE "sprite_library.s"
+                    INCLUDE "generated/sprite_library.s"
                     MMU     3, PAGE_PLAY
 
 ; ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ bit_reverse_table:
                     bit_reverse_bytes
 
                     ALIGN   512
-                    INCLUDE "sprite_table.s"
+                    INCLUDE "generated/sprite_table.s"
 
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap

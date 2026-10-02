@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const model = require('./room_model');
+const layout = require('./game_layout');
 const { codeReferences } = require('./template_refs');
 
 const VIEW_TYPE = 'filmation.roomTemplates';
@@ -60,13 +61,10 @@ function imageUri(file) {
   }
 }
 
-// Paths a rooms.json names are relative to it, and may not climb out.
-function beside(here, name) {
-  const full = path.resolve(here, name);
-  const inside = path.relative(here, full);
-  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return null;
-  return full;
-}
+// Paths a rooms.json names are relative to it, and may not climb out of the
+// game's folder -- the one above metadata/, or the file's own for a castle
+// laid out flat. The same rule as the room designer's, from game_layout.js.
+const beside = layout.within;
 
 // A file's text as the editor has it: an open document's, unsaved edits and
 // all, or else what is on the disk. The room designer beside this may be
@@ -127,7 +125,8 @@ function bootFor(document) {
     sheet: atlasFile && readJsonIfThere(atlasFile),
     graphics: graphicsFile && readJsonIfThere(graphicsFile),
     sheetPng: sheetFile && imageUri(sheetFile),
-    codeRefs: codeReferences(here)
+    // The code is the game's, at the top of its folder, not in metadata/.
+    codeRefs: codeReferences(layout.gameDirOf(here))
   };
 }
 

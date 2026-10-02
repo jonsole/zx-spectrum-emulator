@@ -1,12 +1,12 @@
 // The Filmation graphic map, in the editor.
 //
-// examples/filmation/<game>/graphics.json is the table a game indexes by:
-// for each of its graphic numbers, which sprite draws it, the pixel nudge that
-// lines that bitmap up, and the box it occupies in the world. As text it is
-// numbers pointing at names; this opens it as the bitmaps those name.
+// examples/filmation/<game>/metadata/graphics.json is the table a game indexes
+// by: for each of its graphic numbers, which sprite draws it, the pixel nudge
+// that lines that bitmap up, and the box it occupies in the world. As text it
+// is numbers pointing at names; this opens it as the bitmaps those name.
 //
 // sprites.json is read alongside, for the pictures and the rectangles they come
-// out of, and sprites.png for the pixels. Neither is edited here.
+// out of, and art/sprites.png for the pixels. Neither is edited here.
 //
 // The same shape as room_view.js, and for the same reasons: the file is the
 // model, every change comes back as the whole document and goes in through a
@@ -23,6 +23,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const model = require('./graphic_map_model');
+const sheetModel = require('./sheet_model');
+const layout = require('./game_layout');
 
 const VIEW_TYPE = 'filmation.graphicMap';
 
@@ -31,10 +33,12 @@ const INLINED = ['sheet_model.js', 'graphic_map_model.js'];
 
 // The sheet this table's names point into, and the picture it describes.
 // Both are written by sprite_sheet.py, ONCE, and nothing regenerates them.
-// They sit beside the document, which is how graphics.json names the first of
-// them -- so a game whose files are called something else still opens.
+// Each file names the next: graphics.json names its sheet in "sprites"
+// (sprites.json, beside it in metadata/), and the sheet names its picture in
+// sheet.file, relative to itself (../art/sprites.png). These are what a file
+// from before it said gets -- both beside it, the way a flat folder has them.
+// A named path may not leave the game's folder; game_layout.js has the rule.
 const SHEET_JSON = 'sprites.json';
-const SHEET_PNG = 'sprites.png';
 
 function readIfThere(file) {
   try {
@@ -69,23 +73,27 @@ function bootFor(document) {
   // error: the table is still readable and still editable, it just has no
   // pictures to show, and saying so beats refusing to open the file.
   let sheet = {};
-  const sheetText = readIfThere(
-    path.join(here, (graphics && graphics.sprites) || SHEET_JSON));
-  if (sheetText !== null) {
+  const sheetFile = layout.within(here, (graphics && graphics.sprites) || SHEET_JSON);
+  const sheetText = sheetFile && readIfThere(sheetFile);
+  if (sheetText) {
     try {
       sheet = JSON.parse(sheetText);
     } catch (err) {
       sheet = {};
     }
   }
+  // The picture, where the sheet says it is -- formatOf falls back on
+  // sprites.png -- relative to the sheet, not to this document.
+  const pngFile = sheetFile &&
+    layout.within(path.dirname(sheetFile), sheetModel.formatOf(sheet).file);
 
   return {
     // The document is graphics.json; the sheet travels with it, read-only.
     graphics: graphics,
     sheet: sheet,
-    game: path.basename(here),
+    game: path.basename(layout.gameDirOf(here)),
     eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
-    sheetPng: imageUri(path.join(here, SHEET_PNG)),
+    sheetPng: pngFile && imageUri(pngFile),
     // The editor saves the document, so the page needs no Save of its own.
     showSave: false
   };
@@ -207,21 +215,25 @@ function activateGraphicMap(context) {
   );
 }
 
-// The Filmation sprite sheets in the workspace, for the command-palette route.
-// There is one a game and the games live side by side.
+// The Filmation graphic maps in the workspace, for the command-palette route.
+// There is one a game and the games live side by side, each in its metadata/
+// or, for a game laid out flat, at its top. The map is graphics.json, the
+// document this editor opens -- not the sheet, which it only reads.
 async function pickMap() {
   const found = await vscode.workspace.findFiles(
-    '**/examples/filmation/*/sprites.json', '**/node_modules/**', 20);
+    '{**/examples/filmation/*/metadata/graphics.json,**/examples/filmation/*/graphics.json}',
+    '**/node_modules/**', 20);
   if (!found.length) {
     vscode.window.showErrorMessage(
-      'No Filmation sprites.json in the workspace. Run a game’s extractor ' +
+      'No Filmation graphics.json in the workspace. Run a game’s extractor ' +
       'and then its sprite_sheet.py once, against your own copy of the game.');
     return null;
   }
   if (found.length === 1) return found[0];
   const pick = await vscode.window.showQuickPick(
     found.map((uri) => ({
-      label: path.basename(path.dirname(uri.fsPath)),
+      // The game's name, not "metadata".
+      label: path.basename(layout.gameDirOf(path.dirname(uri.fsPath))),
       description: vscode.workspace.asRelativePath(uri),
       uri: uri
     })),

@@ -59,8 +59,8 @@ The extracted files are yours to edit too: `sprites.png` is the artwork,
 |---|---|
 | `examples/filmation/engine/` | The Filmation engine, shared with the Pentagram remake |
 | `examples/filmation/knightlore/` | The game's code, `build.py`, and `graphics.json` -- which sprite each graphic number draws and the nudge that places it, the remake's own |
-| `examples/filmation/extract.py`, `original.py` | The extraction from your copy |
-| `examples/filmation/knightlore/original.json` | The hashes a right copy gives -- hashes only, nothing of the game |
+| `examples/filmation/scripts/extract.py`, `original.py` | The extraction from your copy |
+| `examples/filmation/knightlore/metadata/original.json` | The hashes a right copy gives -- hashes only, nothing of the game |
 | `examples/filmation/*.py`, `tools/` | What the build uses to turn the data into source |
 | `examples/filmation/README.md` | How the engine works |
 

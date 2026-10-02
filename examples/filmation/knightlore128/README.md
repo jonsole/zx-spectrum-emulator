@@ -26,7 +26,7 @@ entry uses it, and a server started by hand wants
 The game extracts nothing of its own. Its castle (`rooms.json`,
 `templates.json`), its graphics (`sprites.png`, `sprites.json`,
 `graphics.json`) and its charms (`specials.json`) are carried and are what you
-edit. The font is Knight Lore's, read from `../knightlore/`'s unpacked sheet,
+edit. The font is Knight Lore's, read from `../knightlore/extracted/`'s unpacked sheet,
 so that game's `kl_extract.py` must have been run once. The keys, the symbols
 and the staging recipes are in [driving.md](driving.md).
 

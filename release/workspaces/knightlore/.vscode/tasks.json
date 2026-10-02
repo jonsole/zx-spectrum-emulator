@@ -17,7 +17,7 @@
       "label": "Extract Knight Lore",
       "type": "process",
       "command": "python",
-      "args": ["examples/filmation/extract.py", "knightlore", "${input:copy}"],
+      "args": ["examples/filmation/scripts/extract.py", "knightlore", "${input:copy}"],
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "problemMatcher": []

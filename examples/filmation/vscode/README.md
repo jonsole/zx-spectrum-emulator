@@ -6,9 +6,9 @@ from, and which sprite each graphic draws. It is separate from the emulator's
 extension and needs nothing from it; **Build** runs the game's own `build.py`
 as a task.
 
-- **The room designer** opens `examples/filmation/<game>/rooms.json`. It shows
-  the room the way the engine draws it, the castle's map, and the room's
-  scenery, objects and (for Knight Lore) collectables. Hosted by
+- **The room designer** opens `examples/filmation/<game>/metadata/rooms.json`.
+  It shows the room the way the engine draws it, the castle's map, and the
+  room's scenery, objects and (for Knight Lore) collectables. Hosted by
   `room_view.js` and `room_view.html`. The same page runs in a browser, served
   by `room_designer.py`.
 - **The templates editor** opens `templates.json`. It edits the pieces of each
@@ -20,10 +20,18 @@ as a task.
 - **Schemas** under `schemas/` cover every JSON file a remake is built from,
   so editing one as text gives completion and checking.
 
+A game keeps its JSON in `metadata/` and its sprite sheet in `art/` (the
+layout `examples/filmation/scripts/layout.py` describes), and the files name
+each other relative to themselves: `rooms.json` names its picture
+`../art/sprites.png`. Neither host follows a path out of the game's folder. A
+folder with no `metadata/` in it is taken as flat, its JSON at the top, and
+opens the same way -- that is how game-disassemblies' room editor hands over a
+castle. `game_layout.js` has the rule.
+
 What a castle is and how it looks are in files that don't import `vscode`:
 `room_model.js`, `room_render.js`, `sheet_model.js`, `specials_model.js`,
-`graphic_map_model.js` and `template_refs.js`. They are tested from plain
-Node, one file per topic, in `tests/`:
+`graphic_map_model.js`, `template_refs.js` and `game_layout.js`. They are
+tested from plain Node, one file per topic, in `tests/`:
 
 ```powershell
 node examples\filmation\vscode\tests\room_model_test.js

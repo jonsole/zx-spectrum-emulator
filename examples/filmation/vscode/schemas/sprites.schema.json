@@ -14,8 +14,8 @@
    "properties": {
     "file": {
      "type": "string",
-     "pattern": "^[A-Za-z0-9_.-]+[.]png$",
-     "description": "The PNG beside this file."
+     "pattern": "^([.][.]/)?([A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+[.]png$",
+     "description": "The PNG, relative to this file: ../art/sprites.png from a game's metadata/, or sprites.png beside it for a game laid out flat. At most one step up, which reaches the game's folder and no further -- and the hosts refuse a path that leaves it."
     },
     "colours": {
      "type": "object",

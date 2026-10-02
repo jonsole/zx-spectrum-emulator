@@ -18,7 +18,7 @@ host, not the page.
 ## The files it edits
 
 Each game keeps its castle in two files beside each other in
-`examples/filmation/<game>/`, one job each:
+`examples/filmation/<game>/metadata/`, one job each:
 
 | File | What it is |
 |---|---|
@@ -255,11 +255,16 @@ the built game's.
 
 ```json
 "sprites": {
- "sheet": "sprites.png",
+ "sheet": "../art/sprites.png",
  "atlas": "sprites.json",
  "graphics": "graphics.json"
 }
 ```
+
+Each path is relative to `rooms.json`, in `metadata/`, and may not leave the
+game's folder -- `game_layout.js` has the rule, and `scripts/layout.py` the
+same one for the Python. A castle laid out flat, with no `metadata/`, keeps
+all three beside `rooms.json`.
 
 and a graphic is resolved through them:
 
@@ -354,7 +359,7 @@ New-Item -ItemType Junction -Path $dest -Target (Resolve-Path .\examples\filmati
 The folder name is `<publisher>.<name>-<version>` from its `package.json`.
 Linked rather than copied, a change to it takes effect on the next reload.
 
-**In VS Code.** Open `examples/filmation/<game>/rooms.json`, or run
+**In VS Code.** Open `examples/filmation/<game>/metadata/rooms.json`, or run
 **Filmation: Design Rooms...** from the Command Palette, which
 offers the games it can find. The document is the model: every change goes in
 through a `WorkspaceEdit`, so undo, the dirty mark and Save are the editor's
@@ -683,6 +688,7 @@ node examples/filmation/vscode/tests/room_model_test.js
 node examples/filmation/vscode/tests/room_render_test.js
 node examples/filmation/vscode/tests/specials_model_test.js
 node examples/filmation/vscode/tests/room_page_test.js
+node examples/filmation/vscode/tests/game_layout_test.js
 ```
 
 The last one opens the assembled page against the real castle in a fake DOM.
@@ -814,16 +820,17 @@ them.
 | `examples/filmation/vscode/room_view.html` | The page, the same in both hosts |
 | `examples/filmation/vscode/room_view.js` | The editor's host: the custom editor, `WorkspaceEdit`s, and the build task |
 | `examples/filmation/vscode/room_designer.py` | The browser's host: a localhost server that serves the page and writes the file |
-| `examples/filmation/<game>/rooms.py` | `room_data.bin` → `rooms.json`, once, for someone who has extracted their own |
-| `examples/filmation/<game>/rooms_source.py` | `rooms.json` → `room_data.s` |
+| `examples/filmation/vscode/game_layout.js` | Where a game keeps what: its folder, `metadata/`, `art/`, `generated/`, and how far a file may point |
+| `examples/filmation/<game>/scripts/rooms.py` | `room_data.bin` → `rooms.json`, once, for someone who has extracted their own |
+| `examples/filmation/<game>/scripts/rooms_source.py` | `rooms.json` → `generated/room_data.s` |
 | `examples/filmation/vscode/specials_model.js` | What a collectable is: the game's own limits, and the edits |
 | `examples/filmation/vscode/graphic_map_model.js` | What a graphic map says, what it hides, and how to re-point one |
 | `examples/filmation/vscode/graphic_map_view.html` | The graphic map's page |
 | `examples/filmation/vscode/graphic_map_view.js` | Its editor host |
 | `examples/filmation/vscode/schemas/` | The five JSON schemas, for editing any of it as text |
-| `examples/filmation/<game>/sprites.json` | the graphics: the sprites, their names, which sprite each graphic number draws and the nudge that lines it up |
-| `examples/filmation/knightlore/specials.json` | where the collectables start and the order the wizard wants them, → `specials_gen.s` |
-| `examples/filmation/knightlore/specials_source.py` | `specials.json` → `specials_gen.s` |
+| `examples/filmation/<game>/metadata/sprites.json` | the graphics: the sprites, their names, which sprite each graphic number draws and the nudge that lines it up |
+| `examples/filmation/knightlore/metadata/specials.json` | where the collectables start and the order the wizard wants them, → `specials_gen.s` |
+| `examples/filmation/knightlore/scripts/specials_source.py` | `specials.json` → `specials_gen.s` |
 
 ## Not done yet
 

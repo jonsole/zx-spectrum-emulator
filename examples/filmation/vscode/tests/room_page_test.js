@@ -18,6 +18,8 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const m = require('../room_model');
+const layout = require('../game_layout');
 
 const EXT = path.join(__dirname, '..');
 const GAMES = ['knightlore', 'pentagram', 'knightlore128'];
@@ -72,27 +74,32 @@ function assemble(boot) {
   return html.replace('/*@host@*/', () => bootJs);
 }
 
+// The files where room_view.js finds them: rooms.json in the game's
+// metadata/, the templates and the collectables beside it, and the artwork
+// wherever its meta.sprites says, relative to it -- the picture is
+// ../art/sprites.png.
 function bootFor(game, room) {
-  const here = path.join(FILMATION, game);
+  const here = layout.metadataOf(path.join(FILMATION, game));
   const rooms = path.join(here, 'rooms.json');
   if (!fs.existsSync(rooms)) skip(game + '/rooms.json is not here');
   const text = fs.readFileSync(rooms, 'utf8');
+  const named = m.spriteFilesOf(JSON.parse(text));
   const read = (name) => {
-    const file = path.join(here, name);
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    const file = layout.within(here, name);
+    return file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   };
+  const png = layout.within(here, named.sheet) || '';
   return {
     atlas: JSON.parse(text),
     // The templates the rooms place, which are a file of their own.
     templates: read('templates.json'),
     eol: text.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
-    sheet: read('sprites.json'),
-    graphics: read('graphics.json'),
+    sheet: read(named.atlas),
+    graphics: read(named.graphics),
     // The artwork, as the host sends it: a webview cannot read a file of its
     // own, so the picture travels with the page.
-    sheetPng: fs.existsSync(path.join(here, 'sprites.png'))
-      ? 'data:image/png;base64,' +
-        fs.readFileSync(path.join(here, 'sprites.png')).toString('base64')
+    sheetPng: fs.existsSync(png)
+      ? 'data:image/png;base64,' + fs.readFileSync(png).toString('base64')
       : null,
     specials: read('specials.json'),
     room: room === undefined ? null : room,

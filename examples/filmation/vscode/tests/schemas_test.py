@@ -112,7 +112,11 @@ CASES = [
       ("a group with a misspelt key",
        lambda d: first_group(d).__setitem__("sprite", {})),
       ("rows in an order there is no such thing as",
-       lambda d: d["bytes"].__setitem__("rows", "sideways"))]),
+       lambda d: d["bytes"].__setitem__("rows", "sideways")),
+      # The picture is in the game's art/, one step up from metadata/. Two
+      # steps is another game's, or anywhere at all.
+      ("a picture two folders up, outside the game",
+       lambda d: d["sheet"].__setitem__("file", "../../pentagram/art/sprites.png"))]),
 
     ("graphics.schema.json",
      ["knightlore/graphics.json", "pentagram/graphics.json"],
@@ -174,6 +178,15 @@ def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def located(relative):
+    """A game's file, from "<game>/<file>": in the game's metadata/, where a
+    game keeps its JSON, or at its top for a game laid out flat -- the rule
+    examples/filmation/scripts/layout.py has."""
+    game, leaf = relative.split("/", 1)
+    inside = FILMATION / game / "metadata"
+    return (inside if inside.is_dir() else FILMATION / game) / leaf
+
+
 def main():
     failures = 0
     checked = 0
@@ -184,7 +197,7 @@ def main():
         validator = jsonschema.Draft7Validator(schema)
 
         for relative in files:
-            path = FILMATION / relative
+            path = located(relative)
             if not path.is_file():
                 print("skip %-22s %s is not here" % (schema_name, relative))
                 continue

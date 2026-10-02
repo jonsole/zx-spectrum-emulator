@@ -86,7 +86,7 @@ function graphicsByName(graphics) {
 // What each graphic is called, which is what rooms.json refers to it by.
 //
 // The name is simply the key it sits under: graphics.json is the one place a
-// graphic is named, and examples/filmation/graphics.py reads exactly the same
+// graphic is named, and examples/filmation/scripts/graphics.py reads exactly the same
 // thing for the build. It used to be worked out here from the sprite, with the
 // number stuck on the end where several graphics shared one bitmap -- so a
 // castle referred to names that were written down nowhere.

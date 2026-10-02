@@ -43,10 +43,15 @@ zx-spectrum-emulator/
   examples/
     hello_rom_call/              # tiny original demo, committed
     filmation/                    # isometric masked-sprite engine; multi-file,
-                                  #   assembled by its own build.py
-      graphics.py                 #   what each game's graphic numbers are called,
-                                  #   off its sprite sheet: the one rule both
-                                  #   rooms.py and rooms_source.py name them by
+                                  #   assembled by each game's own build.py
+      engine/                     #   the engine every game includes, and its tests
+      scripts/                    #   the Python every game shares: layout.py (where
+                                  #   a game keeps what), castle.py, sheet.py,
+                                  #   graphics.py, extract.py, room_budget.py ...
+      knightlore/, pentagram/,    #   the games, each the same shape: build.py and
+      knightlore128/, lightkeep/  #   its own .s at the top; scripts/, metadata/
+                                  #   (the JSON), art/ (sprites.png), tests/; and,
+                                  #   never carried, generated/, extracted/, output/
       vscode/                     #   the Filmation designer: a VS Code extension
                                   #   of its own (room-designer.md) -- the room,
                                   #   templates and graphic-map editors, their

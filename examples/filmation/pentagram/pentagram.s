@@ -81,8 +81,8 @@ STACK_RESERVE		EQU		48		; 32 used, measured -- see above
 ; tape. font.s comes from font.png/font.json by way of font_source.py. None of
 ; them is hand-written.
                     ORG     $6000
-                    INCLUDE "room_data.s"
-                    INCLUDE "font.s"
+                    INCLUDE "generated/room_data.s"
+                    INCLUDE "generated/font.s"
 
 ; A percent sign, which the original's font has not got: the remake's own, for
 ; the game over's percentage. Straight after the font, so it is character 43.
@@ -100,7 +100,7 @@ PERCENT_CHAR        EQU     43
 ; The one buffer every deferred rotation goes through -- see ../engine/shift.s.
 shift_shared:       DS      SHIFT_SHARED_SIZE
 
-                    INCLUDE "sound_data.s"
+                    INCLUDE "generated/sound_data.s"
                     INCLUDE "sound_tune.s"      ; what it gives the engine's
                     INCLUDE "../engine/tune.s"  ; player, and the player itself
 room_data_end:
@@ -125,7 +125,7 @@ room_data_end:
 
 					INCLUDE "../engine/sprite.s"
 sprite_start:
-					INCLUDE "sprite_data.s"
+					INCLUDE "generated/sprite_data.s"
 sprite_end:
 					DISPLAY "sprite_data size ", sprite_end - sprite_start
 					INCLUDE "../engine/object.s"
@@ -147,7 +147,7 @@ shift_arena_next:	DW		shift_arena
 					INCLUDE "panel.s"
 					INCLUDE "gameover.s"
 					INCLUDE "quest.s"
-					INCLUDE "quest_data.s"
+					INCLUDE "generated/quest_data.s"
 					INCLUDE "input.s"		; its keys and its bits, then
 					INCLUDE "../engine/input.s"		; the sticks, which are nobody's
 					INCLUDE "main.s"
@@ -172,11 +172,11 @@ shift_arena_next:	DW		shift_arena
 ; with these in it. The code region has thousands spare, so they come up here.
 ; sprite_adj_index is page-aligned either way, which is all the engine asks.
 					INCLUDE "menu_run.s"             ; cold, in the pad before the index
-					INCLUDE "sprite_adj_gen.s"
+					INCLUDE "generated/sprite_adj_gen.s"
 					INCLUDE "menu_text.s"
 					INCLUDE "gameover_sabreman.s"
 					INCLUDE "pause.s"
-					INCLUDE "sound_title.s"
+					INCLUDE "generated/sound_title.s"
 
 image_end:
                     ASSERT  $ <= $10000 - STACK_RESERVE
@@ -255,7 +255,7 @@ bit_reverse_table:
 ; names 172 graphics rather than 256, but the table is still 512 bytes -- the
 ; entries past the game's own simply hold zero.
                     ALIGN   512
-                    INCLUDE "sprite_table.s"
+                    INCLUDE "generated/sprite_table.s"
 
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap

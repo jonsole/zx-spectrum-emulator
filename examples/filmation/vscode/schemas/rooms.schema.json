@@ -27,11 +27,11 @@
     },
     "sprites": {
      "type": "object",
-     "description": "Which sheet the graphic names in this file go with. The designer resolves a name through these; the paths are relative to this file, and neither host will follow one that is absolute or climbs out of the directory.",
+     "description": "Which sheet the graphic names in this file go with. The designer resolves a name through these; the paths are relative to this file, and neither host will follow one that is absolute or climbs out of the game's folder -- the one above metadata/, where a game keeps this file, or this file's own for a game laid out flat.",
      "properties": {
       "sheet": {
        "type": "string",
-       "description": "The picture, normally sprites.png."
+       "description": "The picture, normally ../art/sprites.png -- or sprites.png, beside this file, for a game laid out flat."
       },
       "atlas": {
        "type": "string",

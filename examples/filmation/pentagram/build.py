@@ -41,6 +41,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The shared Python, examples/filmation/scripts: layout.py says where a
+# game keeps what.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import layout                                                   # noqa: E402
+
 # Pentagram's sources, its data and the scripts that turn the data into
 # source all live here, beside this script.
 HERE = Path(__file__).resolve().parent
@@ -99,25 +104,25 @@ def generate_sprite_data() -> None:
     a CACHE of graphic_map.json -- and a cache nothing invalidated, so
     re-pointing a graphic changed a file the build had already stopped reading.
     """
-    generator = PENTAGRAM / "sprite_source.py"
-    sheet = PENTAGRAM / "sprites.png"
-    atlas = PENTAGRAM / "sprites.json"
+    generator = PENTAGRAM / "scripts" / "sprite_source.py"
+    sheet = layout.art(PENTAGRAM) / "sprites.png"
+    atlas = layout.metadata(PENTAGRAM) / "sprites.json"
     # The graphic table is an input too: the nudges come out of it, and which
     # sprite each graphic number draws.
-    table = PENTAGRAM / "graphics.json"
+    table = layout.metadata(PENTAGRAM) / "graphics.json"
     # ...and so is the code that reads the sheet and the game's facts about it:
     # the frame check and the pixel colours are sheet.py's, and what keeps its
     # blank rows and the rotation buffers are sprite_sheet.py's.
-    code = [PENTAGRAM.parent / "sheet.py", PENTAGRAM / "sprite_sheet.py"]
-    generated = [PENTAGRAM / name for name in
+    code = [PENTAGRAM.parent / "scripts" / "sheet.py", PENTAGRAM / "scripts" / "sprite_sheet.py"]
+    generated = [layout.generated(PENTAGRAM) / name for name in
                  ("sprite_data.s", "sprite_table.s", "sprite_adj_gen.s")]
 
     if not sheet.is_file() or not atlas.is_file():
         sys.exit(f"{sheet.name} and {atlas.name} are the graphics this game is "
                  f"built from, and one of them is missing.\n"
                  f"They are made once, from your own copy of the game:\n"
-                 f"    python pg_extract.py \"path/to/Pentagram\"\n"
-                 f"    python sprite_sheet.py\n"
+                 f"    python scripts/pg_extract.py \"path/to/Pentagram\"\n"
+                 f"    python scripts/sprite_sheet.py\n"
                  f"After that they are yours to edit and nothing overwrites them.")
 
     newest_input = max(f.stat().st_mtime
@@ -137,12 +142,12 @@ def generate_font_data() -> None:
     that sheet into font.s. Only the first run makes a sheet -- an existing one
     is the artwork, edits and all, and is never overwritten.
     """
-    packed = PENTAGRAM / "font.bin"
-    unpack = PENTAGRAM / "font_sheet.py"
-    generator = PENTAGRAM / "font_source.py"
-    sheet = PENTAGRAM / "font.png"
-    atlas = PENTAGRAM / "font.json"
-    generated = PENTAGRAM / "font.s"
+    packed = layout.extracted(PENTAGRAM) / "font.bin"
+    unpack = PENTAGRAM / "scripts" / "font_sheet.py"
+    generator = PENTAGRAM / "scripts" / "font_source.py"
+    sheet = layout.extracted(PENTAGRAM) / "font.png"
+    atlas = layout.extracted(PENTAGRAM) / "font.json"
+    generated = layout.generated(PENTAGRAM) / "font.s"
 
     if not sheet.is_file() or not atlas.is_file():
         if not packed.is_file():
@@ -165,9 +170,9 @@ def generate_quest_data() -> None:
     quest.bin is the original's quest tables, which pg_extract.py lifts out
     of the tape; neither it nor quest_data.s is committed.
     """
-    packed = PENTAGRAM / "quest.bin"
-    generator = PENTAGRAM / "quest_source.py"
-    generated = PENTAGRAM / "quest_data.s"
+    packed = layout.extracted(PENTAGRAM) / "quest.bin"
+    generator = PENTAGRAM / "scripts" / "quest_source.py"
+    generated = layout.generated(PENTAGRAM) / "quest_data.s"
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
                  "own copy of Pentagram to produce it")
@@ -184,10 +189,10 @@ def generate_sound_data() -> None:
     sound.bin is the original's notes and tunes, which pg_extract.py lifts
     out of the tape; neither it nor sound_data.s is committed.
     """
-    packed = PENTAGRAM / "sound.bin"
-    generator = PENTAGRAM / "sound_source.py"
-    generated = PENTAGRAM / "sound_data.s"
-    title = PENTAGRAM / "sound_title.s"
+    packed = layout.extracted(PENTAGRAM) / "sound.bin"
+    generator = PENTAGRAM / "scripts" / "sound_source.py"
+    generated = layout.generated(PENTAGRAM) / "sound_data.s"
+    title = layout.generated(PENTAGRAM) / "sound_title.s"
     if not packed.is_file():
         sys.exit(f"{packed.name} is missing -- run pg_extract.py against your "
                  "own copy of Pentagram to produce it")
@@ -301,15 +306,15 @@ def generate_room_data() -> None:
     Going back to those is a deliberate act: run rooms.py by hand, which says
     plainly that it overwrites what is there.
     """
-    emitter = PENTAGRAM / "rooms_source.py"
-    atlas = PENTAGRAM / "rooms.json"
-    generated = PENTAGRAM / "room_data.s"
+    emitter = PENTAGRAM / "scripts" / "rooms_source.py"
+    atlas = layout.metadata(PENTAGRAM) / "rooms.json"
+    generated = layout.generated(PENTAGRAM) / "room_data.s"
 
     if not atlas.is_file():
         sys.exit(f"{atlas.name} is the castle this game is built from, and it "
                  f"is missing.\nIt is made once, from your own copy of the "
-                 f"game:\n    python pg_extract.py \"path/to/Pentagram\"\n"
-                 f"    python rooms.py")
+                 f"game:\n    python scripts/pg_extract.py \"path/to/Pentagram\"\n"
+                 f"    python scripts/rooms.py")
 
     # The sheet is an input too: rooms.json names its graphics after the
     # sheet's own labels (examples/filmation/graphics.py), so a sheet that has
@@ -319,13 +324,13 @@ def generate_room_data() -> None:
     # ...and the templates the rooms place, a file of their own, wherever
     # rooms.json says it is.
     named = (json.loads(atlas.read_text(encoding="utf-8")).get("meta") or {}).get("templates")
-    templates = PENTAGRAM / named if named else None
+    templates = layout.metadata(PENTAGRAM) / named if named else None
     if templates and templates.is_file():
         inputs.append(templates.stat().st_mtime)
-    namer = PENTAGRAM.parent / "graphics.py"
+    namer = PENTAGRAM.parent / "scripts" / "graphics.py"
     if namer.is_file():
         inputs.append(namer.stat().st_mtime)
-    sheet = PENTAGRAM / "sprites.json"
+    sheet = layout.metadata(PENTAGRAM) / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
 
@@ -344,12 +349,12 @@ def require_extracted() -> None:
     without the carried files is in the same place. Said once, here, rather
     than by whichever generator happens to find the first file missing.
     """
-    pins = json.loads((HERE / "original.json").read_text(encoding="utf-8"))
+    pins = json.loads((layout.metadata(HERE) / "original.json").read_text(encoding="utf-8"))
     missing = [name for name in pins["carried"] if not (HERE / name).is_file()]
     if missing:
         sys.exit(f"{', '.join(missing)} missing: Pentagram's data comes from your own copy "
                  f"of the original.\nPut it in the workspace and run the \"Extract Pentagram\" "
-                 f"task, or:\n    python examples/filmation/extract.py pentagram "
+                 f"task, or:\n    python examples/filmation/scripts/extract.py pentagram "
                  f"path/to/your/copy")
 
 

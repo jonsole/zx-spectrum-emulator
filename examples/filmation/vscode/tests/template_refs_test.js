@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { codeReferences } = require('../template_refs');
 const m = require('../room_model');
+const layout = require('../game_layout');
 
 const FILMATION = path.join(__dirname, '..', '..');
 
@@ -30,13 +31,18 @@ function test(name, body) {
 function skip(why) { const err = new Error(why); err.skip = true; throw err; }
 
 function atlasOf(game) {
-  const read = (leaf) => fs.readFileSync(path.join(FILMATION, game, leaf), 'utf8');
+  const here = layout.metadataOf(path.join(FILMATION, game));
+  const read = (leaf) => fs.readFileSync(path.join(here, leaf), 'utf8');
   return m.withTemplates(m.parseAtlas(read('rooms.json')), m.parseTemplates(read('templates.json')));
 }
 
+// codeReferences takes the game's folder, as templates_view.js gives it, and
+// finds the generated room_data.s in its generated/ for itself.
 function refsOf(game) {
   const here = path.join(FILMATION, game);
-  if (!fs.existsSync(path.join(here, 'room_data.s'))) skip(game + '/room_data.s has not been built');
+  if (!fs.existsSync(path.join(layout.generatedOf(here), 'room_data.s'))) {
+    skip(game + '/room_data.s has not been built');
+  }
   return codeReferences(here);
 }
 

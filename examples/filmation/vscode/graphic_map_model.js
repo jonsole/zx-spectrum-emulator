@@ -1,6 +1,6 @@
 // What a Filmation graphic table is, and the edits you can make to one.
 //
-// examples/filmation/<game>/graphics.json is the table the game indexes by:
+// examples/filmation/<game>/metadata/graphics.json is the table the game indexes by:
 // for each of its graphic numbers, which sprite draws it and the pixel nudge
 // that lines that bitmap up. It is the document this edits. sprites.json is
 // read alongside, for the pictures and the names -- sheet_model.js is what
@@ -42,7 +42,7 @@ function parseMap(text) {
   return JSON.parse(text);
 }
 
-// ...and back out, laid out the way examples/filmation/graphics.py writes it:
+// ...and back out, laid out the way examples/filmation/scripts/graphics.py writes it:
 // one graphic to a line, with the sprite and the box lined up into columns.
 //
 // Not JSON.stringify. The file is one people edit by hand, and a panel that

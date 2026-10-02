@@ -66,10 +66,10 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; repository carries, not the packed files kl_extract.py first pulled them
 ; out of.
                     ORG     $6000
-                    INCLUDE "room_data.s"
+                    INCLUDE "generated/room_data.s"
                     INCLUDE "panel_data.s"
-                    INCLUDE "sprite_adj_gen.s"
-                    INCLUDE "graphics_gen.s"   ; GFX_* -- generated from graphics.json
+                    INCLUDE "generated/sprite_adj_gen.s"
+                    INCLUDE "generated/graphics_gen.s"   ; GFX_* -- generated from graphics.json
 
 ; The game's own font: forty 8x8 characters, which is all the text Knight Lore
 ; has. Digits first and then letters, no lower case and no punctuation beyond
@@ -82,7 +82,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; font.s is generated from the font sheet, font.png and font.json, which is
 ; where the artwork lives -- see font_sheet.py and font_source.py. It opens
 ; the label `font` that print_char reaches for.
-                    INCLUDE "font.s"
+                    INCLUDE "generated/font.s"
 
 ; The collectables: where each of the thirty-two starts, the order the wizard
 ; wants them in, and which graphic each row has been dealt -- see special.s.
@@ -91,7 +91,7 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; come out of that one file: the two that hold data and the two that only
 ; reserve room, because special_init copies the first over the second in one
 ; LDIR and nothing may come between them.
-                    INCLUDE "specials_gen.s"
+                    INCLUDE "generated/specials_gen.s"
 
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
@@ -108,7 +108,7 @@ room_data_end:
 
 					INCLUDE "../engine/sprite.s"
 sprite_start:
-					INCLUDE "sprite_data.s"
+					INCLUDE "generated/sprite_data.s"
 sprite_end:
 					DISPLAY "sprite_data size ", sprite_end - sprite_start
 					INCLUDE "../engine/object.s"
@@ -239,7 +239,7 @@ bit_reverse_table:
                     bit_reverse_bytes
 
                     ALIGN   512
-                    INCLUDE "sprite_table.s"
+                    INCLUDE "generated/sprite_table.s"
 
 ; And code that only runs when a key is pressed, in what is left.
                     INCLUDE "pickup.s"

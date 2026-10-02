@@ -5,7 +5,7 @@ README says which parts exist so far. The 48K builds keep the map in the
 [README](README.md#laying-out-memory); this is the layout a 128K build of the
 engine would use, so that a game can carry three times Knight Lore's room data
 and three times its graphics. The sizes are Knight Lore's and Pentagram's,
-measured with [`../room_budget.py`](../room_budget.py) and the emulator's
+measured with [`../scripts/room_budget.py`](../scripts/room_budget.py) and the emulator's
 profiler on 2026-09-18.
 
 ## Contents

@@ -27,7 +27,7 @@ used instead when there is one.
 
 **The Filmation examples carry none of Ultimate's data** -- no artwork, no
 rooms, no built game. Each workspace's **Extract** task runs
-`examples/filmation/extract.py` on the user's own copy (Knight Lore as a `.sna`
+`examples/filmation/scripts/extract.py` on the user's own copy (Knight Lore as a `.sna`
 or `.z80`; Pentagram as a `.tzx`, `.tap`, `.sna` or `.z80`), which makes the
 files the repository carries and checks each against the game's
 `original.json` -- hashes only. Extraction from the originals reproduces the

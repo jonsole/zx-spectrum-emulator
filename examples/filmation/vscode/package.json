@@ -32,6 +32,7 @@
         "viewType": "filmation.graphicMap",
         "displayName": "Filmation Graphic Map",
         "selector": [
+          { "filenamePattern": "**/examples/filmation/*/metadata/graphics.json" },
           { "filenamePattern": "**/examples/filmation/*/graphics.json" }
         ],
         "priority": "default"
@@ -40,6 +41,7 @@
         "viewType": "filmation.roomTemplates",
         "displayName": "Filmation Room Templates",
         "selector": [
+          { "filenamePattern": "**/examples/filmation/*/metadata/templates.json" },
           { "filenamePattern": "**/examples/filmation/*/templates.json" }
         ],
         "priority": "default"
@@ -48,6 +50,7 @@
         "viewType": "filmation.roomDesign",
         "displayName": "Filmation Room Designer",
         "selector": [
+          { "filenamePattern": "**/examples/filmation/*/metadata/rooms.json" },
           { "filenamePattern": "**/examples/filmation/*/rooms.json" }
         ],
         "priority": "default"
@@ -55,23 +58,28 @@
     ],
     "jsonValidation": [
       {
-        "fileMatch": "**/examples/filmation/*/rooms.json",
+        "fileMatch": ["**/examples/filmation/*/metadata/rooms.json",
+                      "**/examples/filmation/*/rooms.json"],
         "url": "./schemas/rooms.schema.json"
       },
       {
-        "fileMatch": "**/examples/filmation/*/templates.json",
+        "fileMatch": ["**/examples/filmation/*/metadata/templates.json",
+                      "**/examples/filmation/*/templates.json"],
         "url": "./schemas/templates.schema.json"
       },
       {
-        "fileMatch": "**/examples/filmation/*/sprites.json",
+        "fileMatch": ["**/examples/filmation/*/metadata/sprites.json",
+                      "**/examples/filmation/*/sprites.json"],
         "url": "./schemas/sprites.schema.json"
       },
       {
-        "fileMatch": "**/examples/filmation/*/graphics.json",
+        "fileMatch": ["**/examples/filmation/*/metadata/graphics.json",
+                      "**/examples/filmation/*/graphics.json"],
         "url": "./schemas/graphics.schema.json"
       },
       {
-        "fileMatch": "**/examples/filmation/*/specials.json",
+        "fileMatch": ["**/examples/filmation/*/metadata/specials.json",
+                      "**/examples/filmation/*/specials.json"],
         "url": "./schemas/specials.schema.json"
       }
     ],
