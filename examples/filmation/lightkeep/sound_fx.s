@@ -190,6 +190,7 @@ fire_turned:        cp      COLLIDE_V
                     call    sound_take
                     ret     z
                     ;; NB: fall through into sound_bounce
+                    ASSERT  $ == sound_bounce   ; Knight Lore 128K once put two sounds in between
 
 ; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
 ; are DI, XOR A and LD DE,$FFFF, with the top two bits set.

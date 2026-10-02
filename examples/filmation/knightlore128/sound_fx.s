@@ -190,6 +190,20 @@ fire_turned:        cp      COLLIDE_V
                     call    sound_take
                     ret     z
                     ;; NB: fall through into sound_bounce
+                    ASSERT  $ == sound_bounce   ; Knight Lore 128K once put two sounds in between
+
+; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
+; are DI, XOR A and LD DE,$FFFF, with the top two bits set.
+;
+; In:  nothing
+; Out: nothing
+; Corrupts: AF, BC, DE, HL
+sound_bounce:       ld      hl,sound_bounces
+                    ld      de,$FF04
+                    ld      c,3
+                    jr      sound_noise
+
+sound_bounces:      DB      $F3 | $C0, $AF | $C0, $11 | $C0, $FF | $C0
 
 ; His bolt going off -- Pentagram's $D65B: a falling sweep of thirty-two
 ; cycles.
@@ -225,19 +239,6 @@ sound_poof:         call    mover_rand
                     dec     e
                     jr      nz,.cycle
                     ret
-
-; A bounce -- audio_B42E: four bytes from the very start of the ROM, which
-; are DI, XOR A and LD DE,$FFFF, with the top two bits set.
-;
-; In:  nothing
-; Out: nothing
-; Corrupts: AF, BC, DE, HL
-sound_bounce:       ld      hl,sound_bounces
-                    ld      de,$FF04
-                    ld      c,3
-                    jr      sound_noise
-
-sound_bounces:      DB      $F3 | $C0, $AF | $C0, $11 | $C0, $FF | $C0
 
 ; A portcullis coming down -- audio_B489: sixteen bytes from somewhere in the
 ; first 8K of the ROM, picked by the seed and the turn, below $80.
