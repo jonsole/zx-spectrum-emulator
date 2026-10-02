@@ -83,35 +83,10 @@ FG_REPEL_SPELL		EQU		$19
 FG_GATE_UD_1		EQU		$1A
 FG_GATE_UD_2		EQU		$1B
 FG_BALL_UD_X		EQU		$1C
-; Pentagram's, which movers.s's mover_of names too. Any values apart from the
-; above will do: nothing here builds a room from them.
-FG_PENTAGRAM_GRASS			EQU	$1D
-FG_PENTAGRAM_THORNS			EQU	$1E
-FG_PENTAGRAM_WATER			EQU	$1F
-FG_PENTAGRAM_WATER_DEEP		EQU	$20
-FG_PENTAGRAM_THORNY_BUSH	EQU	$21
-FG_PENTAGRAM_SPIDER			EQU	$22
-FG_PENTAGRAM_CREATURE		EQU	$23
-FG_PENTAGRAM_DRAGON_PACES_U	EQU	$24
-FG_PENTAGRAM_DRAGON_PACES_V	EQU	$25
-FG_PENTAGRAM_DRAGON_HOPS	EQU	$26
-FG_PENTAGRAM_PLATFORM_U		EQU	$27
-FG_PENTAGRAM_PLATFORM_V		EQU	$28
-FG_PENTAGRAM_LIFT			EQU	$29
-FG_PENTAGRAM_CONVEYOR_1		EQU	$2A
-FG_PENTAGRAM_CONVEYOR_3		EQU	$2B
-FG_PENTAGRAM_CONVEYOR_4		EQU	$2C
-FG_PENTAGRAM_BLOCK_FALLS	EQU	$2D
-FG_PENTAGRAM_BLOCK_CRUMBLES	EQU	$2E
-FG_PENTAGRAM_BLOCK_SINKS	EQU	$2F
-FG_PENTAGRAM_STUMP_PUSHED	EQU	$30
-FG_PENTAGRAM_CUBE_PUSHED	EQU	$31
-FG_PENTAGRAM_TABLE_PUSHED	EQU	$32
-FG_PENTAGRAM_STONE_PUSHED	EQU	$33
-; ...and this game's own torches.
-FG_CASTLE_TORCH				EQU	$34
-FG_CASTLE_TORCH_M			EQU	$35
-GFX_PENTAGRAM_BLOCK_4		EQU	222		; the crumbling block's last crack
+; ...and Knight Lore 128K's torches. Any values apart from the above will do:
+; nothing here builds a room from them.
+FG_CASTLE_TORCH				EQU	$1D
+FG_CASTLE_TORCH_M			EQU	$1E
 CHARACTER_BODY		EQU		ROOM_STRIDE		; as engine/walker.s has it
 
 
@@ -154,17 +129,17 @@ start:				ld		sp,$FE00
 
 					TEST	"find: the last in the table"
 					call	fresh
-					ld		a,FG_SPIKE		; the entry before the $FF
+					ld		a,FG_CASTLE_TORCH_M	; the entry before the $FF
+					call	mover_find
+					call	snap
+					EXPECT_A	MOVE_FLAME, "the behaviour: a torch is a flame"
+
+					TEST	"find: a spike is still, and kills"
+					call	fresh
+					ld		a,FG_SPIKE
 					call	mover_find
 					call	snap
 					EXPECT_A	MOVE_STILL, "the behaviour"
-
-					TEST	"find: a torch is a flame"
-					call	fresh
-					ld		a,FG_CASTLE_TORCH_M
-					call	mover_find
-					call	snap
-					EXPECT_A	MOVE_FLAME, "the behaviour"
 
 					TEST	"find: one that does not move"
 					call	fresh
@@ -849,16 +824,7 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	hide_calls, 1, "object_hide"
 					EXPECT_WORD	hide_ix, REC, "...of it"
 
-; --- Pentagram's, beside Knight Lore's ----------------------------------------
-; Where the two games share one of engine/movers.s's movers, movers.s's hooks
-; tell them apart by behaviour.
-
-					TEST	"find: one of Pentagram's templates"
-					call	fresh
-					ld		a,FG_PENTAGRAM_SPIDER
-					call	mover_find
-					call	snap
-					EXPECT_A	MOVE_SPIDER, "the behaviour"
+; --- the hooks a fire gives the library's pacer -----------------------------
 
 					TEST	"pacer_frame: a fire flickers"
 					call	fresh
@@ -867,13 +833,6 @@ start:				ld		sp,$FE00
 					RUN		pacer_frame
 					EXPECT_FIELD	OBJ.GFX, 86, "the graphic, bit 0 turned over"
 
-					TEST	"pacer_frame: a platform keeps its frame"
-					call	fresh
-					SET		OBJ.BEHAVIOUR, MOVE_PLATFORM_U
-					SET		OBJ.GFX, 200
-					RUN		pacer_frame
-					EXPECT_FIELD	OBJ.GFX, 200, "the graphic"
-
 					TEST	"pacer_move: a fire goes its step"
 					call	fresh
 					SET		OBJ.BEHAVIOUR, MOVE_FIRE_U
@@ -881,41 +840,6 @@ start:				ld		sp,$FE00
 					SET		OBJ.DU, 1
 					RUN		pacer_move
 					EXPECT_FIELD	OBJ.U, 101, "U"
-
-					TEST	"pacer_move: a dragon goes twice it"
-					call	fresh
-					SET		OBJ.BEHAVIOUR, MOVE_DRAGON_V
-					SET		OBJ.V, 100
-					SET		OBJ.DV, -1
-					RUN		pacer_move
-					EXPECT_FIELD	OBJ.V, 98, "V"
-
-					TEST	"dragon hops: the balls' top is left as it was"
-					call	fresh
-					ld		a,150
-					ld		(mover_ball_top),a
-					SET		OBJ.BEHAVIOUR, MOVE_DRAGON_HOPS
-					RUN		mover_dragon_hops
-					EXPECT_BYTE	mover_ball_top, 150, "mover_ball_top"
-
-					TEST	"conveyor: the way is the bottom two bits"
-					call	fresh
-					SET		OBJ.GFX, 202		; 2: along +V
-					RUN		mover_conveyor
-					EXPECT_FIELD	OBJ.DU, 0, "DU"
-					EXPECT_FIELD	OBJ.DV, 1, "DV"
-					call	fresh
-					SET		OBJ.GFX, 201		; 1: along -U
-					RUN		mover_conveyor
-					EXPECT_FIELD	OBJ.DU, -1 & $FF, "DU"
-					EXPECT_FIELD	OBJ.DV, 0, "DV"
-
-					TEST	"monster_sits_out: monster_gate has decided already"
-					call	fresh
-					scf
-					call	monster_sits_out
-					call	snap
-					EXPECT_CARRY	0, "carry: it takes its turn"
 
 ; --- mover_flame ---------------------------------------------------------------
 ; The torch's four frames are graphics 144 to 147, and the bottom two bits

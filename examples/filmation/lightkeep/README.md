@@ -42,8 +42,8 @@ starts.
 |---|---|---|
 | 0a | the fork: Knight Lore 128K's game and data, building byte for byte as it | done |
 | 0b | what Fairlight has no use for taken out of the code: the werewolf, the forty days and the sun and moon, the cauldron's quest, and Pentagram's bolt and what falls from the sky | done |
-| 0c | Pentagram's creatures, rooms and art taken out, and the werewolf's art | |
-| 1 | Melkhior's art, made at build time from your own copy of the game and never committed | |
+| 0c | Pentagram's creatures, rooms and art taken out, and the werewolf's, the transformation's and the sun window's art | done |
+| 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | |
 | 2 | rooms that remember where things were left | |
 | 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, drop, use, and keys 1-5 for the slot | |
 | 4 | pushing by weight | |
@@ -80,3 +80,59 @@ lost their three bolt tests. Removing `sound_fire` also fixed a fall-through:
 in Knight Lore 128K, `fire_turned` falls into Pentagram's `sound_fire`, which
 was put in front of the `sound_bounce` it was written to reach, so a fire
 turning plays the bolt's sweep.
+
+### What stage 0c took out
+
+- **Pentagram's rooms**, $05 to $23 -- fourteen of them, built only of its
+  templates and joined to nothing -- and its 19 scenery and 28 object
+  templates. The castle is Knight Lore's 127 rooms and $25 (129 in all).
+- **Pentagram's movers**: the spider, the creature, the dragons' heads, the
+  platforms, the lift, the conveyors, the blocks that fall, crumble and are
+  pushed in piles. The hooks the library's pacer and hopper ask for are
+  Knight Lore's alone now, EQUs in `shared_movers.s` rather than routines that
+  told the two games apart. Behaviour numbers closed up again: twenty in all.
+- **Art no code draws**: Pentagram's 88 sprites, the werewolf's 20, the four
+  twinkles, the sun and moon and the window's frame -- 116 sprites, the sheet
+  912 rows tall where it was 1,311. `pentagram_merge.py` and
+  `pentagram_templates.py`, which brought Pentagram in, went with them.
+- **The knight's buffers** are sized from his own sprites: the sparkle for his
+  legs and his tallest body, `sabreman.body.7`, for the top half.
+  `sprite_sheet.py` names them rather than numbering them, so taking a band out
+  of the sheet cannot move them.
+
+That frees 101 graphic numbers, 113 in all:
+
+    48-53, 56-61, 64-79, 88-90, 92-95, 149, 152-157, 176-177, 182-183, 186,
+    188-245, 247-251, 253-255
+
+The room page has 6,212 bytes left after the fullest room (2,116 before:
+the werewolf was resident), and the code below the stack 2,110.
+
+What was checked, in a 128K emulator: every one of the 129 rooms builds and
+runs a dozen turns with a read watchpoint on `sprite_missing`, and none draws
+it. Two kinds of read are stepped over as not draws: `room_page_fill` pointing
+a room's unloaded graphics at it, and `backdrop_bands` reading the same
+address in bank 6. The Z80 tests pass (lightkeep's movers_tests 69: the
+Pentagram ones gone, the fire's pacer hooks kept), and so do the designer's
+and the schema tests.
+
+### How Melkhior's art comes in (stage 1, decided)
+
+- **Seven sheets.** Knight Lore's `sprites.png`, committed as it is now, and
+  one sheet per category of Melkhior's own viewer: Objects, Furniture, Doors,
+  Characters, Walls and Floors. Each holds the whole category, in 1-bit.
+- **Names are Melkhior's.** A sprite is its image and frame,
+  `furniture:GrandfatherClock.2` or `objects:KeyCyan.0`, so the name on the
+  "Melkhior in Mono" page is the name in the build. A plain name still means
+  the main sheet.
+- **`graphics.json` is the only selection.** A sprite costs a graphic number
+  and room-page space only once a graphic names it, as an unused Knight Lore
+  sprite costs nothing now. A small committed file holds per-sprite
+  conversion settings (dithered, tiled, a threshold), and no pixels.
+- **Converted once, then yours.** The converter writes each category's sheet
+  into `melkhior/`, gitignored, from `~/Downloads/MelkhiorsMansion`. After
+  that it is a file to retouch by hand, and the build reads it; converting
+  again is a deliberate command that warns before it overwrites. It is never
+  committed, so it has no backup but the one you keep.
+- **The graphic-map editor learns several sheets** in the same stage, so the
+  Melkhior sheets can be browsed and numbered there.

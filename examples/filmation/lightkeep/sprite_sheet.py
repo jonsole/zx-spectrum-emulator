@@ -56,9 +56,7 @@ GRAPHIC_COUNT = 256
 SPELL = list(range(112, 128))
 LEG_POSES = list(range(0, 6)) + list(range(8, 14))
 SABREMAN_LEGS = [16 + k for k in LEG_POSES]
-WEREWOLF_LEGS = [48 + k for k in LEG_POSES]
 SABREMAN_BODY = [32 + k for k in range(16)]
-WEREWOLF_BODY = [64 + k for k in range(16)]
 
 # Everything that animates, as sprite_source.py checks it: every frame in a
 # group has to rotate into a buffer sized from any other frame in it.
@@ -82,10 +80,9 @@ ANIMATIONS = (
 # room, one at 104-111 and one at 168-175. The last, the extra life, is
 # Sabreman's head and shares its bitmap with the panel's lives indicator, so
 # this band comes after the panel's and takes seven of the eight.
-# The twinkle Sabreman turns into the werewolf through, and back again --
-# PLAYER_CHANGE_GFX in player.s. No room places these: the player's own code
-# draws them, which is why they swept into the scenery band before.
-TRANSFORM = (92, 93, 94, 95)
+# Knight Lore 128K also has the werewolf, the twinkle Sabreman turns into him
+# through, the sun and moon and their window, and Pentagram's art. Lightkeep
+# has none of them: stage 0c took them out of the sheet and the table.
 
 COLLECTABLE = tuple(range(96, 104))
 
@@ -98,12 +95,6 @@ WALL_FOREST = (128, 129, 130)   # scenery_trees_0/1/2
 DOOR_CASTLE = (2, 3)            # scenery_arch_n/e/s/w, and the high arches
 DOOR_FOREST = (4, 5)            # scenery_tree_arch_n/e/s/w
 
-SUN = (88, 89)                  # the sun and the moon, sixteen rows in
-                                # sun_place -- SUN_GFX in sun.s says so.
-                                # This used to read (88, 96), which made
-                                # the moon a collectable: 96 is
-                                # SPECIAL_FIRST, the first of the eight.
-WINDOW = (90, 186)              # the window's frame, indexed by row in sun_draw
 PANEL = (134, 135, 136, 140)    # the chain, the bars, the ends, Sabreman's head
 MENU = (137, 138, 139)          # the frame's corner, drawn upside down too;
                                 # a run's four pixels; and the bar. MENU_SIDE_BITS
@@ -116,16 +107,18 @@ MENU = (137, 138, 139)          # the frame's corner, drawn upside down too;
 # corner is drawn whole, but its side and bar are drawn a fixed number of rows
 # in, so whatever is under that never matters and they trim like anything
 # else. What a sprite IS and how it is DRAWN are different questions.
-WHOLE_SPRITE_GRAPHICS = SUN + WINDOW + PANEL + (137,)
+WHOLE_SPRITE_GRAPHICS = PANEL + (137,)
 
 # The knight keeps two rotation buffers for life, sized from these two
-# sprites; every frame the matching half can wear has to fit.
+# sprites, named as sprites.json names them; every frame the matching half can
+# wear has to fit. With the werewolf gone, the legs' largest is the sparkle and
+# the body's is Sabreman's own seventh frame, a row taller than it.
 # The sparkle is in both, though it is in neither band: a half wearing it has
 # to fit the buffer it already has, and taking it out of the lists above is
 # about where it is DRAWN on the sheet, not about what a buffer must hold.
 ROTATION_BUFFERS = (
-    ("CHARACTER_LARGEST", 30, SABREMAN_LEGS + WEREWOLF_LEGS + SPELL),
-    ("CHARACTER_TALLEST", 92, SABREMAN_BODY + WEREWOLF_BODY + SPELL),
+    ("CHARACTER_LARGEST", "spell.1", SABREMAN_LEGS + SPELL),
+    ("CHARACTER_TALLEST", "sabreman.body.7", SABREMAN_BODY + SPELL),
 )
 
 # The groups a sprite can be in, and what they claim.
@@ -148,11 +141,6 @@ BANDS = (
         ("legs", "Sabreman's legs", SABREMAN_LEGS),
         ("body", "Sabreman's body", SABREMAN_BODY),
     )),
-    ("werewolf", "the werewolf", (), (
-        ("legs", "the werewolf's legs", WEREWOLF_LEGS),
-        ("body", "the werewolf's body", WEREWOLF_BODY),
-    )),
-    ("transform", "Sabreman turning into the werewolf", TRANSFORM),
     # A guard's legs are Sabreman's own -- graphics 144 to 157 name sprites
     # 55 to 62, which sabreman.legs has already taken -- so they have no band of
     # their own, and editing the knight's walk changes theirs with it.
@@ -163,8 +151,6 @@ BANDS = (
     ("balls", "balls", (178, 179, 182, 183)),
     ("ghost", "the ghost", (80, 81, 82, 83)),
     ("gate", "the portcullis", (8, 9)),
-    ("sun", "the sun and the moon", SUN),
-    ("window", "the sun window's frame", WINDOW),
     ("panel", "the status panel", PANEL),
     ("menu", "the menu's frame", MENU),
     ("collectable", "the things the wizard wants", COLLECTABLE),

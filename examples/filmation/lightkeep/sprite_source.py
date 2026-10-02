@@ -525,6 +525,12 @@ def main():
                              "against your own copy of the game to make it")
 
     _sheet, entries, facts = sheet.read_sheet_files(game, args.json, args.graphics)
+    # sprite_sheet.py names the knight's two buffer sprites rather than giving
+    # their place in the sheet, so taking a band out cannot move them.
+    by_name = {e["name"]: n for n, e in enumerate(entries)}
+    for buffer in facts["rotationBuffers"]:
+        if isinstance(buffer["sprite"], str):
+            buffer["sprite"] = by_name[buffer["sprite"]]
     gmap = facts["graphicMap"]
     whole = {gmap[g] for g in facts["wholeSpriteGraphics"] if gmap[g] is not None}
     animated = {gmap[g] for frames in facts["animations"] for g in frames

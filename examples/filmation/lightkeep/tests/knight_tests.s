@@ -171,7 +171,7 @@ room_door_at:		DS		4
 
 ; The two sprites knight.s names for the walker. Only their addresses matter.
 sprite_spell_1:			DB		0
-sprite_werewolf_body_9:			DB		0
+sprite_sabreman_body_7:			DB		0
 
 ; As engine/walker.s has it: A, made positive. B is kept.
 character_door_find:

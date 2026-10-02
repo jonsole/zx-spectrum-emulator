@@ -16,8 +16,9 @@ COLLIDE_HEIGHT		EQU		23
 ; every build: a buffer too small gets rotated past its end, into the other.
 CHARACTER_LARGEST	EQU		sprite_spell_1		; 3x24: the sparkle the legs die and
 					; come back as, which is bigger than any walking frame
-CHARACTER_TALLEST	EQU		sprite_werewolf_body_9		; 3x29: the werewolf's body, which only a
-					; walking character's top half ever wears
+CHARACTER_TALLEST	EQU		sprite_sabreman_body_7		; 3x25: the tallest of his
+					; bodies -- Knight Lore 128K's werewolf body
+					; was taller still, and this game has none
 CHARACTER_BODY_UP	EQU		12		; how far every body rides above its legs,
 					; the same twelve Knight Lore gives the
 					; knight. Z is what the depth sort reads, so
