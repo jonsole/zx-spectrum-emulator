@@ -123,6 +123,13 @@ GitHub takes its notes from that section.
   saved in `templates.json`, and the build writes the game's table from it. The
   weight is a Filmation engine build option, `LOOSE_WEIGHT`; Knight Lore,
   Knight Lore 128K and Pentagram build as before.
+- **How the Filmation engine works**, `examples/filmation/engine/how-it-works.md`:
+  the engine explained for a Spectrum programmer, from the record the draw
+  walk POPs to the 48K and 128K memory maps.
+- **A user guide for the Filmation Designer**,
+  `examples/filmation/designer-guide.md`: the room designer, the templates
+  editor, the graphic map and the sprite sheet editor, task by task, with
+  screenshots.
 - **A sprite sheet editor for the Filmation games.** Opening a sheet's
   description (`metadata/sprites.json`, or a Melkhior one) opens its picture
   for pixel editing: the sprites in their groups, a pencil and a fill in ink,

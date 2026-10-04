@@ -52,4 +52,6 @@ $dest = "$env:USERPROFILE\.vscode\extensions\jonsole.filmation-designer-0.0.1"
 New-Item -ItemType Junction -Path $dest -Target (Resolve-Path .\examples\filmation\vscode)
 ```
 
-The full description is in [room-designer.md](../room-designer.md).
+How to use the editors, task by task, is in the
+[user guide](../designer-guide.md); the full description is in
+[room-designer.md](../room-designer.md).

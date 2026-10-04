@@ -20,6 +20,11 @@ is Knight Lore on the 128K, with a bigger castle and Pentagram's graphics
 beside its own. [`lightkeep/`](lightkeep/README.md) is a Fairlight-like game
 of its own. Each README says how far it has got.
 
+[How the engine works](engine/how-it-works.md) explains the engine for a
+Spectrum programmer: the record, the projection, the draw path, depth order,
+collision, timing and memory. The [Filmation Designer user
+guide](designer-guide.md) covers the editors for the games' data.
+
 Unlike the other examples here it is a real, multi-file program, which is the
 point of it being in the tree: the SLD it produces maps addresses into nearly
 forty source files across two folders. That is exactly the case a single flat

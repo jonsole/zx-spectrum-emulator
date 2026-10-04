@@ -1,7 +1,8 @@
 # Designing a Filmation room
 
 This is the reference for the Filmation Designer's editors: what every rule
-is and why, and how each is held to what the engine does.
+is and why, and how each is held to what the engine does. For a task-by-task
+guide to using them, see the [user guide](designer-guide.md).
 
 The Filmation engine under `examples/filmation` does not store a room as a list
 of objects. It stores templates and expands them: a room is a colour, a floor
