@@ -295,7 +295,8 @@ Building from scratch is a separate, checkable procedure:
 
 This project's own code is MIT-licensed -- see [LICENSE](LICENSE). The
 third-party code it carries (nlohmann/json, miniz and stb_image_write in the
-server; floooh/chips, zlib-licensed, in the tests) is listed with its terms in
+server; floooh/chips, zlib-licensed, which parts of the Z80 core are adapted
+from and which the tests compare against) is listed with its terms in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 No ROM image is in this repository: a checkout needs its own in `roms/`. A

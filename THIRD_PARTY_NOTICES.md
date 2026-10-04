@@ -177,7 +177,50 @@ own table. This repository carries the extracted JSON and `sprites.png` for
 `examples/filmation/knightlore/` and `pentagram/`, as the editable source the
 builds read.
 
-## floooh/chips (repository only)
+## floooh/chips
 
-`vendor/chips/z80.h` and `z80_desc.yml`, zlib-licensed, used only by the
-test suite as a reference Z80 to compare against. Not in any release.
+<https://github.com/floooh/chips>, by Andre Weissflog. It reaches the project
+two ways:
+
+- **Derived work, compiled into `zx_server`.** Parts of this project's Z80
+  core are adapted from chips' `z80.h` and `z80_desc.yml` rather than written
+  independently: the flag computations in `cpp-core/src/alu.h` and `alu.cpp` (ported from
+  its `_z80_add_flags`, `_z80_sub_flags`, `_z80_cp_flags` and their
+  neighbours), the instruction dispatch in
+  `cpp-core/src/generated/dispatch.inc` (generated from `z80_desc.yml` by
+  `scripts/generate_z80_dispatch.py`, which follows chips' own code generator
+  but emits C++ at half-T-state resolution), and the `(IX+d)/(IY+d)` opcode
+  table in `cpp-core/src/z80.cpp`. These are altered versions, not the
+  original: `alu.h`'s header, `dispatch.inc`'s header and the table's comment
+  say where each came from.
+- **Repository only.** `vendor/chips/z80.h` and `z80_desc.yml`, unmodified,
+  used by the test suite as a reference Z80 to compare against and as the
+  generator's input. Not in any release.
+
+> zlib/libpng license
+>
+> Copyright (c) 2021 Andre Weissflog
+>
+> This software is provided 'as-is', without any express or implied warranty.
+> In no event will the authors be held liable for any damages arising from the
+> use of this software.
+>
+> Permission is granted to anyone to use this software for any purpose,
+> including commercial applications, and to alter it and redistribute it
+> freely, subject to the following restrictions:
+>
+> 1. The origin of this software must not be misrepresented; you must not
+>    claim that you wrote the original software. If you use this software in a
+>    product, an acknowledgment in the product documentation would be
+>    appreciated but is not required.
+> 2. Altered source versions must be plainly marked as such, and must not be
+>    misrepresented as being the original software.
+> 3. This notice may not be removed or altered from any source distribution.
+
+## Reference data
+
+Two tables in `zx_server` are measurements taken from other emulators'
+documentation of the hardware, not their code: the AY-3-8910 volume curve in
+`cpp-core/src/ay.cpp` is the measured curve from MAME's ay8910 sound core,
+rescaled, and the 128K's frame timings in `cpp-core/src/ula.h` are the World of
+Spectrum / libspectrum reference figures.
