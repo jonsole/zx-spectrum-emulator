@@ -378,7 +378,9 @@ room_door_note:		ld		a,b
 ; then that many packed positions.
 ;
 ;   type   the first byte: any of up to 256 object templates
-;   count  the second, one to eight
+;   count  the second: how many, one to eight, less one, in bits 0-2, and a
+;          shift in Z in bits 3-7 -- signed, 4 units a step -- which goes on
+;          every object of the group (room_group_dz)
 ;
 ; Knight Lore packs both into one byte, the type in bits 3-7 and the count less
 ; one in bits 0-2, which reaches only 32 templates. It has 29; with Pentagram's
@@ -411,7 +413,14 @@ room_objects_of:	ld		a,(room_bytes_left)
 					ld		c,a
 					ld		a,(de)		; and how many of it: two bytes, where
 					inc		de		; Knight Lore packs both into one that
-					ld		(room_count_left),a	; holds only 32 templates
+					ld		b,a		; holds only 32 templates
+					and		7		; how many, less one
+					inc		a
+					ld		(room_count_left),a
+					ld		a,b		; and the five bits above it, a shift in
+					and		$F8		; Z in steps of 4: as they lie that is
+					sra		a		; eight a step, signed, so one SRA
+					ld		(room_group_dz),a
 					ld		hl,room_bytes_left
 					dec		(hl)		; the second of them
 					ld		a,c
@@ -516,6 +525,9 @@ room_unpack:		ld		a,(room_packed)
 					add		a,b		; ...* 6
 					add		a,a		; ...* 12
 					ld		b,a
+					ld		a,(room_group_dz)	; the group's shift, which can
+					add		a,b		; put it between the levels,
+					ld		b,a		; above them, or below the floor
 					ld		a,(room_floor_z)
 					add		a,b
 					ld		(room_base_z),a
@@ -566,6 +578,11 @@ room_unpack_base:	push	hl
 room_base_u:		DB		0
 room_base_v:		DB		0
 room_base_z:		DB		0
+
+; The shift in Z of the group being placed, from the top five bits of its count
+; byte: signed, in units, a multiple of 4 from -64 to +60. The room designer
+; puts an object in such a group when it stands off the four levels.
+room_group_dz:		DB		0
 
 
 LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives

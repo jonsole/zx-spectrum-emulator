@@ -1584,6 +1584,100 @@ test(TABLE + ': background and flip agree with the generated room_data.s', funct
 });
 
 
+// --- heights off the levels: a group's shift in Z --------------------------
+
+// A castle of one room whose builder reads a group's shift (Lightkeep's rule),
+// with a floor at 128 and a block template with no raise of its own.
+function shiftAtlas(shifts) {
+  return {
+    meta: { game: 'lightkeep', rules: { exits: 'table', groupBytes: 2, groupShiftZ: shifts } },
+    roomDimensions: { square: { u: 64, v: 64, z: 128 } },
+    sceneryTemplates: {},
+    objectTemplates: { block: [{ graphic: 'blk', flags: { mirrored: false, passable: false, rest: 0 },
+                                 offsets: { halfU: false, halfV: false, raiseZ: 0 } }] },
+    startRooms: [1],
+    rooms: [{ number: 1, ink: 7, dimensions: 'square', scenery: [],
+              objects: [{ template: 'block', positions: [{ u: 3, v: 3, z: 1 }, { u: 4, v: 4, z: 0 }] }] }]
+  };
+}
+
+test('heights: a level needs no shift, anything else the nearest level and the difference', function () {
+  assert.deepStrictEqual(m.placeForHeight(0), { z: 0, shift: 0 });
+  assert.deepStrictEqual(m.placeForHeight(36), { z: 3, shift: 0 });
+  assert.deepStrictEqual(m.placeForHeight(16), { z: 1, shift: 4 });     // 12 + 4
+  assert.deepStrictEqual(m.placeForHeight(20), { z: 2, shift: -4 });    // 24 - 4
+  assert.deepStrictEqual(m.placeForHeight(-4), { z: 0, shift: -4 });    // below the floor
+  assert.deepStrictEqual(m.placeForHeight(48), { z: 3, shift: 12 });    // above the top level
+  // The range: 64 below the floor to 36 + 60 above it, 4 a step; a castle
+  // without the rule keeps its four levels.
+  assert.deepStrictEqual(m.heightRange(shiftAtlas(true)), { min: -64, max: 96, step: 4 });
+  assert.deepStrictEqual(m.heightRange(shiftAtlas(false)), { min: 0, max: 36, step: 12 });
+});
+
+test('heights: off a level an object goes into a group of its own shift, and back again', function () {
+  const atlas = shiftAtlas(true);
+  const room = atlas.rooms[0];
+  // Up 4 from level 1: a new group, shifted +4, the old one keeping the other.
+  let at = m.setObjectHeight(atlas, room, 0, 0, 16);
+  assert.strictEqual(room.objects.length, 2);
+  assert.deepStrictEqual(room.objects[at.ref], { template: 'block', shiftZ: 4, positions: [{ u: 3, v: 3, z: 1 }] });
+  assert.strictEqual(m.heightOf(room.objects[at.ref], room.objects[at.ref].positions[at.slot]), 16);
+  // The other block to the same height joins that group rather than making another.
+  const other = m.setObjectHeight(atlas, room, 0, 0, 16);
+  assert.strictEqual(room.objects.length, 1, 'the plain group, emptied, is gone');
+  assert.deepStrictEqual(room.objects[0].positions.length, 2);
+  assert.strictEqual(other.ref, 0);
+  // Inside the same group's reach a level changes, the group does not: 16 to 28
+  // is level 2 with the same +4.
+  at = m.setObjectHeight(atlas, room, 0, 1, 28);
+  assert.deepStrictEqual([room.objects.length, at.ref, at.slot, room.objects[0].positions[1].z], [1, 0, 1, 2]);
+  // Back onto a level: a plain group again, with no shiftZ written at all.
+  at = m.setObjectHeight(atlas, room, 0, 1, 24);
+  assert.deepStrictEqual(room.objects[at.ref], { template: 'block', positions: [{ u: 4, v: 4, z: 2 }] });
+  // Snapped to 4 and held to the range.
+  at = m.setObjectHeight(atlas, room, at.ref, at.slot, 1000);
+  assert.strictEqual(m.heightOf(room.objects[at.ref], room.objects[at.ref].positions[at.slot]), 96);
+  at = m.setObjectHeight(atlas, room, at.ref, at.slot, -7);
+  assert.strictEqual(m.heightOf(room.objects[at.ref], room.objects[at.ref].positions[at.slot]), -8);
+  // A new object of the template joins a plain group, not a shifted one.
+  const added = m.addObject(room, 'block', { u: 0, v: 0, z: 0 });
+  assert.ok(!room.objects[added.ref].shiftZ);
+});
+
+test('heights: drawn, written and read back with the shift, and checked', function () {
+  const atlas = shiftAtlas(true);
+  const room = atlas.rooms[0];
+  const numbers = new Map([['blk', 7]]);
+  const sizes = new Map([['blk', { u: 8, v: 8, z: 12 }]]);
+  m.setObjectHeight(atlas, room, 0, 0, -4);
+  // Worked out: a floor at 128, level 0, a shift of -4: 124.
+  const pieces = m.expandRoom(atlas, room, numbers, sizes);
+  assert.deepStrictEqual(pieces.map(function (p) { return p.z; }).sort(), [124, 128]);
+  const text = m.serializeAtlas(atlas, '\n');
+  assert.ok(text.indexOf('{ "template": "block", "shiftZ": -4, "positions": [') >= 0, text);
+  assert.strictEqual(m.parseAtlas(text).rooms[0].objects[1].shiftZ, -4);
+  const faults = function (a) {
+    return m.checkAtlas(a).filter(function (p) { return /shifted/.test(p.text); });
+  };
+  assert.deepStrictEqual(faults(atlas), []);
+  room.objects[1].shiftZ = 6;
+  assert.strictEqual(faults(atlas).length, 1, 'not a multiple of 4');
+  room.objects[1].shiftZ = -68;
+  assert.strictEqual(faults(atlas).length, 1, 'out of range');
+  // A castle whose builder reads no shift is told so.
+  const plain = shiftAtlas(false);
+  plain.rooms[0].objects[0].shiftZ = 4;
+  assert.strictEqual(faults(plain).length, 1);
+});
+
+test('heights: a castle without the rule keeps its levels', function () {
+  const atlas = shiftAtlas(false);
+  const room = atlas.rooms[0];
+  const at = m.setObjectHeight(atlas, room, 0, 0, 16);   // 16 is not a level: 12 it is
+  assert.deepStrictEqual(room.objects[at.ref], { template: 'block', positions: [{ u: 3, v: 3, z: 1 }, { u: 4, v: 4, z: 0 }] });
+});
+
+
 // --- how an object template moves ------------------------------------------
 
 test('movers: a template is given a behaviour and a weight, and kept in table order',

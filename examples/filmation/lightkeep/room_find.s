@@ -126,7 +126,12 @@ room_templates_copy:
                     ret     z
                     ld      a,(hl)
                     inc     hl
-                    ld      b,(hl)              ; the count
+                    push    af
+                    ld      a,(hl)              ; the count, less one, under
+                    and     7                   ; the group's shift in Z
+                    inc     a
+                    ld      b,a
+                    pop     af
                     inc     hl
                     push    bc
                     ld      c,b

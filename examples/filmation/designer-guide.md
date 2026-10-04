@@ -137,7 +137,16 @@ the same lines. Anything in front of it is drawn faint, so it is never hidden.
 |---|---|
 | Arrows | Move the selected object a cell along the floor |
 | **Ctrl+↑** / **Ctrl+↓**, or `]` / `[` | Raise or lower it a level |
+| **Ctrl+Shift+↑** / **Ctrl+Shift+↓**, or `}` / `{` | Raise or lower it 4 units (Lightkeep) |
 | **Delete** | Remove it |
+
+In Lightkeep an object can stand at any height in steps of 4, from 64
+below the floor to 96 above it, not only on the four levels (0, 12, 24
+and 36). The side panel's **Z** is its height in units. The room data
+keeps an object that is off the levels in a group of its own with a shift
+in Z. The designer makes those groups, and folds the object back into an
+ordinary one when it returns to a level. The side panel says when the
+selected object needs one. Nothing else needs doing.
 
 An object's position is the room's, but some templates carry a nudge of
 half a cell or a raise. The side panel says so, and says how many rooms share

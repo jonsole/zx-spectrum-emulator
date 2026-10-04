@@ -150,6 +150,12 @@ GitHub takes its notes from that section.
   where he was, walking the way he was. Everything a push moves, and every
   template `templates.json` marks `"kept": true`, is an entry in one table, as
   in Fairlight. A new game puts it all back.
+- **Lightkeep's objects can stand at any height in steps of 4**, from 64
+  below the floor to 96 above it, not only on the four levels. A shift in Z
+  rides in the spare bits of an object group's count byte, so the room data
+  is no bigger. The room designer hides it. Ctrl with up and down moves an
+  object a level, and with Shift 4 units. The designer makes and merges the
+  groups a height needs, and says when the selected object is in one.
 
 ## 0.1.0 (2026-09-29)
 

@@ -353,6 +353,31 @@ def loose_behaviours():
             if name.startswith("MOVE_") and (value(name) or 0) >= loose}
 
 
+# A group's shift in Z, in the five bits above its count: 4 units a step, -16
+# to +15 steps. room_objects_of adds it to the base of every object in the
+# group; the room designer makes these groups itself.
+SHIFT_STEP = 4
+SHIFT_MIN = -64
+SHIFT_MAX = 60
+
+
+def shift_of(room, group):
+    """A group's shift in Z, checked: 0 when it has none."""
+    shift = group.get("shiftZ", 0)
+    if (not isinstance(shift, int) or shift % SHIFT_STEP
+            or not SHIFT_MIN <= shift <= SHIFT_MAX):
+        sys.exit("room %d: a group of %s is shifted %r in Z; a shift is a multiple "
+                 "of %d from %d to %d" % (room["number"], group["template"], shift,
+                                          SHIFT_STEP, SHIFT_MIN, SHIFT_MAX))
+    return shift
+
+
+def count_byte(room, group):
+    """A group's second byte: how many, less one, in bits 0-2, and its shift in
+    Z, in steps, in bits 3-7."""
+    return (len(group["positions"]) - 1) | ((shift_of(room, group) // SHIFT_STEP) & 0x1F) << 3
+
+
 def kept_templates(objects, movers, loose):
     """The object templates whose every placement is a thing: kept where it was
     left, in the thing table, rather than built afresh from the room's record.
@@ -392,6 +417,9 @@ def main():
         sys.exit("%s does not say an object group starts with two bytes "
                  "(meta.rules.groupBytes), and room_build.s reads a template and a "
                  "count" % ATLAS.name)
+    if (meta.get("rules") or {}).get("groupShiftZ") is not True:
+        sys.exit("%s does not say a group's count byte carries a shift in Z "
+                 "(meta.rules.groupShiftZ), and room_build.s reads one" % ATLAS.name)
     templates_meta = atlas.get("templatesMeta") or {}
     BACKGROUND.update(label_of(name) for name in templates_meta.get("background") or [])
     doorways = templates_meta.get("doorways") or {}
@@ -575,8 +603,10 @@ def main():
     out.append(";                           room it leads to if it is a doorway -- or")
     out.append(";                           ROOM_NO_EXIT, for a doorway walled up and for")
     out.append(";                           everything that is not a doorway")
-    out.append(";     object groups         the template's index, how many of it (1-8),")
-    out.append(";                           then that many packed positions: U cell in")
+    out.append(";     object groups         the template's index; how many of it less one")
+    out.append(";                           in bits 0-2 and a shift in Z, 4 units a step,")
+    out.append(";                           signed, in bits 3-7; then that many packed")
+    out.append(";                           positions: U cell in")
     out.append(";                           bits 0-2, V cell in bits 3-5, Z level in")
     out.append(";                           bits 6-7. Knight Lore packs the index and")
     out.append(";                           the count into one byte, which holds 32")
@@ -635,7 +665,7 @@ def main():
                 # template's own offsets go on.
                 things.append((r["number"], o["template"],
                                p["u"] * 16 + 72, p["v"] * 16 + 72,
-                               floor_z + p["z"] * 12))
+                               floor_z + p["z"] * 12 + shift_of(r, o)))
     if len(things) > 255:
         sys.exit("%d things; the table is walked with a one-byte count, so 255 at most"
                  % len(things))
@@ -674,8 +704,11 @@ def main():
                          % (r["number"], o["template"], n))
             spots = ", ".join("$%02X" % (p["u"] | p["v"] << 3 | p["z"] << 6)
                               for p in o["positions"])
-            line(out, "", "DB", "FG_%s, %d, %s" % (bare(o["template"]).upper(), n, spots),
-                 "%d x %s" % (n, bare(o["template"])))
+            shift = shift_of(r, o)
+            line(out, "", "DB", "FG_%s, $%02X, %s" % (bare(o["template"]).upper(),
+                                                     count_byte(r, o), spots),
+                 "%d x %s%s" % (n, bare(o["template"]),
+                                ", Z %+d" % shift if shift else ""))
         out.append("")
     out.append("")
 

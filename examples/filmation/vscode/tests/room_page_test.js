@@ -284,9 +284,13 @@ const PAGE_IDS = ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap
 
 function open(boot) {
   const dom = fakeDom(PAGE_IDS);
+  // What the page listens for on the window -- the keys, the end of a drag --
+  // so a test can press one.
+  const windowListeners = [];
   const sandbox = {
     window: {
-      addEventListener() {}, removeEventListener() {},
+      addEventListener(kind, fn) { windowListeners.push({ kind: kind, fn: fn }); },
+      removeEventListener() {},
       requestAnimationFrame: (fn) => fn(),
       getComputedStyle: () => ({ getPropertyValue: () => '' }),
       innerWidth: 1200, innerHeight: 900
@@ -324,7 +328,14 @@ function open(boot) {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   new vm.Script(scriptOf(assemble(boot))).runInContext(sandbox);
-  return { sandbox, dom };
+  return { sandbox, dom, windowListeners };
+}
+
+// A key pressed with the page's canvas focused.
+function press(page, key, mods) {
+  const event = Object.assign({ key: key, ctrlKey: false, shiftKey: false, metaKey: false,
+                                target: { tagName: 'CANVAS' }, preventDefault() {} }, mods || {});
+  for (const l of page.windowListeners) if (l.kind === 'keydown') l.fn(event);
 }
 
 test('the page opens on the real castle', () => {
@@ -765,6 +776,36 @@ test('a selected object gets the amber guides on the floor, as in the templates 
   assert.ok(spots.length, 'room $00 has objects to select');
   listenerOn(page.dom, spots[0], 'click')();
   assert.ok(guides() > before, 'the guides are drawn once something is selected');
+});
+
+test('lightkeep: ctrl and shift with up raises an object 4, in a group the page makes and folds back', () => {
+  const boot = bootFor('lightkeep', 0);
+  const room = boot.atlas.rooms.find((r) => r.number === 0);
+  const page = open(boot);
+  const spots = nodesIn(page.dom.byId.panel).filter((n) => /\bspot\b/.test(n.className));
+  assert.ok(spots.length, 'room $00 has objects to select');
+  // The first spot is the first group's first position.
+  const first = room.objects[0];
+  const was = first.positions[0];
+  assert.strictEqual(was.z, 0, 'room $00 starts with a block on the floor');
+  listenerOn(page.dom, spots[0], 'click')();
+  const placed = () => JSON.parse(page.sandbox.window.__saved).rooms
+    .find((r) => r.number === 0).objects;
+  const holding = (objects) => objects.filter((g) => g.template === first.template &&
+    g.positions.some((p) => p.u === was.u && p.v === was.v));
+  press(page, 'ArrowUp', { ctrlKey: true, shiftKey: true });
+  let groups = holding(placed()).filter((g) => g.shiftZ);
+  assert.deepStrictEqual(groups.map((g) => [g.shiftZ, g.positions.length]), [[4, 1]]);
+  assert.ok(nodesIn(page.dom.byId.panel).some((n) => /Z shift of \+4/.test(n.textContent || '')),
+            'the panel says why it has a group of its own');
+  // Two more: 8 is level 1 less 4, and 12 is level 1, in a plain group again.
+  press(page, 'ArrowUp', { ctrlKey: true, shiftKey: true });
+  groups = holding(placed()).filter((g) => g.shiftZ);
+  assert.deepStrictEqual(groups.map((g) => g.shiftZ), [-4]);
+  press(page, 'ArrowUp', { ctrlKey: true, shiftKey: true });
+  assert.deepStrictEqual(placed().filter((g) => g.shiftZ), []);
+  assert.ok(holding(placed()).some((g) => g.positions.some((p) =>
+    p.u === was.u && p.v === was.v && p.z === 1)));
 });
 
 test('the Shapes tab edits, adds and deletes the castle’s floor shapes', () => {

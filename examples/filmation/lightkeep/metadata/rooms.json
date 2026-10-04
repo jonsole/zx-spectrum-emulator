@@ -13,7 +13,8 @@
    "exits": "table",
    "sceneryPerRoom": 7,
    "lastRoom": 255,
-   "groupBytes": 2
+   "groupBytes": 2,
+   "groupShiftZ": true
   }
  },
 

@@ -535,3 +535,39 @@ Checked in a 128K emulator:
 Not done: the room designer still places a thing on the packed grid, as it
 does every object; the pool has no spare slots for things brought into a room
 (stage 3); and nothing yet uses the room $FE, or the two spare bytes.
+
+### Heights off the levels
+
+A room's record places an object by a packed byte: three bits of U, three of V
+and two of level, so it stood on the floor or 12, 24 or 36 above it, plus
+whatever raise its template carries. The new castle's ledges, pits and stairs
+want more than that. A group's count byte only ever needed three bits for its
+one to eight, so the other five now carry a **shift in Z**: signed, 4 units a
+step, from -64 to +60. Every object in the group moves by it, so an object can
+stand between the levels, above the top one, or below the floor.
+
+- **In `rooms.json`** a group says it with `"shiftZ"`, left out when it is 0.
+  `meta.rules.groupShiftZ` says the castle's builder reads one, and
+  `rooms_source.py` will not build without it.
+- **In the build**, `room_objects_of` takes the count from bits 0-2 and the
+  shift from bits 3-7, one `AND` and one `SRA`. `room_unpack` adds it to the
+  base, so it goes on after the template's offsets. A thing's starting Z
+  includes its group's shift.
+- **In the room designer** the shift is never shown. An object has a height,
+  and the designer works out the group:
+  - **Ctrl** with up and down moves it a level, and with **Shift** as well,
+    4 units.
+  - The side panel's Z is the height itself.
+  - Off a level, the object goes into a group with the shift that makes up the
+    difference from the nearest level. The designer makes that group, and
+    folds the object back into a plain one when it returns to a level.
+  - The panel says when the selected object is in such a group.
+
+Checked in a 128K emulator:
+
+- **No shifts.** Every room builds the same objects as at stage 2.
+- **Shifts.** With room $00's two block groups shifted -64 and +60, and room
+  $0A's table (a thing) +8, those 16 records moved by exactly their shifts and
+  nothing else in either room moved. The table started at Z 136.
+
+The designer's tests cover the heights, the grouping and the panel's note.

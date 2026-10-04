@@ -413,6 +413,7 @@ function roomLines(room, indent) {
     const spots = group.positions || [];
     lines.push(indent + '   { "template": ' + scalar(group.template) +
                (group.nudge ? ', "nudge": ' + scalar(group.nudge) : '') +
+               (group.shiftZ ? ', "shiftZ": ' + scalar(group.shiftZ) : '') +
                ', "positions": [');
     spots.forEach(function (spot, j) {
       lines.push(indent + '    ' + flat(spot) + (j < spots.length - 1 ? ',' : ''));
@@ -543,7 +544,7 @@ function pieceFromBlock(block, numbers, sizes, templateName, index) {
 // half a cell along U or V, and a raise in Z, which is the template's and so
 // moves every object drawn from it.
 function pieceFromEntry(entry, position, floorZ, numbers, sizes,
-                        templateName, index, groupNudge) {
+                        templateName, index, groupNudge, groupShift) {
   // A group's own nudge -- Alien 8's, set by the header before it -- adds to
   // the template's, the way the builder adds PLACE_NUDGE: bit 0 half a cell in
   // U, bit 1 in V, the rest to Z.
@@ -556,7 +557,10 @@ function pieceFromEntry(entry, position, floorZ, numbers, sizes,
   const v = position.v * CELL + (nudge.halfV ? HALF_CELL : 0) + CELL_ORIGIN;
   // The mask is room_unpack's: it adds the nudge byte whole and drops its two
   // low bits again, so the half-cell bits never reach the height.
-  const z = floorZ + ((position.z * LEVEL_Z + (nudge.raiseZ || 0)) & Z_MASK);
+  // A group's shift goes on after the mask, as room_unpack adds it to the base
+  // and not to the offsets byte: it can be below the floor, which the mask
+  // could not keep.
+  const z = floorZ + ((position.z * LEVEL_Z + (nudge.raiseZ || 0)) & Z_MASK) + (groupShift || 0);
   return {
     graphic: graphicNumberOf(numbers, entry.graphic),
     graphicName: entry.graphic,
@@ -721,7 +725,8 @@ function expandRoom(atlas, room, numbers, sizes) {
     group.positions.forEach(function (position, slot) {
       template.forEach(function (entry, i) {
         const piece = pieceFromEntry(entry, position, floorZ, numbers,
-                                     sizes, group.template, i, group.nudge);
+                                     sizes, group.template, i, group.nudge,
+                                     group.shiftZ);
         if (piece.graphic < FIRST_REAL_GRAPHIC) return;
         piece.background = false;
         piece.ref = refIndex;
@@ -818,6 +823,10 @@ function rulesOf(atlas) {
     // Whether an object group may carry a placement nudge of its own -- Alien
     // 8's rooms set one with a header of template 0 for the groups after it.
     groupNudge: said.groupNudge === true,
+    // Whether a group's count byte may carry a shift in Z, so its objects
+    // stand between the four levels or beyond them -- Lightkeep's builder
+    // reads one (see heightOf).
+    groupShiftZ: said.groupShiftZ === true,
     // How many object templates the castle may have, when its builder says.
     objectTemplateLimit: Number.isInteger(said.objectTemplateLimit) && said.objectTemplateLimit > 0
       ? said.objectTemplateLimit : null
@@ -1190,6 +1199,16 @@ function checkAtlas(atlas, numbers, sizes) {
           fault(n, group.template + ' at ' + p.u + ',' + p.v + ',' + p.z + ' is off the grid');
         }
       }
+      if (group.shiftZ !== undefined && group.shiftZ !== 0) {
+        const s = group.shiftZ;
+        if (!rules.groupShiftZ) {
+          fault(n, group.template + ' is shifted ' + s + ' in Z, which this castle\'s ' +
+                   'builder does not read (meta.rules.groupShiftZ)');
+        } else if (!Number.isInteger(s) || s % SHIFT_STEP !== 0 || s < SHIFT_MIN || s > SHIFT_MAX) {
+          fault(n, group.template + ' is shifted ' + JSON.stringify(s) + ' in Z; a shift is a ' +
+                   'multiple of ' + SHIFT_STEP + ' from ' + SHIFT_MIN + ' to ' + SHIFT_MAX);
+        }
+      }
       body += rules.groupBytes + count;
     }
 
@@ -1286,18 +1305,83 @@ function checkAtlas(atlas, numbers, sizes) {
 // two object_block groups because the first filled up.
 const GROUP_LIMIT = 8;
 
-function addObject(room, templateName, cell) {
+function addObject(room, templateName, cell, shiftZ) {
+  // A group's shift moves everything in it, so an object joins only a group
+  // whose shift is its own: 0, the levels, unless setObjectHeight says.
+  const shift = shiftZ || 0;
   for (const group of room.objects) {
-    if (group.template === templateName && group.positions.length < GROUP_LIMIT) {
+    if (group.template === templateName && (group.shiftZ || 0) === shift &&
+        group.positions.length < GROUP_LIMIT) {
       group.positions.push({ u: cell.u, v: cell.v, z: cell.z });
       return { ref: room.objects.indexOf(group), slot: group.positions.length - 1 };
     }
   }
-  room.objects.push({
-    template: templateName,
-    positions: [{ u: cell.u, v: cell.v, z: cell.z }]
-  });
+  const group = { template: templateName };
+  if (shift) group.shiftZ = shift;
+  group.positions = [{ u: cell.u, v: cell.v, z: cell.z }];
+  room.objects.push(group);
   return { ref: room.objects.length - 1, slot: 0 };
+}
+
+// --- heights off the levels ------------------------------------------------
+//
+// A position byte has two bits of level, so an object stands at 0, 12, 24 or
+// 36 above the floor. A castle whose rules say groupShiftZ (Lightkeep's) keeps
+// a signed shift in the five spare bits of a group's count byte, 4 units a
+// step, and room_unpack adds it to every object in the group -- so an object
+// can stand between the levels, above them, or below the floor.
+//
+// The designer does not show the shift. An object has a height, and the group
+// it sits in is whatever that height needs: on a level, a plain group; off
+// one, a group with the shift that makes up the difference from the nearest
+// level. Moving it back onto a level puts it back in a plain group.
+const SHIFT_STEP = 4;
+const SHIFT_MIN = -64;
+const SHIFT_MAX = 60;
+
+// An object's height above the floor, before its template's own raise.
+function heightOf(group, position) {
+  return position.z * LEVEL_Z + ((group && group.shiftZ) || 0);
+}
+
+// The heights an object may have in this castle, and the step between them.
+function heightRange(atlas) {
+  const top = (LEVELS - 1) * LEVEL_Z;
+  return rulesOf(atlas).groupShiftZ
+    ? { min: SHIFT_MIN, max: top + SHIFT_MAX, step: SHIFT_STEP }
+    : { min: 0, max: top, step: LEVEL_Z };
+}
+
+// The level and the shift that make a height: no shift on a level, and
+// otherwise the nearest level, so the shift is as small as it can be.
+function placeForHeight(height) {
+  const top = (LEVELS - 1) * LEVEL_Z;
+  if (height % LEVEL_Z === 0 && height >= 0 && height <= top) {
+    return { z: height / LEVEL_Z, shift: 0 };
+  }
+  const level = Math.max(0, Math.min(LEVELS - 1, Math.round(height / LEVEL_Z)));
+  return { z: level, shift: height - level * LEVEL_Z };
+}
+
+// Stand an object at a height: snapped to the castle's step and held to its
+// range, in whichever group that needs. Returns where it is now, which is not
+// where it was when it changed group, and the shift its group has.
+function setObjectHeight(atlas, room, ref, slot, height) {
+  const group = room.objects[ref];
+  if (!group || !group.positions[slot]) return null;
+  const range = heightRange(atlas);
+  const snapped = Math.round(Number(height) / range.step) * range.step;
+  const place = placeForHeight(Math.max(range.min, Math.min(range.max, snapped || 0)));
+  const position = group.positions[slot];
+  if ((group.shiftZ || 0) === place.shift) {
+    position.z = place.z;
+    return { ref: ref, slot: slot, shiftZ: place.shift };
+  }
+  const moved = { u: position.u, v: position.v, z: place.z };
+  const template = group.template;
+  removeObject(room, ref, slot);
+  const at = addObject(room, template, moved, place.shift);
+  return { ref: at.ref, slot: at.slot, shiftZ: place.shift };
 }
 
 function removeObject(room, ref, slot) {
@@ -1328,8 +1412,9 @@ function retemplateObject(room, ref, slot, templateName) {
   if (!group || !group.positions[slot]) return null;
   const cell = group.positions[slot];
   const moved = { u: cell.u, v: cell.v, z: cell.z };
+  const shift = group.shiftZ || 0;      // and at the same height
   removeObject(room, ref, slot);
-  return addObject(room, templateName, moved);
+  return addObject(room, templateName, moved, shift);
 }
 
 // Scenery is a bare template in Knight Lore and a template plus the room a
@@ -1976,6 +2061,7 @@ if (typeof module !== 'undefined') {
     rulesOf, doorwayOf, destinationOf, roomMap, unreciprocated, doorwaysOf,
     MAP_STEP, mapLayout,
     GROUP_LIMIT, addObject, removeObject, moveObject, retemplateObject,
+    SHIFT_STEP, SHIFT_MIN, SHIFT_MAX, heightOf, heightRange, placeForHeight, setObjectHeight,
     addScenery, setSceneryTemplate, removeScenery, renameTemplate, refreshUsage,
     addRoomProblem, firstFreeRoom, addRoom, deleteRoomProblem, deleteRoom,
     setTemplateField, setTemplateGraphic, setTemplateBox, MAX_BOX_HEIGHT,

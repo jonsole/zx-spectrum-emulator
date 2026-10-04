@@ -86,6 +86,7 @@ In `rooms.json`:
 | `shapeLimit` | the most floor shapes a room can name. Without it, 4: the remakes' builders keep the shape in bits 3 and 4 of the attribute byte. The original Knight Lore's castle says 32, which is what bits 3 to 7 of its attribute byte can name. |
 | `yOrigin` | the projection's Y origin, unwrapped: a point is drawn on the row this less half its V less U (plus 64), and its Z. Without it 296 -- 40 and a whole byte -- which is Knight Lore's and Pentagram's, whose projections subtract 104 from the game's upward Y. Alien 8's subtracts 40 with its floors 64 lower, so its castle says 232; both put a floor on the same row. |
 | `startSpot` | where the player is put when a game starts, whichever starting room -- `u`, `v`, `z` and the box's `sizeU`, `sizeV`, `sizeZ` -- which a starting room needs clear. Without it Knight Lore's and Pentagram's: the middle of a floor at 128, 5 either way and 23 high. Alien 8's robot starts on a floor at 64, 7 either way. |
+| `groupShiftZ` | `true`: an object group may carry a shift in Z, `shiftZ` beside its template -- a multiple of 4 from -64 to +60, which the builder keeps in the five bits of the count byte above the count and adds to every object in the group. The designer never shows it: an object has a height, and the designer puts it in whatever group that needs (see **The room** below). Lightkeep's. |
 | `groupNudge` | `true`: an object group may carry a placement nudge of its own, `nudge` beside its template -- bit 0 half a cell along U, bit 1 along V, the rest a raise -- which is drawn with it and offered as the group's **raise** in the Objects tab. Alien 8's rooms set one with a header before the groups it applies to. |
 | `objectTemplateLimit` | the most object templates the castle may have, when its builder says: the templates editor holds to it. |
 
@@ -502,6 +503,17 @@ to select it and drag it about the floor. The arrow keys nudge it a cell, and
 two arrows are the ones that could mean either thing, so the floor keeps them
 and height takes the modifier. `[` and `]` do the same as ctrl-down and ctrl-up,
 and Delete removes it.
+
+In a castle whose rules say `groupShiftZ` (Lightkeep's), an object is raised
+and lowered by height, not by level. Ctrl with up and down, and `[` and `]`,
+move it 12. With shift as well, or `{` and `}`, they move it 4. The side
+panel's Z is its height above the floor, from -64 to 96. A height that is
+not one of the four levels needs a group with a shift. `setObjectHeight`
+puts the object in one with the shift that makes up the difference from the
+nearest level, making the group if it has to. Back on a level, the object
+goes back into a plain group, and the group it left goes when it is
+emptied. The panel says when the selected object is in such a group, and
+why. Every other castle keeps its four levels.
 
 A selected object also has **the ground it stands on** lit, with a dashed riser
 between the two. That pair is what makes its place readable: the projection

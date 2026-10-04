@@ -297,6 +297,9 @@ def _room(room, pad):
         # A group's own placement nudge -- Alien 8's -- beside its template,
         # the way room_model.js writes it.
         nudge = (', "nudge": %s' % _scalar(group["nudge"])) if group.get("nudge") else ""
+        # And its shift in Z -- Lightkeep's -- after it, as room_model.js does.
+        if group.get("shiftZ"):
+            nudge += ', "shiftZ": %s' % _scalar(group["shiftZ"])
         lines.append('%s   { "template": %s%s, "positions": ['
                      % (pad, _scalar(group["template"]), nudge))
         for j, spot in enumerate(spots):

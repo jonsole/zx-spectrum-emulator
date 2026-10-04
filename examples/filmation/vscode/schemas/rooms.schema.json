@@ -91,6 +91,10 @@
        },
        "additionalProperties": false
       },
+      "groupShiftZ": {
+       "type": "boolean",
+       "description": "true: an object group may carry a shift in Z (its `shiftZ`), which the builder keeps in the five spare bits of the group's count byte and adds to every object in the group -- Lightkeep's. The room designer makes and merges these groups itself as objects are raised and lowered."
+      },
       "groupNudge": {
        "type": "boolean",
        "description": "true: an object group may carry a placement nudge of its own (its `nudge`), as Alien 8's rooms set one for the groups after a header."
@@ -225,6 +229,13 @@
         "template": {
          "type": "string",
          "description": "A name from objectTemplates."
+        },
+        "shiftZ": {
+         "type": "integer",
+         "minimum": -64,
+         "maximum": 60,
+         "multipleOf": 4,
+         "description": "Added to the Z of every object in the group, where the castle's rules say groupShiftZ: so an object can stand between the four levels, above them or below the floor. Nothing here when it is 0. The room designer writes it; nobody need."
         },
         "nudge": {
          "$ref": "#/definitions/byte",
