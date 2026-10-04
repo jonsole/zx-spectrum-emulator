@@ -498,8 +498,79 @@ start:				ld		sp,$FE00
 					EXPECT_BYTE	coll_dv, -1 & $FF, "the clamp's DV"
 					EXPECT_BYTE	collide_hit, COLLIDE_V, "collide_hit, with the edge in it"
 
+				IFDEF	CHARACTER_STEP_UP
+; --- character_climb: walker_step_tests.s defines CHARACTER_STEP_UP as 6 ------
+;
+; The stub's collide_top stands in for whatever stopped the step along the
+; floor. The knight's feet are at 128, so a top of 134 is a step of six.
+
+					TEST	"climb: a step of six, up two and the step tried again"
+					call	fresh
+					call	step_ahead
+					ld		a,128 + 6
+					ld		(stub_top),a
+					STEP	3, 0
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 2, "object_collide's calls"
+					EXPECT_BYTE	coll_dz, CHARACTER_CLIMB, "the rise"
+					EXPECT_BYTE	coll_du, 3, "the step, all of it again"
+					EXPECT_TAIL	CHARACTER_DZ, 0, "the velocity: climbing, not falling"
+
+					TEST	"climb: the last unit, only what is left"
+					call	fresh
+					call	step_ahead
+					ld		a,128 + 1
+					ld		(stub_top),a
+					STEP	0, -3
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 2, "object_collide's calls"
+					EXPECT_BYTE	coll_dz, 1, "the rise"
+					EXPECT_BYTE	coll_dv, -3 & $FF, "the step"
+
+					TEST	"climb: a unit too high is a wall"
+					call	fresh
+					call	step_ahead
+					ld		a,128 + 7
+					ld		(stub_top),a
+					STEP	3, 0
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 1, "object_collide's calls"
+
+					TEST	"climb: not when only the room's edge stopped him"
+					call	fresh
+					call	step_ahead
+					STEP	3, 0
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 1, "object_collide's calls"
+
+					TEST	"climb: not in a jump"
+					call	fresh
+					call	step_ahead
+					SET		CHARACTER_STATE, CHARACTER_JUMPING
+					SET		CHARACTER_DZ, 4
+					ld		a,128 + 6
+					ld		(stub_top),a
+					STEP	3, 0
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 1, "object_collide's calls"
+
+					TEST	"climb: not when only Z gave"
+					call	fresh
+					ld		a,COLLIDE_Z
+					ld		(stub_hit),a
+					ld		a,128 + 6
+					ld		(stub_top),a
+					STEP	3, 0
+					RUN		character_settle
+					EXPECT_BYTE	coll_calls, 1, "object_collide's calls"
+				ENDIF
+
 					call	finish
+				IFDEF	CHARACTER_STEP_UP
+					DB		"walker_step_tests", 0
+				ELSE
 					DB		"walker_tests", 0
+				ENDIF
 
 
 ; ---------------------------------------------------------------------------
@@ -547,6 +618,13 @@ zero:				ld		(hl),0
 					jr		nz,zero
 					ret
 
+; Something in the way along the floor: object_collide takes the step away and
+; says U gave.
+step_ahead:			ld		a,COLLIDE_U
+					ld		(stub_hit),a
+					ld		(stub_block),a
+					ret
+
 ; An arch on the floor in the north wall, standing at V 196 as the game's do.
 north_arch:			ld		a,128
 					ld		(room_door_z),a
@@ -575,6 +653,10 @@ room_floor_z:		DB		0
 stub_hit:			DB		0		; what object_collide says gave
 stub_block:			DB		0		; non-zero: it takes the step along the floor
 stub_carry:			DB		0		; added to DU, as a ride would
+				IFDEF	CHARACTER_STEP_UP
+stub_top:			DB		0		; what object_collide says stopped the step
+collide_top:		DB		0		; ...and where object.s's says it
+				ENDIF
 
 coll_calls:			DB		0
 coll_du:			DB		0		; the step object_collide was handed
@@ -610,6 +692,10 @@ object_collide:		ld		hl,coll_calls
 					ld		(coll_dz),a
 					ld		a,(stub_hit)
 					ld		(collide_hit),a
+				IFDEF	CHARACTER_STEP_UP
+					ld		a,(stub_top)
+					ld		(collide_top),a
+				ENDIF
 					ld		a,(stub_carry)
 					add		a,(ix+OBJ.DU)
 					ld		(ix+OBJ.DU),a

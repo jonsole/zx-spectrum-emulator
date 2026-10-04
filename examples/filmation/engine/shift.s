@@ -105,41 +105,21 @@ SHIFT_SHARED_SIZE	EQU		416
 ; had run out of room for it.
 
 
-; Every object that survives objects_draw_all's filter comes through here on
-; its way to the blit. SHIFT is zero for all but the marked ones, so this is
-; usually a load, a test and a return.
-;
-; The object comes from draw_object, which objects_draw_all patches as it
-; walks the record -- see there for why IY cannot be used. Everything else is
-; kept, the flags included.
-;
-; In:  HL -> the sprite's bitmap
-; Out: HL -> the bitmap to blit: the shared buffer, if it was rotated into it
-; Corrupts: nothing
-shift_if_deferred:	push	af
-					push	iy
-draw_object:		ld		iy,0		; patched: the record + 10, where the
-					; walk had got to when it stored SP
-					ld		a,(iy+OBJ.SHIFT-10)
-					or		a
-					call	nz,shift_at_draw
-					pop		iy
-					pop		af
-					ret
+; Every drawn object comes past a test for a draw-time rotation on its way to
+; the blit: it is inline in objects_draw_all, and calls this.
 
 
 ; Rotate this object's sprite into the shared buffer, for objects_draw_all.
 ;
 ; Both register sets are kept, and IX -- the caller is mid-blit and every one
-; of them is live. AF and IY are shift_if_deferred's to keep, which it does.
+; of them is live. IY is not: the rotation uses it.
 ;
 ; In:  HL -> the sprite's bitmap, the way round this object wants it
-;      IY -> the object, as shift_if_deferred has just set it: the record + 10
+;      IX -> the object's record
 ; Out: HL -> the shared buffer
 ; Corrupts: AF, IY
 shift_at_draw:		push	bc
 					push	de
-					push	ix
 					exx
 					push	bc
 					push	de
@@ -148,11 +128,6 @@ shift_at_draw:		push	bc
 					ex		af,af'
 					push	af
 					ex		af,af'
-
-					push	iy
-					pop		ix
-					ld		bc,-10
-					add		ix,bc		; the rotation wants the record itself, in IX
 
 					; The blit index has already been widened to the rotated
 					; width, at placement; the rotation wants the artwork's own.
@@ -177,7 +152,6 @@ shift_at_draw:		push	bc
 					pop		de
 					pop		bc
 					exx
-					pop		ix
 					pop		de
 					pop		bc
 					ld		hl,shift_shared
@@ -310,8 +284,8 @@ copy_alloc:			push	hl
 ; for as long as both are in one. Room $88's two right-hand arches are exactly
 ; that pair, and it cost 85% of the frame to stand in front of them.
 ;
-; Rotating already gives an object private bytes -- that is why sprite_orient
-; skips a shifted one -- so this is the same answer for the objects that do not
+; Rotating already gives an object private bytes -- that is why the draw's
+; orientation check skips a shifted one -- so this is the same answer for the objects that do not
 ; rotate, and it is settled once at placement rather than twice a frame.
 ;
 ; In:  IX -> the object, its buffer already allocated

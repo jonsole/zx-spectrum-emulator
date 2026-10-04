@@ -211,10 +211,10 @@ room_objects:
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
-                    ; object_record lays down only the first twenty bytes of a
+                    ; object_record lays down only the first OBJ_RECORD_LAID bytes of a
                     ; record, and the ALIGN in front of the next one is what gives
                     ; it the rest. The last one has no next one: without this its
-                    ; last twelve bytes were whatever came after the pool -- which
+                    ; last bytes were whatever came after the pool -- which
                     ; is day_step -- and the fullest room's second collectable slot
                     ; is that record. Blanking it zeroed two of day_step's operands,
                     ; and the sun never moved again.

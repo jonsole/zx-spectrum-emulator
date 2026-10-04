@@ -58,6 +58,24 @@ GitHub takes its notes from that section.
   original in `extracted/`; the Python every game shares is in
   `examples/filmation/scripts/`. The Knight Lore and Pentagram workspaces' Extract
   task runs `examples/filmation/scripts/extract.py`.
+- **The Filmation engine can have 512 graphic numbers** in a game that needs
+  them (Lightkeep): the ninth bit rides in the object record's y nudge, and the
+  code for it is assembled only in such a game, so the others build as they
+  did. The graphic map offers numbers up to 511, never 256 or 257.
+- **Filmation characters can walk up stairs**, in a game built with
+  `DEFINE CHARACTER_STEP_UP n`: anything solid whose top is no more than `n`
+  units above his feet is climbed, two units a turn, rather than jumped, the
+  way Fairlight's knight climbs its staircases. Lightkeep has it at 6, and an
+  invisible `solid` graphic for boxes under stair and ledge artwork. Room 106
+  has a raised section along its west wall, an invisible box with the castle's
+  wall stones on its front face (`scenery_raised_w`), and test stairs up to
+  it. Knight Lore, Knight Lore 128K and
+  Pentagram don't define it and build byte for byte as before.
+- **Lightkeep's guards fall like the knight, legs and all.** A guard that
+  walks off a raised floor now gathers speed as the knight does, and his legs
+  come down with him: a two-part figure's legs used to follow its torso along
+  the floor but not down. It is a build option of the Filmation engine,
+  `PAIR_GRAVITY`; Knight Lore, whose guards never fall, builds as before.
 
 ## 0.1.0 (2026-09-29)
 

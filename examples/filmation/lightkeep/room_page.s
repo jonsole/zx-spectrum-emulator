@@ -69,17 +69,19 @@ room_page_fill:     ld      a,ROOM_BANK
                     ld      l,c                 ; HL -> its record
                     call    page_in
 
-                    ; The graphics that draw it, pointed at where it is going.
-                    ; sprite_table is in bank 5, so it is there whatever bank is
-                    ; paged in.
+                    ; The graphics that draw it, pointed at where it is going --
+                    ; each by its entry's address in sprite_table, since a
+                    ; graphic number can be nine bits. sprite_table is in bank
+                    ; 5, so it is there whatever bank is paged in.
                     ld      b,(hl)
 .graphic:           inc     hl
+                    ld      a,(hl)
+                    inc     hl
                     push    hl
-                    ld      l,(hl)
-                    ld      h,(high sprite_table) / 2
-                    add     hl,hl
+                    ld      h,(hl)
+                    ld      l,a                 ; HL -> the graphic's entry
                     ld      (hl),e
-                    inc     l
+                    inc     l                   ; entries are even: no carry
                     ld      (hl),d
                     pop     hl
                     djnz    .graphic

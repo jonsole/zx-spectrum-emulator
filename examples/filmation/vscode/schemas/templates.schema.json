@@ -45,6 +45,30 @@
      },
      "uniqueItems": true
     },
+    "movers": {
+     "type": "object",
+     "description": "Which object templates move, and how, by template name: the game's build writes its mover_of from this (Lightkeep). A template not here stands still. Without this the game's movers.s keeps the table itself.",
+     "additionalProperties": {
+      "type": "object",
+      "required": [
+       "behaviour"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "behaviour": {
+        "type": "string",
+        "pattern": "^MOVE_[A-Z0-9_]+$",
+        "description": "A MOVE_ name of the game's movers.s, given a number there."
+       },
+       "weight": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 127,
+        "description": "What a push loses: something pushed moves the pusher's step less this, and not at all when it is as much. Something a push moves weighs 1 or more -- the build refuses one without -- and nothing else has one."
+       }
+      }
+     }
+    },
     "comment": {
      "type": "string"
     },

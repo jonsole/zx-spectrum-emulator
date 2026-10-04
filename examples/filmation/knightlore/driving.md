@@ -181,8 +181,10 @@ Every recipe starts the same way:
 1. Load the build.
 2. Press 0.
 3. **Wait until the game is really in a room.** Set a breakpoint at
-   `start.entered` and run to it, or poll until `room_shown` equals
-   `room_number`. Only then write anything.
+   `start.loop` and run to it, or poll until `room_shown` equals
+   `room_number`. Only then write anything. Stopped at `start.entered` is too
+   early: its next instructions copy `room_number` into `room_shown`, so a
+   room written there is recorded as shown while the start room stays built.
 
 **Another room.** Write `room_number`, and poll `room_shown` until it matches.
 For a room that doesn't build, `room_shown` stays where it was: check it.

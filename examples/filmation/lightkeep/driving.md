@@ -70,6 +70,10 @@ The cursor keys are 5 left, 8 right, 7 up, 6 down and 0 fire. Interface II is
 - A room holds at most two charms, so something can only be put down in a room
   with a slot free.
 
+Lightkeep has none of this. Stage 0b took the days and the werewolf, and 0d
+the charms and the wizard, so the pick-up keys do nothing until stage 3 brings
+carrying back.
+
 ## 2. Running either game in the emulator
 
 Everything in `../pentagram/driving.md` section 2 applies:
@@ -182,8 +186,10 @@ Every recipe starts the same way:
 1. Load the build.
 2. Press 0.
 3. **Wait until the game is really in a room.** Set a breakpoint at
-   `start.entered` and run to it, or poll until `room_shown` equals
-   `room_number`. Only then write anything.
+   `start.loop` and run to it, or poll until `room_shown` equals
+   `room_number`. Only then write anything. Stopped at `start.entered` is too
+   early: its next instructions copy `room_number` into `room_shown`, so a
+   room written there is recorded as shown while the start room stays built.
 
 **Another room.** Write `room_number`, and poll `room_shown` until it matches.
 Set `player_state` to 0 as well: a room forced while he is dying or arriving

@@ -22,6 +22,11 @@ MOVE_NONE			EQU		0
 ; spikes, spiked balls, bouncing balls of both kinds, fires, guards, the wizard
 ; and the ghost. Not the repel spell or the cauldron's bubbles.
 ;
+; A behaviour is a MOVE_ name given a number of its own. The templates editor
+; lists them for a template to be given one, so a name that only marks where a
+; band begins or ends -- MOVE_CRUSHING, MOVE_HARMLESS, MOVE_LOOSE,
+; MOVE_MONSTER_LAST -- is given the behaviour it marks instead, by name.
+;
 ; MOVE_STILL is deadly and does nothing else. Spikes and gargoyles have no
 ; update of their own beyond the flag, and movers_step steps straight over it.
 MOVE_STILL		EQU		1
@@ -33,16 +38,16 @@ MOVE_GUARD_SQ	EQU		6
 MOVE_GHOST		EQU		7
 MOVE_BOUNCE		EQU		8
 MOVE_SPIKE_BALL	EQU		9
-MOVE_MONSTER_LAST	EQU		9		; monster_gate's range ends here
+MOVE_MONSTER_LAST	EQU		MOVE_SPIKE_BALL		; monster_gate's range ends here
 ; The gates only kill what they come down on. upd_9 sets bit 7 of $0D alone --
 ; "fatal if it hits the player" -- and not bit 5, "fatal if he hits it", so the
 ; clamp at $CBAF only passes it on when the gate is the one moving. Walking into
 ; a gate is safe; standing under one as it drops is not.
-MOVE_CRUSHING	EQU		10
 MOVE_GATE			EQU		10
+MOVE_CRUSHING	EQU		MOVE_GATE
 
-MOVE_HARMLESS	EQU		11		; and from here on, nothing kills
 MOVE_SLIDE_U		EQU		11
+MOVE_HARMLESS	EQU		MOVE_SLIDE_U		; and from here on, nothing kills
 MOVE_SLIDE_V		EQU		12
 MOVE_SPELL		EQU		13
 ; A torch's flame, Knight Lore 128K's own: its four frames, and nothing else --
@@ -68,11 +73,10 @@ MOVE_COLLAPSING	EQU		16		; object_landed_on, which relies on the order.
 ; whether a behaviour is at or past it. Putting the hunting ball above it by
 ; accident made the ball itself carriable and shoveable, and it spent its
 ; time being flung about by whatever it touched.
-MOVE_LOOSE		EQU		17
 MOVE_CARRIED		EQU		17
+MOVE_LOOSE		EQU		MOVE_CARRIED
 MOVE_PUSHED		EQU		18
 MOVE_SLIDING		EQU		19
-MOVE_SPECIAL		EQU		20		; a collectable -- see special.s
 ; What the engine's contact rules need to know about these numbers. It never
 ; names a behaviour, only the bands above -- see engine/object.s.
 BEHAVIOUR_FIRST_TURN	EQU		MOVE_BALL		; the first with a turn, and mover_tbl's first
@@ -86,7 +90,7 @@ BEHAVIOUR_LOOSE		EQU		MOVE_LOOSE		; this and everything above: carried and shove
 ; Bits of OBJ.MOVE_STATE. The direction bits are numbered by axis, so that the
 ; same mask both says which way a thing is going and tests collide_hit for
 ; whether it just ran into something -- which is how the game numbers them.
-MOVE_RISING		EQU		4		; bit 2, as in the game's byte $0D
+STATE_RISING		EQU		4		; bit 2, as in the game's byte $0D
 
 ; How fast each of them goes, and how high a ball bounces.
 ; The game moves a fire two a frame at about fifteen frames a second; the
@@ -99,40 +103,11 @@ SPELL_STEP		EQU		4
 SPELL_CREEP		EQU		1		; while the knight is in an arch
 
 
-; Which templates move, and how. Room-build time only, so a walk will do.
-; Ends with $FF, which is not a template.
-mover_of:			DB		FG_BLOCK_EW, MOVE_SLIDE_U
-					DB		FG_BLOCK_NS, MOVE_SLIDE_V
-					DB		FG_FIRE_EW, MOVE_FIRE_U
-					DB		FG_FIRE_NS, MOVE_FIRE_V
-					; All four of these are graphic 178 and all four bounce. They are
-					; four templates because of where they SIT, not what they do: the
-					; names are about which axes get a half-cell offset, and the last
-					; byte of each is $00, $01, $02 or $03 accordingly.
-					DB		FG_BALL_UD, MOVE_BALL
-					DB		FG_BALL_UD_X, MOVE_BALL
-					DB		FG_BALL_UD_Y, MOVE_BALL
-					DB		FG_BALL_UD_XY, MOVE_BALL
-					DB		FG_GUARD_EW, MOVE_GUARD_U
-					DB		FG_GUARD_SQUARE, MOVE_GUARD_SQ
-					DB		FG_GATE_UD_1, MOVE_GATE
-					DB		FG_GATE_UD_2, MOVE_GATE
-					DB		FG_MOVEABLE_BLOCK, MOVE_CARRIED
-					DB		FG_GHOST, MOVE_GHOST
-					DB		FG_TABLE, MOVE_PUSHED
-					DB		FG_CHEST, MOVE_SLIDING
-					DB		FG_BALL_BOUNCE, MOVE_BOUNCE
-					DB		FG_REPEL_SPELL, MOVE_SPELL
-					DB		FG_SPIKE_BALL, MOVE_SPIKE_BALL
-					DB		FG_SPIKE_BALL_FALLING, MOVE_SPIKE_BALL
-					DB		FG_DROPPING_BLOCK, MOVE_DROPPING
-					DB		FG_COLLAPSING_BLOCK, MOVE_COLLAPSING
-					DB		FG_GARGOYLE, MOVE_STILL
-					DB		FG_SPIKE, MOVE_STILL
-					; Knight Lore 128K's.
-					DB		FG_CASTLE_TORCH, MOVE_FLAME
-					DB		FG_CASTLE_TORCH_M, MOVE_FLAME
-					DB		$FF
+; Which templates move, and how, is templates.json's meta.movers: template
+; name to behaviour and weight, which the templates editor sets and
+; rooms_source.py writes out as mover_of, in generated/room_data.s -- triples
+; of template, behaviour and weight, ended by $FF. See engine/movers.s's
+; mover_find, and LOOSE_WEIGHT in lightkeep.s.
 
 ; The monsters, MOVE_FIRE_U to MOVE_SPIKE_BALL, go through monster_gate, which
 ; sits them out by turns in a busy room -- see busy.s -- and otherwise goes on
@@ -154,9 +129,8 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
 					DW		mover_shoved		; MOVE_PUSHED: engine/movers.s
-					DW		mover_move		; MOVE_SLIDING: see mover_sliding
-					DW		mover_special	; MOVE_SPECIAL
-					ASSERT	($ - mover_tbl) / 2 == MOVE_SPECIAL - MOVE_BALL + 1
+					DW		mover_move		; MOVE_SLIDING: it never clears its step -- see MOVE_LOOSE
+					ASSERT	($ - mover_tbl) / 2 == MOVE_SLIDING - MOVE_BALL + 1
 
 
 ; How high the balls in this room bounce. Zero until the first ball takes its
@@ -168,9 +142,10 @@ mover_ball_top:	DB		0
 
 ; Whether this room holds its spiked balls up at all, which the game's $5BC0
 ; says: bit 0 of the room number, taken when the room is built, so that only
-; even rooms drop them -- until the knight picks something up there, which
-; clears it. engine/movers.s's mover_spike_ball asks; whether one is on its
-; way down is its own business.
+; even rooms drop them. In Knight Lore picking something up there clears it;
+; nothing is picked up here until stage 3, so an even room's balls stay up.
+; engine/movers.s's mover_spike_ball asks; whether one is on its way down is
+; its own business.
 spike_ball_held:	DB		0
 
 

@@ -107,15 +107,6 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; the label `font` that print_char reaches for.
                     INCLUDE "generated/font.s"
 
-; The collectables: where each of the thirty-two starts, the order the wizard
-; wants them in, and which graphic each row has been dealt -- see special.s.
-; kl_extract.py pulls the first two out of the game, as it does the font, and
-; specials_source.py turns specials.json back into assembler. All four labels
-; come out of that one file: the two that hold data and the two that only
-; reserve room, because special_init copies the first over the second in one
-; LDIR and nothing may come between them.
-                    INCLUDE "generated/specials_gen.s"
-
 ; The one buffer every deferred rotation goes through, moved down here for the
 ; same reason -- see shift.s for what it is and how it is sized.
 shift_shared:       DS      SHIFT_SHARED_SIZE
@@ -141,6 +132,20 @@ room_data_end:
 
                     ORG     $8000
 
+                    ; Stairs, as Fairlight has them: the knight walks up anything
+                    ; solid whose top is no more than this many units above his
+                    ; feet, rather than having to jump it -- see character_climb.
+                    DEFINE  CHARACTER_STEP_UP 6
+
+                    ; And a guard that walks off a raised floor falls the way
+                    ; the knight does, faster every turn -- see mover_move_pair.
+                    DEFINE  PAIR_GRAVITY
+
+                    ; Loose things weigh something: a push moves them its step
+                    ; less their weight -- see object_shove. Each template's is
+                    ; in templates.json's meta.movers.
+                    DEFINE  LOOSE_WEIGHT
+
 					INCLUDE "../engine/sprite.s"
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
@@ -164,7 +169,6 @@ shift_arena_next:	DW		shift_arena
 					INCLUDE "../engine/mover.s"
 					INCLUDE "shared_movers.s"		; what it gives the next
 					INCLUDE "../engine/movers.s"		; the behaviours shared with Pentagram
-					INCLUDE "special.s"
 					INCLUDE "../engine/sound.s"
 					INCLUDE "panel.s"
 					INCLUDE "input.s"		; its keys and its bits, then
@@ -225,12 +229,10 @@ sprite_start:
 					INCLUDE "generated/sprite_data.s"
 sprite_end:
 
-; Code that only runs when a key is pressed: picking up and putting down, and
-; the screen_sprite the panel and the menu draw with. It was in the $7400
+; The screen_sprite the panel and the menu draw with. It was in the $7400
 ; region; four more pool slots for the sky pushed that region's aligned tables
-; a page on. Bank 0 is paged in whenever any of it runs.
-                    INCLUDE "pickup.s"
-                    INCLUDE "../engine/screen.s"         ; pickup.s falls into it
+; a page on. Bank 0 is paged in whenever it runs.
+                    INCLUDE "../engine/screen.s"
 ; ...and the menu, which runs between games, and where it and the end screens
 ; put a character: they came here from the $6000 region when the room
 ; templates' copy buffer went in there.
@@ -298,17 +300,17 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms_source.py works out while generating room_data.s.
 ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
-POOL_SLOTS          EQU     ROOM_SLOTS + SPECIAL_SLOTS
+POOL_SLOTS          EQU     ROOM_SLOTS
                     ALIGN   32
 room_objects:
                 REPT    POOL_SLOTS
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
-                    ; object_record lays down only the first twenty bytes of a
+                    ; object_record lays down only the first OBJ_RECORD_LAID bytes of a
                     ; record, and the ALIGN in front of the next one is what gives
                     ; it the rest. The last one has no next one: without this its
-                    ; last twelve bytes were whatever came after the pool, and in
+                    ; last bytes were whatever came after the pool, and in
                     ; Knight Lore 128K blanking the fullest room's second
                     ; collectable slot zeroed two of the day clock's operands.
                     ALIGN   32

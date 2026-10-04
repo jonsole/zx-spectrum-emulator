@@ -5,9 +5,9 @@
 ; The behaviours themselves are the game's own movers.s, and those more than
 ; one game has are in movers.s beside this file.
 ;
-; mover_move comes first on purpose. The game's movers.s ends with a behaviour
-; that falls through into it, and knightlore.s includes this file straight
-; after that one.
+; mover_move is a whole behaviour on its own, for a thing that only ever moves
+; by the step something gave it: a game's mover_tbl may point straight at it,
+; as Knight Lore's does for MOVE_SLIDING.
 ; ---------------------------------------------------------------------------
 
 MOVER_PAIR			EQU		ROOM_STRIDE		; a two-record figure's second record
@@ -152,15 +152,46 @@ mover_cycle4:		ld		a,(ix+OBJ.GFX)
 ; been behind, because starting the legs at the torso pinned them later in the
 ; list than they belonged.
 ;
-; The legs take the torso's new U and V and keep their own Z -- (IX+$01) and
-; (IX+$02) into (IX+$21) and (IX+$22) is all the game copies. They are worked
-; out from the torso's old position plus the step, because the torso has not
-; moved yet when the legs need them.
+; The legs take the torso's new U and V -- (IX+$01) and (IX+$02) into (IX+$21)
+; and (IX+$22) is all the game copies. They are worked out from the torso's old
+; position plus the step, because the torso has not moved yet when the legs
+; need them.
+;
+; In a game built with PAIR_GRAVITY they take the torso's step in Z as well,
+; onto their own Z. The game does not: its guards
+; never fall, because they never walk off anything -- gravity is asked for
+; every turn and the floor cuts it to nothing. A guard put on a raised floor
+; does walk off its edge, and the torso fell to the floor while the legs,
+; which have no mover of their own, stayed where they were. The step is added
+; rather than the torso's Z copied, so a pair whose halves stand at different
+; heights keeps them so. Knight Lore, with no raised floors and no bytes to
+; spare, builds without it.
+;
+; And the torso falls the way a character does. A pair's mover leaves DZ as
+; last turn's clamp left it -- the step it actually took, nothing on the floor
+; or on anything else, how fast it was falling in the air -- and this takes a
+; unit more off it, which with mover_clamp's own DEC is two a turn,
+; character_gravity's rate when the jump key is not held, to the character's
+; limit, CHARACTER_FALL_MAX. On the floor the floor takes both units away
+; again, so a pair that stands still stays still.
+;
+; DEFINE PAIR_GRAVITY before the engine for all of this. Without it a pair's
+; mover zeroes DZ every turn, as Knight Lore's do, and the clamp's DEC alone
+; would sink it a unit a turn if it were ever in the air.
 ;
 ; In:  IX -> the torso record, with DU, DV and DZ set; mover_ix names it too
 ; Out: nothing
 ; Corrupts: everything but IX
-mover_move_pair:	call	mover_clamp
+mover_move_pair:
+				IFDEF	PAIR_GRAVITY
+					ld		a,(ix+OBJ.DZ)
+					dec		a		; and mover_clamp takes the other unit
+					cp		CHARACTER_FALL_MAX + 1		; both negative, so CP orders them
+					jr		nc,.falls
+					ld		a,CHARACTER_FALL_MAX + 1		; the limit, with the clamp's DEC
+.falls:				ld		(ix+OBJ.DZ),a
+				ENDIF
+					call	mover_clamp
 
 					ASSERT	MOVER_PAIR == ROOM_STRIDE
 					call	region_reset
@@ -172,9 +203,17 @@ mover_move_pair:	call	mover_clamp
 					ld		a,(ix+OBJ.V)
 					add		a,(ix+OBJ.DV)
 					ld		b,a
+				IFDEF	PAIR_GRAVITY
+					ld		h,(ix+OBJ.DZ)		; the torso's fall, which the legs share
+				ENDIF
 
 					ld		de,MOVER_PAIR
 					add		ix,de
+				IFDEF	PAIR_GRAVITY
+					ld		a,(ix+OBJ.Z)
+					add		a,h
+					ld		l,a		; the legs' Z after it
+				ENDIF
 					; The legs have no step of their own to hand depth_step, and
 					; are not always where the torso is -- the wizard's two
 					; pieces start eight apart -- so whether they moved is where
@@ -184,8 +223,16 @@ mover_move_pair:	call	mover_clamp
 					jr		nz,.legs_moved
 					ld		a,(ix+OBJ.V)
 					cp		b
+				IFDEF	PAIR_GRAVITY
+					jr		nz,.legs_moved
+					ld		a,h
+					or		a		; a fall moves them too
+				ENDIF
 .legs_moved:		ld		(ix+OBJ.U),c		; nothing from here to the call
 					ld		(ix+OBJ.V),b		; touches the flags
+				IFDEF	PAIR_GRAVITY
+					ld		(ix+OBJ.Z),l
+				ENDIF
 					call	nz,depth_relink		; against the whole run
 					call	room_adjust
 					call	object_place

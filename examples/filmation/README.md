@@ -14,10 +14,11 @@ with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
 built on it. `knightlore/knightlore.s` joins the two -- it lays out memory
 and includes both.
 
-Two more games are built on the same engine. [`pentagram/`](pentagram/) is a
-remake of Ultimate's *Pentagram*. [`knightlore128/`](knightlore128/README.md)
+Three more games are built on the same engine. [`pentagram/`](pentagram/) is
+a remake of Ultimate's *Pentagram*. [`knightlore128/`](knightlore128/README.md)
 is Knight Lore on the 128K, with a bigger castle and Pentagram's graphics
-beside its own; its README says how far it has got.
+beside its own. [`lightkeep/`](lightkeep/README.md) is a Fairlight-like game
+of its own. Each README says how far it has got.
 
 Unlike the other examples here it is a real, multi-file program, which is the
 point of it being in the tree: the SLD it produces maps addresses into nearly
@@ -396,6 +397,33 @@ table no longer fits the `ld h,high sprite_table` a 128-entry one allowed, so
 `object_update` doubles a pre-halved base instead -- the same trick the view
 buffer's row address uses, and it needs the same `ALIGN 512`.
 
+### More than 256 graphic numbers
+
+A game can have 512. Bit 8 of a graphic is bit 0 of the record's `ADJ_Y`,
+which then holds the y nudge doubled: `object_place` takes the nudge back with
+an `SRA`, `object_update` adds the bit to the table's pre-halved base so that
+graphics 256-511 come from the 512 bytes after the first 256 entries,
+`room_adjust` reads a second nudge index two pages after the first and keeps
+the bit when it writes the nudge, and the twin scan compares it with the
+number. A template piece carries the bit in bit 7 of its height, which no
+height comes near, and `room_add` moves it into `ADJ_Y`; a mover stepping
+through frames changes only `GFX`, so its graphics keep the bit, and the
+engine's code that gives a record a graphic by name -- `object_blank`, the
+poof -- clears it.
+
+That code is assembled only when the game's `GRAPHIC_COUNT`, which its
+generated sources define from `sprite_sheet.py`, is over 256. It is the one
+place the engine differs between games, and it is there because the 48K games
+have no room for it: Knight Lore, Pentagram and Knight Lore 128K assemble
+exactly as they did, and Lightkeep has 512.
+
+256 and 257 are never graphics, as 0 and 1 are not. A template names its
+graphic by the low byte, and the room builder reads 0 as the end of a template
+and 1 as a piece drawn by something else; the build refuses them. Each nudge
+index has its own list of the graphics whose mirror image wants a different
+nudge, ending where its page begins and read backwards from there, so the two
+lists cannot mistake 258 for 2.
+
 ### Adjustments are harvested, not ported
 
 Every sprite is nudged a few pixels so its artwork lines up with its logical
@@ -429,7 +457,7 @@ makes the game rebuild whatever room `$5C10` names, every frame.
 An object whose top runs off the screen is clipped, not dropped. `MIN_Y` is a
 single byte, so `base - height` would wrap for a sprite taller than its base
 row. Instead `object_update` clamps `MIN_Y` to row 0 and keeps the rows it lost
-in `CLIP_TOP`, and `objects_draw_all` starts the bitmap that many rows in, on
+in `CLIP_Y`, and `objects_draw_all` starts the bitmap that many rows in, on
 top of whatever the region itself cuts off. A base below the last row is
 clipped to it, and an object wholly below the screen gets an empty extent.
 
@@ -535,11 +563,12 @@ the object is about to be drawn**, not only when it is placed:
 - `object_update`, before the width is read and before a rotation. A rotated
   copy is private to one object and nothing looks at it again, so it has to be
   taken from the orientation that object asked for.
-- `sprite_orient`, inside `objects_draw_all`, for each object as it is about to
-  be blitted.
+- `objects_draw_all`, for each object as it is about to be blitted: a test
+  inline in the loop, which calls `sprite_flip_h` only when the bytes are the
+  wrong way round.
 
 `FLAGS` bit 5 (`OBJ_SHIFTED`) says an object draws from private bytes -- its own
-rotated buffer, or a cached copy -- and `sprite_orient` leaves those alone:
+rotated buffer, or a cached copy -- and the check leaves those alone:
 their `SPRITE_L/H` points into the arena, so `SPRITE - 2` is not a sprite
 header at all. For any other object it is, because `SPRITE` is the record plus
 2 and records are `ALIGN 4`, so the two `dec l` cannot borrow. `FLAGS` bit 0 is
@@ -552,7 +581,9 @@ no stack to call with. That cannot work: two objects in one region wanting
 opposite orientations leave whichever the pass reached last holding the
 graphic, and room $88 put a few pixels of one arch leaf on the other. The loop
 now puts the real stack back once it has read the sprite address -- the last
-thing it wants from the record -- and calls `sprite_orient` there.
+thing it wants from the record -- and checks there. It was a routine of its
+own, `sprite_orient`, until it was put inline: it has one caller, and the
+call, the return and the registers it saved cost more than the test.
 
 ### Pieces that would fight over a graphic
 

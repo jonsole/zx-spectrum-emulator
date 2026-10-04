@@ -109,9 +109,9 @@ CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 6
 ; to go on, and his head came out in front of the block.
 				MACRO	character_record legs_base, body_base, facing
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, CHARACTER_BODY_UP
-					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; the rest of the legs' slot
+					DS		ROOM_STRIDE - OBJ_RECORD_LAID, 0		; the rest of the legs' slot
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, COLLIDE_HEIGHT - CHARACTER_BODY_UP
-					DS		ROOM_STRIDE - OBJ.ADJ_X, 0		; ...and of the body's
+					DS		ROOM_STRIDE - OBJ_RECORD_LAID, 0		; ...and of the body's
 
 					; ...and then the character's own, in the order the EQUs give
 					DB		0, 0			; CHARACTER_DZ, CHARACTER_STATE
@@ -398,10 +398,79 @@ character_settle:	; Anything that ran into us since our last turn left its step
 					ld		e,a
 
 					call	character_gravity
+				IFDEF	CHARACTER_STEP_UP
+					push	de		; the step he asked for, for a climb
 					call	character_collide
+					pop		bc
+					call	character_climb
+				ELSE
+					call	character_collide
+				ENDIF
 					ld		(ix+OBJ.DU),0	; spent, so the next turn starts clean
 					ld		(ix+OBJ.DV),0
 					jp		character_land
+
+
+				IFDEF	CHARACTER_STEP_UP
+; Walking up steps, for a game that has them: DEFINE CHARACTER_STEP_UP with
+; the highest step, in units, before the engine is included. Knight Lore has
+; no steps -- everything in its castle is a jump -- and a game without the
+; define assembles none of this.
+;
+; A step is anything solid whose top is no more than CHARACTER_STEP_UP above
+; his feet: a stair's tread, usually an invisible box under stair artwork, as
+; Fairlight builds its staircases. Walk into one and he rises
+; CHARACTER_CLIMB a turn, still pressing forward, until his feet are level
+; with its top and the step along the floor goes through. Let go part way and
+; gravity takes him back down. Fairlight lifts its knight the same way, over
+; three turns (COMMIT_STEP, on bit 6 of STEP_AXES), though it marks its stair
+; steps with a kind of their own where this goes by height alone: the FLAGS
+; byte has no bit to spare, and a height needs nothing marked in the data.
+;
+; Nothing is remembered between turns. Each one starts from where he stands,
+; falls back the unit or two gravity asks for, finds the step still in the
+; way and a little closer to his feet, and climbs again from there.
+CHARACTER_CLIMB		EQU		2		; units a turn, up a step
+
+; His step along the floor has just been cut. If what cut it is a step, climb.
+;
+; In:  IX -> the legs record
+;      BC = the step he asked for, U in B and V in C
+;      D, E, DU, DV and DZ = what character_collide left of it
+;      collide_hit, collide_top = what stopped him
+; Out: D, E, DU, DV and DZ = the step, a climb's if he climbs
+;      collide_hit = which axes gave
+; Corrupts: AF, BC, HL, IY
+character_climb:	ld		a,(collide_hit)
+					and		COLLIDE_U | COLLIDE_V
+					ret		z		; nothing stopped him along the floor
+					bit		0,(ix+CHARACTER_STATE)
+					ret		nz		; jumping: the jump decides
+
+					; How far above his feet the top of what stopped him is. Zero
+					; when only the room's edges did, which is below him.
+					ld		a,(collide_top)
+					sub		(ix+OBJ.Z)
+					ret		c
+					ret		z
+					cp		CHARACTER_STEP_UP + 1
+					ret		nc		; a wall, or a block to jump on
+
+					; Up by as much of it as one turn allows -- the last turn only
+					; what is left, so that he arrives level with its top.
+					cp		CHARACTER_CLIMB + 1
+					jr		c,.rise
+					ld		a,CHARACTER_CLIMB
+.rise:				ld		(ix+OBJ.DZ),a
+					ld		(ix+CHARACTER_DZ),0		; climbing, not falling
+
+					; And the whole step again from there, the floor axes tested
+					; at the new height -- they come after Z in the clamp. A head
+					; against a ceiling cuts the rise, and then the step stays cut.
+					ld		d,b
+					ld		e,c
+					jp		character_collide
+				ENDIF
 
 
 ; Everything a character does in a turn once the step along the floor is known.

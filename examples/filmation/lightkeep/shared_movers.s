@@ -103,4 +103,4 @@ hopper_move			EQU		mover_move_always		; it changes every turn
 hopper_frame		EQU		mover_flicker
 hopper_sound		EQU		sound_z
 hopper_landed		EQU		sound_bounce
-					ASSERT	MOVE_RISING == 1 << HOPPER_RISING
+					ASSERT	STATE_RISING == 1 << HOPPER_RISING

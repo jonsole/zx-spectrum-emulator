@@ -50,7 +50,6 @@ start:              di
                     ld      bc,END_ROOMS - 1
                     ld      (hl),0
                     ldir
-                    call    special_init
 
         ; Nothing goes into a room that was not built. room_build leaves the
         ; old room up when it is handed a number no record carries,
@@ -58,8 +57,7 @@ start:              di
         ; characters again would insert records that are already there, and
         ; an object compared against itself ties, which makes the scan take
         ; itself as its own insertion point and link its NEXT to itself.
-.enter:             call    special_room_leave
-                    ld      a,(room_number)
+.enter:             ld      a,(room_number)
                     call    room_build
                     jr      c,.entered
                     ld      a,(room_shown)      ; stay where we are
@@ -73,17 +71,16 @@ start:              di
                     ld      (room_shown),a
                     ld      a,(enter_dir)       ; kept for starting the room over
                     ld      (entered_by),a
-                    call    special_room_enter
                     call    player_add
 
                     ; The room is drawn, still black: now it appears, all at
-                    ; once. Then the carried objects and the panel -- drawn now
-                    ; rather than in the dark, so they are drawn once each:
+                    ; once. Then the panel -- drawn now rather than in the
+                    ; dark, so it is drawn once:
                     ; drawing a panel piece over itself is not harmless, since a
                     ; data bit outside its mask XORs back off, as it does in
                     ; Knight Lore.
                     call    room_paper
-                    call    special_show
+                    call    panel_show
 
                     ; Poke room_number from the debugger and the castle turns
                     ; over. The 1 and 2 keys do it from the keyboard, in a

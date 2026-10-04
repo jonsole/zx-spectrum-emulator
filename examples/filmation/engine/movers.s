@@ -34,10 +34,13 @@
 
 ; What drives a template, or 0 for nothing. Room-build time only, so a walk
 ; will do. The game's mover_of is pairs of (template, behaviour), ended by
-; $FF, which is not a template.
+; $FF, which is not a template -- or, in a game built with LOOSE_WEIGHT,
+; triples, the third byte the template's weight, which goes to room_weight
+; for room_add to give each record (see object_shove).
 ;
 ; In:  A = the template index
 ; Out: A = the behaviour
+;      room_weight = its weight, with LOOSE_WEIGHT
 ; Corrupts: F, C, HL
 					IFUSED	mover_find
 mover_find:			ld		hl,mover_of
@@ -49,10 +52,22 @@ mover_find:			ld		hl,mover_of
 					inc		hl
 					jr		z,.found
 					inc		hl
+				IFDEF	LOOSE_WEIGHT
+					inc		hl		; past its weight
+				ENDIF
 					jr		.next
 .found:				ld		a,(hl)
+				IFDEF	LOOSE_WEIGHT
+					inc		hl
+					ld		c,(hl)
+					ld		hl,room_weight
+					ld		(hl),c
+				ENDIF
 					ret
 .none:				xor		a
+				IFDEF	LOOSE_WEIGHT
+					ld		(room_weight),a		; nothing moves it, and it weighs nothing
+				ENDIF
 					ret
 					ENDIF
 
@@ -198,6 +213,9 @@ object_hide:		call	region_reset
 object_blank:		ld		(ix+OBJ.GFX),0
 					ld		(ix+OBJ.BEHAVIOUR),0
 					ld		(ix+OBJ.FLAGS),OBJ_PASSABLE
+				IF GRAPHIC_COUNT > 256
+					ld		(ix+OBJ.ADJ_Y),0		; and bit 8 of its graphic
+				ENDIF
 					ret
 					ENDIF
 
@@ -455,7 +473,9 @@ mover_conveyor:     ld      a,(ix+OBJ.GFX)
 ;
 ; It does not cancel gravity the way a pacer does: the game calls
 ; dec_dZ_and_update_XYZ without setting DZ first, so a guard falls if it walks
-; off something, and the floor stops it where it stands.
+; off something, and the floor stops it where it stands. In a game built with
+; PAIR_GRAVITY it falls the way a character does, faster every turn -- see
+; mover_move_pair.
 ;
 ; What the game supplies: PAIR_STEP, how far it goes a turn, and pair_frame,
 ; which wears the frames the step calls for -- both halves' graphics are the
@@ -467,7 +487,9 @@ mover_conveyor:     ld      a,(ix+OBJ.GFX)
 					IFUSED	mover_pacer_pair
 mover_pacer_pair:	xor		a
 					ld		(ix+OBJ.DV),a
-					ld		(ix+OBJ.DZ),a
+				IFNDEF	PAIR_GRAVITY
+					ld		(ix+OBJ.DZ),a		; with it, DZ is last turn's fall
+				ENDIF
 					ld		a,PAIR_STEP
 					bit		0,(ix+OBJ.MOVE_STATE)
 					jr		nz,.forward
@@ -524,7 +546,9 @@ mover_circuit_pair:	ld		a,(ix+OBJ.MOVE_STATE)
 					inc		hl
 					ld		a,(hl)
 					ld		(.blocked + 1),a		; the axis this leg walks
-					ld		(ix+OBJ.DZ),0
+				IFNDEF	PAIR_GRAVITY
+					ld		(ix+OBJ.DZ),0		; with it, DZ is last turn's fall
+				ENDIF
 
 					call	pair_frame
 					call	mover_move_pair
@@ -1142,7 +1166,8 @@ shoved_carry:       ld      a,(room_object_count)
 ; ---------------------------------------------------------------------------
 ; The spider -- $CF22. It walks diagonally, four units a turn on both axes,
 ; and whenever anything stops it on either axis, or it has no step at all, it
-; picks a new diagonal at random. It is drawn mirrored every other turn, which
+; picks a new diagonal at random. It is drawn mirrored two turns and not the
+; next two -- bit 1 of move_tick, see mover_move_anim for why two -- which
 ; is the whole of its animation: one sprite, flipped.
 ;
 ; It falls a unit a turn if there is nothing under it: the original zeroes its
@@ -1265,8 +1290,8 @@ mover_roamer:     call    monster_sits_out
 ; bit. Harmless it may be, but it gets in the way.
 ;
 ; The original moves it first, with last turn's velocity, and then steers for
-; the next; so does this. The sixteenths live in the two bytes past the end of
-; the record and in MOVE_STATE.
+; the next; so does this. The sixteenths live in the record's DATA_1 and
+; DATA_2 and in MOVE_STATE -- the game names them HOMER_ACC_U, _V and _Z.
 ;
 ; In:  IX -> the record; mover_ix names it too
 ; Out: nothing
@@ -1477,6 +1502,9 @@ BOLT_LAST           EQU     151
 ; Corrupts: nothing
                     IFUSED  mover_poof_start
 mover_poof_start:   ld      (ix+OBJ.GFX),POOF_FIRST
+                IF GRAPHIC_COUNT > 256
+                    res     0,(ix+OBJ.ADJ_Y)    ; the poof is one of the first 256
+                ENDIF
                     ld      (ix+OBJ.BEHAVIOUR),POOF_BEHAVIOUR
                     set     2,(ix+OBJ.FLAGS)
                     ASSERT  OBJ_PASSABLE == 1 << 2

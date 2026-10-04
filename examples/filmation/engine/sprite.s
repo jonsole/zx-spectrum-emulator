@@ -90,8 +90,8 @@ sprite_jump_table:
 ; In:  A   = the columns of a row that land inside the region
 ;      D   = BLIT_IDX
 ;      DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
-;      IX  = where to go when the sprite is drawn
-; Out: nothing -- it leaves by JP (IX), with the two banks exchanged and SP
+; Out: nothing -- it goes back to objects_draw_all.drawn, its only
+;      caller, by JP, with the two banks exchanged and SP
 ;      somewhere in the sprite
 ; Corrupts: AF, BC, DE, HL, SP, and the blit's B, DE and HL
 sprite_blit_setup:
@@ -157,13 +157,13 @@ BLIT_COLUMN_SIZE	EQU		6		; and what one column of the chain assembles
 ; registers named in the other bank here are the ones it works in.
 ;
 ; SP walks the sprite and is left there. objects_draw_all is the only caller,
-; and both ways on from .next_object set SP before they use it -- LD SP,IY to
+; and both ways on from .drawn set SP before they use it -- LD SP,HL to
 ; walk the next record, or the real stack back at the end -- so putting it
 ; back here was 30 T a blit spent on a value nobody read.
 ;
 ; In:  DE' -> the view buffer, HL' -> the sprite's mask and data, B' = rows
-;      IX  = where to go when the sprite is drawn
-; Out: nothing -- it leaves by JP (IX), with the two banks exchanged and SP
+; Out: nothing -- it goes back to objects_draw_all.drawn, its only
+;      caller, by JP, with the two banks exchanged and SP
 ;      somewhere in the sprite
 ; Corrupts: AF, SP, and the blit's B, DE and HL
 sprite_blit:		exx
@@ -212,7 +212,7 @@ sprite_blit:		exx
 				ENDR
 					DB		0,0					; room for it past the lot
 
-					jp		(ix)				; SP is the caller's to set: see above
+					jp		objects_draw_all.drawn	; SP is the caller's to set: see above
 
 ; Where the DJNZ went last time, so those two bytes can be made POPs again.
 .patched:			DW		.pops
@@ -225,56 +225,11 @@ sprite_blit:		exx
 
 
 ; ---------------------------------------------------------------------------
-; Two small routines of the engine's, here because sprite_rotate_table wants a
+; A small routine of the engine's, here because sprite_rotate_table wants a
 ; page of its own and everything above ends part-way through this one: what
-; they take would otherwise be padding. Any routine the size of the gap would
-; do. sprite_orient is at home here anyway; pixelAddress is vid_buff.s's.
+; it takes would otherwise be padding. Any routine the size of the gap would
+; do. pixelAddress is vid_buff.s's.
 ; ---------------------------------------------------------------------------
-
-
-; Make the shared graphic the way round this object wants it.
-;
-; A graphic is shared by every object drawn from it, and an object that wants
-; it the other way round mirrors it where it lies. So the bytes may not be the
-; way THIS object wants them: another object in the same region may have turned
-; them since. Knight Lore compares the two in print_sprite, per object, for
-; exactly this reason.
-;
-; Settling it once per region cannot work, which is what redraw_orient used to
-; try. Two objects in one region wanting opposite orientations leave whichever
-; the pass reached last holding the graphic, and the other draws mirrored --
-; room $88 puts the north arch's leaf and the east arch's leaf, one flipped and
-; one not, in the same region at the foot of an arch, and a few pixels of the
-; one landed on the other.
-;
-; Everything is kept, the flags included, so it can sit in the middle of the
-; offset arithmetic.
-;
-; In:  HL -> the object's sprite data (the record + 2)
-;      E' = the object's FLAGS, popped alongside BLIT_IDX
-; Out: nothing
-; Corrupts: nothing
-sprite_orient:		push	af
-					push	bc
-					push	de
-					push	hl
-					ASSERT	OBJ_SHIFTED == 1 << 5
-					exx
-					bit		5,e					; OBJ_SHIFTED
-					ld		a,e					; FLAGS, for the XOR below
-					exx
-					jr		nz,.done			; its own private copy, and SPRITE - 2
-					; is not a sprite header at all
-					dec		l					; SPRITE is the record + 2, and records
-					dec		l					; are ALIGN 4, so this cannot borrow
-					xor		(hl)
-					rrca						; the two flip bits differ: carry
-					call	c,sprite_flip_h		; HL -> the record, which is what it wants
-.done:				pop		hl
-					pop		de
-					pop		bc
-					pop		af
-					ret
 
 
 ; The screen address of a pixel. BC and DE are unchanged, so there is no need

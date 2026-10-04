@@ -9,14 +9,12 @@
 
 REDRAW_HOOK_ON		EQU		$3A		; LD A,(nn): what redraw_hook starts with
 
-; The status panel and the carried objects in the bottom-left corner are
-; straight on the screen, and a region that reached either has just wiped it.
-; The carried objects draw the whole panel after them, as Knight Lore does;
-; otherwise the panel puts back the pieces the region touched.
+; The status panel is straight on the screen, and a region that reached it
+; has just wiped it: the panel puts back the pieces the region touched.
 ;
 ; Not while a room is being drawn in the dark, though: this first byte is a
-; RET until room_paper, and the panel and the carried objects are drawn once
-; each after the room instead of once for every tile that reaches them.
+; RET until room_paper, and the panel is drawn once after the room instead
+; of once for every tile that reaches it.
 ;
 ; In:  view_x_extent, view_y_extent = the region
 ; Out: nothing
@@ -24,14 +22,4 @@ REDRAW_HOOK_ON		EQU		$3A		; LD A,(nn): what redraw_hook starts with
 redraw_hook:		ld		a,(view_y_extent+1)		; max, exclusive
 					cp		PANEL_ROW + 1
 					ret		c
-					ld		hl,panel_redraw
-					cp		SCREEN_ROWS - 24 + 1
-					jr		c,.panel
-					ld		a,(view_x_extent)
-					cp		11		; their last column, plus one
-					jr		nc,.panel
-					ld		a,(view_x_extent+1)
-					cp		3		; their first, plus one
-					jr		c,.panel
-					ld		hl,special_show
-.panel:				jp		(hl)
+					jp		panel_redraw

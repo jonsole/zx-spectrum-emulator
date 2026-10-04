@@ -30,10 +30,9 @@ ROAM_STEP           EQU     4
 ; What falls out of the sky: the homer that flies at him ($CC4B) and the two
 ; fallers that roam ($D1FD and $D251) -- engine/movers.s's mover_homer,
 ; mover_faller and mover_faller4. flyers.s drops them.
-HOMER_ACC_U         EQU     30              ; past OBJ, inside the slot
-HOMER_ACC_V         EQU     31
+HOMER_ACC_U         EQU     OBJ.DATA_1      ; the two bytes a record keeps
+HOMER_ACC_V         EQU     OBJ.DATA_2      ; for its mover
 HOMER_ACC_Z         EQU     OBJ.MOVE_STATE
-                    ASSERT  OBJ <= HOMER_ACC_U && HOMER_ACC_V < ROOM_STRIDE
 HOMER_PULL          EQU     3
 HOMER_MOST          EQU     $38             ; +56
 HOMER_LEAST         EQU     $B8             ; -72

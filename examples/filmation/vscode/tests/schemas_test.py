@@ -99,7 +99,8 @@ CASES = [
        lambda d: d["meta"].__setitem__("background", first_template(d)))]),
 
     ("sprites.schema.json",
-     ["knightlore/sprites.json", "pentagram/sprites.json"],
+     ["knightlore/sprites.json", "pentagram/sprites.json",
+      "lightkeep/melkhior/objects.json", "lightkeep/melkhior/characters.json"],
      [("no border colour", lambda d: d["sheet"]["colours"].pop("border")),
       ("a colour with no alpha",
        lambda d: d["sheet"]["colours"].__setitem__("ink", [255, 255, 255])),
@@ -119,7 +120,7 @@ CASES = [
        lambda d: d["sheet"].__setitem__("file", "../../pentagram/art/sprites.png"))]),
 
     ("graphics.schema.json",
-     ["knightlore/graphics.json", "pentagram/graphics.json"],
+     ["knightlore/graphics.json", "pentagram/graphics.json", "lightkeep/graphics.json"],
      [("sprite 255, which means 'none' in the packed form",
        lambda d: table(d)[one(d, "sprite")].__setitem__("sprite", 255)),
       ("a bare number where an entry belongs",
@@ -128,6 +129,12 @@ CASES = [
        lambda d: table(d)[one(d)].pop("number")),
       ("a graphic numbered in hex",
        lambda d: table(d)[one(d)].__setitem__("number", "$1E")),
+      # Nine bits at most, and never 256 or 257: a template names its graphic
+      # by the low byte, and the room builder reads 0 and 1 as markers.
+      ("graphic 256, whose low byte would end its template",
+       lambda d: table(d)[one(d)].__setitem__("number", 256)),
+      ("graphic 512, past a ninth bit",
+       lambda d: table(d)[one(d)].__setitem__("number", 512)),
       ("a nudge that is not a byte",
        lambda d: table(d)[one(d, "x")].__setitem__("x", 900)),
       ("a misspelt field",
@@ -141,7 +148,15 @@ CASES = [
       ("a box whose height is not a byte",
        lambda d: table(d)[one(d, "size")]["size"].__setitem__("z", -1)),
       ("a box with an axis it has not got",
-       lambda d: table(d)[one(d, "size")]["size"].__setitem__("w", 4))]),
+       lambda d: table(d)[one(d, "size")]["size"].__setitem__("w", 4)),
+      # The other sheets: a sprite names one by a word and a colon, and the
+      # list says where each is.
+      ("a sprite on a sheet named with a dot, not a colon",
+       lambda d: table(d)[one(d, "sprite")].__setitem__("sprite", "objects.Bell:0")),
+      ("another sheet that is not a .json file",
+       lambda d: d.__setitem__("sheets", {"objects": "melkhior/objects.png"})),
+      ("another sheet given as a list",
+       lambda d: d.__setitem__("sheets", ["melkhior/objects.json"]))]),
 
     ("specials.schema.json",
      ["knightlore/specials.json"],

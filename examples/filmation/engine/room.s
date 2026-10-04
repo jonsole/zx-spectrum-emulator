@@ -46,6 +46,12 @@ room_object_count:	DB		0
 ; the one that walks.
 room_behaviour:		DB		0
 
+				IFDEF	LOOSE_WEIGHT
+; ...and its weight, from the same template: see mover_find and object_shove.
+; Every record of the group takes it; only a loose one ever has it read.
+room_weight:		DB		0
+				ENDIF
+
 
 ; ---------------------------------------------------------------------------
 ; Fill one object record. A graphic of 0 or 1 -- the end of a template, or a
@@ -81,7 +87,17 @@ room_add:			ld		a,(room_object_count)
 					ld		(ix+OBJ.SIZE_V),a
 					inc		hl
 					ld		a,(hl)
+				IF GRAPHIC_COUNT > 256
+					; Bit 7 of a template's height is bit 8 of its graphic, which
+					; no height comes near: into ADJ_Y's bit 0, for room_adjust.
+					and		$7F
 					ld		(ix+OBJ.SIZE_Z),a
+					xor		(hl)
+					rlca
+					ld		(ix+OBJ.ADJ_Y),a
+				ELSE
+					ld		(ix+OBJ.SIZE_Z),a
+				ENDIF
 					inc		hl
 					ld		a,(hl)
 					inc		hl
@@ -93,6 +109,10 @@ room_add:			ld		a,(room_object_count)
 					; shift_reset has just taken the last room's back.
 					ld		a,(room_behaviour)
 					ld		(ix+OBJ.BEHAVIOUR),a
+				IFDEF	LOOSE_WEIGHT
+					ld		a,(room_weight)
+					ld		(ix+OBJ.DATA_1),a
+				ENDIF
 					ld		(ix+OBJ.MOVE_STATE),0
 
 					; And no step left over from whatever this record was in the last
@@ -133,7 +153,17 @@ room_add:			ld		a,(room_object_count)
 ; Out: nothing
 ; Corrupts: AF, BC
 room_adjust:		push	hl
+				IF GRAPHIC_COUNT > 256
+					; The second 256 graphics' index is two pages on: the page
+					; between holds the pairs, and that index's mirror list.
+					ld		a,(ix+OBJ.ADJ_Y)
+					and		1
+					add		a,a
+					add		a,high sprite_adj_index
+					ld		h,a
+				ELSE
 					ld		h,high sprite_adj_index
+				ENDIF
 					ld		l,(ix+OBJ.GFX)		; the table is page-aligned, so the
 					ld		a,(hl)		; graphic number is the address
 
@@ -154,13 +184,36 @@ room_adjust:		push	hl
 					ld		a,(hl)
 					ld		(ix+OBJ.ADJ_X),a
 					inc		hl
+				IF GRAPHIC_COUNT > 256
+					ld		a,(ix+OBJ.ADJ_Y)		; bit 8, kept
+					and		1
+					or		(hl)		; the nudge, doubled by sprite_source.py
+				ELSE
 					ld		a,(hl)
+				ENDIF
 					ld		(ix+OBJ.ADJ_Y),a
 					pop		hl
 					ret
 
 					; One of the four. Walk the short list for this graphic and
 					; take the index it names instead.
+				IF GRAPHIC_COUNT > 256
+					; Each index page has its own list, ending where the page
+					; begins -- sprite_source.py puts it there -- so it is read
+					; backwards from the page H is still on: a graphic, then the
+					; index below it.
+.mirrored:			ld		l,0
+					ld		c,(ix+OBJ.GFX)
+.look:				dec		hl
+					ld		a,(hl)		; a graphic, or the zero that ends it
+					and		a
+					ret		z		; not there after all: keep what we had
+					dec		hl		; -> its mirrored index
+					cp		c
+					jr		nz,.look
+					ld		a,(hl)
+					ret
+				ELSE
 .mirrored:			ld		hl,sprite_adj_mirror
 					ld		c,(ix+OBJ.GFX)
 .look:				ld		a,(hl)
@@ -173,6 +226,7 @@ room_adjust:		push	hl
 					jr		.look
 .take:				ld		a,(hl)
 					ret
+				ENDIF
 
 
 ; ---------------------------------------------------------------------------
@@ -192,8 +246,9 @@ room_show:			ld		hl,object_place
 					jp		redraw_screen		; and all of it drawn, a tile at a time
 
 
-; Call a routine once for every object in the room. One walk for the three
-; passes of room_show, with the routine written into the CALL.
+; Call a routine once for every object in the room. One walk for the two
+; passes of room_show -- placing, then inserting -- with the routine written
+; into the CALL.
 ;
 ; In:  HL -> the routine, which gets IX -> the record and may corrupt anything
 ; Out: nothing

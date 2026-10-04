@@ -13,9 +13,9 @@ the debugger resolves them. This wraps the RAM as a version 3 128K .z80 that
 starts at `start`, with ../z80file.py -- sjasmplus has no .z80 output of its
 own.
 
-sprite_data.s, font.s, specials_gen.s and room_data.s are generated rather than
-hand-written -- see sprite_source.py, font_source.py, specials_source.py and
-rooms_source.py -- and are regenerated here whenever their inputs or their
+sprite_data.s, font.s and room_data.s are generated rather than
+hand-written -- see sprite_source.py, font_source.py and rooms_source.py --
+and are regenerated here whenever their inputs or their
 generators are newer, which is the one build step beyond calling the
 assembler.
 
@@ -111,6 +111,20 @@ def generate_sprite_data() -> None:
     # ...and so is the castle, since what each room loads into the room page
     # comes from the templates it places.
     code += [layout.metadata(GAME) / "rooms.json", layout.metadata(GAME) / "templates.json", GAME.parent / "scripts" / "castle.py"]
+    # ...and so are the other sheets graphics.json lists -- the Melkhior ones,
+    # each a description and the picture it names -- since the sprites a
+    # graphic takes from one are read out of that picture. Retouching
+    # art/melkhior/doors.png has to reach the game.
+    if table.is_file():
+        said = json.loads(table.read_text(encoding="utf-8"))
+        for leaf in (said.get("sheets") or {}).values():
+            described = table.parent / leaf
+            code.append(described)
+            if described.is_file():
+                tree = json.loads(described.read_text(encoding="utf-8"))
+                picture = (tree.get("sheet") or {}).get("file")
+                if picture:
+                    code.append((described.parent / picture).resolve())
     generated = [layout.generated(GAME) / name for name in
                  ("sprite_data.s", "sprite_library.s", "sprite_table.s",
                   "room_sprites.s", "graphics_gen.s", "sprite_adj_gen.s")]
@@ -161,30 +175,6 @@ def generate_font_data() -> None:
     print(f"Regenerating {generated.name} from {sheet}")
     subprocess.run([sys.executable, str(generator), "--sheet", str(sheet),
                     "--json", str(atlas)], cwd=GAME, check=True)
-
-
-def generate_specials() -> None:
-    """Regenerates specials_gen.s when specials.json has moved on.
-
-    One step rather than two: specials.json is carried, so there is no sheet to
-    unpack first and no packed file to need. kl_extract.py writes the JSON from
-    the game once; after that it is the editable form, and moving a collectable
-    is an edit to it.
-    """
-    data = layout.metadata(GAME) / "specials.json"
-    generator = GAME / "scripts" / "specials_source.py"
-    generated = layout.generated(GAME) / "specials_gen.s"
-
-    if not data.is_file():
-        sys.exit(f"{data.name} is missing -- run kl_extract.py against your "
-                 "own copy of Knight Lore to produce it")
-
-    newest_input = max(f.stat().st_mtime for f in (generator, data))
-    if generated.is_file() and generated.stat().st_mtime >= newest_input:
-        return
-
-    print(f"Regenerating {generated.name} from {data.name}")
-    subprocess.run([sys.executable, str(generator)], cwd=GAME, check=True)
 
 
 def assemble(sjasmplus: str, defines: list[str]) -> None:
@@ -265,6 +255,11 @@ def generate_room_data() -> None:
     sheet = layout.metadata(GAME) / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
+    # ...and the graphic table: a piece is written as its graphic's NUMBER,
+    # so renumbering a graphic there changes the room data.
+    table = layout.metadata(GAME) / "graphics.json"
+    if table.is_file():
+        inputs.append(table.stat().st_mtime)
 
     if generated.is_file() and generated.stat().st_mtime >= max(inputs):
         return
@@ -283,7 +278,6 @@ def main() -> None:
     sjasmplus = find_sjasmplus()
     generate_sprite_data()
     generate_font_data()
-    generate_specials()
     generate_room_data()
     assemble(sjasmplus, defines)
 

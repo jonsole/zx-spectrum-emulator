@@ -40,9 +40,8 @@ MENU_SIDES          EQU     128
 ; 11 Interface II. Bit 3 is directional control: a stick names the way to
 ; walk rather than turning him. It means nothing on the keyboard.
 ;
-; input_read takes the method from it, player_turn the directional control,
-; and special_keys the directional control too, to know where a stick has put
-; pick up.
+; input_read takes the method from it, and player_turn the directional
+; control.
 menu_mode:          DB      0
 
 ; 5 is a toggle rather than a choice, so it only counts on the way down.

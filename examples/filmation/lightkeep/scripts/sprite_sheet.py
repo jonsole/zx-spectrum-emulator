@@ -39,7 +39,11 @@ HERE = Path(__file__).resolve().parent.parent      # the game's folder
 TITLE = "Knight Lore"
 EXTRACTOR = "kl_extract.py"
 # How many graphic numbers the game has, and so how wide the table is.
-GRAPHIC_COUNT = 256
+# Lightkeep has 512: bit 8 of a graphic is bit 0 of the record's ADJ_Y, and
+# the engine's code for it is assembled because this is over 256. 256 and
+# 257 are never used, as 0 and 1 are not: the room builder reads a
+# template's graphic by its low byte, and 0 ends a template and 1 skips.
+GRAPHIC_COUNT = 512
 
 # Knight Lore's graphic numbers, gathered into the bands the sheet is laid out
 # in, and the groups sprites.json names them by. A sprite goes in the first band
@@ -69,22 +73,16 @@ SABREMAN_BODY = [32 + k for k in range(16)]
 ANIMATIONS = (
     (180, 181), (86, 87),                                   # fires
     (178, 179),                                             # balls
-    (150, 151), (30, 31), (158, 159),                       # torsos, wizard's legs
+    (150, 151), (30, 31),                                   # torsos
     tuple(SABREMAN_LEGS),                                   # a guard's legs
     (80, 81, 82, 83), (164, 165, 166, 167), (8, 9),         # ghost, spell, gate
     (144, 145, 146, 147),                                   # a torch's flame
 )
 
-# The eight kinds the wizard asks for -- SPECIAL_FIRST to SPECIAL_LIFE in
-# special.s. Each bitmap is drawn by three graphics: one of these lying in a
-# room, one at 104-111 and one at 168-175. The last, the extra life, is
-# Sabreman's head and shares its bitmap with the panel's lives indicator, so
-# this band comes after the panel's and takes seven of the eight.
 # Knight Lore 128K also has the werewolf, the twinkle Sabreman turns into him
-# through, the sun and moon and their window, and Pentagram's art. Lightkeep
-# has none of them: stage 0c took them out of the sheet and the table.
-
-COLLECTABLE = tuple(range(96, 104))
+# through, the sun and moon and their window, Pentagram's art, the wizard and
+# the collectables he asks for. Lightkeep has none of them: stages 0c and 0d
+# took them out of the sheet and the table.
 
 # What a room is built out of. Knight Lore dresses its rooms two ways -- stone
 # castle and forest -- and each has its own walls and its own doorway arch, so
@@ -145,7 +143,6 @@ BANDS = (
     # 55 to 62, which sabreman.legs has already taken -- so they have no band of
     # their own, and editing the knight's walk changes theirs with it.
     ("guard", "the guard's torso", (150, 151, 30, 31)),
-    ("wizard", "the wizard", (158, 159)),
     ("spell", "the spell, and the sparkle Sabreman dies into", SPELL),
     ("fires", "fires", (176, 177, 180, 181, 86, 87)),
     ("balls", "balls", (178, 179, 182, 183)),
@@ -153,7 +150,6 @@ BANDS = (
     ("gate", "the portcullis", (8, 9)),
     ("panel", "the status panel", PANEL),
     ("menu", "the menu's frame", MENU),
-    ("collectable", "the things the wizard wants", COLLECTABLE),
     ("wall", "what closes a room in", (), (
         ("castle", "stone walls", WALL_CASTLE),
         ("forest", "trees", WALL_FOREST),
@@ -189,7 +185,6 @@ ANIMATION_NAMES = {
     ("fires.1", "fires.2"): "fire",
     ("balls.1", "balls.2"): "ball",
     ("guard.1", "guard.2"): "guard",
-    ("wizard.1", "wizard.2"): "wizard",
     ("ghost.1", "ghost.2", "ghost.3", "ghost.4"): "ghost",
     ("gate.1", "gate.1"): "gate",
     ("spell.1", "spell.2", "spell.3", "spell.2"): "spell",
@@ -211,8 +206,7 @@ BLANK_GRAPHIC = 1
 # library in banks 1, 3 and 7, and a room's are copied into the room page in
 # bank 0 as it is entered -- see room_page.s. Every other group is resident: in
 # bank 0 for good, because the code draws it by number, in any room -- the
-# knight and the wolf, the spells and the twinkle, the collectables, the sun,
-# the window, the panel and the menu.
+# knight, the spells, the panel and the menu.
 #
 # A room that names any sprite in one of these groups gets the WHOLE group
 # (the name up to its last dot: all of "scenery", all of "wall.castle"). That
@@ -228,7 +222,7 @@ BLANK_GRAPHIC = 1
 # put up. Its groups (pentagram.wall.trees, pentagram.block ...) are what a room
 # loads whole. Anything of it the code comes to draw in any room moves out to
 # a resident group then.
-ROOM_GROUPS = ("wall", "door", "scenery", "guard", "wizard", "fires", "balls",
+ROOM_GROUPS = ("wall", "door", "scenery", "guard", "fires", "balls",
                "ghost", "gate", "pentagram", "castle")
 
 

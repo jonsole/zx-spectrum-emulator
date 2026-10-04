@@ -333,6 +333,11 @@ def generate_room_data() -> None:
     sheet = layout.metadata(PENTAGRAM) / "sprites.json"
     if sheet.is_file():
         inputs.append(sheet.stat().st_mtime)
+    # ...and the graphic table: a piece is written as its graphic's NUMBER,
+    # so renumbering a graphic there changes the room data.
+    table = layout.metadata(PENTAGRAM) / "graphics.json"
+    if table.is_file():
+        inputs.append(table.stat().st_mtime)
 
     if generated.is_file() and generated.stat().st_mtime >= max(inputs):
         return

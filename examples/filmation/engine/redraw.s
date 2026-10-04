@@ -66,7 +66,7 @@ region_width:		DB		0
 ; redraw_orient used to live here: one pass per region, settling every
 ; shared graphic before objects_draw_all ran. That is one decision too few
 ; -- two objects in a region wanting opposite orientations leave whichever
-; the pass reached last holding the graphic. sprite_orient asks per object
+; the pass reached last holding the graphic. objects_draw_all asks per object
 ; instead, at the point of drawing, so this is gone.
 
 
@@ -320,8 +320,8 @@ redraw_view:		ld		hl,(view_y_extent)	; l = min, h = max
 
 					; No orientation pass here any more. It settled the shared
 					; graphics once for the whole region, which is one decision
-					; too few: objects_draw_all now asks per object, in
-					; sprite_orient, at the point it is about to draw one.
+					; too few: objects_draw_all now asks per object, at
+					; the point it is about to draw one.
 					call	objects_draw_all
 
 					; Set the copy routine up for this width. There is one

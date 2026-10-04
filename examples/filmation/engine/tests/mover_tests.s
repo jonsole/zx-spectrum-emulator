@@ -143,6 +143,10 @@ start:				ld		sp,$FE00
 					TEST	"pair: a second that stays put is not re-sorted"
 					call	fresh
 					call	pair_at_100
+					; Standing on the floor: mover_clamp asks for a unit of fall
+					; every turn, and the floor takes it away again.
+					ld		a,1
+					ld		(stub_block),a
 					RUN		mover_move_pair
 					EXPECT_BYTE	relink_calls, 0, "second re-sorted"
 					EXPECT_BYTE	upper_calls, 1, "first asked"
@@ -156,8 +160,44 @@ start:				ld		sp,$FE00
 					EXPECT_PAIR	OBJ.U, 100, "the second's U"
 					EXPECT_BYTE	relink_calls, 1, "second re-sorted"
 
+				IFDEF	PAIR_GRAVITY
+					; A guard walked off a raised floor: the torso falls, and the
+					; legs, which have no mover of their own, have to go with it.
+					; DZ is -3, last turn's fall: a unit faster for mover_move_pair
+					; and another for mover_clamp makes it -5.
+					TEST	"pair: a fall takes the second down with the first"
+					call	fresh
+					call	pair_at_100
+					ld		a,140
+					ld		(REC + OBJ.Z),a
+					ld		(REC + MOVER_PAIR + OBJ.Z),a
+					ld		a,-3 & $FF
+					ld		(REC + OBJ.DZ),a
+					RUN		mover_move_pair
+					EXPECT_FIELD	OBJ.Z, 135, "the first's Z"
+					EXPECT_PAIR	OBJ.Z, 135, "the second's Z"
+					EXPECT_BYTE	relink_calls, 1, "second re-sorted"
+
+					; Halves at different heights keep them: the step is added.
+					TEST	"pair: a second standing higher falls by the same step"
+					call	fresh
+					call	pair_at_100
+					ld		a,140
+					ld		(REC + OBJ.Z),a
+					ld		a,152
+					ld		(REC + MOVER_PAIR + OBJ.Z),a
+					ld		a,-3 & $FF
+					ld		(REC + OBJ.DZ),a
+					RUN		mover_move_pair
+					EXPECT_PAIR	OBJ.Z, 147, "the second's Z"
+				ENDIF
+
 					call	finish
+				IFDEF	PAIR_GRAVITY
+					DB		"mover_gravity_tests", 0
+				ELSE
 					DB		"mover_tests", 0
+				ENDIF
 
 
 ; ---------------------------------------------------------------------------

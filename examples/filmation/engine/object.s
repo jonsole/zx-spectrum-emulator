@@ -18,7 +18,7 @@ OBJ_MOVABLE			EQU		0x80		; FLAGS bit 7
 
 ; FLAGS bit 5: SPRITE_L/H points at this object's own rotated copy rather
 ; than at the shared graphic. Set by shift_sprite, cleared on the byte-
-; aligned path. sprite_orient skips these -- the copy is private, it was
+; aligned path. The draw's orientation check skips these -- the copy is private, it was
 ; rotated from the orientation the object wanted, and SPRITE - 2 is not a
 ; sprite header at all but whatever happens to precede the buffer.
 OBJ_SHIFTED			EQU		0x20
@@ -92,16 +92,29 @@ SCREEN_ROWS			EQU		192		; the last row an object may be drawn on
 ; One object record. The list owns NEXT and PREV -- they start zero and
 ; depth_insert fills them in. `shift_buf` is the object's own rotation
 ; buffer, or 0 when it is never drawn at a sub-byte X offset.
+;
+; It lays down the record up to its box -- OBJ_RECORD_LAID bytes -- and what
+; follows the box is left to the ALIGN in front of the next record, or to
+; whoever lays the rest of a slot. The ASSERT after it says the fields are in
+; the order these lines write them.
 					MACRO	object_record flags, shift_buf, size_u, size_v, size_z
 					DW		0		; NEXT
-					DS		OBJ.FLAGS - 2		; MIN_Y, MAX_Y, MIN_X, MAX_X
+					DS		OBJ.FLAGS - OBJ.MIN_Y		; MIN_Y, MAX_Y, MIN_X, MAX_X
 					DB		flags		; FLAGS
-					DS		OBJ.BUF_L - OBJ.FLAGS - 1		; BLIT_IDX, SPRITE_L, SPRITE_H
-					DW		shift_buf		; BUF_L, BUF_H
-					DS		OBJ.PREV - OBJ.U		; U, V, Z
+					DS		OBJ.PREV - OBJ.BLIT_IDX		; BLIT_IDX, SHIFT, CLIP_Y, SPRITE
 					DW		0		; PREV
+					DW		shift_buf		; BUF_L, BUF_H
+					DS		OBJ.SIZE_U - OBJ.U		; U, V, Z, DU, DV, DZ
 					DB		size_u, size_v, size_z
-					ENDM	
+					ENDM
+
+OBJ_RECORD_LAID		EQU		OBJ.SIZE_Z + 1
+					ASSERT	OBJ.NEXT == 0 && OBJ.MIN_Y == 2 && OBJ.FLAGS == OBJ.MAX_X + 1
+					ASSERT	OBJ.BLIT_IDX == OBJ.FLAGS + 1 && OBJ.SHIFT == OBJ.BLIT_IDX + 1
+					ASSERT	OBJ.CLIP_Y == OBJ.SHIFT + 1 && OBJ.SPRITE_L == OBJ.CLIP_Y + 1
+					ASSERT	OBJ.PREV == OBJ.SPRITE_H + 1 && OBJ.BUF_L == OBJ.PREV + 2
+					ASSERT	OBJ.U == OBJ.BUF_H + 1
+					ASSERT	OBJ.SIZE_U == OBJ.DZ + 1
 
 
 					; position in B,C
@@ -428,7 +441,11 @@ object_clamp:		ld		a,(hl)
 					call	object_landed_on
 					call	object_carry
 					jr		.contact
-.shove:			call	object_shove
+.shove:
+				IFDEF	CHARACTER_STEP_UP
+					call	collide_note_top
+				ENDIF
+					call	object_shove
 .contact:			call	object_touched
 
 
@@ -637,6 +654,15 @@ collide_gather:		ld		a,TURN_PER_GATHER
 ; Whether the shove comes off is not decided here. IY's own clamp has the say
 ; when its turn comes, and if it cannot go anywhere it simply does not.
 ;
+; In a game built with LOOSE_WEIGHT, what is shoved takes the step less its
+; weight -- DATA_1, which room_add gives a loose object from its template (see
+; mover_find) -- so something heavy moves slower than whatever pushes it, and
+; something as heavy as the push does not move at all. The knight walks three
+; a turn: a weight of 1 moves two, 2 moves one, and 3 or more stands. Every
+; other record's DATA_1 is whatever its own mover keeps there, and is never
+; read here: only a loose object or a character is shoved, and a character's
+; is nothing.
+;
 ; In:  IX -> us
 ;      IY -> what we ran into
 ;      collide_mask = which axis
@@ -651,11 +677,33 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 					cp		COLLIDE_U
 					jr		nz,.along_v
 					ld		a,(ix+OBJ.DU)
+				IFDEF	LOOSE_WEIGHT
+					call	.weighed
+				ENDIF
 					ld		(iy+OBJ.DU),a
-					ret		
+					ret
 .along_v:			ld		a,(ix+OBJ.DV)
+				IFDEF	LOOSE_WEIGHT
+					call	.weighed
+				ENDIF
 					ld		(iy+OBJ.DV),a
-					ret		
+					ret
+
+				IFDEF	LOOSE_WEIGHT
+					; The step in A, signed, brought its weight nearer nothing --
+					; and to nothing if the weight is all of it.
+.weighed:			or		a
+					ret		z
+					jp		m,.backwards
+					sub		(iy+OBJ.DATA_1)
+					ret		p
+					xor		a
+					ret
+.backwards:			add		a,(iy+OBJ.DATA_1)
+					ret		m
+					xor		a
+					ret
+				ENDIF
 
 
 ; We have just been stopped in Z by IY, which means we are standing on it. If
@@ -727,6 +775,36 @@ object_touched:		bit		7,(ix+OBJ.FLAGS)		; OBJ_MOVABLE: we are the knight
 					ret
 
 
+				IFDEF	CHARACTER_STEP_UP
+; The top of the highest thing that has stopped this step along U or V, or 0
+; when nothing has. character_climb reads it to tell a step it can walk up from
+; a wall it cannot -- see walker.s. Only a game that defines CHARACTER_STEP_UP
+; has it, and the note costs nothing until something is actually in the way.
+collide_top:		DB		0
+
+; IY has stopped us along the floor: keep its top if it is the highest yet.
+; Its top is its Z and its height, except for a character, whose record's
+; height is the depth sort's and whose figure is COLLIDE_HEIGHT -- the same
+; exception object_overlaps makes.
+;
+; In:  IY -> what stopped us
+; Out: collide_top = the higher of it and IY's top
+; Corrupts: AF
+collide_note_top:	ld		a,(iy+OBJ.SIZE_Z)
+					bit		7,(iy+OBJ.FLAGS)		; OBJ_MOVABLE
+					jr		z,.own_height
+					ld		a,COLLIDE_HEIGHT
+.own_height:		add		a,(iy+OBJ.Z)
+					push	hl
+					ld		hl,collide_top
+					cp		(hl)
+					jr		c,.lower
+					ld		(hl),a
+.lower:				pop		hl
+					ret
+				ENDIF
+
+
 ; We have just come down on IY. A block that gives way under a weight wants to
 ; know: the game marks everything landed on, SET 3,(IY+$0D) at $CC6C, and the
 ; dropping and collapsing blocks look for the mark on their next turn. Ours goes
@@ -753,6 +831,9 @@ object_landed_on:	ld		a,(iy+OBJ.BEHAVIOUR)
 ; Corrupts: AF, BC, DE, HL, IY
 object_collide:		xor		a
 					ld		(collide_hit),a
+				IFDEF	CHARACTER_STEP_UP
+					ld		(collide_top),a		; nothing has stopped us along the floor
+				ENDIF
 					ld		(collide_eff_u),a		; nothing is moving yet, as
 					ld		(collide_eff_v),a		; far as any test can see
 					ld		(collide_eff_z),a
@@ -846,9 +927,21 @@ object_place:		ld		a,(ix+OBJ.U)
 					add		a,128		; bias, so the SRL below is safe
 					srl		a		; (V - U) / 2 + 64
 					add		a,(ix+OBJ.Z)
+				IF GRAPHIC_COUNT > 256
+					; ADJ_Y is the nudge doubled, with bit 8 of the graphic in bit
+					; 0: SRA gives the nudge back without it. It goes in before the
+					; NEG, which does the subtracting.
+					ld		b,a
+					ld		a,(ix+OBJ.ADJ_Y)
+					sra		a
+					add		a,b
+					neg				; up on screen is -Y, so negate...
+					add		a,WORLD_Y_ORIGIN		; ...and hang it off the origin
+				ELSE
 					neg				; up on screen is -Y, so negate...
 					add		a,WORLD_Y_ORIGIN		; ...and hang it off the origin
 					sub		(ix+OBJ.ADJ_Y)		; their pixel Y is bottom-up, ours is not
+				ENDIF
 					ld		b,a		; screen y of the base
 					ld		a,(ix+OBJ.GFX)		; and the graphic to draw it with
 					; NB: fall through
@@ -871,7 +964,17 @@ object_update:
 					; carry lands in the high byte where it belongs. Needs ALIGN 512,
 					; same as the view buffer's row address.
 					ld		l,a
+				IF GRAPHIC_COUNT > 256
+					; Bit 8 of the graphic, from ADJ_Y: the table's second 256
+					; entries are the 512 bytes after the first, so it goes into
+					; the pre-halved base before the doubling.
+					ld		a,(ix+OBJ.ADJ_Y)
+					and		1
+					add		a,(high sprite_table) / 2
+					ld		h,a
+				ELSE
 					ld		h,(high sprite_table) / 2
+				ENDIF
 					add		hl,hl		; hl = sprite_table + graphic * 2
 					ld		a,(hl)
 					inc		l		; the low byte is even, so this cannot wrap
@@ -885,7 +988,7 @@ object_update:
 					; before shift_sprite rotates: a rotated copy is private to one
 					; object and nothing looks at it again, so it must be taken from
 					; the orientation that object asked for. An unshifted object gets
-					; checked again at draw time, in sprite_orient, because some
+					; checked again at draw time, in objects_draw_all, because some
 					; other object may mirror the shared bytes in the meantime.
 					;
 					; BC is the screen position and is wanted below; DE is not live
@@ -948,14 +1051,14 @@ object_update:
 					; It runs off the top. MIN_Y is clamped to row 0 and what it
 					; lost is kept, for the blit to start that far in.
 					neg			; height - base, the rows above row 0
-					ld		(ix+OBJ.CLIP_TOP),a
+					ld		(ix+OBJ.CLIP_Y),a
 					xor		a
 					ld		(ix+OBJ.MIN_Y),a
 					ld		(ix+OBJ.MAX_Y),b	; the base
 					jr		.y_done
 
 .on_screen:			ld		(ix+OBJ.MIN_Y),a		; top = base - height
-					ld		(ix+OBJ.CLIP_TOP),0	; and nothing lost off the top
+					ld		(ix+OBJ.CLIP_Y),0	; and nothing lost off the top
 
 					; ...and the other end. A room can stand something below
 					; the bottom of the screen -- a wall base in a room whose
@@ -1061,7 +1164,15 @@ object_update:
 					jr		nz,.next_twin
 					ld		a,(iy+OBJ.GFX)
 					cp		c
+				IF GRAPHIC_COUNT > 256
+					jr		nz,.next_twin
+					ld		a,(iy+OBJ.ADJ_Y)		; and the same bit 8
+					xor		(ix+OBJ.ADJ_Y)
+					rra
+					jr		nc,.twinned
+				ELSE
 					jr		z,.twinned
+				ENDIF
 .next_twin:			add		iy,de
 					djnz	.twin
 
@@ -1084,7 +1195,7 @@ object_update:
 					ld		a,(iy+OBJ.SPRITE_H)
 					ld		(ix+OBJ.SPRITE_H),a
 					set		5,(ix+OBJ.FLAGS)		; OBJ_SHIFTED: private bytes, so
-					set		1,(ix+OBJ.FLAGS)		; sprite_orient leaves them be
+					set		1,(ix+OBJ.FLAGS)		; the draw's orientation check leaves them be
 					pop		iy
 					pop		hl
 					ret
@@ -1097,7 +1208,7 @@ object_update:
 					; The extents and the blit index still describe the ROTATED
 					; form, because that is what gets blitted -- one column wider
 					; than the artwork. OBJ_SHIFTED stays clear, though, because the
-					; bytes really are shared: sprite_orient must go on keeping them
+					; bytes really are shared: the draw must go on keeping them
 					; the way round this object wants them.
 .defer_shift:		ld		(ix+OBJ.SHIFT),a
 					call	.share		; SPRITE -> the shared graphic
@@ -1117,7 +1228,7 @@ object_update:
                     ld		(ix+OBJ.SPRITE_L),l
 					ld		(ix+OBJ.SPRITE_H),h
 					res		5,(ix+OBJ.FLAGS)		; drawn from the shared graphic, so
-					ret		; sprite_orient must keep an eye on it
+					ret		; the draw's orientation check must keep an eye on it
 
 					; Rotate into this object's own buffer, once, here at placement.
 					; The core takes its destination in DE so that the draw-time
@@ -1163,8 +1274,8 @@ object_update:
 					ld		a,(ix+OBJ.BUF_H)
 					ld		(ix+OBJ.SPRITE_H),a
 					set		5,(ix+OBJ.FLAGS)		; this copy is private and already
-					; the right way round: sprite_orient
-					; leaves it alone
+					; the right way round: the draw's
+					; orientation check leaves it alone
 					jr		.widen
 
 
@@ -1299,38 +1410,41 @@ object_update:
 ;;  |      |
 ;;  +------+
 ;;
-;; In:  BC = the sprite's extent
-;;      DE = the current extent
-;; Out: carry set if there is any overlap
-;;      A  = the overlap's size
-;;      H  = the extent adjustment
-;;      L  = the sprite adjustment
-;; Corrupts: B
-				MACRO extent_intersect 
+;; Both extents are a first and a one-past-the-last, low byte first, and the
+;; caller has already found that they meet, so the overlap is never empty.
+;;
+;; In:  BC = the sprite's extent: C its first, B one past its last
+;;      DE = the region's: E its first, D one past its last
+;; Out: A  = the overlap's size
+;;      H  = where the overlap starts in the region
+;;      L  = where it starts in the sprite, negated: 0, or minus what the
+;;           region cuts off the sprite's start
+;; Corrupts: F, B
+				MACRO extent_intersect
 					ld		a,d
 					sub		c
-					ld      l,a     		; l = d - c
-					ld      a,c
-					sub     e       		; a = c - e
-					jr      c,.less
-					;; C >= E case
-					ld      h,a     		; h = c - e
-					ld      a,b
-					sub     c       		; a = c - b
-					ld      b,l     		; c = d - c
-					ld      l,$00   		; l = 0
+					ld		l,a				; L = D - C: the region past the sprite's start
+					ld		a,c
+					sub		e				; A = C - E
+					jr		c,.less
+					;; The sprite starts inside the region.
+					ld		h,a				; H = C - E
+					ld		a,b
+					sub		c				; A = B - C: the whole sprite
+					ld		b,l				; B = D - C
+					ld		l,$00			; L = 0: nothing cut off
 					jr		.compare
-					;; C < E case
-.less:          	ld      l,a     		; l = b - d
-					ld      a,b
-					sub     e
-					ld      b,a     		; c = c - d
-					ld      a,d
-					sub     e       		; a = e - d
-					ld      h,$00   		; h = 0
-.compare:       	cp      b
+					;; The sprite starts before the region.
+.less:				ld		l,a				; L = C - E: minus what is cut off
+					ld		a,b
+					sub		e
+					ld		b,a				; B = B - E: the sprite past the region's start
+					ld		a,d
+					sub		e				; A = D - E: the whole region
+					ld		h,$00			; H = 0: from the region's start
+.compare:			cp		b				; the smaller of the two
 					jr		c,.end
-					ld      a,b
+					ld		a,b
 .end:
 				ENDM
 
@@ -1345,53 +1459,65 @@ view_y_extent:		dw		0
 ; In:  view_x_extent, view_y_extent = the region
 ; Out: nothing
 ; Corrupts: everything
-objects_draw_all:				
-					ld		hl,(view_x_extent)			
-					ld		(.set_x_extent + 1),hl
-					ld		hl,(view_y_extent)			
-					ld		(.set_y_extent + 1),hl
+objects_draw_all:
+					ld		hl,(view_x_extent)
+					ld		(.reload_x + 1),hl
+					ld		hl,(view_y_extent)
+					ld		(.reload_y + 1),hl
 
-					; 'return' address in IX
-					ld		ix,.next_object
 
-					; Save stack pointer as we going to use stack pointer to read object data					
+					; The real stack, kept: SP walks the object records from here on.
 					ld		(.set_stack + 1),sp
-					
+
 					; Walk though objects filtering out those outside the view extent.
 					; The four rejects below are JPs rather than JRs: they used to be
 					; JRs and the loop had to stay inside a byte's reach of them,
 					; which it no longer does. It costs nothing -- a reject is the
 					; common case, and a taken JR is 12T against a JP's 10.
-					ld		iy,(object_list)					
-					jp		.next_object		; the same test also covers an empty list
-					; JP, not JR: the loop below no longer fits in a byte's reach
-.filter_loop:		ld		sp,iy
-					pop		iy					; get next object
+					;
+					; The region's extents stay in DE from one object to the next:
+					; the y extent in the bank each object starts in, the x extent
+					; in the other. A rejection leaves both alone -- one on x swaps
+					; back first, at .reject_x -- and only a drawn object disturbs
+					; them, so .drawn loads them again after each blit, and before
+					; the first object.
+					;
+					; The walk itself is in HL, in the same bank as the y extent:
+					; LD SP,HL and POP HL are cheaper than IY's, and nothing on the
+					; way to a rejection touches it. A drawn object puts NEXT aside
+					; before the y overlap takes HL, and .drawn brings it back.
+					ld		hl,(object_list)
+					jp		.reload_y			; the extents, then the end-of-list test,
+					; which also covers an empty list
+.filter_loop:		ld		sp,hl
+					pop		hl					; get next object
 
-.set_y_extent:		ld		de,0				; de = view y extent
-					pop		bc					; bc = object y excent
+					; DE = view y extent, in this bank
+					pop		bc					; bc = object y extent
 					ld		a,c					; a = obj_min_y
 					cp		d					; obj_min_y - view_max_y
-					jp		nc,.next_object		; if obj_min_y - view_max_y >= 0, return					
+					jp		nc,.next_object		; if obj_min_y - view_max_y >= 0, return
 					ld		a,e					; a = view_min_y
 					cp		b					; view min_y - obj_max_y
 					jp		nc,.next_object   	; if view_min_y - obj_max_y >= 0, return
-					exx
-.set_x_extent:		ld		de,0				; de = view x extent
-					pop		bc					; bc = object x excent
+					exx							; DE = view x extent, in this bank
+					pop		bc					; bc = object x extent
 					ld		a,c					; a = obj_min_x
 					cp		d					; obj_min_x - view_max_x
-					jp		nc,.next_object		; if obj_min_x - view_max_x >= 0, return					
+					jp		nc,.reject_x		; if obj_min_x - view_max_x >= 0, return
 					ld		a,e					; a = view_min_x
 					cp		b					; view min_x - obj_max_x
-					jp		nc,.next_object   	; if view_min_x - obj_max_x >= 0, return
+					jp		nc,.reject_x		; if view_min_x - obj_max_x >= 0, return
 
 					; Calculate x overlap, DE = view_x_extent, BC = object x extent
-					extent_intersect			; HL, BC, DE, AF all changed
+					extent_intersect			; A, H and L out, B and F corrupted
 
 					; Exchange registers
 					exx
 					ex		af,af'
+
+					; The next object, out of HL before the y overlap takes it.
+					ld		(.next_object_at + 1),hl
 
 					; Calculate y overlap, DE = view_y_extent, BC = object y extent
 					extent_intersect
@@ -1401,7 +1527,7 @@ objects_draw_all:
 					; L'/L - x/y sprite adjustment
 
 					; Save y overlap, will be used for line count in blit function
-					exx	
+					exx
 					ld		b,a
 					exx
 
@@ -1435,13 +1561,16 @@ objects_draw_all:
 					; DE' - view buffer address + adjustment
 					; B' - blit line count
 
-					; Adjust sprite data address
-					pop		de					; get index into jump table in D (E not used)
+					; The rest of the record.
+					pop		de					; D = index into the jump table, E = FLAGS,
+					; which the orientation check reads in E' further down
 
 					; Rows to skip before the first one that shows: what the redraw
 					; region cuts off the top, plus what the SCREEN cuts off above
-					; that. The second is CLIP_TOP, and it is reached through SP,
-					; which is eight bytes into this record with two pops to go.
+					; that. The second is CLIP_Y, the next thing off the record,
+					; with SHIFT: POP IX puts CLIP_Y in IXH and SHIFT in IXL, where
+					; it waits for the draw-time rotation's test further down. IX is
+					; nobody else's in this loop.
 					;
 					; Ultimate did not need any of this. Their artwork is stored
 					; bottom row first -- sprite_source.py turns it the right way up on the
@@ -1449,43 +1578,69 @@ objects_draw_all:
 					; known address, so running off the top of the screen just means
 					; drawing fewer rows and stopping. Top-down data has to find the
 					; first visible row instead, and that is a multiply.
-					ld		b,l				; what the region skips, negated
-					ld		hl,OBJ.CLIP_TOP - 8
-					add		hl,sp
-					ld		a,(hl)			; and what the screen took
-					sub		b					; A = both, as a positive row count
+					pop		ix					; IXH = CLIP_Y, IXL = SHIFT
+					ld		a,ixh				; what the screen took
+					sub		l					; less what the region skips, negated:
+					; A = both, as a positive row count
+					ASSERT	OBJ.BLIT_IDX == OBJ.FLAGS + 1 && OBJ.CLIP_Y == OBJ.SHIFT + 1
 					ld		h,high sprite_jump_table
 					ld		l,d
 					jp		(hl)				; jump to Y adjustment multiply routine
-.x_adjust:			exx							; switch to X adjustments                    
+.x_adjust:			exx							; switch to X adjustments
 					sub		l					; A += sprite_x_adjustment
-					add		a					; Double for interleaved mask and data
 					pop		hl					; Get sprite address
 
-					; Which object this is, for shift_if_deferred. IY is no use for
-					; that: the walk read NEXT into it at the top, so it already
-					; names the object AFTER this one -- and for the last object in
-					; the list that is zero, which indexes into the ROM. SP is ten
-					; bytes into the record here, having just read SPRITE out of it.
-					ld		(draw_object + 2),sp		; LD IY,nn is a two-byte opcode
+					; The sprite address is the last thing the record walk wants.
+					; SP is left where it is, just past SPRITE: nothing on the way to
+					; the blit pushes or calls, and the blit points SP into the
+					; sprite itself. The two unusual cases -- a flip, a draw-time
+					; rotation -- go out of the loop to .unusual, which is the one
+					; place SP is used for anything else.
+					;
+					; The offset waits in this bank's C until the two checks are
+					; done, and is doubled after them. The blit works in this bank
+					; and never uses C -- only A, B for its DJNZ, DE, HL and SP --
+					; and the next object's walk pops over it. The FLAGS are in the
+					; other bank's E, popped with BLIT_IDX.
+					ld		c,a					; the offset, kept
+					exx
+					ld		a,e					; FLAGS
+					exx
 
-					; The sprite address is the last thing the record walk wants, so
-					; SP is free -- and putting the real stack back is what lets this
-					; call anything at all. sprite_orient leaves every register alone,
-					; the carry from the doubling above included.
-					ld		sp,(.set_stack + 1)
-					call	sprite_orient
+					; Make the shared graphic the way round this object wants it.
+					;
+					; A graphic is shared by every object drawn from it, and an
+					; object that wants it the other way round mirrors it where it
+					; lies. So the bytes may not be the way THIS object wants them:
+					; another object in the same region may have turned them since.
+					; Knight Lore compares the two in print_sprite, per object, for
+					; exactly this reason. Settling it once per region cannot work,
+					; which is what redraw_orient used to try: room $88 puts the north
+					; arch's leaf and the east arch's leaf, one flipped and one not,
+					; in the same region at the foot of an arch, and a few pixels of
+					; the one landed on the other.
+					bit		5,a					; OBJ_SHIFTED
+					jr		nz,.oriented		; its own private copy, and SPRITE - 2
+					; is not a sprite header at all
+					dec		l					; SPRITE is the record + 2, and records
+					dec		l					; are ALIGN 4, so this cannot borrow
+					xor		(hl)
+					rrca						; the two flip bits differ: carry
+					jp		c,.flip				; HL -> the sprite record, as the flip wants
+					inc		l
+					inc		l
+.oriented:			ASSERT	OBJ_SHIFTED == 1 << 5
 
 					; An OBJ_SHARED_SHIFT object has no rotated copy of its own:
 					; it rotates here, into the one shared buffer, and the blit
 					; below reads that instead of the artwork. SHIFT is zero for
 					; everything else, which is every object in a room that has
 					; not been marked, so this is a load and a test.
-					;
-					; Out of line, and AF saved inside it: the carry out of the
-					; doubling above is read three instructions further down, and
-					; this is the one thing between them that could disturb it.
-					call	shift_if_deferred		; HL -> the shared buffer
+					ld		a,ixl				; SHIFT, off the record with CLIP_Y
+					or		a
+					jp		nz,.unusual			; A = SHIFT: a rotation only
+.usual:				ld		a,c					; the offset back
+					add		a					; Double for interleaved mask and data
 
 					; That doubling is the one step here that can leave eight
 					; bits. A holds rows-skipped * columns + the x adjustment,
@@ -1495,23 +1650,17 @@ objects_draw_all:
 					; the sprite instead of row 49. It drew as a few stray
 					; pixels at the foot of both rear arches, because that is
 					; the only place a sprite this tall is clipped this deeply.
-					;
-					; POP does not touch the flags, so the carry is still the
-					; one ADD A left.
 					jr		nc,.low_half
 					inc		h
-.low_half:			add		l					; A = L + adjustment 
+.low_half:			add		l					; A = L + adjustment
 					ld		l,a					; L = A
- 					adc		h 	  	 			; A = A+L+H+carry
-    				sub		l       			; A = H+carry
-    				ld		h, a    			; H = H+carry
-					exx							
-					
-					; A' - x overlap
-					; HL' - sprite address + adjustment
-					; DE' - view buffer address + adjustment
-					; B' - blit line count
+					adc		h					; A = A+L+H+carry
+					sub		l					; A = H+carry
+					ld		h,a					; H = H+carry
+					ld		a,b					; the blit's row count, for the turn below
+					exx
 
+					; A' - x overlap
 					; HL' - sprite address + adjustment
 					; DE' - view buffer address + adjustment
 					; B' - blit line count
@@ -1527,10 +1676,8 @@ objects_draw_all:
 					; First, count the blit towards the turn -- see turn_pace. It is
 					; written out rather than a call to turn_add, which would save HL
 					; for nobody: this is once per object drawn, and H and L are
-					; free here. The rows are in the other bank.
-					exx
-					ld		a,b
-					exx
+					; free here. The rows came out of the other bank in A, on the
+					; way out of it.
 					add		a,TURN_PER_BLIT
 					ld		hl,turn_work
 					add		a,(hl)
@@ -1541,9 +1688,49 @@ objects_draw_all:
 .counted:			ex		af,af'				; x overlap: the columns to composite
 					jp		sprite_blit_setup
 
-					; Return here after blit routine
-.next_object:		ld		a,iyh
-					and		a
+					; The blit comes back here, with DE gone in both banks: the
+					; region's extents go back in, y in the bank the next object
+					; starts in and x in the other.
+.drawn:
+.next_object_at:	ld		hl,0				; patched: the next object, put aside
+.reload_y:			ld		de,0				; patched: the view y extent
+					exx
+.reload_x:			ld		de,0				; patched: the view x extent
+.reject_x:			exx							; an x rejection comes in here, from the x bank
+.next_object:		ld		a,h					; no record lives in page 0, so a high
+					or		a					; byte of zero is the end of the list
 					jp		nz,.filter_loop		; loop back if not
 .set_stack			ld		sp,000				; restore stack pointer
 					ret
+
+; The unusual cases, out of the loop: the shared graphic is the wrong way round
+; for this object, or the object rotates at draw time, or both. SP is still in
+; the object's record, just past SPRITE, the last thing the walk popped -- so
+; the record is SP less that, and then the real stack goes back, for the calls.
+; Nothing after them needs SP until the blit, which sets its own.
+;
+; This bank's B and DE are the blit's row count and the view buffer, and C is
+; the offset; sprite_flip_h would lose all three, and shift_at_draw keeps
+; everything. An object can want both, and the flip comes first: the rotation
+; wants the bitmap the way round the object asked for.
+;
+; Both come in at .unusual: a flip through .flip, with A zero, and a rotation
+; alone with A its SHIFT, which is never zero there.
+.flip:				xor		a					; the flip, and perhaps a rotation after
+.unusual:			ld		ix,-(OBJ.SPRITE_H + 1)
+					add		ix,sp				; IX -> the record
+					ld		sp,(.set_stack + 1)
+					or		a
+					jr		nz,.rotate			; a rotation only
+					push	bc
+					push	de
+					call	sprite_flip_h		; HL -> the sprite record, which it keeps
+					pop		de
+					pop		bc
+					inc		l					; -> the bitmap again
+					inc		l
+					ld		a,(ix+OBJ.SHIFT)	; a draw-time rotation as well?
+					or		a
+					jp		z,.usual
+.rotate:			call	shift_at_draw		; HL -> the shared buffer
+					jp		.usual

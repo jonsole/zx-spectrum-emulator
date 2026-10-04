@@ -21,7 +21,7 @@ the total is rounded up to a boundary either way. Emitted separately, the
 table goes where a 512 boundary already falls and the bitmaps go last, with
 nothing after them that has to be aligned.
 
-    sprite_data.s       the sprites, bottom row first, mask and data
+    sprite_data.s       the sprites, top row first, mask and data
                         interleaved, with the blank bottom rows trimmed off
     sprite_table.s      256 pointers, indexed by Pentagram's graphic number
     sprite_adj_gen.s    the pixel nudges from graphics.json
@@ -300,7 +300,10 @@ def main():
     check(sprites, facts, animated)
 
     used = {n for n in gmap if n is not None}
-    for name, lines in (("sprite_data.s", emit_bitmaps(sprites, animated, used)),
+    # How many graphic numbers the game has, ahead of the engine: its code for
+    # a ninth bit -- GRAPHIC_COUNT > 256 -- is assembled only if it needs one.
+    count = ["GRAPHIC_COUNT\t\tEQU\t%d" % game.GRAPHIC_COUNT, ""]
+    for name, lines in (("sprite_data.s", count + emit_bitmaps(sprites, animated, used)),
                         ("sprite_table.s", emit_table(sprites, facts)),
                         ("sprite_adj_gen.s", emit_adj(sprites, facts))):
         (args.out_dir / name).write_text("\n".join(lines) + "\n", encoding="utf-8")

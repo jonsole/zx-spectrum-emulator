@@ -37,6 +37,10 @@
 
 					INCLUDE	"../../engine/object_struct.s"
 
+GRAPHIC_COUNT		EQU		512		; as the game has it: over 256 assembles the engine's bit-8 code
+					DEFINE	PAIR_GRAVITY		; as lightkeep.s has it: guards fall as the knight does
+					DEFINE	LOOSE_WEIGHT		; ...and loose things weigh something
+CHARACTER_FALL_MAX	EQU		-8 & $FF		; ...as fast as knight.s lets him
 REC					EQU		$C000		; the record under test; a guard's legs follow
 ROOMS				EQU		$C100		; room_objects, for movers_step
 
@@ -147,6 +151,22 @@ start:				ld		sp,$FE00
 					call	mover_find
 					call	snap
 					EXPECT_A	MOVE_NONE, "the behaviour"
+
+					TEST	"find: a weight comes with the behaviour"
+					call	fresh
+					ld		a,FG_TABLE
+					call	mover_find
+					call	snap
+					EXPECT_A	MOVE_PUSHED, "the behaviour"
+					EXPECT_BYTE	room_weight, 2, "room_weight"
+
+					TEST	"find: one that does not move weighs nothing"
+					call	fresh
+					ld		a,5
+					ld		(room_weight),a		; the last template's
+					ld		a,FG_BLOCK
+					call	mover_find
+					EXPECT_BYTE	room_weight, 0, "room_weight"
 
 ; --- mover_slide ---------------------------------------------------------------
 ; The wave is (move_tick + bit 5 of the record's address) folded into 0..15, and
@@ -323,25 +343,25 @@ start:				ld		sp,$FE00
 					ld		a,COLLIDE_Z
 					ld		(stub_hit),a
 					RUN		mover_hopper_claim
-					EXPECT_FIELD	OBJ.MOVE_STATE, MOVE_RISING, "MOVE_STATE"
+					EXPECT_FIELD	OBJ.MOVE_STATE, STATE_RISING, "MOVE_STATE"
 
 					TEST	"ball: rises three, less gravity"
 					call	fresh
 					ld		a,200
 					ld		(mover_ball_top),a
 					SET		OBJ.Z, 128
-					SET		OBJ.MOVE_STATE, MOVE_RISING | 1
+					SET		OBJ.MOVE_STATE, STATE_RISING | 1
 					RUN		mover_hopper_claim
 					EXPECT_BYTE	clamp_dz, BALL_RISE - 1, "DZ"
 					EXPECT_FIELD	OBJ.Z, 128 + BALL_RISE - 1, "Z"
-					EXPECT_FIELD	OBJ.MOVE_STATE, MOVE_RISING | 1, "MOVE_STATE"
+					EXPECT_FIELD	OBJ.MOVE_STATE, STATE_RISING | 1, "MOVE_STATE"
 
 					TEST	"ball: past the top, falls again"
 					call	fresh
 					ld		a,129
 					ld		(mover_ball_top),a
 					SET		OBJ.Z, 128
-					SET		OBJ.MOVE_STATE, MOVE_RISING | 1
+					SET		OBJ.MOVE_STATE, STATE_RISING | 1
 					RUN		mover_hopper_claim
 					EXPECT_FIELD	OBJ.MOVE_STATE, 1, "MOVE_STATE, only RISING cleared"
 
@@ -411,10 +431,12 @@ start:				ld		sp,$FE00
 					call	guard_at_100
 					SET		OBJ.MOVE_STATE, 1
 					SET		OBJ.DV, 9
-					SET		OBJ.DZ, 9
+					; Standing: last turn's fall was nothing. It asks for two -- a
+					; unit from mover_move_pair, one from mover_clamp -- and the
+					; floor would take them away.
 					RUN		mover_pacer_pair
 					EXPECT_BYTE	clamp_de + 1, GUARD_STEP, "D, the step along U"
-					EXPECT_BYTE	clamp_dz, -1 & $FF, "DZ: it falls"
+					EXPECT_BYTE	clamp_dz, -2 & $FF, "DZ: gravity asked for"
 					EXPECT_LEGS	OBJ.U, 102, "the legs' U"
 					EXPECT_LEGS	OBJ.V, 50, "the legs' V"
 					EXPECT_BYTE	relink_calls, 1, "legs re-sorted"
@@ -475,6 +497,45 @@ start:				ld		sp,$FE00
 					call	guard_at_100
 					RUN		mover_circuit_pair
 					EXPECT_WORD	clamp_de, (-GUARD_STEP & $FF) << 8, "the step: west"
+
+; A guard in the air falls a unit a turn faster, the clamp's DEC and one more,
+; to the knight's limit -- and his legs come down with him.
+
+					TEST	"guard U: falling, falls two a turn faster"
+					call	fresh
+					call	guard_graphics
+					call	guard_at_100
+					SET		OBJ.DZ, -3		; last turn's fall
+					RUN		mover_pacer_pair
+					EXPECT_BYTE	clamp_dz, -5 & $FF, "DZ asked for"
+
+					TEST	"guard U: no faster than the knight falls"
+					call	fresh
+					call	guard_graphics
+					call	guard_at_100
+					SET		OBJ.DZ, CHARACTER_FALL_MAX
+					RUN		mover_pacer_pair
+					EXPECT_BYTE	clamp_dz, CHARACTER_FALL_MAX, "DZ asked for"
+
+					TEST	"guard U: the legs fall with the torso"
+					call	fresh
+					call	guard_graphics
+					call	guard_at_100
+					SET		OBJ.Z, 160
+					ld		a,160
+					ld		(REC + ROOM_STRIDE + OBJ.Z),a
+					SET		OBJ.DZ, -3
+					RUN		mover_pacer_pair
+					EXPECT_LEGS	OBJ.Z, 155, "the legs' Z"
+					EXPECT_BYTE	relink_calls, 1, "legs re-sorted"
+
+					TEST	"square: falling, falls the same way"
+					call	fresh
+					call	guard_graphics
+					call	guard_at_100
+					SET		OBJ.DZ, -3
+					RUN		mover_circuit_pair
+					EXPECT_BYTE	clamp_dz, -5 & $FF, "DZ asked for"
 
 ; --- mover_gate ------------------------------------------------------------------
 
@@ -1142,8 +1203,6 @@ depth_unlink:		ld		(hide_ix),ix
 
 redraw_view:		ret
 
-mover_special:		ret
-
 ; character.s's, which the ghost's facing borrows: A, made positive.
 character_door_find:
 .abs:				or		a
@@ -1169,6 +1228,18 @@ fire_turned:		ret		; sound_fx.s's, which only choose a sound
 
 
 					INCLUDE	"../monster_gate.s"
+; Which templates move, as generated/room_data.s writes it from templates.json's
+; meta.movers: template, behaviour and weight, ended by $FF. A few of the
+; game's, the torch last, and the table given a weight to find.
+mover_of:			DB		FG_GHOST, MOVE_GHOST, 0
+					DB		FG_SPIKE, MOVE_STILL, 0
+					DB		FG_TABLE, MOVE_PUSHED, 2
+					DB		FG_CASTLE_TORCH_M, MOVE_FLAME, 0
+					DB		$FF
+
+; What engine/room.s keeps the weight in, for room_add.
+room_weight:		DB		0
+
 					INCLUDE	"../movers.s"
 					INCLUDE	"../../engine/mover.s"
 					INCLUDE	"../shared_movers.s"

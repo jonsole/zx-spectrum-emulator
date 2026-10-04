@@ -86,7 +86,19 @@ LABEL_COLOUR = (96, 96, 96, 255)
 # rather than underscores because a name already has underscores in it, and
 # because the path is what this is: sabreman.legs.1.
 NAME_SEPARATOR = "."
+# ...and what puts a sprite on one of the other sheets graphics.json lists
+# under "sheets": furniture:GrandfatherClockNE.2 is the sprite called "2" in
+# the group "GrandfatherClockNE" of the sheet graphics.json calls "furniture".
+# A name without one is on the game's own sheet, sprites.json.
+SHEET_SEPARATOR = ":"
 NO_SPRITE = 0xFF                        # a graphic number the game does not use
+
+# What the engine draws as one sprite. A blit is a routine for each width
+# from two bytes to five -- BLIT_COLUMNS in engine/sprite.s is one more than
+# the widest -- and redraw.s sizes what it repaints for 64 rows at most.
+NARROWEST_BYTES = 2
+WIDEST_BYTES = 5
+TALLEST_ROWS = 64
 
 # How a pixel's colour becomes the two bits the Z80 wants: does the sprite
 # cover the screen here, and what does it put down if it does. The border is
@@ -498,7 +510,7 @@ def graphics_json(game, sprites, labels, table, graphic_map):
     The names and the boxes are the file's own once it exists and are carried
     over: remaking the sheet is about the artwork, and must not rename a graphic
     every castle refers to, nor drop a box only re-extracting the castle would
-    bring back.
+    bring back. Nor a graphic's "fixed", which says the code knows its number.
     """
     path = layout.metadata(game.HERE) / GRAPHICS_FILE
     was = {}
@@ -523,6 +535,8 @@ def graphics_json(game, sprites, labels, table, graphic_map):
         size = was.get(number, {}).get("size")
         if size is not None:
             said["size"] = size
+        if was.get(number, {}).get("fixed"):
+            said["fixed"] = True
         said["number"] = number
         if number in game.FIXED_NUDGES:
             # The original sets these from a constant every turn, so a harvest
@@ -599,6 +613,11 @@ def make(game):
 
 # --- reading it back, every build -------------------------------------------
 
+def asm_label(name):
+    """The assembler label a sprite is called by, from its name."""
+    return "sprite_" + name.replace(SHEET_SEPARATOR, "_").replace(NAME_SEPARATOR, "_")
+
+
 def read_sheet_files(game, sprites_path, graphics_path):
     """sprites.json + graphics.json -> the sprites in sheet order, and the facts.
 
@@ -610,6 +629,14 @@ def read_sheet_files(game, sprites_path, graphics_path):
     graphics.json is keyed by the graphic's NAME and carries the number the
     game knows it by; `graphics` here is keyed by that number, as an int.
 
+    graphics.json can list other sheets under "sheets" -- a name for each, and
+    its description, relative to graphics.json -- and a sprite on one of them
+    is named with the sheet's name in front: furniture:GrandfatherClockNE.2.
+    Only the sprites a graphic names are taken from those, after every sprite
+    of the game's own, each carrying the picture it is read from. A sheet of
+    hundreds of sprites, of which a game draws a dozen, costs nothing for the
+    rest -- and a sheet no graphic names need not even be there.
+
     The engine's own facts -- what animates, what keeps its blank rows, the
     rotation buffers -- are not in either file. They are hand-written constants
     about the game, and come from its sprite_sheet.py.
@@ -619,22 +646,42 @@ def read_sheet_files(game, sprites_path, graphics_path):
 
     entries, by_name = [], {}
 
-    def walk(node, path):
+    def walk(node, path, prefix="", wanted=None, extra=None):
         for key, box in (node.get("sprites") or {}).items():
-            name = NAME_SEPARATOR.join(path + [key])
+            name = prefix + NAME_SEPARATOR.join(path + [key])
+            if wanted is not None and name not in wanted:
+                continue
             by_name[name] = len(entries)
-            entries.append({
+            entry = {
                 "name": name,
-                "asm": "sprite_" + name.replace(NAME_SEPARATOR, "_"),
+                "asm": asm_label(name),
                 "x": box["x"], "y": box["y"],
                 "width": box["w"] // 8, "height": box["h"],
-            })
+            }
+            entry.update(extra or {})
+            entries.append(entry)
         for group, sub in (node.get("group") or {}).items():
-            walk(sub, path + [group])
+            walk(sub, path + [group], prefix, wanted, extra)
 
     walk(sheet, [])
     if not entries:
         raise SystemExit(f"{sprites_path.name} has no sprites in it")
+
+    named = {entry.get("sprite") for entry in (said.get("graphics") or {}).values()}
+    for other, leaf in (said.get("sheets") or {}).items():
+        prefix = other + SHEET_SEPARATOR
+        wanted = {name for name in named if name and name.startswith(prefix)}
+        if not wanted:
+            continue
+        described = graphics_path.parent / leaf
+        if not described.is_file():
+            raise SystemExit(f"{graphics_path.name} names sprites on the {other} "
+                             f"sheet, and {described} is not there")
+        tree = json.loads(described.read_text(encoding="utf-8"))
+        colours = (tree.get("sheet") or {}).get("colours", {})
+        picture = (described.parent / ((tree.get("sheet") or {}).get("file")
+                                       or (other + ".png"))).resolve()
+        walk(tree, [], prefix, wanted, {"picture": picture, "palette": colours})
 
     gmap = [None] * game.GRAPHIC_COUNT
     nudge = {}
@@ -645,9 +692,15 @@ def read_sheet_files(game, sprites_path, graphics_path):
         name = entry.get("sprite")
         if name is not None:
             if name not in by_name:
+                why = f"which {sprites_path.name} does not have"
+                if SHEET_SEPARATOR in name:
+                    other = name.split(SHEET_SEPARATOR)[0]
+                    leaf = (said.get("sheets") or {}).get(other)
+                    why = (f"which {leaf} does not have" if leaf else
+                           f"and it lists no sheet called {other!r}")
                 raise SystemExit(
                     f"{graphics_path.name}: {graphic} names the sprite "
-                    f"{name!r}, which {sprites_path.name} does not have")
+                    f"{name!r}, {why}")
             gmap[number] = by_name[name]
         nudge[number] = dict(entry, graphic=graphic)
 
@@ -692,9 +745,10 @@ def frame_check(entry, pixels, border, sheet):
                 f"runs past its edge")
 
 
-def read_sheet(sheet, entries, palette):
-    """The sheet's pixels, as (mask, data) byte rows a sprite, top row first."""
-    image = Image.open(sheet).convert("RGBA")
+def picture_of(path, palette):
+    """A sheet's picture, opened, and what its colours mean: (image, pixels,
+    colour -> bits, the frame's colour, path)."""
+    image = Image.open(path).convert("RGBA")
     # Only the colours that are actually drawn, keyed by RGB. "paper" and
     # "transparent" are both black and differ only in their alpha, so a map
     # keyed by RGB alone would have one quietly overwrite the other -- and
@@ -707,18 +761,48 @@ def read_sheet(sheet, entries, palette):
         raise SystemExit(f"{SPRITES_FILE} names no {BORDER_COLOUR!r} colour, so the "
                          f"frame round each sprite cannot be checked -- "
                          f"regenerate the sheet with sprite_sheet.py")
-    border = tuple(palette[BORDER_COLOUR])
-    pixels = image.load()
+    return image, image.load(), colours, tuple(palette[BORDER_COLOUR]), Path(path)
+
+
+def read_sheet(sheet, entries, palette):
+    """The sheet's pixels, as (mask, data) byte rows a sprite, top row first.
+
+    An entry from another sheet carries its own picture and palette, and is
+    read from those; every other is read from `sheet`, with `palette`.
+    """
+    pictures = {}
+
+    def picture_for(entry):
+        path = Path(entry.get("picture") or sheet)
+        if path not in pictures:
+            if not path.is_file():
+                raise SystemExit(
+                    f"{entry['name']} is on {path}, which is not there -- a "
+                    f"sheet converted from your own copy of a game is never "
+                    f"carried; convert it again, or restore your backup")
+            pictures[path] = picture_of(path, entry.get("palette") or palette)
+        return pictures[path]
 
     sprites = []
     for entry in entries:
+        image, pixels, colours, border, where = picture_for(entry)
         width, height = entry["width"], entry["height"]
         box = entry
         if (box["x"] < 1 or box["y"] < 1 or box["x"] + width * 8 + 1 > image.width
                 or box["y"] + height + 1 > image.height):
-            raise SystemExit(f"{entry['name']} and its frame run off {sheet.name}, "
+            raise SystemExit(f"{entry['name']} and its frame run off {where.name}, "
                              f"which is {image.width}x{image.height}")
-        frame_check(entry, pixels, border, sheet)
+        frame_check(entry, pixels, border, where)
+        # The game's own sheet came out of the game and fits its engine. One
+        # converted from elsewhere can hold anything, and only what a graphic
+        # names gets this far -- so this is where one too big to draw stops.
+        if entry.get("picture") and not (
+                NARROWEST_BYTES <= width <= WIDEST_BYTES and 1 <= height <= TALLEST_ROWS):
+            raise SystemExit(
+                f"{entry['name']} is {width * 8}x{height}, and the engine draws "
+                f"sprites from {NARROWEST_BYTES * 8} to {WIDEST_BYTES * 8} pixels "
+                f"wide and at most {TALLEST_ROWS} high -- cut it up on its sheet "
+                f"and name the pieces")
         mask_rows, data_rows = [], []
         for row in range(height):
             mask, data = bytearray(width), bytearray(width)

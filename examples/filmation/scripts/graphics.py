@@ -222,7 +222,7 @@ def box_of(known_sizes, entry, whose):
     return dict(box)
 
 
-def format_table(entries, sheet_leaf=SHEET):
+def format_table(entries, sheet_leaf=SHEET, sheets=None):
     """graphics.json as text: one graphic to a line, with the columns lined up.
 
     Two scripts write this file -- sprite_sheet.py says which sprite each
@@ -238,7 +238,20 @@ def format_table(entries, sheet_leaf=SHEET):
     Written in the game's own table order, which is what `number` holds: the
     file reads down the table the way the game indexes it, however the names
     are later changed around.
+
+    `sheets` is the file's other sheets, by name, each relative to the file --
+    carried through as they are, since nothing that writes the table makes
+    them. Lightkeep's are Melkhior's Mansion's, one a category.
     """
+    head = ["{", ' "sprites": "%s",' % sheet_leaf]
+    if sheets:
+        widest = max(len(name) for name in sheets)
+        head.append(' "sheets": {')
+        for i, (name, leaf) in enumerate(sheets.items()):
+            head.append('  %-*s "%s"%s' % (widest + 3, '"%s":' % name, leaf,
+                                           "," if i < len(sheets) - 1 else ""))
+        head.append(" },")
+
     rows = []
     for name in sorted(entries, key=lambda k: entries[k]["number"]):
         said = entries[name]
@@ -257,10 +270,14 @@ def format_table(entries, sheet_leaf=SHEET):
         if mirrored:
             cells.append('"mirrored": { "x": %d, "y": %d }'
                          % (mirrored["x"], mirrored["y"]))
+        # The game's code knows this graphic by its number, so the graphic
+        # map will not move it to another.
+        if said.get("fixed"):
+            cells.append('"fixed": true')
         rows.append((name, cells))
 
     if not rows:
-        return '{\n "sprites": "%s",\n "graphics": {\n }\n}\n' % sheet_leaf
+        return "\n".join(head + [' "graphics": {', " }", "}"]) + "\n"
 
     def column(prefix):
         return max((len(c) for _, cells in rows for c in cells[:3]
@@ -268,7 +285,7 @@ def format_table(entries, sheet_leaf=SHEET):
 
     name_width = max(len(n) for n, _ in rows)
     widths = {'"sprite"': column('"sprite"'), '"size"': column('"size"')}
-    lines = ["{", ' "sprites": "%s",' % sheet_leaf, ' "graphics": {']
+    lines = head + [' "graphics": {']
     for i, (name, cells) in enumerate(rows):
         # Only the leading fields are padded into columns. The nudge trails off
         # the end, where lining it up would cost more spaces than it repays.
@@ -339,7 +356,8 @@ def fold_sizes(game_dir, atlas):
         if known.get(name) is not None and name in entries:
             entries[name]["size"] = {"u": box[0], "v": box[1], "z": box[2]}
     layout.metadata(game_dir).joinpath(TABLE).write_text(
-        format_table(entries, table.get("sprites", SHEET)), encoding="utf-8")
+        format_table(entries, table.get("sprites", SHEET), table.get("sheets")),
+        encoding="utf-8")
 
     kept = []
     for _group, template, _at, entry in castle.placements(atlas):

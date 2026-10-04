@@ -315,7 +315,13 @@ def _block(said, depth):
     keys = list(said)
     for i, key in enumerate(keys):
         comma = "," if i < len(keys) - 1 else ""
-        if isinstance(said[key], dict):
+        value = said[key]
+        if (depth >= 2 and isinstance(value, dict)
+                and not any(isinstance(v, dict) for v in value.values())):
+            # Two deep and nothing nested -- a template's entry in
+            # meta.movers -- goes on one line, as room_model.js's block does.
+            lines.append('%s "%s": %s%s' % (pad, key, _flat(value), comma))
+        elif isinstance(value, dict):
             lines.append('%s "%s": %s%s'
                          % (pad, key, _block(said[key], depth + 1), comma))
         else:

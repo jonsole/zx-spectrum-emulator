@@ -171,11 +171,9 @@ player_step:        ld      ix,player
                     ; whether the step took him right out.
                     call    character_door_find
 
-                    ; Picking up and putting down come first, as the game
-                    ; has them. Everything below reads what input_read left,
-                    ; so it is read once, here, whatever is steering.
+                    ; Everything below reads what input_read left, so it is
+                    ; read once, here, whatever is steering.
                     call    input_read
-                    call    special_keys
                     ld      ix,player
 
                     ; The jump key first, because gravity asks about it in the

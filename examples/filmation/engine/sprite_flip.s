@@ -19,10 +19,10 @@
 ; runs until the far pointer drops below the near one instead, and the first
 ; reversed byte waits in A' while the second is read -- 8 T against 21 for a
 ; PUSH and POP, four times a column. objects_draw_all holds the x overlap in A'
-; across sprite_orient, which calls this, so the caller's A' goes on the stack
+; across its orientation check, which calls this, so the caller's A' goes on the stack
 ; for the length of the flip and comes back at the end. The row count is kept
 ; in IYL for the same reason there is no register for it, and IY is saved
-; around the flip too: the draw loop holds its next object there.
+; around the flip too, for whoever calls it.
 ;
 ; Row order is untouched: a horizontal mirror does not care which way up the
 ; rows are stored, which is why nothing here has to know that sprite_source.py

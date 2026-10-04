@@ -43,14 +43,165 @@ starts.
 | 0a | the fork: Knight Lore 128K's game and data, building byte for byte as it | done |
 | 0b | what Fairlight has no use for taken out of the code: the werewolf, the forty days and the sun and moon, the cauldron's quest, and Pentagram's bolt and what falls from the sky | done |
 | 0c | Pentagram's creatures, rooms and art taken out, and the werewolf's, the transformation's and the sun window's art | done |
-| 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | |
+| 0d | the collectables and the wizard taken out: the charms, picking up and putting down, the carried objects in the corner, the extra life, and the wizard who walked room $88 | done |
+| 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | done |
 | 2 | rooms that remember where things were left | |
+| 2b | up and down: holes in the floor to drop through, and ways up to the room above | |
 | 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, drop, use, and keys 1-5 for the slot | |
-| 4 | pushing by weight | |
+| 4 | pushing by weight | begun: see [What moves, and how heavy it is](#what-moves-and-how-heavy-it-is) |
 | 5 | keys and locked doors | |
 | 6 | LIFE, food and drink | |
-| 7 | the sword, and guards that patrol and then chase | |
+| 7 | the weapon, and soldiers who patrol, see the knight and come for him | |
 | 8 | the castle and the quest | |
+
+### The plan for stages 2 to 8
+
+Fairlight's numbers, where a stage copies them, are from its notes; a turn
+here is one of Fairlight's passes.
+
+**2. Rooms that remember.** Knight Lore keeps no memory of a room: it is
+built afresh from shared templates and packed positions each time, into a
+pool that the next room empties. Fairlight keeps one table of everything that
+can move, and so will Lightkeep: an entry for each thing -- the room it is in,
+its template, U, V, Z, a state, and for a helmet when it stands up again
+(eight bytes, so a thing's number is a shift) -- with the room $FE while it is
+carried or once it is used up. A thing is anything that can be moved: pushed,
+carried, or both. Wherever it was left is where it is when the room is
+entered again. The soldiers are in the table too, from this stage on: one
+entry for the two records he is drawn with, saved as he was left, where he
+stood and which way he was walking, so a room never puts him back at the
+start. What moves by itself and is neither a soldier nor a thing -- the
+balls, the fires, the spiked balls -- starts again each time the room is
+entered, as it does now. Scenery stays as it is. `rooms_source.py`
+takes whatever a room places that is a thing out of the room's own record and
+into the table, and the room designer places things at a position rather than
+a packed grid byte. The table is read when a room is built and written back
+when the knight leaves, and nowhere else, so it can live in a bank of its own,
+3 or 7, with the starting copy beside it for a new game. The pool grows by a
+few slots, for things dropped in the fullest room; with none left, a drop is
+refused. Checked by pushing room 10's table, leaving by each door and coming
+back to it where it was left, and finding it home again after a new game.
+
+**2b. Up and down.** The new castle (stage 8) is built in storeys, and
+the knight can drop through the floor into the room below or climb up into
+the one above. Fairlight has twelve holes of this kind; Knight Lore has none,
+since every way out of its rooms is a doorway in a wall.
+
+The floor is not an object. It is one height per room, `room_floor_z`, which
+the engine stops every fall at and which Lightkeep's own `room_shape` sets.
+So a hole needs no engine change: a room with one has its floor set lower,
+and the floor the knight walks on is invisible `solid` boxes at the usual
+height -- four round a square hole -- in the background, as the raised
+section's is. He walks off their edge, falls, and once he is far enough
+below the floor `player_exit` takes him to the room below, arriving at the
+same U and V near its top and still falling. The way up mirrors it: stairs
+or a ledge that reach the top of the room under an opening, and climbing past
+the top inside it arrives in the room above, standing beside its hole. A room
+names where its hole leads and where its opening leads, `down` and `up`,
+next to its doorways' destinations, and the two exits join `room_door_to`.
+The hole and the opening are templates, like the doorways, so the room
+designer places them; the hole's art is a background piece. The way up is
+always stairs or a ledge, never a jump or a ladder.
+
+Things fall through too. A thing that is dropped or pushed into a hole, and
+falls far enough below the floor, leaves the pool, and its entry in the
+stage 2 table takes the room below with the same U and V, at the top: built
+there, it falls to whatever it lands on. A helmet dropped down a hole is a
+soldier downstairs when its 30 seconds are up. A soldier who walks into a
+hole goes the same way, since he falls already (`PAIR_GRAVITY`) and is in the
+table.
+
+To find out first, before anything else of this stage: whether
+`room_floor_z` can sit lower than it does now without the projection, the
+view buffer or the movers that read it (the gate's drop, the spiked ball)
+minding; and how far below the floor the knight can be drawn before he
+leaves.
+
+**3. Carrying.** Five slots and a load limit of 7, Fairlight's. One weight
+serves both carrying and pushing, as Fairlight's does: the `weight` that
+`meta.movers` already gives, with a flag for what can be picked up. Picking
+up looks in a box 4 units ahead of the knight; a drop puts the thing down
+beside him on the side he faces, where it hops and falls, or says BLOCKED; a
+load past 7 says TOO HEAVY. Keys 1-5 choose the slot in use, and use acts on
+what is in it. The room page loads a room's own sprites only, so everything
+that can be carried has to be resident: it can turn up in any room. Things
+that are only pushed never leave their room -- a doorway stops everything but
+the knight -- and stay loaded room by room. The panel's bottom-left corner,
+where the charms were, shows the thing in the slot in use and the slot's
+number, and one message line says BLOCKED, TOO HEAVY or LOCKED.
+
+**4. Pushing by weight.** Mostly there. To do: chains (a pushed thing
+pushing the next), pushed things kept where they stop (stage 2), and movers
+that take steps as steps.
+
+**5. Keys and locked doors.** A doorway in `rooms.json` can name a key, a
+thing. The knight goes through only with that key in the slot in use, and
+the key is not used up; without it, LOCKED. Arriving where a thing already
+stands, BLOCKED. Whether a locked doorway looks different -- a gate from
+Melkhior's doors sheet -- is for then.
+
+**6. LIFE, food and drink.** LIFE is two decimal digits, 99 at the start, in
+the empty middle of the panel. A hurtful touch costs 10 and the thing that
+touched vanishes; a soldier touching the knight drains it 1 a turn; a fall of
+more than 40 units costs 1 a turn past that; a pit floor costs all of it. Food
+gives 10 back, up to 99, and drink fills it. What `BEHAVIOUR_DEADLY` means in
+`movers.s` changes with it, since a touch no longer kills outright. LIFE at 00
+ends the game, as in Fairlight: Knight Lore's lives go, and the head and
+count beside them on the panel with them.
+
+**7. The weapon and the soldiers.** The soldiers are Knight Lore's guards to
+look at -- two records, torso and legs, walking as one -- but they behave as
+neither game's. A soldier patrols, along a line or round a square as the
+guards do now, until he sees the knight: within 30 units in any direction,
+Fairlight's rule. Then he walks towards him, aiming along one axis at a time
+as Fairlight's chasers do, and goes back to patrolling once he has lost him.
+The weapon is a thing lying in the castle; carried in any slot, it lets the
+fire key shoot a bolt, as often as the knight likes. The bolt is Knight Lore
+128K's, which 0b took out -- `player_fire` and `mover_bolt` -- with its pool
+slots and its art resident again. A soldier the bolt hits leaves only his
+helmet, which falls to the floor and is a thing like any other from then on,
+to push or carry: a new graphic cut from the guard's own. The hit turns the
+soldier's entry in the stage 2 table into the helmet's, and 30 seconds later
+the helmet stands up as a soldier again, wherever it has been taken -- so a
+helmet carried into another room and dropped there is a soldier patrolling
+that room later. The 30 seconds pass whether or not the knight is in the
+helmet's room, but not while he carries it. One that has no room to stand
+waits until it has. Since a soldier can then be in any room, his sprites and
+the helmet's are resident, like everything carried.
+
+Nothing ticks every helmet every turn. A clock counts seconds -- sixteen bits
+of them, eighteen hours before it wraps -- and a helmet lying in a room keeps
+the second it is due to stand up. Picking it up turns that into the seconds
+it has left, and putting it down turns them back into a due second, so time
+carried does not count. A room being built stands up the helmets in it that
+are due, and while the knight is in a room only its own helmets, a few at
+most, are looked at.
+
+**8. The castle and the quest.** A new map, not Knight Lore's: its rooms are
+drawn with Knight Lore's art, Melkhior's and some of Pentagram's. Knight
+Lore's 129 rooms stay until then as the place every stage before this one is
+tried in. Pentagram's art came out in 0c, but its sheet is still in
+`../pentagram/art/`, and stage 1's `"sheets"` in `graphics.json` can list it
+beside Melkhior's six, so that only the sprites a graphic names are built in
+-- whether its description reads as a sheet's does is still to check. Then
+the thing that ends the quest and the room it is taken to, and Fairlight's
+set pieces where they fit: the book and the wraith, the ghost that steals,
+the freeze, the teleport and the decoys. The title, the end screen and a
+release.
+
+Between stages, the tools: the room designer and the templates editor drawing
+Melkhior's graphics, the room designer placing things and setting a doorway's
+key, and Z80 tests for carrying, LIFE and the soldiers worked out from
+Fairlight's numbers.
+
+**Not decided yet:**
+
+- whether a push keeps Lightkeep's rule (it slows by the weight, and 3 holds)
+  or takes Fairlight's (the knight pushes up to 7, and the thing coasts on for
+  the difference and 6 turns) -- for stage 4, best settled by trying both on
+  room 10's table;
+- the keys for drop, use and slots 1-5 beside an Interface II joystick, for
+  stage 3.
 
 ### What stage 0b took out
 
@@ -116,23 +267,230 @@ address in bank 6. The Z80 tests pass (lightkeep's movers_tests 69: the
 Pentagram ones gone, the fire's pacer hooks kept), and so do the designer's
 and the schema tests.
 
-### How Melkhior's art comes in (stage 1, decided)
+### What stage 0d took out
 
-- **Seven sheets.** Knight Lore's `sprites.png`, committed as it is now, and
-  one sheet per category of Melkhior's own viewer: Objects, Furniture, Doors,
-  Characters, Walls and Floors. Each holds the whole category, in 1-bit.
-- **Names are Melkhior's.** A sprite is its image and frame,
-  `furniture:GrandfatherClock.2` or `objects:KeyCyan.0`, so the name on the
-  "Melkhior in Mono" page is the name in the build. A plain name still means
-  the main sheet.
-- **`graphics.json` is the only selection.** A sprite costs a graphic number
-  and room-page space only once a graphic names it, as an unused Knight Lore
-  sprite costs nothing now. A small committed file holds per-sprite
-  conversion settings (dithered, tiled, a threshold), and no pixels.
-- **Converted once, then yours.** The converter writes each category's sheet
-  into `melkhior/`, gitignored, from `~/Downloads/MelkhiorsMansion`. After
-  that it is a file to retouch by hand, and the build reads it; converting
-  again is a deliberate command that warns before it overwrites. It is never
-  committed, so it has no backup but the one you keep.
-- **The graphic-map editor learns several sheets** in the same stage, so the
-  Melkhior sheets can be browsed and numbered there.
+- **The collectables.** `special.s` and `pickup.s` are gone, and with them
+  the thirty-two charms dealt out at the start of a game, the two slots a room
+  kept for them in the object pool, the pick-up key's handling, the three
+  carried objects drawn in the bottom-left corner, and the extra life that was
+  taken by touching it. `specials.json`, `specials_source.py` and the
+  `specials_gen.s` it wrote go too, and `MOVE_SPECIAL` with them: nineteen
+  behaviours. The pick-up key is still read into `input_now`, for stage 3.
+  `attr_fill`, which the panel colours with, moved from `pickup.s` to
+  `panel.s`.
+- **The wizard.** His template comes out of room $88, which keeps its arches,
+  its blocks and the pot, and `room_scenery_move` no longer sets him walking
+  a guard's square.
+- **Their art.** The seven collectables and the wizard's two frames come off
+  the sheet (912 rows to 817), and 25 graphic numbers with them: the
+  collectables lying in a room (96-102), in flight (104-110) and in the
+  wanted list (168-174), the extra life at 103 and 175, and the wizard's 158
+  and 159. The panel's head by the lives, graphic 140, is the same bitmap and
+  stays.
+- **The spiked balls** in an even room were held up until the knight picked
+  something up there. Nothing is picked up now, so they stay up until stage 3
+  gives that back.
+
+That leaves 138 graphic numbers free (0 is not one: it means an empty record):
+
+    48-53, 56-61, 64-79, 88-90, 92-110, 149, 152-159, 168-177, 182-183, 186,
+    188-245, 247-251, 253-255
+
+The code below the stack has 2,275 bytes left (2,110 at 0c), the room page
+7,524 after the fullest room (6,212), and the $6000 region 1,884.
+
+What was checked, in a 128K emulator: every one of the 129 rooms builds and
+runs a dozen turns with a read watchpoint on `sprite_missing`, and none draws
+it. With the sheet shorter, `sprite_missing` landed on an address two more
+readers use in other banks, which are stepped over with the two from 0c:
+`backdrop_clear` copying the backdrop out of bank 6, and `room_find` copying
+a room out of bank 4. In room $88 the pick-up key held for ten turns does
+nothing, and the panel is whole. The Z80 tests pass, and so do the
+designer's and the schema tests.
+
+### What stage 1 did: Melkhior's art as sheets to pick from
+
+Melkhior's Mansion's art comes in as six sprite sheets, one for each category
+of its own viewer, beside Knight Lore's `sprites.png`. They are a catalogue:
+nothing on them is in the game until a graphic number draws it.
+
+**Converting.** `scripts/melkhior_sheets.py` reads your own unpacked copy of
+the game -- `~/Downloads/MelkhiorsMansion` unless `--from` says otherwise, the
+viewer's `data.json` for each type's frames and `out/Graphics/` for the
+pictures -- and writes, for each category:
+
+| | |
+|---|---|
+| `art/melkhior/<category>.png` | the sheet: gitignored, and yours to retouch |
+| `metadata/melkhior/<category>.json` | where each sprite is on it: names and rectangles, no pixels, committed |
+
+```powershell
+.\.venv-win\Scripts\python.exe examples\filmation\lightkeep\scripts\melkhior_sheets.py
+```
+
+A sheet that is there already is left alone, since it may hold retouching
+that has no other copy; `--force` converts it again over the top, and naming
+categories (`melkhior_sheets.py --force walls`) does only those. The same copy
+of the game gives the same rectangles every time, so a fresh tree that
+converts matches the committed descriptions. Back the pictures up yourself:
+nothing else holds them.
+
+Each sprite is one frame of one Melkhior type in 1-bit, the way the "Melkhior
+in Mono" page showed them: trimmed to its mask, Melkhior's black as paper and
+every other colour as ink. It is named by its sheet, its type and Melkhior's
+own frame number -- `objects:Bell.0`, `furniture:GrandfatherClockNE.2` -- and a
+frame that repeats an earlier one is dropped and leaves a gap in the numbers
+rather than renumbering the rest. A type that is another one mirrored
+(`Milky2` is `Milky1` facing the other way) or another's frames exactly is left
+out, and its name is written beside the one it duplicates on the sheet: the
+engine mirrors a sprite itself.
+
+| Sheet | Types | Sprites | Too big for one sprite |
+|---|---|---|---|
+| objects | 65 | 298 | 4 |
+| furniture | 49 | 283 | 57 |
+| doors | 18 | 92 | 12 |
+| characters | 24 | 972 | 13 |
+| walls | 75 | 341 | 161 |
+| floors | 31 | 276 | 164 |
+
+"Too big" is wider than 40 pixels or taller than 64, which the engine does not
+draw as one sprite. Those are on the sheets whole, to be seen and cut up.
+
+**Choosing.** `metadata/graphics.json` lists the six under `"sheets"`, and
+that is the only selection. Open it in the graphic-map editor, pick an unused
+number -- Lightkeep's free ones are the list above -- choose a sheet from the
+list over the picker, and click a sprite. That adds a graphic named after the
+sprite, `objects.Bell.0`, drawing `objects:Bell.0`; the build gives it a
+`GFX_OBJECTS_BELL_0` label and a place in the sprite library, loaded only by
+the rooms that place it. A frame too big for one sprite has a dashed border in
+the picker, and the build stops on one a graphic names.
+
+**Building.** `examples/filmation/scripts/sheet.py` reads every sprite on the
+game's own sheet and, from the other sheets, only the ones a graphic names --
+so a sheet's picture is needed only once something on it is used, and a tree
+without Melkhior's Mansion still builds while nothing is. With the sheets
+listed and no Melkhior graphic yet, Lightkeep builds byte for byte as before,
+and so do the other three games. A trial with two (a bell and a mushroom on
+48 and 49) put both in the library; a frame too big, a sprite a sheet has not
+got, a sheet `graphics.json` does not list and a missing picture each stop the
+build and say which.
+
+**Not done yet:**
+
+- The room designer and the templates editor draw from Knight Lore's sheet
+  only, so a Melkhior graphic placed in a room is built but not drawn there.
+- A new graphic has no box (`size`) and no nudge: they are set by hand in
+  `graphics.json`, as before.
+- Cutting a big frame into pieces is by hand, on its sheet. There are no
+  per-sprite conversion settings (a dither, a threshold, tiling) yet: the one
+  rule above converts everything.
+
+### Melkhior's doorways
+
+Six doorway templates are made from Melkhior's castle doors, one for each
+wall and Knight Lore's two raised ones: `scenery_melkhior_door_n`, `_e`, `_s`
+and `_w`, and `scenery_melkhior_high_door_e` and `_s`, 48 up for a walkway.
+Each is listed in `meta.doorways`, so the room builder takes it for a way
+through, as it does an arch. Room $88 uses the four plain ones in place of its
+arches, which is where they were tried; every other room still has Knight
+Lore's.
+
+A doorway is Melkhior's own three pieces, as its viewer builds one: a post
+(`doors:DoorSide1.0`), a second post, shaded, 13 Melkhior units along it
+(`doors:DoorSide1.1`), and the lintel over both, 27 up (`doors:DoorTop1.0`).
+They are graphics 200, 201 and 202, each with its box and with a nudge for each
+way round. (Lightkeep is built for 512 graphic numbers -- see the Filmation
+README -- and had them at 258-260 first, the first in the upper half; none are
+there now.) The north and south walls draw them mirrored, as Melkhior flips
+them for its NE and SW walls. The lintel is passable; the posts are not.
+
+`scripts/melkhior_doors.py` works all of that out from your copy of the game
+and writes the graphics into `graphics.json` and the templates into
+`templates.json`; running it again writes the same files. It takes each
+piece's box and hot spot from the viewer's `data.json`, and where the doors
+sheet trimmed each frame from Melkhior's own picture, and places them through
+the projection melkhior128 used, which is pixel for pixel. In a room 64
+Melkhior units square that projection puts the posts exactly where Knight
+Lore's arch leaves are -- 115 and 141 along the wall, 196 out in the north and
+east -- so the doorway is measured the same; in the south and west they stand
+at 60, where Knight Lore's leaves are at 59.
+
+Lightkeep now draws from the doors sheet, so building it needs
+`art/melkhior/doors.png`: convert it once with `scripts/melkhior_sheets.py`.
+
+Checked in a 128K emulator: in room $88 the knight came in by each of the four
+doorways and, turned round, walked out by it into the room it leads to --
+152, 137, 120 and 135.
+
+Not done: the coloured gates that lock a doorway (stage 5), the caverns
+doorway (the same posts' other two frames and the other lintel), the threshold
+and Melkhior's main door.
+
+### Stairs and ledges
+
+Fairlight has raised floors -- a ledge along a wall with a door on it -- and
+staircases up to them, both built from artwork with invisible boxes under it.
+Lightkeep builds them the same way:
+
+- **The knight walks up steps.** `lightkeep.s` defines `CHARACTER_STEP_UP` as
+  6, the engine's build option for stairs (see `../engine/README.md`): anything
+  solid no more than 6 units above his feet he climbs, two units a turn, while
+  he keeps walking at it. A 4-unit tread takes him two turns. Anything higher
+  is still a wall, or a jump.
+- **An invisible box.** Graphic 203, `solid`, draws a sprite 16 pixels wide,
+  1 row high and every pixel clear (`solid.box`, top left of the sheet). A
+  template places it with its own `sizeU`, `sizeV` and `sizeZ`, so one graphic
+  makes a box of any size. Put it in a template listed under
+  `meta.background`: background pieces are never depth-sorted, and something
+  that draws nothing has no business in the sort. The room designer draws
+  nothing for it yet.
+- **A raised rear section.** `scenery_raised_w` raises the floor along the
+  west wall, U 64 to 96, the whole length of the wall: one invisible `solid`
+  box 36 high, so its top is at 164 -- object level 3, where a guard placed on
+  it stands -- with castle wall stones along its front face at U 96. The box is background, never
+  sorted. Nothing stands on its front edge, so a guard pacing there walks off
+  and falls to the floor, legs and all, gathering speed as the knight does --
+  `lightkeep.s` defines `PAIR_GRAVITY`, the engine's option for it.
+- **A test room.** Room 106 has the raised section, a guard on it, and
+  `scenery_test_stairs` up to it: five bridge decks along U at V 100, each
+  6 units above the last -- the knight's step -- from 134 to 158. The decks
+  are a stand-in for stair artwork.
+
+Height matters for anything placed on it: an object stands at a level, 128,
+140, 152 or 164, so a raised floor anything is to stand on is 12, 24 or 36
+high. One 47 high left the guard placed at 164 eleven units inside it,
+overlapping it on every axis, and he could not move at all.
+
+Checked in a 128K emulator, in room 106: with a rail along the front edge
+the guard paced along the top from U 71 to 88, his torso and legs both at 164;
+the knight walked up the treads 128, 134, 140, 146, 152, 158 and onto the
+section at 164. The rail is gone again, so the guard now walks off the edge.
+
+### What moves, and how heavy it is
+
+Which object templates move, and how, is `templates.json`'s `meta.movers`, not
+code: template name to a behaviour -- a MOVE_ name of `movers.s` -- and a
+weight. The templates editor sets both, and `scripts/rooms_source.py` writes
+the game's `mover_of` table from them into `generated/room_data.s`. A template
+not listed stands still.
+
+`lightkeep.s` defines `LOOSE_WEIGHT`, the engine's option that makes a push
+lose the weight of what it pushes. Something a push moves weighs 1 or more,
+and the build refuses one that does not. Pushed by the knight, who walks 3 a
+turn, 1 moves a table 2 a turn, 2 moves it 1, and 3 or more holds it. Weight
+0 is gone: a push of the knight's whole step left a gap he spent a turn
+closing, and the table lurched 3 every other turn, slower than at weight 1.
+The movable block, the table and the chest weigh 1.
+
+`movers.s` gives each behaviour a number, and gives the names that mark a band
+-- `MOVE_CRUSHING`, `MOVE_HARMLESS`, `MOVE_LOOSE`, `MOVE_MONSTER_LAST` -- the
+behaviour they mark by name, which is how the editor tells the two apart. The
+`MOVE_STATE` bit that was `MOVE_RISING` is `STATE_RISING`.
+
+Checked in a 128K emulator, pushing room 10's table: at weight 1 it moved 2
+every turn, at 3 not at all; at what was weight 0, 3, 0, 3, 0.
+
+Not done: ledge and stair artwork, a wireframe for invisible pieces in the room
+designer (the templates editor has one), and steps for anything but the knight's own walk. The movers still
+treat every step as a wall.

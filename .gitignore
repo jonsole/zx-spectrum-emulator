@@ -115,6 +115,10 @@ examples/filmation/*/output/
 examples/filmation/*/generated/
 examples/filmation/*/extracted/
 examples/filmation/output/
+# Lightkeep's Melkhior's Mansion sheets: converted once from your own copy by
+# scripts/melkhior_sheets.py, and retouched by hand after that, so they are
+# yours to back up. Their rectangles, in metadata/melkhior/, are carried.
+examples/filmation/lightkeep/art/melkhior/
 
 # isoblocks: everything painter/build.py and rays/build.py generate -- the
 # tables, the drawers and compiled tiles, the maps' bytes, the assembled demos

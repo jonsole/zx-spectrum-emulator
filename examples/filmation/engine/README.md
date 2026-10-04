@@ -5,6 +5,11 @@ through a small view buffer, objects kept in depth order, dirty-region redraw,
 and the collision, character and mover machinery a Filmation game is built
 from. `../knightlore/` is the game built on it.
 
+How it works -- the world and the projection, the record, sprites, the draw
+path, depth order, collision, timing and memory -- is in
+[how-it-works.md](how-it-works.md), for a Spectrum programmer. This file is
+the reference for putting a game on it.
+
 The engine is not assembled on its own. A game's top-level file (here
 `../knightlore/knightlore.s`) includes these files, lays out memory, and supplies the few
 names listed under [What the game supplies](#what-the-game-supplies). Every
@@ -17,7 +22,7 @@ an `EQU`, so the split costs no bytes and no T-states.
 |---|---|
 | `object_struct.s` | The `OBJ` record and `ROOM_STRIDE`, the 32-byte slot every record sits in |
 | `sprite_defs.s` | Sprite header layout and the `sprite_width_class` macro |
-| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 7×512-byte `sprite_rotate_table` for sub-byte shifts. In the page's gap before the table, `sprite_orient` and `pixelAddress` |
+| `sprite.s` | The blit: `sprite_jump_table` into width-specific routines, and the 7×512-byte `sprite_rotate_table` for sub-byte shifts. In the page's gap before the table, `pixelAddress` |
 | `sprite_flip.s` | `sprite_flip_h` mirrors a sprite in place; `bit_reverse_bytes` makes its table |
 | `object.s` | Projection (`object_place`), bounds and rotation (`object_update`), the draw walk (`objects_draw_all`, which counts each blit towards the turn), and collision (`object_collide`) |
 | `depth.s` | The depth-ordered list: insert, unlink, step and relink. See [depth.md](depth.md) |
@@ -71,13 +76,22 @@ column and spelled out in full above the routine.
 | `mover_falls` | Clears its step and falls; goes wherever what it stands on goes | -- |
 | `mover_falls_noisy` | The same, with a sound every turn | `sound_falls` |
 | `mover_sinks` | Sinks a unit a turn while something stands on it | `sound_z` |
-| `mover_hopper_claim` | The same, and the first one in a room fixes the height they all bounce to | ...and `HOPPER_ABOVE` |
+| `mover_hopper` | Bounces on the spot: falls, and on landing climbs back above `hopper_top` | `hopper_top`, `HOPPER_RISE`, `hopper_frame`, `hopper_sound`, `hopper_move`, `hopper_landed` |
+| `mover_hopper_claim` | The same, but the first in a room sets the height every one bounces to, from its own Z | ...and `HOPPER_ABOVE` |
+| `mover_pacer`, `mover_pacer_u`, `mover_pacer_v` | Paces to and fro along one axis, turning at whatever stops it | `PACER_STEP`, `pacer_sound`, `pacer_frame`, `pacer_move` |
+| `mover_slide`, `mover_slide_u`, `mover_slide_v` | Slides to and fro along one axis a unit a turn, timed by the turn counter rather than remembering which way | `SLIDE_MIDDLE`, `slide_sound` |
+| `mover_lift` | Rises while the player stands on it, up to a top where it holds; sinks back when he is off | `LIFT_TOP`, `LIFT_RISE`, `LIFT_GIVES_HIM` |
+| `mover_conveyor` | Holds a step it never moves by, so whatever stands on it is carried along | `conveyor_steps` |
+| `mover_gate` | A portcullis: rises a unit a turn, waits, drops under its own weight, waits | `GATE_RISE`, `GATE_DROPS`, `gate_rising`, `gate_landed` |
+| `mover_spike_ball` | Hangs where the room put it until, one turn in `SPIKE_BALL_DICE`, it drops; one at a time | `SPIKE_BALL_DICE`, `spike_ball_held`, `spike_ball_sound` |
+| `mover_pacer_pair` | A two-record figure pacing along U, turning at whatever stops it | `PAIR_STEP`, `pair_frame` |
+| `mover_circuit_pair` | A two-record figure walking a square, each leg until that axis is stopped | `PAIR_STEP`, `pair_frame` |
 | `mover_shoved` | Takes a shove, spends it, and forgets it | `shoved_sound` |
 | `mover_shoved_on` | Takes a shove and slides on until something stops it | `shoved_sound` |
 | `mover_shoved_pile` | Takes a shove and hands it up to whatever is stacked on top; at rest it looks to itself one turn in `SHOVED_REST_EVERY` | `SHOVED_REST_EVERY` |
 | `mover_drifter` | Drifts in a straight line until something stops it, then picks again | `drift_deltas`; `drift_sound`, `drift_turn`, `drift_frame` |
 | `mover_roamer` | Roams one axis at a time, picking the other when it is stopped | `ROAM_STEP`; the monster names below |
-| `mover_scuttler` | The same on both axes at once, mirrored every other turn | `SCUTTLE_STEP`; the monster names below |
+| `mover_scuttler` | The same on both axes at once, mirrored two turns and not the next two | `SCUTTLE_STEP`; the monster names below |
 | `mover_faller`, `mover_faller4` | Falls from the sky and then roams, in two frames or four | `FALLER_STEP`; the monster names below |
 | `mover_homer` | Steers at the player on all three axes in sixteenths, bouncing off walls | `HOMER_ACC_U/V/Z`, `HOMER_PULL`, `HOMER_MOST`, `HOMER_LEAST`; the monster names below |
 | `mover_hunter` | Bounces, and on landing takes a new direction along one axis, towards the player or away | `HUNTER_RISE`, `HUNTER_STEP`; `hunter_landed`, `hunter_flees` |
@@ -183,6 +197,19 @@ goes for every other name here that is an `EQU` to an engine routine: state it
 after that routine's file. An `EQU` of a label still to come takes the previous
 pass's value, and `IFUSED` moves code about between the early passes, so
 sjasmplus warns.
+
+### Build options
+
+A game may also `DEFINE` any of these before it includes the engine. Without
+them the engine assembles exactly as it did before each was added.
+
+| Define | Used by | What it does | Who |
+|---|---|---|---|
+| `CHARACTER_SHORT_WALK` | walker.s | A character walks in four frames a facing rather than six | Pentagram |
+| `CHARACTER_MIRRORED_ART` | walker.s | A character's art faces the other way unmirrored, so the mirror bit's sense flips | Pentagram |
+| `CHARACTER_STEP_UP n` | walker.s, object.s | Stairs: a character walks up anything solid whose top is no more than `n` units above his feet, rising `CHARACTER_CLIMB` (2) a turn while he presses on, instead of having to jump it. Anything higher is still a wall or a jump. A stair is usually invisible boxes under stair artwork, as Fairlight builds them. Costs a second collision pass, only on a turn a step stopped him | Lightkeep, 6 |
+| `LOOSE_WEIGHT` | movers.s, room.s, object.s | Loose objects weigh something: the game's `mover_of` is triples, the third byte a template's weight, which `room_add` gives each record in `DATA_1`, and a push moves a loose object its step less that weight -- not at all when the weight is the whole step | Lightkeep |
+| `PAIR_GRAVITY` | mover.s, movers.s | A two-record figure -- the guards -- that walks off something falls the way a character does, two units a turn faster to `CHARACTER_FALL_MAX`, and its legs come down with its torso. Without it a pair in the air sinks a unit a turn and its legs stay put, which no game without raised floors ever shows | Lightkeep |
 
 The top-level file also provides `VIEW_BUF_WIDTH`, `VIEW_BUF_ROWS`,
 `view_buffer`, `shift_shared` and `bit_reverse_table`, as laid out above.

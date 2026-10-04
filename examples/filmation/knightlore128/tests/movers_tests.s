@@ -37,6 +37,7 @@
 
 					INCLUDE	"../../engine/object_struct.s"
 
+GRAPHIC_COUNT		EQU		256		; as the game has it: over 256 assembles the engine's bit-8 code
 REC					EQU		$C000		; the record under test; a guard's legs follow
 ROOMS				EQU		$C100		; room_objects, for movers_step
 

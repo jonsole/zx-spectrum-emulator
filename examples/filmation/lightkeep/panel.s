@@ -7,16 +7,40 @@
 ; either side of the middle; the knight's head beside the lives. Knight Lore
 ; has the word DAYS and the day's number in the middle, and the sun and moon
 ; in a window to the right; this game has no clock, and leaves both empty.
-; The pieces are ordinary graphics drawn straight onto the screen, as the
-; carried objects are, and their table is down with the room builder in
+; The pieces are ordinary graphics drawn straight onto the screen, and
+; their table is down with the room builder in
 ; panel_pieces. The lives are print_room's, which prints them every turn.
 ;
 ; The room is drawn over the same rows, so a repaint that reaches a piece wipes
 ; it: redraw_view calls panel_redraw, which puts back only the pieces the
-; region touched. Anything that redraws the carried objects draws the whole
-; panel after them, because the chain crosses the third of their places.
+; region touched.
 
 PANEL_ROW           EQU     SCREEN_ROWS - 64    ; the highest any piece reaches
+
+ATTR_FILL_ON         EQU     $11                 ; LD DE,nn: what attr_fill starts with
+
+; Fill a block of attributes -- fill_window, at $C515. While a room is being
+; drawn in the dark its first byte is a RET, so nothing is coloured in before the
+; room is: see room_build and room_paper.
+;
+; In:  A  = the attribute
+;      HL -> the top-left cell
+;      B  = columns
+;      C  = rows
+; Out: nothing
+; Corrupts: F, C, DE, HL -- nothing while it is a RET
+attr_fill:           ld      de,32
+.row:               push    bc
+                    push    hl
+.cell:              ld      (hl),a
+                    inc     hl
+                    djnz    .cell
+                    pop     hl
+                    add     hl,de
+                    pop     bc
+                    dec     c
+                    jr      nz,.row
+                    ret
 
 
 

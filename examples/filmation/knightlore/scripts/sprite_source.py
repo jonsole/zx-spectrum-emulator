@@ -21,7 +21,7 @@ the total is rounded up to a boundary either way. Emitted separately, the
 table goes where a 512 boundary already falls and the bitmaps go last, with
 nothing after them that has to be aligned.
 
-    sprite_data.s       the sprites, bottom row first, mask and data
+    sprite_data.s       the sprites, top row first, mask and data
                         interleaved, with the blank bottom rows trimmed off
     sprite_table.s      256 pointers, indexed by Knight Lore's graphic number
     sprite_adj_gen.s    the pixel nudges from graphics.json
@@ -251,6 +251,10 @@ def emit_labels(facts):
         "; The number is the game's own and cannot be chosen freely: sprite_table is",
         "; indexed by it, and some of the numbering is arithmetic -- a collectable in",
         "; flight is its own graphic plus SPECIAL_FLIGHT. The NAME is free.",
+        "",
+        "; How many graphic numbers the game has: the engine's code for a ninth",
+        "; bit -- GRAPHIC_COUNT > 256 -- is assembled only if it needs one.",
+        "GRAPHIC_COUNT            EQU     %d" % GRAPHIC_COUNT,
         "",
     ]
     for number in sorted(facts["graphics"]):

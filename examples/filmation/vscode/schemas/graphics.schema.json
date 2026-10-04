@@ -11,6 +11,17 @@
    "type": "string",
    "description": "The sheet the names below come from, relative to this file."
   },
+  "sheets": {
+   "type": "object",
+   "description": "Other sheets a sprite can come from, each by the name a sprite on it is called with, and its description relative to this file. A sprite on one is named with the sheet's name and a colon in front -- furniture:GrandfatherClockNE.2. Only the sprites a graphic names are built into the game. Lightkeep lists Melkhior's Mansion's, one a category, converted from your own copy by scripts/melkhior_sheets.py.",
+   "propertyNames": {
+    "pattern": "^[a-z][a-z0-9_]*$"
+   },
+   "additionalProperties": {
+    "type": "string",
+    "pattern": "^([A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+[.]json$"
+   }
+  },
   "graphics": {
    "type": "object",
    "description": "Keyed by the graphic's NAME, which is what rooms.json refers to it by. The name is seeded from the sprite when the table is first written and is the file's own after that -- rename a key and the castles that place it, and the GFX_* label the build generates follows. Several graphics may draw one sprite and they are NOT interchangeable: the nudge is per graphic, so two can put the same bitmap four rows apart. A graphic number is a STATE as well as a picture -- one collectable graphic is it lying in a room, another the same one in flight, another the one the bubbles ask for.",
@@ -21,13 +32,16 @@
     "type": "object",
     "properties": {
      "number": {
-      "$ref": "#/definitions/byte",
-      "description": "The graphic number the GAME knows it by: sprite_table, the nudge table and every template record are indexed by it, and parts of the numbering are arithmetic, so it cannot be chosen freely. The name is free; this is not."
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 511,
+      "not": { "enum": [256, 257] },
+      "description": "The graphic number the GAME knows it by: sprite_table, the nudge table and every template record are indexed by it, and parts of the numbering are arithmetic, so it cannot be chosen freely. The name is free; this is not. Up to 255 in a game of 256 graphic numbers, up to 511 in one of 512 (Lightkeep), where 256 and 257 are never used, as 0 and 1 are not: a template names its graphic by the low byte."
      },
      "sprite": {
       "type": "string",
-      "description": "Which sprite draws it, by the path its group tree gives it in sprites.json -- sabreman.legs.1. Absent where the number draws nothing of its own.",
-      "pattern": "^[A-Za-z0-9_]+([.][A-Za-z0-9_]+)*$"
+      "description": "Which sprite draws it, by the path its group tree gives it in sprites.json -- sabreman.legs.1 -- or, on one of the other sheets, that sheet's name and a colon first: objects:Bell.0. Absent where the number draws nothing of its own.",
+      "pattern": "^([a-z][a-z0-9_]*:)?[A-Za-z0-9_]+([.][A-Za-z0-9_]+)*$"
      },
      "size": {
       "type": "object",
@@ -61,9 +75,14 @@
      },
      "y": {
       "type": "integer",
-      "description": "Pixel nudge down. The trim taken off the sprite's blank bottom rows is already folded in.",
+      "description": "Pixel nudge UP the screen: object_place subtracts it from the row the sprite stands on. The trim taken off the sprite's blank bottom rows is already folded in.",
       "minimum": -128,
       "maximum": 127
+     },
+     "fixed": {
+      "type": "boolean",
+      "description": "The game's code knows this graphic by its NUMBER -- a mover stepping through frames by adding to it or flipping its bits, a constant, a table -- so the graphic map will not move it to another number or swap another onto it. Absent means the number is free to change: rooms refer to a graphic by its name, and the GFX_ label follows the name. Every graphic the original games came with is fixed; the scenery added since is not.",
+      "enum": [true]
      },
      "mirrored": {
       "type": "object",

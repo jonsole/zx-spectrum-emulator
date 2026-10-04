@@ -14,8 +14,8 @@
    "properties": {
     "file": {
      "type": "string",
-     "pattern": "^([.][.]/)?([A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+[.]png$",
-     "description": "The PNG, relative to this file: ../art/sprites.png from a game's metadata/, or sprites.png beside it for a game laid out flat. At most one step up, which reaches the game's folder and no further -- and the hosts refuse a path that leaves it."
+     "pattern": "^([.][.]/|[.][.]/[.][.]/art/)?([A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+[.]png$",
+     "description": "The PNG, relative to this file: ../art/sprites.png from a game's metadata/, or sprites.png beside it for a game laid out flat. At most one step up, which reaches the game's folder and no further -- except for a sheet kept a folder further down, as Lightkeep's metadata/melkhior/objects.json is, whose picture is two steps up and then in the game's art/ (../../art/melkhior/objects.png). The hosts refuse a path that leaves the game's folder."
     },
     "colours": {
      "type": "object",

@@ -39,6 +39,7 @@ input is newer:
 """
 import collections
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -151,10 +152,15 @@ def record_of(entry, scenery):
     the end instead. The flags byte here is still the GAME's; our_flags rewrites
     it below, where the whole castle is in hand to work OBJ_CACHE out.
     """
+    # A graphic over 255 goes in as its low byte, with bit 8 in bit 7 of the
+    # height, which no height comes near: room_add moves it into ADJ_Y.
+    graphic = entry["graphic"]
+    assert entry["sizeZ"] < 128, "a height of %d leaves no room for bit 8" % entry["sizeZ"]
+    size_z = entry["sizeZ"] | (0x80 if graphic > 255 else 0)
     if scenery:
-        return [entry["graphic"], entry["u"], entry["v"], entry["z"],
-                entry["sizeU"], entry["sizeV"], entry["sizeZ"], game_flags(entry)]
-    return [entry["graphic"], entry["sizeU"], entry["sizeV"], entry["sizeZ"],
+        return [graphic & 0xFF, entry["u"], entry["v"], entry["z"],
+                entry["sizeU"], entry["sizeV"], size_z, game_flags(entry)]
+    return [graphic & 0xFF, entry["sizeU"], entry["sizeV"], size_z,
             game_flags(entry), offsets_byte(entry)]
 
 
@@ -317,6 +323,36 @@ def emit_templates(out, templates, key, stride, noun, cached, only=None):
     return refs
 
 
+def loose_behaviours():
+    """The behaviours a push moves: the MOVE_ names movers.s gives a number at
+    or past BEHAVIOUR_LOOSE, followed through the names it gives other names,
+    as the templates editor's behaviours.js reads them."""
+    said = {}
+    for text in (HERE / "movers.s").read_text(encoding="utf-8").splitlines():
+        found = re.match(r"([A-Z][A-Z0-9_]*)\s+EQU\s+([^;]*?)\s*(;.*)?$", text)
+        if found:
+            said[found.group(1)] = found.group(2)
+
+    def value(name, seen=()):
+        expr = said.get(name)
+        if expr is None:
+            return None
+        if re.fullmatch(r"\d+", expr):
+            return int(expr)
+        if re.fullmatch(r"\$[0-9A-Fa-f]+", expr):
+            return int(expr[1:], 16)
+        if name in seen or not re.fullmatch(r"[A-Z][A-Z0-9_]*", expr):
+            return None
+        return value(expr, seen + (name,))
+
+    loose = value("BEHAVIOUR_LOOSE")
+    if loose is None:
+        sys.exit("movers.s says nothing of BEHAVIOUR_LOOSE, so which behaviours "
+                 "a push moves -- and so which need a weight -- is not known")
+    return {name for name in said
+            if name.startswith("MOVE_") and (value(name) or 0) >= loose}
+
+
 def main():
     if not ATLAS.is_file():
         sys.exit("%s is missing -- run rooms.py first" % ATLAS.name)
@@ -455,6 +491,45 @@ def main():
     tpl.append("")
     for index, name in enumerate(objects):
         line(out, "FG_" + bare(name).upper(), "EQU", "$%02X" % index)
+    out.append("")
+
+    # Which object templates move, and how: templates.json's meta.movers,
+    # template name to its behaviour -- a MOVE_ name of movers.s -- and its
+    # weight, which a push loses (engine/object.s, object_shove). mover_find
+    # walks it at room build; the game is built with LOOSE_WEIGHT, so every
+    # entry carries the weight.
+    #
+    # Something a push moves weighs 1 or more. Nothing weighs 0 any longer:
+    # a push of the knight's whole step left a gap he spent the next turn
+    # closing, so the lightest things lurched 3 every other turn and went
+    # slower than things that weighed 1, which go 2 every turn.
+    movers = templates_meta.get("movers") or {}
+    loose = loose_behaviours()
+    out.append("; Which object templates move: template, behaviour (movers.s) and weight")
+    out.append("; (a push moves a loose object its step less this), ended by $FF.")
+    line(out, "mover_of:", "", "")
+    for name in objects:
+        if name not in movers:
+            continue
+        said = movers[name]
+        behaviour = said.get("behaviour", "")
+        weight = said.get("weight", 0)
+        if not re.fullmatch(r"MOVE_[A-Z0-9_]+", behaviour):
+            sys.exit("templates.json gives %s the behaviour %r; a behaviour is a "
+                     "MOVE_ name of movers.s" % (name, behaviour))
+        if not isinstance(weight, int) or not 0 <= weight <= 127:
+            sys.exit("templates.json gives %s the weight %r; a weight is 1 to 127"
+                     % (name, weight))
+        if behaviour in loose and weight < 1:
+            sys.exit("templates.json gives %s, which a push moves (%s), no weight; "
+                     "something pushed weighs 1 or more" % (name, behaviour))
+        line(out, "", "DB", "FG_%s, %s, %d" % (bare(name).upper(), behaviour, weight),
+             bare(name))
+    for name in movers:
+        if name not in objects:
+            sys.exit("templates.json's meta.movers names %s, and there is no such "
+                     "object template" % name)
+    line(out, "", "DB", "$FF")
     out.append("")
     out.append("")
 

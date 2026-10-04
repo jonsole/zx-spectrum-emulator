@@ -26,8 +26,8 @@
  "rooms": [
   { "number": 0, "ink": 3, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n", "destination": 16 },
-     { "template": "scenery_arch_e", "destination": 1 },
+     { "template": "scenery_melkhior_door_n", "destination": 16 },
+     { "template": "scenery_melkhior_door_e", "destination": 1 },
      { "template": "scenery_walls_0" }
     ],
     "objects": [
@@ -1362,9 +1362,14 @@
     "scenery": [
      { "template": "scenery_arch_n", "destination": 122 },
      { "template": "scenery_arch_e", "destination": 107 },
-     { "template": "scenery_walls_0" }
+     { "template": "scenery_raised_w" },
+     { "template": "scenery_test_stairs" }
     ],
-    "objects": []
+    "objects": [
+     { "template": "object_guard_square", "positions": [
+      { "u": 0, "v": 2, "z": 3 }
+     ] }
+    ]
   },
   { "number": 107, "ink": 4, "dimensions": "narrowV",
     "scenery": [
@@ -1774,11 +1779,10 @@
   },
   { "number": 136, "ink": 6, "dimensions": "square",
     "scenery": [
-     { "template": "scenery_arch_n", "destination": 152 },
-     { "template": "scenery_arch_e", "destination": 137 },
-     { "template": "scenery_arch_s", "destination": 120 },
-     { "template": "scenery_arch_w", "destination": 135 },
-     { "template": "scenery_wizard" },
+     { "template": "scenery_melkhior_door_n", "destination": 152 },
+     { "template": "scenery_melkhior_door_e", "destination": 137 },
+     { "template": "scenery_melkhior_door_s", "destination": 120 },
+     { "template": "scenery_melkhior_door_w", "destination": 135 },
      { "template": "scenery_pot" },
      { "template": "scenery_walls_0" }
     ],

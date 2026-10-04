@@ -730,7 +730,7 @@ and V with their current ones before writing them, and calls depth_relink only
 if either differs.
 
 **The step runs before the screen position is worked out.** Nothing in depth.s
-reads the screen extents, and room_adjust, character_lift and object_place do
+reads the screen extents, and room_adjust and object_place do
 not write U, V, Z or the sizes. So callers run depth_step first and
 object_place afterwards, and the flags from the OR are still intact for its
 `ret z`.
@@ -816,7 +816,7 @@ snapped somewhere new would not be re-sorted at all.
 | mover_paint | depth_step with DU, DV and DZ, then room_adjust and object_place |
 | a guard's move | the legs: compare and write U and V, depth_relink if they changed. Then the torso: depth_step_upper with its DU, DV and DZ and HL = the legs, which re-sorts the legs again with the torso out of their way |
 | character_move_go | the legs: depth_add_step with D, E and DZ, which only moves them. Then the body: depth_step_upper with the same step and HL = the legs, which re-sorts both. Each half then goes through character_place |
-| character_place | room_adjust, character_lift and object_place |
+| character_place | room_adjust and object_place |
 | objects_draw_all | walks the list from object_list and draws |
 
 ### When something leaves

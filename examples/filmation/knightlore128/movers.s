@@ -236,7 +236,7 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
 					DW		mover_shoved		; MOVE_PUSHED: engine/movers.s
-					DW		mover_move		; MOVE_SLIDING: see mover_sliding
+					DW		mover_move		; MOVE_SLIDING: it never clears its step -- see MOVE_LOOSE
 					DW		mover_special	; MOVE_SPECIAL
 					DW		mover_shoved_pile	; MOVE_PUSHED_PILE: engine/movers.s
 					ASSERT	($ - mover_tbl) / 2 == MOVE_PUSHED_PILE - MOVE_BALL + 1

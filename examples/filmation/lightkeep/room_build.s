@@ -276,34 +276,23 @@ room_scenery:		ld		a,(room_scenery_left)
 
 ; Does this piece of scenery move?
 ;
-; Two kinds do. The portcullis that hangs in an arch in rooms $09, $CF and $F1
-; is graphic 8, which dispatches to upd_8 exactly as the gate objects do, so it
-; rises and falls on the same rules and shares their one-at-a-time count.
-;
-; And the wizard walks the same square circuit a guard does -- graphics
-; 30, 31, 158 and 159 all dispatch to upd_30_31_158_159, and the routine it
-; turns on is called move_guard_wizard_NSEW, which says as much. He is scenery
-; rather than an object only because that is where the room data puts him.
-;
-; His two pieces are eight units apart in the template, where a guard's sit on
-; top of each other. It does not matter: mover_move_pair copies the torso's U
-; and V down to the legs every turn, so they are together from his first step.
+; One kind does: the portcullis that hangs in an arch in rooms $09, $CF and
+; $F1 is graphic 8, which dispatches to upd_8 exactly as the gate objects do,
+; so it rises and falls on the same rules and shares their one-at-a-time
+; count. Knight Lore's wizard walked a guard's square as scenery too; he is
+; gone from this game.
 ;
 ; In:  C = the scenery template index
-; Out: room_behaviour = MOVE_GATE, MOVE_GUARD_SQ or 0
+; Out: room_behaviour = MOVE_GATE or 0
 ; Corrupts: AF
 room_scenery_move:	xor		a
 					ld		(room_behaviour),a
 					ld		a,c
 					sub		BG_GATE_0
 					cp		BG_GATE_3 - BG_GATE_0 + 1
+					ret		nc
 					ld		a,MOVE_GATE
-					jr		c,.moves
-					ld		a,c
-					cp		BG_WIZARD
-					ret		nz
-					ld		a,MOVE_GUARD_SQ
-.moves:				ld		(room_behaviour),a
+					ld		(room_behaviour),a
 					ret		
 
 
@@ -621,221 +610,4 @@ print_glyph:		ld		b,8
 					inc		de
 					inc		h		; the next pixel row of the same cell
 					djnz	.row
-					ret		
-
-
-; ---------------------------------------------------------------------------
-; The collectables, at the moments the room changes -- see special.s for the
-; rest of them.
-
-; Deal the collectables out, at the start of every game. init_special_objects gives
-; each row a graphic by counting on from a random number, so the kinds come
-; round in turn and every game puts them in different places.
-;
-; In:  nothing
-; Out: nothing
-; Corrupts: AF, BC, DE, HL
-special_init:		ld		hl,special_where_start		; every collectable back where it
-					ld		de,special_where		; began, and nothing carried
-					ld		bc,SPECIAL_ROWS * 4
-					ldir
-					xor		a
-					ld		(special_key_held),a
-					ld		h,a
-					ld		l,a
-					ld		(special_slots),hl
-					ld		hl,special_carried
-					ld		b,8
-.empty:				ld		(hl),a
-					inc		hl
-					djnz	.empty
-
-					ld		a,r
-					ld		e,a
-					ld		hl,special_gfx
-					ld		b,SPECIAL_ROWS
-.deal:				ld		a,e
-					and		7
-					or		SPECIAL_FIRST
-					ld		(hl),a
-					inc		hl
-					inc		e
-					djnz	.deal
 					ret
-
-
-; Write back whatever is lying in the room being left. update_special_objs.
-;
-; In:  nothing
-; Out: nothing
-; Corrupts: AF, BC, DE, HL, IX
-special_room_leave:	ld		ix,(special_slots)
-					ld		a,ixh
-					or		a
-					ret		z		; no room yet
-					ld		b,SPECIAL_SLOTS
-.slot:				ld		a,(ix+OBJ.GFX)
-					sub		SPECIAL_FIRST
-					cp		8
-					jr		nc,.next
-					ld		c,(ix+OBJ.MOVE_STATE)
-					ld		e,c
-					ld		d,0
-					ld		hl,special_gfx
-					add		hl,de
-					ld		a,(ix+OBJ.GFX)
-					ld		(hl),a
-					call	special_where_of
-					ld		a,(ix+OBJ.U)
-					ld		(hl),a
-					inc		hl
-					ld		a,(ix+OBJ.V)
-					ld		(hl),a
-					inc		hl
-					ld		a,(ix+OBJ.Z)
-					ld		(hl),a
-					inc		hl
-					ld		a,(special_room)
-					ld		(hl),a
-.next:				ld		de,ROOM_STRIDE
-					add		ix,de
-					djnz	.slot
-					ret
-
-
-; Put the room's collectables in it: the next two records after everything
-; the room data made, filled from any rows naming this room. find_special_objs_here.
-; Runs after room_show, so each one is placed, sorted and drawn here.
-;
-; In:  nothing
-; Out: nothing
-; Corrupts: everything
-special_room_enter:	ld		a,(room_shown)
-					ld		(special_room),a
-					ld		a,(room_object_count)
-					ld		l,a
-					ld		h,0
-					add		hl,hl
-					add		hl,hl
-					add		hl,hl
-					add		hl,hl
-					add		hl,hl		; * ROOM_STRIDE
-					ld		de,room_objects
-					add		hl,de
-					ld		(special_slots),hl
-					push	hl
-					pop		ix
-					ld		b,SPECIAL_SLOTS
-.blank:				call	object_blank
-					ld		(ix+OBJ.BUF_L),0
-					ld		(ix+OBJ.BUF_H),0
-					ld		(ix+OBJ.NEXT),0		; not in the list, which the
-					ld		(ix+OBJ.NEXT+1),0	; twin scan does not ask but a
-					ld		de,ROOM_STRIDE		; reader of the pool might
-					add		ix,de
-					djnz	.blank
-					ld		a,(room_object_count)
-					add		a,SPECIAL_SLOTS
-					ld		(room_object_count),a
-
-					ld		ix,(special_slots)
-					ld		c,0
-.row:				ld		hl,special_gfx
-					ld		b,0
-					add		hl,bc
-					ld		a,(hl)
-					or		a
-					jr		z,.next
-					push	af		; the graphic
-					call	special_where_of
-					inc		hl
-					inc		hl
-					inc		hl
-					ld		a,(room_shown)
-					cp		(hl)
-					jr		z,.here
-					pop		af
-					jr		.next
-.here:				dec		hl
-					dec		hl
-					dec		hl
-					pop		af
-					push	bc
-					push	ix
-					ld		b,MOVE_SPECIAL
-					call	special_fill
-					pop		ix
-					pop		bc
-					ld		de,ROOM_STRIDE
-					add		ix,de
-					ld		a,ixl
-					ld		hl,(special_slots)
-					sub		l
-					cp		ROOM_STRIDE * SPECIAL_SLOTS
-					jr		z,.shown		; both slots taken
-.next:				inc		c
-					ld		a,c
-					cp		SPECIAL_ROWS
-					jr		c,.row
-.shown:				ret		; start draws them, and the panel, once the room is lit
-
-
-; Where a row says its collectable is.
-;
-; In:  C  = the row
-; Out: HL -> its U, V, Z and room
-; Corrupts: AF, DE
-special_where_of:	ld		a,c
-					add		a,a
-					add		a,a
-					ld		e,a
-					ld		d,0
-					ld		hl,special_where
-					add		hl,de
-					ret
-
-
-; Fill a collectable slot and put it in the room.
-;
-; In:  IX -> the slot
-;      A  = the graphic
-;      B  = its behaviour
-;      C  = its table row
-;      HL -> U, V and Z
-; Out: nothing
-; Corrupts: everything, IX included
-special_fill:		ld		(ix+OBJ.GFX),a
-					ld		(ix+OBJ.BEHAVIOUR),b
-					ld		(ix+OBJ.MOVE_STATE),c
-					ld		a,(hl)
-					ld		(ix+OBJ.U),a
-					inc		hl
-					ld		a,(hl)
-					ld		(ix+OBJ.V),a
-					inc		hl
-					ld		a,(hl)
-					ld		(ix+OBJ.Z),a
-					ld		(ix+OBJ.SIZE_U),SPECIAL_SIZE_UV
-					ld		(ix+OBJ.SIZE_V),SPECIAL_SIZE_UV
-					ld		(ix+OBJ.SIZE_Z),SPECIAL_SIZE_Z
-					xor		a
-					ld		(ix+OBJ.FLAGS),a
-					ld		(ix+OBJ.DU),a
-					ld		(ix+OBJ.DV),a
-					ld		(ix+OBJ.DZ),a
-
-					; One buffer for the life of the room, sized for the largest thing
-					; a slot can show -- every one of them is three bytes by 24 rows at
-					; most -- because a slot changes graphic and object_update would
-					; size one for whatever it happened to be carrying first. If the
-					; arena cannot spare it, rotate at draw time rather than risk a
-					; buffer too small.
-					ld		a,(ix+OBJ.BUF_H)
-					or		a
-					jr		nz,.buffered
-					ld		hl,sprite_collectable_6
-					call	shift_alloc		; OBJ_SHARED_SHIFT if there is none
-.buffered:			call	room_adjust
-					call	object_place
-					call	depth_insert
-					jp		redraw_object

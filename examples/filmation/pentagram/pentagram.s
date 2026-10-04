@@ -238,10 +238,10 @@ room_objects:
                     ALIGN   32
                     object_record   0,      0,              0, 0, 0
                 ENDR
-                    ; object_record lays down only the first twenty bytes of a
+                    ; object_record lays down only the first OBJ_RECORD_LAID bytes of a
                     ; record; the ALIGN in front of the next one gives it the
                     ; rest. The last one has no next one, so it needs this or
-                    ; its final twelve bytes are whatever follows the pool.
+                    ; its final bytes are whatever follows the pool.
                     ALIGN   32
                     ASSERT  $ == room_objects + POOL_SLOTS * ROOM_STRIDE
 
