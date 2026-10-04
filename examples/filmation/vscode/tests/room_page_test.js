@@ -20,6 +20,9 @@ const path = require('path');
 const vm = require('vm');
 const m = require('../room_model');
 const layout = require('../game_layout');
+const sheetFiles = require('../sheet_files');
+const sheetModel = require('../sheet_model');
+const render = require('../room_render');
 
 const EXT = path.join(__dirname, '..');
 const GAMES = ['knightlore', 'pentagram', 'knightlore128'];
@@ -89,13 +92,22 @@ function bootFor(game, room) {
     return file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   };
   const png = layout.within(here, named.sheet) || '';
+  const dataUri = (file) => fs.existsSync(file)
+    ? 'data:image/png;base64,' + fs.readFileSync(file).toString('base64') : null;
+  const graphics = read(named.graphics);
+  // The other sheets graphics.json lists, found as the host finds them.
+  const { others, otherPngs } = graphics
+    ? sheetFiles.otherSheets(graphics, path.dirname(layout.within(here, named.graphics)), dataUri)
+    : { others: {}, otherPngs: {} };
   return {
     atlas: JSON.parse(text),
     // The templates the rooms place, which are a file of their own.
     templates: read('templates.json'),
     eol: text.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
     sheet: read(named.atlas),
-    graphics: read(named.graphics),
+    graphics: graphics,
+    others: others,
+    otherPngs: otherPngs,
     // The artwork, as the host sends it: a webview cannot read a file of its
     // own, so the picture travels with the page.
     sheetPng: fs.existsSync(png)
@@ -170,9 +182,21 @@ function fakeContext(tally) {
       if (key in target) return target[key];
       return function () {
         if (tally) tally[key] = (tally[key] || 0) + 1;
+        // A blit's source rectangle, kept so a test can see what was drawn.
+        if (tally && key === 'drawImage' && arguments.length === 9) {
+          (tally.blits = tally.blits || []).push(Array.prototype.slice.call(arguments, 1, 5));
+        }
       };
     },
-    set: (target, key, value) => { target[key] = value; return true; }
+    set: (target, key, value) => {
+      target[key] = value;
+      // The colours lines are drawn in, so a test can see the guides.
+      if (tally && key === 'strokeStyle') {
+        tally.colours = tally.colours || {};
+        tally.colours[value] = (tally.colours[value] || 0) + 1;
+      }
+      return true;
+    }
   });
 }
 
@@ -471,6 +495,22 @@ for (const game of GAMES) {
   });
 }
 
+test('lightkeep: a room built with Melkhior doorways draws them from the doors sheet', () => {
+  // Room $88 places the four plain ones; every piece of them is on the doors
+  // sheet, which a designer that knew only the game's own sheet left out.
+  const boot = bootFor('lightkeep', 0x88);
+  if (!boot.sheetPng || !boot.otherPngs.doors) {
+    skip('lightkeep/art/melkhior/doors.png has not been converted here');
+  }
+  const doors = sheetModel.spriteList(boot.others.doors, 'doors');
+  const lintel = doors.find((s) => s.name === 'doors:DoorTop1.0');
+  const drewLintel = (dom) => (dom.painted.blits || []).some((b) =>
+    b[0] === lintel.x && b[1] === lintel.y && b[2] === lintel.w && b[3] === lintel.h);
+  assert.ok(drewLintel(open(boot).dom), 'the lintel was not drawn');
+  boot.otherPngs = {};
+  assert.ok(!drewLintel(open(boot).dom), 'drawn without its sheet: the test sees nothing');
+});
+
 // --- a castle joined by a table -------------------------------------------
 
 // knightlore128 says its rules in its meta: its exits are a table, so its
@@ -715,6 +755,16 @@ test('selecting an object points the Place picker at its template', () => {
   // ...and it stays on it once the selection has gone.
   listenerOn(page.dom, nodesIn(page.dom.byId.grid).find((n) => n.textContent === '01'), 'click')();
   assert.strictEqual(placer().value, group[index].template);
+});
+
+test('a selected object gets the amber guides on the floor, as in the templates editor', () => {
+  const page = open(bootFor('knightlore', 0));
+  const guides = () => ((page.dom.painted.colours || {})[render.GUIDE_COLOUR] || 0);
+  const before = guides();
+  const spots = nodesIn(page.dom.byId.panel).filter((n) => /\bspot\b/.test(n.className));
+  assert.ok(spots.length, 'room $00 has objects to select');
+  listenerOn(page.dom, spots[0], 'click')();
+  assert.ok(guides() > before, 'the guides are drawn once something is selected');
 });
 
 test('the Shapes tab edits, adds and deletes the castle’s floor shapes', () => {

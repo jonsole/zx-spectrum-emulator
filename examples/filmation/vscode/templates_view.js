@@ -27,6 +27,8 @@ const crypto = require('crypto');
 const model = require('./room_model');
 const layout = require('./game_layout');
 const { codeReferences } = require('./template_refs');
+const { behavioursOf } = require('./behaviours');
+const sheetFiles = require('./sheet_files');
 
 const VIEW_TYPE = 'filmation.roomTemplates';
 
@@ -117,16 +119,26 @@ function bootFor(document) {
   const sheetFile = beside(here, named.sheet);
   const atlasFile = beside(here, named.atlas);
   const graphicsFile = beside(here, named.graphics);
+  const graphics = graphicsFile && readJsonIfThere(graphicsFile);
+  // The other sheets graphics.json lists -- Lightkeep's Melkhior ones -- so a
+  // piece drawn from one is drawn here too, and can be picked to add.
+  const { others, otherPngs } = graphics
+    ? sheetFiles.otherSheets(graphics, path.dirname(graphicsFile), imageUri)
+    : { others: {}, otherPngs: {} };
   return {
     templates: templates,
     rooms: rooms,
     eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
     roomsEol: model.eolOf(roomsText),
     sheet: atlasFile && readJsonIfThere(atlasFile),
-    graphics: graphicsFile && readJsonIfThere(graphicsFile),
+    graphics: graphics,
     sheetPng: sheetFile && imageUri(sheetFile),
+    others: others,
+    otherPngs: otherPngs,
     // The code is the game's, at the top of its folder, not in metadata/.
-    codeRefs: codeReferences(layout.gameDirOf(here))
+    codeRefs: codeReferences(layout.gameDirOf(here)),
+    // ...and so are the behaviours an object template can be given.
+    behaviours: behavioursOf(layout.gameDirOf(here))
   };
 }
 

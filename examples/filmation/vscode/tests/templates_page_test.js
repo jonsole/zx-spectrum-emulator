@@ -18,6 +18,7 @@ const path = require('path');
 const vm = require('vm');
 const m = require('../room_model');
 const layout = require('../game_layout');
+const sheetFiles = require('../sheet_files');
 
 const EXT = path.join(__dirname, '..');
 const FILMATION = path.join(EXT, '..');
@@ -64,6 +65,12 @@ function bootFor(game) {
     return file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   };
   const png = layout.within(here, named.sheet) || '';
+  const dataUri = (file) => fs.existsSync(file)
+    ? 'data:image/png;base64,' + fs.readFileSync(file).toString('base64') : null;
+  const graphics = read(named.graphics);
+  const graphicsFile = layout.within(here, named.graphics);
+  // The other sheets, found as the host finds them.
+  const { others, otherPngs } = sheetFiles.otherSheets(graphics, path.dirname(graphicsFile), dataUri);
   // What templates_view.js sends: the document, templates.json, and the
   // rooms beside it.
   return {
@@ -72,9 +79,10 @@ function bootFor(game) {
     eol: templatesText.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
     roomsEol: text.indexOf('\r\n') >= 0 ? '\r\n' : '\n',
     sheet: read(named.atlas),
-    graphics: read(named.graphics),
-    sheetPng: fs.existsSync(png)
-      ? 'data:image/png;base64,' + fs.readFileSync(png).toString('base64') : null,
+    graphics: graphics,
+    sheetPng: dataUri(png),
+    others: others,
+    otherPngs: otherPngs,
     // What templates_view.js's codeReferences finds; the page only reads it.
     codeRefs: { sceneryTemplates: {}, objectTemplates: { 8: { label: 'FG_GUARD_EW',
                                                              files: ['movers.s'] } } },
@@ -98,14 +106,27 @@ function scriptOf(html) {
 }
 
 // A DOM that records rather than renders, and a 2d context that counts.
-function fakeDom() {
+// `hooks.imageData`, given, answers getImageData -- (x, y, w, h) to an object
+// with its `data` -- which is how a test makes a sprite read as blank. Every
+// colour a stroke is drawn in is counted too, in `painted.colours`.
+function fakeDom(hooks) {
   const listeners = [];
-  const painted = {};
+  const painted = { colours: {} };
   function context() {
     return new Proxy({}, {
       get: (target, key) => (key in target ? target[key]
-        : function () { painted[key] = (painted[key] || 0) + 1; }),
-      set: (target, key, value) => { target[key] = value; return true; }
+        : function () {
+          painted[key] = (painted[key] || 0) + 1;
+          if (key === 'getImageData' && hooks && hooks.imageData) {
+            return hooks.imageData.apply(null, arguments);
+          }
+          return undefined;
+        }),
+      set: (target, key, value) => {
+        target[key] = value;
+        if (key === 'strokeStyle') painted.colours[value] = (painted.colours[value] || 0) + 1;
+        return true;
+      }
     });
   }
   function element(tag) {
@@ -137,7 +158,7 @@ function fakeDom() {
     };
     return node;
   }
-  const byId = { list: element('div'), main: element('div') };
+  const byId = { list: element('div'), main: element('div'), dialog: element('div') };
   const document = {
     createElement: element,
     createTextNode: (text) => { const n = element('#text'); n.textContent = text; return n; },
@@ -146,9 +167,10 @@ function fakeDom() {
   return { element, byId, document, listeners, painted };
 }
 
-function open(game) {
+function open(game, hooks, adjust) {
   const boot = bootFor(game);
-  const dom = fakeDom();
+  if (adjust) adjust(boot);
+  const dom = fakeDom(hooks);
   const saved = [];
   const shown = [];
   const renamed = [];
@@ -203,6 +225,15 @@ function clicksOn(dom, node) {
 // A button in the main area by its label.
 function button(dom, label) {
   return walk(dom.byId.main).find((n) => n.tagName === 'BUTTON' && n.textContent === label);
+}
+
+// The Add dialog's tiles, and its buttons by their labels.
+function tiles(dom) {
+  return walk(dom.byId.dialog).filter((n) => n._classes && n._classes.has('tile'));
+}
+
+function dialogButton(dom, label) {
+  return walk(dom.byId.dialog).find((n) => n.tagName === 'BUTTON' && n.textContent === label);
 }
 
 // The list rows, which are what picks a template.
@@ -306,10 +337,20 @@ test('knightlore: New, Add, Duplicate and Delete come back as a castle', () => {
   assert.strictEqual(Object.keys(atlas.sceneryTemplates).slice(-1)[0], 'my_wall',
                      'on the end of the table');
 
-  // Add a piece to it.
-  clicksOn(dom, button(dom, 'Add piece')).slice(-1)[0].fn({});
+  // Add a piece to it: Add... opens the graphics as pictures, a click picks
+  // one, and nothing is saved until the dialog's Add.
+  const before = saved.length;
+  clicksOn(dom, button(dom, 'Add…')).slice(-1)[0].fn({});
+  assert.strictEqual(dom.byId.dialog.style.display, 'flex', 'Add… opened nothing');
+  const tile = tiles(dom).find((t) => /^wall\.castle\.1 /.test(t.title));
+  assert.ok(tile, 'wall.castle.1 is not in the picker');
+  clicksOn(dom, tile).slice(-1)[0].fn({});
+  assert.strictEqual(saved.length, before, 'picking is not yet adding');
+  clicksOn(dom, dialogButton(dom, 'Add')).slice(-1)[0].fn({});
+  assert.strictEqual(dom.byId.dialog.style.display, 'none', 'the dialog stayed open');
   atlas = lastSaved(saved);
   assert.strictEqual(atlas.sceneryTemplates.my_wall.length, 1);
+  assert.strictEqual(atlas.sceneryTemplates.my_wall[0].graphic, 'wall.castle.1');
 
   // Duplicate it.
   const copyAs = walk(dom.byId.main).find((n) => n.placeholder === 'copy as…');
@@ -325,6 +366,40 @@ test('knightlore: New, Add, Duplicate and Delete come back as a castle', () => {
   atlas = lastSaved(saved);
   assert.strictEqual(atlas.sceneryTemplates.my_wall_2, undefined);
   assert.ok(atlas.sceneryTemplates.my_wall, 'the other one stayed');
+});
+
+test('the Add dialog filters the graphics by name, and a double click adds one', () => {
+  const { dom, saved, boot } = open('knightlore');
+  pickTemplate(dom, boot, 'sceneryTemplates', 'scenery_arch_n');
+  clicksOn(dom, button(dom, 'Add…')).slice(-1)[0].fn({});
+  const all = tiles(dom).length;
+  assert.strictEqual(all, m.graphicNumbers(boot.sheet, boot.graphics).size,
+                     'one tile a graphic that draws something');
+  const filter = walk(dom.byId.dialog).find((n) => n.placeholder === 'Filter by name…');
+  filter.value = 'DOOR.FOREST';
+  dom.listeners.filter((l) => l.node === filter && l.kind === 'input')[0].fn({});
+  assert.deepStrictEqual(tiles(dom).map((t) => t.title.split(' ')[0]),
+                         ['door.forest.1', 'door.forest.2'], 'the filter ignores case');
+  const was = boot.templates.sceneryTemplates.scenery_arch_n.length;
+  dom.listeners.filter((l) => l.node === tiles(dom)[1] && l.kind === 'dblclick')[0].fn({});
+  const atlas = lastSaved(saved);
+  assert.strictEqual(atlas.sceneryTemplates.scenery_arch_n.length, was + 1);
+  assert.strictEqual(atlas.sceneryTemplates.scenery_arch_n[was].graphic, 'door.forest.2');
+});
+
+test('lightkeep: a piece from another sheet is drawn, and offered to add', () => {
+  const { dom, boot } = open('lightkeep');
+  if (!boot.otherPngs.doors) skip('lightkeep/art/melkhior/doors.png has not been converted here');
+  // A Melkhior doorway is all three of its pieces from the doors sheet: with
+  // only the game's own picture it drew none of them.
+  const before = dom.painted.drawImage || 0;
+  pickTemplate(dom, boot, 'sceneryTemplates', 'scenery_melkhior_door_n');
+  assert.ok((dom.painted.drawImage || 0) - before >= 3, 'the doorway drew nothing');
+  clicksOn(dom, button(dom, 'Add…')).slice(-1)[0].fn({});
+  const door = tiles(dom).find((t) => /^doors\.DoorTop1\.0 /.test(t.title));
+  assert.ok(door, 'the lintel is not offered');
+  const art = walk(door).find((n) => n._classes && n._classes.has('art'));
+  assert.ok(art && art._classes.has('sheet-doors'), 'not drawn from the doors sheet');
 });
 
 test('knightlore: a template rooms use cannot be deleted, and says why', () => {
@@ -628,6 +703,242 @@ test('knightlore: a rename changes templates.json and rooms.json together', () =
   // ...and rooms.json is still in the build's own layout.
   assert.strictEqual(m.serializeAtlas(m.withTemplates(rooms, templates),
                                       m.eolOf(renamed[0].rooms)), renamed[0].rooms);
+});
+
+
+test('knightlore: a piece lifted off the top of the screen says the game wraps it', () => {
+  const { dom, saved } = open('knightlore');
+  // scenery_arch_n's first leaf, lifted eight at a time until its base is
+  // above row 0: (196 - 141 + 128) / 2 + Z is past 296 from Z 206 on.
+  assert.ok(!/of the screen: the game draws it wrapped/.test(textIn(dom.byId.main)), 'not before');
+  for (let i = 0; i < 12; i++) key(dom, ']', { shiftKey: true });
+  assert.ok(lastSaved(saved).sceneryTemplates.scenery_arch_n[0].z >= 220);
+  assert.ok(/piece 0 is above the top of the screen/.test(textIn(dom.byId.main)), 'warned');
+  for (let i = 0; i < 12; i++) key(dom, '[', { shiftKey: true });
+  assert.ok(!/of the screen: the game draws it wrapped/.test(textIn(dom.byId.main)), 'and not once it is back');
+});
+
+// --- a piece's box ---------------------------------------------------------
+
+// Lightkeep's `solid` is sixteen pixels by one, every one of them clear. The
+// fake canvas reads that sprite as blank and every other as drawn.
+const SOLID_BLANK = {
+  imageData: (x, y, w, h) => ({
+    data: new Uint8ClampedArray(w * h * 4).fill(w === 16 && h === 1 ? 0 : 255)
+  })
+};
+
+// The row of the pieces table for piece `at`, and an input in its box by axis.
+function pieceRow(dom, at) {
+  return walk(dom.byId.main).filter((n) => n.tagName === 'TR')[at];
+}
+
+function boxInput(dom, at, axis) {
+  const span = walk(pieceRow(dom, at)).find((n) => n._classes && n._classes.has('boxsize'));
+  assert.ok(span, 'piece ' + at + ' shows no box of its own');
+  const label = walk(span).find((n) => n.tagName === 'LABEL' && n.textContent === axis);
+  return label.children.find((n) => n.tagName === 'INPUT');
+}
+
+function rowButton(dom, at, label) {
+  return walk(pieceRow(dom, at)).find((n) => n.tagName === 'BUTTON' && n.textContent === label);
+}
+
+function change(dom, input, value) {
+  input.value = String(value);
+  for (const l of dom.listeners) if (l.node === input && l.kind === 'change') l.fn({});
+}
+
+function raised(hooks) {
+  const opened = open('lightkeep', hooks);
+  if (!opened.boot.templates.sceneryTemplates.scenery_raised_w) {
+    skip('lightkeep has no scenery_raised_w');
+  }
+  pickTemplate(opened.dom, opened.boot, 'sceneryTemplates', 'scenery_raised_w');
+  return opened;
+}
+
+test('lightkeep: a piece\u2019s own box is edited in its three fields', () => {
+  const { dom, saved, boot } = raised(SOLID_BLANK);
+  // Whatever the file says now: the fields start from it.
+  const was = boot.templates.sceneryTemplates.scenery_raised_w[0];
+  assert.strictEqual(Number(boxInput(dom, 0, 'v').value), was.sizeV);
+  change(dom, boxInput(dom, 0, 'v'), 70);
+  let solid = lastSaved(saved).sceneryTemplates.scenery_raised_w[0];
+  assert.deepStrictEqual([solid.sizeU, solid.sizeV, solid.sizeZ], [was.sizeU, 70, was.sizeZ]);
+  change(dom, boxInput(dom, 0, 'z'), 300);
+  solid = lastSaved(saved).sceneryTemplates.scenery_raised_w[0];
+  assert.strictEqual(solid.sizeZ, 127, 'no taller than the graphic\u2019s ninth bit leaves room for');
+});
+
+test('lightkeep: a box of its own is dropped, and given again from the graphic\u2019s', () => {
+  const { dom, saved, boot } = raised(SOLID_BLANK);
+  clicksOn(dom, rowButton(dom, 0, 'graphic\u2019s box')).slice(-1)[0].fn({});
+  let solid = lastSaved(saved).sceneryTemplates.scenery_raised_w[0];
+  assert.ok(!('sizeU' in solid), 'the graphic\u2019s box again');
+  // ...which is what graphics.json gives `solid`, and where a box of its own
+  // starts from. A wall stone's comes the same way, flat along U.
+  clicksOn(dom, rowButton(dom, 0, 'own box')).slice(-1)[0].fn({});
+  solid = lastSaved(saved).sceneryTemplates.scenery_raised_w[0];
+  const said = boot.graphics.graphics.solid.size;
+  assert.deepStrictEqual([solid.sizeU, solid.sizeV, solid.sizeZ], [said.u, said.v, said.z]);
+  clicksOn(dom, rowButton(dom, 1, 'own box')).slice(-1)[0].fn({});
+  const stone = lastSaved(saved).sceneryTemplates.scenery_raised_w[1];
+  const wall = boot.graphics.graphics[stone.graphic].size;
+  assert.deepStrictEqual([stone.sizeU, stone.sizeV, stone.sizeZ], [wall.u, wall.v, wall.z]);
+});
+
+test('lightkeep: an invisible piece is picked by a click on its box', () => {
+  const { dom, boot } = raised(SOLID_BLANK);
+  if (!boot.sheetPng) skip('lightkeep/art/sprites.png is not here');
+  // A sweep of clicks over the picture, each starting from piece 1 picked.
+  // The invisible piece's sprite is one row of sixteen pixels, which a sweep
+  // this coarse would hardly ever land on; its box covers much of the picture.
+  let hits = 0;
+  let tries = 0;
+  for (let fy = 0.05; fy < 1; fy += 0.1) {
+    for (let fx = 0.05; fx < 1; fx += 0.1) {
+      clicksOn(dom, pieceRow(dom, 1)).slice(-1)[0].fn({ target: { tagName: 'TD' } });
+      const canvas = walk(dom.byId.main).find((n) => n.tagName === 'CANVAS');
+      const shown = canvas.getBoundingClientRect();
+      const press = dom.listeners.filter((l) => l.node === canvas && l.kind === 'mousedown')
+        .slice(-1)[0];
+      press.fn({ clientX: shown.width * fx, clientY: shown.height * fy, preventDefault() {} });
+      up(dom);
+      tries++;
+      if (pieceRow(dom, 0)._classes.has('on')) hits++;
+    }
+  }
+  assert.ok(hits > tries / 10, 'its box was picked ' + hits + ' times in ' + tries);
+});
+
+test('lightkeep: without a blank sprite, the same sweep hardly finds it', () => {
+  // The other side of the test above: read as drawn, the piece is its
+  // sixteen-by-one sprite, and the sweep's picks come from its box or not at all.
+  const { dom, boot } = raised();
+  if (!boot.sheetPng) skip('lightkeep/art/sprites.png is not here');
+  let hits = 0;
+  let tries = 0;
+  for (let fy = 0.05; fy < 1; fy += 0.1) {
+    for (let fx = 0.05; fx < 1; fx += 0.1) {
+      clicksOn(dom, pieceRow(dom, 1)).slice(-1)[0].fn({ target: { tagName: 'TD' } });
+      const canvas = walk(dom.byId.main).find((n) => n.tagName === 'CANVAS');
+      const shown = canvas.getBoundingClientRect();
+      const press = dom.listeners.filter((l) => l.node === canvas && l.kind === 'mousedown')
+        .slice(-1)[0];
+      press.fn({ clientX: shown.width * fx, clientY: shown.height * fy, preventDefault() {} });
+      up(dom);
+      tries++;
+      if (pieceRow(dom, 0)._classes.has('on')) hits++;
+    }
+  }
+  assert.ok(hits <= tries / 20, 'its sprite was picked ' + hits + ' times in ' + tries);
+});
+
+test('lightkeep: the selected piece is drawn with its box, its footing and its riser', () => {
+  const { dom, boot } = raised(SOLID_BLANK);
+  if (!boot.sheetPng) skip('lightkeep/art/sprites.png is not here');
+  // One picture as it stands, on the floor...
+  let before = Object.assign({}, dom.painted);
+  clicksOn(dom, pieceRow(dom, 0)).slice(-1)[0].fn({ target: { tagName: 'TD' } });
+  const drew = (k) => (dom.painted[k] || 0) - (before[k] || 0);
+  assert.ok(drew('fill') >= 1, 'the footing is filled');
+  // Twelve edges of its box and the footing's four sides, less the first
+  // point of each.
+  assert.ok(drew('lineTo') >= 12 + 3, 'drew ' + drew('lineTo') + ' lines');
+  assert.ok(drew('setLineDash') >= 1, 'its hidden edges dashed');
+  const standing = drew('fillRect');
+  // ...and one lifted a unit, with the riser up to it: one more rectangle.
+  before = Object.assign({}, dom.painted);
+  key(dom, ']');
+  assert.strictEqual(drew('fillRect'), standing + 1, 'the riser');
+});
+
+// The guides that cross on the floor at the selected piece's place.
+const GUIDE = 'rgba(255,200,80,.85)';
+
+test('lightkeep: on a floor, guide lines cross at the selected piece’s place', () => {
+  const { dom } = raised(SOLID_BLANK);
+  const guides = () => dom.painted.colours[GUIDE] || 0;
+  // On its own there is no floor to draw them on...
+  const alone = guides();
+  clicksOn(dom, pieceRow(dom, 4)).slice(-1)[0].fn({ target: { tagName: 'TD' } });
+  assert.strictEqual(guides(), alone, 'none on its own');
+  // ...and on a floor, or in a room, every picture has them.
+  show(dom, 'shape:square');
+  const onFloor = guides();
+  assert.ok(onFloor > alone, 'on the square floor');
+  clicksOn(dom, pieceRow(dom, 4)).slice(-1)[0].fn({ target: { tagName: 'TD' } });
+  assert.strictEqual(guides(), onFloor + 1, 'one set a picture');
+});
+
+
+// --- how an object template moves ----------------------------------------
+
+function moverRow(dom) {
+  return walk(dom.byId.main).find((n) => n._classes && n._classes.has('mover'));
+}
+
+function lightkeepWithBehaviours() {
+  const opened = open('lightkeep', null, (boot) => {
+    boot.behaviours = require('../behaviours').behavioursOf(path.join(FILMATION, 'lightkeep'));
+  });
+  if (!opened.boot.templates.meta.movers) skip('lightkeep/templates.json says nothing of its movers');
+  if (!opened.boot.behaviours) skip('lightkeep/movers.s is not here');
+  pickTemplate(opened.dom, opened.boot, 'objectTemplates', 'object_table');
+  return opened;
+}
+
+test('lightkeep: an object template says how it moves, and the list is the game\u2019s', () => {
+  const { dom, boot } = lightkeepWithBehaviours();
+  const row = moverRow(dom);
+  assert.ok(row, 'a moves row');
+  const choice = walk(row).find((n) => n.tagName === 'SELECT');
+  assert.strictEqual(choice.value, 'MOVE_PUSHED');
+  const offered = walk(choice).filter((n) => n.tagName === 'OPTION').map((n) => n.value);
+  assert.strictEqual(offered[0], '', 'standing still first');
+  assert.deepStrictEqual(offered.slice(1), boot.behaviours.list.map((x) => x.name));
+  // A table can be pushed, so it has a weight to set.
+  const weight = walk(row).find((n) => n.tagName === 'INPUT');
+  assert.strictEqual(weight.disabled, false);
+});
+
+test('lightkeep: the weight and the behaviour are saved in meta.movers', () => {
+  const { dom, saved } = lightkeepWithBehaviours();
+  change(dom, walk(moverRow(dom)).find((n) => n.tagName === 'INPUT'), 2);
+  assert.deepStrictEqual(lastSaved(saved).meta.movers.object_table, { behaviour: 'MOVE_PUSHED', weight: 2 });
+  change(dom, walk(moverRow(dom)).find((n) => n.tagName === 'SELECT'), 'MOVE_SLIDING');
+  assert.deepStrictEqual(lastSaved(saved).meta.movers.object_table, { behaviour: 'MOVE_SLIDING', weight: 2 });
+  change(dom, walk(moverRow(dom)).find((n) => n.tagName === 'SELECT'), '');
+  assert.ok(!('object_table' in lastSaved(saved).meta.movers), 'standing still: no entry');
+});
+
+test('lightkeep: something pushed weighs 1 or more, and nothing else weighs anything', () => {
+  const { dom, saved } = lightkeepWithBehaviours();
+  const weight = () => walk(moverRow(dom)).find((n) => n.tagName === 'INPUT');
+  const choice = () => walk(moverRow(dom)).find((n) => n.tagName === 'SELECT');
+  assert.strictEqual(Number(weight().value), 1, 'the table weighs 1');
+  // Nought is not a weight: the lightest is 1.
+  change(dom, weight(), 0);
+  assert.strictEqual(lastSaved(saved).meta.movers.object_table.weight, 1);
+  // Something that cannot be pushed has none...
+  change(dom, choice(), 'MOVE_GHOST');
+  assert.deepStrictEqual(lastSaved(saved).meta.movers.object_table, { behaviour: 'MOVE_GHOST' });
+  // ...and something that can starts at 1.
+  change(dom, choice(), 'MOVE_CARRIED');
+  assert.deepStrictEqual(lastSaved(saved).meta.movers.object_table, { behaviour: 'MOVE_CARRIED', weight: 1 });
+});
+
+test('lightkeep: something that cannot be pushed has no weight to set', () => {
+  const { dom, boot } = lightkeepWithBehaviours();
+  pickTemplate(dom, boot, 'objectTemplates', 'object_ghost');
+  assert.strictEqual(walk(moverRow(dom)).find((n) => n.tagName === 'INPUT').disabled, true);
+});
+
+test('knightlore: a castle whose code keeps its movers has no moves row', () => {
+  const { dom, boot } = open('knightlore');
+  pickTemplate(dom, boot, 'objectTemplates', 'object_table');
+  assert.strictEqual(moverRow(dom), undefined);
 });
 
 if (failures) {

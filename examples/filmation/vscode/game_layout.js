@@ -68,4 +68,31 @@ function within(here, name) {
   return full;
 }
 
-module.exports = { METADATA, ART, GENERATED, gameDirOf, metadataOf, artOf, generatedOf, within };
+// The game's folder for a file anywhere under its metadata/ -- the sheet
+// descriptions Lightkeep keeps in metadata/melkhior/, say -- which is the
+// folder above the nearest metadata/ there is; or the directory itself for a
+// game laid out flat.
+function gameDirAbove(here) {
+  let dir = here;
+  for (;;) {
+    if (path.basename(dir).toLowerCase() === METADATA) return path.dirname(dir);
+    const up = path.dirname(dir);
+    if (up === dir) return here;
+    dir = up;
+  }
+}
+
+// ...and `within` for such a file: its path resolved relative to it, and
+// refused if it leaves that game's folder. metadata/melkhior/doors.json names
+// its picture as ../../art/melkhior/doors.png.
+function withinGame(here, name) {
+  if (typeof name !== 'string' || !name) return null;
+  const bound = gameDirAbove(here);
+  const full = path.resolve(here, name);
+  const inside = path.relative(bound, full);
+  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return null;
+  return full;
+}
+
+module.exports = { METADATA, ART, GENERATED, gameDirOf, metadataOf, artOf, generatedOf, within,
+                   gameDirAbove, withinGame };

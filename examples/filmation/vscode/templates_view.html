@@ -68,6 +68,8 @@
     .notes .bad { color: var(--vscode-errorForeground, #f48771); }
 
     .showin { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .mover { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+    .mover label { display: inline-flex; gap: 4px; align-items: center; }
     .stage { flex: 1 1 auto; min-height: 0; margin: 10px 0 4px; background: #000;
              border-radius: 3px; display: flex; align-items: center; justify-content: center;
              line-height: 0; overflow: hidden; }
@@ -78,9 +80,48 @@
     table.pieces tr.on td { background: var(--vscode-list-inactiveSelectionBackground, #37373d); }
     table.pieces tr { cursor: pointer; }
     table.pieces label { display: inline-flex; gap: 3px; align-items: center; margin-right: 6px; }
+    /* A box of the piece's own: its three sizes, after the flags. */
+    .boxsize { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; }
+    .boxsize > .dim { margin-right: 2px; }
     .rooms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .rooms button { font-variant-numeric: tabular-nums; }
     .empty { opacity: .6; padding: 24px 0; }
+
+    /* Adding a piece: every graphic as a picture, in a dialog over the page. */
+    button.primary { color: var(--vscode-button-foreground, #fff);
+                     background: var(--vscode-button-background, #0e639c); }
+    button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #1177bb); }
+    .overlay { position: fixed; inset: 0; z-index: 10; display: none;
+               align-items: center; justify-content: center;
+               background: rgba(0, 0, 0, .45); }
+    .dialog { width: min(900px, calc(100vw - 40px)); height: calc(100vh - 60px);
+              box-sizing: border-box; padding: 14px 16px; border-radius: 6px;
+              display: flex; flex-direction: column; gap: 10px;
+              background: var(--vscode-editorWidget-background, #252526);
+              border: 1px solid var(--vscode-editorWidget-border, #454545);
+              box-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+    .dialog h3 { margin: 0; }
+    .dialog .controls { display: flex; gap: 10px; align-items: center; }
+    .dialog .controls input { flex: 1 1 auto; }
+    .picker { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+              gap: 6px; align-content: start; }
+    .tile { background: #000; border: 1px solid var(--vscode-editorWidget-border, #333);
+            border-radius: 3px; padding: 0; cursor: pointer; color: inherit;
+            display: flex; flex-direction: column; align-items: stretch; }
+    .tile:hover { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+    .tile.here { outline: 2px solid var(--vscode-focusBorder, #007fd4); }
+    .tile .artbox { height: 62px; display: flex; align-items: center;
+                    justify-content: center; overflow: hidden; }
+    .tile .caption { font-size: 10px; line-height: 1.3; padding: 2px 3px 3px;
+                     background: var(--vscode-editorWidget-background, #252526);
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                     font-variant-numeric: tabular-nums; }
+    .tile .caption .dim { display: block; }
+    .art { background-repeat: no-repeat; image-rendering: pixelated;
+           transform-origin: center center; }
+    .dialog .foot { display: flex; gap: 8px; align-items: center; }
+    .dialog .foot .spacer { flex: 1 1 auto; }
   </style>
 </head>
 <body>
@@ -88,6 +129,7 @@
     <div class="list" id="list"></div>
     <div class="main" id="main"></div>
   </div>
+  <div class="overlay" id="dialog"></div>
 
 <script>
 /*@sheet_model.js@*/
@@ -145,8 +187,12 @@
     }
   }());
 
-  let sheet, graphics, numbers, boxes, index, adj, graphicList;
-  let sheetImage = null;
+  let sheet, graphics, others, numbers, boxes, index, adj, graphicList;
+  // Each sheet's picture, by the sheet's name ('' the game's own): the
+  // pieces are drawn from these, a Melkhior door from the doors sheet.
+  const pictures = {};
+  const loadedFrom = {};
+  let adder = null;           // the Add dialog while it is open
 
   // What is on screen: a template, and which of its pieces is selected.
   let pick = null;            // { group, name }
@@ -185,9 +231,10 @@
     atlas = withTemplates(next.rooms, next.templates);
     sheet = next.sheet || {};
     graphics = next.graphics || {};
+    others = next.others || {};
     numbers = graphicNumbers(sheet, graphics);
     boxes = graphicBoxes(sheet, graphics);
-    index = sheetIndex(sheet, graphics);
+    index = sheetIndex(sheet, graphics, others);
     adj = readSpriteAdj(graphics);
     graphicList = Array.from(numbers.keys()).sort();
 
@@ -404,11 +451,33 @@
         ref.files.join(', ') + '). Renaming it changes that label, and the build ' +
         'stops until the code is changed to match.'));
     }
+    // A piece the game draws somewhere other than where it is: it works the
+    // place out in eight bits. Outlined in red in the picture; here, why.
+    const said = [];
+    for (const item of itemsOf(name)) {
+      if (!item.mine || !item.wrap || said.indexOf(item.piece.entry) >= 0) continue;
+      said.push(item.piece.entry);
+      const p = item.piece;
+      const which = kind.piece + ' ' + p.entry + ' ';
+      notes.appendChild(make('div', 'bad', which + ({
+        back: 'is too far back for the game to draw: V − U is ' + (p.v - p.u) +
+              ', past 127, and the engine’s projection drops a bit and draws it ' +
+              '128 rows lower than it stands. A room’s far corner is at 128.',
+        front: 'is too far forward for the game to draw: V − U is ' + (p.v - p.u) +
+               ', below −128, and the game draws it 128 rows higher than it stands.',
+        top: 'is above the top of the screen: the game draws it wrapped round to the bottom.',
+        bottom: 'is below the bottom of the screen: the game draws it wrapped round to the top.',
+        side: 'is off the side of the screen: the game draws it wrapped round to the other side.'
+      })[item.wrap]));
+    }
     if (rooms.length) {
       notes.appendChild(make('div', 'dim',
         'A change here moves every one of those rooms.'));
     }
     top.appendChild(notes);
+
+    // How it moves, where templates.json says (meta.movers).
+    if (pick.group === 'objectTemplates' && hasMovers(atlas)) top.appendChild(moverRow(name));
 
     // What to show it in. A template is placed by rooms, and a scenery piece
     // that looks right on its own can be half through a wall in a narrow room.
@@ -434,18 +503,9 @@
     const h = make('h3');
     h.appendChild(make('span', '', kind.piece + 's'));
     h.appendChild(make('span', 'spacer'));
-    const addPick = make('select');
-    for (const graphic of graphicList) {
-      const option = make('option', '', graphic);
-      option.value = graphic;
-      addPick.appendChild(option);
-    }
-    h.appendChild(addPick);
-    const add = make('button', 'small', 'Add ' + kind.piece);
-    add.addEventListener('click', function () {
-      chosen = addPiece(template, pick.group, addPick.value);
-      changed();
-    });
+    const add = make('button', 'small', 'Add…');
+    add.title = 'pick a graphic to add as a new ' + kind.piece;
+    add.addEventListener('click', function () { openAdder(); });
     h.appendChild(add);
     bottom.appendChild(h);
 
@@ -518,6 +578,68 @@
       render();
     });
     row.appendChild(choice);
+    return row;
+  }
+
+  // How an object template moves: one of the game's behaviours, read out of
+  // its movers.s (behaviours.js), or none -- and, for one that can be pushed,
+  // its weight, which a push loses. The game's build writes mover_of from
+  // what this sets in templates.json's meta.movers.
+  function moverRow(name) {
+    const row = make('div', 'mover');
+    row.appendChild(make('span', 'dim', 'moves'));
+    const said = moverOf(atlas, name);
+    const list = (boot.behaviours && boot.behaviours.list) || [];
+    const known = function (behaviour) {
+      return list.filter(function (b) { return b.name === behaviour; })[0] || null;
+    };
+
+    const choice = make('select');
+    const still = make('option', '', 'doesn’t move');
+    still.value = '';
+    choice.appendChild(still);
+    for (const b of list) {
+      const option = make('option', '', b.label + (b.kills ? ' — kills' : '') +
+                                        (b.loose ? ' — can be pushed' : ''));
+      option.value = b.name;
+      choice.appendChild(option);
+    }
+    if (said && !known(said.behaviour)) {
+      const option = make('option', '', said.behaviour + ' (not in movers.s)');
+      option.value = said.behaviour;
+      choice.appendChild(option);
+    }
+    choice.value = said ? said.behaviour : '';
+    choice.title = said ? said.behaviour : 'nothing moves it';
+    // Something a push moves weighs 1 or more -- a push of the whole step, at
+    // 0, left a gap the pusher spent a turn closing, and the lightest things
+    // lurched -- and nothing else weighs anything.
+    choice.addEventListener('change', function () {
+      const b = known(choice.value);
+      const was = (said && said.weight) || 0;
+      setMover(atlas, name, choice.value || null, b && b.loose ? Math.max(1, was) : 0);
+      changed();
+    });
+    row.appendChild(choice);
+
+    const pushed = !!(said && known(said.behaviour) && known(said.behaviour).loose);
+    const label = make('label', '', 'weight');
+    const weight = make('input');
+    weight.type = 'number';
+    weight.min = 1;
+    weight.max = MAX_WEIGHT;
+    weight.value = pushed ? Math.max(1, (said && said.weight) || 0) : '';
+    weight.disabled = !pushed;
+    weight.addEventListener('change', function () {
+      setMover(atlas, name, said.behaviour, Math.max(1, Number(weight.value) || 1));
+      changed();
+    });
+    label.appendChild(weight);
+    row.appendChild(label);
+    row.appendChild(make('span', 'dim', pushed
+      ? 'a push moves it its step less this — pushed by the knight, 1 moves 2 a turn, ' +
+        '2 moves 1, 3 or more stands firm'
+      : 'only something that can be pushed has a weight'));
     return row;
   }
 
@@ -615,9 +737,50 @@
         label.appendChild(input);
         bits.appendChild(label);
       }
+      // Its box. A piece normally takes its graphic's, from graphics.json; one
+      // may have its own instead -- an invisible box under artwork has nothing
+      // else to give it a size -- and then its three numbers are edited here:
+      // half-widths along U and V, and the whole height.
       if (piece.sizeU !== undefined) {
-        bits.appendChild(make('span', 'dim',
-          'own box ' + piece.sizeU + ',' + piece.sizeV + ',' + piece.sizeZ));
+        const own = { u: piece.sizeU, v: piece.sizeV, z: piece.sizeZ };
+        const span = make('span', 'boxsize');
+        span.appendChild(make('span', 'dim', 'box'));
+        for (const axis of ['u', 'v', 'z']) {
+          const label = make('label', '', axis);
+          const input = make('input');
+          input.type = 'number';
+          input.min = 0;
+          input.max = axis === 'z' ? MAX_BOX_HEIGHT : 255;
+          input.value = own[axis];
+          input.title = axis === 'z' ? 'its height' : 'half its width along ' + axis.toUpperCase();
+          input.addEventListener('change', function () {
+            const next = { u: own.u, v: own.v, z: own.z };
+            next[axis] = Number(input.value) || 0;
+            setTemplateBox(template, row, next);
+            chosen = row;
+            changed();
+          });
+          label.appendChild(input);
+          span.appendChild(label);
+        }
+        const drop = make('button', 'small', 'graphic’s box');
+        drop.title = 'use the box graphics.json gives ' + piece.graphic + ' again';
+        drop.addEventListener('click', function () {
+          setTemplateBox(template, row, null);
+          chosen = row;
+          changed();
+        });
+        span.appendChild(drop);
+        bits.appendChild(span);
+      } else {
+        const give = make('button', 'small', 'own box');
+        give.title = 'give this ' + kind.piece + ' a box of its own, starting from its graphic’s';
+        give.addEventListener('click', function () {
+          setTemplateBox(template, row, boxOf(boxes, piece) || { u: 8, v: 8, z: 12 });
+          chosen = row;
+          changed();
+        });
+        bits.appendChild(give);
       }
 
       const moves = cell();
@@ -648,6 +811,157 @@
       table.appendChild(tr);
     });
     return table;
+  }
+
+  // --- adding a piece --------------------------------------------------------
+
+  // Every graphic the template could take, as a picture with its name, and a
+  // filter on the name. A click picks one and Add puts it on the end of the
+  // template; a double click does both. Nothing changes until then.
+  function openAdder() {
+    const overlay = document.getElementById('dialog');
+    if (!overlay || !pick) return;
+    const template = atlas[pick.group][pick.name];
+    const kind = kindOf(pick.group);
+    let picked = null;
+
+    overlay.innerHTML = '';
+    const dialog = make('div', 'dialog');
+    overlay.appendChild(dialog);
+    dialog.appendChild(make('h3', '', 'Add a ' + kind.piece + ' to ' + pick.name));
+    const controls = make('div', 'controls');
+    const filter = make('input');
+    filter.type = 'text';
+    filter.placeholder = 'Filter by name…';
+    filter.addEventListener('input', fill);
+    controls.appendChild(filter);
+    const count = make('span', 'dim');
+    controls.appendChild(count);
+    dialog.appendChild(controls);
+    const grid = make('div', 'picker');
+    dialog.appendChild(grid);
+
+    const foot = make('div', 'foot');
+    const says = make('span', 'dim', 'Pick a graphic');
+    foot.appendChild(says);
+    foot.appendChild(make('span', 'spacer'));
+    const cancel = make('button', '', 'Cancel');
+    cancel.addEventListener('click', close);
+    foot.appendChild(cancel);
+    const ok = make('button', 'primary', 'Add');
+    ok.disabled = true;
+    ok.addEventListener('click', apply);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+
+    function fill() {
+      const want = filter.value.trim().toLowerCase();
+      grid.innerHTML = '';
+      let shown = 0;
+      for (const graphic of graphicList) {
+        if (want && graphic.toLowerCase().indexOf(want) < 0) continue;
+        grid.appendChild(tileFor(graphic));
+        shown++;
+      }
+      count.textContent = shown + ' of ' + graphicList.length;
+    }
+
+    function tileFor(graphic) {
+      const number = numbers.get(graphic);
+      const art = spriteFor(index, number);
+      const tile = make('button', 'tile');
+      if (graphic === picked) tile.classList.add('here');
+      tile.appendChild(artBox(art));
+      const caption = make('div', 'caption', graphic);
+      caption.appendChild(make('span', 'dim', 'graphic ' + number));
+      tile.appendChild(caption);
+      tile.title = graphic + ' — graphic ' + number +
+        (art ? '  (' + art.width + ' × ' + art.height + ')' : '  (no picture here)');
+      tile.addEventListener('click', function () {
+        picked = graphic;
+        for (const other of grid.children) other.classList.remove('here');
+        tile.classList.add('here');
+        says.textContent = graphic + ', graphic ' + number;
+        ok.disabled = false;
+      });
+      tile.addEventListener('dblclick', function () {
+        picked = graphic;
+        apply();
+      });
+      return tile;
+    }
+
+    function apply() {
+      if (picked === null) return;
+      close();
+      chosen = addPiece(template, pick.group, picked);
+      changed();
+    }
+
+    function close() {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+      adder = null;
+    }
+
+    adder = { close: close };
+    // A click on the dimmed page round the dialog is Cancel.
+    overlay.onmousedown = function (event) {
+      if (event.target === overlay) close();
+    };
+    fill();
+    overlay.style.display = 'flex';
+    if (filter.focus) filter.focus();
+  }
+
+  // One frame of a sheet, as a box with the sheet slid behind it so the frame
+  // shows, scaled up by whole numbers -- or down by whole divisions -- to sit
+  // in the tile. The picture is the sheet's CSS class, not carried by each.
+  const TILE_FIT = 56;
+
+  function artBox(art) {
+    const box = make('div', 'artbox');
+    if (!art) return box;
+    const r = art.rect;
+    const inner = make('div', 'art ' + sheetClass(art.sheet));
+    inner.style.width = r.w + 'px';
+    inner.style.height = r.h + 'px';
+    inner.style.backgroundPosition = (-r.x) + 'px ' + (-r.y) + 'px';
+    const up = Math.floor(Math.min(TILE_FIT / r.w, TILE_FIT / r.h));
+    const scale = up >= 1 ? up : 1 / Math.ceil(Math.max(r.w / TILE_FIT, r.h / TILE_FIT));
+    if (scale !== 1) inner.style.transform = 'scale(' + scale + ')';
+    box.appendChild(inner);
+    return box;
+  }
+
+  function sheetClass(onSheet) {
+    return 'sheet-' + (onSheet ? onSheet.replace(/[^A-Za-z0-9_-]/g, '_') : 'own');
+  }
+
+  // Each sheet's picture, twice over: as a CSS class for the Add dialog's
+  // tiles, and as an image the template's picture is drawn from.
+  function loadPictures() {
+    const all = Object.assign({ '': boot.sheetPng }, boot.otherPngs || {});
+    let rules = '';
+    for (const key of Object.keys(all)) {
+      const uri = all[key];
+      if (!uri) continue;
+      rules += '.' + sheetClass(key) + ' { background-image: url(' + uri + '); }\n';
+      if (loadedFrom[key] === uri) continue;
+      loadedFrom[key] = uri;
+      const image = new Image();
+      image.onload = function () { pictures[key] = image; blankSprites = {}; render(); };
+      image.onerror = function () { render(); };
+      image.src = uri;
+    }
+    if (!document.head) return;
+    let style = document.getElementById('sheet-pictures');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sheet-pictures';
+      document.head.appendChild(style);
+    }
+    style.textContent = rules;
   }
 
   // --- the picture ---------------------------------------------------------
@@ -681,8 +995,50 @@
     if (view.kind !== 'alone') floor = sizeOf(atlas, room);
     const items = drawList(expandRoom(atlas, room, numbers, boxes), index, adj, rulesOf(atlas).yOrigin)
       .filter(function (item) { return item.sprite; });
-    for (const item of items) item.mine = item.piece.template === name;
-    return { items: items, floor: floor };
+    for (const item of items) {
+      item.mine = item.piece.template === name;
+      // Drawn where it really is, not where the game's eight bits wrap it: a
+      // piece lifted off the top of the screen goes on up, out of the rest,
+      // rather than coming back at the bottom. `wraps` says the game would.
+      item.x = item.trueX;
+      item.base = item.trueBase;
+      item.y = item.trueBase - item.height;
+    }
+    // The floor's height even when no floor is drawn: a piece's footing is
+    // marked on it all the same.
+    return { items: items, floor: floor, floorZ: sizeOf(atlas, room).z };
+  }
+
+  // Whether a sprite draws nothing at all -- Lightkeep's `solid`, an
+  // invisible box under artwork. A piece like that is drawn as its box, and
+  // picked by it, or there would be nothing to see or to click. Read off the
+  // sheet's own picture once a sprite; a picture that cannot be read counts as
+  // drawing something.
+  let blankSprites = {};
+
+  function isBlank(sprite) {
+    const image = pictures[sprite.sheet || ''];
+    if (!image) return false;
+    const r = sprite.rect;
+    const key = (sprite.sheet || '') + ':' + r.x + ',' + r.y + ',' + r.w + ',' + r.h;
+    if (Object.prototype.hasOwnProperty.call(blankSprites, key)) return blankSprites[key];
+    let blank = false;
+    try {
+      const scratch = document.createElement('canvas');
+      scratch.width = r.w;
+      scratch.height = r.h;
+      const c = scratch.getContext('2d');
+      c.drawImage(image, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+      const data = c.getImageData(0, 0, r.w, r.h).data;
+      blank = data.length > 0;
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] >= 128) { blank = false; break; }
+      }
+    } catch (err) {
+      blank = false;
+    }
+    blankSprites[key] = blank;
+    return blank;
   }
 
   function itemsOf(name) {
@@ -705,7 +1061,19 @@
     const scene = sceneOf(pick.name);
     const items = scene.items;
     const grid = { cell: CELL, origin: CELL_ORIGIN, count: CELLS, half: HALF_CELL };
-    const outline = scene.floor ? floorOutline(scene.floor, rulesOf(atlas).yOrigin) : [];
+    const yOrigin = rulesOf(atlas).yOrigin;
+    const outline = scene.floor ? floorOutline(scene.floor, yOrigin) : [];
+    // The template's own pieces carry their box and their footing, to be drawn
+    // and for the picture to be cut wide enough to hold them.
+    for (const item of items) {
+      if (!item.mine) continue;
+      item.box = boxOutline(item.piece, yOrigin);
+      item.footing = footing(item.piece, scene.floorZ, yOrigin);
+      item.blank = isBlank(item.sprite);
+    }
+    const held = items.filter(function (item) {
+      return item.mine && item.piece.entry === chosen;
+    })[0];
     lastItems = [];
     if (!items.length && !outline.length) {
       canvas.width = STAGE_WIDTH;
@@ -725,7 +1093,11 @@
         right = Math.max(right, item.x + r.w);
         bottom = Math.max(bottom, item.y + r.h);
       }
-      for (const point of outline) {
+      const ownPoints = [];
+      for (const item of items) {
+        if (item.mine) ownPoints.push.apply(ownPoints, item.box.corners.concat(item.footing.base));
+      }
+      for (const point of outline.concat(ownPoints)) {
         left = Math.min(left, point.x);
         top = Math.min(top, point.y);
         right = Math.max(right, point.x);
@@ -749,6 +1121,14 @@
     const top = frame.top;
     const pad = 0;
     const scale = frame.scale;
+    // How wide a line has to be drawn to survive being shown smaller. The
+    // picture is drawn at a whole `scale` and shown at the fit, which can be as
+    // little as half of it, and nearest-neighbour shrinking keeps only some of
+    // the canvas's rows and columns -- so a line one canvas pixel wide could
+    // fall between them and an edge go missing. At this width each one keeps
+    // at least a screen pixel. Every outline below is drawn this wide or wider,
+    // and its dashes scaled with it.
+    const thin = Math.max(1, Math.ceil(scale / frame.fit));
     canvas.width = frame.wide * scale;
     canvas.height = frame.tall * scale;
     // ...on the screen at exactly the fit.
@@ -759,32 +1139,46 @@
     c.fillStyle = '#000';
     c.fillRect(0, 0, canvas.width, canvas.height);
 
+    const at = function (p) { return { x: (p.x - left) * scale, y: (p.y - top) * scale }; };
+    const trace = function (points) {
+      c.beginPath();
+      const first = at(points[0]);
+      c.moveTo(first.x + 0.5, first.y + 0.5);
+      for (let i = 1; i < points.length; i++) {
+        const p = at(points[i]);
+        c.lineTo(p.x + 0.5, p.y + 0.5);
+      }
+      c.closePath();
+    };
+    const path = function (quad) {
+      trace(quad);
+      c.stroke();
+    };
+
     // The floor first, under everything: its cells faint, its edge less so --
     // the edge being what the walker is clamped to.
     if (outline.length) {
-      const at = function (p) { return { x: (p.x - left) * scale, y: (p.y - top) * scale }; };
-      const path = function (quad) {
-        c.beginPath();
-        const first = at(quad[0]);
-        c.moveTo(first.x + 0.5, first.y + 0.5);
-        for (let i = 1; i < quad.length; i++) {
-          const p = at(quad[i]);
-          c.lineTo(p.x + 0.5, p.y + 0.5);
-        }
-        c.closePath();
-        c.stroke();
-      };
-      c.lineWidth = 1;
+      c.lineWidth = thin;
       c.strokeStyle = 'rgba(255,255,255,.12)';
-      for (const quad of floorCells(scene.floor, grid, rulesOf(atlas).yOrigin)) path(quad);
+      for (const quad of floorCells(scene.floor, grid, yOrigin)) path(quad);
       c.strokeStyle = 'rgba(255,255,255,.35)';
       path(outline);
+    }
+
+    // Where the selected piece is on the floor, shaded under everything: its
+    // box's base, dropped to the floor. The rest of its footing is drawn over
+    // the pieces, below, so that nothing standing in front hides it.
+    if (held) {
+      trace(held.footing.base);
+      c.fillStyle = 'rgba(255,255,255,.17)';
+      c.fill();
     }
 
     for (const item of items) {
       const r = item.sprite.rect;
       const x = (item.x - left + pad) * scale;
       const y = (item.y - top + pad) * scale;
+      const sheetImage = pictures[item.sprite.sheet || ''];
       if (sheetImage) {
         c.save();
         // The rest of a room is there to be seen against: dimmed.
@@ -798,17 +1192,113 @@
         }
         c.restore();
       }
-      if (item.mine) {
+      if (!item.mine) continue;
+      if (item.blank) {
+        // Nothing to click on but its box, so the box is what a click finds.
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const corner of item.box.corners) {
+          const p = at(corner);
+          x0 = Math.min(x0, p.x);
+          y0 = Math.min(y0, p.y);
+          x1 = Math.max(x1, p.x);
+          y1 = Math.max(y1, p.y);
+        }
+        lastItems.push({ x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0),
+                         entry: item.piece.entry });
+      } else {
         lastItems.push({ x: x, y: y, w: r.w * scale, h: r.h * scale, entry: item.piece.entry });
       }
     }
 
-    // The selected piece, outlined.
-    for (const drawn of lastItems) {
-      if (drawn.entry !== chosen) continue;
-      c.strokeStyle = '#3794ff';
-      c.lineWidth = 2;
-      c.strokeRect(drawn.x + 1, drawn.y + 1, drawn.w - 2, drawn.h - 2);
+    // A piece's box, edge by edge, the ones a solid box would hide dashed.
+    const drawBox = function (box, colour, width) {
+      c.strokeStyle = colour;
+      c.lineWidth = width;
+      for (const edge of box.edges) {
+        const a = at(box.corners[edge.from]);
+        const b = at(box.corners[edge.to]);
+        c.setLineDash(edge.hidden ? [3 * thin, 3 * thin] : []);
+        c.beginPath();
+        c.moveTo(a.x + 0.5, a.y + 0.5);
+        c.lineTo(b.x + 0.5, b.y + 0.5);
+        c.stroke();
+      }
+      c.setLineDash([]);
+    };
+
+    // A piece the game would draw wrapped round to the other side of the
+    // screen, outlined where it really is.
+    for (const item of items) {
+      if (!item.mine || !item.wraps) continue;
+      const r = item.sprite.rect;
+      c.strokeStyle = '#f48771';
+      c.lineWidth = 2 * thin;
+      c.setLineDash([4 * thin, 3 * thin]);
+      c.strokeRect((item.x - left) * scale + thin, (item.y - top) * scale + thin,
+                   r.w * scale - 2 * thin, r.h * scale - 2 * thin);
+      c.setLineDash([]);
+    }
+
+    // An invisible piece is only ever its box, so its box is always drawn.
+    for (const item of items) {
+      if (item.mine && item.blank && item !== held) drawBox(item.box, 'rgba(120,200,255,.55)', thin);
+    }
+
+    // The selected piece: where it is on the floor, the riser up from there to
+    // where it stands, its box, and the sprite's own rectangle.
+    //
+    // Where it is on the floor is the thing a picture like this cannot show by
+    // itself: going back along V moves a point up the screen just as lifting
+    // it does, so a piece on the floor behind the back wall is drawn where one
+    // on a raised floor in front of it would be. Two guide lines cross on the
+    // floor at its place, one along U and one along V, each across the room's
+    // floor and on out to the piece if it stands beyond it -- so a piece
+    // outside the room shows its lines leaving the floor. Over everything,
+    // for the same reason.
+    if (held) {
+      if (scene.floor) {
+        c.strokeStyle = GUIDE_COLOUR;
+        c.lineWidth = Math.max(thin, Math.round(scale / 2));
+        for (const line of floorGuides(held.piece.u, held.piece.v, scene.floor, yOrigin)) {
+          const a = at(line[0]);
+          const e = at(line[1]);
+          c.beginPath();
+          c.moveTo(a.x + 0.5, a.y + 0.5);
+          c.lineTo(e.x + 0.5, e.y + 0.5);
+          c.stroke();
+        }
+      }
+      // Its box's base on the floor, and the point under its middle, which a
+      // wall piece's base -- a line, having no depth -- would not show alone.
+      trace(held.footing.base);
+      c.strokeStyle = 'rgba(255,255,255,.8)';
+      c.lineWidth = thin;
+      c.stroke();
+      const foot = at(held.footing.foot);
+      const dot = 3 * scale;             // three of the game's pixels
+      c.fillStyle = '#fff';
+      c.fillRect(Math.round(foot.x - dot / 2), Math.round(foot.y - dot / 2), dot, dot);
+
+      if (held.piece.z > scene.floorZ) {
+        const foot = at(held.footing.foot);
+        const head = at(held.footing.head);
+        // A game pixel wide, solid: the picture may be shown smaller than it is
+        // drawn, and a thin dashed line can thin away to nothing.
+        c.fillStyle = 'rgba(255,255,255,.8)';
+        c.fillRect(Math.round(foot.x - scale / 2), Math.round(head.y), scale,
+                   Math.max(0, Math.round(foot.y - head.y)));
+      }
+      drawBox(held.box, '#3794ff', 2 * thin);
+      if (!held.blank) {
+        const r = held.sprite.rect;
+        // Just outside the sprite, so it covers none of it.
+        c.strokeStyle = 'rgba(255,255,255,.8)';
+        c.lineWidth = thin;
+        c.setLineDash([3 * thin, 2 * thin]);
+        c.strokeRect((held.x - left) * scale - thin / 2, (held.y - top) * scale - thin / 2,
+                     r.w * scale + thin, r.h * scale + thin);
+        c.setLineDash([]);
+      }
     }
 
     // Pressing on a piece selects it -- the last one drawn under the pointer,
@@ -900,6 +1390,12 @@
   // arrow switches its half-cell on or off, and a lift is four -- the game
   // masks the raise to a multiple of four -- or a whole level with Shift.
   function keyed(event) {
+    // The Add dialog takes the keys while it is open: Escape closes it, and
+    // nothing reaches the template behind it.
+    if (adder) {
+      if (event.key === 'Escape') adder.close();
+      return;
+    }
     if (!pick || drag) return;
     const target = event.target;
     if (target && /INPUT|SELECT|TEXTAREA/.test(target.tagName || '')) return;
@@ -961,11 +1457,7 @@
 
   function start() {
     load(boot);
-    if (!boot.sheetPng) { render(); return; }
-    const image = new Image();
-    image.onload = function () { sheetImage = image; render(); };
-    image.onerror = function () { render(); };
-    image.src = boot.sheetPng;
+    loadPictures();
     render();
   }
 
@@ -973,6 +1465,7 @@
   if (host.onReload) {
     host.onReload(function (next) {
       load(next);
+      loadPictures();
       render();
     });
   }

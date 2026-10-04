@@ -28,6 +28,7 @@ const path = require('path');
 const crypto = require('crypto');
 const model = require('./room_model');
 const layout = require('./game_layout');
+const sheetFiles = require('./sheet_files');
 const { openTemplatesOf } = require('./templates_view');
 
 const VIEW_TYPE = 'filmation.roomDesign';
@@ -135,12 +136,20 @@ function bootFor(document, room) {
   const sheetFile = beside(here, named.sheet);
   const graphicsFile = beside(here, named.graphics);
   const sheet = atlasFile && readIfThere(atlasFile);
+  const graphics = graphicsFile && readJsonIfThere(graphicsFile);
+  // The other sheets graphics.json lists -- Lightkeep's Melkhior ones -- so a
+  // piece drawn from one is drawn here too.
+  const { others, otherPngs } = graphics
+    ? sheetFiles.otherSheets(graphics, path.dirname(graphicsFile), imageUri)
+    : { others: {}, otherPngs: {} };
   return {
     atlas: atlas,
     eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
     sheet: sheet ? JSON.parse(sheet) : null,
     sheetPng: sheetFile && imageUri(sheetFile),
-    graphics: graphicsFile && readJsonIfThere(graphicsFile),
+    graphics: graphics,
+    others: others,
+    otherPngs: otherPngs,
     templates: templates,
     specials: readJsonIfThere(path.join(here, SPECIALS)),
     room: room === undefined ? null : room,

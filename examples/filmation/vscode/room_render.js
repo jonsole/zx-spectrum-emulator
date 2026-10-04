@@ -71,6 +71,39 @@ function project(piece, adj, yOrigin) {
   return { x: x, y: y };
 }
 
+// Why the game draws a piece somewhere other than where it is, or null.
+//
+// 'back' and 'front' come first, because they are not the screen's edge at
+// all. object_place halves V - U + 128 with SRL, which drops the ninth bit, so
+// a piece with V - U past 127 -- behind the far corner of a room, which is at
+// exactly 128 -- is drawn 128 rows lower than it stands, and one with V - U
+// below -128 128 rows higher. The rest are the screen's own edges: a base above
+// row 0 wraps to the bottom ('top'), one past row 255 to the top ('bottom'),
+// and a column off either side to the other ('side').
+function wrapOf(piece, at, truly) {
+  const depth = piece.v - piece.u + WORLD_V_BIAS;
+  if (depth > 0xFF) return 'back';
+  if (depth < 0) return 'front';
+  if (truly.y !== at.y) return truly.y < 0 ? 'top' : 'bottom';
+  if (truly.x !== at.x) return 'side';
+  return null;
+}
+
+// The same place without the wrap: where the piece really is, on a screen
+// that went on past its edges. project() wraps in eight bits as object_place
+// does, so a piece raised until its base is above row 0 comes back at the
+// bottom -- which the game does too, and draws it there. An editor shows it
+// here instead, where it went, and can say the game cannot.
+function projectUnwrapped(piece, adj, yOrigin) {
+  const adjX = adj ? signedOf(adj.x) : 0;
+  const adjY = adj ? signedOf(adj.y) : 0;
+  const origin = yOrigin === undefined ? TRUE_Y_ORIGIN : yOrigin;
+  return {
+    x: piece.u + piece.v - WORLD_X_ORIGIN + adjX,
+    y: origin - (((piece.v - piece.u + WORLD_V_BIAS) >> 1) + piece.z) - adjY
+  };
+}
+
 // --- depth ----------------------------------------------------------------
 //
 // depth_cmp, from engine/depth.s and the walkthrough in engine/depth.md.
@@ -251,9 +284,16 @@ function drawList(pieces, index, adj, yOrigin) {
   return ordered.map(function (piece) {
     const nudge = adjFor(adj, piece.graphic, piece.mirrored);
     const at = project(piece, nudge, yOrigin);
+    const truly = projectUnwrapped(piece, nudge, yOrigin);
     const art = spriteFor(index, piece.graphic);
     const height = art ? art.height : 0;
     return {
+      // Where it really is, and whether the game's eight bits put it
+      // somewhere else, and why -- see wrapOf.
+      trueX: truly.x,
+      trueBase: truly.y,
+      wraps: truly.x !== at.x || truly.y !== at.y,
+      wrap: wrapOf(piece, at, truly),
       piece: piece,
       graphic: piece.graphic,
       mirrored: piece.mirrored,
@@ -328,12 +368,75 @@ function floorCells(size, grid, yOrigin) {
   return out;
 }
 
+// A placed piece's box as the screen sees it: its eight corners and the
+// twelve edges between them. Corner i is -U or +U by bit 0, -V or +V by bit 1
+// and its base or its top by bit 2 -- the graphic map's numbering -- so
+// FAR_BOX_CORNER is the back corner on the floor, the one a solid box stands
+// in front of, and an edge that meets it is one the box would hide.
+//
+// The piece is what expandRoom makes: U and V its centre, SIZE_U and SIZE_V
+// half-widths, Z its base and SIZE_Z its whole height, as object_overlaps has
+// them.
+const FAR_BOX_CORNER = 2;
+
+function boxOutline(piece, yOrigin) {
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push(floorPoint(piece.u + (i & 1 ? piece.sizeU : -piece.sizeU),
+                            piece.v + (i & 2 ? piece.sizeV : -piece.sizeV),
+                            piece.z + (i & 4 ? piece.sizeZ : 0), yOrigin));
+  }
+  const edges = [];
+  for (let i = 0; i < 8; i++) {
+    for (const bit of [1, 2, 4]) {
+      if (i & bit) continue;
+      edges.push({ from: i, to: i | bit,
+                   hidden: i === FAR_BOX_CORNER || (i | bit) === FAR_BOX_CORNER });
+    }
+  }
+  return { corners: corners, edges: edges };
+}
+
+// Where a piece is on the floor. A sprite high up the screen could be far
+// back on the floor or near and in the air -- the projection sends V and Z up
+// the screen alike -- so the designer marks the floor under it and the riser
+// from there to where it stands, which together say which. `base` is the
+// box's base dropped to the floor at floorZ, `foot` the middle of that and
+// `head` the piece's own base above it.
+function footing(piece, floorZ, yOrigin) {
+  const base = [];
+  for (const corner of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    base.push(floorPoint(piece.u + corner[0] * piece.sizeU, piece.v + corner[1] * piece.sizeV,
+                         floorZ, yOrigin));
+  }
+  return { base: base,
+           foot: floorPoint(piece.u, piece.v, floorZ, yOrigin),
+           head: floorPoint(piece.u, piece.v, piece.z, yOrigin) };
+}
+
+// Two guide lines on the floor crossing at a piece's place, for the editors
+// that move things about a room: one along U at its V and one along V at its
+// U, each across the room's floor and on out to the piece if it stands beyond
+// it. A sprite high on the screen could be far back on the floor or near and
+// raised, and these say which; a piece outside the room shows its lines
+// leaving the floor. `size` is the room's shape, as roomBounds takes it.
+const GUIDE_COLOUR = 'rgba(255,200,80,.85)';
+
+function floorGuides(u, v, size, yOrigin) {
+  const b = roomBounds(size);
+  return [
+    [floorPoint(Math.min(b.minU, u), v, size.z, yOrigin), floorPoint(Math.max(b.maxU, u), v, size.z, yOrigin)],
+    [floorPoint(u, Math.min(b.minV, v), size.z, yOrigin), floorPoint(u, Math.max(b.maxV, v), size.z, yOrigin)]
+  ];
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     WORLD_X_ORIGIN, WORLD_Y_ORIGIN, WORLD_V_BIAS, SCREEN_WIDTH, SCREEN_ROWS,
     VOTE_NEARER, VOTE_FURTHER,
-    byteOf, signedOf, project, depthCompare, insertPlaced, depthOrder,
+    byteOf, signedOf, project, projectUnwrapped, wrapOf, depthCompare, insertPlaced, depthOrder,
     readSpriteAdj, adjFor, sheetIndex, spriteFor, drawList, roomBounds,
-    TRUE_Y_ORIGIN, floorPoint, floorOutline, floorCells
+    TRUE_Y_ORIGIN, floorPoint, floorOutline, floorCells,
+    FAR_BOX_CORNER, boxOutline, footing, GUIDE_COLOUR, floorGuides
   };
 }

@@ -25,11 +25,13 @@ const crypto = require('crypto');
 const model = require('./graphic_map_model');
 const sheetModel = require('./sheet_model');
 const layout = require('./game_layout');
+const sheetFiles = require('./sheet_files');
 
 const VIEW_TYPE = 'filmation.graphicMap';
 
-// The one pure file the page inlines, in the order its markers name it.
-const INLINED = ['sheet_model.js', 'graphic_map_model.js'];
+// The pure files the page inlines, in the order its markers name them:
+// room_render.js for the projection the nudge editor draws the box with.
+const INLINED = ['sheet_model.js', 'room_render.js', 'graphic_map_model.js'];
 
 // The sheet this table's names point into, and the picture it describes.
 // Both are written by sprite_sheet.py, ONCE, and nothing regenerates them.
@@ -87,13 +89,22 @@ function bootFor(document) {
   const pngFile = sheetFile &&
     layout.within(path.dirname(sheetFile), sheetModel.formatOf(sheet).file);
 
+  // The other sheets graphics.json lists -- Lightkeep's Melkhior ones.
+  const { others, otherPngs } = sheetFiles.otherSheets(graphics, here, imageUri);
+
   return {
-    // The document is graphics.json; the sheet travels with it, read-only.
+    // The document is graphics.json; the sheets travel with it, read-only.
     graphics: graphics,
     sheet: sheet,
+    others: others,
     game: path.basename(layout.gameDirOf(here)),
     eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
     sheetPng: pngFile && imageUri(pngFile),
+    otherPngs: otherPngs,
+    // How many graphic numbers the game is built with, which the table alone
+    // cannot say: it decides how far a y nudge may go, and which numbers
+    // Add offers.
+    graphicCount: sheetFiles.graphicCountOf(layout.gameDirOf(here)),
     // The editor saves the document, so the page needs no Save of its own.
     showSave: false
   };
@@ -117,6 +128,10 @@ function pageHtml(document) {
     '  return {\n' +
     '    boot: ' + JSON.stringify(boot).replace(/</g, '\\u003c') + ',\n' +
     '    save: function (text) { vscode.postMessage({ type: "save", text: text }); },\n' +
+    // The page's own settings -- how big the map and the picker draw --
+    // kept by the webview while it is hidden and brought back.
+    '    state: function () { return vscode.getState() || {}; },\n' +
+    '    keep: function (state) { vscode.setState(state); },\n' +
     '    onReload: function (fn) { reload = fn; }\n' +
     '  };\n' +
     '})();\n';

@@ -9,7 +9,7 @@ under one version, as a GitHub Release with these files:
 |---|---|
 | `zxspectrum-debug-<version>-win32-x64.vsix` | The extension, carrying `zx_server.exe` in `bin/`, the 48K and 128K ROMs in `roms/`, the trace viewer, and the tape designer's builder with its fast loader in `builder/`. Installed with **Extensions: Install from VSIX...**, it needs nothing else to debug |
 | `zx-spectrum-emulator-<version>-win32-x64.zip` | `zx_server.exe` and the ROMs alone, for MCP clients and other editors |
-| `filmation-designer-<version>.vsix` | The Filmation designer: the room, templates and graphic-map editors |
+| `filmation-designer-<version>.vsix` | The Filmation designer: the room, templates, graphic-map and sprite sheet editors |
 | `zx-spectrum-example-rom-<version>.zip` | A workspace for stepping through the ROM in its commented disassembly |
 | `zx-spectrum-example-knightlore-<version>.zip` | The Knight Lore remake's workspace: its code, and a task that extracts the game's data from the user's own copy of the original |
 | `zx-spectrum-example-pentagram-<version>.zip` | The same for Pentagram |

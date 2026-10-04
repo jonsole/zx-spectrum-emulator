@@ -294,7 +294,7 @@
   // there is nothing else to load and nothing that can fall out of step with
   // the artwork.
   let adj = readSpriteAdj(graphics);
-  let index = sheetIndex(sheet, graphics);
+  let index = sheetIndex(sheet, graphics, boot.others || {});
   // Name to graphic number, off the sheet, exactly as graphics.py does it for
   // the build. Without a sheet there are no numbers and nothing can be drawn.
   let numbers = graphicNumbers(sheet, graphics);
@@ -323,12 +323,13 @@
   let lastDrawList = [];
   let dirty = false;
 
-  // The sheet, once per ink colour. Its pixels are white for ink, black for
-  // paper and clear elsewhere (sprite_sheet.py writes it that way), so a tint
-  // is a recolour of the white and nothing else.
-  const tinted = new Map();
-  let sheetImage = null;
-  let sheetPixels = null;
+  // The sheets, each once per ink colour: the game's own under '', and any
+  // other graphics.json lists -- Lightkeep's Melkhior ones -- under its name.
+  // Their pixels are white for ink, black for paper and clear elsewhere
+  // (sprite_sheet.py and melkhior_sheets.py both write them that way), so a
+  // tint is a recolour of the white and nothing else. Each is
+  // { image, pixels, tinted }.
+  let sheets = {};
 
   const el = {};
   for (const id of ['title', 'subtitle', 'state', 'save', 'build', 'grid', 'offmap',
@@ -359,29 +360,43 @@
 
   // --- the artwork ---------------------------------------------------------
 
+  // Every sheet's picture, then `done` once all of them have arrived or
+  // failed to.
   function loadSheet(done) {
-    if (!boot.sheetPng) { done(); return; }
-    const image = new Image();
-    image.onload = function () {
-      sheetImage = image;
-      const scratch = document.createElement('canvas');
-      scratch.width = image.width;
-      scratch.height = image.height;
-      const c = scratch.getContext('2d');
-      c.drawImage(image, 0, 0);
-      try {
-        sheetPixels = c.getImageData(0, 0, image.width, image.height);
-      } catch (err) {
-        sheetPixels = null;     // a tainted canvas; hit testing falls back on rects
-      }
-      done();
-    };
-    image.onerror = function () { done(); };
-    image.src = boot.sheetPng;
+    const all = Object.assign({ '': boot.sheetPng }, boot.otherPngs || {});
+    const keys = Object.keys(all).filter(function (key) { return all[key]; });
+    let left = keys.length;
+    if (!left) { done(); return; }
+    const one = function () { if (--left === 0) done(); };
+    for (const key of keys) {
+      const image = new Image();
+      image.onload = function () {
+        const scratch = document.createElement('canvas');
+        scratch.width = image.width;
+        scratch.height = image.height;
+        const c = scratch.getContext('2d');
+        c.drawImage(image, 0, 0);
+        let pixels = null;
+        try {
+          pixels = c.getImageData(0, 0, image.width, image.height);
+        } catch (err) {
+          pixels = null;        // a tainted canvas; hit testing falls back on rects
+        }
+        sheets[key] = { image: image, pixels: pixels, tinted: new Map() };
+        one();
+      };
+      image.onerror = one;
+      image.src = all[key];
+    }
   }
 
-  function sheetFor(ink) {
-    if (!sheetImage) return null;
+  // A sheet in a room's ink: `onSheet` is the sheet's name, '' the game's own.
+  function sheetFor(ink, onSheet) {
+    const got = sheets[onSheet || ''];
+    if (!got) return null;
+    const sheetImage = got.image;
+    const sheetPixels = got.pixels;
+    const tinted = got.tinted;
     if (tinted.has(ink)) return tinted.get(ink);
     const canvas = document.createElement('canvas');
     canvas.width = sheetImage.width;
@@ -494,10 +509,10 @@
       }
     }
 
-    const art = sheetFor(room.ink);
     for (let i = 0; i < lastDrawList.length; i++) {
       const item = lastDrawList[i];
-      if (!item.sprite || !art) continue;
+      const art = item.sprite && sheetFor(room.ink, item.sprite.sheet);
+      if (!art) continue;
       const rect = item.sprite.rect;
       ctx.save();
       if (inFront >= 0 && i > inFront) ctx.globalAlpha = IN_FRONT_ALPHA;
@@ -612,6 +627,18 @@
     } else {
       return;
     }
+    // The guide lines first, crossing on the floor at its place and running
+    // across the room -- and out of it, to a collectable put down beyond a
+    // wall. The templates editor draws the same (floorGuides, room_render.js).
+    ctx.strokeStyle = GUIDE_COLOUR;
+    ctx.lineWidth = 1;
+    for (const line of floorGuides(middleU, middleV, sizeOf(atlas, room), trueYOrigin())) {
+      ctx.beginPath();
+      ctx.moveTo(line[0].x + .5, line[0].y + .5);
+      ctx.lineTo(line[1].x + .5, line[1].y + .5);
+      ctx.stroke();
+    }
+
     const quad = footprint(middleU, middleV, floorZ);
     ctx.beginPath();
     ctx.moveTo(quad[0].x + .5, quad[0].y + .5);
@@ -672,6 +699,7 @@
       if (!item.sprite) continue;
       if (x < item.x || x >= item.x + item.width) continue;
       if (y < item.y || y >= item.y + item.height) continue;
+      const sheetPixels = (sheets[item.sprite.sheet || ''] || {}).pixels;
       if (sheetPixels) {
         let sx = x - item.x;
         if (item.mirrored) sx = item.width - 1 - sx;
@@ -1546,9 +1574,14 @@
     const what = document.createElement('div');
     what.className = 'what';
     if (!items.length) {
-      what.textContent = parts.length
-        ? 'nothing to draw: its graphics are below two'
-        : 'an empty template';
+      // Either every graphic is below two -- 0 ends a template and 1 is drawn
+      // by something else -- or there is no picture here for them.
+      const unseen = parts.filter(function (part) {
+        return graphicNumberOf(numbers, part.graphic) >= 2;
+      }).map(function (part) { return part.graphic; });
+      what.textContent = !parts.length ? 'an empty template'
+        : unseen.length ? 'nothing to draw: no picture here for ' + unseen.join(', ')
+        : 'nothing to draw: its graphics are below two';
       host.appendChild(what);
       return;
     }
@@ -1575,9 +1608,10 @@
     canvas.style.width = shown + 'px';
     canvas.style.height = Math.round(tall * (shown / wide)) + 'px';
     const paint = canvas.getContext('2d');
-    const art = sheetFor(room.ink);
-    if (art) {
+    {
       for (const item of items) {
+        const art = sheetFor(room.ink, item.sprite.sheet);
+        if (!art) continue;
         const rect = item.sprite.rect;
         const x = item.x - left;
         const y = item.base - item.height - top;
@@ -2163,16 +2197,12 @@
     if (next.graphics) graphics = next.graphics;
     if (next.sheet) {
       sheet = next.sheet;
-      index = sheetIndex(sheet, graphics);
+      index = sheetIndex(sheet, graphics, next.others || {});
       numbers = graphicNumbers(sheet, graphics);
       boxes = graphicBoxes(sheet, graphics);
       adj = readSpriteAdj(graphics);
     }
-    if (next.sheetPng !== undefined) {
-      tinted.clear();
-      sheetImage = null;
-      sheetPixels = null;
-    }
+    if (next.sheetPng !== undefined) sheets = {};
     if (next.specials !== undefined) {
       specials = next.specials || null;
       specialsText = specials ? serializeSpecials(specials, next.eol) : null;
@@ -2206,7 +2236,7 @@
   wireLoad();
   room = byNumber(atlas.rooms).get(boot.room) || atlas.rooms[0] || null;
   loadSheet(function () {
-    if (!sheetImage) {
+    if (!sheets['']) {
       el.poolnote.textContent = 'no sprite sheet: run the game’s build.py once';
     }
     refresh();

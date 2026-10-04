@@ -425,6 +425,14 @@ function roomLines(room, indent) {
 }
 
 // A nested mapping, one key to a line: the meta block and nothing else.
+function isFlatMapping(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.keys(value).every(function (key) {
+    const inner = value[key];
+    return !inner || typeof inner !== 'object' || Array.isArray(inner);
+  });
+}
+
 function block(said, depth) {
   const indent = ' '.repeat(depth);
   const keys = Object.keys(said || {});
@@ -432,7 +440,11 @@ function block(said, depth) {
   keys.forEach(function (key, i) {
     const comma = i < keys.length - 1 ? ',' : '';
     const value = said[key];
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (isFlatMapping(value) && depth >= 2) {
+      // Two deep and nothing nested -- a template's entry in meta.movers --
+      // goes on one line, as castle.py's _block writes it.
+      lines.push(indent + ' "' + key + '": ' + flat(value) + comma);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       lines.push(indent + ' "' + key + '": ' + block(value, depth + 1) + comma);
     } else {
       lines.push(indent + ' "' + key + '": ' + scalar(value) + comma);
@@ -1491,6 +1503,14 @@ function renameTemplate(atlas, from, to) {
       if (background[i] === from) background[i] = to;
     }
   }
+  // ...and how it moves, by name as well, in its place in the list.
+  const movers = moversSaid(atlas);
+  if (movers && Object.prototype.hasOwnProperty.call(movers, from)) {
+    const rebuilt = {};
+    for (const name of Object.keys(movers)) rebuilt[name === from ? to : name] = movers[name];
+    for (const name of Object.keys(movers)) delete movers[name];
+    for (const name of Object.keys(rebuilt)) movers[name] = rebuilt[name];
+  }
 
   for (const room of atlas.rooms) {
     for (const ref of room.scenery) {
@@ -1513,8 +1533,9 @@ function renameTemplate(atlas, from, to) {
 // place from the room -- and edits its flags and its nudge through the two
 // groups below.
 //
-// An entry may still carry a box of its own, for the records whose bytes are
-// not a box at all, and nothing here writes one or throws one away.
+// An entry may still carry a box of its own -- for the records whose bytes are
+// not a box at all, and for an invisible box under artwork, which has no size
+// of its own to lend it -- and setTemplateBox below gives or takes one whole.
 const ENTRY_FIELDS = {
   blocks: ['u', 'v', 'z'],
   entries: []
@@ -1553,6 +1574,29 @@ function setTemplateField(template, key, entryIndex, field, value) {
     return entry;
   }
   return null;
+}
+
+// A box of the entry's own in place of its graphic's: sizeU, sizeV and sizeZ
+// together, or with null none of them, and the graphic's box again. The build
+// takes all three or none. U and V are half-widths and Z the whole height, as
+// in graphics.json. The height stops at 127: in a game with more than 256
+// graphics bit 7 of it carries the graphic's ninth bit, and Lightkeep's
+// rooms_source.py refuses anything higher.
+const MAX_BOX_HEIGHT = 127;
+
+function setTemplateBox(template, entryIndex, box) {
+  const entry = template && template[entryIndex];
+  if (!entry) return null;
+  if (!box) {
+    delete entry.sizeU;
+    delete entry.sizeV;
+    delete entry.sizeZ;
+    return entry;
+  }
+  entry.sizeU = Math.max(0, Math.min(255, Math.round(box.u) || 0));
+  entry.sizeV = Math.max(0, Math.min(255, Math.round(box.v) || 0));
+  entry.sizeZ = Math.max(0, Math.min(MAX_BOX_HEIGHT, Math.round(box.z) || 0));
+  return entry;
 }
 
 // Which graphic an entry is drawn from, by name. Refused rather than guessed
@@ -1660,14 +1704,68 @@ function newTemplate(atlas, group, name) {
 }
 
 // A copy of one, under a new name, on the end of its table. The copy is the
-// pieces and nothing else: behaviour the game's code gives the original by
-// label does not come with it.
+// pieces, and how it moves if templates.json says (meta.movers); behaviour the
+// game's code gives the original by label does not come with it.
 function duplicateTemplate(atlas, group, from, to) {
   if (!Object.prototype.hasOwnProperty.call(atlas[group], from)) return null;
   const at = newTemplate(atlas, group, to);
   if (at === null) return null;
   atlas[group][to] = JSON.parse(JSON.stringify(atlas[group][from]));
+  const mover = moverOf(atlas, from);
+  if (mover) setMover(atlas, to, mover.behaviour, mover.weight || 0);
   return at;
+}
+
+// --- how an object template moves ------------------------------------------
+
+// A castle whose templates.json says which object templates move, and how --
+// meta.movers, template name to { behaviour, weight } -- has the build write
+// the game's mover_of from it (Lightkeep's rooms_source.py). A behaviour is a
+// MOVE_ name of the game's movers.s (behaviours.js reads them); the weight,
+// left out when it is nothing, is what a push loses (engine/object.s,
+// object_shove, with LOOSE_WEIGHT). A castle without meta.movers keeps
+// mover_of in its code, and these do nothing for it.
+const MAX_WEIGHT = 127;
+
+function moversSaid(atlas) {
+  const said = atlas && atlas.templatesMeta && atlas.templatesMeta.movers;
+  return said && typeof said === 'object' && !Array.isArray(said) ? said : null;
+}
+
+function hasMovers(atlas) {
+  return moversSaid(atlas) !== null;
+}
+
+function moverOf(atlas, name) {
+  const said = moversSaid(atlas);
+  return said && Object.prototype.hasOwnProperty.call(said, name) ? said[name] : null;
+}
+
+// Give a template a behaviour and a weight, or with no behaviour take its
+// entry away: it stands still. The entries are kept in the object templates'
+// own order, which is the order the build writes them in.
+function setMover(atlas, name, behaviour, weight) {
+  const said = moversSaid(atlas);
+  if (!said) return null;
+  const entries = {};
+  for (const key of Object.keys(said)) entries[key] = said[key];
+  if (behaviour) {
+    const entry = { behaviour: String(behaviour) };
+    const w = Math.max(0, Math.min(MAX_WEIGHT, Math.round(Number(weight)) || 0));
+    if (w) entry.weight = w;
+    entries[name] = entry;
+  } else {
+    delete entries[name];
+  }
+  const order = Object.keys(atlas.objectTemplates || {});
+  const names = Object.keys(entries).sort(function (a, b) {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib);
+  });
+  for (const key of Object.keys(said)) delete said[key];
+  for (const key of names) said[key] = entries[key];
+  return behaviour ? said[name] : null;
 }
 
 // Why a template cannot be deleted, or null if it can.
@@ -1686,6 +1784,7 @@ function deleteProblem(atlas, group, name) {
 function deleteTemplate(atlas, group, name) {
   if (deleteProblem(atlas, group, name)) return false;
   delete atlas[group][name];
+  if (moverOf(atlas, name)) setMover(atlas, name, null);
   return true;
 }
 
@@ -1876,7 +1975,8 @@ if (typeof module !== 'undefined') {
     GROUP_LIMIT, addObject, removeObject, moveObject, retemplateObject,
     addScenery, setSceneryTemplate, removeScenery, renameTemplate, refreshUsage,
     addRoomProblem, firstFreeRoom, addRoom, deleteRoomProblem, deleteRoom,
-    setTemplateField, setTemplateGraphic,
+    setTemplateField, setTemplateGraphic, setTemplateBox, MAX_BOX_HEIGHT,
+    hasMovers, moverOf, setMover, MAX_WEIGHT,
     templateUsage,
     checkAtlas, poolNeeded, startRoomsOf, START_SPOT, startBlockers, startRoomProblem,
     setStartRoom, SHAPE_LIMIT, SHAPE_RANGE, shapeValueProblem, roomsOfShape, setShapeField,

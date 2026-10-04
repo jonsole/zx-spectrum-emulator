@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Filmation Sprite Sheet</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px var(--vscode-font-family, system-ui, sans-serif);
+           color: var(--vscode-foreground, #ccc);
+           background: var(--vscode-editor-background, #1e1e1e);
+           padding: 14px 18px 0; box-sizing: border-box; overflow: hidden;
+           display: flex; flex-direction: column; }
+    h1 { font-size: 17px; font-weight: 600; margin: 0 0 2px; }
+    h2 { font-size: 12px; font-weight: normal; opacity: .7; margin: 0 0 12px;
+         font-variant-numeric: tabular-nums; }
+    h3 { font-size: 11px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase;
+         letter-spacing: .06em; opacity: .75; }
+    button { font: inherit; padding: 3px 10px; border: 0; border-radius: 2px; cursor: pointer;
+             color: var(--vscode-button-secondaryForeground, #ccc);
+             background: var(--vscode-button-secondaryBackground, #3a3d41); }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+    button.on { color: var(--vscode-button-foreground, #fff);
+                background: var(--vscode-button-background, #0e639c); }
+    input[type=text], select { font: inherit; padding: 2px 6px; border-radius: 2px;
+      color: var(--vscode-input-foreground, #ccc);
+      background: var(--vscode-input-background, #3c3c3c);
+      border: 1px solid var(--vscode-input-border, transparent); }
+
+    /* The page never scrolls; the tree, the picture and the side panel each
+       scroll on their own. */
+    .layout { display: flex; gap: 14px; flex: 1 1 auto; min-height: 0; }
+    .tree { flex: 0 0 260px; overflow-y: auto; padding-bottom: 16px; }
+    .middle { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    .side { flex: 0 0 250px; overflow-y: auto; padding-bottom: 16px; }
+    .card { background: var(--vscode-editorWidget-background, #252526);
+            border: 1px solid var(--vscode-editorWidget-border, #333);
+            border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
+
+    .tree input[type=text] { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+    .group { margin: 8px 0 3px; font-size: 11px; font-weight: 600; opacity: .7;
+             text-transform: none; letter-spacing: .02em; }
+    .sprite { display: flex; align-items: center; gap: 8px; padding: 2px 4px;
+              border-radius: 3px; cursor: pointer; font-variant-numeric: tabular-nums; }
+    .sprite:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+    .sprite.on { background: var(--vscode-list-activeSelectionBackground, #094771);
+                 color: var(--vscode-list-activeSelectionForeground, #fff); }
+    .sprite canvas { flex: 0 0 auto; background: #000; image-rendering: pixelated; }
+    .sprite .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sprite .dim { opacity: .6; font-size: 11px; }
+    .sprite .bad { color: var(--vscode-editorError-foreground, #f48771); font-size: 11px; }
+
+    .toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .toolbar .gap { width: 10px; }
+    .toolbar label { opacity: .7; font-size: 12px; }
+    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+              vertical-align: -2px; margin-right: 5px; border: 1px solid #777; }
+    /* The view: a canvas the size of the stage, drawn from the pixels, under
+       a scroller whose content is an empty box the size of the zoomed sheet.
+       The scroller gives the scroll bars and takes the pointer. */
+    .stage { flex: 1 1 auto; min-height: 0; position: relative; background: #111;
+             border-radius: 3px; overflow: hidden; }
+    .stage canvas.view { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+    .stage .scroller { position: absolute; inset: 0; overflow: auto; cursor: crosshair;
+                       touch-action: none; }
+    .stage .spacer { pointer-events: none; }
+    .hint { opacity: .65; font-size: 12px; line-height: 1.5; margin: 6px 0 12px; }
+
+    .side dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0;
+               font-variant-numeric: tabular-nums; }
+    .side dt { opacity: .6; }
+    .side dd { margin: 0; overflow-wrap: anywhere; }
+    .problems div { color: var(--vscode-editorError-foreground, #f48771); font-size: 12px;
+                    margin-top: 4px; }
+    .ok { color: var(--vscode-testing-iconPassed, #73c991); font-size: 12px; margin-top: 4px; }
+    .previews { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+    .previews canvas { background: #000; image-rendering: pixelated; }
+    .inks { display: flex; gap: 3px; margin-bottom: 8px; }
+    .inks button { width: 18px; height: 18px; padding: 0; border: 1px solid #555; }
+    .inks button.on { outline: 2px solid var(--vscode-focusBorder, #007fd4); }
+    .edges { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 6px;
+             align-items: center; margin-bottom: 6px; }
+    .edges button { padding: 1px 10px; font-variant-numeric: tabular-nums; }
+    .tidy { margin-bottom: 8px; }
+    .tidy button { margin-right: 6px; }
+    .tidy .hint { margin: 0 0 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Sprite sheet</h1>
+    <h2 id="summary"></h2>
+  </header>
+  <div class="layout">
+    <div class="tree" id="tree"></div>
+    <div class="middle">
+      <div class="toolbar" id="toolbar"></div>
+      <div class="stage" id="stage"></div>
+      <div class="hint">Click a sprite to pick it; the left button toggles a pixel between ink and paper -- a clear one takes the picked colour -- the right
+        rubs out to transparent, Alt+click picks a colour. The wheel scrolls, Ctrl and
+        the wheel zoom, the middle button or Space and drag moves about. Keys: 1-4 the
+        colours, P pencil, F fill, G grid, S the picked sprite, + and - zoom, [ and ]
+        the sprite before and after. Ctrl+Z and Ctrl+Y undo and redo; Save writes it.</div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+<script>
+/*@sprite_sheet_model.js@*/
+/*@host@*/
+
+// The sprite sheet editor's page. Everything it knows about what a sheet is
+// -- the tree, what a colour means, painting, the frame -- is in
+// sprite_sheet_model.js above; this lays it out and draws it, and sends each
+// stroke to the host, which keeps the real pixels and the undo.
+(function () {
+  'use strict';
+
+  const host = window.spriteSheetHost;
+  let boot = host.boot;
+  let sheet, colours, tree, sprites, drawnBy;
+  // The page's copy of the pixels: { width, height, rgba }, out of the PNG
+  // the host sent. What a stroke changes is changed here at once, so the
+  // picture keeps up with the pointer, and then sent.
+  let picture = null;
+
+  // The zooms offered: screen pixels a sheet pixel.
+  const ZOOMS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
+  const kept = (host.state && host.state()) || {};
+  let chosen = kept.chosen || null;           // a sprite's path
+  let tool = kept.tool === 'fill' ? 'fill' : 'pencil';
+  let paintWith = PAINTS.indexOf(kept.paint) >= 0 ? kept.paint : 'ink';
+  // How many screen pixels a sheet pixel is, and where the view is scrolled
+  // to: the whole picture is the view, and the picked sprite is a place on it.
+  let zoom = ZOOMS.indexOf(kept.zoom) >= 0 ? kept.zoom : 8;
+  let grid = kept.grid !== false;
+  let previewInk = Number.isInteger(kept.ink) ? kept.ink : 7;
+  let filter = '';
+  let stroke = null;                          // the stroke in progress
+  // What the host last said about a layout change -- it moved the sprite to
+  // make room, or refused -- shown until the next one.
+  let note = null;
+  let confirming = false;                     // Tidy asked, not yet confirmed
+
+  // Spectrum ink colours, for the previews: the sprite as a room draws it.
+  const INKS = ['#000000', '#0000d7', '#d70000', '#d700d7', '#00d700', '#00d7d7',
+                '#d7d700', '#d7d7d7'];
+  // How the editor shows each colour: paper black, ink white, stray red, the
+  // frame its own magenta, and transparent as a checkerboard.
+  const SHOW = { ink: '#ffffff', paper: '#000000', stray: '#e03c3c', border: '#ff00ff' };
+  const CHECK = ['#3a3a3a', '#2c2c2c'];
+
+  const el = (id) => document.getElementById(id);
+
+  function keep() {
+    if (host.keep) {
+      host.keep({ chosen: chosen, tool: tool, paint: paintWith, zoom: zoom, grid: grid,
+                  ink: previewInk, scroll: view ? [view.scroller.scrollLeft, view.scroller.scrollTop] : null });
+    }
+  }
+
+  // --- loading --------------------------------------------------------------
+
+  function load(next, done) {
+    boot = next;
+    sheet = boot.sheet;
+    colours = coloursOf(sheet);
+    tree = sheetTree(sheet);
+    sprites = allSpritesOf(tree);
+    drawnBy = boot.graphics && boot.prefix !== null
+      ? graphicsDrawing(boot.graphics, boot.prefix) : new Map();
+    if (!sprites.some((s) => s.path === chosen)) chosen = sprites.length ? sprites[0].path : null;
+    decode(boot.png, function (decoded) {
+      picture = decoded;
+      done();
+    });
+  }
+
+  // The PNG into pixels, by way of a canvas. The sheets hold only opaque
+  // colours and fully clear pixels, which a canvas gives back exactly.
+  function decode(uri, then) {
+    if (typeof Image === 'undefined') { then(null); return; }
+    const image = new Image();
+    image.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const c = canvas.getContext('2d');
+      c.drawImage(image, 0, 0);
+      const data = c.getImageData(0, 0, image.width, image.height);
+      then({ width: image.width, height: image.height, rgba: data.data });
+    };
+    image.onerror = function () { then(null); };
+    image.src = uri;
+  }
+
+  function current() {
+    return sprites.find((s) => s.path === chosen) || null;
+  }
+
+  // --- drawing a sprite -------------------------------------------------------
+
+  // A sprite's pixels onto a canvas, `scale` canvas pixels each. `ink` is the
+  // colour ink is shown in (white in the editor, the room's in a preview);
+  // `back` what transparent shows, or null for the checkerboard. `frame`
+  // draws the ring round it too.
+  function drawSprite(canvas, rect, scale, opts) {
+    const o = opts || {};
+    const pad = o.frame ? 1 : 0;
+    canvas.width = (rect.w + 2 * pad) * scale;
+    canvas.height = (rect.h + 2 * pad) * scale;
+    const c = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!c || !picture) return;
+    for (let y = -pad; y < rect.h + pad; y++) {
+      for (let x = -pad; x < rect.w + pad; x++) {
+        const sx = rect.x + (o.flip ? rect.w - 1 - x : x);
+        const sy = rect.y + y;
+        let fillWith;
+        if (sx < 0 || sy < 0 || sx >= picture.width || sy >= picture.height) {
+          fillWith = '#000';
+        } else {
+          const name = colourAt(picture, colours, sx, sy);
+          if (name === 'transparent') {
+            fillWith = o.back || CHECK[(x + y) & 1];
+          } else if (name === 'ink') {
+            fillWith = o.ink || SHOW.ink;
+          } else if (name) {
+            fillWith = SHOW[name];
+          } else {
+            const i = (sy * picture.width + sx) * 4;
+            fillWith = 'rgb(' + picture.rgba[i] + ',' + picture.rgba[i + 1] + ',' +
+                       picture.rgba[i + 2] + ')';
+          }
+        }
+        c.fillStyle = fillWith;
+        c.fillRect((x + pad) * scale, (y + pad) * scale, scale, scale);
+      }
+    }
+  }
+
+  // --- the tree ---------------------------------------------------------------
+
+  const THUMB = 28;
+  // Each sprite's row in the tree, by path, and each group's heading, so the
+  // filter and a change can reach them without building the tree again --
+  // a sheet can have hundreds of sprites, and the tree keeps its scroll.
+  let rows = new Map();
+  let heads = [];
+
+  function drawTree() {
+    const box = el('tree');
+    box.textContent = '';
+    rows = new Map();
+    heads = [];
+    box.appendChild(tidyControl());
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Filter by name…';
+    search.value = filter;
+    search.addEventListener('input', () => {
+      filter = search.value;
+      applyFilter();
+    });
+    box.appendChild(search);
+    (function walk(group) {
+      if (group.sprites.length) {
+        const head = document.createElement('div');
+        head.className = 'group';
+        head.textContent = group.path || '(top level)';
+        box.appendChild(head);
+        heads.push({ head: head, group: group });
+      }
+      for (const sprite of group.sprites) {
+        const row = rowFor(sprite);
+        rows.set(sprite.path, row);
+        box.appendChild(row);
+      }
+      for (const sub of group.groups) walk(sub);
+    }(tree));
+    applyFilter();
+  }
+
+  // Tidy re-lays every sprite, so it asks first, in place: a webview has no
+  // dialog boxes.
+  function tidyControl() {
+    const box = document.createElement('div');
+    box.className = 'tidy';
+    const button = (text, title, fn, primary) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      b.title = title;
+      if (primary) b.classList.add('on');
+      b.addEventListener('click', fn);
+      box.appendChild(b);
+      return b;
+    };
+    if (!confirming) {
+      button('Tidy sheet…', 'Lay every sprite out afresh, in the order of the tree, ' +
+             'with the gaps the build wants', () => { confirming = true; drawTree(); });
+      return box;
+    }
+    const said = document.createElement('div');
+    said.className = 'hint';
+    said.textContent = 'Re-lay every sprite in the order of the tree, each group from a new ' +
+      'row. The rectangles in the description move with them. Anything else painted on ' +
+      'the picture -- the group names sprite_sheet.py writes -- goes.';
+    box.appendChild(said);
+    button('Tidy', 'Do it: one edit, which Ctrl+Z undoes', () => {
+      confirming = false;
+      host.tidy();
+      drawTree();
+    }, true);
+    button('Cancel', '', () => { confirming = false; drawTree(); });
+    return box;
+  }
+
+  function applyFilter() {
+    const want = filter.trim().toLowerCase();
+    const shows = (sprite) => !want || sprite.path.toLowerCase().indexOf(want) >= 0;
+    for (const sprite of sprites) rows.get(sprite.path).style.display = shows(sprite) ? '' : 'none';
+    for (const h of heads) h.head.style.display = h.group.sprites.some(shows) ? '' : 'none';
+  }
+
+  // One sprite's thumbnail again, after its pixels changed.
+  function redrawThumb(path) {
+    const row = rows.get(path);
+    const sprite = sprites.find((s) => s.path === path);
+    if (!row || !sprite) return;
+    const thumb = row.children[0];
+    const r = sprite.rect;
+    drawSprite(thumb, r, Math.max(1, Math.floor(THUMB / Math.max(r.w, r.h))), { back: '#000' });
+  }
+
+  function rowFor(sprite) {
+    const row = document.createElement('div');
+    row.className = 'sprite';
+    if (sprite.path === chosen) row.classList.add('on');
+    const thumb = document.createElement('canvas');
+    const r = sprite.rect;
+    const scale = Math.max(1, Math.floor(THUMB / Math.max(r.w, r.h)));
+    drawSprite(thumb, r, scale, { back: '#000' });
+    thumb.style.width = Math.min(THUMB, r.w * scale) + 'px';
+    row.appendChild(thumb);
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = sprite.name;
+    row.appendChild(name);
+    const size = document.createElement('span');
+    size.className = 'dim';
+    size.textContent = r.w + '×' + r.h;
+    row.appendChild(size);
+    const drawn = drawnBy.get(sprite.path);
+    row.title = sprite.path + '  (' + r.w + ' × ' + r.h + ' at ' + r.x + ', ' + r.y + ')' +
+      (drawn ? '\nDrawn by graphic' + (drawn.length > 1 ? 's ' : ' ') + drawn.join(', ') : '');
+    row.addEventListener('click', () => choose(sprite.path));
+    return row;
+  }
+
+  function choose(path, onSheet) {
+    const was = rows.get(chosen);
+    if (was) was.classList.remove('on');
+    chosen = path;
+    const now = rows.get(chosen);
+    if (now) {
+      now.classList.add('on');
+      if (now.scrollIntoView) now.scrollIntoView({ block: 'nearest' });
+    }
+    keep();
+    if (!onSheet) bringIntoView(current());
+    render();
+    drawSide();
+  }
+
+  // --- the toolbar ---------------------------------------------------------
+
+  function drawToolbar() {
+    const bar = el('toolbar');
+    bar.textContent = '';
+    const button = (text, on, title, fn) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      if (on) b.classList.add('on');
+      b.title = title;
+      b.addEventListener('click', fn);
+      bar.appendChild(b);
+      return b;
+    };
+    const gap = () => {
+      const g = document.createElement('span');
+      g.className = 'gap';
+      bar.appendChild(g);
+    };
+    button('Pencil', tool === 'pencil', 'Paint pixel by pixel (P)', () => { tool = 'pencil'; keep(); drawToolbar(); });
+    button('Fill', tool === 'fill', 'Fill the joined pixels of one colour (F)', () => { tool = 'fill'; keep(); drawToolbar(); });
+    gap();
+    PAINTS.forEach((name, i) => {
+      const b = button(name[0].toUpperCase() + name.slice(1), paintWith === name,
+        'Paint ' + name + ' (' + (i + 1) + ')' + (name === 'stray'
+          ? ' -- a data bit under a hole in the mask, which draws nothing; the original art has a few'
+          : ''), () => { paintWith = name; keep(); drawToolbar(); });
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      swatch.style.background = name === 'transparent'
+        ? 'repeating-conic-gradient(#3a3a3a 0 25%, #2c2c2c 0 50%) 0 0 / 6px 6px'
+        : SHOW[name];
+      b.insertBefore ? b.insertBefore(swatch, b.firstChild) : b.appendChild(swatch);
+    });
+    gap();
+    const label = document.createElement('label');
+    label.textContent = 'Zoom ×' + zoom;
+    bar.appendChild(label);
+    button('−', false, 'Zoom out (-, or Ctrl and the wheel)', () => zoomBy(-1));
+    button('+', false, 'Zoom in (+, or Ctrl and the wheel)', () => zoomBy(1));
+    button('Fit width', false, 'The whole width of the picture in the view', fitWidth);
+    button('Sprite', false, 'Zoom to the picked sprite and bring it into the middle (S)', fitSprite);
+    gap();
+    button('Grid', grid, 'A line round every pixel when zoomed in, and the picked sprite\'s ' +
+      'bytes -- the columns the engine draws it in -- stronger (G)', () => {
+      grid = !grid; keep(); drawToolbar(); render();
+    });
+  }
+
+  // --- the picture -------------------------------------------------------------
+  //
+  // The whole sheet, scrolled about and zoomed. A tall sheet at a big zoom is
+  // far bigger than any canvas can be -- Lightkeep's walls are 5,084 rows --
+  // so the view is a canvas the size of the space it has, under a scroller
+  // whose content is only an empty box the size of the zoomed sheet. The
+  // scroller gives the scroll bars and the wheel; the canvas is drawn again,
+  // from the pixels, for whatever part of the sheet the scroll has shown.
+
+  let view = null;            // { canvas, scroller, spacer, scratch }
+  let panning = null;         // a drag that moves the view rather than painting
+  let spaceHeld = false;
+
+  // The view, made afresh -- on opening, and when the sheet changes shape --
+  // scrolled where it was: where it was left last time, at first, or else to
+  // the picked sprite.
+  function drawStage() {
+    const stage = el('stage');
+    const was = view ? [view.scroller.scrollLeft || 0, view.scroller.scrollTop || 0]
+      : Array.isArray(kept.scroll) ? kept.scroll : null;
+    stage.textContent = '';
+    view = null;
+    if (!picture) return;
+    const canvas = document.createElement('canvas');
+    canvas.className = 'view';
+    const scroller = document.createElement('div');
+    scroller.className = 'scroller';
+    const spacer = document.createElement('div');
+    spacer.className = 'spacer';
+    scroller.appendChild(spacer);
+    stage.appendChild(canvas);
+    stage.appendChild(scroller);
+    view = { canvas: canvas, scroller: scroller, spacer: spacer,
+             scratch: document.createElement('canvas') };
+    sizeSpacer();
+    if (was) {
+      scroller.scrollLeft = was[0];
+      scroller.scrollTop = was[1];
+    } else if (current()) {
+      centre(current());
+    }
+    scroller.addEventListener('scroll', () => { render(); keepSoon(); });
+    scroller.addEventListener('wheel', wheel, { passive: false });
+    scroller.addEventListener('pointerdown', down);
+    scroller.addEventListener('pointermove', move);
+    scroller.addEventListener('pointerup', up);
+    scroller.addEventListener('pointercancel', up);
+    scroller.addEventListener('contextmenu', (event) => event.preventDefault());
+    render();
+  }
+
+  function sizeSpacer() {
+    view.spacer.style.width = picture.width * zoom + 'px';
+    view.spacer.style.height = picture.height * zoom + 'px';
+  }
+
+  // The scroll is kept with the rest of the page's state, but not on every
+  // pixel of a scroll.
+  let keepTimer = null;
+  function keepSoon() {
+    if (keepTimer || typeof setTimeout === 'undefined') return;
+    keepTimer = setTimeout(() => { keepTimer = null; keep(); }, 300);
+  }
+
+  // How each pixel shows: paper black, ink white, stray red, the frame its
+  // magenta, transparent a checkerboard of greys, and a colour the sheet
+  // gives no meaning as itself. Outside the picked sprite it is dimmed, so
+  // the sprite being worked on stands out from the rest of the sheet.
+  const SHOW_RGB = { ink: [255, 255, 255], paper: [0, 0, 0], stray: [224, 60, 60],
+                     border: [255, 0, 255] };
+  const CHECK_RGB = [[58, 58, 58], [44, 44, 44]];
+  const DIM = 0.55;
+
+  function render() {
+    if (!view || !picture) return;
+    const scroller = view.scroller;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = scroller.clientWidth || 600;
+    const ch = scroller.clientHeight || 400;
+    const canvas = view.canvas;
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    const c = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!c) return;
+    c.fillStyle = '#111';
+    c.fillRect(0, 0, canvas.width, canvas.height);
+
+    // The part of the sheet that shows, in sheet pixels.
+    const left = scroller.scrollLeft || 0;
+    const top = scroller.scrollTop || 0;
+    const x0 = Math.max(0, Math.floor(left / zoom));
+    const y0 = Math.max(0, Math.floor(top / zoom));
+    const x1 = Math.min(picture.width, Math.ceil((left + cw) / zoom));
+    const y1 = Math.min(picture.height, Math.ceil((top + ch) / zoom));
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w <= 0 || h <= 0) return;
+
+    // Those pixels as they show, one to one, then stretched hard-edged.
+    const sprite = current();
+    const near = sprite ? { x: sprite.rect.x - 1, y: sprite.rect.y - 1,
+                            w: sprite.rect.w + 2, h: sprite.rect.h + 2 } : null;
+    const scratch = view.scratch;
+    scratch.width = w;
+    scratch.height = h;
+    const s = scratch.getContext ? scratch.getContext('2d') : null;
+    const shown = s && s.createImageData ? s.createImageData(w, h) : null;
+    if (shown && shown.data) {
+      const d = shown.data;
+      const ink = colours.ink;
+      const paper = colours.paper;
+      const stray = colours.stray;
+      const border = colours.border;
+      const p = picture.rgba;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const sx = x0 + x;
+          const sy = y0 + y;
+          const i = (sy * picture.width + sx) * 4;
+          let rgb;
+          if (p[i + 3] < OPAQUE) rgb = CHECK_RGB[(sx + sy) & 1];
+          else if (p[i] === ink[0] && p[i + 1] === ink[1] && p[i + 2] === ink[2]) rgb = SHOW_RGB.ink;
+          else if (p[i] === paper[0] && p[i + 1] === paper[1] && p[i + 2] === paper[2]) rgb = SHOW_RGB.paper;
+          else if (p[i] === border[0] && p[i + 1] === border[1] && p[i + 2] === border[2]) rgb = SHOW_RGB.border;
+          else if (p[i] === stray[0] && p[i + 1] === stray[1] && p[i + 2] === stray[2]) rgb = SHOW_RGB.stray;
+          else rgb = [p[i], p[i + 1], p[i + 2]];
+          const lit = near && inside(near, sx, sy) ? 1 : DIM;
+          const o = (y * w + x) * 4;
+          d[o] = rgb[0] * lit;
+          d[o + 1] = rgb[1] * lit;
+          d[o + 2] = rgb[2] * lit;
+          d[o + 3] = 255;
+        }
+      }
+      s.putImageData(shown, 0, 0);
+      c.imageSmoothingEnabled = false;
+      c.drawImage(scratch, 0, 0, w, h, (x0 * zoom - left) * dpr, (y0 * zoom - top) * dpr,
+                  w * zoom * dpr, h * zoom * dpr);
+    }
+
+    const at = (sx, sy) => ({ x: Math.round((sx * zoom - left) * dpr), y: Math.round((sy * zoom - top) * dpr) });
+    // A line round every pixel once they are big enough to aim at.
+    if (grid && zoom >= 6) {
+      c.lineWidth = 1;
+      c.strokeStyle = 'rgba(128, 128, 128, .22)';
+      c.beginPath();
+      for (let x = x0; x <= x1; x++) {
+        const p = at(x, 0);
+        c.moveTo(p.x + 0.5, 0);
+        c.lineTo(p.x + 0.5, canvas.height);
+      }
+      for (let y = y0; y <= y1; y++) {
+        const p = at(0, y);
+        c.moveTo(0, p.y + 0.5);
+        c.lineTo(canvas.width, p.y + 0.5);
+      }
+      c.stroke();
+    }
+    if (sprite) {
+      const r = sprite.rect;
+      // The picked sprite's bytes: the columns the engine draws it in.
+      if (grid && zoom >= 4) {
+        c.strokeStyle = 'rgba(80, 160, 255, .7)';
+        c.beginPath();
+        for (let x = r.x; x <= r.x + r.w; x += 8) {
+          const a = at(x, r.y);
+          const b = at(x, r.y + r.h);
+          c.moveTo(a.x + 0.5, a.y);
+          c.lineTo(b.x + 0.5, b.y);
+        }
+        c.stroke();
+      }
+      // ...and a ring round its frame, so it is easy to find on the sheet.
+      const a = at(r.x - 1, r.y - 1);
+      const b = at(r.x + r.w + 1, r.y + r.h + 1);
+      c.lineWidth = Math.max(2, Math.round(dpr * 2));
+      c.strokeStyle = '#3794ff';
+      c.strokeRect(a.x - c.lineWidth, a.y - c.lineWidth, b.x - a.x + 2 * c.lineWidth,
+                   b.y - a.y + 2 * c.lineWidth);
+    }
+  }
+
+  // The sheet pixel under the pointer, or null off the picture.
+  function pixelAt(event) {
+    if (!view) return null;
+    const box = view.scroller.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - box.left) + (view.scroller.scrollLeft || 0)) / zoom);
+    const y = Math.floor(((event.clientY - box.top) + (view.scroller.scrollTop || 0)) / zoom);
+    if (x < 0 || y < 0 || x >= picture.width || y >= picture.height) return null;
+    return { x: x, y: y };
+  }
+
+  // The sprite whose rectangle holds a sheet pixel, if any.
+  function spriteAt(p) {
+    return sprites.find((s) => inside(s.rect, p.x, p.y)) || null;
+  }
+
+  // --- zooming and moving about ---------------------------------------------------
+
+  // A new zoom, keeping the sheet pixel at a point of the view -- the
+  // anchor -- where it was.
+  //
+  // Whatever the anchor, the picked sprite stays in sight. Without one --
+  // the buttons, the keys -- the anchor is the picked sprite's middle, as it
+  // is on the screen now, so the sprite grows or shrinks where it is; with
+  // one -- the pointer, for Ctrl and the wheel -- the view then moves the
+  // least it can to bring the sprite back, if zooming took it out of sight.
+  function setZoom(next, cx, cy) {
+    if (!view || next === zoom) return;
+    const scroller = view.scroller;
+    const cw = scroller.clientWidth || 600;
+    const ch = scroller.clientHeight || 400;
+    const sprite = current();
+    let ax = cx;
+    let ay = cy;
+    if (ax === undefined) {
+      ax = cw / 2;
+      ay = ch / 2;
+      if (sprite) {
+        const r = sprite.rect;
+        const mx = (r.x + r.w / 2) * zoom - (scroller.scrollLeft || 0);
+        const my = (r.y + r.h / 2) * zoom - (scroller.scrollTop || 0);
+        // Its middle where it is, if that is in sight at all.
+        if (mx >= 0 && mx <= cw && my >= 0 && my <= ch) {
+          ax = mx;
+          ay = my;
+        }
+      }
+    }
+    const sx = ((scroller.scrollLeft || 0) + ax) / zoom;
+    const sy = ((scroller.scrollTop || 0) + ay) / zoom;
+    zoom = next;
+    sizeSpacer();
+    scroller.scrollLeft = Math.max(0, sx * zoom - ax);
+    scroller.scrollTop = Math.max(0, sy * zoom - ay);
+    keepInView(sprite);
+    keep();
+    drawToolbar();
+    render();
+  }
+
+  // Scroll the least distance that shows a sprite and its frame whole -- or,
+  // if it is bigger than the view at this zoom, put its middle in the middle.
+  function keepInView(sprite) {
+    if (!view || !sprite) return;
+    const r = sprite.rect;
+    const scroller = view.scroller;
+    const cw = scroller.clientWidth || 600;
+    const ch = scroller.clientHeight || 400;
+    const left = (r.x - 1) * zoom;
+    const top = (r.y - 1) * zoom;
+    const right = (r.x + r.w + 1) * zoom;
+    const bottom = (r.y + r.h + 1) * zoom;
+    if (right - left > cw || bottom - top > ch) {
+      centre(sprite);
+      return;
+    }
+    const sl = scroller.scrollLeft || 0;
+    const st = scroller.scrollTop || 0;
+    if (left < sl) scroller.scrollLeft = left;
+    else if (right > sl + cw) scroller.scrollLeft = right - cw;
+    if (top < st) scroller.scrollTop = top;
+    else if (bottom > st + ch) scroller.scrollTop = bottom - ch;
+  }
+
+  function zoomBy(steps, cx, cy) {
+    const at = ZOOMS.indexOf(zoom);
+    setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, at + steps))], cx, cy);
+  }
+
+  function fitWidth() {
+    if (!view) return;
+    const fits = ZOOMS.filter((z) => z * picture.width <= (view.scroller.clientWidth || 600));
+    setZoom(fits.length ? fits[fits.length - 1] : ZOOMS[0]);
+  }
+
+  // The biggest zoom the picked sprite fits at, with room round it, and the
+  // sprite in the middle.
+  function fitSprite() {
+    const sprite = current();
+    if (!view || !sprite) return;
+    const r = sprite.rect;
+    const cw = view.scroller.clientWidth || 600;
+    const ch = view.scroller.clientHeight || 400;
+    const fits = ZOOMS.filter((z) => (r.w + 8) * z <= cw && (r.h + 8) * z <= ch);
+    zoom = fits.length ? fits[fits.length - 1] : ZOOMS[0];
+    sizeSpacer();
+    centre(sprite);
+    keep();
+    drawToolbar();
+    render();
+  }
+
+  // Scroll so a sprite is in the middle of the view.
+  function centre(sprite) {
+    const r = sprite.rect;
+    const scroller = view.scroller;
+    scroller.scrollLeft = Math.max(0, (r.x + r.w / 2) * zoom - (scroller.clientWidth || 600) / 2);
+    scroller.scrollTop = Math.max(0, (r.y + r.h / 2) * zoom - (scroller.clientHeight || 400) / 2);
+  }
+
+  // ...but only if it is not already in sight: picking from the tree should
+  // not make the view jump about for a sprite already showing.
+  function bringIntoView(sprite) {
+    if (!view || !sprite) return;
+    const r = sprite.rect;
+    const scroller = view.scroller;
+    const left = (scroller.scrollLeft || 0) / zoom;
+    const top = (scroller.scrollTop || 0) / zoom;
+    const right = left + (scroller.clientWidth || 600) / zoom;
+    const bottom = top + (scroller.clientHeight || 400) / zoom;
+    if (r.x - 1 < left || r.y - 1 < top || r.x + r.w + 1 > right || r.y + r.h + 1 > bottom) {
+      centre(sprite);
+    }
+  }
+
+  // Ctrl and the wheel zoom about the pointer; the wheel alone scrolls, as
+  // the scroller does by itself.
+  function wheel(event) {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.preventDefault) event.preventDefault();
+    const box = view.scroller.getBoundingClientRect();
+    zoomBy(event.deltaY < 0 ? 1 : -1, event.clientX - box.left, event.clientY - box.top);
+  }
+
+  // --- painting ---------------------------------------------------------------------
+
+  function down(event) {
+    if (!view || !picture) return;
+    // The middle button, or the left with Space held, moves the view.
+    if (event.button === 1 || (event.button === 0 && spaceHeld)) {
+      panning = { x: event.clientX, y: event.clientY,
+                  left: view.scroller.scrollLeft || 0, top: view.scroller.scrollTop || 0 };
+      capture(event);
+      if (event.preventDefault) event.preventDefault();
+      return;
+    }
+    const at = pixelAt(event);
+    if (event.preventDefault) event.preventDefault();
+    if (!at) return;
+    // Alt picks the colour under the pointer rather than painting.
+    if (event.altKey) {
+      const name = colourAt(picture, colours, at.x, at.y);
+      if (PAINTS.indexOf(name) >= 0) { paintWith = name; keep(); drawToolbar(); }
+      return;
+    }
+    // A press on another sprite picks it; only the picked one is painted.
+    const sprite = current();
+    if (!sprite || !inside(sprite.rect, at.x, at.y)) {
+      const other = spriteAt(at);
+      if (other) choose(other.path, true);
+      return;
+    }
+    // The right button rubs out; the left toggles ink and paper, or puts the
+    // picked colour on a clear pixel -- see strokeColour.
+    const name = event.button === 2 ? 'transparent'
+      : strokeColour(colourAt(picture, colours, at.x, at.y), paintWith);
+    if (tool === 'fill') {
+      send(fill(picture, colours, sprite.rect, at.x, at.y, name));
+      return;
+    }
+    stroke = { name: name, last: at, changes: [], rect: sprite.rect };
+    capture(event);
+    paintPoints([at]);
+  }
+
+  function capture(event) {
+    if (view.scroller.setPointerCapture) {
+      try { view.scroller.setPointerCapture(event.pointerId); } catch (err) { /* gone */ }
+    }
+  }
+
+  function move(event) {
+    if (panning) {
+      view.scroller.scrollLeft = Math.max(0, panning.left - (event.clientX - panning.x));
+      view.scroller.scrollTop = Math.max(0, panning.top - (event.clientY - panning.y));
+      render();
+      return;
+    }
+    if (!stroke) return;
+    const at = pixelAt(event);
+    if (!at) return;
+    // Every pixel between this one and the last, so a fast stroke is a line.
+    paintPoints(lineBetween(stroke.last, at));
+    stroke.last = at;
+  }
+
+  // A stroke is one edit, and one step of undo: it goes to the host when the
+  // button comes up.
+  function up() {
+    if (panning) { panning = null; keep(); return; }
+    if (!stroke) return;
+    const changes = stroke.changes;
+    stroke = null;
+    if (!changes.length) return;
+    host.paint(changes.map((c) => ({ x: c.x, y: c.y, to: c.to })));
+    changed(changes);
+  }
+
+  function paintPoints(points) {
+    const changes = paint(picture, colours, stroke.rect, points, stroke.name);
+    if (!changes.length) return;
+    applyChanges(picture, colours, changes, false);
+    stroke.changes = stroke.changes.concat(changes);
+    render();
+  }
+
+  // A whole change at once -- a fill -- painted here and sent.
+  function send(changes) {
+    if (!changes.length) return;
+    applyChanges(picture, colours, changes, false);
+    host.paint(changes.map((c) => ({ x: c.x, y: c.y, to: c.to })));
+    changed(changes);
+  }
+
+  function lineBetween(a, b) {
+    const out = [];
+    const steps = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    for (let i = 1; i <= steps; i++) {
+      out.push({ x: Math.round(a.x + (b.x - a.x) * i / steps),
+                 y: Math.round(a.y + (b.y - a.y) * i / steps) });
+    }
+    return out.length ? out : [b];
+  }
+
+  // After pixels changed: the picture, the previews, the problems, and the
+  // thumbnail of every sprite they were in -- an undo can reach a sprite
+  // other than the one showing.
+  function changed(changes) {
+    render();
+    drawSide();
+    const touched = new Set();
+    for (const c of changes) {
+      for (const sprite of sprites) {
+        if (inside(sprite.rect, c.x, c.y)) touched.add(sprite.path);
+      }
+    }
+    for (const path of touched) redrawThumb(path);
+  }
+
+  // --- the side panel ------------------------------------------------------------
+
+  function drawSide() {
+    const box = el('side');
+    box.textContent = '';
+    const sprite = current();
+    if (!sprite) return;
+    const r = sprite.rect;
+
+    const about = document.createElement('div');
+    about.className = 'card';
+    const h = document.createElement('h3');
+    h.textContent = sprite.path;
+    about.appendChild(h);
+    const dl = document.createElement('dl');
+    const pair = (key, value) => {
+      const dt = document.createElement('dt');
+      dt.textContent = key;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    };
+    pair('Size', r.w + ' × ' + r.h);
+    pair('At', r.x + ', ' + r.y + ' on ' + boot.picture);
+    if (sprite.trim) pair('Trimmed', sprite.trim + ' blank row' + (sprite.trim === 1 ? '' : 's'));
+    const drawn = drawnBy.get(sprite.path);
+    pair('Drawn by', boot.prefix === null ? 'no graphics.json lists this sheet'
+      : drawn ? 'graphic' + (drawn.length > 1 ? 's ' : ' ') + drawn.join(', ') : 'no graphic');
+    about.appendChild(dl);
+    // What the build will say. The size limits are the engine's; the build
+    // holds the other sheets to them, the game's own having come out of it.
+    const problems = picture ? spriteProblems(picture, colours, r, !!boot.prefix) : [];
+    const said = document.createElement('div');
+    said.className = 'problems';
+    if (!problems.length && picture) {
+      const ok = document.createElement('div');
+      ok.className = 'ok';
+      ok.textContent = 'The build will take it.';
+      about.appendChild(ok);
+    }
+    for (const why of problems) {
+      const line = document.createElement('div');
+      line.textContent = why;
+      said.appendChild(line);
+    }
+    about.appendChild(said);
+    box.appendChild(about);
+
+    box.appendChild(sizeCard(sprite));
+
+    // As the game draws it: in a room's ink, on black, both ways round.
+    const look = document.createElement('div');
+    look.className = 'card';
+    const h2 = document.createElement('h3');
+    h2.textContent = 'In a room';
+    look.appendChild(h2);
+    const inks = document.createElement('div');
+    inks.className = 'inks';
+    INKS.forEach((colour, i) => {
+      if (!i) return;
+      const b = document.createElement('button');
+      b.style.background = colour;
+      b.title = 'Ink ' + i;
+      if (i === previewInk) b.classList.add('on');
+      b.addEventListener('click', () => { previewInk = i; keep(); drawSide(); });
+      inks.appendChild(b);
+    });
+    look.appendChild(inks);
+    const row = document.createElement('div');
+    row.className = 'previews';
+    for (const scale of [1, 2, 3]) {
+      for (const flip of [false, true]) {
+        const canvas = document.createElement('canvas');
+        drawSprite(canvas, r, scale, { ink: INKS[previewInk], back: '#000', flip: flip });
+        canvas.title = '×' + scale + (flip ? ', mirrored' : '');
+        row.appendChild(canvas);
+      }
+    }
+    look.appendChild(row);
+    box.appendChild(look);
+  }
+
+  // Making the sprite bigger or smaller at each edge: a row at a time at the
+  // top and bottom, a byte -- eight columns -- at the sides, since the build
+  // reads a sprite in bytes. What is drawn stays where it is in the sprite.
+  // The host does it, moves the sprite if it no longer fits where it is, and
+  // says so.
+  function sizeCard(sprite) {
+    const card = document.createElement('div');
+    card.className = 'card size';
+    const h = document.createElement('h3');
+    h.textContent = 'Size';
+    card.appendChild(h);
+    if (note) {
+      const said = document.createElement('div');
+      said.className = note.refused ? 'problems' : 'hint';
+      const line = document.createElement('div');
+      line.textContent = note.text;
+      said.appendChild(line);
+      card.appendChild(said);
+    }
+    const grid = document.createElement('div');
+    grid.className = 'edges';
+    const EDGES = [['top', 1, 'row'], ['bottom', 1, 'row'], ['left', 8, 'byte'], ['right', 8, 'byte']];
+    for (const [edge, step, unit] of EDGES) {
+      const label = document.createElement('span');
+      label.textContent = edge[0].toUpperCase() + edge.slice(1);
+      grid.appendChild(label);
+      for (const sign of [-1, 1]) {
+        const b = document.createElement('button');
+        b.textContent = (sign < 0 ? '−' : '+') + step;
+        b.title = (sign < 0 ? 'Take a ' + unit + ' off the ' : 'Add a ' + unit + ' at the ') + edge;
+        const shrinks = sign < 0 && (edge === 'top' || edge === 'bottom' ? sprite.rect.h <= 1 : sprite.rect.w <= 8);
+        b.disabled = shrinks;
+        b.addEventListener('click', () => {
+          const edges = {};
+          edges[edge] = sign * step;
+          note = null;
+          host.resize(sprite.path, edges);
+        });
+        grid.appendChild(b);
+      }
+    }
+    card.appendChild(grid);
+    const why = document.createElement('div');
+    why.className = 'hint';
+    why.textContent = 'The game stands a sprite on its bottom row and lines it up by its ' +
+      'left column. A change at the top or right leaves it where it was on the screen; ' +
+      'one at the bottom or left moves it there, unless its nudge in graphics.json moves too.';
+    card.appendChild(why);
+    return card;
+  }
+
+  // --- the whole page --------------------------------------------------------------
+
+  function drawAll() {
+    el('title').textContent = boot.title;
+    const groups = (function count(g) { return g.groups.reduce((n, s) => n + count(s), g.groups.length); }(tree));
+    el('summary').textContent = sprites.length + ' sprites in ' + groups + ' groups, on ' +
+      boot.picture + (picture ? ' (' + picture.width + ' × ' + picture.height + ')' : ' — the picture did not load');
+    drawTree();
+    drawToolbar();
+    drawStage();
+    drawSide();
+  }
+
+  // The keys. Nothing while a name is being typed in the filter.
+  function keyed(event) {
+    const tag = String((event.target && event.target.tagName) || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'SELECT' || event.ctrlKey || event.metaKey) return;
+    const at = sprites.findIndex((s) => s.path === chosen);
+    const k = event.key;
+    if (k >= '1' && k <= '4') { paintWith = PAINTS[Number(k) - 1]; keep(); drawToolbar(); }
+    else if (k === 'p' || k === 'P') { tool = 'pencil'; keep(); drawToolbar(); }
+    else if (k === 'f' || k === 'F') { tool = 'fill'; keep(); drawToolbar(); }
+    else if (k === 'g' || k === 'G') { grid = !grid; keep(); drawToolbar(); render(); }
+    else if (k === 's' || k === 'S') fitSprite();
+    else if (k === ' ') spaceHeld = true;
+    else if (k === '+' || k === '=') zoomBy(1);
+    else if (k === '-') zoomBy(-1);
+    else if (k === '[' && at > 0) choose(sprites[at - 1].path);
+    else if (k === ']' && at >= 0 && at < sprites.length - 1) choose(sprites[at + 1].path);
+    else return;
+    if (event.preventDefault) event.preventDefault();
+  }
+
+  // Undo, redo and revert, from the host; a picture saved over by a paint
+  // program, too.
+  host.onMessage(function (message) {
+    if (message.type === 'pixels' && picture) {
+      for (const c of message.changes) setColour(picture, colours, c.x, c.y, c.to);
+      changed(message.changes);
+    } else if (message.type === 'layout' && picture) {
+      relaid(message);
+    } else if (message.type === 'refused') {
+      note = { text: message.why, refused: true };
+      drawSide();
+    } else if (message.type === 'reload') {
+      note = message.note ? { text: message.note } : null;
+      load(message.boot, drawAll);
+    }
+  });
+
+  // A layout change from the host -- a resize, a tidy, or the undo of one:
+  // the new description, and the pixels that changed, each as its index and
+  // its colour packed four bytes to a number. The picture may have grown or
+  // shrunk at the bottom.
+  function relaid(message) {
+    if (message.height !== picture.height) {
+      const rgba = new Uint8ClampedArray(message.width * message.height * 4);
+      rgba.set(picture.rgba.subarray(0, Math.min(picture.rgba.length, rgba.length)));
+      picture = { width: message.width, height: message.height, rgba: rgba };
+    }
+    for (let k = 0; k < message.at.length; k++) {
+      const i = message.at[k] * 4;
+      const v = message.values[k];
+      picture.rgba[i] = v >>> 24;
+      picture.rgba[i + 1] = (v >>> 16) & 255;
+      picture.rgba[i + 2] = (v >>> 8) & 255;
+      picture.rgba[i + 3] = v & 255;
+    }
+    boot.sheet = message.sheet;
+    sheet = message.sheet;
+    tree = sheetTree(sheet);
+    sprites = allSpritesOf(tree);
+    note = message.note ? { text: message.note } : null;
+    drawAll();
+  }
+
+  if (window.addEventListener) {
+    window.addEventListener('keydown', keyed);
+    window.addEventListener('keyup', (event) => { if (event.key === ' ') spaceHeld = false; });
+    window.addEventListener('resize', () => render());
+  }
+  load(boot, drawAll);
+})();
+</script>
+</body>
+</html>

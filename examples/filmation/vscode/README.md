@@ -15,8 +15,13 @@ as a task.
   template and shows the template on its own, on a room's floor, or in a room
   that places it. Hosted by `templates_view.js` and `templates_view.html`.
 - **The graphic map** opens `graphics.json`: which sprite each graphic number
-  draws, and its box. Hosted by `graphic_map_view.js` and
-  `graphic_map_view.html`.
+  draws, and its box, from the game's own sheet or the others it lists under
+  `"sheets"` (Lightkeep's Melkhior's Mansion sheets). Hosted by
+  `graphic_map_view.js` and `graphic_map_view.html`.
+- **The sprite sheet editor** opens a sheet's description --
+  `metadata/sprites.json`, or one of Lightkeep's `metadata/melkhior/*.json` --
+  and paints the picture it names, pixel by pixel. Hosted by
+  `sprite_sheet_view.js` and `sprite_sheet_view.html`.
 - **Schemas** under `schemas/` cover every JSON file a remake is built from,
   so editing one as text gives completion and checking.
 
@@ -30,7 +35,8 @@ castle. `game_layout.js` has the rule.
 
 What a castle is and how it looks are in files that don't import `vscode`:
 `room_model.js`, `room_render.js`, `sheet_model.js`, `specials_model.js`,
-`graphic_map_model.js`, `template_refs.js` and `game_layout.js`. They are
+`graphic_map_model.js`, `template_refs.js`, `behaviours.js`, `game_layout.js`, `sheet_files.js`,
+`sprite_sheet_model.js`, `sprite_sheet_document.js` and `png_codec.js`. They are
 tested from plain Node, one file per topic, in `tests/`:
 
 ```powershell

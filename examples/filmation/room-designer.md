@@ -1,5 +1,8 @@
 # Designing a Filmation room
 
+This is the reference for the Filmation Designer's editors: what every rule
+is and why, and how each is held to what the engine does.
+
 The Filmation engine under `examples/filmation` does not store a room as a list
 of objects. It stores templates and expands them: a room is a colour, a floor
 shape and a handful of indices naming pieces of scenery and groups of objects
@@ -241,6 +244,11 @@ and V are the **guard's patrol extent**, 5 × 5 for the wizard and 6 × 6 for th
 two guards. Four Pentagram templates no room places decode into nonsense and
 keep theirs for the same reason. Those six entries are the only ones in either
 game that override; everything else takes its box from the graphic.
+
+Lightkeep has a second use for one: an invisible box under artwork. Its
+graphic `solid` draws nothing, so a template places it with a box of its own --
+`scenery_raised_w` raises the floor along a west wall with one 32 x 128 x 20.
+The templates editor edits such a box (see [The templates](#the-templates)).
 
 The rule is written twice, as the naming rule is: `box_of` in
 [graphics.py](graphics.py) for the build, `boxOf` in
@@ -498,7 +506,11 @@ A selected object also has **the ground it stands on** lit, with a dashed riser
 between the two. That pair is what makes its place readable: the projection
 sends V up the screen and Z up it as well, so a sprite drawn high up could
 equally be far away on the floor or near and in the air, and the artwork alone
-does not say which.
+does not say which. Two amber guide lines cross on the floor at its place
+as well, one along U and one along V, from wall to wall and on out to the
+object if it stands beyond one: a collectable put down past a wall shows its
+lines leaving the floor. They are `floorGuides` in `room_render.js`, and the
+templates editor draws the same ones.
 
 The marker follows the object, not the cell its position names, because those
 are not always the same place. A template carries a nudge -- half a cell in U,
@@ -605,11 +617,60 @@ Under the picture is every piece, and each can be changed in place: the graphic 
 picked from `graphics.json` rather than typed; a scenery piece's U, V and Z;
 the mirrored and passable flags; and an object's half-cell nudges and raise.
 Pieces can be added, moved earlier or later -- order is the order they are
-laid, and the order they join the object pool -- and removed. At the bottom is
+laid, and the order they join the object pool -- and removed. **Add...** shows
+every graphic as a picture with its name and number, filtered by name as you
+type; click one and **Add** puts it on the end of the template, or double-click
+it to do both. At the bottom is
 every room that places the template; clicking one takes the designer there.
 
-A piece's **box** is not here: it belongs to the graphic, and the graphic map
-is where it is changed.
+The selected piece is drawn with its box, in blue, and with where it is on
+the floor: the box's base shaded there, a mark under its middle, and a line up
+from the mark to the piece when it stands above the floor -- the room
+designer's footing, for a piece that is not on a cell. On a floor or in a
+room, amber guide lines cross on the floor at its place, along U and along V,
+across the room's floor and on out to the piece. A piece on the floor behind a
+back wall is drawn where one on a raised floor in front of it would be, and
+the lines are what tell the two apart. All of it is drawn over the pieces. A
+piece whose sprite
+draws nothing (Lightkeep's `solid`) is always drawn as its box, fainter, and is
+picked by clicking inside it.
+
+The picture puts every piece where it really is (`projectUnwrapped` in
+`room_render.js`), not where `object_place`'s eight bits put it. A piece
+lifted until its base is above the top of the screen goes on up rather than
+coming back at the bottom, as the game would draw it; it is outlined in red and
+the template's notes say so. The room designer keeps the game's wrap, since
+what it shows is the game's screen.
+
+The notes give the reason (`wrapOf` in `room_render.js`). The screen's edges
+are one. The other is a piece too far back: `object_place` halves
+V − U + 128 with `SRL`, which drops the ninth bit, so a piece with V − U past
+127 is drawn 128 rows lower than it stands. A room's far corner is at exactly
+128, so only a piece behind the back walls can do it.
+
+A piece's **box** normally belongs to its graphic, and the graphic map is where
+that is changed. **own box** gives one piece a box of its own, starting from
+its graphic's, and its three sizes are then edited in its row -- U and V
+half-widths and Z the height, at most 127, since in a game with more than 256
+graphics bit 7 of it carries the graphic's ninth bit. **graphic's box** takes
+it away again (`setTemplateBox` in `room_model.js`).
+
+**How an object template moves**, in a castle whose `templates.json` says so
+(`meta.movers`, Lightkeep's): template name to `{ "behaviour", "weight" }`, a
+MOVE_ name of the game's `movers.s` and what a push loses. The **moves** row
+picks the behaviour from the game's own list -- `behaviours.js` reads the MOVE_
+names `movers.s` gives a number, leaving out a name given another name, which
+only marks where a band of them begins or ends -- and marks the ones that kill
+and the ones that can be pushed, from the engine's bands. Only one that can be
+pushed has its weight read (`LOOSE_WEIGHT`, see the engine's README), so only
+it has the weight field, and it weighs 1 or more: the field will not go
+lower, and the build refuses one that can be pushed and has no weight
+(`rooms_source.py` reads which behaviours a push moves from `movers.s`, as
+`behaviours.js` does). `rooms_source.py` writes `mover_of` from this, in
+table order, one triple a template; a template not listed stands still. A
+rename, a copy and a delete carry the entry with them. A castle without
+`meta.movers` -- Knight Lore, Knight Lore 128K and Pentagram -- keeps
+`mover_of` in its `movers.s`, and has no row.
 
 A template can be renamed, duplicated under a new name, created empty, and --
 with one condition -- deleted. The condition is the thing to understand about
@@ -739,6 +800,86 @@ two files to save. The browser host holds both and writes them with one Save,
 because they are edited in one page and there is nothing useful about saving
 half of it.
 
+## The sprite sheet editor
+
+A sheet is two files: the picture, `art/sprites.png` (or one of Lightkeep's
+`art/melkhior/*.png`), and the description that names it and cuts it up,
+`metadata/sprites.json` (or `metadata/melkhior/*.json`). Opening the
+description opens the editor on both, and so does **Filmation: Edit Sprite
+Sheet...** Every sheet is drawn in four colours that mean something to the
+build -- ink, paper, transparent, and the rare stray, a data bit under a hole
+in the mask -- with a magenta frame just outside each sprite, which the build
+checks so that a rectangle that has moved off its sprite is caught.
+
+In the middle is the whole picture, to scroll about and zoom into: the wheel
+scrolls, **Ctrl** and the wheel zoom about the pointer from ×1 to ×32, the
+middle button -- or **Space** and the left -- drags it about, **Fit width**
+shows the picture's whole width and **Sprite** zooms to the picked one. Click
+a sprite to pick it; it is ringed, the rest of the sheet dimmed round it, and
+once zoomed in a grid shows every pixel and, stronger, the picked sprite's
+bytes, the columns the engine draws it in. On the left is the tree of groups,
+each sprite with its thumbnail and size, and a filter by name; picking one
+there brings it into view. Only the picked sprite is painted. With the
+**pencil**, a click on an ink pixel makes it paper and one on paper makes it
+ink, so clicking toggles a pixel between the two; a clear pixel takes the
+colour picked in the toolbar. A drag keeps the colour its first pixel gave
+it, so one started on ink turns ink to paper all the way along. With
+**Transparent** picked, the left button rubs out instead, and the right
+button always does. **Fill** takes every joined pixel of one colour by the
+same rule, and **Alt**+click picks up the colour under the pointer. Painting never reaches a frame or anything
+outside the sprite. The keys: 1-4 the colours, P and F the tools, G the grid,
+S the picked sprite, + and - the zoom, [ and ] the sprite before and after.
+The view is drawn from the pixels for whatever part of the sheet shows, so a
+tall sheet -- Lightkeep's walls are 5,084 rows -- costs no more than a short
+one.
+
+On the right is what the sprite is: its size and place on the picture, which
+graphic numbers draw it (from `graphics.json`), and what the build will say
+about it -- a broken frame, a colour with no meaning, or, for a sprite from
+one of the other sheets, a size the engine cannot draw (16 to 40 pixels wide,
+64 high). Under that it is drawn as a room would: in a room's ink, on black,
+at one, two and three times, both ways round.
+
+The **Size** card grows or shrinks the sprite at one edge: a row at a time at
+the top and bottom, a byte -- eight columns -- at the sides, since the build
+reads a sprite in bytes. What is drawn stays where it is in the sprite, new
+pixels are transparent, and the editor redraws the frame. The game stands a
+sprite on its bottom row and lines it up by its left column, so a change at
+the top or right leaves it where it was on the screen and one at the bottom
+or left moves it there -- unless its nudge in `graphics.json` moves too, which
+the graphic map's **Nudge...** is for. A sprite that no longer fits where it
+is, clear of the others' frames by the gap the build lays them out with,
+moves to the first place on the picture it does, and the picture grows at
+the bottom if there is none; the card says where it went.
+
+**Tidy sheet...** lays every sprite out afresh: in the tree's order, each
+group from a new row, left to right with that gap between. It asks first,
+because anything else painted on the picture goes -- the group names
+`sprite_sheet.py` writes above each band among it. Where a sprite sits on the
+picture means nothing to the game, so a tidied sheet builds the same game;
+Lightkeep's own sheet and its doors sheet, tidied, built byte for byte the
+same.
+
+Each of these is one edit, as a stroke is: **Ctrl+Z** and **Ctrl+Y** undo and
+redo it, the tab shows it unsaved, and **Save** writes the picture and, when
+a rectangle moved or changed size, the description too. The description is
+written in the layout `sheet.py` writes -- one sprite a line, the columns
+lined up, the file's own line endings and its own order, even where a name
+looks like a number -- so a resize diffs as the line it changed. The build
+notices either file changing and regenerates the sprites (for Lightkeep's
+Melkhior sheets too). If a paint program saves over the picture, or anything
+over the description, while the editor has nothing unsaved, it reloads.
+
+The PNG is written by the editor's own encoder, `png_codec.js`.
+`tests/png_codec_test.js` checks it round-trips every sheet in the
+repository, and that every one decodes to a whole frame round every sprite;
+`tests/sprite_sheet_model_test.js` that every description comes back out of
+the editor's writer byte for byte.
+
+Not done yet: adding, renaming and deleting sprites and groups, moving a
+sprite to another group, and previewing animations. Until then those are
+edits to the description by hand, with the frame drawn in a paint program.
+
 ## The graphic map
 
 `graphics.json` opens as a picture too, for the same reason: it is numbers
@@ -750,10 +891,123 @@ rectangles they come out of, and is not edited here.
 Every graphic number is a tile showing the bitmap it draws, its sprite's name
 and its number. A gold border means a bitmap more than one number draws; picking one
 shows which others, and they are links. A red one means the file points at a
-sprite the sheet has not got. Re-pointing a graphic is a click in the picker,
-filtered by name or group, and "mark unused" takes the sprite off a number.
+sprite the sheet has not got. The map and the side panel scroll apart, so the
+panel stays beside the high numbers.
 
-It never touches the **nudge** or the **box**, even when the sprite goes. A
+The side panel shows the picked number -- its sprite stood in its box, its
+name, frame, nudge and box -- with four buttons. **Add...** opens the sprite picker on a number nothing uses
+yet (the picked one if it is free, or any up to 511 from a list, never 256 or
+257; a game of 256 graphic numbers refuses the upper half when it builds) and adds that
+graphic, named after the sprite, with the number on the end if that name is
+taken: this is how a sprite is put into a game. **Change...** opens the picker to
+point the picked number at a different sprite. **Nudge...** moves its sprite
+against its box (below). **Delete** takes the sprite off
+the number. Nothing changes until the picker's OK; a double click on a sprite
+is pick and OK, and a double click on the map is Change (or Add, on an unused
+number). The picker chooses the sheet, filters by name or group, and shows the
+sprite you have picked beside OK.
+
+The map and the picker each have a size: **Fit** gives every sprite a tile and
+scales it to fill it, and **×1**, **×2** and **×3** draw every sprite at that
+scale, as big as it really is against the others.
+
+### Moving a graphic to another number
+
+Drag a tile onto another number to move its graphic there. Dropped on an unused
+number, it moves; dropped on a used one, the two swap. Nothing else is
+renumbered, the side panel follows the graphic, and the drop is one edit and
+one undo. Only the number changes. Rooms place a graphic by its name and the
+`GFX_` label is made from the name, so both follow it, and the build rewrites
+the room data with the new number (and, past 255, with bit 8 in the height --
+see the Filmation README).
+
+A graphic whose number the game's **code** relies on cannot move, and nothing
+can be swapped onto one. Its tile carries a small lock, and `graphics.json`
+says `"fixed": true`. The code steps the knight's legs through 16 to 29 by
+arithmetic, flips the ghost between 80 and 81 by a bit, counts a torch's bottom
+two bits round, and puts a collectable in flight at its number plus 8, so moving
+any of those would leave the code drawing whatever took its old place. Every
+graphic Knight Lore and Pentagram came with is fixed, because their code is the
+originals'. In Knight Lore 128K and Lightkeep, the scenery added since -- the
+`castle.*` furniture, not the animated torches, and Lightkeep's Melkhior doors
+-- is not. A graphic added through **Add...** is not fixed. Mark it fixed by
+hand once code refers to it by number rather than by its `GFX_` label.
+
+The name keeps any `.g<number>` it was given when it was seeded, even when the
+graphic moves away from that number: rooms refer to it by that name.
+
+### Nudging
+
+**Nudge...**, or a click on the picture in the side panel, opens the picked
+graphic stood in its box the way the game draws it. The sprite is where
+`object_place` puts it. The box is drawn in blue round the red point the
+graphic stands on -- its U, V and Z -- with the edges the box hides dashed and
+its floor shaded. Move the sprite by dragging it, with the arrow keys (Shift
+moves 8), or by typing the numbers. It moves a Spectrum pixel at a time at
+every scale, and a gold outline keeps where it started. y counts up the
+screen, because the engine subtracts it from the row. The nudges in
+`graphics.json` already have the sprite's trimmed rows folded in, so this is
+the sprite exactly where the game draws it.
+
+**Plain** and **Mirrored** show it each way round: mirrored flips the sprite
+and turns the box, U and V swapped. Most graphics have one nudge and use it both
+ways round. Moving the mirrored sprite gives the graphic a mirrored nudge of its
+own, and **Use the plain one** takes that away again. **Reflect the plain one**
+starts it at the plain one's mirror image: the column -(x + width), the row
+kept. Knight Lore's four doorways agree with that on the column and want a row
+lower, so it is a start, not the answer.
+
+The **box** is beside it, because a nudge is only right against a box:
+half-widths along U and V and a height, stored unmirrored. It is what every
+template placing the graphic is sorted and collided by, so changing it changes
+the rooms as well as the picture. A graphic with no box of its own -- usually
+an animation's later frames -- is drawn in the first box another number drawing
+the same sprite has. **Give it a box** copies that one, or works one out from
+the sprite's size when there is none. A mover's graphics, such as the
+knight's, have none here, because a mover gives its record a box in its code.
+
+Nothing changes until OK, and then it is one edit and one undo. In a game of
+more than 256 graphic numbers, y is kept between -64 and 63 and the height
+under 128, because the engine keeps bit 8 of the graphic beside them.
+
+It shows one graphic on its own. Judging one against another -- a body against
+the legs under it, say -- is still done in the room designer or the running
+game.
+
+### Other sheets
+
+A `graphics.json` can list sheets besides the game's own, under `"sheets"`:
+
+```json
+ "sprites": "sprites.json",
+ "sheets": {
+  "objects":    "melkhior/objects.json",
+  "furniture":  "melkhior/furniture.json"
+ },
+```
+
+Each is a description in the same shape as `sprites.json`, relative to
+`graphics.json`, and names its own picture. A sprite on one is named with the
+sheet's name and a colon in front -- `furniture:GrandfatherClockNE.2` -- and
+the graphic made from it gets the same name with a dot: `furniture.GrandfatherClockNE.2`.
+The picker then has a list of the sheets above its filter. Only the sprites a
+graphic names go into the build (`examples/filmation/scripts/sheet.py`), so a
+sheet of hundreds costs nothing for the ones no graphic uses, and an unused
+sprite on one is not reported as a problem the way one on the game's own sheet
+is. A sheet whose picture is not there is listed as "not converted here", and
+the build needs it only once a graphic names a sprite on it.
+
+A frame bigger than the engine draws as one sprite -- more than 40 pixels wide
+or 64 high, or narrower than 16 -- has a dashed border in the picker, and the
+build stops on one a graphic names. Lightkeep's Melkhior's Mansion sheets are
+the use for all this: see [lightkeep/README.md](lightkeep/README.md).
+
+The room designer and the templates editor draw from all of them, each in the
+room's ink as the game's own sheet is, and the templates editor offers their
+graphics to add.
+
+Picking a sprite never touches the **nudge** or the **box**, even when the
+sprite goes; only the Nudge dialog changes them, and only on its OK. A
 sprite can be re-extracted from a snapshot whenever you like; the nudge came
 off a running game and there is no other copy, so no click here throws one
 away, and the box is the graphic's rather than the bitmap's -- drawing it with
@@ -777,6 +1031,7 @@ node examples/filmation/vscode/tests/graphic_map_model_test.js
 node examples/filmation/vscode/tests/graphic_map_page_test.js
 node examples/filmation/vscode/tests/templates_page_test.js
 node examples/filmation/vscode/tests/template_refs_test.js
+node examples/filmation/vscode/tests/behaviours_test.js
 ```
 
 ## Editing the files as text
@@ -824,7 +1079,7 @@ them.
 | `examples/filmation/<game>/scripts/rooms.py` | `room_data.bin` → `rooms.json`, once, for someone who has extracted their own |
 | `examples/filmation/<game>/scripts/rooms_source.py` | `rooms.json` → `generated/room_data.s` |
 | `examples/filmation/vscode/specials_model.js` | What a collectable is: the game's own limits, and the edits |
-| `examples/filmation/vscode/graphic_map_model.js` | What a graphic map says, what it hides, and how to re-point one |
+| `examples/filmation/vscode/graphic_map_model.js` | What a graphic map says, what it hides, how to re-point one, and the box and sprite the nudge dialog draws |
 | `examples/filmation/vscode/graphic_map_view.html` | The graphic map's page |
 | `examples/filmation/vscode/graphic_map_view.js` | Its editor host |
 | `examples/filmation/vscode/schemas/` | The five JSON schemas, for editing any of it as text |

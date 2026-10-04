@@ -58,10 +58,34 @@ GitHub takes its notes from that section.
   original in `extracted/`; the Python every game shares is in
   `examples/filmation/scripts/`. The Knight Lore and Pentagram workspaces' Extract
   task runs `examples/filmation/scripts/extract.py`.
+- **The graphic map picks sprites from more than one sheet.** A `graphics.json`
+  can list other sheets under `"sheets"`, and a sprite on one is named
+  `objects:Bell.0`; the picker has a list of the sheets, marks a frame too big
+  for the engine to draw as one sprite, and picking a sprite for an unused
+  number adds that graphic. The build takes only the sprites a graphic names
+  from those sheets, and stops on one too big. The picker's tiles had been
+  captioned "undefined" since sprites were named rather than numbered, and a
+  click on one took the sprite off the graphic; that is fixed.
+- **The graphic map is easier to work in.** The map and the side panel scroll
+  apart; the panel shows the picked number with Add, Change and Delete, and the
+  sprite picker opens in a dialog of its own. The map and the picker each draw
+  at Fit, ×1, ×2 or ×3, the fixed sizes keeping sprites true to one another.
 - **The Filmation engine can have 512 graphic numbers** in a game that needs
   them (Lightkeep): the ninth bit rides in the object record's y nudge, and the
   code for it is assembled only in such a game, so the others build as they
   did. The graphic map offers numbers up to 511, never 256 or 257.
+- **The graphic map edits nudges and boxes by eye.** The side panel shows the
+  picked graphic stood in its 3D box, and **Nudge...** opens it big. Drag the
+  sprite, use the arrow keys or type the numbers, plain and mirrored, while a
+  gold outline keeps where it started. The box can be changed beside it, or
+  given to a graphic that has none. The picture uses the room designer's
+  projection, so the sprite sits exactly where the game draws it.
+- **Graphics can be renumbered by dragging them on the graphic map.** Dropped
+  on an unused number a graphic moves there, and dropped on a used one the two
+  swap; rooms follow, because they place graphics by name. A graphic whose
+  number the game's code relies on is marked `"fixed": true` in
+  `graphics.json`, shows a lock, and stays put. Every graphic the original
+  Knight Lore and Pentagram came with is fixed.
 - **Filmation characters can walk up stairs**, in a game built with
   `DEFINE CHARACTER_STEP_UP n`: anything solid whose top is no more than `n`
   units above his feet is climbed, two units a turn, rather than jumped, the
@@ -71,11 +95,49 @@ GitHub takes its notes from that section.
   wall stones on its front face (`scenery_raised_w`), and test stairs up to
   it. Knight Lore, Knight Lore 128K and
   Pentagram don't define it and build byte for byte as before.
+- **The templates editor shows a piece's box and where it stands.** The
+  selected piece is drawn with its box, the box's base shaded on the floor, a
+  mark under its middle, a line up to it when it is raised, and guide lines
+  crossing on the floor at its place, which run on out of the room when the
+  piece is outside it, while it is dragged as well. The room designer draws
+  the same guide lines under a selected object or collectable. A piece whose sprite draws nothing, such as Lightkeep's
+  invisible `solid`, is drawn as its box and picked by clicking inside it. A
+  piece can be given a box of its own, edited in its row, or go back to its
+  graphic's. A piece lifted off the top of the screen stays above the rest,
+  outlined in red with a warning, rather than jumping to the bottom; the game
+  would draw it wrapped round to the bottom. A piece behind a room's far
+  corner, which the game draws 128 rows lower, is outlined and named the same
+  way.
 - **Lightkeep's guards fall like the knight, legs and all.** A guard that
   walks off a raised floor now gathers speed as the knight does, and his legs
   come down with him: a two-part figure's legs used to follow its torso along
   the floor but not down. It is a build option of the Filmation engine,
   `PAIR_GRAVITY`; Knight Lore, whose guards never fall, builds as before.
+- **Lightkeep's moving objects are chosen in the templates editor, and can
+  weigh something.** An object template has a **moves** row: one of the
+  game's behaviours, read from its `movers.s` and marked if it kills or can be
+  pushed, or none. One that can be pushed has a weight from 1 up, which a
+  push loses, so a heavier object moves less and one as heavy as the push not
+  at all: the knight pushes a weight of 1 at 2 a turn, smoothly, where a table
+  used to lurch 3 every other turn. It is
+  saved in `templates.json`, and the build writes the game's table from it. The
+  weight is a Filmation engine build option, `LOOSE_WEIGHT`; Knight Lore,
+  Knight Lore 128K and Pentagram build as before.
+- **A sprite sheet editor for the Filmation games.** Opening a sheet's
+  description (`metadata/sprites.json`, or a Melkhior one) opens its picture
+  for pixel editing: the sprites in their groups, a pencil and a fill in ink,
+  paper and transparent, a mirrored view, previews in a room's ink, which
+  graphics draw each sprite, and what the build will say about it. A sprite
+  grows or shrinks at any edge, keeping its frame and moving to free space
+  when it no longer fits, and **Tidy sheet** re-lays the whole picture; the
+  description is rewritten to match, in the layout the build writes. Undo,
+  redo and Save are VS Code's own. Naming and grouping sprites are to follow.
+- **The templates editor adds a piece from pictures.** **Add...** shows every
+  graphic as a picture with its name, filtered by name as you type, and the
+  editor and the room designer now draw pieces from the other sheets
+  `graphics.json` lists, so Lightkeep's Melkhior doorways show in both. The graphic map takes a game's
+  `GRAPHIC_COUNT` from its `sprite_sheet.py`, so the numbers it offers and how
+  far a y nudge may go follow what the game is built with.
 
 ## 0.1.0 (2026-09-29)
 

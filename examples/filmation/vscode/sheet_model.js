@@ -23,17 +23,32 @@
 
 'use strict';
 
+// What puts a sprite on one of the other sheets graphics.json lists under
+// "sheets": furniture:GrandfatherClockNE.2 is the sprite "2" in the group
+// "GrandfatherClockNE" of the sheet graphics.json calls "furniture". A name
+// without one is on the game's own sheet. examples/filmation/scripts/sheet.py
+// reads the same names for the build.
+// var, not const: each page inlines this file and then graphic_map_model.js,
+// whose require() line declares the same name again.
+var SHEET_SEPARATOR = ':';  // eslint-disable-line no-var
+
 // Every sprite in the sheet, in the order the tree lists them -- which is the
 // order the picture lays them out, and the order the build emits them.
-function spriteList(sheet) {
+//
+// `onSheet` is the sheet's name when it is one of the others, which goes on
+// the front of every name and group; each sprite says which sheet it is on
+// ('' for the game's own), so a drawer knows which picture to cut it from.
+function spriteList(sheet, onSheet) {
   const out = [];
+  const prefix = onSheet ? onSheet + SHEET_SEPARATOR : '';
 
   function walk(node, path) {
     for (const key of Object.keys((node && node.sprites) || {})) {
       const box = node.sprites[key];
       out.push({
-        name: path.concat([key]).join('.'),
-        group: path.join('.'),
+        name: prefix + path.concat([key]).join('.'),
+        group: prefix + path.join('.'),
+        sheet: onSheet || '',
         x: box.x, y: box.y, w: box.w, h: box.h
       });
     }
@@ -46,10 +61,32 @@ function spriteList(sheet) {
   return out;
 }
 
+// The other sheets a graphics.json lists: name -> its file, relative to the
+// graphics.json. Lightkeep lists Melkhior's Mansion's, one a category.
+function sheetsOf(graphics) {
+  const said = (graphics && graphics.sheets) || {};
+  const out = {};
+  for (const name of Object.keys(said)) {
+    if (typeof said[name] === 'string') out[name] = said[name];
+  }
+  return out;
+}
+
+// Every sprite there is to draw from: the game's own sheet's, then each
+// other's in the order graphics.json lists them. `others` maps a sheet's name
+// to what its file says, and may be left out.
+function allSprites(sheet, others) {
+  let out = spriteList(sheet);
+  for (const name of Object.keys(others || {})) {
+    out = out.concat(spriteList(others[name], name));
+  }
+  return out;
+}
+
 // ...and by name, which is how graphics.json refers to them.
-function spritesByName(sheet) {
+function spritesByName(sheet, others) {
   const out = new Map();
-  for (const sprite of spriteList(sheet)) out.set(sprite.name, sprite);
+  for (const sprite of allSprites(sheet, others)) out.set(sprite.name, sprite);
   return out;
 }
 
@@ -141,9 +178,12 @@ function boxOf(sizes, entry) {
 }
 
 // Everything a drawer needs, worked out once: a graphic number to the
-// rectangle it comes out of, and the nudge it is placed with.
-function sheetIndex(sheet, graphics) {
-  const byName = spritesByName(sheet);
+// rectangle it comes out of, and the nudge it is placed with. A drawer that
+// has only the game's own picture leaves `others` out, and a graphic drawn
+// from another sheet is then one it has no sprite for -- not one cut from the
+// wrong picture.
+function sheetIndex(sheet, graphics, others) {
+  const byName = spritesByName(sheet, others);
   const table = graphicTable(graphics);
   return { byName: byName, table: table, sprites: spriteList(sheet) };
 }
@@ -158,6 +198,7 @@ function spriteFor(index, graphic) {
   return {
     sprite: sprite.name,
     group: sprite.group,
+    sheet: sprite.sheet,
     rect: { x: sprite.x, y: sprite.y, w: sprite.w, h: sprite.h },
     width: sprite.w,
     height: sprite.h
@@ -189,7 +230,8 @@ function formatOf(sheet) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    spriteList, spritesByName, graphicTable, graphicsByName, graphicNamesOf,
+    SHEET_SEPARATOR, spriteList, sheetsOf, allSprites, spritesByName,
+    graphicTable, graphicsByName, graphicNamesOf,
     graphicSizes, boxOf,
     sheetIndex, spriteFor, animationsOf, formatOf
   };

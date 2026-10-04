@@ -8,7 +8,8 @@
     body { font: 13px var(--vscode-font-family, system-ui, sans-serif);
            color: var(--vscode-foreground, #ccc);
            background: var(--vscode-editor-background, #1e1e1e);
-           padding: 16px 20px; box-sizing: border-box; overflow: auto; }
+           padding: 16px 20px 0; box-sizing: border-box; overflow: hidden;
+           display: flex; flex-direction: column; }
     h1 { font-size: 19px; font-weight: 600; margin: 0 0 2px; }
     h2 { font-size: 12px; font-weight: normal; opacity: .7; margin: 0 0 14px;
          font-variant-numeric: tabular-nums; }
@@ -30,11 +31,15 @@
       background: var(--vscode-input-background, #3c3c3c);
       border: 1px solid var(--vscode-input-border, transparent); }
 
-    header { display: flex; align-items: flex-start; gap: 16px; }
+    header { display: flex; align-items: flex-start; gap: 16px; flex: 0 0 auto; }
     header .spacer { flex: 1 1 auto; }
     header .buttons { display: flex; gap: 8px; align-items: center; }
 
-    .layout { display: flex; gap: 18px; align-items: flex-start; }
+    /* The page itself never scrolls: the map and the sidebar each scroll on
+       their own, so looking down the map at graphic 200 leaves the sprite
+       picker where it was, beside it, rather than scrolled away above. */
+    .layout { display: flex; gap: 18px; flex: 1 1 auto; min-height: 0; }
+    .middle, .sidebar { overflow-y: auto; padding-bottom: 16px; }
     .middle { flex: 1 1 auto; min-width: 0; }
     .sidebar { flex: 0 0 320px; }
     .card { background: var(--vscode-editorWidget-background, #252526);
@@ -69,10 +74,20 @@
        eye with the ones that draw something. */
     .tile.empty { opacity: .3; background: transparent; }
     .tile.empty .artbox { color: var(--vscode-foreground); font-size: 10px; }
+    /* Dragging a tile onto another number moves the graphic there. A graphic
+       whose number the code relies on carries a small lock and stays put. */
+    .tile.locked .caption::before { content: '\1F512'; font-size: 8px; opacity: .55;
+                                    margin-right: 2px; }
+    .tile.dragging { opacity: .35; }
+    .tile.drop { outline: 2px dashed var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }
     /* Two or more numbers on one bitmap: the thing the file states only by
        repeating an index, and the reason a name carries its number. */
     .tile.shared { border-color: #9a7b2f; }
     .tile.dangling { border-color: var(--vscode-editorError-foreground, #f48771); }
+    /* A frame bigger than the engine draws as one sprite: on the sheet to be
+       seen and cut up, and refused by the build as it stands. */
+    .tile.toobig { border-style: dashed;
+                   border-color: var(--vscode-editorWarning-foreground, #cca700); }
 
     .problems { color: var(--vscode-editorError-foreground, #f48771); font-size: 12px; }
     .problems div { margin-bottom: 3px; }
@@ -89,10 +104,90 @@
             font-family: inherit; }
     .chip:hover { background: var(--vscode-button-background, #0e639c); color: #fff; }
 
-    #picker { max-height: 340px; overflow: auto; display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 4px; }
-    #picker .tile .artbox { height: 48px; }
+    select { font: inherit; padding: 2px 4px; border-radius: 2px; width: 100%;
+             margin-bottom: 6px;
+             color: var(--vscode-dropdown-foreground, #ccc);
+             background: var(--vscode-dropdown-background, #3c3c3c);
+             border: 1px solid var(--vscode-dropdown-border, transparent); }
+
+    /* A card's heading with the size choice beside it. */
+    .cardhead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .cardhead h3 { margin: 0; }
+    .cardhead .spacer { flex: 1 1 auto; }
+    .sizes { display: inline-flex; gap: 1px; }
+    .sizes button { padding: 1px 8px; font-size: 11px; border-radius: 0; }
+    .sizes button:first-child { border-radius: 2px 0 0 2px; }
+    .sizes button:last-child { border-radius: 0 2px 2px 0; }
+    .sizes button.on { color: var(--vscode-button-foreground, #fff);
+                       background: var(--vscode-button-background, #0e639c); }
+
+    /* At a fixed size every sprite is drawn at one scale, so they keep their
+       sizes against one another: each tile is as big as its sprite, and they
+       stand on a shelf along their bottoms. */
+    #map.fixed, #picker.fixed { display: flex; flex-wrap: wrap; align-items: flex-end;
+                                align-content: flex-start; }
+    .fixed .tile .artbox { align-self: center; }
+
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+
+    /* The dialog the editing is done in: the sprite picker, over the page. */
+    .overlay { position: fixed; inset: 0; z-index: 10; display: none;
+               align-items: center; justify-content: center;
+               background: rgba(0, 0, 0, .45); }
+    .dialog { width: min(960px, calc(100vw - 40px)); height: calc(100vh - 60px);
+              box-sizing: border-box; padding: 14px 16px; border-radius: 6px;
+              display: flex; flex-direction: column; gap: 10px;
+              background: var(--vscode-editorWidget-background, #252526);
+              border: 1px solid var(--vscode-editorWidget-border, #454545);
+              box-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+    .dialog h3 { margin: 0; }
+    .dialog .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .dialog .controls label { opacity: .7; font-size: 12px; }
+    .dialog .controls select { width: auto; margin: 0; }
+    .dialog .controls input[type=text] { width: auto; flex: 1 1 160px; }
+    #picker { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+              gap: 6px; align-content: start; }
+    .dialog .foot { display: flex; gap: 8px; align-items: center; }
+    .dialog .foot .spacer { flex: 1 1 auto; }
+    .dialog .choice { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+    .dialog .choice .artbox { width: 52px; height: 52px; background: #000;
+                              border-radius: 3px; }
     .nosheet { padding: 40px 0; text-align: center; opacity: .7; line-height: 1.6; }
+
+    input[type=number] { font: inherit; padding: 2px 4px; border-radius: 2px; width: 58px;
+      box-sizing: border-box; font-variant-numeric: tabular-nums;
+      color: var(--vscode-input-foreground, #ccc);
+      background: var(--vscode-input-background, #3c3c3c);
+      border: 1px solid var(--vscode-input-border, transparent); }
+
+    /* The box view: a graphic stood in its box, drawn on a canvas because a
+       mirrored sprite has to be flipped and the box drawn over it. */
+    .stage { display: block; width: 100%; background: #000; border-radius: 3px; }
+    .detail .stage { height: 150px; margin-bottom: 10px; cursor: pointer; }
+    .dialog.nudge { width: min(980px, calc(100vw - 40px)); }
+    .nudge .body { flex: 1 1 auto; min-height: 0; display: flex; gap: 16px; }
+    /* Placed absolutely, so the size the canvas is drawn at never feeds back
+       into the size it is laid out at. */
+    .nudge .view { flex: 1 1 auto; min-width: 0; position: relative; }
+    .nudge .stage { position: absolute; inset: 0; height: 100%; cursor: grab;
+                    outline: none; }
+    .nudge .stage:active { cursor: grabbing; }
+    .nudge .side { flex: 0 0 236px; overflow-y: auto; display: flex;
+                   flex-direction: column; gap: 14px; }
+    .nudge .side h4 { font-size: 11px; font-weight: 600; margin: 0 0 6px;
+                      text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+    .nudge .fields { display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+                     margin-bottom: 6px; }
+    .nudge .fields label { opacity: .7; font-size: 12px; }
+    .nudge .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .nudge .pad { display: grid; grid-template-columns: repeat(3, 30px); gap: 3px;
+                  margin: 4px 0 6px; }
+    .nudge .pad button { padding: 2px 0; }
+    .nudge .legend { font-size: 11px; line-height: 1.7; opacity: .8; }
+    .nudge .legend span { display: inline-block; width: 14px; height: 0;
+                          vertical-align: middle; margin-right: 6px;
+                          border-top: 2px solid; }
   </style>
 </head>
 <body>
@@ -111,7 +206,11 @@
   <div class="layout">
     <div class="middle">
       <div class="card">
-        <h3>Graphic numbers</h3>
+        <div class="cardhead">
+          <h3>Graphic numbers</h3>
+          <div class="spacer"></div>
+          <div id="map-size" class="sizes"></div>
+        </div>
         <div id="problems" class="problems"></div>
         <div id="map"></div>
       </div>
@@ -121,8 +220,11 @@
     </aside>
   </div>
 
+  <div id="dialog" class="overlay"></div>
+
 <script>
 /*@sheet_model.js@*/
+/*@room_render.js@*/
 /*@graphic_map_model.js@*/
 /*@host@*/
 
@@ -147,53 +249,147 @@
   // page never writes one back -- sprites.json is the artwork's own file.
   let said = boot.graphics;
   let sheet = boot.sheet || {};
+  // The other sheets graphics.json lists, by name -- Lightkeep's Melkhior
+  // ones -- to pick sprites from as well as the game's own.
+  let others = boot.others || {};
   let chosen = null;              // the graphic number being looked at
+  let pickFrom = null;            // which sheet the picker shows: '' is the game's own
   let dirty = false;
 
   const el = (id) => document.getElementById(id);
 
   // --- drawing a sprite ---------------------------------------------------
 
-  // One frame of the sheet, as a box the size of that frame with the sheet
-  // slid behind it. `fit` is the box it has to sit inside; the sprite is
-  // scaled up by whole numbers only, because these are Spectrum pixels and a
-  // fractional scale would make some of them wider than others.
-  function artFor(rect, fit) {
+  // Each sheet's picture as one CSS class. A frame names its sheet's class
+  // rather than carrying the picture in its own style: the picture is a data:
+  // URI of a few hundred kilobytes, and a picker of a thousand frames would
+  // otherwise hold a thousand copies of it.
+  function sheetClasses() {
+    let rules = '';
+    const add = (name, uri) => {
+      if (uri) rules += '.' + classOf(name) + ' { background-image: url(' + uri + '); }\n';
+    };
+    add('', boot.sheetPng);
+    for (const name of Object.keys(boot.otherPngs || {})) add(name, boot.otherPngs[name]);
+    let style = el('sheet-pictures');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sheet-pictures';
+      document.head.appendChild(style);
+    }
+    style.textContent = rules;
+  }
+
+  function classOf(onSheet) {
+    return 'sheet-' + (onSheet ? onSheet.replace(/[^A-Za-z0-9_-]/g, '_') : 'own');
+  }
+
+  function pictureOf(onSheet) {
+    return onSheet ? (boot.otherPngs || {})[onSheet] : boot.sheetPng;
+  }
+
+  // One frame of a sheet, as a box with the sheet slid behind it so the
+  // wanted frame shows. `size` is how big: 'fit' scales it to sit in a box
+  // `fit` pixels square, up by whole numbers or down by whole divisions --
+  // these are Spectrum pixels, and a fractional scale would make some of
+  // them wider than others -- and a number draws it at that scale, in a box
+  // its own size, so sprites drawn alike keep their sizes against one
+  // another. `onSheet` is the sheet it is on, '' for the game's own.
+  function artFor(rect, fit, onSheet, size) {
     const box = document.createElement('div');
     box.className = 'artbox';
-    if (!rect || !boot.sheetPng) return box;
+    if (!rect || !pictureOf(onSheet)) return box;
     const art = document.createElement('div');
-    art.className = 'art';
+    art.className = 'art ' + classOf(onSheet);
     art.style.width = rect.w + 'px';
     art.style.height = rect.h + 'px';
-    art.style.backgroundImage = 'url(' + boot.sheetPng + ')';
     art.style.backgroundPosition = (-rect.x) + 'px ' + (-rect.y) + 'px';
-    const scale = Math.max(1, Math.floor(Math.min(fit / rect.w, fit / rect.h)));
-    if (scale > 1) art.style.transform = 'scale(' + scale + ')';
+    let scale = fitScale(rect, fit);
+    if (typeof size === 'number') {
+      scale = size;
+      box.style.width = rect.w * scale + 'px';
+      box.style.height = rect.h * scale + 'px';
+    }
+    if (scale !== 1) art.style.transform = 'scale(' + scale + ')';
     box.appendChild(art);
     return box;
   }
 
-  function tileFor(row, fit) {
+  function fitScale(rect, fit) {
+    const up = Math.floor(Math.min(fit / rect.w, fit / rect.h));
+    if (up >= 1) return up;
+    return 1 / Math.ceil(Math.max(rect.w / fit, rect.h / fit));
+  }
+
+  // A tile at a fixed size is as wide as its sprite, but never too narrow for
+  // its number to be read under it.
+  const NARROWEST_TILE = 56;
+  const EMPTY_HEIGHT = 32;
+
+  function sizeTile(tile, rect, size) {
+    if (typeof size !== 'number') return;
+    tile.style.width = Math.max(NARROWEST_TILE, (rect ? rect.w * size : 0) + 4) + 'px';
+  }
+
+  // --- how big ------------------------------------------------------------
+
+  // The choices both the map and the picker offer. Fit is a tile each, the
+  // sprite scaled to fill it; the others draw every sprite at one scale.
+  const SIZES = [['fit', 'Fit'], [1, '×1'], [2, '×2'], [3, '×3']];
+  const kept = (host.state && host.state()) || {};
+  // The nudge dialog's picture goes bigger: it is there to judge single
+  // pixels by.
+  const STAGE_SIZES = [['fit', 'Fit'], [2, '×2'], [3, '×3'], [4, '×4'], [6, '×6']];
+  let mapSize = sizeFrom(kept.mapSize);
+  let pickSize = sizeFrom(kept.pickSize);
+  let stageSize = sizeFrom(kept.stageSize, STAGE_SIZES);
+
+  function sizeFrom(said, choices) {
+    for (const [value] of choices || SIZES) if (value === said) return value;
+    return 'fit';
+  }
+
+  function keepSizes() {
+    if (host.keep) host.keep({ mapSize: mapSize, pickSize: pickSize, stageSize: stageSize });
+  }
+
+  function sizeControl(into, current, pick, choices) {
+    into.textContent = '';
+    for (const [value, text] of choices || SIZES) {
+      const button = document.createElement('button');
+      button.textContent = text;
+      if (choices) {
+        button.title = value === 'fit' ? 'As big as the picture allows' : 'Drawn at ' + text;
+      } else {
+        button.title = value === 'fit'
+          ? 'Scale each sprite to fill its tile'
+          : 'Draw every sprite at ' + text + ', so they keep their sizes against one another';
+      }
+      if (value === current) button.classList.add('on');
+      button.addEventListener('click', () => pick(value));
+      into.appendChild(button);
+    }
+  }
+
+  function tileFor(row, size) {
     const tile = document.createElement('button');
     tile.className = 'tile';
     if (row.sprite === null) tile.classList.add('empty');
     if (row.sharedWith.length) tile.classList.add('shared');
     if (row.dangling) tile.classList.add('dangling');
     if (chosen === row.graphic) tile.classList.add('here');
+    if (row.fixed) tile.classList.add('locked');
 
-    if (row.dangling) {
+    if (row.dangling || row.sprite === null) {
       const box = document.createElement('div');
       box.className = 'artbox';
-      box.textContent = '?';
+      box.textContent = row.dangling ? '?' : 'unused';
+      if (typeof size === 'number') box.style.height = EMPTY_HEIGHT + 'px';
       tile.appendChild(box);
-    } else if (row.sprite === null) {
-      const box = document.createElement('div');
-      box.className = 'artbox';
-      box.textContent = 'unused';
-      tile.appendChild(box);
+      sizeTile(tile, null, size);
     } else {
-      tile.appendChild(artFor(row.rect, fit));
+      tile.appendChild(artFor(row.rect, 58, row.sheet, size));
+      sizeTile(tile, row.rect, size);
     }
 
     const caption = document.createElement('div');
@@ -213,33 +409,251 @@
         (row.group ? ' (in ' + row.group + ')' : '') +
         (row.sharedWith.length
           ? '\nAlso drawn by ' + row.sharedWith.join(', ')
-          : '');
+          : '') +
+        (row.fixed
+          ? '\nFixed: the game\'s code knows it by this number'
+          : row.name ? '\nDrag it onto another number to move it there' : '');
     tile.addEventListener('click', () => { chosen = row.graphic; draw(); });
+    dragAndDrop(tile, row);
+    // A double click is Change, or Add on an unused number.
+    tile.addEventListener('dblclick', () => {
+      chosen = row.graphic;
+      draw();
+      openPicker(row.sprite === null ? 'add' : 'edit');
+    });
     return tile;
+  }
+
+  // --- the box view -------------------------------------------------------
+
+  // The sheets' pictures as images, for the canvas. The map's tiles show a
+  // frame as a CSS background; the box view draws over the sprite and flips
+  // it, which takes the picture itself. Each is loaded once, and whatever
+  // asked for it before it arrived is painted again when it does.
+  const pictures = {};
+
+  function imageOf(onSheet, then) {
+    const uri = pictureOf(onSheet);
+    if (!uri || typeof Image === 'undefined') return null;
+    const key = onSheet || '';
+    let entry = pictures[key];
+    if (!entry || entry.uri !== uri) {
+      const loading = { uri: uri, img: new Image(), ready: false, waiting: [] };
+      loading.img.onload = () => {
+        loading.ready = true;
+        for (const fn of loading.waiting.splice(0)) fn();
+      };
+      loading.img.src = uri;
+      pictures[key] = entry = loading;
+    }
+    if (entry.ready) return entry.img;
+    if (then) entry.waiting.push(then);
+    return null;
+  }
+
+  // What the box view is drawn in: the box blue, the edges it hides fainter
+  // and the floor it stands on a wash of the same; where the sprite was when
+  // the dialog opened in gold; the point it stands on red.
+  const BOX_EDGE = 'rgba(80, 200, 255, 0.95)';
+  const BOX_HIDDEN = 'rgba(80, 200, 255, 0.5)';
+  const BOX_FLOOR = 'rgba(80, 200, 255, 0.18)';
+  const FRAME_EDGE = 'rgba(255, 255, 255, 0.28)';
+  const WAS_EDGE = 'rgba(255, 196, 64, 0.9)';
+  const POINT = '#ff5a5a';
+  const STAGE_MARGIN = 6;           // Spectrum pixels round what is drawn, at Fit
+
+  // Paint a box view into a canvas, filling it, and say how it was laid out,
+  // so that a drag can be turned back into Spectrum pixels.
+  //
+  //   look.view   boxView's answer: the box, the sprite and their bounds
+  //   look.was    another, whose sprite is outlined: where it started
+  //   look.rect   the frame on the sheet, and look.sheet which sheet
+  //   look.size   'fit', or CSS pixels to a Spectrum pixel
+  //   look.frame  the bounds to fit and centre on, if not the view's own
+  //
+  // The scale is a whole number of DEVICE pixels, so that every Spectrum
+  // pixel is the same size on a screen scaled by 125% as well, and a line is
+  // a device pixel wide, through the middle of the pixels it joins.
+  function paintStage(canvas, look) {
+    const ctx = canvas.getContext ? canvas.getContext('2d') : null;
+    if (!ctx) return null;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round((canvas.clientWidth || 300) * dpr));
+    canvas.height = Math.max(1, Math.round((canvas.clientHeight || 150) * dpr));
+    const view = look.view;
+    const b = look.frame || view.bounds;
+    let s = look.size === 'fit'
+      ? Math.floor(Math.min(canvas.width / (b.maxX - b.minX + 2 * STAGE_MARGIN),
+                            canvas.height / (b.maxY - b.minY + 2 * STAGE_MARGIN)))
+      : Math.round(look.size * dpr);
+    s = Math.max(1, s);
+    const ox = Math.round(canvas.width / 2 - (b.minX + b.maxX) / 2 * s);
+    const oy = Math.round(canvas.height / 2 - (b.minY + b.maxY) / 2 * s);
+    const px = (x) => ox + x * s;
+    const py = (y) => oy + y * s;
+    const mid = (p) => ({ x: px(p.x) + s / 2, y: py(p.y) + s / 2 });
+    const line = Math.max(1, Math.round(dpr));
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = line;
+
+    const path = (points) => {
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const at = mid(p);
+        if (i) ctx.lineTo(at.x, at.y);
+        else ctx.moveTo(at.x, at.y);
+      });
+    };
+    const edges = (hidden) => {
+      ctx.strokeStyle = hidden ? BOX_HIDDEN : BOX_EDGE;
+      ctx.setLineDash(hidden ? [3 * line, 3 * line] : []);
+      for (const edge of view.edges) {
+        if (edge.hidden !== hidden) continue;
+        path([view.corners[edge.from], view.corners[edge.to]]);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    };
+    const outline = (sp, colour, dashed) => {
+      ctx.strokeStyle = colour;
+      ctx.setLineDash(dashed ? [4 * line, 3 * line] : []);
+      ctx.strokeRect(px(sp.x) + line / 2, py(sp.y) + line / 2,
+                     sp.w * s - line, sp.h * s - line);
+      ctx.setLineDash([]);
+    };
+
+    // Behind the sprite: the floor the box stands on, and the edges the box
+    // itself would hide.
+    if (view.floor.length) {
+      path(view.floor);
+      ctx.closePath();
+      ctx.fillStyle = BOX_FLOOR;
+      ctx.fill();
+    }
+    edges(true);
+
+    // The sprite, the way round it is drawn, and its frame.
+    const sp = view.sprite;
+    const img = imageOf(look.sheet, () => paintStage(canvas, look));
+    if (img) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.save();
+      if (sp.flipped) {
+        ctx.translate(px(sp.x + sp.w), py(sp.y));
+        ctx.scale(-1, 1);
+      } else {
+        ctx.translate(px(sp.x), py(sp.y));
+      }
+      ctx.drawImage(img, look.rect.x, look.rect.y, look.rect.w, look.rect.h,
+                    0, 0, sp.w * s, sp.h * s);
+      ctx.restore();
+    }
+    outline(sp, FRAME_EDGE, false);
+    const was = look.was && look.was.sprite;
+    if (was && (was.x !== sp.x || was.y !== sp.y)) outline(was, WAS_EDGE, true);
+
+    // In front of it: the box's near edges, and the point it stands on.
+    edges(false);
+    const at = mid({ x: 0, y: 0 });
+    const arm = Math.max(3 * line, 2 * s);
+    ctx.strokeStyle = POINT;
+    ctx.beginPath();
+    ctx.moveTo(at.x - arm, at.y);
+    ctx.lineTo(at.x + arm, at.y);
+    ctx.moveTo(at.x, at.y - arm);
+    ctx.lineTo(at.x, at.y + arm);
+    ctx.stroke();
+    return { scale: s, dpr: dpr };
+  }
+
+  // --- moving a graphic to another number ----------------------------------
+
+  // Drag a tile onto another number and the graphic moves there; onto a used
+  // one, the two swap. Only the numbers change -- rooms place a graphic by
+  // its name, and the build follows it -- which is why one the game's code
+  // knows by its number does not move, and nothing is swapped onto it. The
+  // drop is one edit and one undo.
+  let dragging = null;              // the graphic number being dragged
+
+  function dragAndDrop(tile, row) {
+    if (row.name !== null && !row.fixed) {
+      tile.draggable = true;
+      tile.addEventListener('dragstart', (event) => {
+        dragging = row.graphic;
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(row.graphic));
+        }
+        tile.classList.add('dragging');
+      });
+      tile.addEventListener('dragend', () => {
+        dragging = null;
+        tile.classList.remove('dragging');
+      });
+    }
+    // Only a number it can go to takes it, so the pointer says so before the
+    // drop rather than after.
+    tile.addEventListener('dragover', (event) => {
+      if (dragging === null || whyNotMove(said, dragging, row.graphic, boot.graphicCount) !== null) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      tile.classList.add('drop');
+    });
+    tile.addEventListener('dragleave', () => tile.classList.remove('drop'));
+    tile.addEventListener('drop', (event) => {
+      event.preventDefault();
+      tile.classList.remove('drop');
+      const from = dragging;
+      dragging = null;
+      if (from !== null) moveTo(from, row.graphic);
+    });
+  }
+
+  function moveTo(from, to) {
+    if (whyNotMove(said, from, to, boot.graphicCount) !== null) return;
+    said = moveGraphic(said, from, to, boot.graphicCount);
+    // The side panel follows the graphic it was showing.
+    if (chosen === from) chosen = to;
+    else if (chosen === to) chosen = from;
+    dirty = true;
+    send();
+    draw();
   }
 
   // --- the whole page -----------------------------------------------------
 
   function draw() {
-    const sums = summary(said, sheet);
+    const sums = summary(said, sheet, others);
     el('title').textContent =
       (boot.game || 'Filmation') + ' graphic map';
     el('summary').textContent =
       sums.used + ' of ' + sums.count + ' graphic numbers used, drawn by ' +
-      sums.sprites + ' of the sheet’s ' + sums.onSheet + ' sprites — ' +
-      sums.shared + ' bitmaps are shared';
+      (sums.sheets
+        ? sums.sprites + ' sprites, ' + sums.fromSheets + ' of them from the ' +
+          sums.sheets + ' other sheets'
+        : sums.sprites + ' of the sheet’s ' + sums.onSheet + ' sprites') +
+      ' — ' + sums.shared + ' bitmaps are shared';
 
     const problems = el('problems');
     problems.textContent = '';
-    for (const why of checkMap(said, sheet)) {
+    for (const why of checkMap(said, sheet, others)) {
       const line = document.createElement('div');
       line.textContent = why;
       problems.appendChild(line);
     }
 
+    sizeControl(el('map-size'), mapSize, (value) => {
+      mapSize = value;
+      keepSizes();
+      draw();
+    });
     const map = el('map');
     map.textContent = '';
-    for (const row of rows(said, sheet)) map.appendChild(tileFor(row, 58));
+    if (typeof mapSize === 'number') map.classList.add('fixed');
+    else map.classList.remove('fixed');
+    for (const row of rows(said, sheet, others)) map.appendChild(tileFor(row, mapSize));
 
     drawDetail();
     el('state').textContent = dirty ? 'edited' : '';
@@ -247,133 +661,730 @@
     el('save').disabled = !dirty;
   }
 
+  // The side panel says what the chosen number is; changing it is done in
+  // the dialog, which Add and Edit open.
   function drawDetail() {
     const box = el('detail');
     box.textContent = '';
+    const list = rows(said, sheet, others);
+    const row = chosen === null ? null : list[chosen] || null;
+
+    const h = document.createElement('h3');
+    h.textContent = chosen === null ? 'A graphic number' : 'Graphic ' + chosen;
+    box.appendChild(h);
+
     if (chosen === null) {
-      const h = document.createElement('h3');
-      h.textContent = 'A graphic number';
-      box.appendChild(h);
       const hint = document.createElement('div');
       hint.className = 'hint';
       hint.textContent = 'Pick one to see what draws it and what else shares ' +
         'its bitmap. A gold border means a bitmap more than one number draws: ' +
         'those numbers are not interchangeable, because the pixel nudge in ' +
-        'graphic_map.json is per number.';
+        'graphics.json is per number. Add puts a sprite in the game under a ' +
+        'number nothing uses yet.';
       box.appendChild(hint);
-      return;
-    }
-
-    const list = rows(said, sheet);
-    const row = list[chosen];
-    const h = document.createElement('h3');
-    h.textContent = 'Graphic ' + chosen;
-    box.appendChild(h);
-
-    if (row && row.rect) {
-      const big = artFor(row.rect, 90);
-      big.className = 'artbox big';
-      box.appendChild(big);
-    }
-
-    const dl = document.createElement('dl');
-    const pair = (key, value) => {
-      const dt = document.createElement('dt');
-      dt.textContent = key;
-      const dd = document.createElement('dd');
-      if (typeof value === 'string' || typeof value === 'number') dd.textContent = value;
-      else dd.appendChild(value);
-      dl.appendChild(dt);
-      dl.appendChild(dd);
-    };
-    pair('Number', chosen + '  ($' + chosen.toString(16).toUpperCase().padStart(2, '0') + ')');
-    pair('Sprite', row && row.sprite !== null ? String(row.sprite) : 'none');
-    if (row && row.name) pair("Called", row.name);
-    if (row && row.label) pair("Sprite name", row.label);
-    if (row && row.group) pair('Group', row.group);
-    if (row && row.rect) {
-      pair('Frame', row.rect.w + ' × ' + row.rect.h +
-                    ' at ' + row.rect.x + ', ' + row.rect.y);
-    }
-    box.appendChild(dl);
-
-    if (row && row.sharedWith.length) {
-      const h2 = document.createElement('h3');
-      h2.textContent = 'Also drawn by';
-      box.appendChild(h2);
-      const chips = document.createElement('div');
-      for (const other of row.sharedWith) {
-        const chip = document.createElement('button');
-        chip.className = 'chip';
-        chip.textContent = other;
-        chip.title = 'Look at graphic ' + other;
-        chip.addEventListener('click', () => { chosen = other; draw(); });
-        chips.appendChild(chip);
+    } else {
+      // The graphic stood in its box, as the game draws it: clicking it is
+      // Nudge.
+      const boxed = row && row.rect ? boxFor(said, chosen) : null;
+      if (row && row.rect) {
+        const stage = document.createElement('canvas');
+        stage.className = 'stage';
+        stage.title = 'Graphic ' + chosen + ' in its box, where its nudge puts it. ' +
+          'Click to nudge it.';
+        stage.addEventListener('click', openNudge);
+        box.appendChild(stage);
+        const look = {
+          view: boxView(row.nudge, boxed && boxed.box, row.rect, false),
+          rect: row.rect, sheet: row.sheet, size: 'fit'
+        };
+        paintStage(stage, look);
       }
-      box.appendChild(chips);
-      const why = document.createElement('div');
-      why.className = 'hint';
-      why.textContent = 'The game points these at one bitmap itself. They still ' +
-        'draw in different places, because the nudge is per number.';
-      box.appendChild(why);
+
+      const dl = document.createElement('dl');
+      const pair = (key, value) => {
+        const dt = document.createElement('dt');
+        dt.textContent = key;
+        const dd = document.createElement('dd');
+        dd.textContent = value;
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+      };
+      pair('Number', chosen + '  ($' + chosen.toString(16).toUpperCase().padStart(2, '0') + ')' +
+                     (row && row.fixed ? '  fixed' : ''));
+      pair('Sprite', row && row.sprite !== null ? String(row.sprite) : 'none');
+      if (row && row.name) pair('Called', row.name);
+      if (row && row.group) pair('Group', row.group);
+      if (row && row.sheet) pair('Sheet', row.sheet);
+      if (row && row.rect) {
+        pair('Frame', row.rect.w + ' × ' + row.rect.h +
+                      ' at ' + row.rect.x + ', ' + row.rect.y);
+      }
+      if (row && row.nudge) {
+        pair('Nudge', row.nudge.x + ', ' + row.nudge.y +
+             (row.nudge.mirrored
+               ? '  (mirrored ' + row.nudge.mirrored.x + ', ' + row.nudge.mirrored.y + ')'
+               : ''));
+      }
+      if (row && row.sprite !== null) {
+        pair('Box', !boxed ? 'none'
+          : boxed.box.u + ', ' + boxed.box.v + ', ' + boxed.box.z +
+            (boxed.from === chosen ? '' : '  (graphic ' + boxed.from + '’s)'));
+      }
+      box.appendChild(dl);
+
+      if (row && row.name !== null) {
+        const where = document.createElement('div');
+        where.className = 'hint numbering';
+        where.textContent = row.fixed
+          ? 'Its number is fixed: the game\'s code knows it as ' + chosen +
+            ', so it stays where it is.'
+          : 'Drag its tile onto another number to move it there, or onto a ' +
+            'used one to swap the two. Rooms place it by its name, so they follow.';
+        box.appendChild(where);
+      }
+
+      if (row && row.sharedWith.length) {
+        const h2 = document.createElement('h3');
+        h2.textContent = 'Also drawn by';
+        box.appendChild(h2);
+        const chips = document.createElement('div');
+        for (const other of row.sharedWith) {
+          const chip = document.createElement('button');
+          chip.className = 'chip';
+          chip.textContent = other;
+          chip.title = 'Look at graphic ' + other;
+          chip.addEventListener('click', () => { chosen = other; draw(); });
+          chips.appendChild(chip);
+        }
+        box.appendChild(chips);
+        const why = document.createElement('div');
+        why.className = 'hint';
+        why.textContent = 'The game points these at one bitmap itself. They still ' +
+          'draw in different places, because the nudge is per number.';
+        box.appendChild(why);
+      }
     }
 
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const action = (text, title, enabled, fn) => {
+      const button = document.createElement('button');
+      button.textContent = text;
+      button.title = title;
+      button.disabled = !enabled;
+      button.addEventListener('click', fn);
+      actions.appendChild(button);
+      return button;
+    };
+    const used = !!row && row.sprite !== null;
+    action('Add…', 'Put a sprite in the game under a graphic number nothing uses yet',
+           !used && firstFree(list) !== null, () => openPicker('add')).className = 'primary';
+    action('Change…', 'Point graphic ' + chosen + ' at a different sprite',
+           used, () => openPicker('edit'));
+    action('Nudge…', 'Move graphic ' + chosen + '’s sprite against its box, ' +
+           'plain and mirrored, and change the box',
+           used && !!row.rect, openNudge);
+    action('Delete', 'Take the sprite off graphic ' + chosen + '. Its name and its ' +
+           'nudge stay in graphics.json, because rooms refer to it by the name and ' +
+           'the nudge came off the running game.',
+           used, () => repoint(chosen, null));
+    box.appendChild(actions);
+  }
 
+  // --- the dialog ---------------------------------------------------------
 
-    const h3 = document.createElement('h3');
-    h3.style.marginTop = '12px';
-    h3.textContent = 'Point it at';
-    box.appendChild(h3);
+  // The numbers a sprite can be added under: the unused ones the table
+  // already spans, then the rest up to the game's GRAPHIC_COUNT -- or up to
+  // 511 if the host could not find it, and then a game of 256 refuses the top
+  // half when it builds. 256 and 257 are never offered, as 0 and 1 are not,
+  // because a template names its graphic by the low byte and the room builder
+  // reads 0 as the end of one and 1 as "drawn elsewhere".
+  const GRAPHIC_LIMIT = boot.graphicCount || 512;
+  const NEVER = NEVER_NUMBERS;
+
+  function freeNumbers(list) {
+    const out = [];
+    for (const row of list) {
+      if (row.sprite === null && !NEVER.includes(row.graphic)) out.push(row.graphic);
+    }
+    for (let n = list.length; n < GRAPHIC_LIMIT; n++) {
+      if (!NEVER.includes(n)) out.push(n);
+    }
+    return out;
+  }
+
+  // The chosen number when it is free, otherwise the first that is.
+  function firstFree(list) {
+    const free = freeNumbers(list);
+    if (chosen !== null && free.includes(chosen)) return chosen;
+    return free.length ? free[0] : null;
+  }
+
+  // 'add' picks a free number and a sprite for it; 'edit' a different sprite
+  // for the chosen number. Nothing changes until OK.
+  function openPicker(mode) {
+    const list = rows(said, sheet, others);
+    const row = chosen === null ? null : list[chosen] || null;
+    let number = mode === 'edit' ? chosen : firstFree(list);
+    if (number === null) return;
+    const before = mode === 'edit' && row ? row.sprite : null;
+    let picked = before;
+    // The picker starts on the sheet the graphic already draws from, and
+    // otherwise stays on the one it was last left on.
+    if (mode === 'edit' && row) pickFrom = row.sheet || '';
+    if (pickFrom === null || (pickFrom && !others[pickFrom])) pickFrom = '';
+
+    const overlay = el('dialog');
+    overlay.textContent = '';
+    const dialog = document.createElement('div');
+    dialog.className = 'dialog';
+    overlay.appendChild(dialog);
+
+    const h = document.createElement('h3');
+    h.textContent = mode === 'edit'
+      ? 'Graphic ' + number + ': pick its sprite'
+      : 'Add a graphic';
+    dialog.appendChild(h);
+
+    const controls = document.createElement('div');
+    controls.className = 'controls';
+    dialog.appendChild(controls);
+    const label = (text) => {
+      const l = document.createElement('label');
+      l.textContent = text;
+      controls.appendChild(l);
+    };
+    const option = (choose, value, text, on) => {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      if (on) o.selected = true;
+      choose.appendChild(o);
+    };
+
+    if (mode === 'add') {
+      label('Number');
+      const which = document.createElement('select');
+      which.className = 'number-choice';
+      for (const n of freeNumbers(list)) option(which, String(n), String(n), n === number);
+      which.addEventListener('change', () => { number = Number(which.value); });
+      controls.appendChild(which);
+    }
+
+    // Which sheet to pick from, when the table lists others.
+    const sheetNames = Object.keys(others);
+    if (sheetNames.length) {
+      label('Sheet');
+      const choose = document.createElement('select');
+      choose.className = 'sheet-choice';
+      option(choose, '', 'The game’s own', pickFrom === '');
+      for (const name of sheetNames) {
+        option(choose, name, name + (pictureOf(name) ? '' : ' (not converted here)'),
+               name === pickFrom);
+      }
+      choose.addEventListener('change', () => { pickFrom = choose.value; fill(); });
+      controls.appendChild(choose);
+    }
 
     const search = document.createElement('input');
     search.type = 'text';
     search.placeholder = 'Filter by name or group…';
-    search.style.marginBottom = '6px';
-    box.appendChild(search);
+    search.addEventListener('input', () => fill());
+    controls.appendChild(search);
+
+    const sizes = document.createElement('div');
+    sizes.className = 'sizes';
+    controls.appendChild(sizes);
+    const drawSizes = () => sizeControl(sizes, pickSize, (value) => {
+      pickSize = value;
+      keepSizes();
+      drawSizes();
+      fill();
+    });
+    drawSizes();
 
     const picker = document.createElement('div');
     picker.id = 'picker';
-    box.appendChild(picker);
+    dialog.appendChild(picker);
 
-    const sprites = sheetSprites(sheet);
-    const fill = () => {
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    dialog.appendChild(foot);
+    const choice = document.createElement('div');
+    choice.className = 'choice';
+    foot.appendChild(choice);
+    const spacer = document.createElement('div');
+    spacer.className = 'spacer';
+    foot.appendChild(spacer);
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', close);
+    foot.appendChild(cancel);
+    const ok = document.createElement('button');
+    ok.className = 'primary';
+    ok.textContent = mode === 'edit' ? 'OK' : 'Add';
+    ok.addEventListener('click', apply);
+    foot.appendChild(ok);
+
+    const sprites = sheetSprites(sheet, others);
+    const byName = new Map(sprites.map((sprite) => [sprite.name, sprite]));
+
+    function showChoice() {
+      choice.textContent = '';
+      const sprite = picked === null ? null : byName.get(picked);
+      if (sprite) choice.appendChild(artFor(sprite.rect, 48, sprite.sheet, 'fit'));
+      const text = document.createElement('span');
+      text.textContent = sprite
+        ? sprite.name + '  (' + sprite.rect.w + ' × ' + sprite.rect.h + ')'
+        : 'Pick a sprite';
+      choice.appendChild(text);
+      ok.disabled = picked === null || picked === before;
+    }
+
+    function fill() {
       const want = search.value.trim().toLowerCase();
       picker.textContent = '';
+      if (typeof pickSize === 'number') picker.classList.add('fixed');
+      else picker.classList.remove('fixed');
       for (const sprite of sprites) {
-        if (want && !(sprite.label || '').toLowerCase().includes(want) &&
-            !(sprite.group || '').toLowerCase().includes(want)) continue;
+        if (sprite.sheet !== pickFrom) continue;
+        if (want && !sprite.name.toLowerCase().includes(want) &&
+            !String(sprite.group || '').toLowerCase().includes(want)) continue;
         const tile = document.createElement('button');
         tile.className = 'tile';
-        if (row && sprite.index === row.sprite) tile.classList.add('here');
-        tile.appendChild(artFor(sprite.rect, 44));
+        if (sprite.name === picked) tile.classList.add('here');
+        tile.appendChild(artFor(sprite.rect, 58, sprite.sheet, pickSize));
+        sizeTile(tile, sprite.rect, pickSize);
         const caption = document.createElement('div');
         caption.className = 'caption';
-        caption.textContent = sprite.index;
+        // The name without its sheet, which the list above already says.
+        caption.textContent = sprite.sheet
+          ? sprite.name.slice(sprite.sheet.length + 1) : sprite.name;
         tile.appendChild(caption);
-        tile.title = sprite.label + ' (sprite ' + sprite.index + ')';
-        tile.addEventListener('click', () => repoint(sprite.index));
+        tile.title = sprite.name + '  (' + sprite.rect.w + ' × ' + sprite.rect.h + ')';
+        if (!fitsOneSprite(sprite.rect)) {
+          tile.classList.add('toobig');
+          tile.title += '\nBigger than the engine draws as one sprite (40 × 64 at ' +
+            'most): cut it up on its sheet before a graphic can use it.';
+        }
+        tile.addEventListener('click', () => {
+          picked = sprite.name;
+          for (const other of picker.children) other.classList.remove('here');
+          tile.classList.add('here');
+          showChoice();
+        });
+        // A double click is pick and OK.
+        tile.addEventListener('dblclick', () => {
+          picked = sprite.name;
+          apply();
+        });
         picker.appendChild(tile);
       }
-    };
-    search.addEventListener('input', fill);
-    fill();
+    }
 
-    const clear = document.createElement('button');
-    clear.className = 'small';
-    clear.style.marginTop = '8px';
-    clear.textContent = 'Mark unused';
-    clear.title = 'Take graphic ' + chosen + ' out of the map: the game does ' +
-                  'not use this number.';
-    clear.addEventListener('click', () => repoint(null));
-    box.appendChild(clear);
+    function apply() {
+      if (picked === null || picked === before) return;
+      close();
+      chosen = number;
+      repoint(number, picked);
+    }
+
+    function close() {
+      overlay.style.display = 'none';
+      overlay.textContent = '';
+      overlay.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('mousedown', onBackdrop);
+    }
+
+    function onKey(event) {
+      if (event.key === 'Escape') close();
+    }
+
+    // A click on the dimmed page around the dialog is Cancel.
+    function onBackdrop(event) {
+      if (event.target === overlay) close();
+    }
+
+    overlay.addEventListener('keydown', onKey);
+    overlay.addEventListener('mousedown', onBackdrop);
+    fill();
+    showChoice();
+    overlay.style.display = 'flex';
+    if (search.focus) search.focus();
+  }
+
+  // --- the nudge dialog ---------------------------------------------------
+
+  // The chosen graphic stood in its box, to be moved by eye: drag the sprite,
+  // press the arrow keys or type the numbers. Plain and mirrored are a nudge
+  // each, though most graphics have only the plain one and are drawn mirrored
+  // with that. The box is here too, because a nudge is only right against a
+  // box. Nothing changes until OK, and then it is one edit and one undo.
+  function openNudge() {
+    const list = rows(said, sheet, others);
+    const row = chosen === null ? null : list[chosen] || null;
+    if (!row || !row.rect) return;
+    const graphic = chosen;
+    const rect = row.rect;
+    const limits = editLimits(said, boot.graphicCount);
+    let draft = said;               // the document as OK would leave it
+    let mirrored = false;
+    let frame = null;               // what the picture is fitted to
+    let drag = null;
+    let laid = null;                // how the picture was last laid out
+
+    // The nudge it is drawn with one way round, in one version of the file.
+    const nudgeIn = (doc, flipped) => {
+      const n = nudgeOf(doc, graphic);
+      if (!n) return { x: 0, y: 0 };
+      if (flipped && n.mirrored) return { x: n.mirrored.x, y: n.mirrored.y };
+      return { x: n.x, y: n.y };
+    };
+    const ownMirror = () => {
+      const n = nudgeOf(draft, graphic);
+      return !!(n && n.mirrored);
+    };
+    const viewOf = (doc) => {
+      const boxed = boxFor(doc, graphic);
+      return boxView(nudgeIn(doc, mirrored), boxed && boxed.box, rect, mirrored);
+    };
+    // What OK would change, which is only ever this one graphic's entry.
+    const factsOf = (doc) => {
+      const e = graphicTable(doc).get(graphic) || {};
+      return JSON.stringify([e.x || 0, e.y || 0,
+        e.mirrored ? [e.mirrored.x, e.mirrored.y] : null,
+        e.size ? [e.size.u, e.size.v, e.size.z] : null]);
+    };
+    const changed = () => factsOf(draft) !== factsOf(said);
+    const clamp = (value, range) => Math.max(range.min, Math.min(range.max, value));
+
+    const overlay = el('dialog');
+    overlay.textContent = '';
+    const dialog = document.createElement('div');
+    dialog.className = 'dialog nudge';
+    overlay.appendChild(dialog);
+    const make = (tag, className, text, into) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text) node.textContent = text;
+      if (into) into.appendChild(node);
+      return node;
+    };
+    const button = (text, title, into, fn) => {
+      const b = make('button', '', text, into);
+      b.title = title;
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const numberIn = (className, title, range, into) => {
+      const input = make('input', className, '', into);
+      input.type = 'number';
+      input.title = title;
+      input.min = String(range.min);
+      input.max = String(range.max);
+      return input;
+    };
+    // A typed number, kept in range; null while it is half typed.
+    const read = (input, range) => {
+      const value = parseInt(input.value, 10);
+      return Number.isFinite(value) ? clamp(value, range) : null;
+    };
+
+    const head = make('div', 'cardhead', '', dialog);
+    make('h3', '', 'Graphic ' + graphic + ': ' + row.sprite, head);
+    make('div', 'spacer', '', head);
+    const sizes = make('div', 'sizes', '', head);
+    const drawSizes = () => sizeControl(sizes, stageSize, (value) => {
+      stageSize = value;
+      keepSizes();
+      drawSizes();
+      frame = null;
+      paint();
+    }, STAGE_SIZES);
+    drawSizes();
+
+    const body = make('div', 'body', '', dialog);
+    const view = make('div', 'view', '', body);
+    const stage = make('canvas', 'stage', '', view);
+    stage.tabIndex = 0;
+    const side = make('div', 'side', '', body);
+
+    // Which way round.
+    const ways = make('div', '', '', side);
+    make('h4', '', 'Drawn', ways);
+    const wayButtons = make('div', 'sizes way', '', ways);
+    const way = (flipped) => button(flipped ? 'Mirrored' : 'Plain',
+      flipped ? 'As the game draws it mirrored: the sprite flipped and the box ' +
+                'turned, its U and V swapped'
+              : 'As the game draws it unmirrored', wayButtons, () => {
+        mirrored = flipped;
+        frame = null;
+        update();
+      });
+    const plainButton = way(false);
+    const mirrorButton = way(true);
+
+    // The nudge, that way round.
+    const nudging = make('div', '', '', side);
+    const nudgeHead = make('h4', '', '', nudging);
+    const fields = make('div', 'fields', '', nudging);
+    make('label', '', 'x', fields);
+    const nx = numberIn('nudge-x', 'Pixels right', limits.x, fields);
+    make('label', '', 'y', fields);
+    const ny = numberIn('nudge-y', 'Pixels UP: the game subtracts it from the row', limits.y, fields);
+    const pad = make('div', 'pad', '', nudging);
+    const arrow = (text, title, dx, dy) => button(text, title, pad, () => move(dx, dy));
+    make('div', '', '', pad);
+    arrow('↑', 'Up a pixel', 0, 1);
+    make('div', '', '', pad);
+    arrow('←', 'Left a pixel', -1, 0);
+    arrow('↓', 'Down a pixel', 0, -1);
+    arrow('→', 'Right a pixel', 1, 0);
+    make('div', 'hint', 'Drag the sprite, or the arrow keys -- with Shift for 8. ' +
+         'y counts up the screen.', nudging);
+    const mirrorRow = make('div', '', '', nudging);
+    const mirrorSays = make('div', 'hint', '', mirrorRow);
+    const mirrorButtons = make('div', 'row', '', mirrorRow);
+    const usePlain = button('Use the plain one', 'Take the mirrored nudge away, so it ' +
+      'is drawn mirrored with the plain one, as most graphics are', mirrorButtons, () => {
+      draft = setNudge(draft, graphic, null, true);
+      update();
+    });
+    button('Reflect the plain one', 'Put the mirrored sprite where the plain one ' +
+      'is, mirror image for mirror image: the column reflected, the row kept',
+    mirrorButtons, () => {
+      setTo(reflectedNudge(nudgeIn(draft, false), rect.w));
+    });
+
+    // The box.
+    const boxing = make('div', '', '', side);
+    make('h4', '', 'Box', boxing);
+    const boxFields = make('div', 'fields', '', boxing);
+    const boxInputs = {};
+    for (const axis of ['u', 'v', 'z']) {
+      make('label', '', axis, boxFields);
+      boxInputs[axis] = numberIn('box-' + axis, {
+        u: 'Half-width along U, towards the viewer',
+        v: 'Half-width along V, away from the viewer',
+        z: 'Height, up from where it stands'
+      }[axis], limits[axis], boxFields);
+    }
+    const boxSays = make('div', 'hint', '', boxing);
+    const giveBox = button('Give it a box', '', boxing, () => {
+      const boxed = boxFor(draft, graphic);
+      draft = setBox(draft, graphic, boxed ? boxed.box : guessBox(rect));
+      update();
+    });
+
+    const legend = make('div', 'legend', '', side);
+    for (const [colour, text] of [[BOX_EDGE, 'the box, hidden edges dashed'],
+                                  [WAS_EDGE, 'where the sprite was'],
+                                  [POINT, 'the point it stands on: its U, V and Z']]) {
+      const line = make('div', '', '', legend);
+      make('span', '', '', line).style.borderColor = colour;
+      line.appendChild(document.createTextNode
+        ? document.createTextNode(text) : make('span', '', text));
+    }
+
+    const foot = make('div', 'foot', '', dialog);
+    const revert = button('Revert', 'Back to how it was when this opened', foot, () => {
+      draft = said;
+      update();
+    });
+    make('div', 'spacer', '', foot);
+    button('Cancel', '', foot, close);
+    const ok = button('OK', '', foot, apply);
+    ok.className = 'primary';
+
+    // --- what the controls do
+
+    function setTo(nudge, typing) {
+      const next = { x: clamp(nudge.x, limits.x), y: clamp(nudge.y, limits.y) };
+      const now = nudgeIn(draft, mirrored);
+      // Moving a mirrored sprite gives it a mirrored nudge of its own; until
+      // then it follows the plain one.
+      if (next.x === now.x && next.y === now.y && (!mirrored || ownMirror())) return;
+      draft = setNudge(draft, graphic, next, mirrored);
+      update(typing);
+    }
+
+    function move(dx, dy) {
+      const now = nudgeIn(draft, mirrored);
+      setTo({ x: now.x + dx, y: now.y + dy });
+    }
+
+    nx.addEventListener('input', () => {
+      const value = read(nx, limits.x);
+      if (value !== null) setTo({ x: value, y: nudgeIn(draft, mirrored).y }, nx);
+    });
+    ny.addEventListener('input', () => {
+      const value = read(ny, limits.y);
+      if (value !== null) setTo({ x: nudgeIn(draft, mirrored).x, y: value }, ny);
+    });
+    for (const axis of ['u', 'v', 'z']) {
+      const input = boxInputs[axis];
+      input.addEventListener('input', () => {
+        const value = read(input, limits[axis]);
+        const boxed = boxFor(draft, graphic);
+        if (value === null || !boxed) return;
+        const box = boxed.box;
+        if (box[axis] === value) return;
+        box[axis] = value;
+        draft = setBox(draft, graphic, box);
+        update(input);
+      });
+    }
+
+    // The picture follows the pointer: a drag is in CSS pixels, and the
+    // layout says how many of those make a Spectrum pixel.
+    stage.addEventListener('pointerdown', (event) => {
+      if (!laid) return;
+      drag = { x: event.clientX, y: event.clientY, from: nudgeIn(draft, mirrored) };
+      // Captured, so a drag that leaves the picture still moves the sprite.
+      // A pointer the browser no longer knows refuses, and the drag simply
+      // ends at the picture's edge instead.
+      try {
+        if (stage.setPointerCapture) stage.setPointerCapture(event.pointerId);
+      } catch (err) { /* see above */ }
+      if (stage.focus) stage.focus();
+    });
+    stage.addEventListener('pointermove', (event) => {
+      if (!drag || !laid) return;
+      const per = laid.dpr / laid.scale;
+      setTo({ x: drag.from.x + Math.round((event.clientX - drag.x) * per),
+              y: drag.from.y - Math.round((event.clientY - drag.y) * per) });
+    });
+    const stop = () => {
+      if (!drag) return;
+      drag = null;
+      paint();
+    };
+    stage.addEventListener('pointerup', stop);
+    stage.addEventListener('pointercancel', stop);
+
+    // Everything that says what the draft is, from the draft. `typing` is the
+    // input being typed in, which is left as it is.
+    function update(typing) {
+      const now = nudgeIn(draft, mirrored);
+      if (nx !== typing) nx.value = String(now.x);
+      if (ny !== typing) ny.value = String(now.y);
+      plainButton.classList[mirrored ? 'remove' : 'add']('on');
+      mirrorButton.classList[mirrored ? 'add' : 'remove']('on');
+      nudgeHead.textContent = mirrored ? 'Nudge, mirrored' : 'Nudge';
+      mirrorRow.style.display = mirrored ? '' : 'none';
+      mirrorSays.textContent = ownMirror()
+        ? 'It has a mirrored nudge of its own.'
+        : 'It has none of its own, and is drawn mirrored with the plain one. ' +
+          'Moving it here gives it one.';
+      usePlain.disabled = !ownMirror();
+
+      const boxed = boxFor(draft, graphic);
+      const own = !!boxed && boxed.from === graphic;
+      boxFields.style.display = own ? '' : 'none';
+      giveBox.style.display = own ? 'none' : '';
+      if (own) {
+        for (const axis of ['u', 'v', 'z']) {
+          if (boxInputs[axis] !== typing) boxInputs[axis].value = String(boxed.box[axis]);
+        }
+      }
+      boxSays.textContent = own
+        ? 'Half-widths along U and V, and a height, stored unmirrored. Every ' +
+          'template that places it is sorted and collided by this.'
+        : boxed
+          ? 'None of its own: graphic ' + boxed.from + '’s is drawn, which ' +
+            'shows the same sprite. Give it one to change it.'
+          : 'None in graphics.json. A mover gives its records a box in its ' +
+            'code, as the knight\'s does; a template cannot place this ' +
+            'graphic until it has one here. Giving it one starts from the ' +
+            'size of the sprite.';
+      giveBox.title = boxed
+        ? 'Give it a copy of graphic ' + boxed.from + '’s box'
+        : 'Give it a box worked out from the size of its sprite';
+
+      const edited = changed();
+      ok.disabled = !edited;
+      revert.disabled = !edited;
+      paint();
+    }
+
+    // Fitted to where the sprite started and where it is, with room to move,
+    // and fitted again only when it leaves that -- and not while it is being
+    // dragged, so that the picture holds still under the pointer.
+    const ROOM_TO_MOVE = 8;
+    function paint() {
+      const now = viewOf(draft);
+      const was = viewOf(said);
+      const both = {
+        minX: Math.min(now.bounds.minX, was.bounds.minX),
+        minY: Math.min(now.bounds.minY, was.bounds.minY),
+        maxX: Math.max(now.bounds.maxX, was.bounds.maxX),
+        maxY: Math.max(now.bounds.maxY, was.bounds.maxY)
+      };
+      const within = frame && both.minX >= frame.minX && both.minY >= frame.minY &&
+        both.maxX <= frame.maxX && both.maxY <= frame.maxY;
+      if (!frame || (!within && !drag)) {
+        frame = { minX: both.minX - ROOM_TO_MOVE, minY: both.minY - ROOM_TO_MOVE,
+                  maxX: both.maxX + ROOM_TO_MOVE, maxY: both.maxY + ROOM_TO_MOVE };
+      }
+      laid = paintStage(stage, { view: now, was: was, rect: rect, sheet: row.sheet,
+                                 size: stageSize, frame: frame });
+    }
+
+    function apply() {
+      close();
+      if (!changed()) return;
+      said = draft;
+      dirty = true;
+      send();
+      draw();
+    }
+
+    function close() {
+      overlay.style.display = 'none';
+      overlay.textContent = '';
+      overlay.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('mousedown', onBackdrop);
+      if (window.removeEventListener) window.removeEventListener('resize', paint);
+    }
+
+    // The arrow keys move the sprite unless a number is being typed, where
+    // they are the number's own; Enter is OK unless a button has the focus.
+    function onKey(event) {
+      const tag = String((event.target && event.target.tagName) || '').toUpperCase();
+      if (event.key === 'Escape') {
+        close();
+        return;
+      }
+      if (tag === 'INPUT' || tag === 'SELECT') return;
+      const step = event.shiftKey ? 8 : 1;
+      const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+                       ArrowUp: [0, step], ArrowDown: [0, -step] };
+      if (arrows[event.key]) {
+        move(arrows[event.key][0], arrows[event.key][1]);
+        if (event.preventDefault) event.preventDefault();
+      } else if (event.key === 'Enter' && tag !== 'BUTTON') {
+        apply();
+      }
+    }
+
+    function onBackdrop(event) {
+      if (event.target === overlay) close();
+    }
+
+    overlay.addEventListener('keydown', onKey);
+    overlay.addEventListener('mousedown', onBackdrop);
+    if (window.addEventListener) window.addEventListener('resize', paint);
+    overlay.style.display = 'flex';
+    update();
+    if (stage.focus) stage.focus();
   }
 
   // --- editing ------------------------------------------------------------
 
-  function repoint(sprite) {
-    const before = rows(said, sheet)[chosen];
+  function repoint(graphic, sprite) {
+    const before = rows(said, sheet, others)[graphic];
     if (before && before.sprite === sprite) return;
-    said = setSprite(said, chosen, sprite);
+    said = setSprite(said, graphic, sprite);
     dirty = true;
     send();
     draw();
@@ -398,11 +1409,14 @@
     boot = next;
     said = next.graphics;
     if (next.sheet) sheet = next.sheet;
+    others = next.others || {};
+    sheetClasses();
     dirty = false;
     if (chosen !== null && chosen >= countOf(said)) chosen = null;
     draw();
   });
 
+  sheetClasses();
   draw();
 })();
 </script>

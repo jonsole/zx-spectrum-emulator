@@ -504,13 +504,37 @@ test('setTemplateField: edits a field, and refuses one that is not there',
     assert.strictEqual(m.setTemplateField(template, 'blocks', 9, 'u', 1), null);
 
     // The box belongs to the GRAPHIC and lives in graphics.json, so it is not
-    // a field of the entry any more -- asking to set one here would quietly
-    // give this template an override of its own.
+    // a field of the entry -- asking to set one here would quietly give this
+    // template an override of its own. setTemplateBox gives one on purpose.
     assert.strictEqual(m.setTemplateField(template, 'blocks', 0, 'sizeU', 9), null);
     assert.strictEqual(template[0].sizeU, undefined);
     assert.strictEqual(
       m.setTemplateField(atlas.objectTemplates.object_block, 'entries', 0,
                          'sizeZ', 9), null);
+  });
+
+test('setTemplateBox: gives a piece a box of its own, all three or none',
+  function () {
+    const atlas = knightLoreAtlas();
+    const template = atlas.sceneryTemplates.scenery_arch_n;
+
+    m.setTemplateBox(template, 0, { u: 16, v: 64, z: 20 });
+    assert.deepStrictEqual([template[0].sizeU, template[0].sizeV, template[0].sizeZ], [16, 64, 20]);
+    // Written straight after the place, in the order the build reads them.
+    const text = m.serializeTemplates(atlas, '\n');
+    assert.ok(text.indexOf('"z": 128, "sizeU": 16, "sizeV": 64, "sizeZ": 20') >= 0, 'serialized');
+
+    // A byte each, and the height no more than 127: in a game with over 256
+    // graphics bit 7 of it is the graphic's ninth bit.
+    m.setTemplateBox(template, 0, { u: 300, v: -4, z: 200 });
+    assert.deepStrictEqual([template[0].sizeU, template[0].sizeV, template[0].sizeZ],
+                           [255, 0, m.MAX_BOX_HEIGHT]);
+    assert.strictEqual(m.MAX_BOX_HEIGHT, 127);
+
+    // None, and the graphic's box is used again.
+    m.setTemplateBox(template, 0, null);
+    assert.ok(!('sizeU' in template[0]) && !('sizeV' in template[0]) && !('sizeZ' in template[0]));
+    assert.strictEqual(m.setTemplateBox(template, 9, { u: 1, v: 1, z: 1 }), null);
   });
 
 test('setTemplateGraphic: only a name the table has a number for', function () {
@@ -1558,6 +1582,56 @@ test(TABLE + ': background and flip agree with the generated room_data.s', funct
   }
   assert.ok(checked > 20, 'checked ' + checked + ' pieces');
 });
+
+
+// --- how an object template moves ------------------------------------------
+
+test('movers: a template is given a behaviour and a weight, and kept in table order',
+  function () {
+    const atlas = atlasFor('lightkeep');
+    if (!m.hasMovers(atlas)) skip('lightkeep/templates.json says nothing of its movers');
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_table'), { behaviour: 'MOVE_PUSHED', weight: 1 });
+    m.setMover(atlas, 'object_table', 'MOVE_PUSHED', 2);
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_table'), { behaviour: 'MOVE_PUSHED', weight: 2 });
+    // A weight is a byte the build can carry: 0 to 127, and nothing left out.
+    m.setMover(atlas, 'object_table', 'MOVE_PUSHED', 500);
+    assert.strictEqual(m.moverOf(atlas, 'object_table').weight, m.MAX_WEIGHT);
+    m.setMover(atlas, 'object_table', 'MOVE_PUSHED', 0);
+    assert.ok(!('weight' in m.moverOf(atlas, 'object_table')));
+    // A template given one for the first time goes where the table has it.
+    m.setMover(atlas, 'object_block', 'MOVE_CARRIED', 1);
+    const order = Object.keys(atlas.objectTemplates);
+    const said = Object.keys(atlas.templatesMeta.movers);
+    assert.deepStrictEqual(said, said.slice().sort((a, b) => order.indexOf(a) - order.indexOf(b)));
+    // No behaviour: it stands still, and has no entry at all.
+    m.setMover(atlas, 'object_block', null);
+    assert.strictEqual(m.moverOf(atlas, 'object_block'), null);
+    // Written on one line each, as castle.py writes them.
+    const text = m.serializeTemplates(atlas, '\n');
+    assert.ok(text.indexOf('   "object_table": { "behaviour": "MOVE_PUSHED" }') >= 0);
+  });
+
+test('movers: a rename takes the entry with it, a copy copies it, a delete drops it',
+  function () {
+    const atlas = atlasFor('lightkeep');
+    if (!m.hasMovers(atlas)) skip('lightkeep/templates.json says nothing of its movers');
+    m.setMover(atlas, 'object_table', 'MOVE_PUSHED', 1);
+    assert.ok(m.renameTemplate(atlas, 'object_table', 'object_bench_table'));
+    assert.strictEqual(m.moverOf(atlas, 'object_table'), null);
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_bench_table'), { behaviour: 'MOVE_PUSHED', weight: 1 });
+    assert.notStrictEqual(m.duplicateTemplate(atlas, 'objectTemplates', 'object_bench_table', 'object_copy'), null);
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_copy'), { behaviour: 'MOVE_PUSHED', weight: 1 });
+    assert.ok(m.deleteTemplate(atlas, 'objectTemplates', 'object_copy'));
+    assert.strictEqual(m.moverOf(atlas, 'object_copy'), null);
+  });
+
+test('movers: a castle without meta.movers keeps its table in code, and is left alone',
+  function () {
+    const atlas = knightLoreAtlas();
+    assert.strictEqual(m.hasMovers(atlas), false);
+    assert.strictEqual(m.setMover(atlas, 'object_table', 'MOVE_PUSHED', 1), null);
+    assert.strictEqual(m.moverOf(atlas, 'object_table'), null);
+  });
 
 if (failures) {
   console.log(failures + ' failed');

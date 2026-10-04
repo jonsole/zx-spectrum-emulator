@@ -1,7 +1,7 @@
 {
   "name": "filmation-designer",
   "displayName": "Filmation Designer",
-  "description": "Editors for the Filmation remakes in examples/filmation: the room designer on rooms.json, the templates the rooms are built from, the graphic map, and JSON schemas for every file a remake is built from. Independent of the emulator extension.",
+  "description": "Editors for the Filmation remakes in examples/filmation: the room designer on rooms.json, the templates the rooms are built from, the graphic map, the sprite sheet editor, and JSON schemas for every file a remake is built from. Independent of the emulator extension.",
   "version": "0.0.1",
   "publisher": "jonsole",
   "license": "MIT",
@@ -24,7 +24,9 @@
     "onCustomEditor:filmation.roomTemplates",
     "onCommand:filmation.openRoomTemplates",
     "onCustomEditor:filmation.graphicMap",
-    "onCommand:filmation.openGraphicMap"
+    "onCommand:filmation.openGraphicMap",
+    "onCustomEditor:filmation.spriteSheet",
+    "onCommand:filmation.openSpriteSheet"
   ],
   "contributes": {
     "customEditors": [
@@ -43,6 +45,16 @@
         "selector": [
           { "filenamePattern": "**/examples/filmation/*/metadata/templates.json" },
           { "filenamePattern": "**/examples/filmation/*/templates.json" }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "filmation.spriteSheet",
+        "displayName": "Filmation Sprite Sheet",
+        "selector": [
+          { "filenamePattern": "**/examples/filmation/*/metadata/sprites.json" },
+          { "filenamePattern": "**/examples/filmation/*/sprites.json" },
+          { "filenamePattern": "**/examples/filmation/*/metadata/melkhior/*.json" }
         ],
         "priority": "default"
       },
@@ -104,6 +116,10 @@
       {
         "command": "filmation.openGraphicMap",
         "title": "Filmation: Open Graphic Map..."
+      },
+      {
+        "command": "filmation.openSpriteSheet",
+        "title": "Filmation: Edit Sprite Sheet..."
       }
     ]
   }

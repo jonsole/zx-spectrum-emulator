@@ -446,6 +446,94 @@ test('a floor reaches the cells its room does', () => {
   assert.strictEqual(outline[2].x, 256);
 });
 
+test('a piece off the top of the screen: the game wraps it, the true place does not', () => {
+  // object_place: y = 296 - ((V - U + 128) / 2 + Z) - ADJ_Y, in eight bits. In
+  // the middle of the floor (V - U + 128) / 2 is 64, so a base at Z 128 is
+  // row 296 - 192 = 104, and at Z 240 it is 296 - 304 = -8: above the top,
+  // which eight bits make 248, the bottom.
+  const middle = { u: 128, v: 128, z: 128 };
+  assert.deepStrictEqual(r.projectUnwrapped(middle, null, 296), { x: 128, y: 104 });
+  assert.strictEqual(r.project(middle, null, 296).y, 104, 'on the screen the two agree');
+  const high = { u: 128, v: 128, z: 240 };
+  assert.strictEqual(r.projectUnwrapped(high, null, 296).y, -8);
+  assert.strictEqual(r.project(high, null, 296).y, 248);
+  // A nudge is signed, whichever way it is written.
+  assert.strictEqual(r.projectUnwrapped(middle, { x: -12, y: -4 }, 296).x, 116);
+  assert.strictEqual(r.projectUnwrapped(middle, { x: 244, y: 252 }, 296).y, 108);
+});
+
+test('why the game draws a piece elsewhere: too far back is not the top of the screen', () => {
+  const why = (piece) => r.wrapOf(piece, r.project(piece, null, 296), r.projectUnwrapped(piece, null, 296));
+  // At U 67, V 206 -- behind a room's far corner -- V - U + 128 is 267, and
+  // object_place's SRL halves the 11 left in eight bits: 5 where 133 is
+  // meant, 128 rows lower. Nothing to do with the edge of the screen.
+  const behind = { u: 67, v: 206, z: 128 };
+  assert.strictEqual(why(behind), 'back');
+  assert.strictEqual(r.projectUnwrapped(behind, null, 296).y - r.project(behind, null, 296).y, -128);
+  // The far corner itself, V - U = 128, is the first that does it; 127 is fine.
+  assert.strictEqual(why({ u: 64, v: 192, z: 128 }), 'back');
+  assert.strictEqual(why({ u: 65, v: 192, z: 128 }), null);
+  assert.strictEqual(why({ u: 200, v: 60, z: 128 }), 'front');
+  // Lifted until its base is above row 0, in the middle of the floor.
+  assert.strictEqual(why({ u: 128, v: 128, z: 240 }), 'top');
+  assert.strictEqual(why({ u: 128, v: 128, z: 128 }), null);
+});
+
+test('the guides cross at a piece and reach across the room, and out to it beyond', () => {
+  const square = { u: 64, v: 64, z: 128 };     // floor 64 to 192 both ways
+  // Inside: along U at its V from wall to wall, along V at its U likewise.
+  let lines = r.floorGuides(100, 150, square);
+  assert.deepStrictEqual(lines[0], [r.floorPoint(64, 150, 128), r.floorPoint(192, 150, 128)]);
+  assert.deepStrictEqual(lines[1], [r.floorPoint(100, 64, 128), r.floorPoint(100, 192, 128)]);
+  // Behind the north wall, at V 206: the line along V runs on out to it.
+  lines = r.floorGuides(67, 206, square);
+  assert.deepStrictEqual(lines[1], [r.floorPoint(67, 64, 128), r.floorPoint(67, 206, 128)]);
+  assert.deepStrictEqual(lines[0], [r.floorPoint(64, 206, 128), r.floorPoint(192, 206, 128)]);
+});
+
+// Lightkeep's raised section: an invisible box 32 across U, 128 along V and
+// 20 high, its centre at U 80, V 128 on a floor at 128.
+const RAISED = { u: 80, v: 128, z: 128, sizeU: 16, sizeV: 64, sizeZ: 20 };
+
+test('a box is eight corners, U by bit 0, V by bit 1, the top by bit 2', () => {
+  const box = r.boxOutline(RAISED);
+  assert.strictEqual(box.corners.length, 8);
+  // Screen x is U + V - 128, whatever the height.
+  assert.deepStrictEqual(box.corners.slice(0, 4).map((p) => p.x), [0, 32, 128, 160]);
+  assert.deepStrictEqual(box.corners.slice(4).map((p) => p.x), [0, 32, 128, 160]);
+  // The top is the base twenty rows up.
+  for (let i = 0; i < 4; i++) assert.strictEqual(box.corners[i + 4].y, box.corners[i].y - 20);
+  // Each corner is where floorPoint puts it.
+  assert.deepStrictEqual(box.corners[0], r.floorPoint(64, 64, 128));
+  assert.deepStrictEqual(box.corners[7], r.floorPoint(96, 192, 148));
+});
+
+test('a box has twelve edges, and the three at its back corner are hidden', () => {
+  const box = r.boxOutline(RAISED);
+  assert.strictEqual(box.edges.length, 12);
+  const hidden = box.edges.filter((e) => e.hidden);
+  assert.strictEqual(hidden.length, 3);
+  for (const e of hidden) assert.ok(e.from === r.FAR_BOX_CORNER || e.to === r.FAR_BOX_CORNER);
+  // The back corner is -U, +V on the floor: the highest base corner on the
+  // screen, since V - U is what lifts a point up it.
+  const base = box.corners.slice(0, 4).map((p) => p.y);
+  assert.strictEqual(Math.min.apply(null, base), box.corners[r.FAR_BOX_CORNER].y);
+});
+
+test('a footing is the box’s base on the floor, and the riser up to the piece', () => {
+  const lifted = Object.assign({}, RAISED, { z: 148 });
+  const f = r.footing(lifted, 128);
+  assert.deepStrictEqual(f.base, [r.floorPoint(64, 64, 128), r.floorPoint(96, 64, 128),
+                                  r.floorPoint(96, 192, 128), r.floorPoint(64, 192, 128)]);
+  assert.deepStrictEqual(f.foot, r.floorPoint(80, 128, 128));
+  // Z moves a point straight up the screen: the riser is vertical, twenty high.
+  assert.strictEqual(f.head.x, f.foot.x);
+  assert.strictEqual(f.head.y, f.foot.y - 20);
+  // A wall piece has no depth along U, and its base is a line.
+  const wall = r.footing({ u: 96, v: 84, z: 128, sizeU: 0, sizeV: 20, sizeZ: 20 }, 128);
+  assert.deepStrictEqual(wall.base[0], wall.base[1]);
+});
+
 if (failures) {
   console.log(failures + ' failed');
   process.exit(1);
