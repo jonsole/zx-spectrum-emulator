@@ -145,6 +145,11 @@ GitHub takes its notes from that section.
   `graphics.json` lists, so Lightkeep's Melkhior doorways show in both. The graphic map takes a game's
   `GRAPHIC_COUNT` from its `sprite_sheet.py`, so the numbers it offers and how
   far a y nudge may go follow what the game is built with.
+- **Lightkeep's rooms remember where things were left.** A table pushed into
+  a corner is still in the corner when the knight comes back, and a soldier is
+  where he was, walking the way he was. Everything a push moves, and every
+  template `templates.json` marks `"kept": true`, is an entry in one table, as
+  in Fairlight. A new game puts it all back.
 
 ## 0.1.0 (2026-09-29)
 

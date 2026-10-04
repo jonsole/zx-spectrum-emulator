@@ -65,6 +65,10 @@
         "minimum": 1,
         "maximum": 127,
         "description": "What a push loses: something pushed moves the pusher's step less this, and not at all when it is as much. Something a push moves weighs 1 or more -- the build refuses one without -- and nothing else has one."
+       },
+       "kept": {
+        "type": "boolean",
+        "description": "Kept where it was left: every placement of this template is a thing in the game's thing table, found where it was when its room is entered again, rather than built afresh. Anything a push moves is kept whatever this says; this keeps the rest, such as Lightkeep's soldiers."
        }
       }
      }

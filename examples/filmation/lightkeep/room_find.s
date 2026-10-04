@@ -61,6 +61,7 @@ room_find:          ld      a,ROOM_BANK
                     ld      de,room_record
                     ldir
                     call    room_templates_copy
+                    ld      (room_templates_free),de    ; for things_gather
                     pop     bc
                     ld      a,PAGE_PLAY
                     call    page_in
@@ -152,6 +153,7 @@ room_templates_copy:
 SCENERY_STRIDE      EQU     8                   ; as rooms_source.py writes them
 OBJECT_STRIDE       EQU     6
 room_template_stride: DW    0
+room_templates_free: DW     0                   ; past the last copy
 
 
 ; One template copied, and its entry in a live table pointed at the copy.

@@ -45,7 +45,7 @@ starts.
 | 0c | Pentagram's creatures, rooms and art taken out, and the werewolf's, the transformation's and the sun window's art | done |
 | 0d | the collectables and the wizard taken out: the charms, picking up and putting down, the carried objects in the corner, the extra life, and the wizard who walked room $88 | done |
 | 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | done |
-| 2 | rooms that remember where things were left | |
+| 2 | rooms that remember where things were left: the thing table | done |
 | 2b | up and down: holes in the floor to drop through, and ways up to the room above | |
 | 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, drop, use, and keys 1-5 for the slot | |
 | 4 | pushing by weight | begun: see [What moves, and how heavy it is](#what-moves-and-how-heavy-it-is) |
@@ -59,28 +59,13 @@ starts.
 Fairlight's numbers, where a stage copies them, are from its notes; a turn
 here is one of Fairlight's passes.
 
-**2. Rooms that remember.** Knight Lore keeps no memory of a room: it is
-built afresh from shared templates and packed positions each time, into a
-pool that the next room empties. Fairlight keeps one table of everything that
-can move, and so will Lightkeep: an entry for each thing -- the room it is in,
-its template, U, V, Z, a state, and for a helmet when it stands up again
-(eight bytes, so a thing's number is a shift) -- with the room $FE while it is
-carried or once it is used up. A thing is anything that can be moved: pushed,
-carried, or both. Wherever it was left is where it is when the room is
-entered again. The soldiers are in the table too, from this stage on: one
-entry for the two records he is drawn with, saved as he was left, where he
-stood and which way he was walking, so a room never puts him back at the
-start. What moves by itself and is neither a soldier nor a thing -- the
-balls, the fires, the spiked balls -- starts again each time the room is
-entered, as it does now. Scenery stays as it is. `rooms_source.py`
-takes whatever a room places that is a thing out of the room's own record and
-into the table, and the room designer places things at a position rather than
-a packed grid byte. The table is read when a room is built and written back
-when the knight leaves, and nowhere else, so it can live in a bank of its own,
-3 or 7, with the starting copy beside it for a new game. The pool grows by a
-few slots, for things dropped in the fullest room; with none left, a drop is
-refused. Checked by pushing room 10's table, leaving by each door and coming
-back to it where it was left, and finding it home again after a new game.
+**2. Rooms that remember.** Done: see [What stage 2 did](#what-stage-2-did-rooms-that-remember).
+A thing is anything that can be moved -- pushed, carried, or both -- and the
+soldiers; wherever it was left is where it is when the room is entered again.
+What moves by itself and is neither -- the balls, the fires, the spiked
+balls -- starts again each time, as it does now. Left for the stages that
+need them: a pool with room for things dropped in the fullest room (stage 3),
+and the room $FE for something carried or used up.
 
 **2b. Up and down.** The new castle (stage 8) is built in storeys, and
 the knight can drop through the floor into the room below or climb up into
@@ -494,3 +479,59 @@ every turn, at 3 not at all; at what was weight 0, 3, 0, 3, 0.
 Not done: ledge and stair artwork, a wireframe for invisible pieces in the room
 designer (the templates editor has one), and steps for anything but the knight's own walk. The movers still
 treat every step as a wall.
+
+### What stage 2 did: rooms that remember
+
+Every table, chest and movable block, and every soldier, is now a *thing*:
+an entry in one table, as Fairlight keeps them, rather than a placement in
+its room's record. 56 of them: 21 tables, 16 chests, 9 blocks and 10
+soldiers, at most 8 in one room.
+
+- **Which templates.** Anything a push moves -- a behaviour at or past
+  `BEHAVIOUR_LOOSE` -- and anything `meta.movers` in `templates.json` marks
+  `"kept": true`, which is the two guard templates. The templates editor keeps
+  the mark when a behaviour is changed; it has no control for it yet.
+- **The table.** `scripts/rooms_source.py` takes every placement of those
+  templates out of its room's record and writes it as an entry in
+  `things_start`, in bank 4 with the rooms: the room, the template, U, V and Z,
+  the state, and two spare bytes. U, V and Z are the place before the template's
+  offsets go on -- what `room_unpack` makes of a packed byte -- so a thing
+  starts exactly where its old placement stood. `things_live` beside it is the
+  copy play uses; `things_new_game` copies one over the other.
+- **Building a room.** `things_gather` copies the room's entries out of bank 4,
+  and their templates after the record's. `room_things_place` then places them
+  after the room's own objects, through the second half of `room_unpack`, now
+  `room_unpack_base`, and puts each one's `MOVE_STATE` back. For a soldier that
+  is which way he paces, or which leg of his round he is on.
+- **Leaving.** `things_save` runs before every room is built, which is the
+  last moment the pool still holds the room being left. It writes each thing's
+  U, V, Z and state back into its entry. A death rebuilds the room through the
+  same path, so what was moved stays moved. A room that turns out not to exist
+  leaves the old one up and its things still listed, and they are saved again
+  when it is really left.
+
+Building a room now also clears `room_weight`, which `room_add` copies into
+every record. It held whatever the last room's last `mover_find` left, which,
+with things placed last, was a table's weight. Only a loose record reads it,
+so nothing behaved differently.
+
+Bank 4 has 7,097 bytes left (7,609 before), the $6000 region 1,127
+(1,566), the room builder at $5B00 349 (381) and the code below the stack
+2,158 (2,164).
+
+Checked in a 128K emulator:
+
+- **Unchanged.** With nothing moved, every room builds the same objects as
+  before the table, compared record by record against a build of the commit
+  before: 127 rooms identical, and room $09's two portcullis records differ
+  only in the stale weight above.
+- **Kept.** In all 30 rooms that have things, each of the 56 had its driving
+  record moved and its state changed. The knight left for a room with none,
+  then went back to each: every one was where it was left, with its state.
+- **Reset.** Room $0A's table was moved and the room left, so the live table
+  differed from the starting one. After the last life was lost, the end
+  screen, the menu and a new game, the two were the same again.
+
+Not done: the room designer still places a thing on the packed grid, as it
+does every object; the pool has no spare slots for things brought into a room
+(stage 3); and nothing yet uses the room $FE, or the two spare bytes.

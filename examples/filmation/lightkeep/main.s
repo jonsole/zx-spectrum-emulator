@@ -50,6 +50,7 @@ start:              di
                     ld      bc,END_ROOMS - 1
                     ld      (hl),0
                     ldir
+                    call    things_new_game     ; and everything where it starts
 
         ; Nothing goes into a room that was not built. room_build leaves the
         ; old room up when it is handed a number no record carries,
@@ -57,7 +58,11 @@ start:              di
         ; characters again would insert records that are already there, and
         ; an object compared against itself ties, which makes the scan take
         ; itself as its own insertion point and link its NEXT to itself.
-.enter:             ld      a,(room_number)
+        ;
+        ; The room being left keeps its things where they are now: the pool is
+        ; the only place that says, and room_build is about to fill it again.
+.enter:             call    things_save
+                    ld      a,(room_number)
                     call    room_build
                     jr      c,.entered
                     ld      a,(room_shown)      ; stay where we are

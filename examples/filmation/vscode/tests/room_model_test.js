@@ -1611,6 +1611,22 @@ test('movers: a template is given a behaviour and a weight, and kept in table or
     assert.ok(text.indexOf('   "object_table": { "behaviour": "MOVE_PUSHED" }') >= 0);
   });
 
+test('movers: a soldier kept where he was left stays kept when his behaviour changes',
+  function () {
+    const atlas = atlasFor('lightkeep');
+    if (!m.hasMovers(atlas)) skip('lightkeep/templates.json says nothing of its movers');
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_guard_ew'),
+                           { behaviour: 'MOVE_GUARD_U', kept: true });
+    m.setMover(atlas, 'object_guard_ew', 'MOVE_GUARD_SQ', 0);
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_guard_ew'),
+                           { behaviour: 'MOVE_GUARD_SQ', kept: true });
+    // No behaviour, no entry: kept goes with the rest.
+    m.setMover(atlas, 'object_guard_ew', null);
+    assert.strictEqual(m.moverOf(atlas, 'object_guard_ew'), null);
+    const text = m.serializeTemplates(atlas, '\n');
+    assert.ok(text.indexOf('"object_guard_square": { "behaviour": "MOVE_GUARD_SQ", "kept": true }') >= 0);
+  });
+
 test('movers: a rename takes the entry with it, a copy copies it, a delete drops it',
   function () {
     const atlas = atlasFor('lightkeep');

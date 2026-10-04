@@ -76,7 +76,8 @@ room_build:			ld		c,a
 					; its own successor
 
 					push	hl		; the record
-					call	room_page_fill		; C is still the room: its sprites
+					call	things_gather		; C is still the room: its things,
+					call	room_page_fill		; and its sprites
 
 					; Nothing survives a room change.
 					call	shift_reset
@@ -89,6 +90,11 @@ room_build:			ld		c,a
 					ld		(room_door_z + ROOM_DOOR_W),a
 					ld		(room_behaviour),a
 					ld		(room_group_move),a
+					; Scenery takes room_weight too, and nothing has set it for this
+					; room yet: without this it wore whatever the last room's last
+					; mover_find left, which since things are placed last is a
+					; table's weight.
+					ld		(room_weight),a
 					ld		(mover_ball_top),a
 					ld		(mover_gate_busy),a
 					ld		(mover_gate_drops),a
@@ -141,6 +147,7 @@ room_build:			ld		c,a
 					ld		ix,room_objects
 					call	room_scenery
 					call	room_objects_of
+					call	room_things_place	; and what was left here: things.s
 
 					call	room_show_backdrop	; room_show, with the walls drawn once
 					ld		a,(room_number)
@@ -468,30 +475,23 @@ room_objects_of:	ld		a,(room_bytes_left)
 ; Turn one template entry plus the packed position into the eight bytes
 ; room_add takes.
 ;
+; It is two steps: the position byte into a place in the room -- the base the
+; template's offsets go on, in room_base_u, room_base_v and room_base_z -- and
+; then the entry at that place. A thing (things.s) keeps its base in its entry
+; instead of a packed byte, and goes in at the second step.
+;
 ; In:  HL -> sprite, size U, size V, size Z, flags, offsets
 ;      room_packed = the position byte
 ; Out: room_stage = the eight bytes
 ; Corrupts: AF, BC, DE
-room_unpack:		push	hl
-					ld		a,(hl)
-					ld		(room_stage + 0),a		; sprite
-					inc		hl
-					ld		de,room_stage + 4		; size U, size V, size Z and
-					ld		bc,4		; the flags, in that order in both
-					ldir		; (DE is the caller's and already on the stack)
-					ld		c,(hl)		; the offsets byte
-
-					ld		a,(room_packed)
+room_unpack:		ld		a,(room_packed)
 					and		7
 					add		a,a
 					add		a,a
 					add		a,a
 					add		a,a		; cell * 16
-					bit		0,c
-					jr		z,.no_half_u
-					add		a,8
-.no_half_u:			add		a,72
-					ld		(room_stage + 1),a		; U
+					add		a,72
+					ld		(room_base_u),a
 
 					ld		a,(room_packed)
 					rrca
@@ -502,11 +502,8 @@ room_unpack:		push	hl
 					add		a,a
 					add		a,a
 					add		a,a
-					bit		1,c
-					jr		z,.no_half_v
-					add		a,8
-.no_half_v:			add		a,72
-					ld		(room_stage + 2),a		; V
+					add		a,72
+					ld		(room_base_v),a
 
 					ld		a,(room_packed)
 					rlca
@@ -518,15 +515,57 @@ room_unpack:		push	hl
 					add		a,b
 					add		a,b		; ...* 6
 					add		a,a		; ...* 12
-					add		a,c		; plus the template's own offset
-					and		$FC		; and drop the two nudge bits again
 					ld		b,a
 					ld		a,(room_floor_z)
+					add		a,b
+					ld		(room_base_z),a
+
+					;; NB: fall through into room_unpack_base
+
+
+; One template entry at a place in the room: its half-cell nudges and its
+; height above the base added on. The level is a multiple of 12, so adding the
+; offsets byte with its two nudge bits masked off is the same sum Knight Lore
+; makes, which adds the byte and masks the total.
+;
+; In:  HL -> sprite, size U, size V, size Z, flags, offsets
+;      room_base_u, room_base_v, room_base_z = the place
+; Out: room_stage = the eight bytes
+; Corrupts: AF, BC, DE
+room_unpack_base:	push	hl
+					ld		a,(hl)
+					ld		(room_stage + 0),a		; sprite
+					inc		hl
+					ld		de,room_stage + 4		; size U, size V, size Z and
+					ld		bc,4		; the flags, in that order in both
+					ldir		; (DE is the caller's and already on the stack)
+					ld		c,(hl)		; the offsets byte
+
+					ld		a,(room_base_u)
+					bit		0,c
+					jr		z,.no_half_u
+					add		a,8
+.no_half_u:			ld		(room_stage + 1),a		; U
+
+					ld		a,(room_base_v)
+					bit		1,c
+					jr		z,.no_half_v
+					add		a,8
+.no_half_v:			ld		(room_stage + 2),a		; V
+
+					ld		a,c
+					and		$FC		; the template's own offset, without the nudges
+					ld		b,a
+					ld		a,(room_base_z)
 					add		a,b
 					ld		(room_stage + 3),a		; Z
 
 					pop		hl
 					ret
+
+room_base_u:		DB		0
+room_base_v:		DB		0
+room_base_z:		DB		0
 
 
 LIVES_AT			EQU		$4000 + 2 * 2048 + 3 * 32 + 4	; row 19, print_lives

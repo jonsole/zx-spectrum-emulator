@@ -152,6 +152,9 @@ grep -E "\|F\|room_number$" output/lightkeep.sld | cut -d'|' -f6
 | `special_carried` | what he carries |
 | `end_rooms_seen` | a bit a room, for the percentage |
 | `room_objects`, `room_object_count` | the object pool, 32 bytes a record, with the same layout as Pentagram's (see its driving.md) |
+| `things_live` | the thing table, in bank 4 (`read_memory` with `bank: 4`, offset from $C000): 8 bytes a thing -- room, object template, U, V, Z, state, two spare. A room's things are read from it when the room is built and written back when it is left (things.s) |
+| `things_start` | the same table as a game begins; `things_new_game` copies it over `things_live` |
+| `things_here`, `things_here_count` | the room being played's things, 13 bytes each: the entry's address in bank 4, the record that drives it, its first sprite's offsets, and a copy of the entry |
 | `room_busy` | 0 when quiet, or the period monsters sit out: 4, 3 or 2 (busy.s) |
 | `busy_calm`, `busy_phase`, `busy_count` | the busy rule's state |
 | `move_tick`, `menu_mode`, `input_now` | the turn counter, the menu's choice, this turn's keys |
@@ -198,6 +201,16 @@ new room gives his legs, through other graphics. To put him somewhere in the
 new room, let it run two or three turns first: a position written at
 `start.entered` is overwritten when he is placed.
 For a room that doesn't build, `room_shown` stays where it was: check it.
+
+**Moving a thing.** Tables, chests, movable blocks and the soldiers are things
+(things.s). Write a new U, V or Z into the record `things_here` names for it,
+and it is kept when the room is left: the same write into any other record is
+lost, since the room is built afresh from its data. Leaving by writing
+`room_number` saves it as walking out does.
+
+**Losing the game.** Write 0 to `player_lives` and 1 to `player_touched` --
+but only once `player_state` is 0. While he is still appearing in a room the
+touch is never looked at, and the game plays on.
 
 **Keeping him alive** while you watch. Each turn, write 0 to `player_touched`,
 and keep `player_lives` up.

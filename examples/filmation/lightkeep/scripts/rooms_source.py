@@ -353,6 +353,29 @@ def loose_behaviours():
             if name.startswith("MOVE_") and (value(name) or 0) >= loose}
 
 
+def kept_templates(objects, movers, loose):
+    """The object templates whose every placement is a thing: kept where it was
+    left, in the thing table, rather than built afresh from the room's record.
+
+    Anything a push moves is one, since moving it is the point. Anything else
+    is one only when templates.json's meta.movers says "kept": true -- the
+    soldiers, who walk where they like and are found where they were.
+    """
+    kept = set()
+    for name in objects:
+        said = movers.get(name) or {}
+        if said.get("behaviour") in loose or said.get("kept"):
+            kept.add(name)
+    return kept
+
+
+# The thing table's entries, as things.s reads them: the room it is in, its
+# object template, the U, V and Z its template's offsets are added to (what
+# room_unpack makes of a packed position), the state its driving record had,
+# and two bytes kept for later stages.
+THING_STRIDE = 8
+
+
 def main():
     if not ATLAS.is_file():
         sys.exit("%s is missing -- run rooms.py first" % ATLAS.name)
@@ -533,6 +556,8 @@ def main():
     out.append("")
     out.append("")
 
+    kept = kept_templates(objects, movers, loose)
+
     # --- the rooms ---------------------------------------------------------
     # From here to the end of the records is room_list.s rather than
     # room_data.s; both files open with the same header.
@@ -597,14 +622,35 @@ def main():
                      % (room["number"], ref["template"], to))
         return to
 
+    # Every placement of a kept template becomes a thing, in room order, and
+    # the room's own record keeps only the rest.
+    things = []
+    for r in rooms:
+        floor_z = atlas["roomDimensions"][r["dimensions"]]["z"]
+        for o in r["objects"]:
+            if o["template"] not in kept:
+                continue
+            for p in o["positions"]:
+                # What room_unpack makes of the packed byte before the
+                # template's own offsets go on.
+                things.append((r["number"], o["template"],
+                               p["u"] * 16 + 72, p["v"] * 16 + 72,
+                               floor_z + p["z"] * 12))
+    if len(things) > 255:
+        sys.exit("%d things; the table is walked with a one-byte count, so 255 at most"
+                 % len(things))
+    things_in = collections.Counter(t[0] for t in things)
+    things_most = max(things_in.values()) if things_in else 0
+
     line(out, "room_list:", "", "")
     for r in rooms:
-        scn, obs = r["scenery"], r["objects"]
+        scn, everything = r["scenery"], r["objects"]
+        obs = [o for o in everything if o["template"] not in kept]
         object_bytes = sum(2 + len(o["positions"]) for o in obs)
         biggest = max(biggest, 2 * len(scn) + object_bytes)
         placed = sum(len(scn_by_name[s["template"]]) for s in scn)
         placed += sum(len(o["positions"]) * len(obj_by_name[o["template"]])
-                      for o in obs)
+                      for o in everything)
         most_objects = max(most_objects, placed)
 
         attr = r["ink"] | (castle.shape_index(atlas, r["dimensions"],
@@ -632,6 +678,21 @@ def main():
                  "%d x %s" % (n, bare(o["template"])))
         out.append("")
     out.append("")
+
+    # --- the things ---------------------------------------------------------
+    out.append("; --- the things --------------------------------------------------------------")
+    out.append(";")
+    out.append("; Everything that is kept where it was left: what a push moves, and the")
+    out.append("; soldiers. Each is room, template, U, V, Z, state and two spare bytes --")
+    out.append("; see things.s. things_start is the castle as a game begins; things_new_game")
+    out.append("; copies it over things_live, which is what play reads and writes.")
+    line(out, "things_start:", "", "")
+    for number, template, u, v, z in things:
+        line(out, "", "DB", "$%02X, FG_%s, %3d, %3d, %3d, 0, 0, 0"
+             % (number, bare(template).upper(), u, v, z), bare(template))
+    line(out, "things_live:", "DS", "THING_COUNT * THING_STRIDE")
+    out.append("")
+    out.append("")
     listing = header + tpl + out[list_start:]
     del out[list_start:]
 
@@ -643,10 +704,14 @@ def main():
     # time the room names it, as room_find copies it: a scenery template is
     # eight bytes a piece and an object template six an entry, each ending in
     # a byte of 0.
+    # A thing's template is copied once for each thing, by things_gather, after
+    # the ones its room's record names.
     most_templates = 0
     for r in rooms:
         size = sum(SCENERY_STRIDE * len(scn_by_name[s["template"]]) + 1 for s in r["scenery"])
-        size += sum(OBJECT_STRIDE * len(obj_by_name[o["template"]]) + 1 for o in r["objects"])
+        for o in r["objects"]:
+            one = OBJECT_STRIDE * len(obj_by_name[o["template"]]) + 1
+            size += one * len(o["positions"]) if o["template"] in kept else one
         most_templates = max(most_templates, size)
     out.append("")
     out.append("; The room being built's templates, copied out of bank 4 by room_find, and")
@@ -664,6 +729,11 @@ def main():
     line(out, "ROOM_MAX_BODY", "EQU", "%d" % biggest, "longest scenery+object list")
     line(out, "ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,
          "the fullest room, so the object pool")
+    out.append("")
+    line(out, "THING_COUNT", "EQU", "%d" % len(things), "the castle's things")
+    line(out, "THING_STRIDE", "EQU", "%d" % THING_STRIDE, "bytes a thing")
+    line(out, "THINGS_HERE_MOST", "EQU", "%d" % things_most,
+         "the most one room starts with")
     out.append("")
     out.append("; The flag bits the templates above were written with, for room.s to check")
     out.append("; against object.s.")

@@ -117,6 +117,7 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 
 ; Looking a room up in bank 4, and the paging it needs.
                     INCLUDE "room_find.s"
+                    INCLUDE "things.s"          ; what is kept where it was left
                     INCLUDE "room_page.s"
                     INCLUDE "page.s"
 
