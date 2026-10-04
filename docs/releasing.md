@@ -10,7 +10,7 @@ under one version, as a GitHub Release with these files:
 | `zxspectrum-debug-<version>-win32-x64.vsix` | The extension, carrying `zx_server.exe` in `bin/`, the 48K and 128K ROMs in `roms/`, the trace viewer, and the tape designer's builder with its fast loader in `builder/`. Installed with **Extensions: Install from VSIX...**, it needs nothing else to debug |
 | `zx-spectrum-emulator-<version>-win32-x64.zip` | `zx_server.exe` and the ROMs alone, for MCP clients and other editors |
 | `filmation-designer-<version>.vsix` | The Filmation designer: the room, templates and graphic-map editors |
-| `zx-spectrum-example-rom-<version>.zip` | A workspace for stepping through the ROM in its commented disassembly |
+| `zx-spectrum-example-rom-<version>.zip` | A workspace for stepping through the ROM in its commented disassembly, which it builds on the user's machine the first time it launches |
 | `zx-spectrum-example-knightlore-<version>.zip` | The Knight Lore remake's workspace: its code, and a task that extracts the game's data from the user's own copy of the original |
 | `zx-spectrum-example-pentagram-<version>.zip` | The same for Pentagram |
 
@@ -98,10 +98,7 @@ pushed `v*` tag, on `windows-latest`:
 2. `scripts/fetch_roms.py` -- the ROMs, from the Fuse emulator's source,
    checked against pinned SHA-256 hashes. Fetched before the build, so the
    tests that need a real ROM run rather than skip.
-3. The `examples/zx-tape-loader` submodule, for the tape builder;
-   `scripts/fetch_sjasmplus.py` and SkoolKit, and with them
-   `scripts/build_rom_source.py` -- the ROM disassembly for the ROM example,
-   which it refuses to write unless it reassembles the ROM byte for byte.
+3. The `examples/zx-tape-loader` submodule, for the tape builder.
 4. `build.ps1 -Release -Distribution -Test` -- the optimised build and the
    fast test suite.
 5. `zx_server --version` must say the tag's version.
@@ -121,8 +118,7 @@ every push to `master`, plus a build without rewind, so a broken build is
 found then rather than at a tag.
 
 To try the packaging by hand (it needs Node for vsce, or `--no-vsix` for the
-zips and the staged folders alone; and `rom_disassembly/`, built by
-`scripts/build_rom_source.py`):
+zips and the staged folders alone):
 
 ```powershell
 .venv-win\Scripts\python.exe scripts\package_release.py `
@@ -141,11 +137,17 @@ zips and the staged folders alone; and `rom_disassembly/`, built by
 - **The executable is not code-signed.** Windows SmartScreen warns the first
   time a downloaded `zx_server.exe` runs. Signing costs money and can come
   later.
-- **The ROM disassembly ships in the ROM example only**, by the author's
-  choice: skoolkid/rom, the SkoolKit edition of *The Complete Spectrum ROM
-  Disassembly*, is published with no licence of its own (the notices say
-  whose it is). The extension does not carry it, so outside that workspace the
-  ROM steps as plain disassembly, without its labels and comments.
+- **The ROM disassembly ships nowhere.** skoolkid/rom, the SkoolKit edition
+  of *The Complete Spectrum ROM Disassembly*, is published with no licence of
+  its own (the notices say whose it is), so nothing gives the right to pass it
+  on. The ROM example carries `scripts/build_rom_source.py` instead, and its
+  launches run it: the user's machine fetches the source at the pinned commit
+  and builds it, with Python and SkoolKit. CI still builds it on every push
+  (`ci.yml`), which is what proves the pinned commit reassembles the ROM; to
+  move the pin, change `SKOOL_COMMIT` and `SKOOL_SHA256` in the script.
+  `package_release.py` checks the script's copy of the 48K ROM's hash against
+  `fetch_roms.py`'s. Outside that workspace the ROM steps as plain
+  disassembly, without its labels and comments.
 - **Changing a Filmation game's data** -- a room in the designer, a sprite in
   `sprites.png` -- stops the next release until it is dealt with, since the
   example workspace makes that data from the original and could not reproduce

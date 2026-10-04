@@ -262,10 +262,11 @@ python -m venv .venv-win
 .\.venv-win\Scripts\python.exe scripts\build_rom_source.py
 ```
 
-Also needs `sjasmplus` on PATH (https://github.com/z00m128/sjasmplus). The
-script assembles the disassembly and compares it byte-for-byte against
-`roms/48.rom`, refusing to write output if they differ — so a pass is also a
-second confirmation the ROM is genuine.
+Also needs sjasmplus: `scripts\fetch_sjasmplus.py` puts it in `tools\sjasmplus\`,
+where the script looks first (then `SJASMPLUS`, then the PATH). The script
+fetches the disassembly's source at a pinned commit, assembles it and checks
+the result against the 48K ROM's pinned SHA-256, refusing to write output if
+they differ.
 
 **Game disassemblies.** These live in their own repository now,
 [zx-spectrum-disassemblies](https://github.com/jonsole/zx-spectrum-disassemblies),

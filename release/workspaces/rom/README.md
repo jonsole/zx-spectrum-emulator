@@ -6,10 +6,22 @@ emulator in the **ZX Spectrum Debug** extension.
 
 ## Before you start
 
-Install the extension: `zxspectrum-debug-<version>-win32-x64.vsix` from the
-[releases page](https://github.com/jonsole/zx-spectrum-emulator/releases), with
-**Extensions: Install from VSIX...**. It carries the emulator and the ROMs;
-nothing else is needed.
+- **ZX Spectrum Debug** (`zxspectrum-debug-<version>-win32-x64.vsix`) from the
+  [releases page](https://github.com/jonsole/zx-spectrum-emulator/releases),
+  installed with **Extensions: Install from VSIX...** -- the emulator, the ROMs
+  and the debugger.
+- **Python 3** on the PATH, with **SkoolKit**: `pip install skoolkit==10.1`, the
+  version the build is checked with.
+
+The disassembly itself is not in this zip: it is published with no licence to
+pass it on, so the workspace builds it on your machine instead. The first
+launch fetches its source from [skoolkid/rom](https://github.com/skoolkid/rom),
+at a pinned commit, converts it with SkoolKit and assembles it with sjasmplus
+(fetched by the extension if there is none on the PATH) into
+`rom_disassembly/`. That needs an internet connection and takes a few seconds;
+every launch after it finds the disassembly built and goes straight on. The
+build keeps the result only if it reassembles the 48K ROM byte for byte, so
+every line of it is at the address it says.
 
 ## Using it
 
@@ -34,13 +46,14 @@ More: the [user guide](https://github.com/jonsole/zx-spectrum-emulator/blob/mast
 
 | | |
 |---|---|
-| `rom_disassembly/rom.asm` | The disassembly, as assembly source |
-| `rom_disassembly/rom.sld` | sjasmplus's map from each address to its line in `rom.asm` |
+| `scripts/build_rom_source.py` | Builds the disassembly into `rom_disassembly/` |
+| `rom_disassembly/rom.asm` | The disassembly, as assembly source, once built |
+| `rom_disassembly/rom.sld` | sjasmplus's map from each address to its line in `rom.asm`, once built |
 | `.vscode/launch.json` | The configurations above |
+| `.vscode/tasks.json` | The build, which they run first (**Terminal > Run Build Task...** runs it alone) |
 
 The disassembly is *The Complete Spectrum ROM Disassembly* by Dr Ian Logan and
 Dr Frank O'Hara, in Richard Dymond's SkoolKit edition
 ([skoolkid/rom](https://github.com/skoolkid/rom)), converted with SkoolKit's
-`skool2asm.py` and assembled with sjasmplus -- which reproduces the real ROM
-byte for byte, or the build refuses to write it. The ROM is copyright Amstrad;
-the disassembly's text is its authors'. See `THIRD_PARTY_NOTICES.md`.
+`skool2asm` and assembled with sjasmplus. The ROM is copyright Amstrad; the
+disassembly's text is its authors'. See `THIRD_PARTY_NOTICES.md`.

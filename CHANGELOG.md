@@ -7,6 +7,16 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The ROM example workspace builds its disassembly on your machine.**
+  *The Complete Spectrum ROM Disassembly* is published with no licence to
+  pass it on, so the workspace's zip no longer carries it. The first launch
+  fetches its source from skoolkid/rom, at a pinned commit, and builds it with
+  SkoolKit and sjasmplus; it needs Python 3 with SkoolKit
+  (`pip install skoolkit==10.1`) and, that first time, an internet connection.
+  `scripts/build_rom_source.py` no longer needs git or `roms/48.rom`: it
+  checks both its source and its result against pinned hashes, and does
+  nothing when the disassembly is already built.
+
 ## 0.1.0 (2026-09-29)
 
 The first release: the emulator and the VS Code extension, packaged.

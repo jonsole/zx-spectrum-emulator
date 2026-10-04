@@ -37,9 +37,11 @@ jobs:
         run: python scripts/fetch_roms.py
 
       # What the packages carry besides the build: the tape designer's fast
-      # loader (a submodule), and for the ROM example, the commented ROM
-      # disassembly -- built here with sjasmplus and SkoolKit, which refuses
-      # to write one that does not reassemble the ROM byte for byte.
+      # loader (a submodule). And the commented ROM disassembly, which no
+      # package carries -- the ROM example builds it on the user's machine --
+      # built here as the check that the commit build_rom_source.py pins still
+      # reassembles the ROM byte for byte with SkoolKit 10.1, the version the
+      # ROM example's README names.
       - name: Fetch the tape loader and build the ROM disassembly
         run: |
           git submodule update --init examples/zx-tape-loader

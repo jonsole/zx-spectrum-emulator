@@ -1,0 +1,29 @@
+{
+  // "Build the ROM disassembly": makes rom_disassembly/rom.asm and rom.sld on
+  // this machine, once -- the launches run it first, and after the first time
+  // it only says the disassembly is up to date. It fetches the disassembly's
+  // source (skoolkid/rom, at the commit scripts/build_rom_source.py pins),
+  // converts it with SkoolKit and assembles it with sjasmplus from the PATH or
+  // fetched by the ZX Spectrum Debug extension (the command in "env" below),
+  // and keeps it only if it reassembles the 48K ROM byte for byte. The
+  // disassembly is not in this workspace's zip because it is published with
+  // no licence to pass it on: see README.md.
+  //
+  // Needs Python 3 on the PATH with SkoolKit (pip install skoolkit==10.1).
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build the ROM disassembly",
+      "type": "process",
+      "command": "python",
+      "args": ["scripts/build_rom_source.py"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "SJASMPLUS": "${command:zxspectrum.sjasmplusPath}" }
+      },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

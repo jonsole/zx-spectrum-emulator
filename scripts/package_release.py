@@ -22,8 +22,9 @@ writes into dist/:
     zx-spectrum-example-knightlore-<version>.zip
     zx-spectrum-example-pentagram-<version>.zip
         VS Code workspaces to open and run: release/workspaces/<name>/ for the
-        .vscode/ and README, with what they work on. The ROM's commented
-        disassembly (rom_disassembly/, built by build_rom_source.py); the two
+        .vscode/ and README, with what they work on. The ROM's carries
+        build_rom_source.py and none of the disassembly, which it builds on
+        the user's machine the first time it launches; the two
         Filmation remakes in the repository's own layout, examples/filmation/
         with the engine and the one game's code -- and none of Ultimate's
         data, which each workspace extracts from the user's own copy of the
@@ -210,14 +211,29 @@ def add_workspace_template(z, top, name):
         z.write(os.path.join(ROOT, notice), f"{top}/{notice}")
 
 
-def build_rom_example(path, top, disassembly):
+def build_rom_example(path, top):
+    """The ROM workspace: the script that builds its disassembly, not the
+    disassembly. skoolkid/rom is published with no licence to pass it on, so
+    the workspace's launch runs the script on the user's machine instead."""
+    check_rom_hash_agrees()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         add_workspace_template(z, top, "rom")
-        for name in ("rom.asm", "rom.sld"):
-            source = os.path.join(disassembly, name)
-            if not os.path.isfile(source):
-                raise SystemExit(f"{source} missing: python scripts/build_rom_source.py")
-            z.write(source, f"{top}/rom_disassembly/{name}")
+        z.write(os.path.join(ROOT, "scripts", "build_rom_source.py"), f"{top}/scripts/build_rom_source.py")
+
+
+def check_rom_hash_agrees():
+    """build_rom_source.py repeats fetch_roms.py's 48K ROM hash so that it
+    stands alone in the workspace; a release whose two copies disagreed would
+    ship a build that refuses every user's ROM."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    try:
+        import build_rom_source
+        import fetch_roms
+    finally:
+        sys.path.pop(0)
+    pinned = dict((name, digest) for name, _, digest in fetch_roms.ROMS)["48.rom"]
+    if build_rom_source.ROM_48_SHA256 != pinned:
+        raise SystemExit("build_rom_source.py's ROM_48_SHA256 is not fetch_roms.py's 48.rom hash")
 
 
 def json_hash(path):
@@ -272,8 +288,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--server", required=True, help="the zx_server.exe to ship")
     parser.add_argument("--roms", required=True, help="a directory holding 48.rom and 128.rom")
-    parser.add_argument("--rom-disassembly", default=os.path.join(ROOT, "rom_disassembly"),
-                        help="rom.asm and rom.sld (default: rom_disassembly/)")
     parser.add_argument("--ref", required=True, help="the tag the release is cut from, e.g. v0.1.0")
     parser.add_argument("--out", default=os.path.join(ROOT, "dist"), help="where to write (default: dist/)")
     parser.add_argument("--no-vsix", action="store_true", help="stage and zip, but do not run vsce")
@@ -301,7 +315,7 @@ def main():
     written.append(zip_path)
     top = "zx-spectrum-example-rom"
     zip_path = os.path.join(args.out, f"{top}-{version}.zip")
-    build_rom_example(zip_path, top, args.rom_disassembly)
+    build_rom_example(zip_path, top)
     written.append(zip_path)
     for game in FILMATION_GAMES:
         top = f"zx-spectrum-example-{game}"

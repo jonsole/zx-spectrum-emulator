@@ -152,14 +152,15 @@ repository as the `examples/zx-tape-loader` submodule.
 
 ## The Complete Spectrum ROM Disassembly
 
-`rom_disassembly/rom.asm` and `rom.sld` in the ROM example workspace's zip.
-*The Complete Spectrum ROM Disassembly* is by Dr Ian Logan and Dr Frank
-O'Hara; the text here is Richard Dymond's SkoolKit edition of it,
-<https://github.com/skoolkid/rom>, converted to assembly source by SkoolKit's
-`skool2asm.py` and assembled with sjasmplus by `scripts/build_rom_source.py`.
-The ROM it describes is copyright Amstrad. The disassembly's text remains its
-authors'; it is published with no licence of its own, and is not in this
-repository.
+Not in this repository or any release. *The Complete Spectrum ROM
+Disassembly* is by Dr Ian Logan and Dr Frank O'Hara; Richard Dymond's SkoolKit
+edition of it, <https://github.com/skoolkid/rom>, is published with no licence
+of its own, so nothing here passes it on. The ROM example workspace's zip
+carries only `scripts/build_rom_source.py`, the project's own (MIT), which
+fetches `rom.skool` from skoolkid/rom on the user's machine, converts it to
+assembly source with SkoolKit (GPL-3.0, installed by the user) and assembles it
+with sjasmplus into the workspace's `rom_disassembly/`. The ROM it describes is
+copyright Amstrad; the disassembly's text remains its authors'.
 
 ## Knight Lore and Pentagram (Ultimate Play the Game)
 

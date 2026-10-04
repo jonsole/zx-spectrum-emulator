@@ -1261,27 +1261,36 @@ reproduces *The Complete Spectrum ROM Disassembly* (Logan & O'Hara) as a
 view for the DAP session:
 
 ```
-skoolkid/rom (.skool)  →  skool2asm.py  →  sjasmplus --sld  →  rom_disassembly/
+skoolkid/rom (.skool)  →  skool2asm  →  sjasmplus --sld  →  rom_disassembly/
                                                                   rom.asm  (readable, labeled source)
                                                                   rom.sld  (address <-> source-line map)
 ```
 
 Run it once. The `scripts/` helpers are Python — the only part of the project
 that still is — and want their own venv: `python -m venv .venv-win` then
-`.\.venv-win\Scripts\pip.exe install skoolkit`, plus `sjasmplus` on PATH (see
-the script's `--help` for where to get a build per platform):
+`.\.venv-win\Scripts\pip.exe install skoolkit`, plus sjasmplus -- in
+`tools/sjasmplus/` (`scripts/fetch_sjasmplus.py` puts it there), on the PATH,
+or named by the `SJASMPLUS` environment variable:
 
 ```sh
 .venv-win\Scripts\python.exe scripts\build_rom_source.py
 ```
 
-It clones `skoolkid/rom` into `.rom-disassembly-src/` and writes
+It fetches `skoolkid/rom`'s `rom.skool` at the commit the script pins
+(checked against a pinned SHA-256) into `.rom-disassembly-src/` and writes
 `rom_disassembly/rom.asm` + `rom.sld` — both gitignored, since the
 disassembly (like the ROM binary itself) is copyrighted material fetched
 locally, never committed. The script **refuses to write output** unless the
-freshly assembled binary is byte-for-byte identical to `roms/48.rom` — a
-mismatch would mean the address↔source-line map can't be trusted for
-debugging, which is worse than not having one.
+freshly assembled binary is byte-for-byte the 48K ROM, checked against the
+same SHA-256 `scripts/fetch_roms.py` pins — a mismatch would mean the
+address↔source-line map can't be trusted for debugging, which is worse than
+not having one. Run again, it does nothing unless the pinned commit has
+moved (`--rebuild` builds regardless).
+
+The ROM example workspace a release publishes carries this same script
+rather than the disassembly, which is published with no licence to pass it
+on: its launches run it first, as a task, so the disassembly is built on the
+user's own machine the first time.
 
 Once built, the DAP server picks it up automatically (no config needed) the
 next time it starts: stack frames get a real `source`/`line` into
