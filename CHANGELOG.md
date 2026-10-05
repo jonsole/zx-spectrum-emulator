@@ -156,6 +156,12 @@ GitHub takes its notes from that section.
   is no bigger. The room designer hides it. Ctrl with up and down moves an
   object a level, and with Shift 4 units. The designer makes and merges the
   groups a height needs, and says when the selected object is in one.
+- **Lightkeep has storeys.** A room can have a hole down to the room below and
+  stairs up to the room above (`"down"` and `"up"` in `rooms.json`). A storey
+  is 96 units, so a staircase runs on from one room into the next. The knight
+  drops through a hole and climbs the stairs. Things fall through too, soldiers
+  included, and land in the room below. Rooms $A7 and $83 have a test
+  stairwell. The hole has no art of its own yet.
 
 ## 0.1.0 (2026-09-29)
 

@@ -150,6 +150,7 @@ room_build:			ld		c,a
 					call	room_things_place	; and what was left here: things.s
 
 					call	room_show_backdrop	; room_show, with the walls drawn once
+					call	room_vertical		; its ways down and up: storeys.s
 					ld		a,(room_number)
 					call	room_seen		; for the percentage at the end
 					scf				; built

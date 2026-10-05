@@ -91,9 +91,23 @@ player_add:         ld      ix,player
 ;      C  = V
 ;      A  = the Z to stand at
 ;      enter_dir = $FF: it is spent
-; Corrupts: F, E, HL
+; Corrupts: F, DE, HL, IY
 player_entry:       ld      a,(enter_dir)
-                    ld      e,a
+                    cp      ENTER_FROM_ABOVE
+                    jr      c,.wall
+                    ; Down through a hole or up the stairs: where he was, and
+                    ; the height player_vertical worked out -- which is also
+                    ; where a death in this room puts him back.
+                    ld      b,(ix+OBJ.U)
+                    ld      c,(ix+OBJ.V)
+                    sub     ENTER_FROM_BELOW    ; $FF from above: hold the
+                    ld      (vertical_hold),a   ; way up (storeys.s), 0 from below
+                    ld      a,$FF
+                    ld      (enter_dir),a
+                    ld      a,(vertical_z)
+                    jp      vertical_clear      ; and on top of anything there
+
+.wall:              ld      e,a
                     ld      c,a
                     ld      b,0
                     ld      hl,room_door_z
@@ -193,8 +207,11 @@ player_step:        ld      ix,player
 
                     ; Not walking -- nothing held, or the move was the turn
                     ; itself. He still has to fall, and he is still drawn, so
-                    ; that a turn costs about the same either way.
-                    jp      character_stand
+                    ; that a turn costs about the same either way. A fall can
+                    ; take him through a hole: storeys.s.
+                    call    character_stand
+                    ld      ix,player
+                    jp      player_vertical
 
 .walk:              push    af
                     bit     0,(ix+OBJ.GFX)          ; a footstep every other frame
@@ -204,6 +221,7 @@ player_step:        ld      ix,player
                     pop     af
                     call    character_walk
                     ld      ix,player               ; the repaint took IX
+                    call    player_vertical         ; down a hole, up the stairs
 
                     ;; NB: fall through into player_exit -- player_turn is
                     ;; PAST it, deliberately: anything put here instead is

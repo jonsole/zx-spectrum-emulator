@@ -120,6 +120,7 @@ start:              di
                     ; his legs under its top.
                     call    player_step
                     call    movers_step
+                    call    things_fall         ; through a hole: storeys.s
                     call    redraw_flush        ; whatever the turn left waiting
                     call    print_room
                 IFDEF   DEBUG_ROOM

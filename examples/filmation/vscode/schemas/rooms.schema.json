@@ -188,6 +188,14 @@
       "type": "boolean",
       "description": "knightlore128: whether things can fall into this room out of the sky, as they do in Pentagram. A sky room loads the flyers' sprites as well as its own. Left out means no sky."
      },
+     "down": {
+      "$ref": "#/definitions/byte",
+      "description": "Lightkeep: the room below, reached by falling through a hole in this one. The floor is lowered and walked on as invisible solid boxes round the hole; whatever drops 24 below the floor arrives there 96 higher, at the same U and V. Left out means no way down."
+     },
+     "up": {
+      "$ref": "#/definitions/byte",
+      "description": "Lightkeep: the room above, reached by climbing stairs or a ledge in this one to 72 above the floor; he arrives there 96 lower, at the same U and V, on the stairs that carry on up out of its hole. Left out means no way up."
+     },
      "scenery": {
       "type": "array",
       "description": "The scenery templates this room is built from, in the order they are drawn.",

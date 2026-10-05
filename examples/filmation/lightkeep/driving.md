@@ -154,7 +154,10 @@ grep -E "\|F\|room_number$" output/lightkeep.sld | cut -d'|' -f6
 | `room_objects`, `room_object_count` | the object pool, 32 bytes a record, with the same layout as Pentagram's (see its driving.md) |
 | `things_live` | the thing table, in bank 4 (`read_memory` with `bank: 4`, offset from $C000): 8 bytes a thing -- room, object template, U, V, Z, state, two spare. A room's things are read from it when the room is built and written back when it is left (things.s) |
 | `things_start` | the same table as a game begins; `things_new_game` copies it over `things_live` |
-| `things_here`, `things_here_count` | the room being played's things, 13 bytes each: the entry's address in bank 4, the record that drives it, its first sprite's offsets, and a copy of the entry |
+| `things_here`, `things_here_count` | the room being played's things, 14 bytes each: the entry's address in bank 4, the record that drives it (0 once it has fallen out of the room), how many records it has, its first sprite's offsets, and a copy of the entry |
+| `room_down`, `room_up` | the room being played's ways down and up, `ROOM_NO_EXIT` for none (storeys.s) |
+| `room_ground_z` | the floor's height as built; `room_floor_z` is 64 lower in a room with a hole |
+| `vertical_z`, `vertical_hold` | where he came in from above or below, and whether the way up is waiting for him to go below its line |
 | `room_busy` | 0 when quiet, or the period monsters sit out: 4, 3 or 2 (busy.s) |
 | `busy_calm`, `busy_phase`, `busy_count` | the busy rule's state |
 | `move_tick`, `menu_mode`, `input_now` | the turn counter, the menu's choice, this turn's keys |
@@ -207,6 +210,13 @@ For a room that doesn't build, `room_shown` stays where it was: check it.
 and it is kept when the room is left: the same write into any other record is
 lost, since the room is built afresh from its data. Leaving by writing
 `room_number` saves it as walking out does.
+
+**Down a hole, up the stairs.** Rooms $A7 (a hole) and $83 (stairs) are the
+test pair. Stand him over $A7's gap, U 105 to 115 and V 72 to 88 -- write his legs
+and his body, 32 bytes on, together -- and he falls through in a few turns.
+To go up, stand him on $83's tread 11 at 110,80,194, set his facing
+(`player` + 66) to 0, and hold a middle-row key. A box that cuts into a tread
+leaves him stuck in it: U 108 does, by a unit.
 
 **Losing the game.** Write 0 to `player_lives` and 1 to `player_touched` --
 but only once `player_state` is 0. While he is still appearing in a room the

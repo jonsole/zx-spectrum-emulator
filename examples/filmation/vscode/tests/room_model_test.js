@@ -1670,6 +1670,17 @@ test('heights: drawn, written and read back with the shift, and checked', functi
   assert.strictEqual(faults(plain).length, 1);
 });
 
+test('lightkeep: a room’s ways down and up are written back where they were', function () {
+  const atlas = atlasFor('lightkeep');
+  const above = atlas.rooms.find(function (r) { return r.number === 0xA7; });
+  const below = atlas.rooms.find(function (r) { return r.number === 0x83; });
+  if (!above || above.down === undefined) skip('lightkeep has no room $A7 with a way down');
+  const text = m.serializeAtlas(atlas, '\n');
+  assert.ok(text.indexOf('{ "number": 167, "ink": 3, "dimensions": "square", "down": 131,') >= 0);
+  const again = m.parseAtlas(text);
+  assert.strictEqual(again.rooms.find(function (r) { return r.number === 0x83; }).up, below.up);
+});
+
 test('heights: a castle without the rule keeps its levels', function () {
   const atlas = shiftAtlas(false);
   const room = atlas.rooms[0];

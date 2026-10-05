@@ -90,6 +90,11 @@ In `rooms.json`:
 | `groupNudge` | `true`: an object group may carry a placement nudge of its own, `nudge` beside its template -- bit 0 half a cell along U, bit 1 along V, the rest a raise -- which is drawn with it and offered as the group's **raise** in the Objects tab. Alien 8's rooms set one with a header before the groups it applies to. |
 | `objectTemplateLimit` | the most object templates the castle may have, when its builder says: the templates editor holds to it. |
 
+A room of Lightkeep's can also say `"down"` and `"up"`: the room below,
+reached through a hole, and the room above, reached by stairs
+(`lightkeep/storeys.s`). The designer keeps them as they are, but has no
+control for them yet, and its map does not show them.
+
 And in `templates.json`:
 
 | Key | What it means |

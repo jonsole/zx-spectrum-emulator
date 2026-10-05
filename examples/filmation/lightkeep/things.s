@@ -36,13 +36,15 @@ THING_STATE         EQU     5           ; its driving record's MOVE_STATE
                     ASSERT  THING_COUNT <= 255  ; walked with a one-byte count
 
 ; One of the room's things, while the room is up: where its entry is in bank 4,
-; the record that drives it, the offsets of its template's first sprite -- the
-; ones that record was placed with, which things_save takes off again -- and a
-; copy of the entry.
+; the record that drives it -- 0 once it has left the room, or when the pool had
+; no slot for it -- how many records it has, the offsets of its template's first
+; sprite -- the ones that record was placed with, which things_save takes off
+; again -- and a copy of the entry.
 HERE_AT             EQU     0           ; 2 bytes
 HERE_RECORD         EQU     2           ; 2 bytes
-HERE_OFFSETS        EQU     4
-HERE_ENTRY          EQU     5           ; THING_STRIDE bytes
+HERE_COUNT          EQU     4           ; a soldier is two
+HERE_OFFSETS        EQU     5
+HERE_ENTRY          EQU     6           ; THING_STRIDE bytes
 HERE_STRIDE         EQU     HERE_ENTRY + THING_STRIDE
 
 things_here_count:  DB      0
@@ -162,6 +164,8 @@ room_things_place:  ld      a,(things_here_count)
                     pop     hl
                     ld      (iy+HERE_RECORD),l  ; the first record is the one
                     ld      (iy+HERE_RECORD+1),h ; that drives it
+                    ld      a,(room_object_count)
+                    ld      (iy+HERE_COUNT),a   ; for now: how many before it
 
                     ld      a,(iy+HERE_ENTRY+THING_TEMPLATE)
                     push    af
@@ -207,17 +211,27 @@ room_things_place:  ld      a,(things_here_count)
                     add     hl,bc
                     jr      .sprite
 
-.placed:            ld      l,(iy+HERE_RECORD)
+.placed:            ld      a,(room_object_count)
+                    sub     (iy+HERE_COUNT)
+                    ld      (iy+HERE_COUNT),a   ; how many it took
+                    jr      nz,.state
+                    ; None: the pool was full. Its entry stays as it is, and
+                    ; nothing here is to be saved for it.
+                    ld      (iy+HERE_RECORD),a
+                    ld      (iy+HERE_RECORD+1),a
+                    jr      .on
+.state:             ld      l,(iy+HERE_RECORD)
                     ld      h,(iy+HERE_RECORD+1)
                     ld      de,OBJ.MOVE_STATE
                     add     hl,de
                     ld      a,(iy+HERE_ENTRY+THING_STATE)
                     ld      (hl),a              ; room_add cleared it
 
-                    ld      bc,HERE_STRIDE
+.on:                ld      bc,HERE_STRIDE
                     add     iy,bc
                     pop     bc
-                    djnz    .thing
+                    dec     b                   ; too far back for a DJNZ
+                    jp      nz,.thing
                     ret
 
 
@@ -242,17 +256,34 @@ things_save:        ld      a,(things_here_count)
                     ld      iy,things_here
 .thing:             ld      l,(iy+HERE_RECORD)
                     ld      h,(iy+HERE_RECORD+1)
+                    ld      a,h
+                    or      l
+                    jr      z,.next             ; it has left, or never came
                     push    hl
                     pop     ix
-                    ld      l,(iy+HERE_AT)
+                    call    thing_write
+.next:              ld      de,HERE_STRIDE
+                    add     iy,de
+                    djnz    .thing
+                    ld      a,PAGE_PLAY
+                    jp      page_in
+
+
+; One thing's place written back into its entry: the driving record's U, V and
+; Z with its sprite's offsets taken off again -- room_unpack_base's sums the
+; other way -- and its MOVE_STATE.
+;
+; In:  IY -> its things_here entry; IX -> its driving record; bank 4 paged in
+; Out: HL -> the entry's THING_Z
+; Corrupts: AF, C, D, HL
+thing_write:        ld      l,(iy+HERE_AT)
                     ld      h,(iy+HERE_AT+1)
                     ld      c,(iy+HERE_OFFSETS)
                     ASSERT  THING_U == 2 && THING_V == 3 && THING_Z == 4 && THING_STATE == 5
                     inc     hl
                     inc     hl                  ; -> THING_U
-
-                    ld      a,(ix+OBJ.U)        ; room_unpack_base's sums,
-                    bit     0,c                 ; the other way
+                    ld      a,(ix+OBJ.U)
+                    bit     0,c
                     jr      z,.u
                     sub     8
 .u:                 ld      (hl),a
@@ -272,9 +303,5 @@ things_save:        ld      a,(things_here_count)
                     inc     hl
                     ld      a,(ix+OBJ.MOVE_STATE)
                     ld      (hl),a
-
-                    ld      de,HERE_STRIDE
-                    add     iy,de
-                    djnz    .thing
-                    ld      a,PAGE_PLAY
-                    jp      page_in
+                    dec     hl                  ; -> THING_Z
+                    ret

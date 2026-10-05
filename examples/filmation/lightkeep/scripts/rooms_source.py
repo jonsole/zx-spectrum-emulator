@@ -399,6 +399,7 @@ def kept_templates(objects, movers, loose):
 # room_unpack makes of a packed position), the state its driving record had,
 # and two bytes kept for later stages.
 THING_STRIDE = 8
+THINGS_SPARE = 4            # things one room can take in beyond what it starts with
 
 
 def main():
@@ -746,6 +747,15 @@ def main():
             one = OBJECT_STRIDE * len(obj_by_name[o["template"]]) + 1
             size += one * len(o["positions"]) if o["template"] in kept else one
         most_templates = max(most_templates, size)
+    # ...and things arrive from other rooms: through a hole, so far. A room can
+    # take THINGS_SPARE more than it starts with, each copying its template, so
+    # the buffer has room for that many of the largest kept template on top of
+    # the fullest room's own. Without it a block dropped into the room with the
+    # most template bytes -- $83, under the stairwell -- ran its copy past the
+    # end and over whatever followed.
+    if kept:
+        most_templates += THINGS_SPARE * max(OBJECT_STRIDE * len(obj_by_name[name]) + 1
+                                             for name in kept)
     out.append("")
     out.append("; The room being built's templates, copied out of bank 4 by room_find, and")
     out.append("; where each is: room_build looks a template up in these, by index.")
@@ -763,10 +773,47 @@ def main():
     line(out, "ROOM_MAX_OBJECTS", "EQU", "%d" % most_objects,
          "the fullest room, so the object pool")
     out.append("")
+    # The ways up and down: a room's "down" is the room its hole drops into,
+    # and its "up" the room its stairs climb to. Few rooms have either, so they
+    # are a short table room_build walks, rather than two bytes in every record.
+    out.append("; The rooms with a way down or up: the room, the room below and the room")
+    out.append("; above, ROOM_NO_EXIT where there is none -- room_build's room_vertical.")
+    line(out, "room_vertical_tbl:", "", "")
+    verticals = 0
+    for r in rooms:
+        ways = []
+        for key in ("down", "up"):
+            to = r.get(key)
+            if to is not None and to not in numbers_used:
+                sys.exit("room %d: its way %s leads to room %d, which is not a room"
+                         % (r["number"], key, to))
+            if to == r["number"]:
+                sys.exit("room %d: its way %s leads to itself" % (r["number"], key))
+            ways.append(to)
+        if ways == [None, None]:
+            continue
+        verticals += 1
+        line(out, "", "DB", "$%02X, %s, %s" % (
+            r["number"], *("$%02X" % to if to is not None else "ROOM_NO_EXIT" for to in ways)),
+             ", ".join("%s to $%02X" % (k, t) for k, t in zip(("down", "up"), ways)
+                       if t is not None))
+    line(out, "ROOM_VERTICALS", "EQU", "%d" % verticals)
+    # A way down with no way back up, or up with none down, is a one-way trip:
+    # said, as a doorway with no door back is, and built all the same.
+    by_number = {r["number"]: r for r in rooms}
+    for r in rooms:
+        for key, back in (("down", "up"), ("up", "down")):
+            to = r.get(key)
+            if to is not None and by_number[to].get(back) != r["number"]:
+                print("note: room $%02X goes %s to room $%02X, which has no way %s back"
+                      % (r["number"], key, to, back))
+    out.append("")
     line(out, "THING_COUNT", "EQU", "%d" % len(things), "the castle's things")
     line(out, "THING_STRIDE", "EQU", "%d" % THING_STRIDE, "bytes a thing")
-    line(out, "THINGS_HERE_MOST", "EQU", "%d" % things_most,
-         "the most one room starts with")
+    # Things move between rooms now -- they fall through holes -- so a room can
+    # end up holding more than any starts with: room for a few more.
+    line(out, "THINGS_HERE_MOST", "EQU", "%d" % (things_most + THINGS_SPARE),
+         "the most one room starts with, and %d more" % THINGS_SPARE)
     out.append("")
     out.append("; The flag bits the templates above were written with, for room.s to check")
     out.append("; against object.s.")

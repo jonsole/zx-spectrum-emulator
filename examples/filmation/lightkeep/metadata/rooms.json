@@ -1663,11 +1663,13 @@
      ] }
     ]
   },
-  { "number": 131, "ink": 6, "dimensions": "square",
+  { "number": 131, "ink": 6, "dimensions": "square", "up": 167,
     "scenery": [
      { "template": "scenery_arch_n", "destination": 147 },
      { "template": "scenery_arch_e", "destination": 132 },
-     { "template": "scenery_walls_0" }
+     { "template": "scenery_walls_0" },
+     { "template": "scenery_stairs_up_solid", "destination": null },
+     { "template": "scenery_stairs_up_decks", "destination": null }
     ],
     "objects": []
   },
@@ -2131,13 +2133,19 @@
      ] }
     ]
   },
-  { "number": 167, "ink": 3, "dimensions": "square",
+  { "number": 167, "ink": 3, "dimensions": "square", "down": 131,
     "scenery": [
      { "template": "scenery_arch_n", "destination": 183 },
      { "template": "scenery_arch_s", "destination": 151 },
-     { "template": "scenery_walls_0" }
+     { "template": "scenery_walls_0" },
+     { "template": "scenery_hole_solid", "destination": null },
+     { "template": "scenery_hole_decks", "destination": null }
     ],
-    "objects": []
+    "objects": [
+     { "template": "object_moveable_block", "positions": [
+      { "u": 4, "v": 3, "z": 0 }
+     ] }
+    ]
   },
   { "number": 168, "ink": 6, "dimensions": "square",
     "scenery": [

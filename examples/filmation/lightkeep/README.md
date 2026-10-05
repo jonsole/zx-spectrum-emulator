@@ -46,7 +46,7 @@ starts.
 | 0d | the collectables and the wizard taken out: the charms, picking up and putting down, the carried objects in the corner, the extra life, and the wizard who walked room $88 | done |
 | 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | done |
 | 2 | rooms that remember where things were left: the thing table | done |
-| 2b | up and down: holes in the floor to drop through, and ways up to the room above | |
+| 2b | up and down: holes in the floor to drop through, and stairs up to the room above | done |
 | 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, drop, use, and keys 1-5 for the slot | |
 | 4 | pushing by weight | begun: see [What moves, and how heavy it is](#what-moves-and-how-heavy-it-is) |
 | 5 | keys and locked doors | |
@@ -67,40 +67,10 @@ balls -- starts again each time, as it does now. Left for the stages that
 need them: a pool with room for things dropped in the fullest room (stage 3),
 and the room $FE for something carried or used up.
 
-**2b. Up and down.** The new castle (stage 8) is built in storeys, and
-the knight can drop through the floor into the room below or climb up into
-the one above. Fairlight has twelve holes of this kind; Knight Lore has none,
-since every way out of its rooms is a doorway in a wall.
-
-The floor is not an object. It is one height per room, `room_floor_z`, which
-the engine stops every fall at and which Lightkeep's own `room_shape` sets.
-So a hole needs no engine change: a room with one has its floor set lower,
-and the floor the knight walks on is invisible `solid` boxes at the usual
-height -- four round a square hole -- in the background, as the raised
-section's is. He walks off their edge, falls, and once he is far enough
-below the floor `player_exit` takes him to the room below, arriving at the
-same U and V near its top and still falling. The way up mirrors it: stairs
-or a ledge that reach the top of the room under an opening, and climbing past
-the top inside it arrives in the room above, standing beside its hole. A room
-names where its hole leads and where its opening leads, `down` and `up`,
-next to its doorways' destinations, and the two exits join `room_door_to`.
-The hole and the opening are templates, like the doorways, so the room
-designer places them; the hole's art is a background piece. The way up is
-always stairs or a ledge, never a jump or a ladder.
-
-Things fall through too. A thing that is dropped or pushed into a hole, and
-falls far enough below the floor, leaves the pool, and its entry in the
-stage 2 table takes the room below with the same U and V, at the top: built
-there, it falls to whatever it lands on. A helmet dropped down a hole is a
-soldier downstairs when its 30 seconds are up. A soldier who walks into a
-hole goes the same way, since he falls already (`PAIR_GRAVITY`) and is in the
-table.
-
-To find out first, before anything else of this stage: whether
-`room_floor_z` can sit lower than it does now without the projection, the
-view buffer or the movers that read it (the gate's drop, the spiked ball)
-minding; and how far below the floor the knight can be drawn before he
-leaves.
+**2b. Up and down.** Done: see [What stage 2b did](#what-stage-2b-did-up-and-down).
+The new castle (stage 8) is built in storeys. The knight drops through a hole
+into the room below, and climbs stairs or a ledge into the room above, never
+a jump or a ladder. Things fall through holes too, soldiers included.
 
 **3. Carrying.** Five slots and a load limit of 7, Fairlight's. One weight
 serves both carrying and pushing, as Fairlight's does: the `weight` that
@@ -571,3 +541,99 @@ Checked in a 128K emulator:
   nothing else in either room moved. The table started at Z 136.
 
 The designer's tests cover the heights, the grouping and the panel's note.
+
+### What stage 2b did: up and down
+
+A room can have a way down, a hole in its floor, and a way up, stairs to the
+room above: `"down"` and `"up"` in `rooms.json`, each a room number.
+`rooms_source.py` writes the rooms that have either into `room_vertical_tbl`,
+and says when a way has no way back. `storeys.s` does the rest, with one rule:
+**a storey is 96 units**. A place in one room is the same U and V in the
+other, 96 higher in the room below.
+
+- **Down.** Whatever drops 24 below the floor is in the room below, 96 higher.
+  The knight arrives at the top of its view and falls onto what is under him.
+- **Up.** The knight climbing to 72 above the floor (24 short of a storey) is
+  in the room above, 96 lower.
+- **No bouncing.** The two lines are exactly a storey apart, so arriving never
+  puts him past the line that would send him back. A staircase between two
+  rooms is one staircase: the treads below the hole go on in the hole above, a
+  storey lower, and walking up or down them crosses from one room to the other
+  without a jolt.
+- **The floor.** It is not an object but one height, `room_floor_z`. So a room
+  with a way down has it lowered by 64 once the room is built and drawn
+  (`room_vertical`). Everything else stands on invisible `solid` boxes, 64
+  deep, laid round the hole as background scenery. No engine change: the
+  engine's own floor is only the bottom of the pit now. The portcullis and the
+  spiked ball read that floor too, so a room with a hole must not have them.
+- **Things fall through.** `things_fall`, every turn in a room with a hole,
+  finds any thing past the line. It writes the thing's entry with the room
+  below and 96 more Z, and takes its records out of the room (`object_hide`).
+  It arrives where it crossed the line, a storey up, and falls when that room
+  is next played. A soldier goes legs and all, since `things_here` now knows
+  how many records each thing has.
+- **Landing on something.** A thing that fell first waits in the air where the
+  knight will arrive if he follows it. Two records inside each other never
+  move, so `vertical_clear` lifts him onto anything solid he would be inside.
+  Lifted that high he can be past the way up's line, and the thing is in the
+  room below's table only, so going up would drop him straight back onto it.
+  The way up therefore waits until he has once been below its line
+  (`vertical_hold`).
+- **Dying** in a room he dropped into or climbed into puts him back where he
+  came in, as a doorway does.
+- **Room for arrivals.** Things now move between rooms, so a room can hold
+  more than it starts with:
+  - 4 more entries in `things_here`;
+  - 8 more slots in the object pool (`POOL_SPARE`);
+  - template space for 4 more of the largest kept template.
+
+  Without that last, a block dropped into room $83 ran its template copy over
+  `room_vertical_tbl`, and leaving the room jumped into the ROM. A room still
+  too full leaves a thing waiting in the table until there is room.
+
+**The test stairwell.** Room $A7 has a hole (down to $83), and $83 stairs (up
+to $A7), along the south side of both:
+
+- **In $83:** 12 treads, each 6 higher and 8 deep, rise towards the west wall
+  to Z 200 at U 100.
+- **In $A7:** the hole is U 64 to 120, V 72 to 88. Its west end holds the same
+  staircase's last four treads, 104 to 122, and then the floor. The east 16
+  units are open, to drop through.
+
+The treads are `solid` boxes (`scenery_stairs_up_solid`, `scenery_hole_solid`)
+with bridge decks over them for art (`..._decks`): stand-ins, as room 106's
+are. $A7 has a movable block to push in.
+
+Bank 4 has 6,572 bytes left (the stairwell's templates), the $6000 region 777,
+the code below the stack 2,100, and the pool's region none at all: the spare
+slots pushed the 512-aligned sprite table to the top of it.
+
+Checked in a 128K emulator, driving the server over MCP:
+
+- **Down.** The block put over the gap fell through in 7 turns, its entry now
+  in $83 at Z 196. The knight followed and arrived in $83 at 196, then landed
+  on tread 11 at 194.
+- **Up.** Walking west from tread 11, he was in $A7 at Z 104 on tread 12 after
+  4 turns, and walked on up out of the hole to the floor at U 70.
+- **Down the stairs.** Walking east off tread 12 in $A7, he was in $83 at 198,
+  and landed on tread 11.
+- **After a thing.** Following the block down the same spot, he arrived lifted
+  onto it, at 208, and stood there on it at 206 once it had settled on the
+  tread, without going back up.
+- **A soldier.** One put over the gap (for the test only) arrived in $83 whole,
+  both records, and walked on down the stairs.
+- **Dying.** A death in $83 put the knight back where he had dropped in.
+- **The rest unchanged.** Every other room builds as before, and stage 2's
+  things are still kept: 57 in 31 rooms, the new block among them.
+
+Not done:
+
+- **Art.** A hole draws nothing: Knight Lore's floor is black, so only the
+  treads show where it is, and the knight falling into one is drawn over its
+  front edge rather than behind it. The rim, and a front lip sorted in front of
+  him, want art.
+- **The room designer** keeps `"down"` and `"up"` but cannot set them, and its
+  map does not show them. The stairwell's templates were written by a script,
+  not drawn.
+- **Things** do not go up. Anything else that falls into a hole -- a ball, say
+  -- lands on the pit's floor and stays there.

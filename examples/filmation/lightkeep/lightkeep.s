@@ -118,6 +118,7 @@ shift_shared:       DS      SHIFT_SHARED_SIZE
 ; Looking a room up in bank 4, and the paging it needs.
                     INCLUDE "room_find.s"
                     INCLUDE "things.s"          ; what is kept where it was left
+                    INCLUDE "storeys.s"         ; holes down and stairs up
                     INCLUDE "room_page.s"
                     INCLUDE "page.s"
 
@@ -300,7 +301,11 @@ view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
 ; The object pool. A room owns all of it: room_build refills it from the start,
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
 ; the castle, which rooms_source.py works out while generating room_data.s.
-ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS    ; what room_add may fill
+; A few more than that, now that things fall from one room into another (see
+; storeys.s): a room can be given more than it started with. One that is still
+; too full leaves a thing in the table until there is room -- room_things_place.
+POOL_SPARE          EQU     8
+ROOM_SLOTS          EQU     ROOM_MAX_OBJECTS + POOL_SPARE   ; what room_add may fill
 POOL_SLOTS          EQU     ROOM_SLOTS
                     ALIGN   32
 room_objects:
