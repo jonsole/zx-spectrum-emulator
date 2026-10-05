@@ -59,6 +59,12 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           python web/build.py --roms "$RUNNER_TEMP/roms"
 
+      # Loads the ROMs, a 48K and a 128K .z80 and a .sna into the built
+      # module and runs frames of each, so a site that cannot run a
+      # snapshot is never deployed.
+      - name: Test the site
+        run: node web/tests/smoke_test.js
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/site

@@ -31,6 +31,7 @@ for each build, so the repository still never holds them.
 | `web/main.js` | The page's script: runs frames against the clock, draws them, plays the samples, maps the PC keyboard |
 | `web/index.html`, `web/style.css` | The page, with Knight Lore's controls |
 | `web/build.py` | Compiles the core and copies the page into `web/site/` (gitignored) |
+| `web/tests/smoke_test.js` | Runs the built module from Node: the ROMs, a 48K and a 128K `.z80` and a `.sna`, a second of frames each |
 | `.github/workflows/pages.yml` | Builds the site on a push to `master` that touches it or the core, and deploys it |
 
 `zx_web.cpp` drives the `Spectrum` itself rather than through the Engine.
@@ -46,6 +47,11 @@ dropped if more than a quarter of a second has built up. A key tapped faster
 than a frame is held for three frames, because a program reads the keyboard
 once an interrupt and would never see the tap otherwise.
 
+The module gets a 1 MB stack, not Emscripten's default 64 KB. `load_z80`
+keeps all eight 128K banks on the stack while it decodes them, and on 64 KB
+every `.z80` overflowed it. The first site did that, and crashed the tab on
+Knight Lore's own snapshot.
+
 ## Building it
 
 Needs [Emscripten](https://emscripten.org/docs/getting_started/downloads.html)
@@ -55,10 +61,12 @@ Needs [Emscripten](https://emscripten.org/docs/getting_started/downloads.html)
 python scripts/fetch_roms.py --dest roms
 source path/to/emsdk/emsdk_env.sh
 python web/build.py --roms roms
+node web/tests/smoke_test.js
 python -m http.server -d web/site
 ```
 
-Then open http://localhost:8000. A page opened from `file://` won't work:
+The smoke test runs the module the page loads, without the page. The
+workflow runs it before deploying anything. Then open http://localhost:8000. A page opened from `file://` won't work:
 the browser won't fetch the `.wasm` or the ROMs from one.
 
 To publish, turn Pages on in the repository's **Settings > Pages**, with
