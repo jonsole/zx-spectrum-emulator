@@ -33,6 +33,9 @@ and the `.lst`. A server started by hand wants
 `../knightlore/extracted/`'s unpacked sheet, as Knight Lore 128K's is. The keys and the
 staging recipes are in [driving.md](driving.md), still Knight Lore 128K's.
 
+Where everything is in memory, and how much is left, is in
+[memory.md](memory.md).
+
 ## How far it has got
 
 Each stage builds, runs in the emulator and is committed before the next
@@ -602,11 +605,23 @@ to $A7), along the south side of both:
 
 The treads are `solid` boxes (`scenery_stairs_up_solid`, `scenery_hole_solid`)
 with bridge decks over them for art (`..._decks`): stand-ins, as room 106's
-are. $A7 has a movable block to push in.
+are. In $83 a deck covers two treads, to keep the room's records down. $A7 has
+a movable block to push in.
 
-Bank 4 has 6,572 bytes left (the stairwell's templates), the $6000 region 777,
-the code below the stack 2,100, and the pool's region none at all: the spare
-slots pushed the 512-aligned sprite table to the top of it.
+Bank 4 has 6,572 bytes left (the stairwell's templates).
+
+As first built, the stage left the $7400 region full, with no room for the
+sprite table to grow past graphic 255. Bank 5 was laid out again to make the
+room back:
+
+- the sprite table goes before the pool;
+- `bit_reverse_table` moved to $6000;
+- room $83 has a deck every other tread;
+- the end screen and the tunes moved to bank 0.
+
+Now the $6000 region has 1,012 bytes free, the $7400 region 640, and the code
+below the stack 2,103. A build with a graphic numbered 511 still fits.
+[memory.md](memory.md) has the whole map.
 
 Checked in a 128K emulator, driving the server over MCP:
 

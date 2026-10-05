@@ -89,6 +89,17 @@ STACK_RESERVE		EQU		48		; 34 used, 14 spare
 ; repository carries, not the packed files kl_extract.py first pulled them
 ; out of.
                     ORG     $6000
+
+; Every byte with its bits the other way round, for mirroring a sprite. Knight
+; Lore keeps the same table at $F100 and reaches it exactly this way, with the
+; page in B and the byte in C, so it has to start a page -- and $6000 does, so
+; here it costs its own 256 bytes and nothing to line it up. It is read only
+; while a graphic is being mirrored, so contention is no matter. Its bytes are
+; laid down at the foot of this file: bit_reverse_bytes is a macro of
+; ../engine/sprite_flip.s, which is not included until the code.
+bit_reverse_table:  DS      256
+                    ASSERT  low bit_reverse_table == 0
+
                     INCLUDE "generated/room_data.s"      ; the shapes, and this room's templates
                     INCLUDE "panel_data.s"
                     INCLUDE "generated/sprite_adj_gen.s"
@@ -202,11 +213,11 @@ image_end:
                     DISPLAY "code            $8000..", /H, image_end, "   free below the stack: ", /D, STACK_TOP - STACK_RESERVE - image_end
 
 ; ---------------------------------------------------------------------------
-; Code that runs between games rather than during one: the end screens and
-; their tunes, what plays the tunes, and the menu. It was up with the rest of
-; the code on the 48K. On the 128K that space went to the stack, and this is
-; cold enough not to mind contended memory, so it goes on the end of the data
-; in the $6000 region. It is assembled down here, after the engine, because
+; Code that runs between games rather than during one -- once the end screens,
+; their tunes and the menu, all of which are in bank 0 now -- and the backdrop's,
+; which runs every region. It was up with the rest of the code on the 48K. On
+; the 128K that space went to the stack, and this is cold enough not to mind
+; contended memory, so it goes on the end of the data in the $6000 region. It is assembled down here, after the engine, because
 ; menu.s uses sprite_width_class, a macro engine/sprite.s brings in.
                     ORG     room_data_end
 cold_start:
@@ -214,8 +225,6 @@ cold_start:
                     ; is full, and it comes after redraw.s for its macro.
                     INCLUDE "backdrop.s"
                     INCLUDE "backdrop_build.s"  ; the room's walls, drawn once
-                    INCLUDE "end.s"             ; its tunes and their notes, then
-                    INCLUDE "../engine/tune.s"  ; what plays them
 cold_end:
                     ASSERT  cold_end <= $7400   ; clear of the view buffer
                     DISPLAY "data, cold code $6000..", /H, cold_end, "   free: ", /D, $7400 - cold_end
@@ -240,6 +249,13 @@ sprite_end:
 ; templates' copy buffer went in there.
                     INCLUDE "menu.s"
                     INCLUDE "end_at.s"
+; ...and the end screen and the tunes, which went the same way when graphics
+; past 255 wanted the $6000 region's room for their second page of nudges --
+; memory.md. Neither pages a bank in, so neither can page itself out: game_over
+; is only ever reached in play, with bank 0 in, and the menu calls tune_play
+; from here already.
+                    INCLUDE "end.s"             ; its tunes and their notes, then
+                    INCLUDE "../engine/tune.s"  ; what plays them
                     ALIGN   4
 room_page:
                     ASSERT  room_page + ROOM_PAGE_MOST <= $10000
@@ -294,9 +310,21 @@ room_code_end:
 ; The view buffer is aligned to its own size, so a row start is a multiple of
 ; the stride in both pages and `high view_buffer` is even -- the row address
 ; folds its top bit into D with a single `rl d`, which needs an even base.
+;
+; Then the sprite table, which needs a 512 boundary too and so goes straight
+; after it, and the object pool last, which needs only 32: in that order
+; nothing is lost to lining things up. The sprite table is as long as the
+; highest graphic number in use -- 512 bytes for graphics 0-255, 1,024 once one
+; is 256 or more -- and the pool moves up behind it. memory.md has the sums.
                     ORG     $7400
                     ALIGN   512
 view_buffer:        DS      VIEW_BUF_ROWS * VIEW_BUF_WIDTH
+
+; sprite_table is read as `ld h,(high sprite_table)/2 / ld l,a / add hl,hl`, so
+; its page has to be even: a 512 boundary, not merely a 256 one. It is touched
+; once per object placed, so contention is no matter here either.
+                    ALIGN   512
+                    INCLUDE "generated/sprite_table.s"
 
 ; The object pool. A room owns all of it: room_build refills it from the start,
 ; so nothing survives a room change. ROOM_MAX_OBJECTS is the fullest room in
@@ -322,27 +350,14 @@ room_objects:
                     ALIGN   32
                     ASSERT  $ == room_objects + POOL_SLOTS * ROOM_STRIDE
 
-; Two tables that were up in the code region until it ran out of room. Neither
-; is touched by anything that cares about contention -- bit_reverse_table only
-; while a graphic is being mirrored, which happens when a room is built, and
-; sprite_table once per object placed -- and both want an alignment that there
-; is room to honour here and was not up there.
-;
-; sprite_table is read as `ld h,(high sprite_table)/2 / ld l,a / add hl,hl`, so
-; its page has to be even: a 512 boundary, not merely a 256 one.
-                    ALIGN   256
-; Every byte with its bits the other way round, for mirroring a sprite. Knight
-; Lore keeps the same table at $F100 and reaches it exactly this way, with the
-; page in B and the byte in C.
-bit_reverse_table:
-                    bit_reverse_bytes
-
-                    ALIGN   512
-                    INCLUDE "generated/sprite_table.s"
-
 pool_end:
                     ASSERT  $ <= $8000      ; still inside the gap
                     DISPLAY "buffer and pool $7400..", /H, pool_end, "   free: ", /D, $8000 - pool_end
+
+; bit_reverse_table's bytes, in the room kept for them at $6000.
+                    ORG     bit_reverse_table
+                    bit_reverse_bytes
+                    ASSERT  $ == bit_reverse_table + 256
 
 ; All eight RAM banks, bank 0 first, for build.py to wrap as
 ; output/lightkeep.z80 with PC at start. Not SAVESNA: a .sna keeps PC on
