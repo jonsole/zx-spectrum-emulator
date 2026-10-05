@@ -55,6 +55,8 @@ zx-spectrum-emulator/
     zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
                                   #   a fast custom tape loader, and the Python that
                                   #   renders its tapes to WAV
+  web/                         # the emulator in a browser (web.md): the core as
+                               #   WebAssembly, its page, and build.py
   tools/
     trace_viewer.html          # standalone viewer for cycle-by-cycle bus traces
   vscode-extension/            # debugger type registration + screen/trace/graphics/tape panels

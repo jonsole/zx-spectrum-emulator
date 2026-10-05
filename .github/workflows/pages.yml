@@ -1,0 +1,74 @@
+# Builds the web emulator (web/) and publishes it to GitHub Pages: the core
+# compiled to WebAssembly, the page, and the ROMs. What it runs -- the
+# Filmation Knight Lore snapshot -- is not part of the site; each visitor opens
+# their own (docs/web.md says why).
+#
+# Needs Pages turned on with "GitHub Actions" as its source (Settings > Pages).
+
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'web/**'
+      - 'cpp-core/src/**'
+      - 'cpp-core/third_party/miniz/**'
+      - 'scripts/fetch_roms.py'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a newer push supersedes one still queued.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # The Emscripten the site is built and tested with; a newer one is a
+  # deliberate change, not something a rebuild picks up on its own.
+  EMSDK_VERSION: 6.0.11
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      # Amstrad allow the ROMs' distribution, which is why the release bundles
+      # them and the site can too -- but the repository never holds them.
+      - name: Fetch the ROMs
+        run: python scripts/fetch_roms.py --dest "$RUNNER_TEMP/roms"
+
+      - name: Build the site
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          python web/build.py --roms "$RUNNER_TEMP/roms"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
