@@ -1,7 +1,6 @@
 # Builds the web emulator (web/) and publishes it to GitHub Pages: the core
-# compiled to WebAssembly, the page, and the ROMs. What it runs -- the
-# Filmation Knight Lore snapshot -- is not part of the site; each visitor opens
-# their own (docs/web.md says why).
+# compiled to WebAssembly, the page, and the ROMs. What it runs is not part of
+# the site: each visitor opens a snapshot of their own (docs/web.md).
 #
 # Needs Pages turned on with "GitHub Actions" as its source (Settings > Pages).
 

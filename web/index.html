@@ -3,24 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Filmation Knight Lore</title>
-<meta name="description" content="The Filmation engine's Knight Lore, running in a ZX Spectrum emulator compiled to WebAssembly.">
+<title>ZX Spectrum</title>
+<meta name="description" content="A ZX Spectrum emulator compiled to WebAssembly: open a .z80 or .sna snapshot and it runs.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1>Knight Lore <span>on the Filmation engine</span></h1>
-  <p>A ZX Spectrum emulator, this project's C++ core compiled to WebAssembly,
-  running the <a href="https://github.com/jonsole/zx-spectrum-emulator/tree/master/examples/filmation">Filmation</a>
-  remake of Ultimate's <em>Knight Lore</em>.</p>
+  <h1>ZX Spectrum <span>in the browser</span></h1>
+  <p>This project's C++ emulator core compiled to WebAssembly. Open a 48K or
+  128K snapshot and it runs.</p>
 </header>
 
 <main>
   <div id="stage">
     <canvas id="screen" width="352" height="312" tabindex="0" aria-label="Spectrum screen"></canvas>
     <label id="drop" for="file">
-      <strong>Drop <code>knightlore.z80</code> here</strong>
-      <span>or click to choose a .z80 or .sna snapshot</span>
+      <strong>Drop a snapshot here</strong>
+      <span>or click to choose a .z80 or .sna file</span>
     </label>
     <input id="file" type="file" accept=".z80,.sna">
   </div>
@@ -35,31 +34,26 @@
 
   <section id="help">
     <div>
-      <h2>Playing</h2>
-      <p>At the menu, <kbd>1</kbd>–<kbd>4</kbd> choose the controls and <kbd>0</kbd> starts.
-      Keyboard (<kbd>1</kbd>) is the one to pick: Kempston isn't emulated here.</p>
+      <h2>The keyboard</h2>
+      <p>Letters, numbers, <kbd>Enter</kbd> and <kbd>Space</kbd> are the
+      Spectrum's own keys.</p>
       <table>
-        <tr><th>Turn</th><td><kbd>Z</kbd> <kbd>C</kbd> <kbd>B</kbd> <kbd>M</kbd> one way, <kbd>X</kbd> <kbd>V</kbd> <kbd>N</kbd> <kbd>Ctrl</kbd> the other</td></tr>
-        <tr><th>Walk</th><td>any of <kbd>A</kbd>–<kbd>L</kbd>, or <kbd>Enter</kbd></td></tr>
-        <tr><th>Jump</th><td>any of <kbd>Q</kbd>–<kbd>P</kbd></td></tr>
-        <tr><th>Pick up / drop</th><td>any number</td></tr>
+        <tr><th>CAPS SHIFT</th><td><kbd>Shift</kbd></td></tr>
+        <tr><th>SYMBOL SHIFT</th><td><kbd>Ctrl</kbd> or <kbd>Alt</kbd></td></tr>
+        <tr><th>DELETE</th><td><kbd>Backspace</kbd></td></tr>
+        <tr><th>5 6 7 8</th><td><kbd>←</kbd> <kbd>↓</kbd> <kbd>↑</kbd> <kbd>→</kbd>, unshifted, as a cursor joystick reads them</td></tr>
       </table>
-      <p>For cursor control (<kbd>3</kbd>), the arrow keys are the Spectrum's
-      <kbd>5</kbd>–<kbd>8</kbd> and <kbd>Space</kbd> is fire (<kbd>0</kbd>).
-      <kbd>Shift</kbd> is CAPS SHIFT; <kbd>Ctrl</kbd> and <kbd>Alt</kbd> are SYMBOL SHIFT.</p>
+      <p>There is no Kempston joystick: in a game's menu, pick the keyboard
+      or cursor keys.</p>
     </div>
     <div>
-      <h2>Where the game comes from</h2>
-      <p>The game isn't hosted here. Its graphics and font are Ultimate's, so
-      building it takes your own copy of the original. With that,
-      <code>examples/filmation/extract.py</code> and
-      <code>knightlore/build.py</code> write <code>knightlore/output/knightlore.z80</code>,
-      the file to open here. The
-      <a href="https://github.com/jonsole/zx-spectrum-emulator/blob/master/examples/filmation/README.md">Filmation README</a>
-      has the steps.</p>
-      <p>The last snapshot you opened is kept in this browser, so it's
-      back the next time you visit. Any other 48K or 128K <code>.z80</code>
-      or <code>.sna</code> runs as well.</p>
+      <h2>Snapshots</h2>
+      <p>Opens <code>.z80</code> (versions 1 to 3) and <code>.sna</code>, 48K
+      or 128K; the machine switches to whichever the snapshot was taken on.
+      Nothing is uploaded: the file is read in this page.</p>
+      <p>The last snapshot you opened is kept in this browser, so it's back
+      the next time you visit. <strong>Reset</strong> restarts the machine
+      into its ROM: BASIC, with no snapshot needed.</p>
     </div>
   </section>
 </main>
