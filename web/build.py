@@ -82,8 +82,14 @@ def main():
         empp, "-O3", "-std=c++17", "-Wall", "-Wextra", "-Werror",
         "-I", SRC, "-isystem", THIRD_PARTY, *defines, *sources,
         "-o", os.path.join(args.out, "zx.js"),
-        "-sMODULARIZE=1", "-sEXPORT_NAME=createZx", "-sENVIRONMENT=web",
+        # node as well as web, so web/tests/smoke_test.js can run the module.
+        "-sMODULARIZE=1", "-sEXPORT_NAME=createZx", "-sENVIRONMENT=web,node",
         "-sALLOW_MEMORY_GROWTH=1",
+        # Emscripten's stack is 64K unless told otherwise, and load_z80 keeps
+        # all eight 128K banks on it while it decodes them -- 128K, so every
+        # .z80 overflowed it and crashed the page. A native thread's stack
+        # is a megabyte or more, which is why nothing else ever noticed.
+        "-sSTACK_SIZE=1MB",
         "-sEXPORTED_FUNCTIONS=" + ",".join(EXPORTS),
         "-sEXPORTED_RUNTIME_METHODS=" + ",".join(RUNTIME),
     ]

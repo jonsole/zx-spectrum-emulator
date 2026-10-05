@@ -31,6 +31,15 @@
         statusLine.textContent = text;
     }
 
+    /// Set once the module has aborted. Nothing in it can be called again,
+    /// so the page stops running frames and says so rather than going quiet.
+    let dead = false;
+
+    function stopped(e) {
+        dead = true;
+        status('The emulator stopped (' + (e && e.message ? e.message : e) + '). Reload the page to try again.');
+    }
+
     status('Loading the emulator…');
     const zx = await createZx();
 
@@ -247,7 +256,16 @@
     let running = false;
 
     function load(bytes, name) {
-        const error = withBytes(bytes, (p, n) => errorOf(zx._zx_load_snapshot(p, n)));
+        if (dead) {
+            return false;
+        }
+        let error;
+        try {
+            error = withBytes(bytes, (p, n) => errorOf(zx._zx_load_snapshot(p, n)));
+        } catch (e) {
+            stopped(e);
+            return false;
+        }
         if (error) {
             status(name + ': ' + error);
             return false;
@@ -354,6 +372,9 @@
     let owed = 0;
 
     function tick(now) {
+        if (dead) {
+            return;
+        }
         const frameMs = 1e6 / zx._zx_frame_rate_milli();
         owed += now - last;
         last = now;
@@ -362,7 +383,12 @@
         }
         let ran = false;
         while (running && owed >= frameMs) {
-            zx._zx_run_frame();
+            try {
+                zx._zx_run_frame();
+            } catch (e) {
+                stopped(e);
+                return;
+            }
             frames++;
             releaseLate();
             play();
