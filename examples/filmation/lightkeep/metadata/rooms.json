@@ -2143,7 +2143,7 @@
     ],
     "objects": [
      { "template": "object_moveable_block", "positions": [
-      { "u": 4, "v": 3, "z": 0 }
+      { "u": 5, "v": 3, "z": 0 }
      ] }
     ]
   },
