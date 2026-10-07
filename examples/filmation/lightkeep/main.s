@@ -24,8 +24,8 @@ start:              di
 
                     ; A game from the beginning -- which is also where losing the
                     ; last life comes back to.
-                    ld      a,r                 ; init_start_location: one of four
-                    and     3
+                    ld      a,r                 ; init_start_location: one of the
+                    and     START_ROOMS_MASK    ; rooms rooms.json starts in
                     ld      e,a
                     ld      d,0
                     ld      hl,start_rooms
@@ -184,9 +184,9 @@ room_key_held:      DB      0
                 ENDIF
 
 
-; Which room to build, and the one on the screen. A game begins in one of four,
-; chosen at random -- Knight Lore's start_locations at $D1E2.
-start_rooms:        DB      $2F, $44, $B3, $8F
+; Which room to build, and the one on the screen. A game begins in one of the
+; rooms rooms.json lists as startRooms, chosen at random as Knight Lore chose
+; one of its four (start_locations at $D1E2): start_rooms is rooms_source.py's.
 room_number:        DB      $B3
 room_shown:         DB      $B3
 

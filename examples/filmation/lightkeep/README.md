@@ -608,6 +608,11 @@ with bridge decks over them for art (`..._decks`): stand-ins, as room 106's
 are. In $83 a deck covers two treads, to keep the room's records down. $A7 has
 a movable block to push in.
 
+A game starts in $A7, to try the stairwell straight away. The rooms a game can
+start in are `rooms.json`'s `startRooms` (one, two, four or eight, picked at
+random), which the room designer edits and `rooms_source.py` writes into
+`start_rooms`. They were Knight Lore's four, written into `main.s`.
+
 Bank 4 has 6,572 bytes left (the stairwell's templates).
 
 As first built, the stage left the $7400 region full, with no room for the

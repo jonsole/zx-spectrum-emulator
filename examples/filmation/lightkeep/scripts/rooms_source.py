@@ -808,6 +808,20 @@ def main():
                 print("note: room $%02X goes %s to room $%02X, which has no way %s back"
                       % (r["number"], key, to, back))
     out.append("")
+    # The rooms a game can start in: rooms.json's startRooms, which the room
+    # designer edits. main.s picks one with two bits of R, or as many as there
+    # are rooms, so the count is a power of two.
+    starts = atlas.get("startRooms")
+    if not isinstance(starts, list) or len(starts) not in (1, 2, 4, 8):
+        sys.exit("%s has to list 1, 2, 4 or 8 startRooms: main.s picks one with a "
+                 "mask of R" % ATLAS.name)
+    for n in starts:
+        if n not in numbers_used:
+            sys.exit("%s starts a game in room %r, which is not a room" % (ATLAS.name, n))
+    out.append("; The rooms a game can start in, one picked at random: rooms.json's startRooms.")
+    line(out, "start_rooms:", "DB", ", ".join("$%02X" % n for n in starts))
+    line(out, "START_ROOMS_MASK", "EQU", "%d" % (len(starts) - 1))
+    out.append("")
     line(out, "THING_COUNT", "EQU", "%d" % len(things), "the castle's things")
     line(out, "THING_STRIDE", "EQU", "%d" % THING_STRIDE, "bytes a thing")
     # Things move between rooms now -- they fall through holes -- so a room can

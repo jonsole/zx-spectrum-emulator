@@ -24,6 +24,8 @@
   "narrowV": { "u": 64, "v": 32, "z": 128 }
  },
 
+ "startRooms": [167],
+
  "rooms": [
   { "number": 0, "ink": 3, "dimensions": "square",
     "scenery": [
