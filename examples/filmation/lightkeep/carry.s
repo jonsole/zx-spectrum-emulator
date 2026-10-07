@@ -1,26 +1,36 @@
 ; ---------------------------------------------------------------------------
-; Carrying: five slots and a load limit of 7, as Fairlight has them.
+; Carrying: five places and a load limit of 7, worked as Knight Lore works its
+; three (handle_pickup_drop, $C00E) -- one key.
 ;
-; The knight picks up a thing next to him into the slot in use, and puts what
-; is in it down beside him, on the side he faces. Z, X, C, V and B choose the
-; slot, and N picks up or puts down (input.s). Which things can be carried is
-; templates.json's "pickup" (pickup_tbl), and what each weighs is the weight a
-; push already loses (OBJ.DATA_1): the whole load may not come to more than 7.
+; Each press of N (or down, on a stick not steering by direction) moves what he
+; carries along by one place. Whatever falls off the end is put down, and if
+; there is something next to him that can be carried, it is picked up into the
+; first place:
+;
+;   something next to him   it goes into place 1, the rest move along, and
+;                           what was in place 5 is put down where it stood
+;   nothing next to him     the rest move along, and what was in place 5 is put
+;                           down beside him, on the side he faces
+;
+; So pressing with nothing near brings each thing in turn to the end and puts
+; it down. Nothing is ever "used" by a key: food is eaten by being picked up,
+; a key opens a door by being carried, and the rest work by being put down
+; next to where they are wanted -- stages 5, 6 and 8.
+;
+; Which things can be carried is templates.json's "pickup" (pickup_tbl), and
+; what each weighs is the weight a push already loses (OBJ.DATA_1): the whole
+; load may not come to more than 7, counting what drops off the end.
 ;
 ; Carried, a thing has no record in any room: its entry in the thing table says
-; THING_CARRIED, and its slot keeps what its record is made of -- graphic, box,
-; flags, behaviour, weight, and the offsets its template places it with -- so
-; that putting it down rebuilds the record without the template, in a room
-; that may never have placed one. Its sprite is resident (sprite_source.py) for
-; the same reason.
+; THING_CARRIED, and its place keeps what its record is made of -- graphic,
+; box, flags, behaviour, weight, and the offsets its template places it with --
+; so that putting it down rebuilds the record without the template, in a room
+; that may never have placed one. Its sprite is resident (sprite_source.py)
+; for the same reason.
 ;
-; This is in bank 0, beside the menu, which is paged in for the whole of play
-; and had room. Nothing here pages another bank in: what has to write the thing
-; table in bank 4 is thing_record, in bank 5.
-;
-; The panel shows the slot in use: what is in it, in the box under the lives,
-; and its number beside it. A refusal -- TOO HEAVY, BLOCKED -- is printed to
-; the right for a while.
+; This is in bank 0, beside the menu, which is paged in for the whole of play.
+; Nothing here pages another bank in: what writes the thing table in bank 4 is
+; thing_record, in bank 5.
 ; ---------------------------------------------------------------------------
 
 CARRY_SLOTS         EQU     5
@@ -28,7 +38,7 @@ CARRY_LOAD_MOST     EQU     7           ; Fairlight's: a load of 8 is too heavy
 PICKUP_REACH        EQU     4           ; how much further than he walks he reaches
 CARRY_SAY_TURNS     EQU     25          ; how long a refusal stays up
 
-; A slot: what the thing's record is made of while it has none.
+; A place: what the thing's record is made of while it has none.
 SLOT_AT             EQU     0           ; 2: its entry's address in bank 4, or 0
 SLOT_GFX            EQU     2
 SLOT_SIZE_U         EQU     3
@@ -40,31 +50,38 @@ SLOT_WEIGHT         EQU     8
 SLOT_OFFSETS        EQU     9           ; its template's first sprite's
 SLOT_TEMPLATE       EQU     10
 SLOT_STRIDE         EQU     11
+SLOT_LAST           EQU     carry_slots + (CARRY_SLOTS - 1) * SLOT_STRIDE
 
 ; The flags a record's template gave it, as against the ones drawing sets.
 CARRY_FLAGS         EQU     ROOM_FLAG_FLIP | ROOM_FLAG_PASSABLE | ROOM_FLAG_SHARED_SHIFT | ROOM_FLAG_CACHE | ROOM_FLAG_BACKGROUND
 
-; Where the panel shows it: a box four characters by four under the lives,
-; the slot's number beside it, and the refusals to the right of the middle.
-CARRY_BOX_X         EQU     24                  ; pixels: column 3
-CARRY_BOX_TOP       EQU     SCREEN_ROWS - 32    ; character row 20
-CARRY_BOX_ATTR      EQU     $5800 + 20 * 32 + 3
-CARRY_NUMBER_AT     EQU     $4000 + 2 * 2048 + 7 * 32 + 7   ; row 23, column 7
-CARRY_SAY_AT        EQU     $4000 + 2 * 2048 + 6 * 32 + 20  ; row 22, column 20
+; The panel: the five places along the bottom, clear of the scroll -- two
+; under the lives, one in the middle, two on the right -- each four characters
+; wide and three high, what is in it standing on the bottom row. The refusals
+; go above the middle one, between the scroll's two lines.
+CARRY_ROWS          EQU     24
+CARRY_TOP           EQU     SCREEN_ROWS - CARRY_ROWS
+CARRY_SAY_AT        EQU     $4000 + 2 * 2048 + 4 * 32 + 11  ; row 20, column 11
 CARRY_SAY_WIDE      EQU     10
 FONT_SPACE          EQU     38
 
 carry_slots:        DS      CARRY_SLOTS * SLOT_STRIDE
-carry_slot:         DB      0           ; the slot in use, 0 to 4
+carry_new:          DS      SLOT_STRIDE ; what is being picked up, on its way in
 carry_key_held:     DB      0           ; N, or down, has had its turn
 carry_said:         DB      0           ; turns the refusal has left
 carry_saying:       DW      0           ; -> it
 carry_record:       DW      0           ; putting down: the record it gets,
-carry_here:         DW      0           ; its things_here entry
-carry_reused:       DB      0           ; ...and whether that was an empty one
+carry_here:         DW      0           ; its things_here entry,
+carry_reused:       DB      0           ; and whether that record was an empty one
+carry_skip:         DW      0           ; a record carry_clear leaves out
+carry_take_record:  DW      0           ; picking up: its record,
+carry_take_here:    DW      0           ; and its things_here entry
+
+; The five places' columns, in pixels.
+carry_places:       DB      2 * 8, 6 * 8, 14 * 8, 22 * 8, 26 * 8
 
 
-; A new game: nothing carried, and slot 1.
+; A new game: nothing carried.
 ;
 ; In:  nothing
 ; Out: nothing
@@ -75,24 +92,22 @@ carry_reset:        ld      hl,carry_slots
                     ld      (hl),0
                     ldir
                     xor     a
-                    ld      (carry_slot),a
                     ld      (carry_key_held),a
                     ld      (carry_said),a
                     ret
 
 
-; Once a turn, while he is about: the slot keys, and N.
+; Once a turn, while he is about: N, or down.
 ;
 ; One press does one thing, and only while he stands inside the room's edges --
-; held down in the air, it waits for him to land -- as Knight Lore's pick-up
-; key does (handle_pickup_drop, $C00E).
+; held down in the air, it waits for him to land -- as Knight Lore's does.
 ;
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: everything
 carry_turn:         ld      a,(carry_said)
                     or      a
-                    jr      z,.slot
+                    jr      z,.pick
                     dec     a
                     ld      (carry_said),a
                     push    af
@@ -100,16 +115,6 @@ carry_turn:         ld      a,(carry_said)
                     call    nz,carry_print      ; again: a region may have wiped it
                     pop     af
                     call    z,carry_unsay
-
-.slot:              ld      a,(input_slot)
-                    or      a
-                    jr      z,.pick
-                    dec     a
-                    ld      hl,carry_slot
-                    cp      (hl)
-                    jr      z,.pick
-                    ld      (hl),a
-                    call    carry_show
 
                     ; N whatever is steering; down on a stick as well, unless the
                     ; stick is steering by direction, when down is a way to go.
@@ -160,21 +165,125 @@ carry_turn:         ld      a,(carry_said)
 
                     ld      a,1
                     ld      (carry_key_held),a
-                    call    carry_slot_at
-                    ld      a,(hl)
-                    inc     hl
-                    or      (hl)
-                    jr      z,carry_pickup
-                    jp      carry_drop
+
+                    ;; NB: fall through into carry_press
 
 
-; The thing next to him that can be picked up, into the slot in use, if the
-; load allows. Nothing near, nothing happens, as in Fairlight.
+; One press: see the top of the file.
+;
+; Everything is checked before anything is done, so a refusal leaves the room
+; and the places as they were.
 ;
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: everything
-carry_pickup:       ld      a,(things_here_count)
+carry_press:        call    carry_find
+                    jr      nc,.nothing
+
+                    ; Something to pick up. The load it makes, with what drops off
+                    ; the end taken away.
+                    ld      (carry_take_record),ix
+                    ld      (carry_take_here),iy
+                    call    carry_load
+                    ld      hl,SLOT_LAST
+                    call    carry_weight_of
+                    sub     c
+                    add     a,(ix+OBJ.DATA_1)   ; its weight, from room_add
+                    cp      CARRY_LOAD_MOST + 1
+                    ld      hl,carry_too_heavy
+                    jp      nc,carry_say
+
+                    ; What drops off the end goes where the new one stands --
+                    ; Knight Lore's pickup_object puts the oldest down in the same
+                    ; place -- if it fits there, which the new one's own record,
+                    ; going, does not count against.
+                    call    carry_last
+                    jr      z,.take
+                    ld      ix,(carry_take_record)
+                    ld      a,(ix+OBJ.U)
+                    ld      (room_stage + 1),a
+                    ld      a,(ix+OBJ.V)
+                    ld      (room_stage + 2),a
+                    ld      a,(ix+OBJ.Z)
+                    ld      (room_stage + 3),a
+                    ld      (carry_skip),ix
+                    ld      iy,SLOT_LAST
+                    call    carry_fits
+                    jp      c,carry_blocked
+
+.take:              ld      ix,(carry_take_record)
+                    ld      iy,(carry_take_here)
+                    call    carry_take
+                    call    carry_last
+                    jr      z,.shift
+                    ld      iy,SLOT_LAST
+                    call    carry_put           ; room_stage is still the place
+.shift:             call    carry_shift
+                    call    sound_pickup
+                    jp      carry_show
+
+                    ; Nothing to pick up: what is on the end goes down beside him,
+                    ; if it fits, and the rest move along.
+.nothing:           ld      hl,carry_new        ; nothing comes in
+                    ld      de,carry_new + 1
+                    ld      bc,SLOT_STRIDE - 1
+                    ld      (hl),0
+                    ldir
+                    call    carry_last
+                    jr      z,.turn
+                    ld      iy,SLOT_LAST
+                    call    carry_beside
+                    ld      hl,0
+                    ld      (carry_skip),hl
+                    call    carry_fits
+                    jp      c,carry_blocked
+                    ld      iy,SLOT_LAST
+                    call    carry_put
+.turn:              call    carry_shift
+                    call    sound_pickup
+                    jp      carry_show
+
+carry_blocked:      ld      hl,carry_blocked_text
+                    jp      carry_say
+
+
+; Is there something in the last place?
+;
+; In:  nothing
+; Out: NZ if there is
+; Corrupts: AF
+carry_last:         ld      a,(SLOT_LAST + SLOT_AT)
+                    push    hl
+                    ld      hl,SLOT_LAST + SLOT_AT + 1
+                    or      (hl)
+                    pop     hl
+                    ret
+
+
+; Everything moves along a place -- the last, already put down or empty, is
+; written over -- and carry_new comes into the first. adjust_carried, $C12B.
+;
+; In:  carry_new = what comes in, or all 0 for nothing
+; Out: nothing
+; Corrupts: BC, DE, HL
+carry_shift:        ld      hl,SLOT_LAST - 1
+                    ld      de,SLOT_LAST + SLOT_STRIDE - 1
+                    ld      bc,(CARRY_SLOTS - 1) * SLOT_STRIDE
+                    lddr
+                    ld      hl,carry_new
+                    ld      de,carry_slots
+                    ld      bc,SLOT_STRIDE
+                    ldir
+                    ret
+
+
+; The first thing next to him that can be carried.
+;
+; In:  nothing
+; Out: carry set, IX -> its driving record and IY -> its things_here entry;
+;        carry clear if there is none
+; Corrupts: AF, BC, DE, HL
+carry_find:         ld      a,(things_here_count)
                     or      a
                     ret     z
                     ld      b,a
@@ -189,23 +298,25 @@ carry_pickup:       ld      a,(things_here_count)
                     ld      a,(iy+HERE_ENTRY+THING_TEMPLATE)
                     call    carry_pickable
                     jr      nc,.next
+                    push    bc                  ; carry_near takes B, the count
                     ld      de,PICKUP_REACH * 257
                     call    carry_near
-                    jr      c,.found
+                    pop     bc
+                    ret     c
 .next:              ld      de,HERE_STRIDE
                     add     iy,de
                     djnz    .thing
+                    or      a
                     ret
 
-.found:             call    carry_load
-                    add     a,(ix+OBJ.DATA_1)   ; its weight, from room_add
-                    cp      CARRY_LOAD_MOST + 1
-                    jr      c,.light
-                    ld      hl,carry_too_heavy
-                    jp      carry_say
 
-                    ; What its record is made of, into the slot.
-.light:             call    carry_slot_at
+; Pick a thing up into carry_new: what its record is made of, its entry
+; written as carried, and every record of it out of the room.
+;
+; In:  IX -> its driving record; IY -> its things_here entry
+; Out: nothing
+; Corrupts: everything
+carry_take:         ld      hl,carry_new
                     ld      a,(iy+HERE_AT)
                     ld      (hl),a
                     inc     hl
@@ -240,11 +351,9 @@ carry_pickup:       ld      a,(things_here_count)
                     ld      a,(iy+HERE_ENTRY+THING_TEMPLATE)
                     ld      (hl),a
 
-                    ; Its entry: where it was, and carried.
                     ld      a,THING_CARRIED
                     call    thing_record
 
-                    ; And out of the room, every record of it.
                     ld      b,(iy+HERE_COUNT)
                     xor     a
                     ld      (iy+HERE_RECORD),a
@@ -257,26 +366,17 @@ carry_pickup:       ld      a,(things_here_count)
                     add     ix,de
                     pop     bc
                     djnz    .hide
-                    call    sound_pickup
-                    jp      carry_show
+                    ret
 
 
-; Put what is in the slot in use down beside him, on the side he faces: on the
-; floor of its own box if there is room for it there, inside the room's edges
-; and clear of everything, and refused with BLOCKED if not. It goes down at
-; his feet' height and falls from there, as everything does.
+; Where beside him a thing would go down: his own place, moved out along the
+; way he faces by his half, its half and one to spare. Facing 0 is -U, 1 +V,
+; 2 +U and 3 -V (player.s). At his feet's height, to fall from there.
 ;
-; In:  nothing
-; Out: nothing
-; Corrupts: everything
-carry_drop:         call    carry_slot_at
-                    push    hl
-                    pop     iy                  ; IY -> the slot
-
-                    ; Where: his own place, moved out along the way he faces by
-                    ; his half, its half and one to spare. Facing 0 is -U, 1 +V,
-                    ; 2 +U and 3 -V (player.s).
-                    ld      ix,player
+; In:  IY -> the place
+; Out: room_stage + 1 to 3 = U, V and Z
+; Corrupts: AF, BC, HL, IX
+carry_beside:       ld      ix,player
                     ld      a,(ix+OBJ.U)
                     ld      (room_stage + 1),a
                     ld      a,(ix+OBJ.V)
@@ -304,9 +404,17 @@ carry_drop:         call    carry_slot_at
                     jr      .placed
 .up:                add     a,b
 .placed:            ld      (hl),a
+                    ret
 
-                    ; The rest of the eight bytes room_add takes.
-                    ld      a,(iy+SLOT_GFX)
+
+; Would the thing in a place fit at room_stage's U, V and Z: inside the room's
+; edges, all of it, and clear of everything solid but carry_skip? Fills in the
+; rest of room_stage from the place as it goes, for carry_put.
+;
+; In:  IY -> the place; room_stage + 1 to 3 = where
+; Out: carry set if it would not
+; Corrupts: AF, BC, DE, HL, IX
+carry_fits:         ld      a,(iy+SLOT_GFX)
                     ld      (room_stage + 0),a
                     ld      a,(iy+SLOT_SIZE_U)
                     ld      (room_stage + 4),a
@@ -317,7 +425,6 @@ carry_drop:         call    carry_slot_at
                     ld      a,(iy+SLOT_FLAGS)
                     ld      (room_stage + 7),a
 
-                    ; Inside the room's edges, all of it.
                     ld      a,(room_stage + 1)
                     sub     128
                     jp      p,.eu
@@ -326,7 +433,8 @@ carry_drop:         call    carry_slot_at
                     ld      hl,room_half_u
                     cp      (hl)
                     jr      z,.inside_u
-                    jp      nc,carry_blocked
+                    ccf
+                    ret     c                   ; past the edge
 .inside_u:          ld      a,(room_stage + 2)
                     sub     128
                     jp      p,.ev
@@ -334,28 +442,100 @@ carry_drop:         call    carry_slot_at
 .ev:                add     a,(iy+SLOT_SIZE_V)
                     inc     hl
                     cp      (hl)
-                    jr      z,.inside_v
-                    jp      nc,carry_blocked
-.inside_v:
-                    call    carry_clear
-                    jp      c,carry_blocked
+                    jr      z,carry_clear
+                    ccf
+                    ret     c
 
-                    ; A record for it -- an empty one, of something picked up in
-                    ; this room, or a new one at the end of the pool -- and an
-                    ; entry in things_here, found the same way. The record
-                    ; first: finding the entry counts it, and nothing may be
-                    ; counted for a drop that is then refused.
+                    ;; NB: fall through into carry_clear
+
+
+; Is room_stage's box clear of everything solid in the room but carry_skip?
+; Boxes that only touch are apart, as the collision has them.
+;
+; In:  room_stage = graphic, U, V, Z, half U, half V, height, flags
+; Out: carry set if something is in the way
+; Corrupts: AF, BC, DE, HL, IX
+carry_clear:        ld      a,(room_object_count)
+                    or      a
+                    ret     z
+                    ld      b,a
+                    ld      ix,room_objects
+.record:            ld      a,(ix+OBJ.GFX)
+                    or      a
+                    jr      z,.next
+                    ld      a,(ix+OBJ.FLAGS)
+                    and     OBJ_PASSABLE
+                    jr      nz,.next
+                    push    ix
+                    pop     hl
+                    ld      de,(carry_skip)
+                    or      a
+                    sbc     hl,de
+                    jr      z,.next             ; the one being picked up
+                    ld      a,(room_stage + 4)  ; along U: the halves together,
+                    add     a,(ix+OBJ.SIZE_U)   ; and the difference within them
+                    ld      d,a
+                    ld      a,(room_stage + 1)
+                    add     a,d
+                    sub     (ix+OBJ.U)
+                    jr      z,.next
+                    sla     d
+                    cp      d
+                    jr      nc,.next
+                    ld      a,(room_stage + 5)  ; along V
+                    add     a,(ix+OBJ.SIZE_V)
+                    ld      d,a
+                    ld      a,(room_stage + 2)
+                    add     a,d
+                    sub     (ix+OBJ.V)
+                    jr      z,.next
+                    sla     d
+                    cp      d
+                    jr      nc,.next
+                    ld      a,(ix+OBJ.Z)        ; and in height
+                    add     a,(ix+OBJ.SIZE_Z)
+                    ld      d,a
+                    ld      a,(room_stage + 3)
+                    cp      d
+                    jr      nc,.next            ; at its top or above
+                    ld      e,a
+                    ld      a,(room_stage + 6)
+                    add     a,e
+                    cp      (ix+OBJ.Z)
+                    jr      z,.next
+                    jr      c,.next             ; at its base or below
+                    scf
+                    ret
+.next:              ld      de,ROOM_STRIDE
+                    add     ix,de
+                    djnz    .record
+                    or      a
+                    ret
+
+
+; Put the thing in a place into the room, at room_stage, which carry_fits has
+; filled in and found clear: a record for it -- an empty one, of something
+; picked up in this room, or one more at the end of the pool -- and a
+; things_here entry, found the same way; its entry in the table given this
+; room; and it placed, sorted and drawn. The place is emptied. Refused, with
+; BLOCKED, only if the pool or things_here is full.
+;
+; In:  IY -> the place
+; Out: nothing
+; Corrupts: everything
+carry_put:          push    iy
                     call    carry_free_record
-                    jp      nc,carry_blocked
+                    jr      nc,.full
                     ld      (carry_record),ix
-                    push    iy
                     call    carry_free_here
                     ld      (carry_here),iy
-                    pop     iy
-                    jp      nc,carry_blocked
+                    jr      c,.room
+.full:              pop     iy
+                    jp      carry_blocked
 
                     ; room_add counts it, and refuses a full pool -- so a record
                     ; that is counted already, an empty one, is uncounted first.
+.room:              pop     iy
                     ld      a,(carry_reused)
                     or      a
                     jr      z,.add
@@ -365,6 +545,7 @@ carry_drop:         call    carry_slot_at
                     ld      (room_behaviour),a
                     ld      a,(iy+SLOT_WEIGHT)
                     ld      (room_weight),a
+                    ld      ix,(carry_record)
                     ld      hl,room_stage
                     call    room_add            ; and nudges it
                     ld      ix,(carry_record)
@@ -384,8 +565,8 @@ carry_drop:         call    carry_slot_at
                     ; Its things_here entry, which things_save, things_fall and the
                     ; next pick-up go by.
                     push    iy
+                    pop     hl                  ; HL -> the place
                     ld      iy,(carry_here)
-                    pop     hl                  ; HL -> the slot
                     ld      a,(hl)
                     ld      (iy+HERE_AT),a
                     inc     hl
@@ -402,6 +583,9 @@ carry_drop:         call    carry_slot_at
                     inc     hl
                     ld      a,(hl)
                     ld      (iy+HERE_ENTRY+THING_TEMPLATE),a
+                    ld      de,-SLOT_TEMPLATE
+                    add     hl,de
+                    push    hl                  ; the place, to empty
 
                     ; Its entry in the table: this room, and here.
                     ld      a,(room_shown)
@@ -415,19 +599,14 @@ carry_drop:         call    carry_slot_at
                     ld      ix,(carry_record)
                     call    redraw_object
 
-                    ; And the slot is empty.
-                    call    carry_slot_at
+                    pop     hl                  ; and the place is empty
                     ld      d,h
                     ld      e,l
                     inc     de
                     ld      bc,SLOT_STRIDE - 1
                     ld      (hl),0
                     ldir
-                    call    sound_pickup
-                    jp      carry_show
-
-carry_blocked:      ld      hl,carry_blocked_text
-                    jp      carry_say
+                    ret
 
 
 ; A record to put a thing down into: the first empty one in the pool, of
@@ -487,64 +666,6 @@ carry_free_here:    ld      iy,things_here
                     inc     a
                     ld      (things_here_count),a
                     scf
-                    ret
-
-
-; Is room_stage's box clear of everything solid in the room? Boxes that only
-; touch are apart, as the collision has them.
-;
-; In:  room_stage = graphic, U, V, Z, half U, half V, height, flags
-; Out: carry set if something is in the way
-; Corrupts: AF, BC, DE, IX
-carry_clear:        ld      a,(room_object_count)
-                    or      a
-                    ret     z
-                    ld      b,a
-                    ld      ix,room_objects
-.record:            ld      a,(ix+OBJ.GFX)
-                    or      a
-                    jr      z,.next
-                    ld      a,(ix+OBJ.FLAGS)
-                    and     OBJ_PASSABLE
-                    jr      nz,.next
-                    ld      a,(room_stage + 4)  ; along U: the halves together,
-                    add     a,(ix+OBJ.SIZE_U)   ; and the difference within them
-                    ld      d,a
-                    ld      a,(room_stage + 1)
-                    add     a,d
-                    sub     (ix+OBJ.U)
-                    jr      z,.next
-                    sla     d
-                    cp      d
-                    jr      nc,.next
-                    ld      a,(room_stage + 5)  ; along V
-                    add     a,(ix+OBJ.SIZE_V)
-                    ld      d,a
-                    ld      a,(room_stage + 2)
-                    add     a,d
-                    sub     (ix+OBJ.V)
-                    jr      z,.next
-                    sla     d
-                    cp      d
-                    jr      nc,.next
-                    ld      a,(ix+OBJ.Z)        ; and in height
-                    add     a,(ix+OBJ.SIZE_Z)
-                    ld      d,a
-                    ld      a,(room_stage + 3)
-                    cp      d
-                    jr      nc,.next            ; at its top or above
-                    ld      e,a
-                    ld      a,(room_stage + 6)
-                    add     a,e
-                    cp      (ix+OBJ.Z)
-                    jr      z,.next
-                    jr      c,.next             ; at its base or below
-                    scf
-                    ret
-.next:              ld      de,ROOM_STRIDE
-                    add     ix,de
-                    djnz    .record
-                    or      a
                     ret
 
 
@@ -619,69 +740,94 @@ carry_near:         ld      a,(player + OBJ.U)
                     ret
 
 
-; What all five slots weigh together.
+; What all five places weigh together.
 ;
 ; In:  nothing
 ; Out: A = the load
-; Corrupts: F, B, DE, HL
+; Corrupts: F, BC, DE, HL
 carry_load:         ld      hl,carry_slots
-                    ld      de,SLOT_STRIDE
                     ld      b,CARRY_SLOTS
-                    xor     a
-.slot:              push    af
+                    ld      e,0
+.slot:              call    carry_weight_of
+                    ld      a,e
+                    add     a,c
+                    ld      e,a
+                    push    de
+                    ld      de,SLOT_STRIDE
+                    add     hl,de
+                    pop     de
+                    djnz    .slot
+                    ld      a,e
+                    ret
+
+
+; What the thing in one place weighs: 0 for an empty one.
+;
+; In:  HL -> the place
+; Out: C = its weight
+; Corrupts: nothing else
+carry_weight_of:    push    af
+                    push    hl
                     ld      a,(hl)
                     inc     hl
                     or      (hl)
-                    dec     hl
-                    jr      z,.empty
-                    pop     af
-                    push    hl
+                    ld      c,0
+                    jr      z,.done
                     push    de
-                    ld      de,SLOT_WEIGHT
+                    ld      de,SLOT_WEIGHT - 1
                     add     hl,de
-                    add     a,(hl)
+                    ld      c,(hl)
                     pop     de
-                    pop     hl
-                    jr      .on
-.empty:             pop     af
-.on:                add     hl,de
-                    djnz    .slot
+.done:              pop     hl
+                    pop     af
                     ret
 
 
-; The slot in use.
-;
-; In:  nothing
-; Out: HL -> it
-; Corrupts: AF, DE
-carry_slot_at:      ld      a,(carry_slot)
-                    ld      e,a
-                    add     a,a                 ; * 2
-                    add     a,a                 ; * 4
-                    add     a,e                 ; * 5
-                    add     a,a                 ; * 10
-                    add     a,e                 ; * 11
-                    ASSERT  SLOT_STRIDE == 11
-                    ld      e,a
-                    ld      d,0
-                    ld      hl,carry_slots
-                    add     hl,de
-                    ret
-
-
-; The slot in use on the panel: its box, white, emptied and with what is in it
-; standing on the bottom row, and its number beside it.
+; The five places on the panel, in white, each emptied and with what is in it
+; standing on the bottom row.
 ;
 ; In:  nothing
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL, AF'
-carry_show:         ld      a,$47
-                    ld      hl,CARRY_BOX_ATTR
-                    ld      bc,4 << 8 | 4
-                    call    attr_fill
+carry_show:         ld      hl,carry_slots
+                    ld      de,carry_places
+                    ld      b,CARRY_SLOTS
+.place:             push    bc
+                    push    de
+                    push    hl
+                    ld      a,(de)
+                    ld      c,a                 ; its x
+                    call    carry_show_one
+                    pop     hl
+                    ld      de,SLOT_STRIDE
+                    add     hl,de
+                    pop     de
+                    inc     de
+                    pop     bc
+                    djnz    .place
+                    ret
 
-                    ld      c,CARRY_BOX_X
-                    ld      b,CARRY_BOX_TOP
+; One place.
+;
+; In:  HL -> it; C = its x in pixels
+; Out: nothing
+; Corrupts: AF, BC, DE, HL, AF'
+carry_show_one:     push    hl
+                    push    bc
+                    ld      a,c                 ; its colour: white, four cells by
+                    rrca                        ; three
+                    rrca
+                    rrca
+                    and     $1F
+                    ld      e,a
+                    ld      d,0
+                    ld      hl,$5800 + 21 * 32
+                    add     hl,de
+                    ld      a,$47
+                    ld      bc,4 << 8 | 3
+                    call    attr_fill
+                    pop     bc
+                    ld      b,CARRY_TOP         ; emptied
 .blank:             call    pixelAddress
                     xor     a
                     ld      (hl),a
@@ -695,42 +841,28 @@ carry_show:         ld      a,$47
                     ld      a,b
                     cp      SCREEN_ROWS
                     jr      c,.blank
-
-                    call    carry_slot_at
+                    pop     hl
                     ld      a,(hl)
                     inc     hl
                     or      (hl)
-                    jr      z,.number
+                    ret     z
                     inc     hl
                     ld      a,(hl)              ; SLOT_GFX
-                    ld      c,CARRY_BOX_X
                     ld      de,SCREEN_ROWS      ; D = 0: the right way round
-                    call    screen_sprite
-.number:            ld      a,(carry_slot)
-                    inc     a
-                    ld      hl,CARRY_NUMBER_AT
-                    jp      print_char
+                    jp      screen_sprite
 
 
-; The panel has just been drawn, or a region reaching it has: put the slot back
-; if it was.
+; The panel has just been drawn, or a region reaching it has: put the places
+; back if the region reached their rows.
 ;
-; In:  A = 0 for the whole panel, 1 for a region (view_x_extent, view_y_extent)
+; In:  A = 0 for the whole panel, 1 for a region (view_y_extent)
 ; Out: nothing
 ; Corrupts: AF, BC, DE, HL, AF'
 carry_panel:        or      a
                     jr      z,carry_show
                     ld      a,(view_y_extent + 1)   ; the row after it
-                    cp      CARRY_BOX_TOP + 1
+                    cp      CARRY_TOP + 1
                     ret     c
-                    ld      hl,(view_x_extent)
-                    ld      a,CARRY_BOX_X / 8 + 4
-                    cp      l
-                    ret     c
-                    ret     z                       ; it starts past the box
-                    ld      a,h
-                    cp      CARRY_BOX_X / 8 + 1
-                    ret     c                       ; it ends before the box
                     jr      carry_show
 
 

@@ -7,9 +7,7 @@
 ;   0  left        1  right        2  forward
 ;   3  jump        4  DOWN on a joystick, which picks up and puts down
 ;   5  N, which picks up and puts down whatever is steering
-;   6  fire        7  M, use what is in the slot in use
-;
-; and input_slot says which of Z, X, C, V and B, slots 1 to 5, is held.
+;   6  fire
 ;
 ; Bit 4 does two jobs because a joystick steering by itself has no use for
 ; down -- left, right and forward are all the knight needs -- so down is where
@@ -41,8 +39,6 @@ INPUT_PICKUP_DIR_B  EQU     5                   ; N, whatever is steering
 INPUT_PICKUP_DIR    EQU     1 << INPUT_PICKUP_DIR_B
 INPUT_FIRE_B        EQU     6                   ; nothing yet: the sword, at stage 7
 INPUT_FIRE          EQU     1 << INPUT_FIRE_B
-INPUT_USE_B         EQU     7                   ; M: use what is in the slot
-INPUT_USE           EQU     1 << INPUT_USE_B
 
 ; The keyboard's half-rows. Knight Lore takes whole rows rather than single
 ; keys, so any of A to ENTER walks him forward and any of Q to P jumps.
@@ -58,14 +54,14 @@ KEY_ROWS_LETTERS    EQU     $99FE               ; A to G, Q to T, Y to P, H to E
 ; The keyboard. O turns him one way and P the other, any letter of the middle
 ; row walks him forward, and the rest of the top row jumps and fires by turns
 ; -- Q E T U jump, W R Y I fire. Knight Lore turned on the bottom row and
-; picked up on the numbers: the bottom row is carrying's now, in input_done,
-; whatever is steering, and these keys are not set in stone.
+; picked up on the numbers: N picks up now, in input_done, whatever is
+; steering, and these keys are not set in stone.
 ;
 ; The top row's two halves are read on their own: the one port $DBFE would OR
 ; them together, and give Q and P the same bit.
 ;
 ; In:  nothing
-; Out: input_now = what the player is asking for; input_slot
+; Out: input_now = what the player is asking for
 ; Corrupts: AF, BC, DE
 input_keyboard:     ld      e,0
                     ld      bc,KEY_ROW_Y_P
@@ -109,42 +105,18 @@ input_keyboard:     ld      e,0
                     ;; NB: fall through into input_done -- input_stick_done
 
 
-; The bottom row, whatever is steering: carrying (carry.s). Z, X, C, V and B
-; choose slot 1 to 5, N picks up or puts down, and M uses what is in the slot.
-; Every stick reader in engine/input.s ends here too.
+; N, whatever is steering: picking up and putting down (carry.s), which is
+; one key, as in Knight Lore. Every stick reader in engine/input.s ends here
+; too.
 ;
 ; In:  E = what the reader made of it
-; Out: input_now = that, with INPUT_PICKUP_DIR for N and INPUT_USE for M;
-;      input_slot = 1 to 5 for the first of Z X C V B held, or 0
+; Out: input_now = that, with INPUT_PICKUP_DIR for N
 ; Corrupts: AF, BC, DE
 input_stick_done:
 input_done:         ld      bc,KEY_ROW_SPACE_B
                     in      a,(c)
                     cpl
-                    ld      d,a                 ; SPACE SYM M N B
                     bit     3,a                 ; N
-                    jr      z,.use
+                    jp      z,input_store
                     set     INPUT_PICKUP_DIR_B,e
-.use:               bit     2,d                 ; M
-                    jr      z,.slots
-                    set     INPUT_USE_B,e
-
-.slots:             ld      bc,KEY_ROW_SHIFT_V
-                    in      a,(c)
-                    cpl
-                    rra                         ; past CAPS SHIFT: Z X C V
-                    and     $0F
-                    bit     4,d                 ; and B, the fifth
-                    jr      z,.which
-                    or      $10
-.which:             ld      c,0
-                    or      a
-                    jr      z,.slot
-.find:              inc     c                   ; the lowest held
-                    rra
-                    jr      nc,.find
-.slot:              ld      a,c
-                    ld      (input_slot),a
                     jp      input_store
-
-input_slot:         DB      0

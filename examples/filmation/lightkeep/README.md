@@ -50,7 +50,7 @@ starts.
 | 1 | Melkhior's art: a sheet per category, converted from your own copy of the game and never committed, and graphics.json and the graphic-map editor reading several sheets | done |
 | 2 | rooms that remember where things were left: the thing table | done |
 | 2b | up and down: holes in the floor to drop through, and stairs up to the room above | done |
-| 3 | carrying: five slots, a weight on every template, a load limit of 7; pick up, put down, and keys for the slot | done, but using what is carried waits for stage 6 |
+| 3 | carrying: five places, a weight on every template, a load limit of 7, one key to pick up and put down | done |
 | 4 | pushing by weight | begun: see [What moves, and how heavy it is](#what-moves-and-how-heavy-it-is) |
 | 5 | keys and locked doors | |
 | 6 | LIFE, food and drink | |
@@ -76,7 +76,9 @@ into the room below, and climbs stairs or a ledge into the room above, never
 a jump or a ladder. Things fall through holes too, soldiers included.
 
 **3. Carrying.** Done: see [What stage 3 did](#what-stage-3-did-carrying).
-Using what is carried comes with something to use, at stage 6.
+Nothing is used by a key. Food is eaten by being picked up (stage 6), a key
+opens a door by being carried (stage 5), and anything else works by being put
+down next to where it is wanted (stage 8).
 
 **4. Pushing by weight.** Mostly there. To do: chains (a pushed thing
 pushing the next), pushed things kept where they stop (stage 2), and movers
@@ -661,41 +663,44 @@ Not done:
 
 ### What stage 3 did: carrying
 
-Five slots and a load limit of 7, as in Fairlight.
+Five places and a load limit of 7, as in Fairlight, worked with one key as
+Knight Lore works its three.
 
-**The keys** are provisional:
+**The key** is N, whatever is steering. On a joystick that is not steering by
+direction, down does the same, as in Knight Lore. On the keyboard, turning
+moved from the bottom row to O and P, and the top row's other keys jump
+(Q E T U) and fire (W R Y I). The keys are provisional.
 
-| Key | Does |
+**Each press** moves what he carries along by one place. Whatever falls off the
+end is put down:
+
+| Next to him | A press |
 |---|---|
-| Z X C V B | choose slot 1 to 5 |
-| N | pick up into the slot, or put down what is in it |
-| M | use what is in the slot (nothing yet: stage 6) |
+| something that can be carried | picks it up into place 1; the rest move along, and what was in place 5 is put down where the new one stood (Knight Lore's `pickup_object`) |
+| nothing | moves the rest along, and puts what was in place 5 down beside him, on the side he faces |
 
-They are on the bottom row whatever is steering, since an Interface II
-joystick takes the number keys. On a joystick that is not steering by
-direction, down picks up and puts down as well, as in Knight Lore. On the
-keyboard, turning moved from the bottom row to O and P, and the top row's
-other keys jump (Q E T U) and fire (W R Y I).
+So pressing with nothing near brings each thing in turn to the end and puts it
+down. There is no use key. Food will be eaten by being picked up and keys will
+open doors by being carried (stages 6 and 5). Anything else works by being put
+down next to where it is wanted (stage 8).
 
 **What can be carried** is `templates.json`'s `meta.movers` marking a template
 `"pickup": true`: for now the movable block and the chest. A pickable template
 has to be something a push moves, since a carried thing falls when put down
 and is kept where it was left. It also has to be one sprite, numbered under
-256. Its weight is the one a push already loses, and the whole load may not
-come to more than 7.
+256. Its weight is the one a push already loses, and the whole load, counting
+what drops off the end, may not come to more than 7: TOO HEAVY says so.
 
-**Picking up** takes the first pickable thing next to him into the slot in
-use, if that slot is empty and he stands on something inside the room's
-edges. "Next to him" is Knight Lore's test: within 4 of touching, along the
-floor and in height. Too heavy, and TOO HEAVY is printed instead. A carried
-thing leaves the room altogether: its records go, and its entry in the thing
-table takes room `THING_CARRIED`, a number no room has.
+**Next to him** is Knight Lore's test: within 4 of touching, along the floor
+and in height. A press counts only while he stands on something, inside the
+room's edges. A carried thing leaves the room altogether: its records go, and
+its entry in the thing table takes room `THING_CARRIED`, a number no room has.
 
-**Putting down** puts what is in the slot in use beside him, on the side he
-faces, at his feet's height, to fall from there. It has to be inside the room's
-edges and clear of everything, or BLOCKED is printed and it stays carried. It
-takes an empty record in the pool, or one more at the end (`POOL_SPARE`), and
-an empty `things_here` entry, or one more. The slot keeps what its record is
+**Putting down** has to be inside the room's edges and clear of everything.
+Otherwise BLOCKED is printed, and nothing moves, in the places or in the room:
+every check comes before anything is done. A thing put down takes an empty
+record in the pool, or one more at the end (`POOL_SPARE`), and an empty
+`things_here` entry, or one more. Each place keeps what its thing's record is
 made of, so putting it down needs no template, in a room that may never have
 placed one. Put down over a hole, it falls through like anything else.
 
@@ -709,42 +714,47 @@ placed one. Put down over a hole, it falls through like anything else.
 That second one fixes a fault left by stage 2b: a block falling into $83, which
 never placed one, would have been drawn as the missing-sprite square.
 
-**The panel** shows the slot in use in a box under the lives: what is in it,
-drawn straight onto the screen, and its number beside it. It is put back
-whenever a region reaches it, as the panel's own pieces are. Refusals are
-printed right of the middle for 25 turns, and printed again each turn, since a
-region can wipe them.
+**The panel** shows all five places along the bottom, clear of the scroll: two
+under the lives, one in the middle and two on the right. Each is drawn straight
+onto the screen, and put back whenever a region reaches the panel's bottom
+rows. Refusals are printed above the middle place for 25 turns, and printed
+again each turn, since a region can wipe them.
 
-`carry.s` is in bank 0, beside the menu: about 1.1 KB, and it pages nothing in.
-The one routine that writes the thing table in bank 4, `thing_record`, is in
-`things.s` in bank 5. [memory.md](memory.md) has the figures.
+`carry.s` is in bank 0, beside the menu: about 1.3 KB, and it pages nothing
+in. The one routine that writes the thing table in bank 4, `thing_record`, is
+in `things.s` in bank 5. [memory.md](memory.md) has the figures.
 
-Checked in a 128K emulator, from $A7:
+Checked in a 128K emulator:
 
-- **Picking up.** The block went into slot 1 (graphic 7, weight 1), left the
-  room, and its entry said `THING_CARRIED`.
-- **Putting down.** Facing +U from 136, it landed at 150, which is his half,
-  its half and one, and its entry said $A7 again.
-- **Refusals.** With its weight set to 8, TOO HEAVY came up and nothing was
-  picked up. Against the west wall, BLOCKED came up and it stayed carried.
-- **Slots.** X and Z changed the slot in use, and it was picked up into slot 2.
-- **Rooms.** Carried to $02 and put down at 142, it was still there after a
-  trip to $0D and back. Put down over $A7's gap, it fell through to $83, and
-  was drawn on tread 11 there.
-- **Repeats.** Twenty rounds of picking up and putting down left one entry
-  in `things_here` and the pool steady at 27.
+- **Picking up.** In $6C, standing by its stack of eight chests and moving
+  along it, five presses filled the places in order. A sixth, by another
+  chest, took that one into place 1 and put the oldest down exactly where it
+  had stood (120,136,140).
+- **Moving along.** With nothing near, presses moved two chests along to
+  places 4 and 5. Facing the stack, putting the end one down said BLOCKED and
+  changed nothing. Facing open floor, two presses put them down beside him,
+  at 165,154 and 165,138.
+- **Refusals.** In $A7, the block with its weight set to 8 said TOO HEAVY.
+- **Rooms.** A block carried to $02 and put down was still there after a trip
+  to $0D and back. Brought to the end and put down over $A7's gap, it fell
+  through to $83 and was drawn on tread 11 there.
+- **Repeats.** Eight rounds of picking up and putting down in one room left
+  one entry in `things_here` and the pool steady at 27.
 - **Keys.** O and P turn him on the keyboard.
 - **Nothing else changed.** Every room builds as at c22f671, the 57 things are
   still kept, and the stairwell still goes down and up. The Z80, designer and
   schema tests pass, and the other three games build.
 
+A fault in the first version of this stage, found here: `carry_find` called
+`carry_near`, which takes B, inside a loop counting with B. With more than one
+thing in the room the loop ran on past its end and found stray "records".
+
 Not done:
 
-- **Using things.** M is read and does nothing, until there is food and drink
-  (stage 6) and keys (stage 5).
 - **The editor** keeps `"pickup"` but cannot set it: it is set in the JSON.
 - **Small things.** Only the block and the chest can be carried, both big.
   Fairlight's small things -- food, bottles, keys -- want art, and Melkhior's
-  objects sheet has it.
-- **Putting down** is always beside him: never in front of a doorway he is
-  standing in, nor on top of something, as Fairlight allows.
+  objects sheet has it. A thing taller than 24 rows reaches above its white
+  place on the panel, into the room's colour.
+- **Putting down** is always beside him, or where the new thing stood: never
+  on top of something, as Fairlight allows.

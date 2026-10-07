@@ -22,8 +22,8 @@ or in a paged bank if they are only read while a room is built.
 | bank 5, $5B00 | the room builder | 952 | 328 | room building code |
 | bank 5, $6000 | data, and the backdrop's code | 4,132 | 988 | rooms' templates, things, graphics past 255 |
 | bank 5, $7400 | view buffer, sprite table, object pool | 2,432 | 640 | the fullest room, the highest graphic number |
-| bank 2, $8000 | the code that runs every turn, the rotation arena, the stack | 14,216 | 2,120 | code |
-| bank 0, $C000 | resident sprites, the menu, end screen and carrying, then the room being played's sprites | 10,644 at most | 5,740 | the fullest room's sprites, carried things' sprites |
+| bank 2, $8000 | the code that runs every turn, the rotation arena, the stack | 14,181 | 2,155 | code |
+| bank 0, $C000 | resident sprites, the menu, end screen and carrying, then the room being played's sprites | 10,816 at most | 5,568 | the fullest room's sprites, carried things' sprites |
 | bank 1, $C000 | the sprite library | 8,307 | 8,077 | sprites any room uses |
 | bank 4, $C000 | rooms, templates, the thing table | 9,477 | 6,907 | rooms, templates, things |
 | bank 6, $C000 | the backdrop | 6,144 | 10,240 | -- |
@@ -117,7 +117,7 @@ Graphics past 255 also want the $6000 region's room, for their second page of
 nudges, so the end screen and the tunes (`end.s`, `../engine/tune.s`) moved to
 bank 0 beside the menu. Neither pages a bank in.
 
-## Bank 2, $8000-$BFFF: uncontended, always there (14,216 used, 2,120 free)
+## Bank 2, $8000-$BFFF: uncontended, always there (14,181 used, 2,155 free)
 
 | From | Bytes | What |
 |---|---|---|
@@ -129,11 +129,11 @@ bank 0 beside the menu. Neither pages a bank in.
 | $A793 | 193 | `../engine/shift.s` |
 | $A854 | 785 | `../engine/walker.s` and `knight.s` |
 | $AB65 | 1,341 | the movers: `movers.s`, `../engine/mover.s`, `shared_movers.s`, `../engine/movers.s` |
-| $B0A2 | 492 | sound, the panel and input |
-| $B28E | 238 | `main.s` and `../engine/turn.s` |
-| $B37C | 631 | `player.s` |
-| $B5F3 | 405 | the redraw, the overlay and the copy to the screen |
-| $B788 | 2,120 | free |
+| $B0A2 | 457 | sound, the panel and input |
+| $B26B | 238 | `main.s` and `../engine/turn.s` |
+| $B359 | 631 | `player.s` |
+| $B5D0 | 405 | the redraw, the overlay and the copy to the screen |
+| $B765 | 2,155 | free |
 | $BFD0 | 48 | `STACK_RESERVE`, kept clear below the stack (34 measured in use) |
 
 The stack starts at $C000, so its first push lands at $BFFE.
@@ -145,9 +145,9 @@ The stack starts at $C000, so its first push lands at $BFFE.
 | $C000 | 4,406 | the resident sprites: the knight, everything the code draws by number, and everything that can be carried (the block and the chest), which can be put down in any room |
 | $D136 | 703 | the menu (`screen.s`, `menu.s`, `end_at.s`) |
 | $D3F5 | 618 | the end screen and the tunes (`end.s`, `../engine/tune.s`) |
-| $D65F | 1,161 | carrying (`carry.s`): it pages nothing in, so it can live in the bank that is always in during play |
-| $DAE8 | 3,756 | `room_page`: the room being played's own sprites, copied out of the library when it is built -- 3,756 for the fullest, room $01 |
-| $E994 | 5,740 | free, after the fullest room |
+| $D65F | 1,333 | carrying (`carry.s`): it pages nothing in, so it can live in the bank that is always in during play |
+| $DB94 | 3,756 | `room_page`: the room being played's own sprites, copied out of the library when it is built -- 3,756 for the fullest, room $01 |
+| $EA40 | 5,568 | free, after the fullest room |
 
 ## Bank 1, $C000: the library (8,307 used, 8,077 free)
 

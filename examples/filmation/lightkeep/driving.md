@@ -45,13 +45,10 @@ on the way in; any key cuts it short.
 | Q, E, T, U | jump |
 | W, R, Y, I | fire (nothing yet) |
 
-**Carrying**, whatever is steering (carry.s):
-
-| Keys | Does |
-|---|---|
-| Z, X, C, V, B | choose slot 1 to 5 |
-| N | pick up into the slot, or put down what is in it |
-| M | use what is in the slot (nothing yet) |
+**Carrying**, whatever is steering (carry.s): **N**. Each press moves the five
+places along by one: something next to him is picked up into place 1, and
+what falls off the end is put down -- where the new thing stood, or beside him
+if nothing was picked up.
 
 **Joysticks**
 
@@ -159,7 +156,7 @@ grep -E "\|F\|room_number$" output/lightkeep.sld | cut -d'|' -f6
 | `room_objects`, `room_object_count` | the object pool, 32 bytes a record, with the same layout as Pentagram's (see its driving.md) |
 | `things_live` | the thing table, in bank 4 (`read_memory` with `bank: 4`, offset from $C000): 8 bytes a thing -- room, object template, U, V, Z, state, two spare. A room's things are read from it when the room is built and written back when it is left (things.s) |
 | `things_start` | the same table as a game begins; `things_new_game` copies it over `things_live` |
-| `carry_slots`, `carry_slot` | the five slots, 11 bytes each -- the entry's address in bank 4 (0 for empty), graphic, box, flags, behaviour, weight, offsets, template -- and the one in use, 0 to 4 |
+| `carry_slots` | the five places, first to last, 11 bytes each: the entry's address in bank 4 (0 for empty), graphic, box, flags, behaviour, weight, offsets, template |
 | `things_here`, `things_here_count` | the room being played's things, 14 bytes each: the entry's address in bank 4, the record that drives it (0 once it has fallen out of the room), how many records it has, its first sprite's offsets, and a copy of the entry |
 | `room_down`, `room_up` | the room being played's ways down and up, `ROOM_NO_EXIT` for none (storeys.s) |
 | `room_ground_z` | the floor's height as built; `room_floor_z` is 64 lower in a room with a hole |
