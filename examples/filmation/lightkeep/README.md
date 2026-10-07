@@ -595,18 +595,29 @@ other, 96 higher in the room below.
   too full leaves a thing waiting in the table until there is room.
 
 **The test stairwell.** Room $A7 has a hole (down to $83), and $83 stairs (up
-to $A7), along the south side of both:
+to $A7). It is one staircase of sixteen treads, 6 high and 6 deep, running
+along V at U 100-116 in the middle of both rooms, clear of their doorways'
+paths. Going up is walking north.
 
-- **In $83:** 12 treads, each 6 higher and 8 deep, rise towards the west wall
-  to Z 200 at U 100.
-- **In $A7:** the hole is U 64 to 120, V 72 to 88. Its west end holds the same
-  staircase's last four treads, 104 to 122, and then the floor. The east 16
-  units are open, to drop through.
+- **In $83:** treads 1 to 12 rise from V 80 to Z 200 at V 146-152.
+- **In $A7:** the hole is U 100-116, V 128-176. Treads 12 to 16 continue there,
+  a storey lower, from 104 up to the floor. Its south 18 units (V 128-146) are
+  open, to drop through. The floor round it is four invisible boxes.
 
-The treads are `solid` boxes (`scenery_stairs_up_solid`, `scenery_hole_solid`)
-with bridge decks over them for art (`..._decks`): stand-ins, as room 106's
-are. In $83 a deck covers two treads, to keep the room's records down. $A7 has
-a movable block to push in.
+`scripts/stairwell.py` makes all of it. It writes the templates
+(`scenery_stairs_up`, `scenery_hole_floor`, `scenery_hole_treads`) and the two
+rooms, and it draws the tread it is built from: `stair.tread`, graphic 204, one
+step 16 × 6 × 6, drawn to exactly its box, with its nudge worked out from the
+projection. Running it again writes the same files. A tread is a slab with
+nothing under it, so the high end of a staircase can be walked under, as under
+a real flight. $A7 also has a movable block, at 152,136, to push in.
+
+It was first built against the south walls, from invisible boxes with bridge
+decks over them for art. The decks were 16 deep on 8-deep treads, overlapped
+one another and reached past their boxes. The south doorway's post stood
+nearer than a knight down in the hole, and covered him, which looked like a
+sorting fault. Treads drawn to their own boxes, in the middle of the room,
+put both right, and halved the records: 12 in $83 where there were 24.
 
 A game starts in $A7, to try the stairwell straight away. The rooms a game can
 start in are `rooms.json`'s `startRooms` (one, two, four or eight, picked at
@@ -621,7 +632,7 @@ room back:
 
 - the sprite table goes before the pool;
 - `bit_reverse_table` moved to $6000;
-- room $83 has a deck every other tread;
+- room $83 had fewer records (now its 12 treads);
 - the end screen and the tunes moved to bank 0.
 
 Now the $6000 region has 1,012 bytes free, the $7400 region 640, and the code

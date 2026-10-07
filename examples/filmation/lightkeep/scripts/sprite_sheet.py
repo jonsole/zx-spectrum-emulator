@@ -222,8 +222,11 @@ BLANK_GRAPHIC = 1
 # put up. Its groups (pentagram.wall.trees, pentagram.block ...) are what a room
 # loads whole. Anything of it the code comes to draw in any room moves out to
 # a resident group then.
+#
+# "stair" is the stair tread scripts/stairwell.py draws, which only the rooms
+# with stairs place.
 ROOM_GROUPS = ("wall", "door", "scenery", "guard", "fires", "balls",
-               "ghost", "gate", "pentagram", "castle")
+               "ghost", "gate", "pentagram", "castle", "stair")
 
 
 def main():

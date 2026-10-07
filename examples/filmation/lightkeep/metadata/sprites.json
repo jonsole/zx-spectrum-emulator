@@ -207,6 +207,11 @@
    "sprites": {
     "box": { "x": 15, "y": 1, "w": 16, "h": 1 }
    }
+  },
+  "stair": {
+   "sprites": {
+    "tread": { "x": 217, "y": 2, "w": 24, "h": 18 }
+   }
   }
  },
  "animations": {

@@ -1670,8 +1670,7 @@
      { "template": "scenery_arch_n", "destination": 147 },
      { "template": "scenery_arch_e", "destination": 132 },
      { "template": "scenery_walls_0" },
-     { "template": "scenery_stairs_up_solid", "destination": null },
-     { "template": "scenery_stairs_up_decks", "destination": null }
+     { "template": "scenery_stairs_up", "destination": null }
     ],
     "objects": []
   },
@@ -2140,12 +2139,12 @@
      { "template": "scenery_arch_n", "destination": 183 },
      { "template": "scenery_arch_s", "destination": 151 },
      { "template": "scenery_walls_0" },
-     { "template": "scenery_hole_solid", "destination": null },
-     { "template": "scenery_hole_decks", "destination": null }
+     { "template": "scenery_hole_floor", "destination": null },
+     { "template": "scenery_hole_treads", "destination": null }
     ],
     "objects": [
      { "template": "object_moveable_block", "positions": [
-      { "u": 5, "v": 3, "z": 0 }
+      { "u": 5, "v": 4, "z": 0 }
      ] }
     ]
   },
