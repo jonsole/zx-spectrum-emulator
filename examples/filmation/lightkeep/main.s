@@ -50,7 +50,8 @@ start:              di
                     ld      bc,END_ROOMS - 1
                     ld      (hl),0
                     ldir
-                    call    things_new_game     ; and everything where it starts
+                    call    things_new_game     ; and everything where it starts,
+                    call    carry_reset         ; with nothing carried
 
         ; Nothing goes into a room that was not built. room_build leaves the
         ; old room up when it is handed a number no record carries,

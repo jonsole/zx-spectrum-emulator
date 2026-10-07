@@ -1,8 +1,8 @@
 # Lightkeep's memory
 
 Where everything in Lightkeep is, bank by bank, how much is left, and what
-makes each part grow. The figures are from the build after stage 2b, with
-bank 5 laid out again so that every graphic number up to 511 fits.
+makes each part grow. The figures are from the build with carrying in
+(stage 3), and bank 5 laid out so that every graphic number up to 511 fits.
 
 The build prints the main figures every time, on the lines starting `>`. The
 rest come from `output/lightkeep.sld`, which records each label's bank as well
@@ -20,12 +20,12 @@ or in a paged bank if they are only read while a room is built.
 |---|---|---|---|---|
 | bank 5, $4000 | the screen | 6,912 | -- | -- |
 | bank 5, $5B00 | the room builder | 952 | 328 | room building code |
-| bank 5, $6000 | data, and the backdrop's code | 4,108 | 1,012 | rooms' templates, things, graphics past 255 |
+| bank 5, $6000 | data, and the backdrop's code | 4,132 | 988 | rooms' templates, things, graphics past 255 |
 | bank 5, $7400 | view buffer, sprite table, object pool | 2,432 | 640 | the fullest room, the highest graphic number |
-| bank 2, $8000 | the code that runs every turn, the rotation arena, the stack | 14,233 | 2,103 | code |
-| bank 0, $C000 | resident sprites, the menu and end screen, then the room being played's sprites | 9,484 at most | 6,900 | the fullest room's sprites |
-| bank 1, $C000 | the sprite library | 8,375 | 8,009 | sprites any room uses |
-| bank 4, $C000 | rooms, templates, the thing table | 9,812 | 6,572 | rooms, templates, things |
+| bank 2, $8000 | the code that runs every turn, the rotation arena, the stack | 14,216 | 2,120 | code |
+| bank 0, $C000 | resident sprites, the menu, end screen and carrying, then the room being played's sprites | 10,644 at most | 5,740 | the fullest room's sprites, carried things' sprites |
+| bank 1, $C000 | the sprite library | 8,307 | 8,077 | sprites any room uses |
+| bank 4, $C000 | rooms, templates, the thing table | 9,477 | 6,907 | rooms, templates, things |
 | bank 6, $C000 | the backdrop | 6,144 | 10,240 | -- |
 | banks 3, 7 | nothing yet | 0 | 32,768 | the library, when bank 1 fills |
 
@@ -43,7 +43,7 @@ the bridge deck graphic 511, as the worst case:
 
 | Region | Today | With a graphic at 511 |
 |---|---|---|
-| $6000: the nudge tables gain a second page for 256-511 | 1,012 free | 562 free |
+| $6000: the nudge tables gain a second page for 256-511 | 988 free | 540 free |
 | $7400: the sprite table doubles to 1,024, and the pool moves up behind it | 640 free | 128 free |
 
 In that build room $83's decks drew from the table's top half, and a game over
@@ -59,24 +59,24 @@ ran through the end screen to a new game.
 | $5D78 | `../engine/room.s`: `room_add`, `room_adjust`, the room's bounds and doorways |
 | $5E79 | `glance.s` |
 
-### $6000-$73FF, data and the backdrop's code (4,108 used, 1,012 free)
+### $6000-$73FF, data and the backdrop's code (4,132 used, 988 free)
 
 | From | Bytes | What |
 |---|---|---|
 | $6000 | 256 | `bit_reverse_table`: every byte with its bits the other way round, for mirroring. It has to start a page, and $6000 does |
-| $6100 | 626 | `generated/room_data.s`: the room shapes, which templates are doorways, `mover_of`, `room_vertical_tbl`, and the buffers a room's templates are copied into |
-| $6372 | 460 | `panel_data.s` and `generated/sprite_adj_gen.s`, every graphic's nudges, its index on a page boundary at $6400 |
-| $653E | 320 | `generated/font.s` |
-| $667E | 416 | `shift_shared`: the one buffer every deferred rotation goes through |
-| $681E | 226 | `sound_fx.s` |
-| $6900 | 46 | `monster_gate.s` |
-| $692E | 236 | `room_find.s`, with `room_record`, a copy of the room's record |
-| $6A1A | 533 | `things.s`, with `things_here` (12 things × 14) |
-| $6C2F | 371 | `storeys.s` |
-| $6DA2 | 129 | `room_page.s` and `page.s` |
-| $6E23 | 120 | `busy.s` and the engine's |
-| $6E9B | 369 | `backdrop.s` and `backdrop_build.s`: run for every region, so not cold, but they page bank 6 |
-| $700C | 1,012 | free |
+| $6100 | 578 | `generated/room_data.s`: the room shapes, which templates are doorways, `mover_of`, `pickup_tbl`, `room_vertical_tbl`, `start_rooms`, and the buffers a room's templates are copied into |
+| $6342 | 510 | `panel_data.s` and `generated/sprite_adj_gen.s`, every graphic's nudges, its index on a page boundary at $6400 |
+| $6540 | 320 | `generated/font.s` |
+| $6680 | 416 | `shift_shared`: the one buffer every deferred rotation goes through |
+| $6820 | 226 | `sound_fx.s` |
+| $6902 | 46 | `monster_gate.s` |
+| $6930 | 236 | `room_find.s`, with `room_record`, a copy of the room's record |
+| $6A1C | 555 | `things.s`, with `things_here` (12 things × 14) and `thing_record`, which writes an entry for carry.s |
+| $6C47 | 371 | `storeys.s` |
+| $6DBA | 129 | `room_page.s` and `page.s` |
+| $6E3B | 120 | `busy.s` and the engine's |
+| $6EB3 | 369 | `backdrop.s` and `backdrop_build.s`: run for every region, so not cold, but they page bank 6 |
+| $7024 | 988 | free |
 
 `room_templates` is sized by `rooms_source.py`: the most template bytes one
 room names, plus room for four more things arriving through a hole, each
@@ -117,7 +117,7 @@ Graphics past 255 also want the $6000 region's room, for their second page of
 nudges, so the end screen and the tunes (`end.s`, `../engine/tune.s`) moved to
 bank 0 beside the menu. Neither pages a bank in.
 
-## Bank 2, $8000-$BFFF: uncontended, always there (14,233 used, 2,103 free)
+## Bank 2, $8000-$BFFF: uncontended, always there (14,216 used, 2,120 free)
 
 | From | Bytes | What |
 |---|---|---|
@@ -129,11 +129,11 @@ bank 0 beside the menu. Neither pages a bank in.
 | $A793 | 193 | `../engine/shift.s` |
 | $A854 | 785 | `../engine/walker.s` and `knight.s` |
 | $AB65 | 1,341 | the movers: `movers.s`, `../engine/mover.s`, `shared_movers.s`, `../engine/movers.s` |
-| $B0A2 | 511 | sound, the panel and input |
-| $B2A1 | 239 | `main.s` and `../engine/turn.s` |
-| $B390 | 628 | `player.s` |
-| $B604 | 405 | the redraw, the overlay and the copy to the screen |
-| $B799 | 2,103 | free |
+| $B0A2 | 492 | sound, the panel and input |
+| $B28E | 238 | `main.s` and `../engine/turn.s` |
+| $B37C | 631 | `player.s` |
+| $B5F3 | 405 | the redraw, the overlay and the copy to the screen |
+| $B788 | 2,120 | free |
 | $BFD0 | 48 | `STACK_RESERVE`, kept clear below the stack (34 measured in use) |
 
 The stack starts at $C000, so its first push lands at $BFFE.
@@ -142,25 +142,27 @@ The stack starts at $C000, so its first push lands at $BFFE.
 
 | From | Bytes | What |
 |---|---|---|
-| $C000 | 3,942 | the resident sprites: the knight, and everything the code draws by number |
-| $CF66 | 703 | the menu (`screen.s`, `menu.s`, `end_at.s`) |
-| $D225 | 619 | the end screen and the tunes (`end.s`, `../engine/tune.s`) |
-| $D490 | 4,220 | `room_page`: the room being played's own sprites, copied out of the library when it is built -- 4,220 for the fullest, room $01 |
-| $E50C | 6,900 | free, after the fullest room |
+| $C000 | 4,406 | the resident sprites: the knight, everything the code draws by number, and everything that can be carried (the block and the chest), which can be put down in any room |
+| $D136 | 703 | the menu (`screen.s`, `menu.s`, `end_at.s`) |
+| $D3F5 | 618 | the end screen and the tunes (`end.s`, `../engine/tune.s`) |
+| $D65F | 1,161 | carrying (`carry.s`): it pages nothing in, so it can live in the bank that is always in during play |
+| $DAE8 | 3,756 | `room_page`: the room being played's own sprites, copied out of the library when it is built -- 3,756 for the fullest, room $01 |
+| $E994 | 5,740 | free, after the fullest room |
 
-## Bank 1, $C000: the library (8,375 used, 8,009 free)
+## Bank 1, $C000: the library (8,307 used, 8,077 free)
 
-Every sprite a room loads, 48 of them, the largest 352 bytes. `room_page_fill`
+Every sprite a room loads, 47 of them, the largest 352 bytes. A room also
+loads the sprites of the things that can fall into it from the rooms above. `room_page_fill`
 copies a room's into bank 0 through the rotation arena. When this bank fills,
 the library carries on into bank 3 and then 7. Melkhior graphics go here as
 rooms come to use them.
 
-## Bank 4, $C000: the rooms (9,812 used, 6,572 free)
+## Bank 4, $C000: the rooms (9,477 used, 6,907 free)
 
 | From | Bytes | What |
 |---|---|---|
-| $C000 | 5,564 | `generated/room_list.s`: every scenery and object template, the 129 room records, and the thing table twice -- `things_start` and `things_live`, 57 things × 8 each |
-| $D5BC | 4,248 | `generated/room_sprites.s`: which library sprites each room loads, its index on a 512 boundary |
+| $C000 | 5,479 | `generated/room_list.s`: every scenery and object template, the 129 room records, and the thing table twice -- `things_start` and `things_live`, 57 things × 8 each |
+| $D567 | 3,998 | `generated/room_sprites.s`: which library sprites each room loads, its index on a 512 boundary |
 
 ## Bank 6, $C000: the backdrop (6,144 used, 10,240 free)
 

@@ -125,4 +125,7 @@ panel_draw:         ld      (.region + 1),a
                     call    attr_fill
                     ld      hl,$5800 + 19 * 32 + 2
                     ld      bc,4 << 8 | 1
-                    jp      attr_fill
+                    call    attr_fill
+                    ; And what is carried, which a region reaching it has wiped.
+                    ld      a,(panel_draw.region + 1)
+                    jp      carry_panel

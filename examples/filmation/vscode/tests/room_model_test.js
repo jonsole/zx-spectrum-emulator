@@ -1730,6 +1730,10 @@ test('movers: a soldier kept where he was left stays kept when his behaviour cha
     assert.strictEqual(m.moverOf(atlas, 'object_guard_ew'), null);
     const text = m.serializeTemplates(atlas, '\n');
     assert.ok(text.indexOf('"object_guard_square": { "behaviour": "MOVE_GUARD_SQ", "kept": true }') >= 0);
+    // ...and something carried stays carried, at a new weight.
+    m.setMover(atlas, 'object_moveable_block', 'MOVE_CARRIED', 2);
+    assert.deepStrictEqual(m.moverOf(atlas, 'object_moveable_block'),
+                           { behaviour: 'MOVE_CARRIED', weight: 2, pickup: true });
   });
 
 test('movers: a rename takes the entry with it, a copy copies it, a delete drops it',

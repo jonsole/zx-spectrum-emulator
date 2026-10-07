@@ -35,17 +35,23 @@ The remake reads the keys the way the original does ($D022, `read_input`).
 The chosen way flashes, and so does 5 while it's on. The menu tune plays once
 on the way in; any key cuts it short.
 
-**Keyboard.** Whole half-rows, as the game reads them:
+**Keyboard.** Lightkeep's keys, provisional (input.s):
 
 | Keys | Does |
 |---|---|
-| Z, C, M, B | turn left |
-| X, V, SYMBOL SHIFT, N | turn right |
+| O | turn left |
+| P | turn right |
 | A to ENTER, the whole middle row | walk the way he faces |
-| Q to P, the whole top row | jump |
-| 1 to 0 | pick up, or put down |
+| Q, E, T, U | jump |
+| W, R, Y, I | fire (nothing yet) |
 
-There's no firing in Knight Lore.
+**Carrying**, whatever is steering (carry.s):
+
+| Keys | Does |
+|---|---|
+| Z, X, C, V, B | choose slot 1 to 5 |
+| N | pick up into the slot, or put down what is in it |
+| M | use what is in the slot (nothing yet) |
 
 **Joysticks**
 
@@ -55,7 +61,6 @@ There's no firing in Knight Lore.
 | up | walk | walk that way |
 | down | pick up, or put down | walk that way |
 | fire | jump | jump |
-| any letter key | — | pick up, or put down |
 
 The cursor keys are 5 left, 8 right, 7 up, 6 down and 0 fire. Interface II is
 6 to 0 for the first stick and 1 to 5 for the second.
@@ -154,6 +159,7 @@ grep -E "\|F\|room_number$" output/lightkeep.sld | cut -d'|' -f6
 | `room_objects`, `room_object_count` | the object pool, 32 bytes a record, with the same layout as Pentagram's (see its driving.md) |
 | `things_live` | the thing table, in bank 4 (`read_memory` with `bank: 4`, offset from $C000): 8 bytes a thing -- room, object template, U, V, Z, state, two spare. A room's things are read from it when the room is built and written back when it is left (things.s) |
 | `things_start` | the same table as a game begins; `things_new_game` copies it over `things_live` |
+| `carry_slots`, `carry_slot` | the five slots, 11 bytes each -- the entry's address in bank 4 (0 for empty), graphic, box, flags, behaviour, weight, offsets, template -- and the one in use, 0 to 4 |
 | `things_here`, `things_here_count` | the room being played's things, 14 bytes each: the entry's address in bank 4, the record that drives it (0 once it has fallen out of the room), how many records it has, its first sprite's offsets, and a copy of the entry |
 | `room_down`, `room_up` | the room being played's ways down and up, `ROOM_NO_EXIT` for none (storeys.s) |
 | `room_ground_z` | the floor's height as built; `room_floor_z` is 64 lower in a room with a hole |

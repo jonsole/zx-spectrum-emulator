@@ -55,6 +55,7 @@ from sprite_sheet import GRAPHIC_COUNT
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
 import castle                                                   # noqa: E402
+import rooms_source                                             # noqa: E402
 import sheet                                                    # noqa: E402
 import layout                                                   # noqa: E402
 
@@ -470,11 +471,46 @@ def split(entries, drawn):
     return library
 
 
+def carried_sprites(atlas, entries, facts):
+    """The sprites of everything the knight can carry, which are resident:
+    something carried can be put down in any room, so no room's list can be
+    trusted to have loaded it."""
+    number_of = {entry["graphic"]: g for g, entry in facts["graphics"].items()}
+    gmap = facts["graphicMap"]
+    _, pickup = rooms_source.things_of(atlas)
+    out = set()
+    for name in pickup:
+        for piece in atlas["objectTemplates"][name]:
+            if piece["graphic"] in number_of and gmap[number_of[piece["graphic"]]] is not None:
+                out.add(gmap[number_of[piece["graphic"]]])
+    return out
+
+
+def fallen_into(atlas):
+    """room number -> the kept templates that can fall into it: those placed in
+    any room whose way down, followed as far as it goes, reaches it. A thing in
+    the thing table can drop through a hole (storeys.s) into a room that never
+    placed it, and has to find its sprites loaded there."""
+    by_number = {room["number"]: room for room in atlas["rooms"]}
+    kept, _ = rooms_source.things_of(atlas)
+    out = {}
+    for room in atlas["rooms"]:
+        names = {ref["template"] for ref in room["objects"] if ref["template"] in kept}
+        seen = set()
+        below = room.get("down")
+        while names and below is not None and below in by_number and below not in seen:
+            seen.add(below)
+            out.setdefault(below, set()).update(names)
+            below = by_number[below].get("down")
+    return out
+
+
 def room_loads(atlas, entries, facts, library):
     """room number -> the library sprites the room loads, in library order.
 
     What the room's templates name, each widened to its whole group -- see
-    ROOM_GROUPS in sprite_sheet.py for why a group and not a sprite."""
+    ROOM_GROUPS in sprite_sheet.py for why a group and not a sprite -- and
+    what can fall into it from the rooms above (fallen_into)."""
     number_of = {entry["graphic"]: g for g, entry in facts["graphics"].items()}
     gmap = facts["graphicMap"]
     in_library = set(library)
@@ -482,6 +518,7 @@ def room_loads(atlas, entries, facts, library):
     for n in library:
         groups.setdefault(group_of(entries[n]["name"]), []).append(n)
 
+    falls = fallen_into(atlas)
     loads = {}
     for room in atlas["rooms"]:
         named = []
@@ -489,6 +526,8 @@ def room_loads(atlas, entries, facts, library):
             named += [piece["graphic"] for piece in atlas["sceneryTemplates"][ref["template"]]]
         for ref in room["objects"]:
             named += [entry["graphic"] for entry in atlas["objectTemplates"][ref["template"]]]
+        for name in falls.get(room["number"], ()):
+            named += [entry["graphic"] for entry in atlas["objectTemplates"][name]]
         wanted = set()
         for graphic in named:
             n = gmap[number_of[graphic]] if graphic in number_of else None
@@ -639,13 +678,14 @@ def main():
     # room loads.
     gmap = facts["graphicMap"]
     drawn = {n for n in gmap if n is not None}
-    library = split(entries, drawn)
+    atlas = castle.read_castle(HERE)
+    carried = carried_sprites(atlas, entries, facts)
+    library = [n for n in split(entries, drawn) if n not in carried]
     assert len(library) <= 256, "a library number is a byte"
     resident = drawn - set(library)
     unused = len(sprites) - len(drawn)
     if unused:
         print("%d sprites in the sheet are drawn by no graphic, and left out" % unused)
-    atlas = castle.read_castle(HERE)
     loads = room_loads(atlas, entries, facts, library)
     library_lines, bank_of = emit_library(sprites, entries, facts, animated, library)
     room_lines, most, fullest = emit_rooms(sprites, entries, facts, resident,

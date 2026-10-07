@@ -1838,9 +1838,10 @@ function setMover(atlas, name, behaviour, weight) {
     const entry = { behaviour: String(behaviour) };
     const w = Math.max(0, Math.min(MAX_WEIGHT, Math.round(Number(weight)) || 0));
     if (w) entry.weight = w;
-    // Whether it is kept where it was left is not this row's to change: a
-    // soldier given a new behaviour is still a thing.
+    // Whether it is kept where it was left, or can be carried, is not this
+    // row's to change: a soldier given a new behaviour is still a thing.
     if (said[name] && said[name].kept) entry.kept = true;
+    if (said[name] && said[name].pickup) entry.pickup = true;
     entries[name] = entry;
   } else {
     delete entries[name];

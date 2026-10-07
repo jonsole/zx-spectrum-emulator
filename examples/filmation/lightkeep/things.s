@@ -269,6 +269,28 @@ things_save:        ld      a,(things_here_count)
                     jp      page_in
 
 
+; One thing's entry written now rather than when the room is left: its place,
+; and the room it is in -- THING_CARRIED once the knight picks it up, the room
+; it is put down in when he puts it down (carry.s). Here in bank 5 because it
+; pages bank 4, which carry.s, in bank 0, cannot do to itself.
+;
+; In:  A = the room to give it
+;      IY -> its things_here entry; IX -> its driving record
+; Out: nothing
+; Corrupts: AF, C, D, HL
+thing_record:       push    af
+                    ld      a,ROOM_BANK
+                    call    page_in
+                    call    thing_write
+                    ld      l,(iy+HERE_AT)
+                    ld      h,(iy+HERE_AT+1)
+                    pop     af
+                    ASSERT  THING_ROOM == 0
+                    ld      (hl),a
+                    ld      a,PAGE_PLAY
+                    jp      page_in
+
+
 ; One thing's place written back into its entry: the driving record's U, V and
 ; Z with its sprite's offsets taken off again -- room_unpack_base's sums the
 ; other way -- and its MOVE_STATE.

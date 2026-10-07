@@ -66,6 +66,10 @@
         "maximum": 127,
         "description": "What a push loses: something pushed moves the pusher's step less this, and not at all when it is as much. Something a push moves weighs 1 or more -- the build refuses one without -- and nothing else has one."
        },
+       "pickup": {
+        "type": "boolean",
+        "description": "The knight can pick it up and carry it (Lightkeep's carry.s). It has to be something a push moves, one sprite, numbered under 256 -- the build refuses anything else -- and it is a thing, kept where it is put down. Its weight counts towards the load limit of 7."
+       },
        "kept": {
         "type": "boolean",
         "description": "Kept where it was left: every placement of this template is a thing in the game's thing table, found where it was when its room is entered again, rather than built afresh. Anything a push moves is kept whatever this says; this keeps the rest, such as Lightkeep's soldiers."

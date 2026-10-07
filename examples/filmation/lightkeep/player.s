@@ -186,8 +186,10 @@ player_step:        ld      ix,player
                     call    character_door_find
 
                     ; Everything below reads what input_read left, so it is
-                    ; read once, here, whatever is steering.
+                    ; read once, here, whatever is steering -- carrying first,
+                    ; which picks up or puts down before he moves (carry.s).
                     call    input_read
+                    call    carry_turn
                     ld      ix,player
 
                     ; The jump key first, because gravity asks about it in the

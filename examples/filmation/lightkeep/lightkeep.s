@@ -256,6 +256,8 @@ sprite_end:
 ; from here already.
                     INCLUDE "end.s"             ; its tunes and their notes, then
                     INCLUDE "../engine/tune.s"  ; what plays them
+; ...and carrying, which pages nothing in: bank 0 is in for the whole of play.
+                    INCLUDE "carry.s"
                     ALIGN   4
 room_page:
                     ASSERT  room_page + ROOM_PAGE_MOST <= $10000

@@ -394,6 +394,50 @@ def kept_templates(objects, movers, loose):
     return kept
 
 
+def pickup_templates(objects, movers, loose):
+    """The object templates the knight can pick up and carry: templates.json's
+    meta.movers marks them "pickup": true.
+
+    Each has to be something a push moves, since carrying is that and more: it
+    falls when put down, and is kept where it was left. And it has to be one
+    sprite, numbered under 256: the panel draws what is carried straight onto
+    the screen, by its graphic, and the sprite is resident, since a thing put
+    down can be in any room (sprite_source.py).
+    """
+    pickup = []
+    for name in objects:
+        said = movers.get(name) or {}
+        if not said.get("pickup"):
+            continue
+        if said.get("behaviour") not in loose:
+            sys.exit("templates.json lets %s be picked up, and a push does not move "
+                     "it (%s): something carried is something pushed as well"
+                     % (name, said.get("behaviour")))
+        # The graphics are numbers here once resolve_graphics has run, and
+        # names when sprite_source.py asks: the number is checked by this
+        # script's own run.
+        pieces = [p for p in objects[name]
+                  if not isinstance(p["graphic"], int) or p["graphic"] >= 2]
+        if len(pieces) != 1 or (isinstance(pieces[0]["graphic"], int)
+                                and pieces[0]["graphic"] > 255):
+            sys.exit("templates.json lets %s be picked up; something carried is one "
+                     "sprite, numbered under 256" % name)
+        pickup.append(name)
+    return pickup
+
+
+def things_of(atlas):
+    """(kept, pickup): the object templates that are things, and those of them
+    the knight can carry, by name -- for sprite_source.py, which has to know
+    where things can turn up."""
+    meta = atlas.get("templatesMeta") or {}
+    movers = meta.get("movers") or {}
+    loose = loose_behaviours()
+    objects = atlas["objectTemplates"]
+    return (kept_templates(objects, movers, loose),
+            set(pickup_templates(objects, movers, loose)))
+
+
 # The thing table's entries, as things.s reads them: the room it is in, its
 # object template, the U, V and Z its template's offsets are added to (what
 # room_unpack makes of a packed position), the state its driving record had,
@@ -586,6 +630,12 @@ def main():
     out.append("")
 
     kept = kept_templates(objects, movers, loose)
+    pickup = pickup_templates(objects, movers, loose)
+    out.append("; The object templates the knight can pick up -- meta.movers' \"pickup\" --")
+    out.append("; ended by $FF. carry.s looks a thing's template up in it.")
+    line(out, "pickup_tbl:", "DB", ", ".join(["FG_%s" % bare(n).upper() for n in pickup] + ["$FF"]))
+    out.append("")
+    out.append("")
 
     # --- the rooms ---------------------------------------------------------
     # From here to the end of the records is room_list.s rather than
@@ -638,6 +688,10 @@ def main():
     if not free:
         sys.exit("every room number is taken, and one is needed to mean no exit")
     no_exit = free[0]
+    if len(free) < 2:
+        sys.exit("every room number but one is taken, and a second is needed to mean "
+                 "carried")
+    carried = free[1]
 
     # Where every doorway leads, checked: to a room that exists, and only
     # from a doorway.
@@ -822,6 +876,8 @@ def main():
     line(out, "start_rooms:", "DB", ", ".join("$%02X" % n for n in starts))
     line(out, "START_ROOMS_MASK", "EQU", "%d" % (len(starts) - 1))
     out.append("")
+    line(out, "THING_CARRIED", "EQU", "$%02X" % carried,
+         "no room has this number either: a thing's room while it is carried")
     line(out, "THING_COUNT", "EQU", "%d" % len(things), "the castle's things")
     line(out, "THING_STRIDE", "EQU", "%d" % THING_STRIDE, "bytes a thing")
     # Things move between rooms now -- they fall through holes -- so a room can

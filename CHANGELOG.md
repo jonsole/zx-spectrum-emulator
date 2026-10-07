@@ -162,6 +162,12 @@ GitHub takes its notes from that section.
   drops through a hole and climbs the stairs. Things fall through too, soldiers
   included, and land in the room below. Rooms $A7 and $83 have a test
   stairwell. The hole has no art of its own yet.
+- **Lightkeep's knight carries things.** Five slots, chosen with Z X C V B,
+  and a load limit of 7, as in Fairlight. N picks up the thing next to him into
+  the slot in use, or puts it down beside him. The panel shows what is in the
+  slot. TOO HEAVY and BLOCKED say why not. A thing carried to another room and
+  put down stays there. Templates marked `"pickup"` can be carried: for now the
+  movable block and the chest. Keyboard turning has moved to O and P.
 
 ## 0.1.0 (2026-09-29)
 
