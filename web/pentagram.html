@@ -3,29 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Filmation Knight Lore</title>
-<meta name="description" content="A demo of the Filmation 3D engine, up to 3x faster than the original. Make the Filmation remake of Knight Lore from your own copy of the original, then download it or play it.">
+<title>Filmation Pentagram</title>
+<meta name="description" content="A demo of the Filmation 3D engine, up to 3x faster than the original. Make the Filmation remake of Pentagram from your own copy of the original, then download it or play it.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1>Knight Lore <span>on the Filmation engine</span></h1>
+  <h1>Pentagram <span>on the Filmation engine</span></h1>
   <p class="demo">A demo of the Filmation 3D engine: up to 3x faster than Ultimate's original Filmation engine.</p>
   <p>Make the <a href="https://github.com/jonsole/zx-spectrum-emulator/tree/master/examples/filmation">Filmation</a>
-  remake of Ultimate's <em>Knight Lore</em> from your own copy of the original,
+  remake of Ultimate's <em>Pentagram</em> from your own copy of the original,
   then download it or play it in the <a href="index.html">emulator</a>.</p>
 </header>
 
 <main>
-  <div id="maker" data-game="knightlore" data-title="Knight Lore" data-file="knightlore.z80">
+  <div id="maker" data-game="pentagram" data-title="Pentagram" data-file="pentagram.z80">
     <label id="pick" for="file">
-      <strong>Drop your Knight Lore here</strong>
-      <span>or click to choose it: a 48K .z80 or .sna of the original</span>
+      <strong>Drop your Pentagram here</strong>
+      <span>or click to choose it: its tape (.tzx or .tap), or a 48K .z80 or .sna from before a game is started</span>
     </label>
-    <input id="file" type="file" accept=".z80,.sna">
+    <input id="file" type="file" accept=".tzx,.tap,.z80,.sna">
     <p id="result" role="status"></p>
     <div id="done" hidden>
-      <a id="download" class="button" download="knightlore.z80">Download knightlore.z80</a>
+      <a id="download" class="button" download="pentagram.z80">Download pentagram.z80</a>
       <button id="play" type="button">Play it</button>
     </div>
   </div>
@@ -34,12 +34,12 @@
     <div>
       <h2>What this does</h2>
       <p>This page has the remake with everything of Ultimate's left out: the
-      font, the sprites, the castle and the collectables. It reads them from
-      your copy, the way <code>kl_extract.py</code> does, makes of them what
-      the build makes, checks that against the remake, and puts it in. Your file is read in this page and
-      isn't uploaded anywhere.</p>
-      <p>What comes out is the <code>knightlore.z80</code> that
-      <code>examples/filmation/knightlore/build.py</code> writes, byte for
+      font, the sprites, the castle, the quest and the tunes. It reads them
+      from your copy, the way <code>pg_extract.py</code> does, makes of them
+      what the build makes, checks that against the remake, and puts it in.
+      Your file is read in this page and isn't uploaded anywhere.</p>
+      <p>What comes out is the <code>pentagram.z80</code> that
+      <code>examples/filmation/pentagram/build.py</code> writes, byte for
       byte.</p>
     </div>
     <div>
@@ -50,7 +50,8 @@
       <table>
         <tr><th>Turn</th><td><kbd>Z</kbd> <kbd>C</kbd> <kbd>B</kbd> <kbd>M</kbd> one way, <kbd>X</kbd> <kbd>V</kbd> <kbd>N</kbd> <kbd>Ctrl</kbd> the other</td></tr>
         <tr><th>Walk</th><td>any of <kbd>A</kbd>–<kbd>L</kbd>, or <kbd>Enter</kbd></td></tr>
-        <tr><th>Jump</th><td>any of <kbd>Q</kbd>–<kbd>P</kbd></td></tr>
+        <tr><th>Jump</th><td><kbd>Q</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>U</kbd> <kbd>O</kbd></td></tr>
+        <tr><th>Fire</th><td><kbd>W</kbd> <kbd>R</kbd> <kbd>Y</kbd> <kbd>I</kbd> <kbd>P</kbd></td></tr>
         <tr><th>Pick up / drop</th><td>any number</td></tr>
       </table>
     </div>
@@ -63,6 +64,7 @@
 </footer>
 
 <script src="remake.js"></script>
+<script src="remake_pentagram.js"></script>
 <script src="remake_page.js"></script>
 </body>
 </html>

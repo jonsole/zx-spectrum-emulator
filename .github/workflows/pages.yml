@@ -1,9 +1,9 @@
 # Builds the web emulator (web/) and publishes it to GitHub Pages: the core
 # compiled to WebAssembly, the page, and the ROMs. What it runs is not part of
 # the site: each visitor opens a snapshot of their own (docs/web.md). Beside it
-# is knightlore.html, which makes the Filmation Knight Lore from a visitor's
-# own copy of the original: the remake is built here with everything of
-# Ultimate's left out.
+# are knightlore.html and pentagram.html, which make the Filmation Knight Lore
+# and Pentagram from a visitor's own copy of the original: each remake is
+# built here with everything of Ultimate's left out.
 #
 # Needs Pages turned on with "GitHub Actions" as its source (Settings > Pages).
 
@@ -90,6 +90,12 @@ jobs:
           python -m pip install --quiet "pillow>=10.0"
           python web/knightlore_template.py --out web/site --reference "$RUNNER_TEMP/knightlore"
 
+      # The same for pentagram.html -- built four ways, with blanks of the
+      # shape web/pentagram_layout.json gives for what the repository does
+      # not carry.
+      - name: Build the Pentagram remake
+        run: python web/pentagram_template.py --out web/site --reference "$RUNNER_TEMP/pentagram"
+
       # Loads the ROMs, a 48K and a 128K .z80 and a .sna into the built
       # module and runs frames of each, so a site that cannot run a
       # snapshot is never deployed.
@@ -100,6 +106,9 @@ jobs:
       # for byte, and it must read a copy as original.py does.
       - name: Test the Knight Lore remake
         run: node web/tests/knightlore_test.js web/site "$RUNNER_TEMP/knightlore"
+
+      - name: Test the Pentagram remake
+        run: node web/tests/pentagram_test.js web/site "$RUNNER_TEMP/pentagram"
 
       - uses: actions/upload-pages-artifact@v3
         with:

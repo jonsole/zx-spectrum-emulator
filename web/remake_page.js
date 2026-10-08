@@ -1,6 +1,10 @@
-// web/knightlore.html: takes the visitor's copy of Knight Lore, makes the
-// remake with remake.js, and offers it as a download or hands it to the
-// emulator page to play.
+// web/knightlore.html and web/pentagram.html: takes the visitor's copy of
+// the original, makes the remake with remake.js or remake_pentagram.js, and
+// offers it as a download or hands it to the emulator page to play.
+//
+// The page says which game it is on #maker: data-game names the remake's
+// folder on the site and which maker to use, data-title what to call the
+// original, and data-file what the remake is called.
 'use strict';
 
 (async function () {
@@ -10,11 +14,16 @@
     const done = document.getElementById('done');
     const download = document.getElementById('download');
     const play = document.getElementById('play');
+    const maker = document.getElementById('maker');
+    const GAME = maker.dataset.game;
+    const TITLE = maker.dataset.title;
+    const MAKERS = { knightlore: self.KnightLoreRemake, pentagram: self.PentagramRemake };
+    const Remake = MAKERS[GAME];
 
     /// Where the emulator page (main.js) keeps the snapshot it opens on its
     /// next visit, and in what form. Playing is putting the remake there.
     const EMULATOR_SNAPSHOT_KEY = 'zx-web-snapshot';
-    const NAME = 'knightlore.z80';
+    const NAME = maker.dataset.file;
 
     function say(text, failed) {
         result.textContent = text;
@@ -24,8 +33,8 @@
     let template = null;
     let info = null;
     try {
-        const [bin, json] = await Promise.all([fetch('knightlore/template.bin'),
-                                               fetch('knightlore/template.json')]);
+        const [bin, json] = await Promise.all([fetch(GAME + '/template.bin'),
+                                               fetch(GAME + '/template.json')]);
         if (!bin.ok || !json.ok) {
             throw new Error(bin.ok ? json.status : bin.status);
         }
@@ -44,11 +53,11 @@
         done.hidden = true;
         say('Reading ' + file.name + '…');
         try {
-            made = await KnightLoreRemake.remake(template, info,
+            made = await Remake.remake(template, info,
                                                  new Uint8Array(await file.arrayBuffer()), file.name);
         } catch (e) {
             made = null;
-            say(e instanceof KnightLoreRemake.RemakeError ? e.message
+            say(e instanceof Remake.RemakeError ? e.message
                 : file.name + ' could not be read (' + e.message + ').', true);
             return;
         }
@@ -58,7 +67,7 @@
         url = URL.createObjectURL(new Blob([made], { type: 'application/octet-stream' }));
         download.href = url;
         done.hidden = false;
-        say(file.name + ' is Knight Lore: the remake is ready.');
+        say(file.name + ' is ' + TITLE + ': the remake is ready.');
     }
 
     play.addEventListener('click', () => {

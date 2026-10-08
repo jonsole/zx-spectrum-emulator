@@ -41,6 +41,7 @@ header { padding-top: 24px; }
 h1 { margin: 0 0 4px; font-size: 1.75rem; }
 h1 span { color: var(--muted); font-weight: 400; }
 header p { margin: 0 0 20px; color: var(--muted); }
+header p.demo { margin: 0 0 12px; color: var(--accent); font-weight: 600; }
 a { color: var(--accent); }
 
 #stage {

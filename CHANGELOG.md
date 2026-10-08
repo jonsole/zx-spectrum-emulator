@@ -20,7 +20,9 @@ GitHub takes its notes from that section.
   `.z80` or `.sna` a visitor opens from their own disk. Beside it,
   `knightlore.html` makes the Filmation Knight Lore from a visitor's own copy
   of the original, taking its font, sprites, castle and collectables from it -- the same
-  `knightlore.z80` `build.py` writes -- to download or to play. See [docs/web.md](docs/web.md).
+  `knightlore.z80` `build.py` writes -- to download or to play, and
+  `pentagram.html` the Filmation Pentagram, from its tape or a snapshot, every
+  part of it from the copy. See [docs/web.md](docs/web.md).
 
 ## 0.1.0 (2026-09-29)
 
