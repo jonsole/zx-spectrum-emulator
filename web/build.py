@@ -4,7 +4,8 @@
 Needs Emscripten's emcc and em++ on PATH (or --emsdk-bin). Writes web/site/, which is what
 GitHub Pages serves -- the page, its script, zx.js and zx.wasm, and the ROMs
 when --roms names a directory holding them (scripts/fetch_roms.py fetches
-them). site/ is gitignored and regenerated whole.
+them). site/ is gitignored and regenerated whole. knightlore.html's remake is
+web/knightlore_template.py's, run after this one into the same site.
 
     python web/build.py --roms roms
     python -m http.server -d web/site      # then http://localhost:8000
@@ -34,7 +35,8 @@ CORE = [
 ]
 
 # The page's own files, copied into site/ as they are.
-STATIC = ["index.html", "main.js", "style.css"]
+STATIC = ["index.html", "main.js", "style.css",
+          "knightlore.html", "knightlore.js", "remake.js"]
 
 # The same cut-down miniz the native build uses -- inflate and nothing else.
 MINIZ_DEFINES = ["MINIZ_NO_DEFLATE_APIS", "MINIZ_NO_ARCHIVE_APIS",

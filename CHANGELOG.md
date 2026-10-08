@@ -9,7 +9,10 @@ GitHub takes its notes from that section.
 
 - **The emulator in a browser.** `web/` compiles the core to WebAssembly
   and publishes it to GitHub Pages, where it runs whatever 48K or 128K
-  `.z80` or `.sna` a visitor opens from their own disk. See [docs/web.md](docs/web.md).
+  `.z80` or `.sna` a visitor opens from their own disk. Beside it,
+  `knightlore.html` makes the Filmation Knight Lore from a visitor's own copy
+  of the original -- the same `knightlore.z80` `build.py` writes -- to
+  download or to play. See [docs/web.md](docs/web.md).
 
 ## 0.1.0 (2026-09-29)
 

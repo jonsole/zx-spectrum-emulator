@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filmation Knight Lore</title>
+<meta name="description" content="Make the Filmation remake of Knight Lore from your own copy of the original, then download it or play it.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Knight Lore <span>on the Filmation engine</span></h1>
+  <p>Make the <a href="https://github.com/jonsole/zx-spectrum-emulator/tree/master/examples/filmation">Filmation</a>
+  remake of Ultimate's <em>Knight Lore</em> from your own copy of the original,
+  then download it or play it in the <a href="index.html">emulator</a>.</p>
+</header>
+
+<main>
+  <div id="maker">
+    <label id="pick" for="file">
+      <strong>Drop your Knight Lore here</strong>
+      <span>or click to choose it: a 48K .z80 or .sna of the original</span>
+    </label>
+    <input id="file" type="file" accept=".z80,.sna">
+    <p id="result" role="status"></p>
+    <div id="done" hidden>
+      <a id="download" class="button" download="knightlore.z80">Download knightlore.z80</a>
+      <button id="play" type="button">Play it</button>
+    </div>
+  </div>
+
+  <section id="help">
+    <div>
+      <h2>What this does</h2>
+      <p>Everything the remake is built from is in the repository except the
+      font, which is Ultimate's. This page has the remake with the font left
+      out. It reads the font from your copy, checks that it is the one the
+      remake was made from, and puts it in. Your file is read in this page
+      and isn't uploaded anywhere.</p>
+      <p>What comes out is the <code>knightlore.z80</code> that
+      <code>examples/filmation/knightlore/build.py</code> writes, byte for
+      byte.</p>
+    </div>
+    <div>
+      <h2>Playing</h2>
+      <p>At the menu, <kbd>1</kbd>–<kbd>4</kbd> choose the controls and
+      <kbd>0</kbd> starts. Pick the keyboard (<kbd>1</kbd>): the emulator has
+      no Kempston joystick.</p>
+      <table>
+        <tr><th>Turn</th><td><kbd>Z</kbd> <kbd>C</kbd> <kbd>B</kbd> <kbd>M</kbd> one way, <kbd>X</kbd> <kbd>V</kbd> <kbd>N</kbd> <kbd>Ctrl</kbd> the other</td></tr>
+        <tr><th>Walk</th><td>any of <kbd>A</kbd>–<kbd>L</kbd>, or <kbd>Enter</kbd></td></tr>
+        <tr><th>Jump</th><td>any of <kbd>Q</kbd>–<kbd>P</kbd></td></tr>
+        <tr><th>Pick up / drop</th><td>any number</td></tr>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <a href="https://github.com/jonsole/zx-spectrum-emulator">jonsole/zx-spectrum-emulator</a> ·
+  <a href="index.html">the emulator</a>
+</footer>
+
+<script src="remake.js"></script>
+<script src="knightlore.js"></script>
+</body>
+</html>
