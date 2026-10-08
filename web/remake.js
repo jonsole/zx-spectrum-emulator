@@ -2,13 +2,12 @@
 // what web/knightlore.html does with the file it is given, kept apart from
 // the page so that web/tests/knightlore_test.js can run it from Node.
 //
-// The site carries the remake with its font and its sprites' rows left blank
-// (web/knightlore_template.py says why those are the whole of the
-// difference). This reads the font and the sprites out of the copy as
-// kl_extract.py does, checks them against what examples/filmation/knightlore/
-// original.json says a right copy gives, puts them in -- the sprites the way
-// sprite_sheet.py and sprite_source.py turn them round -- and writes the .z80
-// build.py would have.
+// The site carries the remake with its font, its sprites' rows and its DAY
+// lettering left blank (web/knightlore_template.py says why those are the
+// whole of the difference). This reads them out of the copy as kl_extract.py
+// does, checks them against the hashes of what the build puts in the image,
+// puts them in -- the sprites the way sprite_sheet.py and sprite_source.py
+// turn them round -- and writes the .z80 build.py would have.
 'use strict';
 
 (function (root) {
@@ -217,8 +216,7 @@
 
     /// The game's sprite records, as kl_extract.py walks them: every one
     /// turned back the right way round, then the ones that are not empty, in
-    /// address order. Returns where each sits and its size, and the records
-    /// packed together -- sprite_data.bin, which original.json has the hash of.
+    /// address order, with where each sits and its size.
     function sprites(memory, info) {
         let p = info.sprites_start;
         while (p < info.sprites_end) {
@@ -230,7 +228,6 @@
             p += 2 + width * height * 2;
         }
         const records = [];
-        let size = 0;
         p = info.sprites_start;
         while (p < info.sprites_end) {
             const width = memory[p] & 0x1F;
@@ -238,7 +235,6 @@
             const length = 2 + width * height * 2;
             if (width && height) {
                 records.push({ at: p, w: width, h: height });
-                size += length;
             }
             p += length;
         }
@@ -246,26 +242,43 @@
             throw new RemakeError('this is not Knight Lore: its sprites do not end where '
                                   + "Knight Lore's do");
         }
-        const packed = new Uint8Array(size);
-        let at = 0;
-        for (const record of records) {
-            const length = 2 + record.w * record.h * 2;
-            packed.set(memory.subarray(record.at, record.at + length), at);
-            at += length;
-        }
-        return { records, packed };
+        return records;
     }
 
-    /// Writes each sprite's rows into the image where the template keeps them:
-    /// the record found through the copy's own graphic table, its rows top row
-    /// first where the game stores them bottom row first, the blank rows the
-    /// sheet trimmed off left off, and the mask inverted.
-    function putSprites(ram, info, memory, records) {
-        const index = new Map(records.map((record, n) => [record.at, n]));
+    /// The record a graphic number draws, through the copy's own table.
+    function recordOf(memory, info, records, graphic) {
+        const pointer = info.sprite_table + 2 * graphic;
+        const address = memory[pointer] | (memory[pointer + 1] << 8);
+        return records.findIndex((record) => record.at === address);
+    }
+
+    /// Turns a record upside down: the game does it to the menu's corner as
+    /// it draws the frame, and records it nowhere.
+    function turnOver(memory, record) {
+        const stride = record.w * 2;
+        const rows = [];
+        for (let r = 0; r < record.h; r++) {
+            rows.push(memory.slice(record.at + 2 + r * stride, record.at + 2 + (r + 1) * stride));
+        }
+        rows.reverse();
+        rows.forEach((row, r) => memory.set(row, record.at + 2 + r * stride));
+    }
+
+    /// Every sprite's rows as the build emits them, one after another in the
+    /// template's order: the record found through the copy's own graphic
+    /// table, its rows top row first where the game stores them bottom row
+    /// first, the blank rows the sheet trimmed off left off, and the mask
+    /// inverted.
+    function spriteRows(info, memory, records) {
+        let total = 0;
+        for (const sprite of info.sprites) {
+            total += sprite.w * sprite.h * 2;
+        }
+        const out = new Uint8Array(total);
+        let to = 0;
         const used = new Set();
         for (const sprite of info.sprites) {
-            const pointer = info.sprite_table + 2 * sprite.graphic;
-            const n = index.get(memory[pointer] | (memory[pointer + 1] << 8));
+            const n = recordOf(memory, info, records, sprite.graphic);
             const record = records[n];
             if (record === undefined || used.has(n) || record.w !== sprite.w
                     || record.h !== sprite.h + sprite.trim) {
@@ -273,7 +286,6 @@
             }
             used.add(n);
             const stride = record.w * 2;
-            let to = sprite.at - RAM_START;
             for (let row = record.h - 1; row >= 0; row--) {
                 const from = record.at + 2 + row * stride;
                 for (let b = 0; b < stride; b += 2) {
@@ -284,10 +296,36 @@
                         }
                         continue;
                     }
-                    ram[to++] = 0xFF ^ memory[from + b];
-                    ram[to++] = memory[from + b + 1];
+                    out[to++] = 0xFF ^ memory[from + b];
+                    out[to++] = memory[from + b + 1];
                 }
             }
+        }
+        return out;
+    }
+
+    /// The sprites' rows from the copy, checked against the hash of the rows
+    /// the build emits -- trying the menu's corner both ways up -- and written
+    /// where the template keeps them.
+    async function putSprites(ram, info, memory, different) {
+        const records = sprites(memory, info);
+        let rows = spriteRows(info, memory, records);
+        if (await sha256(rows) !== info.sprite_rows_sha256) {
+            const corner = recordOf(memory, info, records, info.menu_corner_graphic);
+            if (corner >= 0) {
+                turnOver(memory, records[corner]);
+                rows = spriteRows(info, memory, records);
+            }
+        }
+        if (await sha256(rows) !== info.sprite_rows_sha256) {
+            throw new RemakeError(different + 'its sprites are different (a different release, '
+                                  + 'or a crack?)');
+        }
+        let from = 0;
+        for (const sprite of info.sprites) {
+            const length = sprite.w * sprite.h * 2;
+            ram.set(rows.subarray(from, from + length), sprite.at - RAM_START);
+            from += length;
         }
     }
 
@@ -308,14 +346,14 @@
         if (await sha256(font) !== info.font_sha256) {
             throw new RemakeError(different + 'its font is different (a different release, or a crack?)');
         }
-        const { records, packed } = sprites(memory, info);
-        if (await sha256(packed) !== info.sprite_data_sha256) {
-            throw new RemakeError(different + 'its sprites are different (a different release, '
-                                  + 'a crack, or a snapshot taken after a game was started?)');
+        const day = memory.slice(info.day_source, info.day_source + info.day_length);
+        if (await sha256(day) !== info.day_sha256) {
+            throw new RemakeError(different + 'its DAY lettering is different');
         }
         const ram = Uint8Array.from(template);
         ram.set(font, info.font_at - RAM_START);
-        putSprites(ram, info, memory, records);
+        ram.set(day, info.day_at - RAM_START);
+        await putSprites(ram, info, memory, different);
         return z80Snapshot(ram, info.start);
     }
 

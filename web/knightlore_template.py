@@ -18,6 +18,10 @@ What the page takes from the copy, and how each lands in the image:
   the sheet comes from the copy's own graphic table at $7112: this says, for
   each sprite, one graphic number that draws it.
 
+The "DAY" over the day count is the third: panel_data.s copies its four
+characters from the game's day_font at $BCEC, and the page takes them from
+there too.
+
 None of that is taken on trust. The game is built three times: as the
 template, with a blank font and the carried sprite sheet; with a patterned
 font; and with the sheet's ink and paper swapped. The font may change nothing
@@ -62,6 +66,14 @@ import sprite_sheet                                             # noqa: E402
 RAM_START = 0x4000
 FONT_SOURCE = kl_extract.FONT_START
 FONT_LENGTH = kl_extract.FONT_END - kl_extract.FONT_START
+# The menu frame's corner. The game turns it upside down in place as it draws
+# the frame and, unlike a left-right mirror, records that nowhere -- so a copy
+# saved at the menu can hold it either way up, and the page tries both.
+MENU_CORNER_GRAPHIC = sprite_sheet.MENU[0]
+# The "DAY" over the day count: four 8x8 characters panel_data.s spells out as
+# panel_word, copied from the game's day_font at $BCEC.
+DAY_SOURCE = 0xBCEC
+DAY_LENGTH = 32
 # The empty records the game has among its sprites: 0 by 0, holes in its
 # numbering, which kl_extract.py walks past.
 EMPTY_RECORDS = 6
@@ -215,7 +227,7 @@ def sheet_reverse(byte):
     return int("{:08b}".format(byte)[::-1], 2)
 
 
-def test_original(sprites, graphic_map, font):
+def test_original(sprites, graphic_map, font, day):
     """A 48K .sna holding `font` and the carried sheet's sprites, laid out as
     the game lays its own out but in another order, with two mirrored.
 
@@ -224,6 +236,7 @@ def test_original(sprites, graphic_map, font):
     as it was for the sheet to come out the same."""
     ram = bytearray(0xC000)
     ram[FONT_SOURCE - RAM_START:FONT_SOURCE - RAM_START + len(font)] = font
+    ram[DAY_SOURCE - RAM_START:DAY_SOURCE - RAM_START + len(day)] = day
     last = sprites[-1]["name"].split(sheet.NAME_SEPARATOR)[0]
     tail = [n for n, s in enumerate(sprites) if s["name"].split(sheet.NAME_SEPARATOR)[0] == last]
     order = [n for n in reversed(range(len(sprites))) if n not in tail] + tail
@@ -274,6 +287,28 @@ def check_test_original(where, original):
             for name in ("font.bin", "sprite_data.bin")}
 
 
+def carried_hash(path):
+    """SHA-256 as extract.py takes it: a JSON file's line endings made LF."""
+    data = path.read_bytes()
+    if path.suffix == ".json":
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
+
+
+def check_sheet_is_the_originals():
+    """The page can only make sprites an original has. If the carried sheet
+    has been edited -- which is what it is for -- no copy gives its rows, and
+    the page would turn every one away; so that stops the build here, the way
+    original.json's carried hashes stop a release."""
+    carried = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["carried"]
+    edited = [name for name in ("sprites.png", "sprites.json")
+              if carried_hash(KNIGHTLORE / name) != carried[name]]
+    if edited:
+        sys.exit(", ".join(edited) + " no longer what an original gives (original.json's "
+                 "carried hashes): the page makes the sprites from a copy of the original, "
+                 "so it cannot make these")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=str(WEB / "site"),
@@ -286,6 +321,7 @@ def main():
     # Every byte different from the blank font and from its neighbours, so a
     # byte that moved or was dropped shows up.
     pattern = bytes((n * 7 + 1) & 0xFF for n in range(FONT_LENGTH))
+    check_sheet_is_the_originals()
     sprites, graphic_map = read_carried_sheet()
 
     with tempfile.TemporaryDirectory() as temp:
@@ -335,9 +371,15 @@ def main():
                      "at $%04X" % (stray[0] + RAM_START))
         if not changed:
             sys.exit("swapping the sheet's ink and paper changed nothing")
+        rows_sha256 = hashlib.sha256(b"".join(emitted_rows(s) for s in sprites)).hexdigest()
+
+        # The DAY lettering: data in a DB, so where its label says.
+        day_at = found["panel_word"] - RAM_START
+        day = bytes(image[day_at:day_at + DAY_LENGTH])
+        image[day_at:day_at + DAY_LENGTH] = bytes(DAY_LENGTH)
 
         if args.reference:
-            original = test_original(sprites, graphic_map, pattern)
+            original = test_original(sprites, graphic_map, pattern, day)
             pins = check_test_original(temp / "d", original)
 
     extracted = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["extracted"]
@@ -346,7 +388,7 @@ def main():
     (out / "template.bin").write_bytes(bytes(image))
     (out / "template.json").write_text(json.dumps({
         "_what": "web/knightlore_template.py: the Filmation Knight Lore's 48K image "
-                 "from $4000, its font and sprite rows blank, and where to put the "
+                 "from $4000, its font, sprite rows and DAY lettering blank, and where to put the "
                  "original's",
         "start": found["start"],
         "font_at": font_at,
@@ -357,7 +399,17 @@ def main():
         "sprites_end": kl_extract.SPRITES_END,
         "sprite_table": kl_extract.SPRITE_TBL,
         "mirrored": kl_extract.MIRRORED,
-        "sprite_data_sha256": extracted["sprite_data.bin"],
+        # Not sprite_data.bin's hash: that covers bits of every record the
+        # build never reads -- the flags in a sprite's width byte, which the
+        # game leaves set or not depending on when the copy was saved -- so it
+        # turns away copies that make this very game. The rows the build
+        # emits are the whole of what the sprites put in the image.
+        "sprite_rows_sha256": rows_sha256,
+        "menu_corner_graphic": MENU_CORNER_GRAPHIC,
+        "day_at": found["panel_word"],
+        "day_source": DAY_SOURCE,
+        "day_length": DAY_LENGTH,
+        "day_sha256": hashlib.sha256(day).hexdigest(),
         "template_sha256": hashlib.sha256(bytes(image)).hexdigest(),
         "sprites": layout,
     }, indent=1) + "\n", encoding="utf-8")

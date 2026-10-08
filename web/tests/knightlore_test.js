@@ -38,12 +38,10 @@ const testOriginal = new Uint8Array(fs.readFileSync(path.join(reference, 'origin
 const pins = JSON.parse(fs.readFileSync(path.join(reference, 'pins.json'), 'utf8'));
 const built = Buffer.from(fs.readFileSync(path.join(reference, 'knightlore.z80')));
 
-/// The template's own facts, with the hashes the test original extracts to
-/// in place of the real game's.
-const pinned = Object.assign({}, info, {
-    font_sha256: pins['font.bin'],
-    sprite_data_sha256: pins['sprite_data.bin'],
-});
+/// The template's own facts, with the hash of the test original's font in
+/// place of the real game's. The sprites and the DAY lettering are checked
+/// against what the build put in the image, which the test original gives.
+const pinned = Object.assign({}, info, { font_sha256: pins['font.bin'] });
 
 const RAM = testOriginal.subarray(27);
 
@@ -117,7 +115,9 @@ async function main() {
     }
     const font = template.subarray(info.font_at - 0x4000, info.font_at - 0x4000 + info.font_length);
     assert.ok(font.every((b) => b === 0), 'the template has a font');
-    console.log('ok the template holds no sprite rows, and no font');
+    const day = template.subarray(info.day_at - 0x4000, info.day_at - 0x4000 + info.day_length);
+    assert.ok(day.every((b) => b === 0), 'the template has the DAY lettering');
+    console.log('ok the template holds no sprite rows, no font and no DAY lettering');
 
     // Every form of snapshot reads as original.py reads it, and makes
     // build.py's .z80.
@@ -138,6 +138,31 @@ async function main() {
         assert.deepStrictEqual(Buffer.from(made), built, name + ': not the .z80 build.py made');
         console.log('ok ' + name + ' makes build.py\'s .z80');
     }
+
+    // A copy saved at the menu can hold the frame's corner upside down, and
+    // the game leaves flags set in the sprites' width bytes or not: neither
+    // reaches the image, so neither stops the copy making the game.
+    const turned = Uint8Array.from(testOriginal);
+    const tableAt = 27 + info.sprite_table - 0x4000 + 2 * info.menu_corner_graphic;
+    const corner = 27 + (turned[tableAt] | (turned[tableAt + 1] << 8)) - 0x4000;
+    const cw = turned[corner] & 0x1F;
+    const ch = turned[corner + 1];
+    const rows = [];
+    for (let r = 0; r < ch; r++) {
+        rows.push(turned.slice(corner + 2 + r * cw * 2, corner + 2 + (r + 1) * cw * 2));
+    }
+    rows.reverse().forEach((row, r) => turned.set(row, corner + 2 + r * cw * 2));
+    for (let p = info.sprites_start; p < info.sprites_end;) {
+        const at = 27 + p - 0x4000;
+        const w = turned[at] & 0x1F;
+        if (w) {
+            turned[at] |= 0xA0;             // flags, but not the mirrored one
+        }
+        p += 2 + w * turned[at + 1] * 2;
+    }
+    assert.deepStrictEqual(Buffer.from(await remake.remake(template, pinned, turned, 'menu.sna')), built,
+                           'a copy saved at the menu');
+    console.log('ok a copy with its menu corner upside down and flags set makes it too');
 
     // A 128K snapshot is refused, as original.py refuses it.
     const big = path.join(temp, 'big.z80');
