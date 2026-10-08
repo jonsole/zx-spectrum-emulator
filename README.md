@@ -281,7 +281,7 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |
-| [The emulator in a browser](docs/web.md) | `web/`: the core compiled to WebAssembly, running the Filmation Knight Lore on GitHub Pages, and why visitors bring their own snapshot |
+| [The emulator in a browser](docs/web.md) | `web/`: the core compiled to WebAssembly and published on GitHub Pages, running whatever `.z80` or `.sna` a visitor opens, and making the Filmation Knight Lore from a visitor's own copy of the original |
 | [Testing and performance](docs/testing-and-performance.md) | The test suites, ZEXALL/ZEXDOC, and measured throughput |
 | [Project layout](docs/project-layout.md) | What lives where in the tree |
 | [Releasing](docs/releasing.md) | Cutting a release: the version, the changelog, the tag, and what the release workflow builds and publishes |

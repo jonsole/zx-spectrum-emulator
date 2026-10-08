@@ -7,10 +7,20 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The Filmation games' `extract.py` takes a Knight Lore saved at the menu.**
+  Drawing the menu turns its frame's corner upside down in place, and the game
+  records that nowhere, so such a copy was refused. It is now tried both ways
+  up, its sprites are checked by the sheet they make rather than by a hash
+  that also covers flag bits nothing reads, `sprites.png` is compared by its
+  pixels where another Pillow writes the same picture as other bytes, and a
+  copy that fails leaves the carried files as they were.
+
 - **The emulator in a browser.** `web/` compiles the core to WebAssembly
-  and publishes a page to GitHub Pages that runs the Filmation Knight Lore,
-  or any other `.z80` or `.sna`. Visitors open their own snapshot, since the
-  game's graphics are Ultimate's. See [docs/web.md](docs/web.md).
+  and publishes it to GitHub Pages, where it runs whatever 48K or 128K
+  `.z80` or `.sna` a visitor opens from their own disk. Beside it,
+  `knightlore.html` makes the Filmation Knight Lore from a visitor's own copy
+  of the original, taking its font, sprites, castle and collectables from it -- the same
+  `knightlore.z80` `build.py` writes -- to download or to play. See [docs/web.md](docs/web.md).
 
 ## 0.1.0 (2026-09-29)
 

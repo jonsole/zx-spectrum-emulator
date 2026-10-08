@@ -1,7 +1,9 @@
 # Builds the web emulator (web/) and publishes it to GitHub Pages: the core
-# compiled to WebAssembly, the page, and the ROMs. What it runs -- the
-# Filmation Knight Lore snapshot -- is not part of the site; each visitor opens
-# their own (docs/web.md says why).
+# compiled to WebAssembly, the page, and the ROMs. What it runs is not part of
+# the site: each visitor opens a snapshot of their own (docs/web.md). Beside it
+# is knightlore.html, which makes the Filmation Knight Lore from a visitor's
+# own copy of the original: the remake is built here with everything of
+# Ultimate's left out.
 #
 # Needs Pages turned on with "GitHub Actions" as its source (Settings > Pages).
 
@@ -15,6 +17,17 @@ on:
       - 'cpp-core/src/**'
       - 'cpp-core/third_party/miniz/**'
       - 'scripts/fetch_roms.py'
+      - 'examples/filmation/**'
+      - '.github/workflows/pages.yml'
+  # Built and tested on a pull request too, so a change that breaks the site
+  # is seen before it is merged; only master deploys.
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'cpp-core/src/**'
+      - 'cpp-core/third_party/miniz/**'
+      - 'scripts/fetch_roms.py'
+      - 'examples/filmation/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -23,15 +36,19 @@ permissions:
   pages: write
   id-token: write
 
-# One deployment at a time, and a newer push supersedes one still queued.
+# One run a branch at a time, so two of master's deployments never overlap.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   # The Emscripten the site is built and tested with; a newer one is a
   # deliberate change, not something a rebuild picks up on its own.
   EMSDK_VERSION: 6.0.11
+  # The sjasmplus the Filmation games are assembled with -- the same version
+  # scripts/fetch_sjasmplus.py fetches for Windows. It has no Linux release,
+  # so it is built from its source.
+  SJASMPLUS_VERSION: 1.23.1
 
 jobs:
   build:
@@ -59,11 +76,30 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           python web/build.py --roms "$RUNNER_TEMP/roms"
 
+      - name: Build sjasmplus
+        run: |
+          git clone --quiet --depth 1 --branch "v$SJASMPLUS_VERSION" --recurse-submodules \
+            --shallow-submodules https://github.com/z00m128/sjasmplus.git "$RUNNER_TEMP/sjasmplus"
+          make -C "$RUNNER_TEMP/sjasmplus" -j"$(nproc)" > /dev/null
+          echo "SJASMPLUS=$RUNNER_TEMP/sjasmplus/sjasmplus" >> "$GITHUB_ENV"
+
+      # The remake for knightlore.html, with everything of Ultimate's blanked --
+      # built four ways, and checked that those are all the original changes.
+      - name: Build the Knight Lore remake
+        run: |
+          python -m pip install --quiet "pillow>=10.0"
+          python web/knightlore_template.py --out web/site --reference "$RUNNER_TEMP/knightlore"
+
       # Loads the ROMs, a 48K and a 128K .z80 and a .sna into the built
       # module and runs frames of each, so a site that cannot run a
       # snapshot is never deployed.
       - name: Test the site
         run: node web/tests/smoke_test.js
+
+      # The .z80 knightlore.html makes must be the one build.py makes, byte
+      # for byte, and it must read a copy as original.py does.
+      - name: Test the Knight Lore remake
+        run: node web/tests/knightlore_test.js web/site "$RUNNER_TEMP/knightlore"
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -71,6 +107,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

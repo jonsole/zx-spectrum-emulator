@@ -4,6 +4,13 @@ Run this once, by hand, against your own copy of the game -- a 48K .sna or
 .z80 of it, from before a game is started (at the menu, say):
 
     python kl_extract.py "path/to/Knight Lore.sna"
+    python kl_extract.py --turn-menu-corner "path/to/Knight Lore.sna"
+
+--turn-menu-corner is for a copy saved once the menu is up. The game turns
+the corner of the menu's frame upside down in place as it draws the frame,
+and unlike a left-right mirror it records that nowhere, so nothing here can
+tell which way up that sprite is: this turns it back over. extract.py tries a
+copy both ways and keeps the one that gives the carried sprite sheet.
 
 A snapshot rather than the tape: the tape's bytes are not the game's until its
 loader has decoded them. Load the tape in the emulator and save a snapshot at
@@ -66,11 +73,13 @@ OBJECTS_REQUIRED = 0xC27D
 OBJECTS_REQUIRED_COUNT = 14
 GRAPHIC_COUNT = 256
 NO_SPRITE = 255
+# The menu frame's corner -- sprite_sheet.py's MENU, first of the three.
+MENU_CORNER_GRAPHIC = 137
 
 
-def load_ram(path):
+def load_ram(path, turn_corner=False):
     """RAM from $4000, out of a .sna or .z80, with every sprite the way round
-    the tape holds it."""
+    the tape holds it -- and the menu's corner turned over, if asked."""
     if Path(path).suffix.lower() in (".tap", ".tzx"):
         sys.exit("Knight Lore's tape is encoded until its loader has run: load it "
                  "in the emulator and save a snapshot at the menu, then extract "
@@ -90,7 +99,22 @@ def load_ram(path):
     if turned:
         print("turned back %d sprite%s the game had mirrored"
               % (turned, "" if turned == 1 else "s"))
+    if turn_corner:
+        turn_menu_corner(memory)
+        print("turned the menu's corner over")
     return bytes(memory[0x4000:])
+
+
+def turn_menu_corner(memory):
+    """Turns the menu frame's corner upside down: its rows the other way
+    round, as the game turns it while it draws the frame. `memory` is the 64K
+    address space, as load_ram has it before it is cut down."""
+    p = SPRITE_TBL + MENU_CORNER_GRAPHIC * 2
+    at = memory[p] | (memory[p + 1] << 8)
+    stride = 2 * (memory[at] & 0x1F)
+    height = memory[at + 1]
+    rows = [memory[at + 2 + r * stride:at + 2 + (r + 1) * stride] for r in range(height)]
+    memory[at + 2:at + 2 + height * stride] = b"".join(reversed(rows))
 
 
 def sprites(ram):
@@ -238,9 +262,12 @@ def write_specials(ram):
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    turn_corner = "--turn-menu-corner" in args
+    args = [a for a in args if a != "--turn-menu-corner"]
+    if len(args) != 1:
         sys.exit(__doc__)
-    ram = load_ram(sys.argv[1])
+    ram = load_ram(args[0], turn_corner)
 
     font = ram[FONT_START - 0x4000:FONT_END - 0x4000]
     (HERE / "font.bin").write_bytes(font)
