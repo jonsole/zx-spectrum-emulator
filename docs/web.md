@@ -30,27 +30,46 @@ and gives back the `knightlore.z80` that
 download, or to play: **Play it** puts it where the emulator page keeps its
 last snapshot and opens that page.
 
-It needs no assembler in the browser, because of what the repository
-already carries. Of everything the remake is built from, the sprite sheet,
-the rooms, the templates and the collectables are all in the tree, and the
-font is the one thing `extract.py` still has to take from an original. It is
-copied byte for byte: `kl_extract.py` takes `$6108`-`$6247` out of the
-game's RAM, and the build writes the same 320 bytes back at the label
-`font`. So the workflow builds the remake with a blank font
-(`web/knightlore_template.py`), and the page reads the font out of the
-visitor's copy, checks its SHA-256 against `knightlore/original.json`, and
-puts it in.
+The site has the remake with Ultimate's font and sprites left out, and the
+page takes them from the visitor's copy. It needs no assembler, because
+neither changes the layout of the image -- only bytes within it:
 
-That the font is the only difference is checked, not assumed: the template
-script builds the game twice, with a blank font and a patterned one, and
-stops unless the two images differ only at `font`.
-`web/tests/knightlore_test.js` then checks the page's `.z80` for the
-patterned font against the one `build.py` wrote, and its reading of every
-form of 48K snapshot against `examples/filmation/original.py`'s.
+- **The font** is copied byte for byte: `kl_extract.py` takes
+  `$6108`-`$6247` out of the game, and the build writes the same 320 bytes
+  back at the label `font`.
+- **The sprites** are the game's records from `$728C`, which `kl_extract.py`
+  walks, turning back the ones the game has mirrored. Every row the build
+  emits is one of a record's rows: stored bottom row first and emitted top
+  row first, with the blank rows at the bottom trimmed off
+  (`sprite_sheet.py`) and the mask inverted (`sprite_source.py`). The image
+  keeps each sprite's size; the rows are the page's to write. Which record
+  is which sprite comes from the copy's own graphic table at `$7112`: the
+  site says only, for each sprite on the sheet, a graphic number that draws
+  it, where its rows go, and its size.
 
-The site holds no more of Ultimate's than the repository does: the remake's
-sprites and rooms are the carried files, and the font comes only from the
-visitor's copy.
+The page checks the font and the packed sprite records (`sprite_data.bin`)
+against the SHA-256s in `knightlore/original.json`, as `extract.py` does, and
+refuses a copy that differs.
+
+None of this is assumed. `web/knightlore_template.py` builds the game three
+times -- the template, with a blank font and the carried sprite sheet; with a
+patterned font; and with the sheet's ink and paper swapped -- and stops
+unless the font changes only the font and the sheet's pixels only the
+sprites' rows, and unless every sprite's rows are where the page will write
+them, as it will write them. It then makes a test original out of the
+carried sheet, its sprites in another order and two of them mirrored, and
+runs the real `kl_extract.py` and `sprite_sheet.py` on it: they must give
+back the carried `sprites.png`, `sprites.json` and `graphics.json`.
+`web/tests/knightlore_test.js` gives the page that original, in every form of
+48K snapshot (read as `examples/filmation/original.py` reads them, checked
+against it), and the page has to make the `.z80` `build.py` made, byte for
+byte.
+
+What the site still holds of Ultimate's is what the repository's sources
+spell out: the rooms, templates and collectables (`rooms.json`,
+`templates.json`, `specials.json`), and the 32 bytes of the "DAY" lettering
+over the day counter, which `panel_data.s` copies from the game's
+`day_font`.
 
 ## What it is
 
@@ -61,9 +80,9 @@ visitor's copy.
 | `web/index.html`, `web/style.css` | The page, and how the PC keyboard maps onto the Spectrum's |
 | `web/build.py` | Compiles the core and copies the pages into `web/site/` (gitignored) |
 | `web/knightlore.html`, `web/knightlore.js` | The Knight Lore page: takes the visitor's copy, offers the remake |
-| `web/remake.js` | What it makes the remake with: reads a 48K snapshot, checks the font, fills the template, writes the `.z80` |
-| `web/knightlore_template.py` | Builds the remake with a blank font into `web/site/knightlore/`, checking that the font is all that differs |
-| `web/tests/knightlore_test.js` | The page's `.z80` against `build.py`'s, and its snapshot reading against `original.py`'s |
+| `web/remake.js` | What it makes the remake with: reads a 48K snapshot, takes and checks the font and sprites, fills the template, writes the `.z80` |
+| `web/knightlore_template.py` | Builds the remake with its font and sprite rows blank into `web/site/knightlore/`, checking that those are all that differ, and makes the test original |
+| `web/tests/knightlore_test.js` | The page given the test original, against `build.py`'s `.z80`; its snapshot reading against `original.py`'s |
 | `web/tests/smoke_test.js` | Runs the built module from Node: the ROMs, a 48K and a 128K `.z80` and a `.sna`, a second of frames each |
 | `.github/workflows/pages.yml` | Builds and tests the site on a pull request, and on a push to `master` deploys it too |
 
@@ -128,7 +147,9 @@ when it's run by hand.
 - **No touch controls**, so it can't be played on a phone or tablet
   without a keyboard.
 - **Only Knight Lore** is made from an original. Pentagram's build takes
-  more from its original than a font, so it would need more than a
-  template with a hole in it.
+  its quest and sound data from its original as well as its font and
+  sprites, and nothing here does those.
+- **The rooms and the "DAY" lettering** come from the repository, not the
+  visitor's copy (see above).
 - **None of the debugger.** No breakpoints, no stepping backwards, no
   profiler. That's what VS Code is for.

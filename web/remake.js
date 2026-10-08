@@ -2,10 +2,13 @@
 // what web/knightlore.html does with the file it is given, kept apart from
 // the page so that web/tests/knightlore_test.js can run it from Node.
 //
-// The site carries the remake with a blank font (web/knightlore_template.py
-// says why that is the whole of the difference); this reads the original's
-// font out of the copy, checks it is the one examples/filmation/knightlore/
-// original.json names, puts it in, and writes the .z80 build.py would have.
+// The site carries the remake with its font and its sprites' rows left blank
+// (web/knightlore_template.py says why those are the whole of the
+// difference). This reads the font and the sprites out of the copy as
+// kl_extract.py does, checks them against what examples/filmation/knightlore/
+// original.json says a right copy gives, puts them in -- the sprites the way
+// sprite_sheet.py and sprite_source.py turn them round -- and writes the .z80
+// build.py would have.
 'use strict';
 
 (function (root) {
@@ -178,16 +181,119 @@
         return out;
     }
 
+    function reverseBits(byte) {
+        let out = 0;
+        for (let bit = 0; bit < 8; bit++) {
+            if (byte & (1 << bit)) {
+                out |= 0x80 >> bit;
+            }
+        }
+        return out;
+    }
+
+    /// Turns the sprite record at `at` back the way the tape holds it if the
+    /// game has mirrored it left to right, as it does in place when it draws
+    /// one. original.py's unmirror, for Knight Lore's one flag.
+    function unmirror(memory, at, mirrored) {
+        if (!(memory[at] & mirrored)) {
+            return;
+        }
+        const width = memory[at] & 0x1F;
+        const height = memory[at + 1];
+        for (let r = 0; r < height; r++) {
+            const row = at + 2 + r * width * 2;
+            const pairs = [];
+            for (let c = 0; c < width; c++) {
+                pairs.push([memory[row + 2 * c], memory[row + 2 * c + 1]]);
+            }
+            pairs.reverse();
+            for (let c = 0; c < width; c++) {
+                memory[row + 2 * c] = reverseBits(pairs[c][0]);
+                memory[row + 2 * c + 1] = reverseBits(pairs[c][1]);
+            }
+        }
+        memory[at] &= ~mirrored & 0xFF;
+    }
+
+    /// The game's sprite records, as kl_extract.py walks them: every one
+    /// turned back the right way round, then the ones that are not empty, in
+    /// address order. Returns where each sits and its size, and the records
+    /// packed together -- sprite_data.bin, which original.json has the hash of.
+    function sprites(memory, info) {
+        let p = info.sprites_start;
+        while (p < info.sprites_end) {
+            const width = memory[p] & 0x1F;
+            const height = memory[p + 1];
+            if (width && height) {
+                unmirror(memory, p, info.mirrored);
+            }
+            p += 2 + width * height * 2;
+        }
+        const records = [];
+        let size = 0;
+        p = info.sprites_start;
+        while (p < info.sprites_end) {
+            const width = memory[p] & 0x1F;
+            const height = memory[p + 1];
+            const length = 2 + width * height * 2;
+            if (width && height) {
+                records.push({ at: p, w: width, h: height });
+                size += length;
+            }
+            p += length;
+        }
+        if (p !== info.sprites_end) {
+            throw new RemakeError('this is not Knight Lore: its sprites do not end where '
+                                  + "Knight Lore's do");
+        }
+        const packed = new Uint8Array(size);
+        let at = 0;
+        for (const record of records) {
+            const length = 2 + record.w * record.h * 2;
+            packed.set(memory.subarray(record.at, record.at + length), at);
+            at += length;
+        }
+        return { records, packed };
+    }
+
+    /// Writes each sprite's rows into the image where the template keeps them:
+    /// the record found through the copy's own graphic table, its rows top row
+    /// first where the game stores them bottom row first, the blank rows the
+    /// sheet trimmed off left off, and the mask inverted.
+    function putSprites(ram, info, memory, records) {
+        const index = new Map(records.map((record, n) => [record.at, n]));
+        const used = new Set();
+        for (const sprite of info.sprites) {
+            const pointer = info.sprite_table + 2 * sprite.graphic;
+            const n = index.get(memory[pointer] | (memory[pointer + 1] << 8));
+            const record = records[n];
+            if (record === undefined || used.has(n) || record.w !== sprite.w
+                    || record.h !== sprite.h + sprite.trim) {
+                throw new RemakeError("this copy's sprites are not laid out as Knight Lore's are");
+            }
+            used.add(n);
+            const stride = record.w * 2;
+            let to = sprite.at - RAM_START;
+            for (let row = record.h - 1; row >= 0; row--) {
+                const from = record.at + 2 + row * stride;
+                for (let b = 0; b < stride; b += 2) {
+                    if (row < sprite.trim) {
+                        // Below the sprite's bottom: trimmed, and blank.
+                        if (memory[from + b] || memory[from + b + 1]) {
+                            throw new RemakeError("this copy's sprites are not Knight Lore's");
+                        }
+                        continue;
+                    }
+                    ram[to++] = 0xFF ^ memory[from + b];
+                    ram[to++] = memory[from + b + 1];
+                }
+            }
+        }
+    }
+
     async function sha256(bytes) {
         const digest = await crypto.subtle.digest('SHA-256', bytes);
         return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    /// The template with `font` in its hole, as a .z80.
-    function fill(template, info, font) {
-        const ram = Uint8Array.from(template);
-        ram.set(font, info.font_at - RAM_START);
-        return z80Snapshot(ram, info.start);
     }
 
     /// The remake from the bytes of the visitor's copy: the .z80, or a
@@ -197,16 +303,23 @@
             throw new RemakeError('the remake did not load whole (' + template.length + ' bytes)');
         }
         const memory = readSnapshot(original, name);
+        const different = name + ' is not the copy of Knight Lore the remake was made from: ';
         const font = memory.slice(info.font_source, info.font_source + info.font_length);
         if (await sha256(font) !== info.font_sha256) {
-            throw new RemakeError(name + " is not the copy of Knight Lore the remake was made "
-                                  + "from: its font is different (a different release, or a "
-                                  + 'crack?)');
+            throw new RemakeError(different + 'its font is different (a different release, or a crack?)');
         }
-        return fill(template, info, font);
+        const { records, packed } = sprites(memory, info);
+        if (await sha256(packed) !== info.sprite_data_sha256) {
+            throw new RemakeError(different + 'its sprites are different (a different release, '
+                                  + 'a crack, or a snapshot taken after a game was started?)');
+        }
+        const ram = Uint8Array.from(template);
+        ram.set(font, info.font_at - RAM_START);
+        putSprites(ram, info, memory, records);
+        return z80Snapshot(ram, info.start);
     }
 
-    const api = { RemakeError, readSnapshot, z80Snapshot, fill, remake, sha256 };
+    const api = { RemakeError, readSnapshot, z80Snapshot, remake, sha256 };
     if (typeof module === 'object' && module.exports) {
         module.exports = api;
     } else {
