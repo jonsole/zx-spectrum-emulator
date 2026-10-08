@@ -1,0 +1,14 @@
+{
+  "_what": "Facts about the original Pentagram that the layout of the remake's image depends on, and that only an original can give: web/pentagram_template.py builds the remake with blanks of exactly this shape, so that the visitor's copy fills the blanks without moving anything. sound_source.py writes the note table only as far as the highest note the tunes play, and each tune at its own length, so those decide where everything assembled after them goes. Lengths and a note number, not the tunes; read once from a copy that extract.py checks out, and checked again by the page against every copy it is given.",
+  "sound": {
+    "highest": 49,
+    "tunes": {
+      "title": 84,
+      "unused": 14,
+      "start": 19,
+      "water": 11,
+      "over": 27,
+      "win": 31
+    }
+  }
+}

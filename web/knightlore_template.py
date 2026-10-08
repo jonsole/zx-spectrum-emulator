@@ -60,7 +60,6 @@ import argparse
 import hashlib
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -70,8 +69,11 @@ ROOT = WEB.parent
 FILMATION = ROOT / "examples" / "filmation"
 KNIGHTLORE = FILMATION / "knightlore"
 
+sys.path.insert(0, str(WEB))
 sys.path.insert(0, str(FILMATION))
 sys.path.insert(0, str(KNIGHTLORE))
+from filmation_common import (differences, edited, emitted_rows,   # noqa: E402
+                              labels, outside, run)
 import castle                                                   # noqa: E402
 import kl_extract                                               # noqa: E402
 import rooms as rooms_py                                        # noqa: E402
@@ -109,11 +111,6 @@ def copy_game(where):
     return knightlore
 
 
-def run(folder, *args):
-    done = subprocess.run([sys.executable, *args], cwd=folder, capture_output=True, text=True)
-    if done.returncode != 0:
-        sys.exit(" ".join(args) + " failed:\n" + done.stdout + done.stderr)
-    return done.stdout
 
 
 def build(where, font, swap_ink=False, move_things=False):
@@ -192,16 +189,6 @@ def castle_policy():
     }
 
 
-def labels(sld):
-    """Every label's address, from the SLD -- as build.py's find_label reads one."""
-    found = {}
-    for line in sld.read_text(encoding="utf-8").splitlines():
-        fields = line.split("|")
-        if len(fields) >= 8 and fields[6] == "L":
-            parts = fields[7].split(",")
-            if len(parts) > 2 and parts[2] == "":
-                found[parts[1]] = int(fields[5])
-    return found
 
 
 def read_carried_sheet():
@@ -235,23 +222,10 @@ def read_carried_sheet():
     return sprites, facts["graphicMap"]
 
 
-def emitted_rows(sprite):
-    """A sprite's rows as sprite_source.py emits them: top row first, each byte
-    the inverted mask and then the data."""
-    out = bytearray()
-    for mask, data in zip(sprite["mask"], sprite["data"]):
-        for m, d in zip(mask, data):
-            out += bytes((255 ^ m, d))
-    return bytes(out)
 
 
-def differences(a, b):
-    return [n for n in range(len(a)) if a[n] != b[n]]
 
 
-def outside(spans, offsets):
-    """The offsets in none of the (start, length) spans."""
-    return [n for n in offsets if not any(s <= n < s + length for s, length in spans)]
 
 
 # --- an original for the test, made from the carried sheet ------------------
@@ -418,12 +392,6 @@ def check_test_original(where, original):
             for name in ("font.bin", "sprite_data.bin")}
 
 
-def carried_hash(path):
-    """SHA-256 as extract.py takes it: a JSON file's line endings made LF."""
-    data = path.read_bytes()
-    if path.suffix == ".json":
-        data = data.replace(b"\r\n", b"\n")
-    return hashlib.sha256(data).hexdigest()
 
 
 def check_carried_is_the_originals():
@@ -431,10 +399,10 @@ def check_carried_is_the_originals():
     castle has been edited -- which is what they are for -- no copy gives it,
     and the page would turn every one away; so that stops the build here, the
     way original.json's carried hashes stop a release."""
-    carried = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["carried"]
-    edited = [name for name in carried if carried_hash(KNIGHTLORE / name) != carried[name]]
-    if edited:
-        sys.exit(", ".join(edited) + " no longer what an original gives (original.json's "
+    pins = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))
+    changed = edited(KNIGHTLORE, pins)
+    if changed:
+        sys.exit(", ".join(changed) + " no longer what an original gives (original.json's "
                  "carried hashes): the page makes the game from a copy of the original, "
                  "so it cannot make these")
 

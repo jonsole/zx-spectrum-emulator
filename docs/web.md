@@ -5,14 +5,16 @@ Part of the [zx-spectrum-emulator README](../README.md).
 `web/` is the emulator as a web page: the C++ core compiled to WebAssembly
 with Emscripten, a page around it, and a workflow that publishes it to GitHub
 Pages. It runs whatever 48K or 128K `.z80` or `.sna` a visitor opens, and
-beside it `knightlore.html` makes the Filmation Knight Lore from a visitor's
-own copy of the original, to download or to play.
+beside it `knightlore.html` and `pentagram.html` make the Filmation Knight
+Lore and Pentagram from a visitor's own copy of the original, to download or
+to play.
 
 Once Pages is on it is at **https://jonsole.github.io/zx-spectrum-emulator/**.
 
 ## What it hosts
 
-The emulator, the ROMs and the Knight Lore remake without its font. A
+The emulator, the ROMs, and the two remakes with everything of Ultimate's
+left out. A
 visitor opens a snapshot from their own disk; it is read in the page and
 never uploaded. The page keeps the last one opened in that browser's
 `localStorage`, so it's back on the next visit. A Filmation game runs as its
@@ -103,6 +105,62 @@ not deploy.
 Checked with a real copy of Knight Lore, saved at the menu: the page's
 `.z80` is byte for byte the one `build.py` makes from it.
 
+## Pentagram from your own copy
+
+`pentagram.html` does the same for Pentagram, from its tape (`.tzx` or
+`.tap`) or a 48K snapshot saved before a game is started, and gives back the
+`pentagram.z80` that `examples/filmation/pentagram/build.py` writes. The
+tape is the better source: Pentagram's `game` block loads exactly as the
+game runs from, so the page reads it straight off the tape, as
+`pg_extract.py` does; from a snapshot it first turns back the sprites the
+game has flipped, left to right and upside down, which Pentagram records.
+
+It takes everything of Ultimate's from the copy -- `remake_pentagram.js`,
+on top of `remake.js`'s snapshot reading and `.z80` writing:
+
+- **The font** is copied byte for byte, from `$8355`.
+- **The sprites** as for Knight Lore, from the game's four runs and through
+  its graphic table at `$6DD7`; the two no graphic draws are left out, as
+  `sprite_source.py` leaves them.
+- **The castle** is re-encoded, as Pentagram's own `rooms_source.py`
+  encodes it: the room directory with a scenery count (stored less one)
+  where the game has an `$FF`, a doorway's destination after it and no other
+  template's, object entries of six bytes where the game's are five, the
+  mirror bit and the background templates in `OBJ.FLAGS`.
+- **The quest** -- the persistent objects, the collectables' spots and their
+  targets -- and **the sound** -- the jingles, the note table and the tunes
+  the game plays -- rearranged as `quest_source.py` and `sound_source.py`
+  rearrange them.
+
+The repository carries Pentagram's sprite sheet and castle but not its font,
+quest or sound, so a checkout cannot build Pentagram at all without an
+original, and the workflow builds it with blanks in their place. A blank has
+to be the original's shape, though: `sound_source.py` writes the note table
+only as far as the highest note the tunes play, and each tune at its own
+length, and that decides where everything assembled after them goes. Those
+few numbers -- the highest note and the six tunes' lengths, not the tunes --
+are in `web/pentagram_layout.json`, read once from a copy `extract.py` checks
+out; the page checks every copy it is given against them.
+
+The page checks the font, quest and sound against `pentagram/original.json`'s
+hashes of what `pg_extract.py` extracts, and the sprites and castle against
+hashes of what the build puts in the image. `web/pentagram_template.py`
+builds four ways -- blanks; the font, quest and sound patterned; the sheet's
+ink and paper swapped; the castle's positions moved -- and stops unless
+each changes only what the page fills in. Its test tape is made from the
+carried files: the sheet is in the game's own sprite order and gives back
+`original.json`'s `sprite_data.bin` byte for byte, and the castle's
+templates go where the game's own table says. Four scenery templates no room
+places point at that table itself, so what `rooms.py` read for them -- and
+`templates.json` carries -- is the address of every template. The real
+`pg_extract.py`, `rooms.py` and `sprite_sheet.py` turn the tape back into
+the carried sheet and castle, and `web/tests/pentagram_test.js` has the page
+make `build.py`'s `.z80` from it, as a `.tap`, as a `.tzx` and as a snapshot
+with sprites flipped every way.
+
+Checked with a real Pentagram tape: the page's `.z80` is byte for byte the
+one `build.py` makes from it.
+
 ## What it is
 
 | File | What |
@@ -111,10 +169,15 @@ Checked with a real copy of Knight Lore, saved at the menu: the page's
 | `web/main.js` | The page's script: runs frames against the clock, draws them, plays the samples, maps the PC keyboard |
 | `web/index.html`, `web/style.css` | The page, and how the PC keyboard maps onto the Spectrum's |
 | `web/build.py` | Compiles the core and copies the pages into `web/site/` (gitignored) |
-| `web/knightlore.html`, `web/knightlore.js` | The Knight Lore page: takes the visitor's copy, offers the remake |
+| `web/knightlore.html`, `web/pentagram.html` | The two remake pages: each takes the visitor's copy and offers the remake |
+| `web/remake_page.js` | Their script: which game the page is for is on its `#maker` |
 | `web/remake.js` | What it makes the remake with: reads a 48K snapshot, takes and checks the font and sprites, fills the template, writes the `.z80` |
+| `web/remake_pentagram.js` | Pentagram's: reads its tape or a snapshot, takes and checks everything, fills the template |
 | `web/knightlore_template.py` | Builds the remake with its font and sprite rows blank into `web/site/knightlore/`, checking that those are all that differ, and makes the test original |
+| `web/pentagram_template.py`, `web/pentagram_layout.json` | The same for Pentagram, into `web/site/pentagram/`, and the shape of the blanks it builds with |
+| `web/filmation_common.py` | What the two template scripts share |
 | `web/tests/knightlore_test.js` | The page given the test original, against `build.py`'s `.z80`; its snapshot reading against `original.py`'s |
+| `web/tests/pentagram_test.js` | The same for Pentagram's test tape, as `.tap`, `.tzx` and snapshot, its reading against `pg_extract.py`'s |
 | `web/tests/smoke_test.js` | Runs the built module from Node: the ROMs, a 48K and a 128K `.z80` and a `.sna`, a second of frames each |
 | `.github/workflows/pages.yml` | Builds and tests the site on a pull request, and on a push to `master` deploys it too |
 
@@ -154,12 +217,14 @@ workflow runs it before deploying anything. Then open http://localhost:8000.
 A page opened from `file://` won't work: the browser won't fetch the
 `.wasm` or the ROMs from one.
 
-The Knight Lore page needs the remake built into the same site, which takes
+The remake pages need their remakes built into the same site, which takes
 sjasmplus (as `build.py` finds it) and Pillow:
 
 ```sh
 python web/knightlore_template.py --out web/site --reference knightlore-test
 node web/tests/knightlore_test.js web/site knightlore-test
+python web/pentagram_template.py --out web/site --reference pentagram-test
+node web/tests/pentagram_test.js web/site pentagram-test
 ```
 
 sjasmplus has no Linux release; the workflow builds the version
@@ -174,12 +239,12 @@ when it's run by hand.
 
 - **No Kempston joystick.** The core doesn't emulate one, so a game set to
   Kempston reads nothing. Keyboard and cursor (the arrow keys) work.
-- **No tapes**, only snapshots. The core can play them, but the page has no
-  transport for them.
+- **No tapes** on the emulator page, only snapshots. The core can play them,
+  but the page has no transport for them. (The Pentagram page reads its
+  tape, but only to take the game's bytes off it.)
 - **No touch controls**, so it can't be played on a phone or tablet
   without a keyboard.
-- **Only Knight Lore** is made from an original. Pentagram's build takes
-  its quest and sound data from its original as well as its font and
-  sprites, and nothing here does those.
+- **Not Knight Lore 128.** `examples/filmation/knightlore128` is not made
+  from an original here.
 - **None of the debugger.** No breakpoints, no stepping backwards, no
   profiler. That's what VS Code is for.
