@@ -181,9 +181,5 @@ when it's run by hand.
 - **Only Knight Lore** is made from an original. Pentagram's build takes
   its quest and sound data from its original as well as its font and
   sprites, and nothing here does those.
-- **`extract.py` still refuses some genuine copies**: one saved at the menu
-  with the frame's corner upside down, or with different flag bits in its
-  sprites' width bytes, fails its `sprite_data.bin` hash. The page takes
-  them.
 - **None of the debugger.** No breakpoints, no stepping backwards, no
   profiler. That's what VS Code is for.

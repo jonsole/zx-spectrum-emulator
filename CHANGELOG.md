@@ -7,6 +7,14 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The Filmation games' `extract.py` takes a Knight Lore saved at the menu.**
+  Drawing the menu turns its frame's corner upside down in place, and the game
+  records that nowhere, so such a copy was refused. It is now tried both ways
+  up, its sprites are checked by the sheet they make rather than by a hash
+  that also covers flag bits nothing reads, `sprites.png` is compared by its
+  pixels where another Pillow writes the same picture as other bytes, and a
+  copy that fails leaves the carried files as they were.
+
 - **The emulator in a browser.** `web/` compiles the core to WebAssembly
   and publishes it to GitHub Pages, where it runs whatever 48K or 128K
   `.z80` or `.sna` a visitor opens from their own disk. Beside it,

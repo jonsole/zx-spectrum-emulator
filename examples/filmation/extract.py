@@ -17,6 +17,21 @@ snapshot (.sna or .z80); Pentagram takes its tape or a snapshot. A snapshot
 wants to be from before a game is started -- the menu, say -- since playing
 changes what the game holds.
 
+A copy of Knight Lore saved once the menu is up holds the corner of the
+menu's frame upside down -- the game turns it in place as it draws the frame,
+and records that nowhere -- so a Knight Lore copy is tried as it is and then
+with that sprite turned back over (kl_extract.py --turn-menu-corner). Its
+sprite_data.bin is not held to original.json's hash either: that covers flag
+bits in every sprite's width byte that the game sets or not depending on
+when the copy was saved, and that nothing after it reads. The sprites are
+checked by what they make instead -- the carried sprites.json byte for byte,
+and sprites.png pixel for pixel (original.json's 'pictures': another version
+of Pillow writes the same picture as other bytes). Everything else is held to
+its hash.
+
+Nothing is kept from a copy that does not check out: the carried files are
+put back as they were, and any that were not there are taken away again.
+
 graphics.json is not Ultimate's: it is this remake's table of which sprite
 each graphic number draws and the nudge that lines it up, carried with the
 code. sprite_sheet.py rewrites it from the extraction, so it is put back
@@ -34,7 +49,12 @@ HERE = Path(__file__).resolve().parent
 
 GAMES = {
     "knightlore": {"title": "Knight Lore", "extractor": "kl_extract.py",
-                   "copies": (".sna", ".z80")},
+                   "copies": (".sna", ".z80"),
+                   # The ways to run the extractor on a copy, in turn.
+                   "attempts": ((), ("--turn-menu-corner",)),
+                   # Extracted files checked by what the steps make of them,
+                   # not by their own hash.
+                   "loose": ("sprite_data.bin",)},
     "pentagram": {"title": "Pentagram", "extractor": "pg_extract.py",
                   "copies": (".tzx", ".tap", ".sna", ".z80")},
 }
@@ -51,12 +71,25 @@ def file_hash(path):
     return hashlib.sha256(data).hexdigest()
 
 
-def mismatches(folder, wanted):
-    """The files in `wanted` (name -> hash) missing or different in `folder`."""
+def picture_hash(path):
+    """SHA-256 of a picture's pixels: its width and height, then its RGBA
+    bytes. The same picture written by another version of Pillow is other
+    bytes, and only the pixels are what the build reads."""
+    from PIL import Image
+    image = Image.open(path).convert("RGBA")
+    return hashlib.sha256(b"%dx%d:" % image.size + image.tobytes()).hexdigest()
+
+
+def mismatches(folder, wanted, pictures=None):
+    """The files in `wanted` (name -> hash) missing or different in `folder`.
+    A file named in `pictures` may match by its pixels instead."""
     wrong = []
     for name, digest in wanted.items():
         path = folder / name
-        if not path.is_file() or file_hash(path) != digest:
+        if not path.is_file():
+            wrong.append(name)
+        elif file_hash(path) != digest and (
+                name not in (pictures or {}) or picture_hash(path) != pictures[name]):
             wrong.append(name)
     return wrong
 
@@ -76,16 +109,39 @@ def run(folder, script, *args):
     return done.returncode, (done.stdout + done.stderr).strip()
 
 
-def extract(game, spec, copy, pins):
-    """Runs the extractor on one copy. Returns None when it gave the right
-    bytes, or why not."""
+def extract(game, spec, copy, pins, extra):
+    """Runs the extractor on one copy, one way, and the steps after it.
+    Returns None when what came out checks out, or why not."""
     folder = HERE / game
-    code, said = run(folder, spec["extractor"], str(copy))
+    code, said = run(folder, spec["extractor"], *extra, str(copy))
     if code != 0:
         return said.splitlines()[-1] if said else f"{spec['extractor']} failed"
     wrong = mismatches(folder, pins["extracted"])
-    if wrong:
-        return ("it is not the copy these were made from -- " + ", ".join(wrong)
+    strict = [name for name in wrong if name not in spec.get("loose", ())]
+    if strict:
+        return ("it is not the copy these were made from -- " + ", ".join(strict)
+                + " came out different (a different release, a crack, or a snapshot "
+                "taken after a game was started?)")
+
+    graphics = folder / "graphics.json"
+    kept = graphics.read_bytes()
+    try:
+        for step in STEPS:
+            code, said = run(folder, step)
+            if code != 0:
+                sys.exit(f"{step} failed:\n{said}")
+    finally:
+        # sprite_sheet.py writes its own graphics.json from the extraction;
+        # the remake's, with its nudges, is the one the build wants.
+        graphics.write_bytes(kept)
+
+    made = mismatches(folder, pins["carried"], pins.get("pictures"))
+    if made and not wrong:
+        sys.exit("The extraction checked out, but " + ", ".join(made) + " did not come "
+                 "out as expected -- the tools that make them have changed since "
+                 "original.json was written.")
+    if made:
+        return ("it is not the copy these were made from -- " + ", ".join(made)
                 + " came out different (a different release, a crack, or a snapshot "
                 "taken after a game was started?)")
     return None
@@ -102,7 +158,7 @@ def main():
     folder = HERE / args.game
     pins = json.loads((folder / "original.json").read_text(encoding="utf-8"))
 
-    if not args.force and not mismatches(folder, pins["carried"]):
+    if not args.force and not mismatches(folder, pins["carried"], pins.get("pictures")):
         print(f"{spec['title']}'s data is already here and checks out -- nothing to do "
               "(--force to extract again)")
         return 0
@@ -114,33 +170,45 @@ def main():
                  f"{Path.cwd()} and run this again, or name it:\n"
                  f"    python examples/filmation/extract.py {args.game} path/to/your/copy")
 
-    graphics = folder / "graphics.json"
-    kept = graphics.read_bytes()
+    # What is here now, to put back if no copy checks out: the extractor
+    # and the steps write the carried files as they go.
+    carried = [folder / name for name in pins["carried"]] + [folder / "graphics.json"]
+    kept = {path: path.read_bytes() for path in carried if path.is_file()}
+
+    def put_back():
+        for path in carried:
+            if path in kept:
+                path.write_bytes(kept[path])
+            else:
+                path.unlink(missing_ok=True)
+
     problems = []
+    done = False
     for copy in copies:
-        why = extract(args.game, spec, copy, pins)
-        if why is None:
-            print(f"{copy.name}: {spec['title']}, checked")
+        for extra in spec.get("attempts", ((),)):
+            # Each attempt from the files as they were: sprite_sheet.py reads
+            # the trims the sheet already records, so a failed attempt's
+            # sheet would otherwise colour the next.
+            put_back()
+            why = extract(args.game, spec, copy, pins, extra)
+            if why is None:
+                turned = " (with the menu's corner turned back over)" if extra else ""
+                print(f"{copy.name}: {spec['title']}, checked{turned}")
+                done = True
+                break
+        if done:
             break
         problems.append(f"  {copy.name}: {why}")
-    else:
+    if not done:
+        put_back()
         sys.exit(f"None of these gave {spec['title']}:\n" + "\n".join(problems))
+    # A picture that came out the same but encoded differently goes back to
+    # the bytes it had, so a checkout does not show it changed.
+    for path, data in kept.items():
+        if (path.suffix == ".png" and path.read_bytes() != data
+                and picture_hash(path) == (pins.get("pictures") or {}).get(path.name)):
+            path.write_bytes(data)
 
-    try:
-        for step in STEPS:
-            code, said = run(folder, step)
-            if code != 0:
-                sys.exit(f"{step} failed:\n{said}")
-    finally:
-        # sprite_sheet.py writes its own graphics.json from the extraction;
-        # the remake's, with its nudges, is the one the build wants.
-        graphics.write_bytes(kept)
-
-    wrong = mismatches(folder, pins["carried"])
-    if wrong:
-        sys.exit("The extraction checked out, but " + ", ".join(wrong) + " did not come "
-                 "out as expected -- the tools that make them have changed since "
-                 "original.json was written.")
     made = ", ".join(sorted(pins["carried"]))
     print(f"Wrote {made} -- {spec['title']} is ready to build")
     return 0

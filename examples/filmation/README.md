@@ -80,7 +80,15 @@ the menu. The games flip sprites in place as they draw them and record it in
 each sprite's width byte (bit 6 left to right, and in Pentagram bit 7 upside
 down); `original.py` turns them back, so a snapshot need not be taken the
 instant the game loads -- but it must be from before a game is played, which
-changes the tables. A change to the carried data -- a room moved in the
+changes the tables. One flip Knight Lore records nowhere: drawing the menu's
+frame turns its corner upside down, so `extract.py` tries a Knight Lore copy
+as it is and then with that sprite turned back over
+(`kl_extract.py --turn-menu-corner`). It checks the sprites by the sheet they
+make rather than by `sprite_data.bin`'s hash, which also covers flag bits the
+game leaves set or not depending on when the copy was saved, and it takes
+`sprites.png` by its pixels (`original.json`'s `pictures`) where another
+version of Pillow has written the same picture as other bytes. A copy that
+does not check out leaves the carried files as they were. A change to the carried data -- a room moved in the
 designer -- stops the next release, since extraction could not reproduce it
 (`original.json`'s `carried` hashes).
 
