@@ -30,10 +30,10 @@ and gives back the `knightlore.z80` that
 download, or to play: **Play it** puts it where the emulator page keeps its
 last snapshot and opens that page.
 
-The site has the remake with Ultimate's font, sprites and "DAY" lettering
-left out, and the page takes them from the visitor's copy. It needs no
-assembler, because none of them changes the layout of the image -- only
-bytes within it:
+The site has the remake with everything of Ultimate's left out -- the font,
+the sprites, the "DAY" lettering, the castle and the collectables -- and the
+page takes them from the visitor's copy. It needs no assembler, because
+none of them changes the layout of the image, only bytes within it:
 
 - **The font** is copied byte for byte: `kl_extract.py` takes
   `$6108`-`$6247` out of the game, and the build writes the same 320 bytes
@@ -49,10 +49,23 @@ bytes within it:
   it, where its rows go, and its size.
 - **The "DAY"** over the day count is four characters `panel_data.s` copies
   from the game's `day_font` at `$BCEC`; the page copies the same 32 bytes.
+- **The castle** is not copied but re-encoded. `rooms.py` decodes the game's
+  room tables (`$6248`-`$6FF1`) into `rooms.json` and `templates.json`, and
+  `rooms_source.py` writes them out again in the remake's own layout as
+  `room_data.s`: the room records with a scenery count where the game has
+  an `$FF`, the flags in the engine's `OBJ.FLAGS` layout -- including which
+  graphics some room wants both ways round and so draws from a private copy,
+  worked out over the whole castle -- the two templates no room places left
+  out, and the tables pointing at the rest. `remake.js` does all of that
+  from the copy's tables, to the same bytes; the site gives it only what the
+  remake decides for itself (the flag a template's name adds, and the
+  encoder's constants).
+- **The collectables** are four bytes of each of the 32 rows at `$6FF2` and
+  the wizard's list at `$C27D`, copied as they are.
 
-The page checks the font against `knightlore/original.json`'s hash, and the
-sprites' rows and the DAY lettering against hashes of what the build puts in
-the image. It does not check `sprite_data.bin`'s hash, as `extract.py` does:
+The page checks the font against `knightlore/original.json`'s hash, and
+everything else against hashes of what the build puts in the image -- the
+castle along with the three counts the code is sized by. It does not check `sprite_data.bin`'s hash, as `extract.py` does:
 that covers bits of every record the build never reads -- the flags in a
 sprite's width byte, which the game leaves set or not depending on when the
 copy was saved -- and a copy saved at the menu fails it although it makes the
@@ -60,27 +73,35 @@ very same game. So does a copy with the menu frame's corner upside down,
 which the game does to it in place as it draws the frame, recording it
 nowhere; the page tries that sprite both ways up.
 
-The page can only make sprites an original has, so the template script
-stops when `sprites.png` or `sprites.json` has been edited away from
-`original.json`'s carried hashes -- an edited sheet would have the page turn
-every copy away.
+The page can only make what an original has, so the template script stops
+when any of the carried files -- the sprite sheet, the castle, the
+collectables -- has been edited away from `original.json`'s carried hashes:
+an edited one would have the page turn every copy away. Edit the castle in
+the room designer and the site stops deploying until it is put back.
 
-None of this is assumed. `web/knightlore_template.py` builds the game three
-times -- the template, with a blank font and the carried sprite sheet; with a
-patterned font; and with the sheet's ink and paper swapped -- and stops
-unless the font changes only the font and the sheet's pixels only the
-sprites' rows, and unless every sprite's rows are where the page will write
-them, as it will write them. It then makes a test original out of the
-carried sheet, its sprites in another order and two of them mirrored, and
-runs the real `kl_extract.py` and `sprite_sheet.py` on it: they must give
-back the carried `sprites.png`, `sprites.json` and `graphics.json`.
+None of this is assumed. `web/knightlore_template.py` builds the game four
+times -- the template, with a blank font and the carried files; with a
+patterned font; with the sheet's ink and paper swapped; and with every
+position in the castle and of the collectables moved -- and stops unless
+each changes only what the page fills in, and unless every sprite's rows are
+where the page will write them, as it will write them. It then makes a test
+original out of the carried files -- its sprites in another order and two of
+them mirrored, its room templates laid out in another order than the
+game's -- and runs the real `kl_extract.py`, `rooms.py` and
+`sprite_sheet.py` on it: they must give back the carried sprite sheet,
+castle and collectables.
 `web/tests/knightlore_test.js` gives the page that original, in every form of
 48K snapshot (read as `examples/filmation/original.py` reads them, checked
 against it), and the page has to make the `.z80` `build.py` made, byte for
 byte.
 
-What the site still holds of Ultimate's is the castle: the rooms, templates
-and collectables, from `rooms.json`, `templates.json` and `specials.json`.
+The remake's encoding of the castle is therefore written twice, in
+`rooms_source.py` and in `remake.js`. The test is what keeps them together:
+a change to one that the other does not follow fails it, and the site does
+not deploy.
+
+Checked with a real copy of Knight Lore, saved at the menu: the page's
+`.z80` is byte for byte the one `build.py` makes from it.
 
 ## What it is
 
@@ -160,7 +181,9 @@ when it's run by hand.
 - **Only Knight Lore** is made from an original. Pentagram's build takes
   its quest and sound data from its original as well as its font and
   sprites, and nothing here does those.
-- **The rooms** come from the repository, not the visitor's copy (see
-  above).
+- **`extract.py` still refuses some genuine copies**: one saved at the menu
+  with the frame's corner upside down, or with different flag bits in its
+  sprites' width bytes, fails its `sprite_data.bin` hash. The page takes
+  them.
 - **None of the debugger.** No breakpoints, no stepping backwards, no
   profiler. That's what VS Code is for.

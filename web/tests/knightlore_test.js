@@ -6,11 +6,12 @@
 // `site` is where web/knightlore_template.py wrote knightlore/ (default
 // web/site), `reference` where it wrote its test original (--reference).
 //
-// The test original is made from the carried sprite sheet, its sprites in a
-// different order and two of them mirrored, and the real kl_extract.py and
+// The test original is made from the carried files -- its sprites in a
+// different order and two of them mirrored, its room templates laid out in
+// another order than the game's -- and the real kl_extract.py, rooms.py and
 // sprite_sheet.py have already been run on it and given back the carried
-// sheet: as far as the build is concerned it is Knight Lore, with a patterned
-// font. So given it, the page has to make the .z80 build.py made with that
+// sheet, castle and collectables: as far as the build is concerned it is
+// Knight Lore, with a patterned font. So given it, the page has to make the .z80 build.py made with that
 // font, byte for byte -- in every form of 48K snapshot, read as
 // examples/filmation/original.py reads them, which is checked against
 // original.py itself.
@@ -117,7 +118,11 @@ async function main() {
     assert.ok(font.every((b) => b === 0), 'the template has a font');
     const day = template.subarray(info.day_at - 0x4000, info.day_at - 0x4000 + info.day_length);
     assert.ok(day.every((b) => b === 0), 'the template has the DAY lettering');
-    console.log('ok the template holds no sprite rows, no font and no DAY lettering');
+    const blank = (at, length) => template.subarray(at - 0x4000, at - 0x4000 + length).every((b) => b === 0);
+    assert.ok(blank(info.castle.at, info.castle.length), 'the template has the castle');
+    assert.ok(blank(info.specials.where_at, info.specials.rows * 4), 'the template has the collectables');
+    assert.ok(blank(info.specials.wanted_at, info.specials.wanted_count), 'the template has the wanted list');
+    console.log('ok the template holds no sprite rows, font, DAY lettering, castle or collectables');
 
     // Every form of snapshot reads as original.py reads it, and makes
     // build.py's .z80.
@@ -182,7 +187,22 @@ async function main() {
     changed[27 + info.sprites_start - 0x4000 + 2 + first.w * 2 * first.trim + 1] ^= 0x01;
     await assert.rejects(remake.remake(template, pinned, changed, 'changed.sna'),
                          (e) => e instanceof remake.RemakeError && /sprites are different/.test(e.message));
-    console.log('ok a copy is checked, font and sprites');
+    // ...and so is one with an object in a room moved, or a collectable.
+    const moved = Uint8Array.from(testOriginal);
+    let p = info.castle.location_table;
+    while (!moved.subarray(27 + p - 0x4000 + 3, 27 + p - 0x4000 + 1 + moved[27 + p - 0x4000 + 1]).includes(0xFF)) {
+        p += moved[27 + p - 0x4000 + 1] + 1;
+    }
+    const record = 27 + p - 0x4000;
+    const cut = moved.subarray(record + 3).indexOf(0xFF);
+    moved[record + 3 + cut + 2] ^= 0x01;    // the first object's position
+    await assert.rejects(remake.remake(template, pinned, moved, 'moved.sna'),
+                         (e) => e instanceof remake.RemakeError && /rooms are different/.test(e.message));
+    const elsewhere = Uint8Array.from(testOriginal);
+    elsewhere[27 + info.specials.table - 0x4000 + 1] ^= 0x01;
+    await assert.rejects(remake.remake(template, pinned, elsewhere, 'elsewhere.sna'),
+                         (e) => e instanceof remake.RemakeError && /collectables are different/.test(e.message));
+    console.log('ok a copy is checked: font, sprites, rooms and collectables');
 
     fs.rmSync(temp, { recursive: true });
 }

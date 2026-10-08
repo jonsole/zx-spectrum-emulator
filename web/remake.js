@@ -2,12 +2,14 @@
 // what web/knightlore.html does with the file it is given, kept apart from
 // the page so that web/tests/knightlore_test.js can run it from Node.
 //
-// The site carries the remake with its font, its sprites' rows and its DAY
-// lettering left blank (web/knightlore_template.py says why those are the
-// whole of the difference). This reads them out of the copy as kl_extract.py
-// does, checks them against the hashes of what the build puts in the image,
-// puts them in -- the sprites the way sprite_sheet.py and sprite_source.py
-// turn them round -- and writes the .z80 build.py would have.
+// The site carries the remake with everything of Ultimate's left blank -- the
+// font, the sprites' rows, the DAY lettering, the castle and the
+// collectables (web/knightlore_template.py says why that is the whole of the
+// difference). This reads them out of the copy as kl_extract.py does, makes
+// of them what the build makes -- the sprites turned round as
+// sprite_sheet.py and sprite_source.py turn them, the castle encoded as
+// rooms_source.py encodes it -- checks that against hashes of what the build
+// puts in the image, puts it in, and writes the .z80 build.py would have.
 'use strict';
 
 (function (root) {
@@ -329,6 +331,229 @@
         }
     }
 
+    // --- the castle ------------------------------------------------------------
+    //
+    // rooms.py decodes the game's room tables into rooms.json and
+    // templates.json; rooms_source.py encodes those again as room_data.s,
+    // rewritten in the remake's own layout. Done here straight from the
+    // copy's tables, to the same bytes -- web/tests/knightlore_test.js checks
+    // the two against each other on every build.
+
+    /// A template block: entries of `stride` bytes, ending in a zero graphic.
+    function block(memory, at, stride) {
+        const entries = [];
+        while (memory[at]) {
+            entries.push(Array.from(memory.subarray(at, at + stride)));
+            at += stride;
+        }
+        return entries;
+    }
+
+    /// The copy's castle, as rooms.py reads it: the room shapes, the scenery
+    /// and object templates in the game's table order, and the rooms in
+    /// ascending order of number.
+    function readCastle(memory, castle) {
+        const word = (at) => memory[at] | (memory[at + 1] << 8);
+        const templates = (table, count, stride) => {
+            const out = [];
+            for (let i = 0; i < count; i++) {
+                out.push(block(memory, word(table + 2 * i), stride));
+            }
+            return out;
+        };
+        const rooms = [];
+        for (let p = castle.location_table; p < castle.location_end;) {
+            const length = memory[p + 1];
+            const body = Array.from(memory.subarray(p + 3, p + 1 + length));
+            const cut = body.indexOf(0xFF);
+            const scenery = cut < 0 ? body : body.slice(0, cut);
+            const rest = cut < 0 ? [] : body.slice(cut + 1);
+            const objects = [];
+            for (let i = 0; i < rest.length;) {
+                const count = (rest[i] & 7) + 1;
+                objects.push({ group: rest[i], type: rest[i] >> 3,
+                               positions: rest.slice(i + 1, i + 1 + count) });
+                i += 1 + count;
+            }
+            rooms.push({ number: memory[p], attr: memory[p + 2], scenery, objects });
+            p += length + 1;
+        }
+        rooms.sort((a, b) => a.number - b.number);
+        return {
+            shapes: Array.from(memory.subarray(castle.size_table, castle.size_table + 9)),
+            scenery: templates(castle.scenery_table, castle.scenery_count, 8),
+            objects: templates(castle.object_table, castle.object_count, 6),
+            rooms,
+        };
+    }
+
+    /// Which way round of each graphic some room wants both ways, and so is
+    /// drawn from a private copy: rooms_source.py's cache_way.
+    function cacheWay(data, flags) {
+        const worst = new Map();
+        const contested = new Set();
+        const mirrored = (entry, at) => (entry[at] & flags.game_mirror ? 1 : 0);
+        for (const room of data.rooms) {
+            const pieces = [];
+            for (const index of room.scenery) {
+                for (const entry of data.scenery[index]) {
+                    if (entry[0] >= 2) {
+                        pieces.push([entry[0], mirrored(entry, 7)]);
+                    }
+                }
+            }
+            for (const group of room.objects) {
+                for (let n = 0; n < group.positions.length; n++) {
+                    for (const entry of data.objects[group.type]) {
+                        if (entry[0] >= 2) {
+                            pieces.push([entry[0], mirrored(entry, 4)]);
+                        }
+                    }
+                }
+            }
+            const ways = new Map();
+            const seen = new Map();
+            for (const [g, f] of pieces) {
+                if (!ways.has(g)) {
+                    ways.set(g, new Set());
+                }
+                ways.get(g).add(f);
+                seen.set(g * 2 + f, (seen.get(g * 2 + f) || 0) + 1);
+            }
+            for (const [g, set] of ways) {
+                if (set.size > 1) {
+                    contested.add(g);
+                }
+            }
+            for (const [key, n] of seen) {
+                worst.set(key, Math.max(worst.get(key) || 0, n));
+            }
+        }
+        const cached = new Map();
+        for (const g of contested) {
+            cached.set(g, (worst.get(g * 2) || 0) <= (worst.get(g * 2 + 1) || 0) ? 0 : 1);
+        }
+        return cached;
+    }
+
+    /// A template entry's flags in the engine's layout: rooms_source.py's
+    /// our_flags. `extra` is what the template's name adds (background).
+    function ourFlags(graphic, game, cached, extra, flags) {
+        let ours = extra;
+        if (game & flags.game_mirror) {
+            ours |= flags.flip;
+        }
+        if (game & flags.game_passable) {
+            ours |= flags.passable;
+        }
+        if (cached.get(graphic) === (game & flags.game_mirror ? 1 : 0)) {
+            ours |= flags.cache;
+        }
+        return ours;
+    }
+
+    /// The castle as room_data.s assembles: rooms_source.py's main, to bytes.
+    /// Returns them, with the three counts the code is sized by.
+    function castleBytes(memory, castle) {
+        const data = readCastle(memory, castle);
+        const flags = castle.flags;
+        const cached = cacheWay(data, flags);
+        const out = [];
+        const word = (value) => out.push(value & 0xFF, value >> 8);
+
+        out.push(...data.shapes);
+
+        // One block a template, the first of any that are the same emitted
+        // once and the rest pointing at it; `only` leaves out the unplaced.
+        const emit = (templates, extras, flagsAt, only) => {
+            const firstOf = new Map();
+            const blockOf = [];
+            templates.forEach((entries, index) => {
+                const key = JSON.stringify(entries);
+                if (!firstOf.has(key)) {
+                    firstOf.set(key, index);
+                }
+                blockOf.push(firstOf.get(key));
+            });
+            const at = new Map();
+            templates.forEach((entries, index) => {
+                if (blockOf[index] !== index || (only && !only.has(index))) {
+                    return;
+                }
+                at.set(index, castle.at + out.length);
+                for (const entry of entries) {
+                    const bytes = entry.slice();
+                    bytes[flagsAt] = ourFlags(entry[0], entry[flagsAt], cached, extras[index], flags);
+                    out.push(...bytes);
+                }
+                out.push(0);
+            });
+            return { blockOf, at };
+        };
+
+        const scenery = emit(data.scenery, castle.scenery_extra, 7, null);
+        for (let index = 0; index < data.scenery.length; index++) {
+            word(scenery.at.get(scenery.blockOf[index]));
+        }
+
+        // Two object templates no room names are left out, and so is any
+        // block only they reach.
+        const named = new Set();
+        for (const room of data.rooms) {
+            for (const group of room.objects) {
+                named.add(group.type);
+            }
+        }
+        const firstOf = new Map();
+        const blockOf = data.objects.map((entries, index) => {
+            const key = JSON.stringify(entries);
+            if (!firstOf.has(key)) {
+                firstOf.set(key, index);
+            }
+            return firstOf.get(key);
+        });
+        const reached = new Set([...named].map((index) => blockOf[index]));
+        const objects = emit(data.objects, castle.object_extra, 4, reached);
+        for (let index = 0; index < data.objects.length; index++) {
+            word(reached.has(blockOf[index]) ? objects.at.get(blockOf[index]) : 0);
+        }
+
+        let biggest = 0;
+        let most = 0;
+        for (const room of data.rooms) {
+            let objectBytes = 0;
+            let placed = 0;
+            for (const index of room.scenery) {
+                placed += data.scenery[index].length;
+            }
+            for (const group of room.objects) {
+                objectBytes += 1 + group.positions.length;
+                placed += group.positions.length * data.objects[group.type].length;
+            }
+            biggest = Math.max(biggest, room.scenery.length + objectBytes);
+            most = Math.max(most, placed);
+            out.push(room.number, 2 + room.scenery.length + objectBytes,
+                     (room.scenery.length << castle.scenery_shift | room.attr) & 0xFF);
+            out.push(...room.scenery);
+            for (const group of room.objects) {
+                out.push(group.group, ...group.positions);
+            }
+        }
+        return { bytes: Uint8Array.from(out), count: data.rooms.length, biggest, most };
+    }
+
+    /// The collectables, as specials_gen.s assembles them: each row's U, V, Z
+    /// and room, then the list the wizard asks from.
+    function specialBytes(memory, specials) {
+        const where = [];
+        for (let row = 0; row < specials.rows; row++) {
+            const at = specials.table + row * specials.stride + 1;
+            where.push(...memory.subarray(at, at + 4));
+        }
+        const wanted = memory.subarray(specials.wanted_from, specials.wanted_from + specials.wanted_count);
+        return { where: Uint8Array.from(where), wanted: Uint8Array.from(wanted) };
+    }
+
     async function sha256(bytes) {
         const digest = await crypto.subtle.digest('SHA-256', bytes);
         return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -350,9 +575,25 @@
         if (await sha256(day) !== info.day_sha256) {
             throw new RemakeError(different + 'its DAY lettering is different');
         }
+        const castle = castleBytes(memory, info.castle);
+        if (castle.bytes.length !== info.castle.length || castle.count !== info.castle.room_count
+                || castle.biggest !== info.castle.max_body || castle.most !== info.castle.max_objects
+                || await sha256(castle.bytes) !== info.castle.sha256) {
+            throw new RemakeError(different + 'its rooms are different');
+        }
+        const specials = specialBytes(memory, info.specials);
+        const both = new Uint8Array(specials.where.length + specials.wanted.length);
+        both.set(specials.where);
+        both.set(specials.wanted, specials.where.length);
+        if (await sha256(both) !== info.specials.sha256) {
+            throw new RemakeError(different + 'its collectables are different');
+        }
         const ram = Uint8Array.from(template);
         ram.set(font, info.font_at - RAM_START);
         ram.set(day, info.day_at - RAM_START);
+        ram.set(castle.bytes, info.castle.at - RAM_START);
+        ram.set(specials.where, info.specials.where_at - RAM_START);
+        ram.set(specials.wanted, info.specials.wanted_at - RAM_START);
         await putSprites(ram, info, memory, different);
         return z80Snapshot(ram, info.start);
     }

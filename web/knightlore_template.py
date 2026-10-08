@@ -22,20 +22,33 @@ The "DAY" over the day count is the third: panel_data.s copies its four
 characters from the game's day_font at $BCEC, and the page takes them from
 there too.
 
-None of that is taken on trust. The game is built three times: as the
+The castle is the fourth. rooms.py decodes the game's room tables
+($6248-$6FF1) into rooms.json and templates.json, and rooms_source.py
+encodes those again in the remake's own layout -- room_data.s, from
+room_size_tbl to the panel data after it. remake.js does the same from the
+copy's tables, and the image keeps none of it: this gives the page only
+what the remake decides for itself -- the flag a template's name adds, and
+the constants the encoder writes with. The collectables, the fifth, are four
+bytes of each of the 32 rows at $6FF2 and the wizard's list at $C27D,
+copied as they are (specials_source.py).
+
+None of that is taken on trust. The game is built four times: as the
 template, with a blank font and the carried sprite sheet; with a patterned
-font; and with the sheet's ink and paper swapped. The font may change nothing
-but the font, and the sheet's pixels nothing but the sprites' rows; and the
-rows in the template build must be the sheet's, emitted as described, before
-they are blanked.
+font; with the sheet's ink and paper swapped; and with every position in the
+castle and of the collectables moved. The font may change nothing but the
+font, the sheet's pixels nothing but the sprites' rows, and the positions
+nothing but the castle and the collectables; and the rows in the template
+build must be the sheet's, emitted as described, before they are blanked.
 
 With --reference it also writes what web/tests/knightlore_test.js checks the
-page against: an original made from the carried sheet -- its sprites in a
-different order from the sheet's, two of them mirrored, the patterned font --
-which the real kl_extract.py and sprite_sheet.py are run on and must turn back
-into the carried sprites.png, sprites.json and graphics.json; and the .z80
-build.py made with the patterned font. The page given that original has to
-make that .z80, byte for byte.
+page against: an original made from the carried files -- its sprites in a
+different order from the sheet's, two of them mirrored, its templates laid
+out in another order than the game's, the patterned font -- which the real
+kl_extract.py, rooms.py and sprite_sheet.py are run on and must turn back
+into the carried sprites.png, sprites.json, graphics.json, rooms.json,
+templates.json and specials.json; and the .z80 build.py made with the
+patterned font. The page given that original has to make that .z80, byte for
+byte.
 
     python web/knightlore_template.py --out web/site --reference web/site-test
 
@@ -59,7 +72,10 @@ KNIGHTLORE = FILMATION / "knightlore"
 
 sys.path.insert(0, str(FILMATION))
 sys.path.insert(0, str(KNIGHTLORE))
+import castle                                                   # noqa: E402
 import kl_extract                                               # noqa: E402
+import rooms as rooms_py                                        # noqa: E402
+import rooms_source                                             # noqa: E402
 import sheet                                                    # noqa: E402
 import sprite_sheet                                             # noqa: E402
 
@@ -74,6 +90,9 @@ MENU_CORNER_GRAPHIC = sprite_sheet.MENU[0]
 # panel_word, copied from the game's day_font at $BCEC.
 DAY_SOURCE = 0xBCEC
 DAY_LENGTH = 32
+# A collectable's row in special_objs_tbl: nine bytes, of which the second to
+# fifth are its U, V, Z and room (kl_extract.py's write_specials).
+SPECIALS_STRIDE = 9
 # The empty records the game has among its sprites: 0 by 0, holes in its
 # numbering, which kl_extract.py walks past.
 EMPTY_RECORDS = 6
@@ -97,14 +116,17 @@ def run(folder, *args):
     return done.stdout
 
 
-def build(where, font, swap_ink=False):
-    """Builds the game in a copy at `where` with `font` as its font.bin, and
-    with the sprite sheet's ink and paper swapped if asked. Returns the 48K
-    image, its labels, and the .z80."""
+def build(where, font, swap_ink=False, move_things=False):
+    """Builds the game in a copy at `where` with `font` as its font.bin, with
+    the sprite sheet's ink and paper swapped and every position in the castle
+    and of the collectables moved, if asked. Returns the 48K image, its
+    labels, and the .z80."""
     knightlore = copy_game(where)
     (knightlore / "font.bin").write_bytes(font)
     if swap_ink:
         swap_ink_and_paper(knightlore / "sprites.png")
+    if move_things:
+        move_positions(knightlore)
     run(knightlore, "build.py")
     output = knightlore / "output"
     return ((output / "knightlore.bin").read_bytes(),
@@ -127,6 +149,47 @@ def swap_ink_and_paper(path):
             elif pixels[x, y] == paper:
                 pixels[x, y] = ink
     image.save(path)
+
+
+def move_positions(knightlore):
+    """Every object in every room, and every collectable, a cell along in U:
+    nothing the castle's shape or counts depend on changes, and everything
+    that is a position does."""
+    path = knightlore / "rooms.json"
+    said = json.loads(path.read_text(encoding="utf-8"))
+    for room in said["rooms"]:
+        for group in room["objects"]:
+            for spot in group["positions"]:
+                spot["u"] ^= 1
+    path.write_text(json.dumps(said, indent=1) + "\n", encoding="utf-8")
+    path = knightlore / "specials.json"
+    said = json.loads(path.read_text(encoding="utf-8"))
+    for place in said["collectables"]:
+        place["u"] ^= 1
+    path.write_text(json.dumps(said, indent=1) + "\n", encoding="utf-8")
+
+
+def castle_policy():
+    """What the remake decides about the castle for itself, for remake.js:
+    the flag bits each template's name adds -- background, shared shift --
+    in the game's table order, and the bits the encoder writes with."""
+    atlas = castle.read_castle(KNIGHTLORE)
+    plain = {"graphic": 0, "flags": {"mirrored": False, "passable": False, "rest": 0}}
+
+    def extras(templates):
+        return [rooms_source.our_flags(plain, {}, rooms_source.label_of(name))
+                for name in templates]
+
+    return {
+        "scenery_extra": extras(atlas["sceneryTemplates"]),
+        "object_extra": extras(atlas["objectTemplates"]),
+        "flags": {"game_mirror": rooms_source.GAME_MIRROR,
+                  "game_passable": rooms_source.GAME_PASSABLE,
+                  "flip": rooms_source.FLIP_FLAG,
+                  "passable": rooms_source.PASSABLE_FLAG,
+                  "cache": rooms_source.CACHE_FLAG},
+        "scenery_shift": rooms_source.ROOM_SCN_SHIFT,
+    }
 
 
 def labels(sld):
@@ -263,7 +326,73 @@ def test_original(sprites, graphic_map, font, day):
         target = address[n] if n is not None else 0
         ram[pointer - RAM_START] = target & 0xFF
         ram[pointer - RAM_START + 1] = target >> 8
-    return bytes(27) + bytes(ram)
+    return bytearray(27) + ram
+
+
+def add_castle(original):
+    """The carried castle and collectables, written into the test original
+    the way the game holds them: rooms.py's decoding run backwards.
+
+    The rooms go in ascending order with no $FF after a room that has no
+    objects, which is how the game has them and fills $6251-$6BD0 exactly;
+    the templates' blocks go in the reverse of their tables' order, which the
+    game's are not in either, so that only the tables say where each is."""
+    atlas = castle.read_castle(KNIGHTLORE)
+    # Names to numbers, and each entry's box from graphics.json: in place.
+    rooms_source.resolve_graphics(atlas)
+    scenery, objects = atlas["sceneryTemplates"], atlas["objectTemplates"]
+    scenery_index = {name: n for n, name in enumerate(scenery)}
+    object_index = {name: n for n, name in enumerate(objects)}
+
+    def put(at, data):
+        original[27 + at - RAM_START:27 + at - RAM_START + len(data)] = bytes(data)
+
+    at = rooms_py.ROOM_SIZE_TBL
+    for shape in atlas["roomDimensions"].values():
+        put(at, (shape["u"], shape["v"], shape["z"]))
+        at += 3
+    at = rooms_py.LOCATION_TBL
+    for room in sorted(atlas["rooms"], key=lambda r: r["number"]):
+        body = [scenery_index[s["template"]] for s in room["scenery"]]
+        if room["objects"]:
+            body.append(0xFF)
+            for group in room["objects"]:
+                body.append(object_index[group["template"]] << 3 | (len(group["positions"]) - 1))
+                body += [p["u"] | p["v"] << 3 | p["z"] << 6 for p in group["positions"]]
+        attr = room["ink"] | castle.shape_index(atlas, room["dimensions"], "the test") << 3
+        put(at, [room["number"], len(body) + 2, attr] + body)
+        at += 3 + len(body)
+    if at != rooms_py.LOCATION_END:
+        sys.exit("the carried rooms come to $%04X, not $%04X" % (at, rooms_py.LOCATION_END))
+
+    for table, count, first, end, templates, is_scenery in (
+            (rooms_py.BLOCK_TYPE_TBL, rooms_py.BLOCK_TYPE_COUNT,
+             rooms_py.BLOCK_TYPE_TBL + 2 * rooms_py.BLOCK_TYPE_COUNT, rooms_py.BG_TYPE_TBL,
+             objects, False),
+            (rooms_py.BG_TYPE_TBL, rooms_py.BG_TYPE_COUNT,
+             rooms_py.BG_TYPE_TBL + 2 * rooms_py.BG_TYPE_COUNT, kl_extract.ROOM_DATA_END,
+             scenery, True)):
+        names = list(templates)
+        if len(names) != count:
+            sys.exit("the carried castle has %d templates of a kind the game has %d of"
+                     % (len(names), count))
+        at = first
+        for n in reversed(range(count)):
+            put(table + 2 * n, (at & 0xFF, at >> 8))
+            for entry in templates[names[n]]:
+                record = rooms_source.record_of(entry, is_scenery)
+                put(at, record)
+                at += len(record)
+            put(at, (0,))
+            at += 1
+        if at > end:
+            sys.exit("the carried templates run past $%04X" % end)
+
+    said = json.loads((KNIGHTLORE / "specials.json").read_text(encoding="utf-8"))
+    for row, place in enumerate(said["collectables"]):
+        put(kl_extract.SPECIALS_TBL + row * SPECIALS_STRIDE + 1,
+            (place["u"], place["v"], place["z"], place["room"]))
+    put(kl_extract.OBJECTS_REQUIRED, said["wanted"])
 
 
 def check_test_original(where, original):
@@ -274,12 +403,14 @@ def check_test_original(where, original):
     path = where / "original.sna"
     path.write_bytes(original)
     run(knightlore, "kl_extract.py", str(path))
+    run(knightlore, "rooms.py")
     run(knightlore, "sprite_sheet.py")
     made = Image.open(knightlore / "sprites.png").convert("RGBA")
     carried = Image.open(KNIGHTLORE / "sprites.png").convert("RGBA")
     if made.size != carried.size or made.tobytes() != carried.tobytes():
         sys.exit("the test original does not extract to the carried sprites.png")
-    for name in ("sprites.json", "graphics.json"):
+    for name in ("sprites.json", "graphics.json", "rooms.json", "templates.json",
+                 "specials.json"):
         if (json.loads((knightlore / name).read_text(encoding="utf-8"))
                 != json.loads((KNIGHTLORE / name).read_text(encoding="utf-8"))):
             sys.exit(f"the test original does not extract to the carried {name}")
@@ -295,17 +426,16 @@ def carried_hash(path):
     return hashlib.sha256(data).hexdigest()
 
 
-def check_sheet_is_the_originals():
-    """The page can only make sprites an original has. If the carried sheet
-    has been edited -- which is what it is for -- no copy gives its rows, and
-    the page would turn every one away; so that stops the build here, the way
-    original.json's carried hashes stop a release."""
+def check_carried_is_the_originals():
+    """The page can only make what an original has. If the carried sheet or
+    castle has been edited -- which is what they are for -- no copy gives it,
+    and the page would turn every one away; so that stops the build here, the
+    way original.json's carried hashes stop a release."""
     carried = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["carried"]
-    edited = [name for name in ("sprites.png", "sprites.json")
-              if carried_hash(KNIGHTLORE / name) != carried[name]]
+    edited = [name for name in carried if carried_hash(KNIGHTLORE / name) != carried[name]]
     if edited:
         sys.exit(", ".join(edited) + " no longer what an original gives (original.json's "
-                 "carried hashes): the page makes the sprites from a copy of the original, "
+                 "carried hashes): the page makes the game from a copy of the original, "
                  "so it cannot make these")
 
 
@@ -321,18 +451,19 @@ def main():
     # Every byte different from the blank font and from its neighbours, so a
     # byte that moved or was dropped shows up.
     pattern = bytes((n * 7 + 1) & 0xFF for n in range(FONT_LENGTH))
-    check_sheet_is_the_originals()
+    check_carried_is_the_originals()
     sprites, graphic_map = read_carried_sheet()
 
     with tempfile.TemporaryDirectory() as temp:
         temp = Path(temp)
-        for name in ("a", "b", "c", "d"):
+        for name in ("a", "b", "c", "d", "e"):
             (temp / name).mkdir()
         ram, found, _ = build(temp / "a", blank)
         ram_b, found_b, z80_b = build(temp / "b", pattern)
         ram_c, found_c, _ = build(temp / "c", blank, swap_ink=True)
-        if found != found_b or found != found_c:
-            sys.exit("the three builds put their labels in different places")
+        ram_e, found_e, _ = build(temp / "e", blank, move_things=True)
+        if not found == found_b == found_c == found_e:
+            sys.exit("the four builds put their labels in different places")
 
         # The font: only its own bytes, and byte for byte.
         font_at = found["font"]
@@ -378,8 +509,33 @@ def main():
         day = bytes(image[day_at:day_at + DAY_LENGTH])
         image[day_at:day_at + DAY_LENGTH] = bytes(DAY_LENGTH)
 
+        # The castle: everything room_data.s assembles, from room_size_tbl
+        # to the panel data that follows it; and the collectables. Moving
+        # every position may change nothing else.
+        castle_at = found["room_size_tbl"] - RAM_START
+        castle_length = found["panel_pieces"] - found["room_size_tbl"]
+        where_at = found["special_where_start"] - RAM_START
+        where_length = kl_extract.SPECIALS_ROWS * 4
+        wanted_at = found["special_wanted"] - RAM_START
+        wanted_length = kl_extract.OBJECTS_REQUIRED_COUNT
+        castle_spans = [(castle_at, castle_length), (where_at, where_length),
+                        (wanted_at, wanted_length)]
+        changed = differences(ram, ram_e)
+        stray = outside(castle_spans, changed)
+        if stray:
+            sys.exit("the castle's positions change more of the image than the castle, first "
+                     "at $%04X" % (stray[0] + RAM_START))
+        if not changed:
+            sys.exit("moving every position in the castle changed nothing")
+        castle_bytes = bytes(image[castle_at:castle_at + castle_length])
+        specials_bytes = (bytes(image[where_at:where_at + where_length])
+                          + bytes(image[wanted_at:wanted_at + wanted_length]))
+        for at, length in castle_spans:
+            image[at:at + length] = bytes(length)
+
         if args.reference:
             original = test_original(sprites, graphic_map, pattern, day)
+            add_castle(original)
             pins = check_test_original(temp / "d", original)
 
     extracted = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["extracted"]
@@ -388,7 +544,7 @@ def main():
     (out / "template.bin").write_bytes(bytes(image))
     (out / "template.json").write_text(json.dumps({
         "_what": "web/knightlore_template.py: the Filmation Knight Lore's 48K image "
-                 "from $4000, its font, sprite rows and DAY lettering blank, and where to put the "
+                 "from $4000, everything of Ultimate's in it blank, and where to put the "
                  "original's",
         "start": found["start"],
         "font_at": font_at,
@@ -410,6 +566,31 @@ def main():
         "day_source": DAY_SOURCE,
         "day_length": DAY_LENGTH,
         "day_sha256": hashlib.sha256(day).hexdigest(),
+        "castle": dict(castle_policy(), **{
+            "size_table": rooms_py.ROOM_SIZE_TBL,
+            "location_table": rooms_py.LOCATION_TBL,
+            "location_end": rooms_py.LOCATION_END,
+            "object_table": rooms_py.BLOCK_TYPE_TBL,
+            "object_count": rooms_py.BLOCK_TYPE_COUNT,
+            "scenery_table": rooms_py.BG_TYPE_TBL,
+            "scenery_count": rooms_py.BG_TYPE_COUNT,
+            "at": found["room_size_tbl"],
+            "length": castle_length,
+            "room_count": found["ROOM_COUNT"],
+            "max_body": found["ROOM_MAX_BODY"],
+            "max_objects": found["ROOM_MAX_OBJECTS"],
+            "sha256": hashlib.sha256(castle_bytes).hexdigest(),
+        }),
+        "specials": {
+            "table": kl_extract.SPECIALS_TBL,
+            "rows": kl_extract.SPECIALS_ROWS,
+            "stride": SPECIALS_STRIDE,
+            "wanted_from": kl_extract.OBJECTS_REQUIRED,
+            "wanted_count": kl_extract.OBJECTS_REQUIRED_COUNT,
+            "where_at": found["special_where_start"],
+            "wanted_at": found["special_wanted"],
+            "sha256": hashlib.sha256(specials_bytes).hexdigest(),
+        },
         "template_sha256": hashlib.sha256(bytes(image)).hexdigest(),
         "sprites": layout,
     }, indent=1) + "\n", encoding="utf-8")

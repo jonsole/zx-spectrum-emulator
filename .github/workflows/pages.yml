@@ -2,8 +2,8 @@
 # compiled to WebAssembly, the page, and the ROMs. What it runs is not part of
 # the site: each visitor opens a snapshot of their own (docs/web.md). Beside it
 # is knightlore.html, which makes the Filmation Knight Lore from a visitor's
-# own copy of the original: the remake is built here with its font and its
-# sprites left out.
+# own copy of the original: the remake is built here with everything of
+# Ultimate's left out.
 #
 # Needs Pages turned on with "GitHub Actions" as its source (Settings > Pages).
 
@@ -83,8 +83,8 @@ jobs:
           make -C "$RUNNER_TEMP/sjasmplus" -j"$(nproc)" > /dev/null
           echo "SJASMPLUS=$RUNNER_TEMP/sjasmplus/sjasmplus" >> "$GITHUB_ENV"
 
-      # The remake for knightlore.html, with its font and sprites blanked --
-      # built three ways, and checked that those are all the original changes.
+      # The remake for knightlore.html, with everything of Ultimate's blanked --
+      # built four ways, and checked that those are all the original changes.
       - name: Build the Knight Lore remake
         run: |
           python -m pip install --quiet "pillow>=10.0"
