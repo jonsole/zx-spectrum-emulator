@@ -62,9 +62,9 @@ zx-spectrum-emulator/
     revs/                         # a road engine after the BBC's Revs (its
                                   #   README.md), assembled by its own build.py;
                                   #   the track data is fetched, not committed
-    exile/                        # an Exile-like for the 48K: a cave planet worked
-                                  #   out on the fly and a jetpacked astronaut;
-                                  #   assembled by its own build.py
+    exile/                        # an Exile-like for the 48K: a cave planet of
+                                  #   hand-placed blocks (map.txt, blocks.png) and
+                                  #   a jetpacked astronaut; built by its build.py
     zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
                                   #   a fast custom tape loader, and the Python that
                                   #   renders its tapes to WAV

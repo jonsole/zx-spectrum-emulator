@@ -1,0 +1,78 @@
+[
+  {
+    "char": " ",
+    "name": "empty"
+  },
+  {
+    "char": "#",
+    "name": "rock"
+  },
+  {
+    "char": "L",
+    "name": "rock slope, solid lower left"
+  },
+  {
+    "char": "J",
+    "name": "rock slope, solid lower right"
+  },
+  {
+    "char": "F",
+    "name": "rock slope, solid upper left"
+  },
+  {
+    "char": "7",
+    "name": "rock slope, solid upper right"
+  },
+  {
+    "char": "_",
+    "name": "rock, bottom half"
+  },
+  {
+    "char": "^",
+    "name": "rock, top half"
+  },
+  {
+    "char": "[",
+    "name": "rock, left half"
+  },
+  {
+    "char": "]",
+    "name": "rock, right half"
+  },
+  {
+    "char": "`",
+    "name": "rock corner, upper left"
+  },
+  {
+    "char": "'",
+    "name": "rock corner, upper right"
+  },
+  {
+    "char": ",",
+    "name": "rock corner, lower left"
+  },
+  {
+    "char": ".",
+    "name": "rock corner, lower right"
+  },
+  {
+    "char": "=",
+    "name": "brick"
+  },
+  {
+    "char": "%",
+    "name": "earth"
+  },
+  {
+    "char": "+",
+    "name": "metal plate"
+  },
+  {
+    "char": "~",
+    "name": "water"
+  },
+  {
+    "char": "\"",
+    "name": "grass"
+  }
+]

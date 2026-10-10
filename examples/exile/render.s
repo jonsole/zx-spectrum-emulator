@@ -1,15 +1,15 @@
 ; Drawing the landscape: a character cell at a time, straight to the screen.
 ;
-; A tile is 2 x 2 cells and the view moves in cells, so a cell is always one
-; quarter of one tile and drawing it is an eight-byte copy. There is no back
+; A block is 2 x 2 cells and the view moves in cells, so a cell is always one
+; quarter of one block and drawing it is an eight-byte copy. There is no back
 ; buffer: the landscape only changes when the view jumps, and the astronaut
 ; is taken off by redrawing the cells he covered (draw_cell_at).
+;
+; Positions in cells fit a byte: the planet is 256 cells each way.
 
-; render_view -- works the windows out for (cam_x, cam_y) and draws the
-; whole view in the landscape's colour.
+; render_view -- draws the whole view at (cam_x, cam_y) in the landscape's
+; colour.
 render_view:
-    call build_window
-
     ld hl,0x5800
     ld de,0x5801
     ld bc,VIEW_W * VIEW_H - 1
@@ -19,33 +19,27 @@ render_view:
     xor a
     ld (row_cy),a
 .row:
-    ; Half-tile row t = (cam_y & 1) + row: the tile row is t >> 1, and t & 1
-    ; picks the top or bottom pair of quarters -- 16 bytes into the tile.
+    ; The planet's cell row is cam_y + row: the block row is that >> 1, and
+    ; its bit 0 picks the top or bottom pair of quarters -- 16 bytes in.
     ld a,(cam_y)
-    and 1
     ld b,a
     ld a,(row_cy)
     add a,b
-    ld b,a
+    ld c,a
     and 1
     rlca
     rlca
     rlca
     rlca
-    ld c,a                  ; C = quarter offset: 0 or 16, plus 8 for a right half
-    ld a,b
+    ld e,a
+    srl c                   ; C = block row
+    ld a,(cam_x)
     srl a
-    ld l,a
-    ld h,0
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ld de,shape_win
-    add hl,de
+    ld b,a                  ; B = the view's first block column
+    call map_addr
     push hl
-    pop ix                  ; IX = this row's first tile in the shape window
+    pop ix                  ; IX = this row's first block in the map
+    ld c,e                  ; C = quarter offset: 0 or 16, plus 8 for a right half
 
     push bc
     ld a,(row_cy)
@@ -58,16 +52,16 @@ render_view:
     ld a,(cam_x)
     and 1
     jr z,.pairs
-    ; The view starts half way through a tile: its right half first.
+    ; The view starts half way through a block: its right half first.
     set 3,c
     call draw_cell
     res 3,c
     inc ix
     dec b
 .pairs:
-    ; A whole tile's width at a time: the left quarter down the screen, then
+    ; A whole block's width at a time: the left quarter down the screen, then
     ; the right quarter back up it, so the pair ends where it started and the
-    ; shape is looked up once for both.
+    ; block is looked up once for both.
     ld a,b
     cp 2
     jr c,.tail
@@ -76,8 +70,8 @@ render_view:
     rrca
     rrca
     ld e,a
-    and 1
-    add a,high tile_gfx
+    and 7
+    add a,high block_gfx
     ld d,a
     ld a,e
     and 0xE0
@@ -118,19 +112,20 @@ render_view:
     jp nz,.row
     ret
 
-; draw_cell -- copies one quarter of a tile to the screen.
-; IX -> the tile's shape, C = which quarter (0, 8, 16 or 24 bytes in),
+; draw_cell -- copies one quarter of a block to the screen.
+; IX -> the block's number, C = which quarter (0, 8, 16 or 24 bytes in),
 ; HL = the cell's top line. Moves HL on a cell; preserves BC and IX.
 draw_cell:
     ld a,(ix + 0)
-    ; shape * 32: tile_gfx is 512-aligned, so the low byte is the shape's
-    ; bottom three bits << 5 and the high byte takes its top bit.
+    ; number * 32: block_gfx is 2K-aligned, so the low byte is the number's
+    ; bottom three bits << 5 and the high byte adds the rest. Three right
+    ; rotations put both where they go.
     rrca
     rrca
     rrca
     ld e,a
-    and 1
-    add a,high tile_gfx
+    and 7
+    add a,high block_gfx
     ld d,a
     ld a,e
     and 0xE0
@@ -171,14 +166,12 @@ draw_cell_at:
     call cell_addr
     push hl
 
-    ; Where the cell is in the windows: half-tile column and row, from the
-    ; view's own half-tile offset.
+    ; The planet's cell: (cam_x + column, cam_y + row). Its block is that
+    ; halved, and its low bits pick the quarter.
     ld a,(cam_x)
-    and 1
     add a,b
     ld b,a
     ld a,(cam_y)
-    and 1
     add a,c
     ld c,a
     and 1
@@ -191,22 +184,9 @@ draw_cell_at:
     add a,a
     add a,a
     ld e,a                  ; E = quarter offset
-
-    ld a,c
-    srl a
-    ld l,a
-    ld h,0
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ld a,b
-    srl a
-    or l
-    ld l,a
-    ld bc,shape_win
-    add hl,bc
+    srl b
+    srl c
+    call map_addr
     push hl
     pop ix
     ld c,e
