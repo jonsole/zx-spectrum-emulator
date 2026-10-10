@@ -52,6 +52,9 @@ zx-spectrum-emulator/
                                   #   templates and graphic-map editors, their
                                   #   schemas and tests, and room_designer.py,
                                   #   which serves the room page outside VS Code
+    exile/                        # an Exile-like for the 48K: a cave planet worked
+                                  #   out on the fly and a jetpacked astronaut;
+                                  #   assembled by its own build.py
     zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
                                   #   a fast custom tape loader, and the Python that
                                   #   renders its tapes to WAV

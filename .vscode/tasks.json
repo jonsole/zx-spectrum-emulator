@@ -141,6 +141,26 @@
       }
     },
     {
+      // The Exile-like (examples/exile): generates its tables, then sjasmplus.
+      "label": "exile.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["examples/exile/build.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/exile"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
       // Fairlight's disassembly (github.com/VilleKrumlinde/FairlightZ80) is
       // fetched and assembled rather than committed -- see
       // game-disassemblies/scripts/build_fairlight_krumlinde.py. Cheap enough (~0.2s of

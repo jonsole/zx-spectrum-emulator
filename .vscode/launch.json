@@ -71,6 +71,18 @@
       "preLaunchTask": "knightlore128.build"
     },
     {
+      // The Exile-like (examples/exile): a cave planet worked out as you fly
+      // through it, and a jetpacked astronaut. Assembled on every launch.
+      "name": "ZX Spectrum: Exile-like",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/exile/output/exile.sna",
+      "sld": "${workspaceFolder}/examples/exile/output/exile.sld",
+      "asm": "${workspaceFolder}/examples/exile/exile.s",
+      "preLaunchTask": "exile.build"
+    },
+    {
       // Fairlight, reassembled on every launch from Ville Krumlinde's
       // disassembly (build_fairlight_krumlinde.py in the game-disassemblies
       // submodule) -- run its build script once after a fresh clone, since

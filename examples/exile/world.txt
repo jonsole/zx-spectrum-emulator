@@ -1,0 +1,45 @@
+# The planet, coarsely: 32 x 32 regions, each 8 x 8 corners of the landscape
+# (128 x 128 pixels, half a screen across). world.py roughens the edges between
+# regions, so draw the caves blocky and let the generator make them rock.
+#
+#   ' '  sky        open, and the edges next to it are roughened
+#   '.'  cavern     open, roughened
+#   '#'  rock       solid, roughened
+#   '='  masonry    solid, kept straight -- built walls, the ship's pad
+#   'o'  chamber    open, kept straight -- inside built rooms
+#   '~'  water      open for now; water comes later
+#
+# Only the lines between '|'s are the map, one row of 32 regions each, top
+# row first; everything else in this file is commentary.
+|################################|
+|#                              #|
+|#                              #|
+|#                              #|
+|#                              #|
+|#        ==                    #|
+|#    ..  ==      ....          #|
+|######.######.##########.#######|
+|######.######.##########.#######|
+|####.....####...####.....#######|
+|####.#####.####..###.###.#######|
+|####.#####.#####..##.###...#####|
+|##.......#.######....#####.#####|
+|##.#####.#.#########.#####.#####|
+|##.#####...##====###.###.....###|
+|##.###########oooo###.##.###.###|
+|##....########oooo##...#.###.###|
+|#####.#####...====##.#.....#.###|
+|#####.....#.####.###.#####...###|
+|#########.#.####.....#####.#####|
+|###~~~~~#.#......###.......#####|
+|###~~~~~#.###########.####.#####|
+|###~~~~~...########...####.#####|
+|####~~~~##.########.######....##|
+|####.######.......#.#########.##|
+|####.######.#####...####......##|
+|##.....####.#####.######.#######|
+|##.###.####.....#.......=oooo=##|
+|##.###......###.#######.=oooo=##|
+|##.....########.........======##|
+|####################.###########|
+|################################|
