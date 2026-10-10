@@ -71,8 +71,9 @@
       "preLaunchTask": "knightlore128.build"
     },
     {
-      // The Exile-like (examples/exile): a cave planet worked out as you fly
-      // through it, and a jetpacked astronaut. Assembled on every launch.
+      // The Exile-like (examples/exile): a cave planet of hand-placed blocks
+      // (map.txt, blocks.png) and a jetpacked astronaut. Assembled on every
+      // launch, so an edited map is what runs.
       "name": "ZX Spectrum: Exile-like",
       "type": "zxspectrum",
       "request": "launch",

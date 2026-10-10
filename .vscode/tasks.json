@@ -141,7 +141,8 @@
       }
     },
     {
-      // The Exile-like (examples/exile): generates its tables, then sjasmplus.
+      // The Exile-like (examples/exile): reads map.txt and blocks.png into its
+      // tables, then sjasmplus.
       "label": "exile.build",
       "type": "shell",
       "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",

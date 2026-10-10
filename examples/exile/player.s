@@ -1,14 +1,14 @@
 ; The astronaut: his jetpack, his momentum, and the rock he bumps into.
 ;
-; Position is in pixels of the planet (0..4095 each way) with a byte of
+; Position is in pixels of the planet (0..2047 each way) with a byte of
 ; fraction below; velocity is signed 8.8 pixels a frame. Every frame adds the
 ; forces to the velocity, then moves him one pixel at a time along each axis,
-; testing the rock at each pixel -- he never moves more than a few a frame,
-; and stepping is what lets him stop exactly against a wall, and walk up a
-; gentle slope, rather than sink into it.
+; testing his whole body against the rock at each pixel -- he never moves more
+; than a few a frame, and stepping is what lets him stop exactly against a
+; wall, and walk up a gentle slope, rather than sink into it.
 ;
-; The rock he tests is the tiles' collision masks (tiles.py): what is drawn is
-; what is solid, to the pixel.
+; The rock he tests is the blocks' collision masks -- blocks.png's white and
+; grey: what is drawn as rock is solid, to the pixel.
 
 ; Forces, in 8.8 pixels per frame per frame.
 GRAVITY     equ 0x0010
@@ -25,8 +25,8 @@ KEY_DOWN    equ 1
 KEY_LEFT    equ 2
 KEY_RIGHT   equ 3
 
-; Where he starts: on the landing pad, in world.txt's sky.
-START_X     equ 1270
+; Where he starts: above the brick landing pad, in map.txt's sky.
+START_X     equ 758
 START_Y     equ 600
 
 player_init:
@@ -150,8 +150,7 @@ physics:
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     inc de
-    ld iy,points_down
-    call blocked
+    call body_blocked
     sbc a,a
     and 1
     ld (on_ground),a
@@ -222,8 +221,6 @@ move_x:
     bit 7,a
     jr nz,.left
     ld b,a
-    ld hl,points_right
-    ld (points_ahead),hl
 .right_step:
     push bc
     ld hl,(pos_x + 1)
@@ -236,8 +233,6 @@ move_x:
 .left:
     neg
     ld b,a
-    ld hl,points_left
-    ld (points_ahead),hl
 .left_step:
     push bc
     ld hl,(pos_x + 1)
@@ -263,17 +258,17 @@ move_x:
 ; If his feet are down and only a low step is in the way, he goes up it.
 step_x:
     ld de,(pos_y + 1)
-    call clear_ahead
+    call body_blocked
     jr nc,.go
     ld a,(on_ground)
     or a
     scf
     ret z
     dec de
-    call clear_ahead_and_up
+    call body_blocked
     jr nc,.climb
     dec de
-    call clear_ahead_and_up
+    call body_blocked
     ret c
 .climb:
     ld (pos_y + 1),de
@@ -281,16 +276,6 @@ step_x:
     ld (pos_x + 1),hl
     or a
     ret
-
-clear_ahead:
-    ld iy,(points_ahead)
-    jp blocked
-
-clear_ahead_and_up:
-    call clear_ahead
-    ret c
-    ld iy,points_up
-    jp blocked
 
 ; move_y -- moves him up or down by vel_y, a pixel at a time.
 move_y:
@@ -322,8 +307,7 @@ move_y:
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     inc de
-    ld iy,points_down
-    call blocked
+    call body_blocked
     pop bc
     jr c,.landed
     ld (pos_y + 1),de
@@ -337,8 +321,7 @@ move_y:
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     dec de
-    ld iy,points_up
-    call blocked
+    call body_blocked
     pop bc
     jr c,.bumped
     ld (pos_y + 1),de
@@ -382,77 +365,105 @@ rebound:
     rr l
     ret
 
-; blocked -- whether any of a list of points on his body is in rock, with
-; him at (HL = x, DE = y). IY -> the list: (dx, dy) byte pairs, 0xFF ends it.
-; Carry if any is. Preserves HL, DE, IY.
-blocked:
-    push iy
-.point:
-    ld a,(iy + 0)
-    cp 0xFF
-    jr z,.clear
+; His body, from the sprite's top-left: x 4..11, y 1..15 (sprites.py's art).
+BODY_LEFT   equ 4
+BODY_TOP    equ 1
+BODY_HEIGHT equ 15          ; and 8 wide: one byte's worth of mask
+
+; body_blocked -- whether any pixel of his body is solid, with him at
+; (HL = x, DE = y). Carry if any is. Preserves HL, DE; uses BC.
+;
+; Every pixel, a row at a time: the body's eight pixels across fall in at most
+; two bytes of the blocks' masks, and those bytes' addresses only change when
+; the row crosses into another block -- so a row is two loads and two ANDs.
+; Testing a few points round his edge instead let the tip of a slope slide in
+; between them.
+body_blocked:
     push hl
     push de
-    ld c,a
-    ld b,0
-    add hl,bc
-    ld a,(iy + 1)
-    ex de,hl
-    ld c,a
+    ld bc,BODY_LEFT
     add hl,bc
     ex de,hl
-    call rock_at
+    ld bc,BODY_TOP
+    add hl,bc
+    ex de,hl                ; HL, DE = the body's top-left pixel
+    ; Off the planet is solid. (The planet's edge is rock, so he never gets
+    ; near enough for the body's far side to matter.)
+    ld a,h
+    cp MAP_W / 16
+    jr nc,.hit
+    ld a,d
+    cp MAP_H / 16
+    jr nc,.hit
+
+    ; The body starts x & 7 pixels into its first mask byte: that byte's
+    ; mask keeps its right-hand 8 - (x & 7) bits, the next byte the rest.
+    ld a,l
+    and 7
+    ld b,a
+    ld a,0xFF
+    jr z,.masked
+.shift:
+    srl a
+    djnz .shift
+.masked:
+    ld (body_mask0),a
+    cpl
+    ld (body_mask1),a
+
+    ; The first mask byte's column, x >> 3: 0..255.
+    ld a,l
+    srl h
+    rra
+    srl h
+    rra
+    srl h
+    rra
+    ld (body_col),a
+
+    call body_row_ptrs
+    ld b,BODY_HEIGHT
+.row:
+    ld a,e
+    and 0x0F
+    add a,a
+    ld c,a                  ; this row's offset into a block's mask
+    ld hl,(body_ptr0)
+    ld a,l
+    or c
+    ld l,a
+    ld a,(body_mask0)
+    and (hl)
+    jr nz,.hit
+    ld hl,(body_ptr1)
+    ld a,l
+    or c
+    ld l,a
+    ld a,(body_mask1)
+    and (hl)
+    jr nz,.hit
+    inc de
+    ld a,e
+    and 0x0F
+    call z,body_row_ptrs    ; into the next row of blocks
+    djnz .row
     pop de
     pop hl
-    jr c,.done
-    inc iy
-    inc iy
-    jr .point
-.clear:
     or a
-.done:
-    pop iy
+    ret
+.hit:
+    pop de
+    pop hl
+    scf
     ret
 
-; His body's edges, as points from the sprite's top-left: the body is x 4..11,
-; y 1..15 (sprites.py's art). The points run out to its corners -- a slope
-; pokes into a corner first -- and are no more than three pixels apart, so a
-; spike of rock needs to be thinner than that to slip between them.
-points_right:   db 11, 1,  11, 5,  11, 8,  11, 12,  11, 15,  0xFF
-points_left:    db 4, 1,   4, 5,   4, 8,   4, 12,   4, 15,   0xFF
-points_down:    db 4, 15,  7, 15,  8, 15,  11, 15,  0xFF
-points_up:      db 4, 1,   7, 1,   8, 1,   11, 1,   0xFF
-
-; rock_at -- whether pixel (HL = x, DE = y) of the planet is rock: its tile's
-; collision mask, out of the windows. Anything outside the windows counts as
-; rock -- he never gets there, since the view recentres first. Carry if rock.
-; Preserves HL, DE; uses BC.
-rock_at:
-    ; Tile x = x >> 4, as a byte: the planet is 256 tiles across.
-    ld a,l
-    rrca
-    rrca
-    rrca
-    rrca
-    and 0x0F
-    ld b,a
-    ld a,h
-    rlca
-    rlca
-    rlca
-    rlca
-    and 0xF0
-    or b
-    ld b,a
-    ld a,(win_tx)
-    ld c,a
-    ld a,b
-    sub c
-    cp WIN_TILES_W
-    ccf
-    ret c
-    ld b,a                  ; B = column in the window
-
+; body_row_ptrs -- body_ptr0 and body_ptr1: where the masks of the blocks
+; under body_col and the column after it start, in the block row of pixel
+; y = DE, each already pointing at its half of the row (the column's bit 0).
+; Preserves B, DE.
+body_row_ptrs:
+    push bc
+    ; Block row y >> 4.
     ld a,e
     rrca
     rrca
@@ -465,66 +476,38 @@ rock_at:
     rlca
     rlca
     rlca
-    and 0xF0
     or c
     ld c,a
-    ld a,(win_ty)
-    neg
-    add a,c
-    cp WIN_TILES_H
-    ccf
-    ret c                   ; A = row in the window
-
-    push hl
+    ld a,(body_col)
+    call .one
+    ld (body_ptr0),hl
+    ld a,(body_col)
+    inc a
+    call .one
+    ld (body_ptr1),hl
+    pop bc
+    ret
+; HL = block_mask + (block under mask column A, row C) * 32 + (A & 1).
+.one:
+    push af
+    srl a
+    ld b,a
+    call map_addr
+    ld a,(hl)
+    rrca
+    rrca
+    rrca
     ld l,a
-    ld h,0
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ld a,b
+    and 7
+    add a,high block_mask
+    ld h,a
+    ld a,l
+    and 0xE0
+    ld l,a
+    pop af
+    and 1
     or l
     ld l,a
-    ld bc,shape_win
-    add hl,bc
-    ld a,(hl)               ; the tile's shape
-    pop hl
-
-    ; Its mask row: tile_mask + shape * 32 + (y & 15) * 2 + which half.
-    rrca
-    rrca
-    rrca
-    ld b,a
-    and 0xE0
-    ld c,a
-    ld a,e
-    and 0x0F
-    add a,a
-    or c
-    ld c,a
-    bit 3,l
-    jr z,.left_half
-    inc c
-.left_half:
-    ld a,b
-    and 1
-    add a,high tile_mask
-    ld b,a
-    ld a,(bc)
-
-    ; The pixel's bit, shifted out into carry.
-    ld c,a
-    ld a,l
-    and 7
-    ld b,a
-    ld a,c
-    jr z,.test
-.shift:
-    add a,a
-    djnz .shift
-.test:
-    add a,a
     ret
 
 ; ---- the view ----------------------------------------------------------------
@@ -545,7 +528,7 @@ centre_camera:
     rr l
     srl h
     rr l
-    ld de,512 - VIEW_W
+    ld de,MAP_W * 2 - VIEW_W
     call clamp_hl_to_de
     ld (cam_x),hl
 
@@ -562,7 +545,7 @@ centre_camera:
     rr l
     srl h
     rr l
-    ld de,512 - VIEW_H
+    ld de,MAP_H * 2 - VIEW_H
     call clamp_hl_to_de
     ld (cam_y),hl
     ret
@@ -813,7 +796,11 @@ pos_y:          db 0
 vel_x:          dw 0        ; 8.8, signed
 vel_y:          dw 0
 target_frac:    db 0
-points_ahead:   dw points_right
+body_col:       db 0        ; body_blocked's first mask column
+body_mask0:     db 0        ; and which bits of it, and of the next, are body
+body_mask1:     db 0
+body_ptr0:      dw 0        ; the two columns' masks in the current block row
+body_ptr1:      dw 0
 keys:           db 0
 on_ground:      db 0
 facing:         db 0        ; 0 right, 1 left

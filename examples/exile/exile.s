@@ -1,8 +1,9 @@
 ; An Exile-like for the 48K Spectrum: the first prototype.
 ;
-; A planet of caves worked out as you fly through it (world.s), drawn in one
-; colour (render.s), and a jetpacked astronaut with momentum, gravity and
-; pixel-exact collisions against the rock (player.s), drawn in his own colour.
+; A planet of caves built from hand-placed blocks (map.s, from map.txt and
+; blocks.png), drawn in one colour (render.s), and a jetpacked astronaut with
+; momentum, gravity and pixel-exact collisions against the rock (player.s),
+; drawn in his own colour.
 ; The view jumps to recentre him when he nears its edge, the way Exile's did.
 ;
 ; Keys: Q thrust, A push down, O left, P right.
@@ -11,6 +12,7 @@
 ; contention yet):
 ;   code, then the variables
 ;   data.s's tables, aligned to the pages the code indexes them by
+;   MAP_ADDR   the planet, 16K
 ;   0xFDFD     the interrupt's JP, with the stack below it
 ;   0xFE00     IM 2's vector table: 257 bytes of 0xFD
 ;
@@ -26,14 +28,7 @@ HUD_ATTR    equ 0x0F        ; white on blue
 VIEW_W      equ 32          ; the view, in character cells
 VIEW_H      equ 20
 
-; The view's corner and shape windows: the tiles under the view, plus one
-; across in case the view starts half way through a tile (it moves in
-; character steps, a tile is two), and the corners round those.
-WIN_TILES_W equ 17
-WIN_TILES_H equ 11
-WIN_CORN_W  equ WIN_TILES_W + 1
-WIN_CORN_H  equ WIN_TILES_H + 1
-SHAPE_STRIDE equ 32         ; a shape window row, padded for a cheap multiply
+MAP_ADDR    equ 0xB800      ; map.txt, 16K: up to 0xF7FF, then the stack
 
 IM2_TABLE   equ 0xFE00
 IM2_JUMP    equ 0xFDFD
@@ -101,7 +96,7 @@ isr:
     ei
     reti
 
-    INCLUDE "world.s"
+    INCLUDE "map.s"
     INCLUDE "render.s"
     INCLUDE "player.s"
     INCLUDE "hud.s"
@@ -114,25 +109,17 @@ loop_frames:    db 0        ; frames the last pass of main_loop took
 
 cam_x:          dw 0        ; the view's top-left, in character cells of the planet
 cam_y:          dw 0
-win_tx:         db 0        ; the windows' top-left tile
-win_ty:         db 0
 row_cy:         db 0        ; render_view's row
-rows_left:      db 0        ; build_window's rows still to do
-row_perm:       db 0        ; build_window: this row's place in the down-nudge
-row_region:     dw 0        ; build_window: this row's start in world_map
-
-; build_window, per column: the across-nudge's place in the wave, then (at
-; COL_REGION on) the column's region. Aligned so the end test is on one byte.
-COL_REGION      equ 32
-    ALIGN 64
-col_perm:       ds 64
-
-corner_win:     ds WIN_CORN_W * WIN_CORN_H
-shape_win:      ds SHAPE_STRIDE * WIN_TILES_H
 
     INCLUDE "output/data.s"
 
 code_end:
-    ASSERT code_end <= IM2_JUMP - 0x100, "program runs into the stack"
+    ASSERT code_end <= MAP_ADDR, "program runs into the map"
+
+    ORG MAP_ADDR
+map_data:
+    INCBIN "output/map.bin"
+map_end:
+    ASSERT map_end <= IM2_JUMP - 0x400, "the map leaves the stack too little room"
 
     SAVESNA "output/exile.sna", start
