@@ -126,6 +126,22 @@ class BlockSet:
         return bytes(out)
 
 
+    def column_bytes(self):
+        """32 bytes a block, for player.s's column tests: a 16-bit word for
+        each of its sixteen pixel columns, left to right, whose bits are the
+        column's rows, row 0 the top bit. Little-endian, as DW stores it: the
+        low byte is rows 8..15."""
+        out = bytearray()
+        for n in range(len(self.legend)):
+            m = self.solid(n)
+            for x in range(BLOCK_PX):
+                word = 0
+                for y in range(BLOCK_PX):
+                    word |= int(m[y][x]) << (15 - y)
+                out += bytes((word & 0xFF, word >> 8))
+        return bytes(out)
+
+
 def _byte(bits):
     v = 0
     for b in bits:

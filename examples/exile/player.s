@@ -44,7 +44,6 @@ player_init:
     ld (on_ground),a
     ld (facing),a
     ld (thrusting),a
-    ld (have_old),a
     ret
 
 read_keys:
@@ -146,11 +145,11 @@ physics:
     call move_x
     call move_y
 
-    ; Standing on something?
+    ; Standing on something? The row under his feet.
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     inc de
-    call body_blocked
+    call foot_blocked
     sbc a,a
     and 1
     ld (on_ground),a
@@ -221,6 +220,8 @@ move_x:
     bit 7,a
     jr nz,.left
     ld b,a
+    ld hl,lead_right
+    ld (lead_edge),hl
 .right_step:
     push bc
     ld hl,(pos_x + 1)
@@ -233,6 +234,8 @@ move_x:
 .left:
     neg
     ld b,a
+    ld hl,lead_left
+    ld (lead_edge),hl
 .left_step:
     push bc
     ld hl,(pos_x + 1)
@@ -258,23 +261,43 @@ move_x:
 ; If his feet are down and only a low step is in the way, he goes up it.
 step_x:
     ld de,(pos_y + 1)
-    call body_blocked
+    call lead_blocked       ; only the column he moves into can be new rock
     jr nc,.go
     ld a,(on_ground)
     or a
     scf
     ret z
+    ; A pixel up as well: the leading column there, and the row he rises
+    ; into.
     dec de
-    call body_blocked
+    call lead_blocked
+    jr c,.two_up
+    call head_blocked
     jr nc,.climb
+.two_up:
+    ; Two up: the column, and both rows.
     dec de
-    call body_blocked
+    call lead_blocked
+    ret c
+    call head_blocked
+    ret c
+    inc de
+    call head_blocked
+    dec de
     ret c
 .climb:
     ld (pos_y + 1),de
 .go:
     ld (pos_x + 1),hl
     or a
+    ret
+
+; lead_blocked -- the leading column of his body, with him at (HL, DE), for
+; the way move_x is going.
+lead_blocked:
+    push hl
+    ld hl,(lead_edge)
+    ex (sp),hl
     ret
 
 ; move_y -- moves him up or down by vel_y, a pixel at a time.
@@ -307,7 +330,7 @@ move_y:
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     inc de
-    call body_blocked
+    call foot_blocked       ; only the row he moves into can be new rock
     pop bc
     jr c,.landed
     ld (pos_y + 1),de
@@ -321,7 +344,7 @@ move_y:
     ld hl,(pos_x + 1)
     ld de,(pos_y + 1)
     dec de
-    call body_blocked
+    call head_blocked
     pop bc
     jr c,.bumped
     ld (pos_y + 1),de
@@ -368,102 +391,76 @@ rebound:
 ; His body, from the sprite's top-left: x 4..11, y 1..15 (sprites.py's art).
 BODY_LEFT   equ 4
 BODY_TOP    equ 1
-BODY_HEIGHT equ 15          ; and 8 wide: one byte's worth of mask
+BODY_WIDTH  equ 8
+BODY_HEIGHT equ 15
 
-; body_blocked -- whether any pixel of his body is solid, with him at
-; (HL = x, DE = y). Carry if any is. Preserves HL, DE; uses BC.
+; Whether a part of his body is in anything solid, with him at (HL = x,
+; DE = y). Carry if it is. Preserve HL, DE, BC.
 ;
-; Every pixel, a row at a time: the body's eight pixels across fall in at most
-; two bytes of the blocks' masks, and those bytes' addresses only change when
-; the row crosses into another block -- so a row is two loads and two ANDs.
-; Testing a few points round his edge instead let the tip of a slope slide in
-; between them.
-body_blocked:
+; A step of one pixel can only take him into rock through the row or column
+; he steps into -- he was clear where he was -- so a step tests just that
+; edge: foot_blocked or head_blocked a row, lead_blocked a column, each a
+; handful of lookups. A climb, up and across at once, tests the column and
+; the rows he rises into.
+foot_blocked:
     push hl
     push de
+    push bc
+    ld a,BODY_TOP + BODY_HEIGHT - 1
+    jr body_row
+head_blocked:
+    push hl
+    push de
+    push bc
+    ld a,BODY_TOP
+body_row:
+    add a,e
+    ld e,a
+    jr nc,.no_carry
+    inc d
+.no_carry:
     ld bc,BODY_LEFT
     add hl,bc
-    ex de,hl
-    ld bc,BODY_TOP
+    call row_blocked
+    jr body_done
+lead_right:
+    push hl
+    push de
+    push bc
+    ld bc,BODY_LEFT + BODY_WIDTH - 1
+    jr body_column
+lead_left:
+    push hl
+    push de
+    push bc
+    ld bc,BODY_LEFT
+body_column:
     add hl,bc
-    ex de,hl                ; HL, DE = the body's top-left pixel
-    ; Off the planet is solid. (The planet's edge is rock, so he never gets
-    ; near enough for the body's far side to matter.)
+    inc de                  ; BODY_TOP
+    ld b,BODY_HEIGHT
+    call column_blocked
+body_done:
+    pop bc
+    pop de
+    pop hl
+    ret
+
+; row_blocked -- whether any of the eight pixels from (HL, DE) across is
+; solid. Carry if one is. Uses everything but IX, IY.
+row_blocked:
     ld a,h
     cp MAP_W / 16
-    jr nc,.hit
+    ccf
+    ret c
     ld a,d
     cp MAP_H / 16
-    jr nc,.hit
-
-    ; The body starts x & 7 pixels into its first mask byte: that byte's
-    ; mask keeps its right-hand 8 - (x & 7) bits, the next byte the rest.
-    ld a,l
-    and 7
-    ld b,a
-    ld a,0xFF
-    jr z,.masked
-.shift:
-    srl a
-    djnz .shift
-.masked:
-    ld (body_mask0),a
-    cpl
-    ld (body_mask1),a
-
-    ; The first mask byte's column, x >> 3: 0..255.
-    ld a,l
-    srl h
-    rra
-    srl h
-    rra
-    srl h
-    rra
-    ld (body_col),a
-
-    call body_row_ptrs
-    ld b,BODY_HEIGHT
-.row:
+    ccf
+    ret c
+    ; The row's offset in a block's mask, (y & 15) * 2, and its block row.
     ld a,e
     and 0x0F
     add a,a
-    ld c,a                  ; this row's offset into a block's mask
-    ld hl,(body_ptr0)
-    ld a,l
-    or c
-    ld l,a
-    ld a,(body_mask0)
-    and (hl)
-    jr nz,.hit
-    ld hl,(body_ptr1)
-    ld a,l
-    or c
-    ld l,a
-    ld a,(body_mask1)
-    and (hl)
-    jr nz,.hit
-    inc de
-    ld a,e
-    and 0x0F
-    call z,body_row_ptrs    ; into the next row of blocks
-    djnz .row
-    pop de
-    pop hl
-    or a
-    ret
-.hit:
-    pop de
-    pop hl
-    scf
-    ret
-
-; body_row_ptrs -- body_ptr0 and body_ptr1: where the masks of the blocks
-; under body_col and the column after it start, in the block row of pixel
-; y = DE, each already pointing at its half of the row (the column's bit 0).
-; Preserves B, DE.
-body_row_ptrs:
-    push bc
-    ; Block row y >> 4.
+    ld (rb_offset),a
     ld a,e
     rrca
     rrca
@@ -478,17 +475,56 @@ body_row_ptrs:
     rlca
     or c
     ld c,a
-    ld a,(body_col)
-    call .one
-    ld (body_ptr0),hl
-    ld a,(body_col)
+    ; The eight pixels start x & 7 into mask byte x >> 3: that byte's right
+    ; 8 - (x & 7) bits, then the left (x & 7) of the next.
+    ld a,l
+    and 7
+    ld (rb_shift),a
+    ld a,l
+    srl h
+    rra
+    srl h
+    rra
+    srl h
+    rra
+    ld (rb_col),a
+    call .mask_byte
+    ld d,a
+    ld a,(rb_shift)
+    ld b,a
+    ld a,0xFF
+    inc b
+    jr .shift_in
+.shift:
+    srl a
+.shift_in:
+    djnz .shift             ; 0xFF >> (x & 7)
+    and d
+    jr nz,.hit
+    ld a,(rb_shift)
+    or a
+    ret z                   ; aligned: all in the one byte (carry is clear)
+    ld a,(rb_col)
     inc a
-    call .one
-    ld (body_ptr1),hl
-    pop bc
+    ld (rb_col),a
+    call .mask_byte
+    ld b,a
+    ld a,(rb_shift)
+    ld d,a
+    ld a,0xFF
+.shift_next:
+    srl a
+    dec d
+    jr nz,.shift_next
+    cpl
+    and b
+    ret z
+.hit:
+    scf
     ret
-; HL = block_mask + (block under mask column A, row C) * 32 + (A & 1).
-.one:
+; A = the mask byte for mask column rb_col in block row C. Preserves C.
+.mask_byte:
+    ld a,(rb_col)
     push af
     srl a
     ld b,a
@@ -508,15 +544,152 @@ body_row_ptrs:
     and 1
     or l
     ld l,a
+    ld a,(rb_offset)
+    or l
+    ld l,a
+    ld a,(hl)
     ret
+
+; column_blocked -- whether any of B pixels (1..16) down from (HL, DE) is
+; solid. Carry if one is. Uses everything but IX, IY.
+;
+; From block_cols: a block's solidity column by column, sixteen rows to a
+; word -- so B rows are at most two blocks' words, each ANDed with the rows
+; it covers.
+column_blocked:
+    ld a,h
+    cp MAP_W / 16
+    ccf
+    ret c
+    ld a,d
+    cp MAP_H / 16
+    ccf
+    ret c
+    ld a,l
+    and 0x0F
+    add a,a
+    ld (cb_column),a        ; which word of a block's sixteen
+    ld a,l
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    ld c,a
+    ld a,h
+    rlca
+    rlca
+    rlca
+    rlca
+    or c
+    ld (cb_bx),a            ; its block column
+    ld a,e
+    and 0x0F
+    ld c,a                  ; the first row within the block
+    add a,b
+    ld (cb_end),a           ; and one past the last: up to 31
+    ld a,e
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    ld b,a
+    ld a,d
+    rlca
+    rlca
+    rlca
+    rlca
+    or b
+    ld (cb_by),a            ; the block row
+
+    ld a,(cb_end)
+    cp BLOCK_ROWS + 1
+    jr c,.in_one
+    ld a,BLOCK_ROWS
+.in_one:
+    call .test              ; rows C .. A - 1 of the first block
+    ret c
+    ld a,(cb_end)
+    sub BLOCK_ROWS
+    jr z,.clear
+    jr c,.clear             ; all in the first block
+    ld c,0
+    ld hl,cb_by
+    inc (hl)                ; the rest in the block below
+    jp .test
+.clear:
+    or a
+    ret
+; Carry if the block at (cb_bx, cb_by) is solid anywhere in column
+; cb_column, rows C .. A - 1.
+.test:
+    ; DE = rows_from[C] & ~rows_from[A]
+    add a,a
+    ld l,a
+    ld h,high rows_from
+    ld a,l
+    add a,low rows_from
+    ld l,a
+    ld a,(hl)
+    cpl
+    ld e,a
+    inc l
+    ld a,(hl)
+    cpl
+    ld d,a
+    ld a,c
+    add a,a
+    add a,low rows_from
+    ld l,a
+    ld a,(hl)
+    and e
+    ld e,a
+    inc l
+    ld a,(hl)
+    and d
+    ld d,a
+    ; HL = the block's word for this column.
+    ld a,(cb_bx)
+    ld b,a
+    ld a,(cb_by)
+    ld c,a
+    call map_addr
+    ld a,(hl)
+    rrca
+    rrca
+    rrca
+    ld l,a
+    and 7
+    add a,high block_cols
+    ld h,a
+    ld a,l
+    and 0xE0
+    ld l,a
+    ld a,(cb_column)
+    or l
+    ld l,a
+    ld a,(hl)
+    and e
+    jr nz,.solid
+    inc l
+    ld a,(hl)
+    and d
+    ret z
+.solid:
+    scf
+    ret
+
+BLOCK_ROWS  equ 16
 
 ; ---- the view ----------------------------------------------------------------
 
-; centre_camera -- puts the view's top-left where he is in the middle of it,
-; inside the planet.
-centre_camera:
+; camera_target -- where the view should be for him: cam_tx, in characters
+; across, and cam_ty, in pixels down, with him in the middle, inside the
+; planet. scroll_view moves the view there.
+camera_target:
     ld hl,(pos_x + 1)
-    ld de,120
+    ld de,VIEW_W * 4 - 4    ; half the view, less half of him
     or a
     sbc hl,de
     jr nc,.x_positive
@@ -530,24 +703,19 @@ centre_camera:
     rr l
     ld de,MAP_W * 2 - VIEW_W
     call clamp_hl_to_de
-    ld (cam_x),hl
+    ld a,l
+    ld (cam_tx),a
 
     ld hl,(pos_y + 1)
-    ld de,72
+    ld de,VIEW_LINES / 2 - 8
     or a
     sbc hl,de
     jr nc,.y_positive
     ld hl,0
 .y_positive:
-    srl h
-    rr l
-    srl h
-    rr l
-    srl h
-    rr l
-    ld de,MAP_H * 2 - VIEW_H
+    ld de,MAP_H * 16 - VIEW_LINES
     call clamp_hl_to_de
-    ld (cam_y),hl
+    ld (cam_ty),hl
     ret
 
 ; clamp_hl_to_de -- HL = min(HL, DE), unsigned.
@@ -560,9 +728,13 @@ clamp_hl_to_de:
     ex de,hl
     ret
 
-; screen_pos -- B, C = where he is on the screen, in pixels. Uses DE, HL.
+; screen_pos -- B, C = where he is in the view, in pixels; carry if his
+; sprite is not wholly inside it (only for a moment, as when the view must
+; catch him up). Uses DE, HL.
 screen_pos:
-    ld hl,(cam_x)
+    ld a,(cam_x)
+    ld l,a
+    ld h,0
     add hl,hl
     add hl,hl
     add hl,hl
@@ -571,220 +743,26 @@ screen_pos:
     or a
     sbc hl,de
     ld b,l
-    ld hl,(cam_y)
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ex de,hl
+    ld a,h
+    or a
+    scf
+    ret nz
+    ld a,l
+    cp VIEW_W * 8 - 23      ; his three bytes across
+    ccf
+    ret c
+    ld de,(cam_y)
     ld hl,(pos_y + 1)
     or a
     sbc hl,de
     ld c,l
-    ret
-
-; follow_camera -- recentres the view, and redraws it, when he gets within
-; a margin of its edge. Exile's view jumped too.
-follow_camera:
-    ld hl,(cam_x)
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ex de,hl
-    ld hl,(pos_x + 1)
-    or a
-    sbc hl,de
     ld a,h
     or a
-    jr nz,.recentre
+    scf
+    ret nz
     ld a,l
-    cp 48
-    jr c,.recentre
-    cp 192
-    jr nc,.recentre
-
-    ld hl,(cam_y)
-    add hl,hl
-    add hl,hl
-    add hl,hl
-    ex de,hl
-    ld hl,(pos_y + 1)
-    or a
-    sbc hl,de
-    ld a,h
-    or a
-    jr nz,.recentre
-    ld a,l
-    cp 32
-    jr c,.recentre
-    cp 112
-    ret c
-.recentre:
-    call centre_camera
-    call render_view
-    xor a
-    ld (have_old),a         ; the whole view is fresh: nothing to take off
-    ret
-
-; ---- the sprite --------------------------------------------------------------
-
-; restore_player -- takes him off the screen: redraws the 3 x 3 cells his
-; sprite last covered, in the landscape's colour.
-restore_player:
-    ld a,(have_old)
-    or a
-    ret z
-    ld a,(old_sy)
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld c,a
-    ld e,3
-.row:
-    ld a,c
-    cp VIEW_H
-    ret nc
-    ld a,(old_sx)
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld b,a
-    ld d,3
-.cell:
-    ld a,b
-    cp VIEW_W
-    jr nc,.next_row
-    push de
-    call draw_cell_at
-    pop de
-    inc b
-    dec d
-    jr nz,.cell
-.next_row:
-    inc c
-    dec e
-    jr nz,.row
-    ret
-
-; draw_player -- draws him where he is now, and colours the cells he is in.
-draw_player:
-    call screen_pos
-    ld a,b
-    ld (old_sx),a
-    ld a,c
-    ld (old_sy),a
-    ld a,1
-    ld (have_old),a
-
-    ; Image facing * 2 + thrusting, at shift x & 7: sprite_table's entry.
-    ld a,(thrusting)
-    or a
-    jr z,.unlit
-    ld a,1
-.unlit:
-    ld e,a
-    ld a,(facing)
-    add a,a
-    or e
-    add a,a
-    add a,a
-    add a,a
-    ld e,a
-    ld a,b
-    and 7
-    or e
-    add a,a
-    ld l,a
-    ld h,0
-    ld de,sprite_table
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-
-    push bc
-    call pixel_addr
-    ld b,16
-.line:
-    push hl
-    REPT 3
-    ld a,(de)
-    and (hl)
-    inc de
-    ex de,hl
-    or (hl)
-    ex de,hl
-    inc de
-    ld (hl),a
-    inc l
-    ENDR
-    pop hl
-    call line_down
-    djnz .line
-    pop bc
-
-    ; His colour, on the cells his ink is in: x + 2 .. x + 12, y + 1 .. y + 14.
-    ld a,c
-    inc a
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld e,a                  ; first row
-    ld a,c
-    add a,14
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    sub e
-    inc a
-    ld d,a                  ; rows
-.attr_row:
-    ld a,e
-    rrca
-    rrca
-    rrca
-    ld l,a
-    and 3
-    add a,0x58
-    ld h,a
-    ld a,l
-    and 0xE0
-    ld l,a
-    ld a,b
-    add a,2
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    or l
-    ld l,a
-    ld a,b
-    add a,12
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld c,a
-    ld a,b
-    add a,2
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    neg
-    add a,c
-    inc a                   ; columns
-.attr:
-    ld (hl),PLAYER_ATTR
-    inc l
-    dec a
-    jr nz,.attr
-    inc e
-    dec d
-    jr nz,.attr_row
+    cp VIEW_LINES - 15      ; his sixteen lines down
+    ccf
     ret
 
 ; ---- variables ---------------------------------------------------------------
@@ -796,15 +774,15 @@ pos_y:          db 0
 vel_x:          dw 0        ; 8.8, signed
 vel_y:          dw 0
 target_frac:    db 0
-body_col:       db 0        ; body_blocked's first mask column
-body_mask0:     db 0        ; and which bits of it, and of the next, are body
-body_mask1:     db 0
-body_ptr0:      dw 0        ; the two columns' masks in the current block row
-body_ptr1:      dw 0
+lead_edge:      dw lead_right ; which edge move_x is moving him into
+rb_offset:      db 0        ; row_blocked's working
+rb_shift:       db 0
+rb_col:         db 0
+cb_column:      db 0        ; column_blocked's
+cb_bx:          db 0
+cb_by:          db 0
+cb_end:         db 0
 keys:           db 0
 on_ground:      db 0
 facing:         db 0        ; 0 right, 1 left
 thrusting:      db 0
-have_old:       db 0        ; whether old_sx/old_sy are on the screen
-old_sx:         db 0
-old_sy:         db 0

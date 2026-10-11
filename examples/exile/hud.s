@@ -20,16 +20,30 @@ hud_init:
     ld de,status_text
     jp print_at
 
-; hud_update -- the position and the frames the last pass took.
+; hud_update -- the position and the frames the last pass took, one of the
+; three each pass: printing all three every pass costs a tenth of it.
 hud_update:
+    ld a,(hud_field)
+    inc a
+    cp 3
+    jr c,.field
+    xor a
+.field:
+    ld (hud_field),a
+    or a
+    jr nz,.not_x
     ld bc,(HUD_ROW + 2) * 256 + 3
     call hud_cursor
     ld de,(pos_x + 1)
-    call print_hex16
+    jp print_hex16
+.not_x:
+    dec a
+    jr nz,.frames
     ld bc,(HUD_ROW + 2) * 256 + 11
     call hud_cursor
     ld de,(pos_y + 1)
-    call print_hex16
+    jp print_hex16
+.frames:
     ld bc,(HUD_ROW + 2) * 256 + 19
     call hud_cursor
     ld a,(loop_frames)
@@ -101,6 +115,8 @@ print_char:
     pop de
     pop bc
     ret
+
+hud_field:      db 0        ; which hud_update prints next
 
 title_text:     db "EXILE-LIKE  Q/A/O/P", 0
 status_text:    db "X ....  Y ....  F ..", 0

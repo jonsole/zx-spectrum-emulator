@@ -4,7 +4,7 @@ An Exile-like for the 48K Spectrum: not a port of Peter Irvin and Jeremy
 Smith's BBC Micro game, but a game in its spirit -- a big cave planet, a
 jetpack with real momentum, and (to come) creatures and objects that obey the
 same physics as you do. This is the first prototype: a planet built from
-hand-placed blocks, and the astronaut, nothing else yet.
+hand-placed blocks, scrolling smoothly, and the astronaut, nothing else yet.
 
 Keys: **Q** thrust, **A** push down, **O** left, **P** right.
 
@@ -79,60 +79,104 @@ record and refuse to overwrite their files without `--force` --
 
 ## How it works
 
-**Drawing.** The landscape is one colour, cyan; things drawn but not solid
-are drawn in it too. The view is 32 x 20 characters; it moves in whole
-characters, so every cell on screen is a quarter of one block and drawing it
-is an eight-byte copy, straight from the map. There is no back buffer: the
-astronaut is taken off by redrawing the 3 x 3 cells he covered, and drawn
-masked, with a black outline, in bright yellow -- the colour of the cells
-he is in, which is where the Spectrum's colour clash shows.
+**Scrolling.** The view, 256 x 128 pixels (the top 16 character rows, the
+panel below), follows him smoothly: a pixel at a time up and down, a
+character at a time across, keeping him in the middle. It runs at 25 frames
+a second -- every other frame the whole view is copied to the screen.
 
-**The astronaut** has a position in pixels plus a byte of fraction, and a
-velocity in 8.8 fixed point. Each frame adds gravity, thrust and drag, then
-moves him a pixel at a time along each axis, testing every pixel of his
-body, 8 x 15, against the blocks' collision masks. With his feet down he
-walks up steps of up to two pixels, so he can climb slopes. Hitting a wall
-or landing hard bounces him back at a quarter of the speed.
+The copy is the PUSH method: the view lives in a back buffer, and a screen
+line is copied by pointing SP at the buffer and POPping sixteen bytes into
+all eight register pairs, then pointing SP at the screen and PUSHing them
+back -- the fastest way a Z80 has of moving bytes. The code is the same few
+lines unrolled, written by `build.py` into `output/blit.s`; the 128 lines
+take about 69,000 T-states.
 
-**The view jumps**, as Exile's did: when he comes within 48 pixels of a side
-or 32 of the top or bottom, it recentres on him and is redrawn.
+That is most of a frame, so the copy has to race the beam. It starts the
+moment the beam reaches the top of the view -- the program reads the
+floating bus, port 0xFF, which returns 0xFF while the beam is in the border
+-- and from there it is always behind the beam on this frame, so nothing the
+beam has still to show changes under it, and ahead of the beam on the next,
+so the next frame shows the new picture whole. A +2A or +3, which has no
+floating bus, falls back on waiting about as long as the top border.
 
-**Memory.** Code and tables from 0x8000; the map, whole, at 0xB800 to
-0xF7FF; the stack and the interrupt table above it. About 6.5K is free
-below the map.
+The buffer scrolls itself, so nothing is redrawn that has not just come into
+view. It is a ring of 128 rows of 64 bytes, each of the view's 32 columns
+held twice, 32 apart, so a screen line's 32 bytes run on unbroken from
+whichever column the view starts at. Moving down a pixel writes one new line
+into the row that has just scrolled off the top; moving across a character
+writes one new column. Moving fast both ways at once is the most expensive
+pass, so on a pass that fills a column the view moves at most four lines
+and catches up on the next.
+
+Smooth scrolling across, a pixel at a time, would mean shifting every byte
+of the view on every frame; a 48K cannot afford that on top of the copy.
+Exile on the BBC moved across in coarse steps too.
+
+**The astronaut** is drawn into the buffer before the copy and taken out
+after it, so the copy carries him and he never flickers: masked, with a
+black outline, in bright yellow -- the colour of the cells he is in, which
+is where the Spectrum's colour clash shows. His colour moves just after the
+copy, before the beam reaches him, so colour and pixels change together.
+
+He has a position in pixels plus a byte of fraction, and a velocity in 8.8
+fixed point. Each 50th of a second -- twice a pass -- adds gravity, thrust
+and drag, then moves him a pixel at a time along each axis. A step can only
+take him into rock through the row or column of his body he steps into, so
+that edge is all a step tests, against the blocks' collision masks: a row
+from `block_mask`, a column from `block_cols`, which holds each block's
+solidity column by column as 16-bit words. With his feet down he walks up
+steps of up to two pixels, so he can climb slopes. Hitting a wall or landing
+hard bounces him back at a quarter of the speed.
+
+**Memory.** The stack from 0x5B00; the map, whole, at 0x6000 to 0x9FFF; the
+view's buffer at 0xA000 to 0xBFFF; code and tables from 0xC000, with about
+7K free below the interrupt table at 0xFE00. What is read hardest -- the
+buffer, the code, the blocks -- is above 0x8000, out of the memory the ULA
+contends for.
 
 | Source | What |
 |---|---|
 | `exile.s` | Memory map, start-up, the main loop, the interrupt |
 | `map.s` | Finding a block in the map |
-| `render.s` | Drawing the view and single cells; screen addressing |
-| `player.s` | Keys, forces, collision, the view following him, his sprite |
+| `render.s` | The scrolling buffer, filling it, him in it, his colour, waiting for the beam |
+| `player.s` | Keys, forces, collision, where the view should be |
 | `hud.s` | The panel: position, and frames per pass of the main loop |
 | `map.txt`, `blocks.png`, `blocks.json` | The planet and its blocks |
 | `planet.py`, `blocks.py` | Reading and checking them |
 | `sprites.py` | The astronaut, and his pre-shifted copies |
-| `build.py`, `preview.py` | Build, and draw the map without the game |
+| `build.py`, `preview.py` | Build (including the unrolled copy), and draw the map without the game |
 | `seed_map.py`, `seed_regions.txt`, `make_blocks.py` | How the first map and block set were made |
 
 ## Where it stands
 
-Measured in this emulator, in T-states (a frame is 69,888):
+Measured in this emulator, in T-states (a frame is 69,888, a pass two):
 
 | | |
 |---|---|
-| A view jump (`render_view`) | about 176,000 -- two and a half frames, drawing 640 cells |
-| A frame of play (physics, sprite off and on, panel) | up to about 36,000 -- 50 frames a second, with half a frame spare |
+| The copy (`blit_view`) | about 69,000 |
+| A new line in the buffer | about 3,000, plus 1,700 a block row |
+| A new column | about 13,000 |
+| His physics, one 50th of a second | about 8,000 |
+| A whole pass | under 140,000 -- 25 frames a second -- on over 99% of passes in long random runs; the rest take a third frame |
 
 Checked by assembling it and driving it headless from the emulator core:
-every landscape pixel on screen matches `map.txt` drawn with `blocks.png`,
-and over long random key sequences no pixel of his body ends up in anything
-solid.
+
+- every pixel and colour of the view on screen, and every byte of the
+  buffer, matches `map.txt` drawn with `blocks.png`;
+- over thousands of passes of random keys no pixel of his body was ever in
+  anything solid;
+- every frame the emulator displayed while scrolling over rock showed the
+  view from one position only -- no frame was torn. The same check, run with
+  the wait for the beam taken out, finds a third of the frames torn, so it
+  does see tearing when there is some.
+
+This emulator does not model the ULA's memory contention, and the copy writes
+to the screen while it is being displayed -- on a real Spectrum it will be
+slower, and whether it still stays ahead of the beam needs checking on
+contended timing.
 
 Not done yet, roughly in the order they are worth doing:
 
-- **Smooth scrolling.** The jumps cost two and a half frames each. A view
-  that scrolls a character at a time from a buffer, at 25 frames a second,
-  is the likely next step.
 - **A map editor.** `map.txt` is edited as text, with `preview.py` to see it;
   a block-painting editor in VS Code, like filmation's room designer, would
   be kinder.
