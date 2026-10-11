@@ -1,64 +1,110 @@
-; Drawing the landscape: a back buffer that scrolls itself, copied to the
+; Drawing the landscape: back buffers that scroll themselves, copied to the
 ; screen with PUSH every frame.
 ;
-; The buffer (BUF, 8K, uncontended) holds the view: 128 lines, each in a row
-; of 64 bytes. Each of the view's 32 columns is held twice, at (column & 31)
-; and 32 after that, so a screen line's 32 bytes run on unbroken from any
-; starting column, cam_x & 31, however far the view has scrolled across. The
-; rows are a ring, and ring_top is the one holding the view's top line. So
-; moving the view a pixel down writes one new line into the row that has just
-; scrolled off the top, and moving it a character across writes one new
-; column; nothing else in the buffer is touched.
+; There are two buffers, each holding the whole view, the second shifted four
+; pixels left of the first: BUF0's bytes are the planet's character columns
+; as they are, BUF4's are each column's right half and the next one's left.
+; The view's left edge moves four pixels at a time, cam_h; on a whole
+; character it shows BUF0, half way through one it shows BUF4. Steps of two
+; pixels would take four buffers, which a 48K holding a 16K map cannot fit.
 ;
-; blit_view, in output/blit.s (build.py writes it: it is the same few lines
-; unrolled), copies the window to the screen sixteen bytes at a time: POP them
-; off the buffer into all eight register pairs, point SP at the screen, PUSH
-; them back. That is about 17 T-states a byte, all told, 69K for the view --
-; most of a frame, so the copy has to be timed against the beam (wait_paper):
-; it starts once the beam has drawn the top of this frame, and finishes before
-; the beam gets to anything it has not yet written in the next.
+; A buffer is 128 rows -- the view's lines -- of 48 bytes, kept as a ring both
+; ways. Across: each row holds 32 of the planet's columns, a column at
+; (column & 31), and the first 16 again after them, so the copy's two
+; sixteen-byte halves of a line each run on unbroken from wherever the view
+; starts. Down: ring_top is the row holding the view's top line. So moving
+; the view a pixel down writes one new line into the row that has just
+; scrolled off the top of each buffer, and moving it four pixels across
+; writes one new column into the buffer that is not being shown; nothing
+; else is touched.
 ;
-; Across, the view moves a character at a time; down, a pixel at a time.
-; Smooth across would mean shifting every byte of the view on every frame,
-; which a 48K cannot afford on top of the copy.
+; blit_view, in output/blit.s (build.py writes it: the same few lines
+; unrolled), copies the shown buffer's window to the screen sixteen bytes at a
+; time: POP them into all eight register pairs, point SP at the screen, PUSH
+; them back. About 69K T-states for the view -- most of a frame -- so it
+; races the beam (wait_paper): it starts once the beam has drawn the top of
+; this frame, and finishes before the beam gets to anything it has not yet
+; written in the next.
 
-BUF         equ 0xA000      ; the view's buffer: up to BUF_END
-BUF_ROW     equ 64          ; bytes a row: 32 columns, twice
+BUF_ROW     equ 48          ; bytes a row: 32 columns, then the first 16 again
 VIEW_LINES  equ VIEW_H * 8  ; 128
 BUF_SIZE    equ BUF_ROW * VIEW_LINES
-BUF_END     equ BUF + BUF_SIZE
+BUF0        equ 0x9E00      ; the view on whole characters
+BUF4        equ BUF0 + BUF_SIZE ; and four pixels on
+BUF_END     equ BUF4 + BUF_SIZE
+
+    ASSERT low BUF0 == 0 && low BUF_SIZE == 0, "a buffer's end is tested by its page"
+    ASSERT (VIEW_LINES & (VIEW_LINES - 1)) == 0, "the ring is wrapped with an AND"
 
 MAX_LINES   equ 6           ; the most the view moves down or up in a pass: as
                             ; fast as he can fall, two frames at 3 pixels
-COLUMN_LINES equ 4          ; or in a pass that also fills a column -- both
-                            ; at once would not fit, and the view catches up
+COLUMN_LINES equ 3          ; or in a pass that also fills a column -- both at
+                            ; once would not fit, and the view catches up
+FAR_BEHIND  equ 10          ; four-pixel steps behind him, or
+FAR_BELOW   equ 24          ; lines, before the view is far behind: then each
+                            ; pass catches up one way only, as fast as a pass
+                            ; allows -- two steps, or MAX_LINES lines
 
-    ASSERT (VIEW_LINES & (VIEW_LINES - 1)) == 0, "the ring is wrapped with an AND"
-
-; buffer_row -- HL = buffer row A (0..127), at column C (0..63). Uses A.
+; buffer_row -- HL = buffer page B's row A (0..127), at column C (0..47).
+; Uses A; preserves BC, DE.
 buffer_row:
     ld l,a
     ld h,0
     add hl,hl
     add hl,hl
     add hl,hl
+    add hl,hl               ; row * 16
+    push de
+    ld e,l
+    ld d,h
     add hl,hl
-    add hl,hl
-    add hl,hl
+    add hl,de               ; row * 48
+    pop de
     ld a,l
-    or c
+    add a,c
     ld l,a
     ld a,h
-    add a,high BUF
+    adc a,b
     ld h,a
     ret
 
-; build_view -- puts the view where it should be for him and fills the whole
-; buffer, at the start. After that the view only ever scrolls.
+; set_windows -- where each buffer's 32 columns start, from cam_h: BUF4's at
+; cam_h >> 1, BUF0's at (cam_h + 1) >> 1. The two are the same on a whole
+; character; half way through one, BUF0's -- not shown -- has gone on a
+; column, ready for the next step.
+set_windows:
+    ld hl,(cam_h)
+    srl h
+    rr l
+    ld a,l
+    ld (cam_s4),a
+    ld hl,(cam_h)
+    inc hl
+    srl h
+    rr l
+    ld a,l
+    ld (cam_s0),a
+    ret
+
+; shown_buffer -- B = the page of the buffer the view shows, C = the page it
+; ends at. Uses A.
+shown_buffer:
+    ld a,(cam_h)
+    and 1
+    ld b,high BUF0
+    ld c,high BUF4
+    ret z
+    ld b,high BUF4
+    ld c,high BUF_END
+    ret
+
+; build_view -- puts the view where it should be for him and fills both
+; buffers, at the start. After that the view only ever scrolls.
 build_view:
     call camera_target
-    ld a,(cam_tx)
-    ld (cam_x),a
+    ld hl,(cam_th)
+    ld (cam_h),hl
+    call set_windows
     ld hl,(cam_ty)
     ld (cam_y),hl
     xor a
@@ -77,31 +123,59 @@ build_view:
     ld (attr_rows),a        ; no colour of his to take off
     ret
 
-; scroll_view -- moves the view toward (cam_tx, cam_ty), a character across
-; and up to MAX_LINES lines up or down, filling in what comes into sight.
+; scroll_view -- moves the view toward (cam_th, cam_ty): four pixels across,
+; or eight when it is far behind him, and up to MAX_LINES lines up or down,
+; filling in what comes into sight.
 scroll_view:
+    ; How far behind him the view is, each way, in pixels.
+    ld hl,(cam_th)
+    ld de,(cam_h)
+    call .distance
+    add hl,hl
+    add hl,hl
+    ld (sv_across),hl
+    ld hl,(cam_ty)
+    ld de,(cam_y)
+    call .distance
+    ld (sv_down),hl
+    ; Far behind: this pass catches up the way it is further behind, and only
+    ; that way -- two columns, or MAX_LINES lines, each fit a pass alone.
+    ld de,FAR_BELOW
+    or a
+    sbc hl,de
+    jr nc,.far
+    ld hl,(sv_across)
+    ld de,FAR_BEHIND * 4
+    or a
+    sbc hl,de
+    jr c,.near
+.far:
+    ld hl,(sv_down)
+    ld de,(sv_across)
+    or a
+    sbc hl,de
+    jr nc,.far_down
+    xor a
+    ld (sv_lines),a
+    call step_across
+    jp step_across
+.far_down:
     ld a,MAX_LINES
     ld (sv_lines),a
-    ld a,(cam_tx)
-    ld b,a
-    ld a,(cam_x)
-    cp b
+    jr .down_or_up
+.near:
+    ; A step across if he has moved on one, and fewer lines with it.
+    ld a,MAX_LINES
+    ld (sv_lines),a
+    call step_across
     jr z,.down_or_up
-    jr c,.right
-    dec a
-    ld (cam_x),a
-    xor a                   ; the new column is on the left
-    jr .column
-.right:
-    inc a
-    ld (cam_x),a
-    ld a,VIEW_W - 1         ; on the right
-.column:
-    call fill_column
     ld a,COLUMN_LINES
     ld (sv_lines),a
 
 .down_or_up:
+    ld a,(sv_lines)
+    or a
+    ret z
     ld hl,(cam_ty)
     ld de,(cam_y)
     or a
@@ -125,7 +199,7 @@ scroll_view:
     ld de,VIEW_LINES
     add hl,de
     ex de,hl                ; the planet rows below the old view
-    jr fill_lines
+    jp fill_lines
 .up:
     ; Up: the bottom rows become the new top lines.
     ex de,hl
@@ -144,7 +218,17 @@ scroll_view:
     sbc hl,de
     ld (cam_y),hl
     ex de,hl                ; the planet rows above the old view
-    jr fill_lines
+    jp fill_lines
+; HL = |HL - DE|.
+.distance:
+    or a
+    sbc hl,de
+    ret nc
+    ex de,hl
+    ld hl,0
+    or a
+    sbc hl,de
+    ret
 ; B = HL, at most sv_lines.
 .lines:
     ld a,(sv_lines)
@@ -158,8 +242,58 @@ scroll_view:
     ld b,a
     ret
 
+; step_across -- four pixels toward cam_th, filling the one column that
+; brings into the buffer that is not being shown. NZ if it stepped.
+;
+; Right onto half way through a character, BUF0's window moves on a column --
+; BUF4 is shown -- and right onto a whole one, BUF4's does. Left, the same
+; the other way round.
+step_across:
+    ld hl,(cam_th)
+    ld de,(cam_h)
+    or a
+    sbc hl,de
+    ret z
+    ex de,hl
+    jr c,.left
+    inc hl
+    ld (cam_h),hl
+    call set_windows
+    ld a,(cam_h)
+    and 1
+    jr z,.right_buf4
+    ld a,(cam_s0)
+    add a,VIEW_W - 1
+    call fill_column0
+    or 1
+    ret
+.right_buf4:
+    ld a,(cam_s4)
+    add a,VIEW_W - 1
+    call fill_column4
+    or 1
+    ret
+.left:
+    dec hl
+    ld (cam_h),hl
+    call set_windows
+    ld a,(cam_h)
+    and 1
+    jr z,.left_buf0
+    ld a,(cam_s4)
+    call fill_column4
+    or 1
+    ret
+.left_buf0:
+    ld a,(cam_s0)
+    call fill_column0
+    or 1
+    ret
+
+; ---- lines --------------------------------------------------------------------
+
 ; fill_lines -- writes B planet pixel rows from DE (0..2047) into buffer rows
-; from C (0..127, round the ring), across the view's 32 columns from cam_x.
+; from C (0..127, round the ring), in both buffers.
 ;
 ; A block row at a time: its blocks' addresses are looked up once into
 ; fl_blocks, and every line in it is then reads and writes. Uses everything.
@@ -200,9 +334,9 @@ fill_lines:
     jr nz,.line
     jr .chunk
 
-; block_row_lookup -- fl_blocks: where each of the 17 blocks across the view's
-; columns keeps its bytes, in block row fl_y >> 4 -- low byte then high, the
-; low byte waiting for the row's offset. Uses everything but IX, IY.
+; block_row_lookup -- fl_blocks: where each of the 17 blocks from BUF4's
+; first column keeps its bytes, in block row fl_y >> 4 -- low byte then high,
+; the low byte waiting for the row's offset. Uses everything but IX, IY.
 block_row_lookup:
     ld de,(fl_y)
     ld a,e
@@ -219,7 +353,7 @@ block_row_lookup:
     rlca
     or c
     ld c,a
-    ld a,(cam_x)
+    ld a,(cam_s4)
     srl a
     ld b,a
     call map_addr
@@ -239,12 +373,17 @@ block_row_lookup:
     add a,high block_gfx
     ld (de),a
     inc e
-    inc l                   ; a 17th past the planet's edge is read, not drawn
+    inc l                   ; a block past the planet's edge is read, not drawn
     djnz .block
     ret
 
-; fill_line -- writes planet pixel row fl_y into buffer row fl_row from
-; fl_blocks. Uses everything but IX, IY.
+; fill_line -- planet pixel row fl_y into buffer row fl_row, in both
+; buffers, from fl_blocks. Uses everything but IX, IY.
+;
+; The row's 33 bytes from BUF4's first column go into fl_line_bytes; BUF0
+; takes 32 of them as they are. Then one RLD a byte, right to left, moves
+; every byte's low half up and the next byte's high half in -- four pixels
+; left -- and BUF4 takes those.
 fill_line:
     ; Which of a block's 32 bytes this row is: ((y >> 3) & 1) * 16 + (y & 7),
     ; into the ORs below; 8 more for a block's right half.
@@ -261,17 +400,14 @@ fill_line:
     or 8
     ld (.right_only + 1),a
 
-    ; HL = where in the row the view's first column goes.
-    ld a,(cam_x)
-    and 31
-    ld c,a
-    ld a,(fl_row)
-    call buffer_row
+    ld hl,fl_line_bytes
     ld bc,fl_blocks
-    ld a,(cam_x)
+    ld a,low fl_blocks + 32
+    ld (.end + 1),a
+    ld a,(cam_s4)
     and 1
-    jr z,.pairs
-    ; The view starts half way through a block: its right half alone.
+    jr z,.pair
+    ; Starting half way through a block: its right half alone.
     ld a,(bc)
     inc c
 .right_only:
@@ -282,12 +418,9 @@ fill_line:
     ld d,a
     ld a,(de)
     ld (hl),a
-    set 5,l
-    ld (hl),a
-    res 5,l
     inc l
-    res 5,l
-.pairs:
+    ld a,low fl_blocks + 34
+    ld (.end + 1),a
 .pair:
     ld a,(bc)
     inc c
@@ -299,26 +432,19 @@ fill_line:
     ld d,a
     ld a,(de)
     ld (hl),a
-    set 5,l
-    ld (hl),a               ; and its twin, 32 along
-    res 5,l
     inc l
-    res 5,l                 ; past column 31 back to 0, not into the twins
     set 3,e
     ld a,(de)
     ld (hl),a
-    set 5,l
-    ld (hl),a
-    res 5,l
     inc l
-    res 5,l
     ld a,c
-    cp low fl_blocks + 32   ; sixteen blocks, or a half, fifteen, and a half
+.end:
+    cp 0                    ; patched: sixteen blocks on
     jr nz,.pair
-    ld a,(cam_x)
+    ld a,(cam_s4)
     and 1
-    ret z
-    ; ...and ends half way through one: its left half alone.
+    jr nz,.gathered
+    ; ...and the 33rd byte, the left half of the next.
     ld a,(bc)
     inc c
 .left_only:
@@ -328,49 +454,159 @@ fill_line:
     ld d,a
     ld a,(de)
     ld (hl),a
-    set 5,l
-    ld (hl),a
+.gathered:
+    ; BUF0: from its own first column, which is BUF4's or the one after.
+    ld a,(cam_s4)
+    ld b,a
+    ld a,(cam_s0)
+    sub b
+    add a,low fl_line_bytes
+    ld l,a
+    ld h,high fl_line_bytes
+    ld a,(cam_s0)
+    and 31
+    ld c,a
+    ld b,high BUF0
+    ld a,(fl_row)
+    call store_row
+
+    ; BUF4: four pixels on.
+    ld hl,fl_line_bytes + 32
+    REPT 33
+    rld
+    dec l
+    ENDR
+    ld hl,fl_line_bytes
+    ld a,(cam_s4)
+    and 31
+    ld c,a
+    ld b,high BUF4
+    ld a,(fl_row)
+    ; fall through
+
+; store_row -- the 32 bytes at HL into buffer page B's row A, the first at
+; column C (0..31) and round the row from there, and the first 16 columns
+; again after the 32. Uses everything but IX, IY.
+store_row:
+    push hl
+    call buffer_row         ; HL = where column C goes
+    ld a,l
+    sub c
+    ld (sr_row),a
+    ld a,h
+    sbc a,0
+    ld (sr_row + 1),a       ; the row's start
+    ex de,hl
+    pop hl
+    ld a,VIEW_W
+    sub c
+    ld b,0
+    push bc
+    ld c,a
+    ldir                    ; columns C..31
+    pop bc
+    ld a,c
+    or a
+    jr z,.twins
+    ld de,(sr_row)
+    ldir                    ; columns 0..C-1
+.twins:
+    ld hl,(sr_row)
+    ld de,VIEW_W
+    ex de,hl
+    add hl,de
+    ex de,hl                ; DE = column 32
+    ld bc,16
+    ldir
     ret
 
-; fill_column -- writes view column A (0..31), planet column cam_x + A, down
-; all the view's lines in the buffer.
+; ---- columns ------------------------------------------------------------------
+
+; fill_column0 -- BUF0's column for planet column A, down every line.
+; fill_column4 -- BUF4's: the column's right half and the next one's left,
+; ORed out of block_hi (the blocks moved four pixels left) and block_lo
+; (four pixels right).
 ;
-; A block at a time, through a copy of a block's sixteen lines unrolled and
-; entered at the line the view's top cuts the block at -- a line is then four
-; instructions and a twin. Where the block would run past the bottom of the
-; view, or round the ring, a line at a time instead.
+; Through the unrolled copies in output/columns.s, a line four or five
+; instructions, running on from block to block: the column's blocks are
+; looked up once into fc_blocks, and the whole column is at most four runs --
+; two either side of where the ring wraps, each a run to a block's end and
+; a run part way down the last block.
+fill_column0:
+    ld c,a
+    ld b,high BUF0
+    call column_setup
+    ld a,(fc_twin)          ; 0 or 1: col0_once or col0_twice
+    ld (fc_variant),a
+    ld b,high block_gfx
+    call column_blocks
+    jr fill_column
+
+fill_column4:
+    ld c,a
+    ld b,high BUF4
+    call column_setup
+    ld a,(fc_twin)
+    add a,2                 ; col4_once or col4_twice
+    ld (fc_variant),a
+    ld b,high block_hi
+    call column_blocks
+    ; fall through
+
 fill_column:
+    ; Down to where the ring wraps, then on from its first row.
+    ld a,(fc_to_wrap)
     ld b,a
-    ld a,(cam_x)
-    add a,b
-    ld c,a                  ; C = planet column
+    xor a
+    call fc_segment
+    ld a,(fc_to_wrap)
+    cp VIEW_LINES
+    ret z
+    ld hl,(fc_dest0)
+    ld (fc_dest),hl
+    ld b,a
+    ld a,VIEW_LINES
+    sub b
+    ld c,b
+    ld b,a                  ; the lines after the wrap
+    ld a,c                  ; from the view's line fc_to_wrap
+    jp fc_segment
+
+; column_setup -- for a column fill of buffer page B, planet column C:
+; fc_dest where it starts, at the view's top line, and fc_dest0 at the
+; ring's first row; fc_twin; fc_to_wrap; and fc_map, the map byte of the
+; block at the view's top. Uses everything but IX, IY.
+column_setup:
+    ld a,c
+    ld (fc_column),a
     and 1
     add a,a
     add a,a
     add a,a
     ld (fc_half),a          ; 8 for a block's right half
-
-    ; Where the view's top line is in the buffer, at this column.
     ld a,c
     and 31
-    push bc
     ld c,a
+    cp 16
+    ld a,1                  ; columns 0..15 are held twice
+    jr c,.twin
+    xor a
+.twin:
+    ld (fc_twin),a
+    xor a
+    call buffer_row
+    ld (fc_dest0),hl
     ld a,(ring_top)
     call buffer_row
-    pop bc
     ld (fc_dest),hl
     ld a,(ring_top)
     neg
     add a,VIEW_LINES
     ld (fc_to_wrap),a       ; lines before the ring goes back to its start
-    ld a,VIEW_LINES
-    ld (fc_left),a
-
-    ; IX = the map byte of the block at the view's top, in this column.
     ld de,(cam_y)
     ld a,e
     and 15
-    ld (fc_line),a          ; the line within the block
+    ld (fc_top_line),a
     ld a,e
     rrca
     rrca
@@ -384,176 +620,251 @@ fill_column:
     rlca
     rlca
     or b
-    ld b,c
     ld c,a
-    srl b
-    call map_addr
-    push hl
-    pop ix
-
-.run:
-    ; DE = the run's first byte: block_gfx + number * 32, + 16 in the
-    ; bottom half, + the line within the half, + 8 on the right.
-    ld a,(ix + 0)
-    rrca
-    rrca
-    rrca
-    ld e,a
-    and 7
-    add a,high block_gfx
-    ld d,a
-    ld a,e
-    and 0xE0
-    ld e,a
-    ld a,(fc_line)
+    ld a,(fc_column)
+    srl a
     ld b,a
-    and 8
-    add a,a
-    or e
-    ld e,a
-    ld a,b
-    and 7
-    or e
-    ld e,a
-    ld a,(fc_half)
-    or e
-    ld e,a
+    call map_addr
+    ld (fc_map),hl
+    ret
 
-    ; The run: to the block's bottom, if neither the view nor the ring ends
-    ; first.
-    ld a,16
-    sub b
-    ld c,a
-    ld a,(fc_left)
-    cp c
-    jp c,.slow
-    ld a,(fc_to_wrap)
-    cp c
-    jp c,.slow
-    ld a,c
-    ld (fc_run),a
+; column_blocks -- fc_blocks: for each block down the column from fc_map,
+; where its bytes for this column are at its first line, in the table at
+; page B (block_gfx or block_hi), then BUF4's other bytes -- the same
+; block's right half or the next block's left, in block_lo. Uses everything
+; but IX, IY.
+column_blocks:
     ld a,b
+    ld (.page + 1),a
+    ld hl,(fc_map)
+    ld de,fc_blocks
+    ld b,COLUMN_BLOCKS
+.block:
+    push bc
+    ld a,(hl)
+    rrca
+    rrca
+    rrca
+    ld c,a
+    and 0xE0
+    ld b,a
+    ld a,(fc_half)
+    or b
+    ld (de),a               ; this column's bytes...
+    inc e
+    ld a,c
+    and 7
+    ld c,a
+.page:
+    add a,0                 ; patched: the table's page
+    ld (de),a
+    inc e
+    ; ...and the next column's, in block_lo.
+    ld a,(fc_half)
+    or a
+    jr nz,.next
+    ld a,b
+    or 8
+    ld (de),a
+    inc e
+    ld a,c
+    jr .lo_page
+.next:
+    inc l
+    ld a,(hl)
+    dec l
+    rrca
+    rrca
+    rrca
+    ld c,a
+    and 0xE0
+    ld (de),a
+    inc e
+    ld a,c
+    and 7
+.lo_page:
+    add a,high block_lo
+    ld (de),a
+    inc e
+    ld bc,MAP_W
+    add hl,bc
+    pop bc
+    djnz .block
+    ret
+
+; fc_segment -- B lines (1..128) of the column, from the view's line A, into
+; the buffer from fc_dest on: a run to the end of a block -- of as many
+; blocks as it covers -- and a run part way down the last. Uses everything.
+fc_segment:
+    ld c,a
+    ld a,(fc_top_line)
+    add a,c                 ; lines down from the top block's first
+    ld c,a
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    ld (fc_block),a
+    ld a,c
+    and 15
+    ld (fc_line),a
+    ld c,a
+    ld a,16
+    sub c                   ; what is left of the first block
+    cp b
+    jr z,.to_end
+    jr c,.to_end
+    ; All in the one block: stop part way.
+    ld a,c
+    add a,b
+    ld (fc_stop_line),a
+    ld a,1
+    ld (fc_count),a
+    jp fc_run
+.to_end:
+    ld c,a
+    ld a,b
+    sub c                   ; lines after the first block
+    ld b,a
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    inc a
+    ld (fc_count),a         ; blocks to the end of a block
+    ld a,b
+    and 15
+    push af
+    xor a
+    ld (fc_stop_line),a
+    call fc_run
+    pop af
+    ret z                   ; ended on a block's end
+    ; The rest, part way down the next block.
+    ld (fc_stop_line),a
+    ld a,(fc_count)
+    ld b,a
+    ld a,(fc_block)
+    add a,b
+    ld (fc_block),a
+    xor a
+    ld (fc_line),a
+    inc a
+    ld (fc_count),a
+    ; fall through
+
+; fc_run -- the unrolled copy from line fc_line of fc_block, for fc_count
+; blocks' ends, or to a RET at fc_stop_line if that is not 0. Uses
+; everything.
+fc_run:
+    ; DE = the block's bytes at the line; IY = its other bytes; HL' = the
+    ; next block's pointers; B' = the count.
+    ld a,(fc_block)
+    add a,a
     add a,a
     ld l,a
     ld h,0
-    ld bc,fc_entries
-    add hl,bc
-    ld a,(hl)
-    inc hl
-    ld h,(hl)
-    ld l,a
-    push hl
-    pop iy
-    ld hl,(fc_dest)
-    ld bc,BUF_ROW
-    jp (iy)
-.lines:
-    REPT 8
-    ld a,(de)
-    inc e
-    ld (hl),a
-    set 5,l
-    ld (hl),a               ; and its twin
-    res 5,l
-    add hl,bc
-    ENDR
-    ld a,e                  ; from the top half's last line to the bottom's first
-    add a,8
-    ld e,a
-.lines_bottom:
-    REPT 8
-    ld a,(de)
-    inc e
-    ld (hl),a
-    set 5,l
-    ld (hl),a
-    res 5,l
-    add hl,bc
-    ENDR
-    jr .ran
-
-.slow:
-    ; The run is cut short: by what is left of the view or of the ring.
-    ld a,(fc_left)
-    cp c
-    jr nc,.not_left
-    ld c,a
-.not_left:
-    ld a,(fc_to_wrap)
-    cp c
-    jr nc,.not_wrap
-    ld c,a
-.not_wrap:
-    ld a,c
-    ld (fc_run),a
-    ld a,b                  ; the line within the block
-    ld b,c
-    ld c,a
-    ld hl,(fc_dest)
-.slow_line:
-    ld a,(de)
-    inc e
-    ld (hl),a
-    set 5,l
-    ld (hl),a
-    res 5,l
-    push bc
-    ld bc,BUF_ROW
-    add hl,bc
-    pop bc
-    inc c
-    ld a,c
-    cp 8
-    jr nz,.same_half
-    ld a,e
-    add a,8
-    ld e,a
-.same_half:
-    djnz .slow_line
-
-.ran:
-    ld (fc_dest),hl
-    ld a,(fc_run)
-    ld c,a
-    ld a,(fc_left)
-    sub c
-    ret z
-    ld (fc_left),a
-    ld a,(fc_to_wrap)
-    sub c
-    ld (fc_to_wrap),a
-    jr nz,.ring_ok
-    ld de,-BUF_SIZE         ; round the ring to its first row
+    ld de,fc_blocks
     add hl,de
-    ld (fc_dest),hl
-    ld a,0xFF               ; and it does not come round again
-    ld (fc_to_wrap),a
-.ring_ok:
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    inc hl
+    ld c,(hl)
+    inc hl
+    ld b,(hl)
+    inc hl
+    push hl
+    push bc
+    pop iy
     ld a,(fc_line)
+    ld c,a
+    and 8
+    add a,a
+    ld b,a
+    ld a,c
+    and 7
+    or b
+    or e
+    ld e,a
+    ld a,(fc_count)
+    exx
+    pop hl
+    ld b,a
+    exx
+
+    ; Where it enters: col_entries[variant * 16 + line].
+    ld a,(fc_variant)
+    add a,a
+    add a,a
+    add a,a
+    add a,a
+    ld b,a                  ; variant * 16
     add a,c
-    and 15
-    ld (fc_line),a
-    jp nz,.run
-    ld de,MAP_W             ; down into the next block
-    add ix,de
-    jp .run
+    add a,a
+    ld l,a
+    ld h,0
+    push de
+    ld de,col_entries
+    add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld (.run + 1),de
+    ; Where it stops, if part way: a RET at col_stops[variant * 16 + line].
+    ld hl,0
+    ld (fc_stop),hl
+    ld a,(fc_stop_line)
+    or a
+    jr z,.registers
+    add a,b
+    add a,a
+    ld l,a
+    ld h,0
+    ld de,col_stops
+    add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld (fc_stop),de
+    ld a,(de)
+    ld (fc_saved),a
+    ld a,0xC9               ; RET
+    ld (de),a
+.registers:
+    pop de
+    ld hl,(fc_dest)
+    push hl
+    pop ix
+    ld bc,BUF_ROW
+.run:
+    call 0                  ; patched
+    ld a,(fc_variant)
+    and 1
+    jr z,.once
+    push ix                 ; a twice-held column's copy moved IX, not HL
+    pop hl
+.once:
+    ld (fc_dest),hl
+    ld hl,(fc_stop)
+    ld a,h
+    or l
+    ret z
+    ld a,(fc_saved)
+    ld (hl),a
+    ret
 
-; Where a run starting at each line of a block enters the unrolled copy: 9
-; bytes a line, and the 4 that move to the block's bottom half after line 7.
-fc_entries:
-    dw fill_column.lines + 0, fill_column.lines + 9, fill_column.lines + 18
-    dw fill_column.lines + 27, fill_column.lines + 36, fill_column.lines + 45
-    dw fill_column.lines + 54, fill_column.lines + 63
-    dw fill_column.lines_bottom + 0, fill_column.lines_bottom + 9
-    dw fill_column.lines_bottom + 18, fill_column.lines_bottom + 27
-    dw fill_column.lines_bottom + 36, fill_column.lines_bottom + 45
-    dw fill_column.lines_bottom + 54, fill_column.lines_bottom + 63
+COLUMN_BLOCKS equ VIEW_LINES / 16 + 1 ; the most blocks a column of the view crosses
 
-; ---- the astronaut, in the buffer --------------------------------------------
+    INCLUDE "output/columns.s"
 
-; sprite_to_buffer -- draws him into the buffer where he is in the view,
-; keeping what was under him for sprite_from_buffer. Into the buffer rather
-; than onto the screen, so the copy carries him and he never flickers.
+; ---- the astronaut, in the buffer ---------------------------------------------
+
+; sprite_to_buffer -- draws him into the shown buffer where he is in the
+; view, keeping what was under him for sprite_from_buffer. Into the buffer
+; rather than onto the screen, so the copy carries him and he never flickers.
 sprite_to_buffer:
     call screen_pos
     sbc a,a
@@ -563,6 +874,69 @@ sprite_to_buffer:
     ld (spr_sx),a
     ld a,c
     ld (spr_sy),a
+
+    ; Where his three bytes are in a row: view column k is at the window's
+    ; start + k in the view's first half, and at the second half's start +
+    ; k - 16 after -- wherever the copy reads it.
+    ld a,b
+    rrca
+    rrca
+    rrca
+    and 0x1F
+    ld e,a                  ; his first view column
+    ld d,0
+.column:
+    ld a,(cam_s4)
+    and 31
+    ld b,a
+    ld a,e
+    cp 16
+    jr c,.first_half
+    ld a,b
+    add a,16
+    and 31
+    ld b,a
+    ld a,e
+    sub 16
+.first_half:
+    add a,b
+    ld hl,spr_offsets
+    ld b,0
+    ld c,d
+    add hl,bc
+    ld (hl),a
+    inc e
+    inc d
+    ld a,d
+    cp 3
+    jr nz,.column
+    ld a,(spr_offsets)
+    ld (.d0a + 2),a
+    ld (.d0b + 2),a
+    ld (sprite_from_buffer.d0 + 2),a
+    ld a,(spr_offsets + 1)
+    ld (.d1a + 2),a
+    ld (.d1b + 2),a
+    ld (sprite_from_buffer.d1 + 2),a
+    ld a,(spr_offsets + 2)
+    ld (.d2a + 2),a
+    ld (.d2b + 2),a
+    ld (sprite_from_buffer.d2 + 2),a
+
+    ; IX = his top line's row, (ring_top + y) mod 128, in the shown buffer.
+    call shown_buffer
+    ld a,c
+    ld (spr_end),a
+    ld a,(ring_top)
+    ld c,a
+    ld a,(spr_sy)
+    add a,c
+    and VIEW_LINES - 1
+    ld c,0
+    call buffer_row
+    ld (spr_row),hl
+    push hl
+    pop ix
 
     ; Image facing * 2 + thrusting, at shift x & 7: sprite_table's entry.
     ld a,(thrusting)
@@ -578,7 +952,7 @@ sprite_to_buffer:
     add a,a
     add a,a
     ld e,a
-    ld a,b
+    ld a,(spr_sx)
     and 7
     or e
     add a,a
@@ -589,51 +963,52 @@ sprite_to_buffer:
     ld e,(hl)
     inc hl
     ld d,(hl)
-    push de
 
-    ; His top line's row, (ring_top + y) mod VIEW_LINES; his column,
-    ; (cam_x & 31) + x / 8.
-    ld a,(ring_top)
-    add a,c
-    jr c,.wrap              ; past 255: certainly past the ring
-    cp VIEW_LINES
-    jr c,.row
-.wrap:
-    sub VIEW_LINES
-.row:
-    ld e,a
-    ld a,b
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld b,a
-    ld a,(cam_x)
-    and 31
-    add a,b
-    ld c,a
-    ld a,e
-    call buffer_row
-    ld (spr_addr),hl
-    pop de
-
-    ld ix,spr_save
+    ld hl,spr_save
     ld b,16
 .line:
-    REPT 3
-    ld a,(hl)
-    ld (ix + 0),a
-    inc ix
-    ld a,(de)
-    and (hl)
-    inc de
-    ex de,hl
-    or (hl)
-    ex de,hl
-    inc de
+.d0a:
+    ld a,(ix + 0)           ; patched: his first byte's column
     ld (hl),a
-    inc l
-    ENDR
+    inc hl
+    ld c,a
+    ld a,(de)
+    and c
+    inc de
+    ld c,a
+    ld a,(de)
+    or c
+    inc de
+.d0b:
+    ld (ix + 0),a
+.d1a:
+    ld a,(ix + 0)
+    ld (hl),a
+    inc hl
+    ld c,a
+    ld a,(de)
+    and c
+    inc de
+    ld c,a
+    ld a,(de)
+    or c
+    inc de
+.d1b:
+    ld (ix + 0),a
+.d2a:
+    ld a,(ix + 0)
+    ld (hl),a
+    inc hl
+    ld c,a
+    ld a,(de)
+    and c
+    inc de
+    ld c,a
+    ld a,(de)
+    or c
+    inc de
+.d2b:
+    ld (ix + 0),a
     call next_sprite_row
     djnz .line
     ret
@@ -643,33 +1018,41 @@ sprite_from_buffer:
     ld a,(spr_hidden)
     or a
     ret nz
-    ld hl,(spr_addr)
-    ld ix,spr_save
+    ld ix,(spr_row)
+    ld hl,spr_save
     ld b,16
 .line:
-    REPT 3
-    ld a,(ix + 0)
-    ld (hl),a
-    inc ix
-    inc l
-    ENDR
+    ld a,(hl)
+    inc hl
+.d0:
+    ld (ix + 0),a           ; patched by sprite_to_buffer
+    ld a,(hl)
+    inc hl
+.d1:
+    ld (ix + 0),a
+    ld a,(hl)
+    inc hl
+.d2:
+    ld (ix + 0),a
     call next_sprite_row
     djnz .line
     ret
 
-; next_sprite_row -- HL, three bytes into a sprite's row in the buffer, to the
-; start of the row below, round the ring. Uses A.
+; next_sprite_row -- IX on a row, round the ring of the buffer that ends at
+; page spr_end. Uses A.
 next_sprite_row:
-    ld a,l
-    add a,BUF_ROW - 3
-    ld l,a
-    jr nc,.same_page
-    inc h
-.same_page:
-    ld a,h
-    cp high BUF_END
-    ret c
-    ld h,high BUF
+    push de
+    ld de,BUF_ROW
+    add ix,de
+    ld a,(spr_end)
+    ld e,a
+    ld a,ixh
+    cp e
+    jr c,.in_ring
+    ld de,-BUF_SIZE
+    add ix,de
+.in_ring:
+    pop de
     ret
 
 ; player_attrs -- his colour on the cells his ink is in (x + 2 .. x + 12,
@@ -804,22 +1187,39 @@ cell_addr:
 ring_top:       db 0        ; the buffer row holding the view's top line
 spr_sx:         db 0        ; where he is drawn this frame, in the view
 spr_sy:         db 0
-spr_addr:       dw 0        ; his top-left byte in the buffer
+spr_row:        dw 0        ; his top line's row in the buffer
+spr_end:        db 0        ; the page that buffer ends at
+spr_offsets:    ds 3        ; his three bytes' columns in a row
 spr_hidden:     db 0        ; 0xFF while he is outside the view
-spr_save:       ds 16 * 3   ; what is under him there
+spr_save:       ds 16 * 3   ; what is under him
 sv_lines:       db 0        ; scroll_view: the most lines this pass
+sv_across:      dw 0        ; how far behind him the view is, in pixels
+sv_down:        dw 0
+sr_row:         dw 0        ; store_row's
 fl_y:           dw 0        ; fill_lines's working
 fl_row:         db 0
 fl_count:       db 0
 fl_chunk:       db 0
     ALIGN 64
 fl_blocks:      ds 17 * 2   ; block_row_lookup's: in one page
-fc_half:        db 0        ; fill_column's working
+    ALIGN 64
+fl_line_bytes:  ds 33       ; fill_line's: in one page
+fc_column:      db 0        ; the column fills' working
+fc_half:        db 0
+fc_twin:        db 0
+fc_variant:     db 0
+fc_map:         dw 0
 fc_dest:        dw 0
+fc_dest0:       dw 0
 fc_to_wrap:     db 0
-fc_left:        db 0
+fc_top_line:    db 0
+fc_block:       db 0
 fc_line:        db 0
-fc_run:         db 0
+fc_count:       db 0
+fc_stop_line:   db 0
+fc_stop:        dw 0
+fc_saved:       db 0
+fc_blocks:      ds COLUMN_BLOCKS * 4
 attr_at:        dw 0        ; the cells his colour is on
 attr_rows:      db 0
 attr_cols:      db 0

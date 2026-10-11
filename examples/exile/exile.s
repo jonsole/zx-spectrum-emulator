@@ -2,7 +2,7 @@
 ;
 ; A planet of caves built from hand-placed blocks (map.s, from map.txt and
 ; blocks.png), drawn in one colour and scrolled smoothly with him in the
-; middle (render.s), and a jetpacked astronaut with momentum, gravity and
+; middle -- four pixels at a time across, one down (render.s) -- and a jetpacked astronaut with momentum, gravity and
 ; pixel-exact collisions against the rock (player.s), drawn in his own colour.
 ; It runs at 25 frames a second: the whole view is copied to the screen every
 ; other frame, and the physics runs twice for each, so he moves as he would at
@@ -14,9 +14,9 @@
 ; is above 0x8000, out of the memory the ULA contends for; the stack and half
 ; the map, read a few bytes at a time, are below it. (This emulator does not
 ; model contention yet, so its timings are a real machine's best case.)
-;   0x5B00     the stack, down from STACK_TOP
+;   0x5B00     the stack, down from STACK_TOP (sjasmplus starts it at 0x5D58)
 ;   MAP_ADDR   the planet, 16K
-;   BUF        the view's buffer, 8K (render.s)
+;   BUF0       the view's two buffers, 6K each (render.s)
 ;   CODE_ADDR  code, variables, then data.s's tables, aligned to the pages the
 ;              code indexes them by
 ;   0xFDFD     the interrupt's JP
@@ -34,9 +34,9 @@ HUD_ATTR    equ 0x0F        ; white on blue
 VIEW_W      equ 32          ; the view, in character cells
 VIEW_H      equ 16          ; a 160-line view's copy leaves too little of a pass
 
-STACK_TOP   equ 0x6000
-MAP_ADDR    equ 0x6000      ; map.txt, 16K: up to 0x9FFF
-CODE_ADDR   equ 0xC000      ; after the view's buffer
+STACK_TOP   equ 0x5E00
+MAP_ADDR    equ 0x5E00      ; map.txt, 16K: up to 0x9DFF
+CODE_ADDR   equ 0xCE00      ; after the view's buffers
 
 IM2_TABLE   equ 0xFE00
 IM2_JUMP    equ 0xFDFD
@@ -74,23 +74,25 @@ start:
     ei
 
 ; A pass is two frames. Up to the copy, nothing may touch the view's pixels
-; -- the beam is still showing the last pass's picture -- and the copy waits
-; for the beam to reach the top of the view anyway (wait_paper), so what
-; happens before it is free: the sprite into the buffer, and the panel. The
-; rest has the time from the copy's end to the next pass, and the view is
-; scrolled for the next pass at the end of this one.
+; -- the beam is still showing the last pass's picture. The copy may start
+; any time from the beam reaching the top of the view (wait_paper) to about
+; 44,000 T-states into the frame -- later, and the beam would catch it up on
+; the next -- so the sprite, the panel and his physics all go before it,
+; where the time would otherwise be spent waiting. What changes the buffers
+; or the colours goes after: the view is scrolled for the next pass at the
+; end of this one.
 main_loop:
     halt
-    call sprite_to_buffer
-    call hud_update         ; the panel is below the copy, and this time is free
+    call sprite_to_buffer   ; where he was: the physics moves him for next pass
+    call hud_update
+    call read_keys
+    call physics            ; two frames' worth
+    call physics
     call wait_paper
     call blit_view          ; into the next frame: interrupts off throughout
 .copied:
     call player_attrs       ; before the beam reaches him: colour and pixels together
     call sprite_from_buffer
-    call read_keys
-    call physics            ; two frames' worth
-    call physics
     call camera_target
     call scroll_view
     ; How many frames this pass took: 2 is 25 a second.
@@ -125,10 +127,12 @@ frames:         dw 0        ; interrupts since the start
 last_frames:    dw 0
 loop_frames:    db 0        ; frames the last pass of main_loop took
 
-cam_x:          db 0        ; the view's left edge, in characters of the planet
+cam_h:          dw 0        ; the view's left edge, in fours of pixels
 cam_y:          dw 0        ; its top line, in pixels
-cam_tx:         db 0        ; where camera_target wants them
+cam_th:         dw 0        ; where camera_target wants them
 cam_ty:         dw 0
+cam_s0:         db 0        ; the planet column each buffer's window starts at
+cam_s4:         db 0
 
     INCLUDE "output/blit.s"
 
@@ -141,7 +145,7 @@ code_end:
 map_data:
     INCBIN "output/map.bin"
 map_end:
-    ASSERT map_end <= BUF, "the map runs into the view's buffer"
-    ASSERT BUF_END <= CODE_ADDR, "the view's buffer runs into the code"
+    ASSERT map_end <= BUF0, "the map runs into the view's buffers"
+    ASSERT BUF_END <= CODE_ADDR, "the view's buffers run into the code"
 
     SAVESNA "output/exile.sna", start

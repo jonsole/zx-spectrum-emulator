@@ -491,14 +491,11 @@ row_blocked:
     call .mask_byte
     ld d,a
     ld a,(rb_shift)
-    ld b,a
-    ld a,0xFF
-    inc b
-    jr .shift_in
-.shift:
-    srl a
-.shift_in:
-    djnz .shift             ; 0xFF >> (x & 7)
+    ld hl,right_bits
+    add a,l
+    ld l,a
+    ld a,(hl)               ; 0xFF >> (x & 7): his pixels in the first byte
+    ld e,a
     and d
     jr nz,.hit
     ld a,(rb_shift)
@@ -508,16 +505,10 @@ row_blocked:
     inc a
     ld (rb_col),a
     call .mask_byte
-    ld b,a
-    ld a,(rb_shift)
     ld d,a
-    ld a,0xFF
-.shift_next:
-    srl a
-    dec d
-    jr nz,.shift_next
-    cpl
-    and b
+    ld a,e
+    cpl                     ; the rest, in the next
+    and d
     ret z
 .hit:
     scf
@@ -682,11 +673,15 @@ column_blocked:
 
 BLOCK_ROWS  equ 16
 
+; 0xFF >> n, n = 0..7, in one page.
+    ALIGN 8
+right_bits:     db 0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01
+
 ; ---- the view ----------------------------------------------------------------
 
-; camera_target -- where the view should be for him: cam_tx, in characters
-; across, and cam_ty, in pixels down, with him in the middle, inside the
-; planet. scroll_view moves the view there.
+; camera_target -- where the view should be for him: cam_th, in fours of
+; pixels across, and cam_ty, in pixels down, with him in the middle, inside
+; the planet. scroll_view moves the view there.
 camera_target:
     ld hl,(pos_x + 1)
     ld de,VIEW_W * 4 - 4    ; half the view, less half of him
@@ -699,12 +694,9 @@ camera_target:
     rr l
     srl h
     rr l
-    srl h
-    rr l
-    ld de,MAP_W * 2 - VIEW_W
+    ld de,(MAP_W * 16 - VIEW_W * 8) / 4
     call clamp_hl_to_de
-    ld a,l
-    ld (cam_tx),a
+    ld (cam_th),hl
 
     ld hl,(pos_y + 1)
     ld de,VIEW_LINES / 2 - 8
@@ -732,10 +724,7 @@ clamp_hl_to_de:
 ; sprite is not wholly inside it (only for a moment, as when the view must
 ; catch him up). Uses DE, HL.
 screen_pos:
-    ld a,(cam_x)
-    ld l,a
-    ld h,0
-    add hl,hl
+    ld hl,(cam_h)
     add hl,hl
     add hl,hl
     ex de,hl

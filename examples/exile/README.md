@@ -80,9 +80,9 @@ record and refuse to overwrite their files without `--force` --
 ## How it works
 
 **Scrolling.** The view, 256 x 128 pixels (the top 16 character rows, the
-panel below), follows him smoothly: a pixel at a time up and down, a
-character at a time across, keeping him in the middle. It runs at 25 frames
-a second -- every other frame the whole view is copied to the screen.
+panel below), follows him smoothly: a pixel at a time up and down, four
+pixels at a time across, keeping him in the middle. It runs at 25 frames a
+second -- every other frame the whole view is copied to the screen.
 
 The copy is the PUSH method: the view lives in a back buffer, and a screen
 line is copied by pointing SP at the buffer and POPping sixteen bytes into
@@ -91,26 +91,40 @@ back -- the fastest way a Z80 has of moving bytes. The code is the same few
 lines unrolled, written by `build.py` into `output/blit.s`; the 128 lines
 take about 69,000 T-states.
 
-That is most of a frame, so the copy has to race the beam. It starts the
-moment the beam reaches the top of the view -- the program reads the
+That is most of a frame, so the copy has to race the beam. It may start any
+time from the beam reaching the top of the view -- the program reads the
 floating bus, port 0xFF, which returns 0xFF while the beam is in the border
--- and from there it is always behind the beam on this frame, so nothing the
-beam has still to show changes under it, and ahead of the beam on the next,
-so the next frame shows the new picture whole. A +2A or +3, which has no
-floating bus, falls back on waiting about as long as the top border.
+-- to about 44,000 T-states into the frame: always behind the beam on this
+frame, so nothing the beam has still to show changes under it, and ahead of
+it on the next, so the next frame shows the new picture whole. His physics
+runs before the copy, in what would otherwise be time spent waiting for the
+beam. A +2A or +3, which has no floating bus, falls back on waiting about as
+long as the top border.
 
-The buffer scrolls itself, so nothing is redrawn that has not just come into
-view. It is a ring of 128 rows of 64 bytes, each of the view's 32 columns
-held twice, 32 apart, so a screen line's 32 bytes run on unbroken from
-whichever column the view starts at. Moving down a pixel writes one new line
-into the row that has just scrolled off the top; moving across a character
-writes one new column. Moving fast both ways at once is the most expensive
-pass, so on a pass that fills a column the view moves at most four lines
-and catches up on the next.
+**Four pixels across.** A Spectrum byte is eight pixels, so moving the view
+less than a character means shifting every byte -- far too slow to do to the
+whole view every frame. Instead there are two buffers: BUF0 holds the view
+on whole characters, BUF4 the same four pixels on, each byte the right half
+of one character and the left half of the next. On a whole character the
+copy reads BUF0, half way through one BUF4. Two-pixel steps would take four
+buffers, and with a 16K map there is not the memory.
 
-Smooth scrolling across, a pixel at a time, would mean shifting every byte
-of the view on every frame; a 48K cannot afford that on top of the copy.
-Exile on the BBC moved across in coarse steps too.
+Each buffer scrolls itself, so nothing is redrawn that has not just come into
+view. A buffer is a ring of 128 rows of 48 bytes: the view's 32 columns, and
+the first 16 of them again, so each sixteen-byte half of a screen line runs
+on unbroken from wherever the view starts. Moving down a pixel writes one
+new line into both buffers -- BUF4's made from BUF0's with one RLD a byte.
+Moving four pixels across writes one new column, always into the buffer that
+is not being shown: right onto half way through a character, BUF0 moves on a
+column; right onto a whole one, BUF4 does. A column goes through unrolled
+copies (`output/columns.s`), BUF4's ORed from the blocks pre-shifted four
+pixels each way (`block_hi`, `block_lo`).
+
+A pass can afford a column and three lines, or six lines, or two columns,
+but not all at once, so the view catches him up in turns: normally a step
+across when he has moved on one, with fewer lines that pass; and when it has
+fallen far behind (he moves up to six pixels a pass), it spends a pass
+catching up whichever way it is further behind.
 
 **The astronaut** is drawn into the buffer before the copy and taken out
 after it, so the copy carries him and he never flickers: masked, with a
@@ -119,7 +133,7 @@ is where the Spectrum's colour clash shows. His colour moves just after the
 copy, before the beam reaches him, so colour and pixels change together.
 
 He has a position in pixels plus a byte of fraction, and a velocity in 8.8
-fixed point. Each 50th of a second -- twice a pass -- adds gravity, thrust
+fixed point. Each 50th of a second -- twice a pass, before the copy -- adds gravity, thrust
 and drag, then moves him a pixel at a time along each axis. A step can only
 take him into rock through the row or column of his body he steps into, so
 that edge is all a step tests, against the blocks' collision masks: a row
@@ -128,23 +142,24 @@ solidity column by column as 16-bit words. With his feet down he walks up
 steps of up to two pixels, so he can climb slopes. Hitting a wall or landing
 hard bounces him back at a quarter of the speed.
 
-**Memory.** The stack from 0x5B00; the map, whole, at 0x6000 to 0x9FFF; the
-view's buffer at 0xA000 to 0xBFFF; code and tables from 0xC000, with about
-7K free below the interrupt table at 0xFE00. What is read hardest -- the
-buffer, the code, the blocks -- is above 0x8000, out of the memory the ULA
-contends for.
+**Memory.** It is nearly all used. The stack from 0x5B00 (sjasmplus's
+start-up stack sits at 0x5D58); the map, whole, at 0x5E00 to 0x9DFF; the two
+buffers, 6K each, at 0x9E00 to 0xCDFF; code and tables from 0xCE00 up to the
+interrupt table at 0xFE00, with a few hundred bytes free. What is read
+hardest -- the buffers, the code, the blocks -- is above 0x8000, out of the
+memory the ULA contends for.
 
 | Source | What |
 |---|---|
 | `exile.s` | Memory map, start-up, the main loop, the interrupt |
 | `map.s` | Finding a block in the map |
-| `render.s` | The scrolling buffer, filling it, him in it, his colour, waiting for the beam |
+| `render.s` | The two scrolling buffers, filling them, him in them, his colour, waiting for the beam |
 | `player.s` | Keys, forces, collision, where the view should be |
 | `hud.s` | The panel: position, and frames per pass of the main loop |
 | `map.txt`, `blocks.png`, `blocks.json` | The planet and its blocks |
 | `planet.py`, `blocks.py` | Reading and checking them |
 | `sprites.py` | The astronaut, and his pre-shifted copies |
-| `build.py`, `preview.py` | Build (including the unrolled copy), and draw the map without the game |
+| `build.py`, `preview.py` | Build (including the unrolled copy and column fills), and draw the map without the game |
 | `seed_map.py`, `seed_regions.txt`, `make_blocks.py` | How the first map and block set were made |
 
 ## Where it stands
@@ -154,15 +169,16 @@ Measured in this emulator, in T-states (a frame is 69,888, a pass two):
 | | |
 |---|---|
 | The copy (`blit_view`) | about 69,000 |
-| A new line in the buffer | about 3,000, plus 1,700 a block row |
-| A new column | about 13,000 |
-| His physics, one 50th of a second | about 8,000 |
+| A new line, in both buffers | about 5,500 |
+| A new column | 10,000 to 17,000, depending on the buffer and whether the column is held twice |
+| His physics, one 50th of a second | 7,000 to 13,000 |
 | A whole pass | under 140,000 -- 25 frames a second -- on over 99% of passes in long random runs; the rest take a third frame |
 
 Checked by assembling it and driving it headless from the emulator core:
 
-- every pixel and colour of the view on screen, and every byte of the
-  buffer, matches `map.txt` drawn with `blocks.png`;
+- every pixel and colour of the view on screen, and every byte of both
+  buffers, matches `map.txt` drawn with `blocks.png`, at whole-character and
+  half-character positions;
 - over thousands of passes of random keys no pixel of his body was ever in
   anything solid;
 - every frame the emulator displayed while scrolling over rock showed the
