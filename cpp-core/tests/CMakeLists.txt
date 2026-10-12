@@ -187,6 +187,16 @@ target_link_libraries(z80_com_runner PRIVATE zx_core)
 target_compile_options(z80_com_runner PRIVATE ${ZX_WARNINGS})
 add_dependencies(zx_tools z80_com_runner)
 
+# Not a test on its own: loads a snapshot and runs, calls and reads it from a
+# line protocol on stdin, for the tests the examples write in Python -- see
+# examples/revs/tests/run_tests.py. Finds roms/48.rom from the project root.
+add_executable(snapshot_probe snapshot_probe.cpp)
+target_link_libraries(snapshot_probe PRIVATE zx_core)
+target_compile_options(snapshot_probe PRIVATE ${ZX_WARNINGS})
+add_dependencies(zx_tools snapshot_probe)
+target_compile_definitions(snapshot_probe
+  PRIVATE ${ZX_ROOT_DEFINE})
+
 # Diagnostic for examples/filmation, not a test: estimates what ULA contention
 # would cost a Knight Lore turn on a real 48K, since the core does not model it.
 # See "The view buffer above $8000" in that example's README.

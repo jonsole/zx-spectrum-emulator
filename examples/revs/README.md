@@ -168,11 +168,11 @@ updates on Silverstone:
 | camera | 5,000 |
 
 Over a whole lap (1,100 updates at one segment an update), the work from
-one frame interrupt to the next HALT is 202,000 T-states at the median
-and 213,000 at the 99th percentile, against three frames' 209,664. 118
+one frame interrupt to the next HALT is 200,000 T-states at the median
+and 215,000 at the 99th percentile, against three frames' 209,664. 115
 updates take a fourth frame, nearly all of them in corners, where the
-camera sees more of the track; at half a segment an update, which lingers
-longer in the corners, 320 do. The worst needs 218,000.
+camera sees more of the track. The worst needs 219,000. The tests' speed
+check measures this (see below).
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:
@@ -203,21 +203,43 @@ What costs most now:
 
 ## Checking it
 
-There is no automated test in the tree yet. The engine was checked against
-`view_model.py`, a Python model of the BBC routines. It gives the reference
-view from any segment (`python view_model.py 300` writes `output/view.png`).
-`track_model.py` plots the whole track from above.
+`tests/run_tests.py` builds the engine, runs it in cpp-core's
+`snapshot_probe`, and checks it against models of what it should do:
 
-- **Geometry.** At a dozen points round the track, every Z80 verge point
-  matched the model's to within 2 pixels across and 1 line up or down. The
-  pictures showed the same verges, red-and-white kerbs and hairpins.
-- **Edges and compose.** A second model, of the Z80's own edge and compose
-  stages, reproduced the Z80's screen byte for byte from the Z80's
-  point lists. Compose's path for out-of-order lines was checked by
-  shuffling the markers in a third of the lines.
-- **Tearing.** Every write to the view was watched over a full lap, and
-  the first frame able to show it worked out from where the beam was: all
-  of an update's writes become visible in the same frame.
+```powershell
+cpp-core\build.ps1 -Release -Target snapshot_probe
+.\.venv-win\Scripts\python.exe examples\revs\tests\run_tests.py
+```
+
+It takes about 20 seconds. Name checks to run only those (`run_tests.py
+screen compose`); `--no-build` uses `output/` as it is. The checks:
+
+| Check | What it compares | Passes when |
+|---|---|---|
+| `maths` | `log16`, `yaw_angle`, `pitch_line` and `verge_width`, called on their own with random arguments, against exact values and `view_model.py`'s BBC routines | logs within 2/256, angles within 96 units, distances within 1.2%, lines within one, widths within 2% |
+| `verges` | the Z80's verge point lists against `view_model.py`'s from the same camera, at a dozen places round the track | the same points and colours, within 3 pixels across and a line up or down |
+| `screen` | the view on the screen against `tests/screen_model.py`, a model of the edge and compose stages, fed the Z80's own point lists | byte for byte |
+| `compose` | `compose_screen` on marker records with a third of the lines shuffled out of x order, against the same records filled in order | byte for byte |
+| `beam` | every write to the view over 200 updates, with the first frame able to show it worked out from where the beam was | all of an update's writes show in the same frame |
+| `speed` | the T-states from each frame interrupt to the next HALT over a lap | the median fits in three frames; the 99th percentile, the worst and the number needing a fourth frame are reported |
+
+`view_model.py` is a Python model of the BBC routines, written from the
+disassembly's documentation. It also draws the reference view from any
+segment (`python view_model.py 300` writes `output/view.png`), and
+`track_model.py` plots the whole track from above. The screen model is
+written from what the edge and compose stages are meant to do, so the Z80
+and the model are never checked against each other's output. Every
+constant the screen model needs (the list addresses, the view's size, the
+fill patterns) is read from the build's symbols.
+
+Each check was shown to catch a bug planted for it:
+- **`compose`:** `sort_line` clobbering the screen pointer.
+- **`maths` and `verges`:** verge marks twice as wide.
+- **`screen`:** the edge stepper rounding from the wrong end.
+- **`beam`:** twelve verge points before the beam wait instead of four.
+
+The `screen` check uses the Z80's own point lists, so it passed with the
+doubled widths. That is the split intended: geometry is `verges`' job.
 
 ## Not done yet
 

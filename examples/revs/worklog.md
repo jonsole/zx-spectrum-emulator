@@ -8,7 +8,7 @@ A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Mic
 
 The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
 
-- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 202,000 T-states against a three-frame budget of 209,664. About 11% of updates need a fourth frame, nearly all in corners.
+- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 200,000 T-states against a three-frame budget of 209,664. About 11% of updates need a fourth frame, nearly all in corners.
 - **Picture:**
   - a solid black road;
   - red-and-white or black-and-white kerbs, 25, 50 or 100 units wide as the track data says;
@@ -165,11 +165,11 @@ A frame is 69,888 T-states, so three frames is 16.7 updates a second. The reques
 
 The camera was run for 1,100 updates at one segment an update. The work from one frame interrupt to the next HALT was:
 
-- 202,000 T-states at the median;
-- 213,000 at the 99th percentile;
-- 218,000 at worst.
+- 200,000 T-states at the median;
+- 215,000 at the 99th percentile;
+- 219,000 at worst.
 
-118 updates (11%) took a fourth frame, nearly all in corners, where more of the track is in view. At half a segment an update the camera lingers in corners, and 320 took a fourth frame.
+115 updates (10%) took a fourth frame, nearly all in corners, where more of the track is in view. These are the figures the tests' speed check reports for the current code. Before the camera was smoothed, the scratch measurement gave 202,000, 213,000 and 218,000, with 118 over. At half a segment an update the camera lingers in corners, and 320 took a fourth frame; that was measured once and is not part of the tests.
 
 ### Where the time goes now
 
@@ -209,7 +209,7 @@ The test tools had bugs of their own, which gave wrong results until fixed:
 - A HALT search broke after a comment changed.
 - A timing measurement misread the PC at a HALT, which the emulator reports as the address after it. It also used a hard-coded HALT address that moved.
 
-All of these tools are scratch scripts outside the repository (see How it is checked).
+The checks have since been rebuilt as `tests/run_tests.py` (see How it is checked).
 
 ## How it is checked
 
@@ -225,7 +225,7 @@ Each check compares the Z80 with something independent of it: a model written fr
 | Work time | T-states from each frame interrupt to the next HALT, over 1,100 updates | The lap figures in Speed |
 | Camera trace and video | Camera position and heading per update; colour GIFs of a lap | Smooth heading, steady kerbs |
 
-Only `view_model.py` and `track_model.py` (a plan of the whole track) are in the repository. The rest were scratch scripts outside the repository, run against a small emulator rig rather than the repo's CTest suite. **There is no automated test in the tree yet**, and adding one is on the list below.
+All of these are in the repository now: `tests/run_tests.py` runs them against the engine in cpp-core's `snapshot_probe`, in about 20 seconds (the engine's README has the commands). The camera trace and the videos are the exception: they are for looking at, not checking. Each check was shown to fail on a bug planted for it.
 
 ## Memory
 
@@ -289,7 +289,7 @@ Roughly in the order the plan would add them, one feature at a time.
 
 ### Tooling
 
-- [ ] **Automated tests in the repo.** The maths, screen-model and beam checks were scratch scripts kept outside the repository. They belong in the tree, ideally run from CTest against the real emulator core.
+- [x] **Automated tests in the repo.** `tests/run_tests.py`, run against the real emulator core through `snapshot_probe`. They are not part of CTest, since they need sjasmplus and the track data, as filmation's Z80 tests do.
 - [ ] **A web page to watch it.** This was asked for and not done, because there is no Emscripten here to build the emulator for the browser. For now there are videos.
 - [ ] **Merge.** The work is on branch `ccr-a5725d0e-ey56yb`, with no pull request yet.
 

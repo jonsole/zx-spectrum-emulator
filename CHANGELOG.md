@@ -12,7 +12,10 @@ GitHub takes its notes from that section.
   revs.bbcelite.com as its design: so far, Silverstone's track seen from a
   camera that drives itself round it, at 16.7 frames a second. Its
   launch configuration is **ZX Spectrum: Revs road**; the track data is
-  fetched at build time, never committed. See
+  fetched at build time, never committed. `examples/revs/tests/run_tests.py`
+  checks it against Python models of its maths, geometry and screen, its
+  timing against the beam, and its speed, through a new cpp-core tool,
+  `snapshot_probe`, that drives a snapshot from a script. See
   [examples/revs/README.md](examples/revs/README.md).
 
 - **The Filmation games' `extract.py` takes a Knight Lore saved at the menu.**

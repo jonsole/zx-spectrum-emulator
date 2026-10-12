@@ -48,6 +48,7 @@ start:
 main_loop:
     call verges_finish
     call edges_build
+.wait_frame:                    ; named for the tests, which time from here
     halt
     ; Compose can't start until the beam has drawn the view's top row, so
     ; the next update's camera moves and its first verge points are found
