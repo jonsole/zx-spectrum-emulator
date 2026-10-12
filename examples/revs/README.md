@@ -18,6 +18,10 @@ What changes is how the numbers are worked out. Divisions are done with log
 tables, there are lookup tables wherever there is memory for them, and the
 screen is a monochrome bitmap rather than a four-colour mode.
 
+[worklog.md](worklog.md) is the longer story: what was done in what order,
+the decisions and the alternatives, the bugs, the checks, and what is still
+to do.
+
 ## Build and run
 
 Launch **"ZX Spectrum: Revs road"** from the Run and Debug view. Its
