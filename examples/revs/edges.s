@@ -278,7 +278,8 @@ raster2:
 ; term, B = lines left; alternate set HL' = the line's marker record,
 ; BC' = +-32 to the next record, DE' for the marker.
 raster:
-    call rs_set_pattern
+    ld (.pattern1+1),a          ; as rs_set_pattern, without the call
+    ld (.pattern2+1),a
     ex de,hl
     push de                     ; the start x
     or a
@@ -352,8 +353,20 @@ raster:
     ret
 .off_screen:
     jp m,.left
-    exx                         ; off the right: nothing to the right of it
+    ; Off the right: nothing to the right of it. Heading right, it stays off
+    ; for the rest of the stretch, so only the record pointer goes on, to
+    ; where the next stretch starts.
+    ld a,(.carry)
+    cp $23                      ; INC HL: heading right
+    jr z,.gone_right
+    exx
     jr .next
+.gone_right:
+    exx
+    add hl,bc
+    exx
+    djnz .gone_right
+    ret
 .left:
     ; Off the left: it sets the line's starting pattern if it is the
     ; rightmost so far. Both x are negative, so an unsigned compare works.

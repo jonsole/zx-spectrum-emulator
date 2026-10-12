@@ -188,7 +188,7 @@ One redraw to scale, in Z80 cycles (T-states) from the start of a TV frame. The 
 
 ```
 TV:   |------ frame 1 --------|------ frame 2 --------|------ frame 3 --------|
-Z80:  ccfffffPPPPPPPPPPPPPPPPPPPPPPrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeeewww
+Z80:  ccfffffPPPPPPPPPPPPPPPPPPPPPPrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeewwww
 beam:       ======                  ======                  ======
 ```
 
@@ -198,15 +198,15 @@ beam:       ======                  ======                  ======
 | `f` | first points | 6,600 | 22,500 |
 | `P` | painting the screen | 22,500 | 86,900 |
 | `r` | rest of the points | 87,300 | 123,600 |
-| `e` | edges | 123,600 | 200,200 |
-| `w` | wait for the next frame | 200,200 | 209,664 |
+| `e` | edges | 123,600 | 196,600 |
+| `w` | wait for the next frame | 196,600 | 209,664 |
 | `=` | the beam drawing the road picture, each frame | 17,900 | 35,700 |
 
 Painting starts after the beam has drawn the road picture in frame 1 and ends before the beam draws it again in frame 2.
 
 To find the beam, it uses a quirk of the 48K Spectrum called the *floating bus*. Reading a port that nothing answers returns whatever byte the TV circuitry is fetching from the screen at that moment. The two character rows above the road are kept blank, in a colour used nowhere else. So the first other value it reads means the beam has reached the road. The +2A and +3 have no floating bus, so this only works on the 48K and 128K.
 
-One redraw takes three TV frames, which is 16.7 redraws a second. In about one redraw in eight, in corners, it takes four. The time the painting would otherwise spend waiting for the beam is used to start the next redraw's points.
+One redraw takes three TV frames, which is 16.7 redraws a second. Only about one redraw in 75, in the tightest corners, takes four. The time the painting would otherwise spend waiting for the beam is used to start the next redraw's points.
 
 ## Reference
 
@@ -833,13 +833,13 @@ T = 0       frame interrupt: the IM 2 handler counts frames
 ~21,000     compose_screen                 ~65,000, behind the beam
 ~86,000     fps_show                       the digit bottom left
             verges_finish                  the rest of the points
-            edges_build                    ~78,000
+            edges_build                    ~73,000
 < 209,664   HALT: wait for the next interrupt, the start of the next update
 ```
 
 Three frames is 16.7 updates a second. In corners, where more of the track
-is in view, about one update in eight runs past the third interrupt and
-takes a fourth.
+is in view, about one update in 75 (22 of 1,639 over a lap) runs past the
+third interrupt and takes a fourth.
 
 The `beam` test watches every write to the view over 200 updates and checks
 this. Without the padding, 59 updates in 60 tore.

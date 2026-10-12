@@ -166,16 +166,16 @@ updates on Silverstone:
 | Stage | T-states |
 |---|---|
 | verges (projection), in two parts | 53,000 |
-| edges | 78,000 |
+| edges | 73,000 |
 | compose, onto the screen | 65,000 |
 | camera | 5,000 |
 
 Over a whole lap at the camera's speed (1,639 updates of 160/256 of a
-segment), the work from one frame interrupt to the next HALT is 200,000
-T-states at the median and 215,000 at the 99th percentile, against three
-frames' 209,664. 207 updates (12.6%) take a fourth frame, nearly all of
-them in corners, where the camera sees more of the track. The worst needs
-219,000. The tests' speed check measures this (see below).
+segment), the work from one frame interrupt to the next HALT is 196,600
+T-states at the median and 210,400 at the 99th percentile, against three
+frames' 209,664. 22 updates (1.3%) take a fourth frame, all of them in the
+tightest corners, where the camera sees most of the track. The worst needs
+214,600. The tests' speed check measures this (see below).
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:
@@ -190,7 +190,9 @@ changes made the difference:
 - hot loops in registers, with their constants patched into the
   instructions;
 - unrolling, short cuts for the commonest divisions, and skipping lines
-  that haven't changed.
+  that haven't changed;
+- leaving an edge alone once it has gone off the right of the screen
+  heading right, which is most of what made corners slow.
 
 For comparison, the BBC's main loop adds 9/100 of a second to the lap timer
 each time round, so the original runs at about 11 updates a second with

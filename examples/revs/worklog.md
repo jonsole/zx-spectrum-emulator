@@ -8,7 +8,7 @@ A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Mic
 
 The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
 
-- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 200,000 T-states against a three-frame budget of 209,664. About 12% of updates need a fourth frame, nearly all in corners.
+- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 196,600 T-states against a three-frame budget of 209,664. About 1.3% of updates need a fourth frame, all in the tightest corners.
 - **Picture:**
   - a solid black road;
   - red-and-white or black-and-white kerbs, 25, 50 or 100 units wide as the track data says;
@@ -160,16 +160,17 @@ A frame is 69,888 T-states, so three frames is 16.7 updates a second. The reques
 - Finding unsorted lines on the fly and moving the camera into the wait brought it to **3.27** on average.
 - Writing the projection out per side and padding skipped lines brought it to **3.05**.
 - The early verge points, the floating bus and one pass per side brought it to **three**, with a fourth frame only in some corners.
+- Leaving an edge alone once it has gone off the right of the screen heading right took the corners that needed a fourth frame from 12.6% of updates to 1.3%.
 
 ### Over a whole lap
 
 The tests' speed check runs the camera once round at its own speed: 1,639 updates of 160/256 of a segment. The work from one frame interrupt to the next HALT is:
 
-- 200,000 T-states at the median;
-- 215,000 at the 99th percentile;
-- 219,000 at worst.
+- 196,600 T-states at the median;
+- 210,400 at the 99th percentile;
+- 214,600 at worst.
 
-207 updates (12.6%) take a fourth frame, nearly all in corners, where more of the track is in view.
+22 updates (1.3%) take a fourth frame, all in the tightest corners, where most of the track is in view. Before edges that had gone off the right stopped being stepped, it was 207 (12.6%), with a median of 200,200.
 
 The scratch measurement before the camera was smoothed ran 1,100 updates at about one segment each. It gave 202,000, 213,000 and 218,000, with 118 over. At half a segment an update, which lingers longer in corners, 320 took a fourth frame. That was measured once and is not part of the tests.
 
@@ -281,7 +282,7 @@ Roughly in the order the plan would add them, one feature at a time.
 
 ### The engine
 
-- [ ] **Corners that need a fourth frame** (12.6% of updates over a lap). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
+- [ ] **Corners that need a fourth frame** (1.3% of updates over a lap, down from 12.6%). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
 - [ ] **Time for the rest of the game.** The road should come down well below three frames if the game is to stay at four. The per-marker cost (about 350 T-states) is the biggest target.
 - [ ] **Stripes at about one segment an update.** At around 170 mph the two-segment kerb pattern is sampled once a stripe and seems to stand still or run backwards. A blend of red and white above some speed would hide it.
 - [ ] **Colour.** Green grass and blue sky through attributes, fitted round the 8×8 grid.
