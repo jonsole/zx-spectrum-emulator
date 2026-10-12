@@ -117,9 +117,10 @@ horizon at line 60, as the BBC does.
   back in one lookup. The distance (`GetObjectDistance`) is a correction to
   the larger delta's log, looked up by the same ratio that gives the angle.
   The verge width comes from the distance log too.
-- **Fill patterns instead of colours.** Grass, road and the verge colours
-  are a grey ramp of dither patterns: white, a quarter, a half, three
-  quarters, black. Odd lines use each pattern rotated two places.
+- **Fill patterns instead of colours.** The road is solid black, as on the
+  BBC, so a black verge mark runs into it and the white marks show as dashes.
+  Grass and the other verge colours are dither patterns: white, a quarter
+  (grass), a half (red). Odd lines use each pattern rotated two places.
 - **Distant verge colours.** The BBC colours every verge mark by its
   segment's parity, and colours the far stretches between points 13, 6 and
   3 segments apart the same way. Those stretches swapped between white and
