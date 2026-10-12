@@ -65,6 +65,8 @@ verges_begin:
     ld hl,vb_steps
     add hl,de
     ld e,(hl)
+    ld a,e
+    ld (vb_step),a
     ld hl,(vb_seg)
     ASSERT low TRACK_LEN == 0       ; the wrap below needs whole pages
     ld a,l                      ; back E segments, round the track
@@ -100,11 +102,20 @@ verges_begin:
     ld l,low LOG2_WIDTH
     ld (vb_wlog),hl
     ; The marks alternate a segment at a time: odd ones white, even ones
-    ; red or black.
+    ; red or black. But a point that ends a step of several segments --
+    ; the far ones, 13, 6 and 3 segments apart -- colours a stretch with
+    ; several marks in it, and by its own segment's parity it would swap
+    ; between white and red every time the camera passed a segment. Those
+    ; stretches take the red or black, so the distance holds still while
+    ; the marks close enough to draw one by one go past.
+    ld a,(vb_step)
+    dec a
+    jr nz,.solid
     ld a,(vb_seg)
     rrca
     ld bc,$0404
     jr c,.colours
+.solid:
     ld a,(vb_flags)
     ld bc,$0202
     bit 2,a
@@ -575,6 +586,7 @@ quarter:
 vb_steps:   db 0,13,6,3,1,1,1,1,1,1,1,1,1,1,1,1
 vb_i:       db 0
 vb_seg:     dw 0
+vb_step:    db 0                ; the segments from the last point to this
 vb_off:     dw 0
 vb_flags:   db 0
 vb_wlog:    dw 0

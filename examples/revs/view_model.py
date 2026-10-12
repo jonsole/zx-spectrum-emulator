@@ -168,7 +168,15 @@ class View:
                 verge_scale = 5 if both_black else (4 if (curved or both_red) else 3)
                 width = (1 << 23) // max(1, dist << verge_scale)
                 outer = rel + width if side == "right" else rel - width
-                colour = (2 if (s % n) & 1 else (1 if red else 0))
+                # The marks alternate by segment, but a point that ends a
+                # step of several segments colours a stretch of several
+                # marks: that takes the red or black, as the Z80 does, so
+                # it doesn't swap colour each time the camera passes a
+                # segment (a Spectrum change; the BBC goes by parity).
+                if step == 1 and (s % n) & 1:
+                    colour = 2
+                else:
+                    colour = 1 if red else 0
                 pts.append((rel, outer, line, colour))
             sides[side] = pts
         return sides
