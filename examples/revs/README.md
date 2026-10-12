@@ -21,6 +21,9 @@ screen is a monochrome bitmap rather than a four-colour mode.
 [rendering.md](rendering.md) walks through how the road is drawn, from the
 track data to the bytes in screen memory, in plain steps; its Reference
 section has the detail, with a worked example.
+[handover.md](handover.md) is where to start if you are picking the engine
+up: where it stands, how to work on it, the rules the code depends on, what
+has been tried, and what to do next.
 [worklog.md](worklog.md) is the longer story: what was done in what order,
 the decisions and the alternatives, the bugs, the checks, and what is still
 to do.
