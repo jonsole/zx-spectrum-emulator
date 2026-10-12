@@ -3,8 +3,9 @@
 Every table is page aligned (256 entries, one page each, or a lo page and a
 hi page for 16-bit values) so the Z80 indexes it with H = page, L = index.
 
-xhi_lo/hi  The screen-x offset of a relative yaw angle's high byte (a signed
-           yaw unit, 256 to a turn): yaw * 256 / 40, as a signed 16-bit value.
+xhi_lo/hi  The screen x of a relative yaw angle's high byte (a signed yaw
+           unit, 256 to a turn): 128 + yaw * 256 / 40, as a signed 16-bit
+           value.
 xfrac      The screen-x offset of the yaw angle's low byte: lo * 256 / 40 / 256.
 mask       The bits of a screen byte from pixel x rightwards: $FF >> (x & 7),
            indexed by x itself so compose_screen needs no AND.
@@ -45,7 +46,7 @@ def arctan_y(t):
 
 
 def build():
-    xhi = [round((i - 256 if i >= 128 else i) * 256 / 40) for i in range(256)]
+    xhi = [128 + round((i - 256 if i >= 128 else i) * 256 / 40) for i in range(256)]
     table("xhi_lo", [v & 0xFF for v in xhi])
     table("xhi_hi", [(v >> 8) & 0xFF for v in xhi])
     table("xfrac", [int(i * 256 / 40 / 256) for i in range(256)])

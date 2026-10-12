@@ -137,7 +137,17 @@ NAME_mix:
     inc l
     ld a,(bc)
     cp (hl)
-    ret z                       ; the same as last time
+    jr nz,.changed
+    ; The same as last time, so left alone -- but no quicker than the beam
+    ; draws a row (224 T-states), or after a run of these compose would
+    ; get ahead of the beam and the next rows it wrote would show a frame
+    ; early. This way the line costs about 245.
+    ld a,6
+.pad:
+    dec a
+    jr nz,.pad
+    ret
+.changed:
     ld a,(hl)
     ld (bc),a
     IF ROT

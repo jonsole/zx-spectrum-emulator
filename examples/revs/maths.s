@@ -15,21 +15,13 @@
 ; its last bit: half a pixel or so on screen. Nothing here feeds physics.
 
 ; HL = 256 * log2(DE), for DE >= 1 (0 for 0): 0 to 4095, 8.8 fixed point.
-; Below 4096 it is a lookup; above, DE's top twelve bits are, plus 4.
-; Uses A, DE.
-log16:
+; Below 4096 it is a lookup; above, DE's top twelve bits are, plus 4. The
+; table's high bytes are 4K above its low bytes, which is bit 4 of H. Uses
+; A, DE. A macro, for the code that can't spare a call, and a routine.
+    MACRO LOG16
     ld a,d
     cp 16
-    jr nc,.big
-    ld hl,tbl_log12_lo
-    add hl,de
-    ld a,(hl)
-    ld de,tbl_log12_hi-tbl_log12_lo
-    add hl,de
-    ld h,(hl)
-    ld l,a
-    ret
-.big:
+    jr c,.small@
     srl d
     rr e
     srl d
@@ -41,13 +33,25 @@ log16:
     ld hl,tbl_log12_lo
     add hl,de
     ld a,(hl)
-    ld de,tbl_log12_hi-tbl_log12_lo
-    add hl,de
+    set 4,h                     ; tbl_log12_hi
     ld h,(hl)
     ld l,a
     ld a,h
     add a,4                     ; log2 16
     ld h,a
+    jr .done@
+.small@:
+    ld hl,tbl_log12_lo
+    add hl,de
+    ld a,(hl)
+    set 4,h
+    ld h,(hl)
+    ld l,a
+.done@:
+    ENDM
+
+log16:
+    LOG16
     ret
 
 ; A = floor(2 ^ (HL / 256)): 0 if HL is negative, 255 from 8 * 256 up.
@@ -212,7 +216,7 @@ yaw_angle:
 ya_logd:  dw 0
 
 ; The track line of a point at distance log HL whose height above the eye
-; has log pa_logdy and sign pa_dysign, as GetObjPitchAngle:
+; has sign pa_dysign (and pa_logdy, from pitch_height), as GetObjPitchAngle:
 ; T = 256 * (|dy| / 8) / distance, line = 60 +/- T. Returns A = the line (a
 ; signed byte, -67..127; negative is below the view) with carry clear, or
 ; carry set if the point is out of sight (T >= 128).
@@ -221,8 +225,6 @@ pitch_line:
     ld hl,(pa_logdy)
     or a
     sbc hl,de
-    ld de,5*256                 ; 256 / 8 = 2 ^ 5
-    add hl,de
     bit 7,h
     jr nz,.level                ; T below 1
     ld a,h
@@ -251,7 +253,9 @@ pitch_line:
     scf
     ret
 
-; pa_logdy and pa_dysign for a height difference HL. Uses A, DE.
+; pa_logdy and pa_dysign for a height difference HL: pa_logdy is the log of
+; 256 * |dy| / 8, ready to have the distance's log taken off it for T.
+; Uses A, DE.
 LOG_ZERO    equ -64*256         ; the log of nothing: far below any other
 
 pitch_height:
@@ -271,6 +275,8 @@ pitch_height:
     jr z,.zero
     ex de,hl
     call log16
+    ld de,5*256                 ; 256 / 8 = 2 ^ 5
+    add hl,de
     ld (pa_logdy),hl
     ret
 .zero:
@@ -298,8 +304,9 @@ verge_width:
     jp exp16
 
 ; HL = 128 + the screen x of the relative yaw angle in HL: yaw / 40, the
-; BBC's 40-unit field of view across 256 pixels. A signed 16-bit result.
-yaw_to_x:
+; BBC's 40-unit field of view across 256 pixels (the 128 is in tbl_xhi). A
+; signed 16-bit result. Uses BC, E. A macro and a routine.
+    MACRO YAW_TO_X
     ld e,l
     ld l,h
     ld h,high tbl_xhi_lo
@@ -311,6 +318,8 @@ yaw_to_x:
     ld l,(hl)
     ld h,0
     add hl,bc
-    ld bc,128
-    add hl,bc
+    ENDM
+
+yaw_to_x:
+    YAW_TO_X
     ret

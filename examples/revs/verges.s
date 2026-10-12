@@ -80,8 +80,28 @@ verges_build:
     jr nz,.scale
     ld b,3
 .scale:
-    ld a,b
-    ld (vb_scale),a
+    ld a,high LOG2_WIDTH        ; the width's log, less the distance's to come:
+    sub b                       ; 256 * (23 - log2 40 - vergeScale)
+    ld h,a
+    ld l,low LOG2_WIDTH
+    ld (vb_wlog),hl
+    ; The marks alternate a segment at a time: odd ones white, even ones
+    ; red or black.
+    ld a,(vb_seg)
+    rrca
+    ld bc,$0404
+    jr c,.colours
+    ld a,(vb_flags)
+    ld bc,$0202
+    bit 2,a
+    jr z,.right_black
+    inc c
+.right_black:
+    bit 1,a
+    jr z,.colours
+    inc b
+.colours:
+    ld (vb_colours),bc          ; C for the right, B for the left
     ; Its height, which both verges share, and its log above the eye.
     ld hl,(vb_seg)
     add hl,hl
@@ -111,36 +131,148 @@ verges_build:
     inc a
     ld (vb_i),a
     cp POINTS
-    jr nz,.point
+    jp nz,.point
     ret
 
 ; The point at segment vb_seg on one side: appended to the side's list, or
 ; the end of the list. There is a copy for each side, so that its state has
 ; fixed addresses and its constants are in the instructions: NAME is the
-; side's prefix, XARR and ZARR its coordinate arrays, RED the section flag
-; for a red verge on it, and LEFT is 1 where the verge's width is
-; subtracted.
-    MACRO VB_POINT NAME, XARR, ZARR, RED, LEFT
+; side's prefix, XARR and ZARR its coordinate arrays, COLOUR where the
+; segment's verge colour for this side is, and LEFT is 1 where the verge's
+; width is subtracted. The maths of yaw_angle, pitch_line and verge_width is
+; written out in it rather than called: this runs 27 times a frame.
+    MACRO VB_POINT NAME, XARR, ZARR, COLOUR, LEFT
 NAME_point:
+    ; The deltas from the camera: DE = dx, BC = dz.
     ld hl,(vb_off)
     ld de,XARR
     add hl,de
     ld e,(hl)
     inc hl
     ld d,(hl)
-    ld (vb_px),de
-    ld hl,(vb_off)
-    ld de,ZARR
-    add hl,de
-    ld e,(hl)
+    ld bc,ZARR-XARR-1
+    add hl,bc
+    ld c,(hl)
     inc hl
-    ld d,(hl)
-    ld (vb_pz),de
-    call vb_project
+    ld b,(hl)
+    ld hl,(cam_z)
+    ld a,c
+    sub l
+    ld c,a
+    ld a,b
+    sbc a,h
+    ld b,a
+    ld hl,(cam_x)
+    ld a,e
+    sub l
+    ld e,a
+    ld a,d
+    sbc a,h
+    ld d,a
+    ; The yaw, as yaw_angle (which see), and the distance's log.
+    ld h,0
+    bit 7,d
+    jr z,.xpos
+    xor a
+    sub e
+    ld e,a
+    sbc a,a
+    sub d
+    ld d,a
+    inc h
+.xpos:
+    bit 7,b
+    jr z,.zpos
+    xor a
+    sub c
+    ld c,a
+    sbc a,a
+    sub b
+    ld b,a
+    inc h
+    inc h
+.zpos:
+    ld a,e
+    sub c
+    ld a,d
+    sbc a,b
+    jr c,.zlarger
+    set 2,h
+    jr .larger_in_de
+.zlarger:
+    ld a,b
+    ld b,d
+    ld d,a
+    ld a,c
+    ld c,e
+    ld e,a
+.larger_in_de:
+    ld a,h
+    ex af,af'                   ; the octant
+    LOG16
+    ld (ya_logd),hl             ; the larger delta's log, for now
+    ld a,b
+    or c
+    jr z,.t                     ; A = 0: on an axis
+    ld d,b
+    ld e,c
+    LOG16
+    ld de,(ya_logd)
+    or a
+    sbc hl,de
+    ld a,h
+    add a,8
+    cp 8
+    jr nc,.t_out
+    add a,high tbl_exp8
+    ld h,a
+    ld a,(hl)
+    jr .t
+.t_out:
+    rlca
+    sbc a,a
+    cpl
+.t:
+    ld l,a
+    ld h,high tbl_logft
+    ld e,(hl)
+    ld d,0
+    inc h
+    ld c,(hl)
+    inc h
+    ld b,(hl)                   ; BC = the angle within the octant
+    ld hl,(ya_logd)
+    add hl,de
+    ld (ya_logd),hl             ; the distance's log
+    ex af,af'
+    ld hl,yaw_angle.octants
+    add a,l
+    ld l,a
+    ld a,(hl)
+    ld h,b
+    ld l,c
+    bit 0,a
+    jr z,.keep
+    ld c,a
+    xor a
+    sub l
+    ld l,a
+    sbc a,a
+    sub h
+    ld h,a
+    ld a,c
+.keep:
+    and $C0
+    add a,h
+    ld h,a
+    ld de,(cam_heading)
+    or a
+    sbc hl,de
+    ld (vb_rel),hl
     ; The closest point so far, visible or not: beyond it the list is
     ; coming back towards the camera and must stay in the field of view.
-    ld hl,(NAME_close)
     ld de,(ya_logd)
+    ld hl,(NAME_close)
     or a
     sbc hl,de
     jr c,.farther
@@ -148,11 +280,34 @@ NAME_point:
     ld a,(vb_i)
     ld (NAME_close_i),a
 .farther:
-    ex de,hl
-    call pitch_line
-    jp c,.hidden
+    ; The pitch, as pitch_line: T = 256 * (|dy| / 8) / distance.
+    ld hl,(pa_logdy)
     or a
+    sbc hl,de
+    bit 7,h
+    jr nz,.level                ; T below 1
+    ld a,h
+    cp 7
+    jp nc,.hidden               ; T >= 128
+    add a,high tbl_exp8
+    ld h,a
+    ld b,(hl)
+    jr .line
+.level:
+    ld b,0
+.line:
+    ld a,(pa_dysign)
+    or a
+    ld a,60
+    jp m,.below
+    add a,b
+    jp p,.in_sight
+    ld a,127                    ; above line 127: see pitch_line
+    jr .in_sight
+.below:
+    sub b
     jp m,.hidden                ; below the view
+.in_sight:
     ld (vb_line),a
     ld a,(NAME_close_i)
     ld b,a
@@ -169,25 +324,31 @@ NAME_point:
 .in_view:
     ld hl,(vb_seg)
     ld (NAME_prev),hl
-    ; The marks alternate a segment at a time: odd ones white, even ones
-    ; red or black.
-    ld a,l
-    rrca
-    ld a,4
-    jr c,.colour
-    ld a,(vb_flags)
-    and RED
-    ld a,3
-    jr nz,.colour
-    ld a,2
-.colour:
-    ld (vb_colour),a
-    ld hl,(ya_logd)
-    ld a,(vb_scale)
-    call verge_width            ; in pixels: adding it to the point's x
-    push hl                     ; can't wrap the way adding yaw angles can
+    ; The verge's width on screen: 2 ^ (vb_wlog - the distance's log).
+    ld hl,(vb_wlog)
+    or a
+    sbc hl,de
+    ld a,h
+    cp 8
+    jr nc,.wide
+    add a,high tbl_exp8
+    ld h,a
+    ld l,(hl)
+    ld h,0
+    jr .width
+.wide:
+    sub 7                       ; never negative here: the nearest point
+    ld b,a                      ; can't be that far
+    ld h,high tbl_exp8 + 7
+    ld l,(hl)
+    ld h,0
+.double:
+    add hl,hl
+    djnz .double
+.width:
+    push hl
     ld hl,(vb_rel)
-    call yaw_to_x
+    YAW_TO_X
     pop de
     ld b,h
     ld c,l
@@ -198,6 +359,8 @@ NAME_point:
     add hl,de
     ENDIF
     ex de,hl
+    ld a,(COLOUR)
+    ld (vb_colour),a
 .store:
     ; BC = x, DE = the outside x, then vb_line and vb_colour.
     ld hl,(NAME_list)
@@ -233,6 +396,20 @@ NAME_point:
     push hl
     ld a,(pa_dysign)
     push af
+    ld hl,(vb_off)              ; this point, which the main path kept in
+    ld de,XARR                  ; registers
+    add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld (vb_px),de
+    ld hl,(vb_off)
+    ld de,ZARR
+    add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld (vb_pz),de
     ld hl,(NAME_prev)
     add hl,hl
     push hl
@@ -315,8 +492,8 @@ NAME_close_i:   db 0            ; and which point that was
 NAME_prev:      dw 0            ; the segment of the last point kept
     ENDM
 
-    VB_POINT vr, SEG_XI, SEG_ZI, %100, 0
-    VB_POINT vl, SEG_XO, SEG_ZO, %010, 1
+    VB_POINT vr, SEG_XI, SEG_ZI, vb_colours, 0
+    VB_POINT vl, SEG_XO, SEG_ZO, vb_colours+1, 1
 
 ; The yaw of (vb_px, vb_pz) relative to the camera's heading into vb_rel,
 ; and the log of its distance in ya_logd.
@@ -356,7 +533,8 @@ vb_i:       db 0
 vb_seg:     dw 0
 vb_off:     dw 0
 vb_flags:   db 0
-vb_scale:   db 0
+vb_wlog:    dw 0
+vb_colours: dw 0
 vb_px:      dw 0
 vb_py:      dw 0
 vb_pz:      dw 0

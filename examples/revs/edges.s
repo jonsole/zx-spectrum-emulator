@@ -71,51 +71,57 @@ ENAME:
     ld a,(ECOUNT)
     or a
     ret z
-    ld (eg_points),a
+    ld b,a
     ld hl,ELIST
-    ld (eg_point),hl
     call .read
     ld (rs_ax),de
     ld (rs_al),a
     ld (eg_low),a
-    ld b,a
+    ld e,a
     ld a,c
     ld (eg_low_colour),a
-    ld a,b
+    ld a,e
+    push hl
     call rs_record
     push hl
     exx
     pop hl                      ; HL' = the first line's record
     exx
+    pop hl
 .next:
-    ld hl,eg_points
-    dec (hl)
+    dec b
     jr z,.end
-    ld a,(hl)
-    dec a
-    ld (rs_more),a              ; zero for the edge's last line segment
-    ld hl,(eg_point)
     ld a,l
     add a,ENTRY
     ld l,a
-    ld (eg_point),hl
+    push hl
+    push bc
     call .read
-    ld b,a
-    ld a,(eg_low)
-    cp b
-    jr c,.not_lower
-    jr z,.not_lower
-    ld a,b
-    ld (eg_low),a
+    ld hl,eg_low
+    cp (hl)
+    jr nc,.not_lower            ; ties keep the first
+    ld (hl),a
+    ld l,a
     ld a,c
     ld (eg_low_colour),a
+    ld a,l
 .not_lower:
     IF ECOL < 0
+    ld l,a                      ; this segment's colour: the nearer point's
     ld a,c
-    call rs_pattern
+    add a,low patterns
+    ld c,a
+    ld b,high patterns
+    ld a,(bc)
+    ld (raster.pattern1+1),a
+    ld (raster.pattern2+1),a
+    ld a,l
     ENDIF
-    ld a,b
+    pop bc
+    push bc
     call raster
+    pop bc
+    pop hl
     jr .next
 .end:
     IF ELEFT
@@ -129,15 +135,16 @@ ENAME:
     ret
     ENDIF
 ; The point at HL: DE = its x on this edge, A = its line, C = the colour.
+; Entries are 8-byte aligned, so only L moves, and HL is put back.
 .read:
     ld a,l
-    add a,EFIELD
+    or EFIELD
     ld l,a
     ld e,(hl)
     inc l
     ld d,(hl)
-    ld a,l
-    add a,4-EFIELD-1
+    and $F8
+    or 4
     ld l,a
     IF ECOL < 0
     inc l
@@ -147,6 +154,10 @@ ENAME:
     ld c,ECOL
     ENDIF
     ld a,(hl)
+    dec l
+    dec l
+    dec l
+    dec l
     ret
     ENDM
 
@@ -167,10 +178,10 @@ edge_right_outside:             ; the right verge's outside edge: grass
 ; Marks the lines from (rs_ax, rs_al) to (DE, A), the next point, then makes
 ; that point the start of the next segment: one marker per line, at the
 ; line's x rounded to the nearest pixel, stepped Bresenham-fashion from a
-; single division, in the pattern rs_pattern last patched in. HL' is the
-; first line's record. The last line is left to the next segment, which
-; starts there at the same x and whose colour would win anyway, unless
-; rs_more is zero: this is the edge's last.
+; single division, in the pattern last patched in. HL' is the first line's
+; record. The last line is left to the next segment, which starts there at
+; the same x and whose colour would win anyway, unless B is 1: this is the
+; edge's last segment.
 ;
 ; The loop is the hottest code in the edge stage, so it runs in registers
 ; with its constants patched into its instructions: main set HL = x,
@@ -178,15 +189,66 @@ edge_right_outside:             ; the right verge's outside edge: grass
 ; term, B = lines left; alternate set HL' = the line's marker record,
 ; BC' = +-32 to the next record, DE' for the marker.
 raster:
+    dec b
+    ld ixl,b                    ; zero for the edge's last segment
+    ld c,a
     ld hl,rs_al
-    ld c,(hl)
-    ld (hl),a                   ; the next segment starts at this one's end
+    sub (hl)                    ; lines, up or down
+    ld (hl),c                   ; the next segment starts at this one's end
     ld hl,(rs_ax)
     ld (rs_ax),de
-    sub c
-    jr nz,.slope
+    jr z,.level
+    exx
+    ld bc,MARK_LINE
+    exx
+    jr nc,.up
+    neg
+    exx
+    ld bc,-MARK_LINE
+    exx
+.up:
+    ld c,a                      ; n
+    ld (.n1+1),a
+    ld (.n2+1),a
+    ex de,hl
+    push de                     ; the start x
+    or a
+    sbc hl,de                   ; dx
+    bit 7,h
+    jr nz,.leftwards
+    call div16_8                ; dx = q * n + r
+    ld (.r+1),a
+    ld a,$23                    ; INC HL
+    ld (.carry),a
+    ex de,hl                    ; DE = q
+    jr .count
+.leftwards:
+    ex de,hl
+    ld hl,0
+    or a
+    sbc hl,de
+    call div16_8                ; -dx = q * n + r
+    ld (.r+1),a
+    ld a,$2B                    ; DEC HL
+    ld (.carry),a
+    ex de,hl
+    ld hl,0
+    or a
+    sbc hl,de
+    ex de,hl                    ; DE = -q
+.count:
+    pop hl                      ; the start x
+    ld b,c
+    ld a,ixl
+    or a
+    jr nz,.lines
+    inc b                       ; the last segment's last line too
+.lines:
+    srl c                       ; the error starts at n / 2: rounding
+    jr .line
+.level:
     ; Level: one marker, for the nearer point, if this is the last segment.
-    ld a,(rs_more)
+    ld a,ixl
     or a
     ret nz
     ex de,hl
@@ -194,61 +256,6 @@ raster:
     ld de,0
     ld c,e
     inc a
-    jr .go
-.slope:
-    exx
-    ld bc,MARK_LINE
-    jr nc,.up
-    ld bc,-MARK_LINE
-.up:
-    exx
-    jr nc,.up2
-    neg
-.up2:
-    ld (.n1+1),a
-    ld (.n2+1),a
-    push hl                     ; the start x
-    ex de,hl
-    pop de
-    push de
-    or a
-    sbc hl,de                   ; dx
-    ld b,$23                    ; INC HL
-    bit 7,h
-    jr z,.right
-    ex de,hl
-    ld hl,0
-    or a
-    sbc hl,de
-    ld b,$2B                    ; DEC HL
-.right:
-    ld a,b
-    ld (.carry),a
-    ld a,(.n1+1)
-    ld c,a
-    call div16_8                ; |dx| = q * n + r
-    ld (.r+1),a
-    ex de,hl                    ; DE = q
-    ld a,(.carry)
-    cp $23
-    jr z,.forwards
-    ld hl,0
-    or a
-    sbc hl,de
-    ex de,hl                    ; DE = -q
-.forwards:
-    pop hl                      ; the start x
-    ld a,(rs_more)
-    or a
-    ld a,(.n1+1)
-    ld b,a
-    jr nz,.lines
-    inc b                       ; the last segment's last line too
-.lines:
-    ld c,a
-    srl c                       ; the error starts at n / 2: rounding
-    jr .line
-.go:
     ld (.n1+1),a
     ld (.n2+1),a
 .line:
@@ -414,10 +421,7 @@ div16_8:
     ENDR
     ret
 
-eg_points:      db 0
-eg_point:       dw 0
 eg_low:         db 0
 eg_low_colour:  db 0
 rs_ax:      dw 0
 rs_al:      db 0
-rs_more:    db 0
