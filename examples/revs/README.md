@@ -48,10 +48,11 @@ Each update runs four stages. They are interleaved round the frame
 interrupt, because compose has to wait for the beam (see below):
 
 1. **`camera.s`** moves the camera a fraction of a segment along the middle
-   of the track, 500 units above it. It looks at the point three segments
-   ahead; one segment is not enough, because a new section restarts from its
-   own coordinates and can skew a single step. This stands in for a driving
-   model until there is one.
+   of the track, 500 units above it. It looks at the point the same fraction
+   of the way from three segments ahead to four, so it turns smoothly through
+   a corner. One segment ahead is not enough, because a new section restarts
+   from its own coordinates and can skew a single step. This stands in for a
+   driving model until there is one.
 2. **`verges.s`** builds a list of points for each verge (after
    `GetSegmentAngles` and `GetVergeAndMarkers`). The two verges are done
    together, a segment at a time, sharing its flags and height.
@@ -86,7 +87,7 @@ The order within an update is:
 1. the rest of the verge points;
 2. the edges;
 3. HALT for the frame interrupt;
-4. the next camera position, and the next update's first six verge points;
+4. the next camera position, and the next update's first four verge points;
 5. compose.
 
 The work in step 4 is time compose would otherwise spend waiting for the
@@ -156,15 +157,17 @@ updates on Silverstone:
 
 | Stage | T-states |
 |---|---|
-| verges (projection), in two parts | 52,000 |
+| verges (projection), in two parts | 53,000 |
 | edges | 78,000 |
 | compose, onto the screen | 65,000 |
 | camera | 5,000 |
 
-Over a whole lap (1,100 updates), the work from one frame interrupt to the
-next HALT is 200,000 T-states at the median and 212,000 at the 99th
-percentile, against three frames' 209,664. 39 updates, all at a handful
-of corners, take a fourth frame; the worst needs 222,000.
+Over a whole lap (1,100 updates at one segment an update), the work from
+one frame interrupt to the next HALT is 202,000 T-states at the median
+and 213,000 at the 99th percentile, against three frames' 209,664. 118
+updates take a fourth frame, nearly all of them in corners, where the
+camera sees more of the track; at half a segment an update, which lingers
+longer in the corners, 320 do. The worst needs 218,000.
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:

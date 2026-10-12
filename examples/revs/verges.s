@@ -35,7 +35,7 @@ POINTS      equ 16
 ; segments, straight after the frame interrupt while compose waits for the
 ; beam, and verges_finish the rest. Everything the loop needs between the
 ; two is in memory.
-VB_EARLY    equ 6
+VB_EARLY    equ 4
 
 verges_begin:
     ld a,VB_EARLY

@@ -111,10 +111,15 @@ class View:
         x = pa[0] + (pb[0] - pa[0]) * frac
         y = pa[1] + (pb[1] - pa[1]) * frac
         z = pa[2] + (pb[2] - pa[2]) * frac
-        # Heading along the track over a few segments: a single step can
-        # be skewed where a new section restarts from its own coordinates.
+        # Looking at the point the same fraction of the way from three
+        # segments ahead to four, so the view turns smoothly through a
+        # corner. (One segment ahead can be skewed where a new section
+        # restarts from its own coordinates.)
         pc = point(self.t.segments[(seg + 3) % n])
-        heading, _ = yaw_angle(int(pc[0] - pa[0]), int(pc[2] - pa[2]))
+        pd = point(self.t.segments[(seg + 4) % n])
+        tx = pc[0] + (pd[0] - pc[0]) * frac
+        tz = pc[2] + (pd[2] - pc[2]) * frac
+        heading, _ = yaw_angle(int(tx - x), int(tz - z))
         return int(x), int(y) + self.eye, int(z), (heading + yaw_offset) & 0xFFFF
 
     def project(self, cam, x, y, z):
