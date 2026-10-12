@@ -7,10 +7,11 @@
 ;
 ; Memory, all uncontended above $8000 except the screen:
 ;
+;   $6000  a 12-bit log table (tables.py), low bytes then high, 4K each
 ;   $8000  code
 ;   $A000  page-aligned lookup tables (tables.py), seven pages
 ;   $A800  the track data file, exactly as the BBC loads it (track_data.py)
-;   $B000  the view buffer: 80 lines of 32 bytes, top line first
+;   $B000  eight pages of antilogarithms
 ;   $BA00  per-frame verge point lists
 ;   $C000  every segment's 16-bit coordinates: five arrays of 1024 words
 ;   $E800  every segment's flags, 1024 bytes
@@ -26,7 +27,6 @@ SEG_ZI      equ $D000
 SEG_XO      equ $D800           ; outer verge
 SEG_ZO      equ $E000
 SEG_FLAGS   equ $E800           ; the section's flag byte, per segment
-VIEWBUF     equ $B000
 MARKERS     equ $EC00
 STACK_TOP   equ $FDF0
 
@@ -47,9 +47,9 @@ main_loop:
     call camera_update
     call verges_build
     call edges_build
-    call compose_view
-    halt                        ; the copy runs ahead of the beam from here
-    call view_copy
+    halt
+    call wait_for_beam
+    call compose_screen
     call fps_show
     jr main_loop
 
@@ -72,5 +72,13 @@ code_end:
 track:
     INCLUDE "track.s.gen"       ; generated, in output/: the track data file
     ASSERT $ <= $B000
+
+    ORG $B000
+    INCLUDE "exp8.s"            ; generated: the antilogarithms
+    ASSERT $ <= VERGE_R
+
+    ORG $6000
+    INCLUDE "log12.s"           ; generated: 8K of logarithms
+    ASSERT $ == $8000
 
     SAVEBIN "output/revs.bin",$4000,$C000

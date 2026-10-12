@@ -41,52 +41,19 @@ im2_handler:
     ei
     reti
 
-; Copies the view buffer to the screen, straight after a HALT: unrolled,
-; sixteen bytes at a time through the registers and the stack pointer, about
-; 410 T-states a row. That outruns the beam, which spends 224 T-states on a
-; row but starts this one VIEW_TOP rows and the top border later, so every
-; row is written before the beam reaches it and no frame shows parts of two
-; views. (An LDI copy, at 16 T-states a byte, could not stay ahead.)
-;
-; It runs with interrupts off, as the stack pointer is busy, which costs
-; nothing: the next interrupt is a whole frame away.
-view_copy:
-    di
-    ld (.sp+1),sp
-.row = 0
-    DUP VIEW_LINES
-.scr = $4000 | (((VIEW_TOP + .row) & $C0) << 5) | (((VIEW_TOP + .row) & 7) << 8) | (((VIEW_TOP + .row) & $38) << 2)
-.half = 0
-    DUP 2
-    ld sp,VIEWBUF + .row * 32 + .half
-    pop af
-    pop bc
-    pop de
-    pop hl
-    exx
-    ex af,af'
-    pop af
-    pop bc
-    pop de
-    pop hl
-    ld sp,.scr + .half + 16
-    push hl
-    push de
-    push bc
-    push af
-    exx
-    ex af,af'
-    push hl
-    push de
-    push bc
-    push af
-.half = .half + 16
-    EDUP
-.row = .row + 1
-    EDUP
-.sp:
-    ld sp,0                     ; patched
-    ei
+; Waits, straight after a HALT, until the beam has drawn the view's top row
+; and a couple more, so compose_screen can follow it down: 64 lines of top
+; border and VIEW_TOP rows at 224 T-states each, less what the interrupt
+; and the HALT took.
+BEAM_WAIT   equ (64 + VIEW_TOP + 2) * 224 - 200
+
+wait_for_beam:
+    ld bc,BEAM_WAIT / 26
+.wait:
+    dec bc                      ; 26 T-states a turn
+    ld a,b
+    or c
+    jr nz,.wait
     ret
 
 ; Shows how many frames the last update took, top left, from the ROM font.

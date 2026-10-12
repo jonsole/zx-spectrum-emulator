@@ -10,7 +10,7 @@ GitHub takes its notes from that section.
 - **A Revs road engine, `examples/revs`.** Geoff Crammond's BBC Micro *Revs*
   rebuilt for the 48K in Z80, using the documented disassembly at
   revs.bbcelite.com as its design: so far, Silverstone's track seen from a
-  camera that drives itself round it, at about eight frames a second. Its
+  camera that drives itself round it, at 12.5 frames a second. Its
   launch configuration is **ZX Spectrum: Revs road**; the track data is
   fetched at build time, never committed. See
   [examples/revs/README.md](examples/revs/README.md).

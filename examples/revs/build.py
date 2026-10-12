@@ -53,6 +53,8 @@ def generate(track: str) -> None:
         lines.append("    db " + ",".join(f"${b:02X}" for b in data[i:i + 16]))
     (OUT_DIR / "track.s.gen").write_text("\n".join(lines) + "\n")
     (OUT_DIR / "tables.s").write_text(tables.source())
+    (OUT_DIR / "log12.s").write_text(tables.big_source(["log12_lo", "log12_hi"]))
+    (OUT_DIR / "exp8.s").write_text(tables.big_source(["exp8"]))
 
 
 def assemble(sjasmplus: str, defines: list[str]) -> None:
