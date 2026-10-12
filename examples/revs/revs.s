@@ -42,12 +42,15 @@ start:
     call markers_init
     call im2_init
     call camera_init
+    call camera_update
     ei
 main_loop:
-    call camera_update
     call verges_build
     call edges_build
     halt
+    ; Compose can't start until the beam has drawn the view's top row, so
+    ; the next update's camera moves in the meantime.
+    call camera_update
     call wait_for_beam
     call compose_screen
     call fps_show

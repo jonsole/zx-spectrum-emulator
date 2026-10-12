@@ -57,13 +57,7 @@ compose_screen:
     ld a,(hl)
     add a,l
     ld (.end+1),a               ; just past the last marker
-    sub l
-    cp 4+2*2
-    jr c,.sorted                ; one marker
-    push hl
-    call sort_line
-    pop hl
-.sorted:
+.restart:
     inc l
     ld a,(hl)                   ; the pattern the line starts with
     IF ROT
@@ -76,13 +70,15 @@ compose_screen:
     inc l
     ld b,h
     ld c,l
-    ld h,high tbl_mask
+    ld hl,tbl_mask              ; L: the last marker's x
 .marker:
     ld a,c
 .end:
     cp 0                        ; patched
     jr z,.last
     ld a,(bc)                   ; x
+    cp l
+    jr c,.unsorted
     inc c
     ld l,a
     rrca
@@ -117,6 +113,22 @@ NAME_mix:
     ex de,hl
     inc e
     jr .marker
+.unsorted:
+    ; Out of order, which only edges crossing each other do: sort the
+    ; line's markers and start it again.
+    ld h,b
+    ld a,c
+    and $E0
+    ld l,a
+    push de
+    push hl
+    call sort_line
+    pop hl
+    pop de
+    ld a,(.row_plus_1+1)
+    dec a
+    ld e,a                      ; back to the row's start
+    jr .restart
 .empty:
     ; No markers: one pattern across the row, mostly pushed. An interrupt
     ; pushes four bytes below SP, so the pushes stop four bytes short of the
@@ -171,34 +183,15 @@ cs_line_even:
     CS_LINE 0, cs_even, fill_even_end
 
 ; Sorts the markers of the record at HL by x: an insertion sort, which
-; keeps markers at the same x in the order they were made, and which is
-; quick here because the edges are drawn left to right and mostly arrive
-; in order. Records are 32-byte aligned, so only L moves.
+; keeps markers at the same x in the order they were made. Records are
+; 32-byte aligned, so only L moves. Uses A, BC, DE.
 sort_line:
     ld a,(hl)
     cp 4+2*2
     ret c                       ; fewer than two
     add a,l
     ld (.end+1),a
-    ; Usually they are in order already, which is quick to see.
-    ld b,a
     ld a,l
-    add a,4
-    ld l,a
-    ld a,(hl)
-.check:
-    ld c,a
-    inc l
-    inc l
-    ld a,l
-    cp b
-    ret z                       ; all in order
-    ld a,(hl)
-    cp c
-    jr nc,.check
-    ld a,l                      ; out of order: back to the record's start
-    and $E0
-    ld l,a
     add a,4
     ld b,a                      ; the front
     add a,2

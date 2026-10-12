@@ -41,14 +41,17 @@ im2_handler:
     ei
     reti
 
-; Waits, straight after a HALT, until the beam has drawn the view's top row
-; and a couple more, so compose_screen can follow it down: 64 lines of top
-; border and VIEW_TOP rows at 224 T-states each, less what the interrupt
-; and the HALT took.
+; Waits, after a HALT and the camera's update, until the beam has drawn the
+; view's top row and a couple more, so compose_screen can follow it down:
+; 64 lines of top border and VIEW_TOP rows at 224 T-states each, less what
+; the interrupt and the HALT took, less the camera's update. That takes
+; 4,485 to 4,763 T-states (measured over 300 random places on the track),
+; so the shortest is taken off: compose can start late, never early.
 BEAM_WAIT   equ (64 + VIEW_TOP + 2) * 224 - 200
+CAMERA_MIN  equ 4485
 
 wait_for_beam:
-    ld bc,BEAM_WAIT / 26
+    ld bc,(BEAM_WAIT - CAMERA_MIN) / 26
 .wait:
     dec bc                      ; 26 T-states a turn
     ld a,b
