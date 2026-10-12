@@ -18,8 +18,9 @@ What changes is how the numbers are worked out. Divisions are done with log
 tables, there are lookup tables wherever there is memory for them, and the
 screen is a monochrome bitmap rather than a four-colour mode.
 
-[rendering.md](rendering.md) is the design in detail, from the track data
-to the bytes in screen memory, with a worked example.
+[rendering.md](rendering.md) walks through how the road is drawn, from the
+track data to the bytes in screen memory, in plain steps; its Reference
+section has the detail, with a worked example.
 [worklog.md](worklog.md) is the longer story: what was done in what order,
 the decisions and the alternatives, the bugs, the checks, and what is still
 to do.

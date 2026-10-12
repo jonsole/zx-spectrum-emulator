@@ -1,17 +1,221 @@
 # How the Revs road is drawn
 
-This is the design of the track renderer in `examples/revs`. It follows the
-data from the BBC track file through to the bytes written into screen memory.
-[README.md](README.md) has the shorter version, how to build and run it, and
-how fast it is. [worklog.md](worklog.md) has how it got this way.
+As of 12 October 2026.
 
-The design is Geoff Crammond's, from BBC Micro *Revs*, as documented in Mark
-Moxon's disassembly at [revs.bbcelite.com](https://revs.bbcelite.com). The
-BBC routine each part follows is named as it comes up. What differs is the
-arithmetic and the way pixels reach the screen. Those differences are the
-Spectrum's, and most of this document is about them.
+The Spectrum redraws the road about 17 times a second. Each time, it works out where the camera is, which bits of kerb the camera can see, and where those land on the screen. Then it paints the screen one line at a time, just behind the TV's beam, so you never see a half-drawn picture. The seven steps below follow one redraw in order. The addresses, tables and code-level detail are in the [Reference](#reference) section after them. [README.md](README.md) has how to build and run the engine and how fast it is, and [worklog.md](worklog.md) how it got this way.
 
-## The pipeline
+## 1. The track
+
+The track is unpacked once, when the program starts, into 1,024 slices, each one recording where the two kerbs are. The code calls the kerbs *verges*, as the BBC game does.
+
+The data is the original BBC game's file for Silverstone, 1,849 bytes. It describes the circuit as 24 sections, each a straight or a corner, and a table of small steps from one slice to the next. Unpacking it means starting each section at its stored position and adding one step at a time.
+
+Each slice is about 120 units long and is stored as five numbers and a byte of flags:
+
+| What | Stored as |
+| --- | --- |
+| Right kerb (the inner one, as the cars go clockwise) | its x and z |
+| Left kerb (the outer one) | its x and z |
+| Height of the road | one y, shared by both kerbs: the road is level from side to side |
+| Flags | corner or straight; whether the left kerb is red-and-white; whether the right one is |
+
+x and z are the position on the ground, like map coordinates, and y is height. All three are in the BBC game's units, each a signed 16-bit number. Round Silverstone, x and z stay between about −24,000 and +21,000, and y between 2,000 and 3,709.
+
+The numbers are built up by adding steps:
+
+- Each section starts from a position stored in the file.
+- Each following slice adds a small step to the right kerb: one signed byte each for x, y and z.
+- The left kerb isn't stepped on its own. It is the right kerb plus four times a second step that points across the track, which gives the track its width of about 350 units.
+- A corner uses a new pair of steps for every slice, which is what makes it turn. A straight keeps the same pair throughout.
+- On a straight, only slices 1 to 9 keep red-and-white kerbs, so the red appears where the straight leaves a corner.
+
+That takes 11K of memory. In return, nothing about the track has to be worked out again while driving.
+
+## 2. The camera
+
+The camera drives itself down the middle of the track, 500 units above the road. There is no steering yet.
+
+It moves 5/8 of a slice per redraw, so a lap is 1,639 redraws. It points at a spot three to four slices ahead, and that spot moves along smoothly with it. So the view turns gradually into a corner instead of jerking round once per slice.
+
+## 3. Picking the points it can see
+
+For each kerb, the program picks up to 16 points to draw through, from far away to close up. It spaces them widely in the distance and closely near the camera.
+
+It starts 32 slices ahead. It steps back 13 slices, then 6, then 3, then one slice at a time until it is two slices behind the camera. Far away, a slice is only a pixel or two deep on screen, so the big steps lose nothing. Close up, each slice covers many screen lines, so every one is used.
+
+The 16 points picked on each kerb, by slices from the camera (`o`), with the track straightened out, two characters a slice:
+
+```
+slices from the camera:
+-2  0                   10    13          19                        32
+o-o-o-o-o-o-o-o-o-o-o-o-o-----o-----------o-------------------------o  right kerb
+o-o-o-o-o-o-o-o-o-o-o-o-o-----o-----------o-------------------------o  left kerb
+    ^ camera
+|<- one slice apart ->|   3      6                   13
+```
+
+A kerb's list stops at the first point the camera can't see: below the bottom of the picture, or off to the side once the points are level with the camera. One extra point, a quarter of the way towards the hidden one, carries the kerb down to the edge of the picture.
+
+## 4. Where each point lands on the screen
+
+Each point gets a position on screen across and a screen line up or down, and the kerb at that point gets a width.
+
+- **Across** (x, 0 to 255) comes from the angle between where the camera points and where the point is. Straight ahead is x = 128, and the picture is 56 degrees wide.
+- **Up or down** (a line from 0 at the bottom to 79 at the top, with the horizon on line 60) comes from how far the point is below the eye, divided by how far away it is. The further away a point is, the closer to the horizon it sits.
+- **The kerb's width** on screen is its real width (25, 50 or 100 units), shrunk by the distance in the same way.
+
+The Z80's own points for the camera at slice 301 (`o`), on the road picture: a character per 4 pixels across, a row per 4 lines. Far points sit near the horizon and the middle; near ones lower down and further out. Each kerb's last point is off the side of the picture.
+
+```
++----------------------------------------------------------------+  line 79
+|                                :                               |
+|                                :                               |
+|                                :                               |
+|                                :                               |
+|----------------------------------------------------------------|  horizon, line 60
+|                          o o   : o o                           |
+|                        o       :      o                        |
+|                    o o         :        oo                     |
+|                  oo            :          o o                  |
+|                o               :               o               |
+|            o                   :                 o             |
+|                                :                               |
+|        o                       :                       o       |
+|                                :                               |
+|o                               :                              o|
+|                                :                               |
+|                                :                               |
+|                                :                               |
+|                                :                               |
+|                                :                               |
++----------------------------------------------------------------+  line 0
+ x = 0                                                   x = 255
+```
+
+Those are all divisions, and the Z80 has no divide instruction. Dividing by hand takes hundreds of cycles, and every point needs several. So the program uses logarithms, the way a slide rule does:
+
+1. Look up the log of each number in a table.
+2. Subtract the two logs.
+3. Look the result back up to turn it into the answer.
+
+Every division becomes two lookups, a subtraction and a lookup, and the answers come out within a pixel or two.
+
+### The conversion, step by step
+
+For a kerb point (x, y, z), with the camera at (cx, cy, cz) facing `heading`:
+
+1. **Across the screen.**
+   - Take the ground offsets dx = x − cx and dz = z − cz.
+   - `yaw_angle` turns them into the point's compass bearing from the camera, with 65,536 units to a full turn. It uses the BBC game's arctangent table, looked up with a ratio found by logs.
+   - Subtract the camera's heading to get the angle off straight ahead.
+   - **Screen x = 128 + angle / 40.**
+2. **Distance.** The same routine gives an approximate ground distance, the BBC's "alpha max plus beta min". It is the larger offset plus an eighth of the smaller, or seven-eighths of the larger plus half the smaller once the angle is wider. That is a cheap stand-in for √(dx² + dz²).
+3. **Up or down the screen.**
+   - Take dy = y − cy, the point's height relative to the eye, which is 500 units above the road.
+   - T = 256 × (|dy| / 8) / distance.
+   - **Line = 60 + T** for a point above the eye, **60 − T** for one below.
+4. **Kerb width.** The kerb's real width, 25, 50 or 100 units, is divided by the same distance.
+
+This isn't a textbook perspective projection: screen x is proportional to the angle itself, not its tangent. Across a 56° picture the difference is under a couple of pixels at the edges.
+
+### How flexible the camera is
+
+The camera's position and heading are completely free. Of what isn't, roll is left out of BBC Revs too. Pitch, and a car facing backwards or sideways, are in Revs and not built here yet; both belong with the driving model.
+
+|  | Here | In BBC Revs |
+| --- | --- | --- |
+| Position (x, z) | Free. It doesn't have to be on the centre line, so a driving model can put the car anywhere across the track. | Free |
+| Eye height | Free. It is the road height + 500 now. | Free |
+| Heading (turning left or right) | Free: any angle, just subtracted from each bearing. | Free |
+| Pitch (looking up or down) | Not yet. The horizon is fixed on line 60. | Yes. A pitch angle is taken off every point's pitch, moving the whole view, horizon included, up or down. It comes from the nose lifting under acceleration and dipping under braking, jumps and drops, bumpy grass, and the car's tilt on a sloping slice. It is smoothed so the horizon doesn't judder. Adding it here is one subtraction in the up-or-down step. |
+| Roll (banking) | No | No. Revs only has pitch and yaw: "the simulation does not extend to rolling the car". |
+| Facing backwards or sideways | Not yet (see below) | Yes. Revs keeps track of which way the car faces along the track, flags when it is sideways, and turns the cached angles as it spins. |
+| Track in the mirrors | No | No. The wing mirrors show only a block for the nearest car behind, sized by its distance and placed by its angle. |
+
+Facing backwards needs no change to the maths. What changes is which slices get picked. Here they are always from 32 ahead to 2 behind, and the field of view is only checked from the closest point on. That suits a camera facing roughly along the track. Revs keeps its kerb tables as the driver's left and right rather than inner and outer, and lays out its list of track sections differently when the car faces backwards. This version will need the same when the driving model lets the car spin.
+
+Sources: the bbcelite deep dives on [pitch and yaw angles](https://revs.bbcelite.com/deep_dives/pitch_and_yaw_angles.html), [jumps and drops](https://revs.bbcelite.com/deep_dives/jumps_and_drops.html), [data structures for the track calculations](https://revs.bbcelite.com/deep_dives/data_structures_for_the_track_calculations.html) and [wing mirrors](https://revs.bbcelite.com/deep_dives/wing_mirrors.html).
+
+## 5. Edges become colour changes
+
+The kerbs' edges are turned into notes on each screen line saying where the colour changes. Nothing is drawn on the screen yet.
+
+Each kerb has two edges, one next to the road and one next to the grass, so there are four edges in all. The program joins each edge's points with straight lines down the picture. Wherever an edge crosses one of the 80 screen lines, it leaves a note on that line: "from this x onwards, this colour". A line usually ends up with four notes, one per edge.
+
+Reading a line's notes from left to right gives its colours. The line in the drawing below starts as grass, turns to kerb at x = 49, road at 59, kerb again at 196, and grass at 206.
+
+Line 40 of that view, a character per 4 pixels: `.` grass, `K` kerb, `#` road.
+
+| Note | From x | Colour |
+|---|---|---|
+| (start of line) | 0 | grass |
+| 1 | 49 | kerb |
+| 2 | 59 | road |
+| 3 | 196 | kerb |
+| 4 | 206 | grass |
+
+```
+............KKK##################################KK.............
+```
+
+## 6. Painting the screen, line by line
+
+The screen is painted one line at a time, straight into the Spectrum's screen memory, from the top of the picture down.
+
+For each line, the program sorts its notes by x and fills the space between them. Most of that is whole bytes, eight pixels at once, written as fast as the Z80 can store them. Only the byte where the colour changes is built dot by dot: the old colour to the left of the change, the new one from it rightwards.
+
+The picture is black and white, so each colour is a pattern of dots:
+
+| Colour | Pattern |
+| --- | --- |
+| Road | solid black |
+| Black kerb | solid black, so it runs into the road and the white marks show as dashes |
+| Red kerb | half the dots black |
+| Grass | a quarter of the dots black |
+| White kerb, sky | blank |
+
+On alternate lines each pattern is shifted two dots along, so the dots don't line up into stripes.
+
+A line with no notes is all one colour. If it is the same as last time, as most of the sky is, it is left alone.
+
+## 7. Staying behind the TV beam
+
+The program paints just behind the TV's beam, so each new picture appears all at once and you never see half of one and half of the last.
+
+The TV draws the picture from top to bottom 50 times a second. The program paints straight onto the picture being shown, with no hidden copy. If it painted a line the beam had not yet reached, that frame would show the top of the new road over the bottom of the old one. So it waits until the beam has passed the top of the road picture, then paints downwards, a little slower than the beam. It finishes well before the beam comes round again.
+
+One redraw to scale, in Z80 cycles (T-states) from the start of a TV frame. The times are the middle values over a lap of 1,639 redraws, measured in the emulator:
+
+```
+TV:   |------ frame 1 --------|------ frame 2 --------|------ frame 3 --------|
+Z80:  ccfffffPPPPPPPPPPPPPPPPPPPPPPrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeeewww
+beam:       ======                  ======                  ======
+```
+
+| | Step | From | To |
+|---|---|---|---|
+| `c` | camera | 100 | 6,600 |
+| `f` | first points | 6,600 | 22,500 |
+| `P` | painting the screen | 22,500 | 86,900 |
+| `r` | rest of the points | 87,300 | 123,600 |
+| `e` | edges | 123,600 | 200,200 |
+| `w` | wait for the next frame | 200,200 | 209,664 |
+| `=` | the beam drawing the road picture, each frame | 17,900 | 35,700 |
+
+Painting starts after the beam has drawn the road picture in frame 1 and ends before the beam draws it again in frame 2.
+
+To find the beam, it uses a quirk of the 48K Spectrum called the *floating bus*. Reading a port that nothing answers returns whatever byte the TV circuitry is fetching from the screen at that moment. The two character rows above the road are kept blank, in a colour used nowhere else. So the first other value it reads means the beam has reached the road. The +2A and +3 have no floating bus, so this only works on the 48K and 128K.
+
+One redraw takes three TV frames, which is 16.7 redraws a second. In about one redraw in eight, in corners, it takes four. The time the painting would otherwise spend waiting for the beam is used to start the next redraw's points.
+
+## Reference
+
+The same design in full: the memory each stage uses, the tables, the
+routines and their registers, and a worked example traced through every
+step. The BBC routine each part follows is named as it comes up, from Mark
+Moxon's disassembly at [revs.bbcelite.com](https://revs.bbcelite.com).
+
+### The pipeline
 
 ```
  track data file (1,849 bytes, Acornsoft's)      once, at startup
@@ -45,7 +249,7 @@ Each stage writes a table, and only the next stage reads it:
 The tests (`tests/run_tests.py`) check the stages one at a time, against
 models of what each table should hold.
 
-## Units
+### Units
 
 | Quantity | Unit | Range |
 |---|---|---|
@@ -71,7 +275,7 @@ The view is 80 track lines, drawn on screen pixel rows 16 to 95. Track line
 that `wait_for_beam` can tell where the beam is (see
 [Timing against the beam](#timing-against-the-beam)).
 
-## 1. The track data file
+### 1. The track data file
 
 The BBC loads a track as one 1,849-byte file at `&5300`.
 - **Where it comes from:** `track_data.py` reassembles Silverstone's file
@@ -105,7 +309,7 @@ A **segment vector** is the step from one segment to the next. A curve uses
 a new vector for each segment, which is how it turns. A straight uses the
 same one throughout.
 
-## 2. Expanding the track: `build_track`
+### 2. Expanding the track: `build_track`
 
 The BBC can't hold the whole track as coordinates. It builds 40 segments at
 a time into a buffer as the car moves (`GetTrackSegment`,
@@ -135,7 +339,7 @@ These are the BBC's rules, segment by segment:
 After this, the camera and the projection only index arrays: segment *n*'s
 inner x is the word at `$C000 + 2n`. The cost is 11K of RAM.
 
-## 3. The camera: `camera_update`
+### 3. The camera: `camera_update`
 
 There is no driving model yet, so a camera drives itself along the middle of
 the track. Two variables hold its position:
@@ -170,7 +374,7 @@ its own coordinates, which can skew a single step.
 difference. It splits |d| × frac into its high and low bytes so that
 `mul8`, an 8×8 multiply, is enough.
 
-## 4. The arithmetic: logarithms instead of division
+### 4. The arithmetic: logarithms instead of division
 
 The BBC gets its ratios by shift-and-subtract division (`Divide16x16`,
 `DivideX`). On a Z80 a 16-bit division costs hundreds of T-states, and each
@@ -242,12 +446,12 @@ two at worst, at the far end of the view, where a point's bearing is a
 small difference of two large angles. Nothing here feeds physics. The
 `maths` and `verges` tests hold it to that.
 
-## 5. The verge points: `verges_begin` and `verges_finish`
+### 5. The verge points: `verges_begin` and `verges_finish`
 
 This is `GetSegmentAngles` with `GetVergeAndMarkers`: for each side of the
 track, the list of points its edges are drawn through, far to near.
 
-### Which segments
+#### Which segments
 
 Both sides start 32 segments ahead of the camera. They step back 13
 segments, then 6, then 3, then one at a time, up to 16 points in all
@@ -272,7 +476,7 @@ what is worked out per segment:
 - **The height.** The segment's height less the eye's goes through
   `pitch_height` once, for both sides.
 
-### Each point
+#### Each point
 
 `VB_POINT` is a macro with a copy for each side (`vr_point`, `vl_point`).
 Each copy's state is at fixed addresses, and its coordinate arrays and
@@ -316,7 +520,7 @@ short of it.
 The right list is at `$BA00` and the left at `$BB00`. They have counts
 `vr_count` and `vl_count`.
 
-### Split round the interrupt
+#### Split round the interrupt
 
 `verges_begin` does the first four segments (`VB_EARLY`) and `verges_finish`
 the rest. The loop's state is all in memory between the two. The reason is
@@ -326,7 +530,7 @@ would otherwise be waiting for the beam (see
 With five, the first update started compose at 33,700 T-states, too late to
 stay behind the beam. With twelve, 157 of 200 updates tear.
 
-### Colours
+#### Colours
 
 The BBC colours every mark by its segment's parity. That is right for the
 near points, a segment apart, and they move with the track. But the far
@@ -337,7 +541,7 @@ they take the verge's red or black instead, so only the marks close enough
 to draw one at a time alternate. This is the one place the engine
 deliberately departs from the BBC.
 
-## 6. A worked example
+### 6. A worked example
 
 This is the camera at segment 301, 64/256 of the way to 302, from the tests'
 segment-300 view:
@@ -366,14 +570,14 @@ ahead, at (6359, 3647, 13089).
 
 The Z80's list entry for it is (138, 139, 57, 2).
 
-## 7. The edges: `edges_build`
+### 7. The edges: `edges_build`
 
 This is `DrawTrack`. Each verge has two edges, its track edge and its
 outside edge, and each is a line through its side's points. Wherever an
 edge crosses a track line it leaves a **marker**: "from this x rightwards,
 this colour". The screen is never touched here.
 
-### The marker records
+#### The marker records
 
 Every track line has a 32-byte record at `$EC00 + 32 × line`:
 
@@ -398,7 +602,7 @@ Records exist for lines 80 to 127 too, above the view. An edge running off
 the top still writes there, which saves the line loop a test. They are
 marked full once, at startup, so nothing is ever added to them.
 
-### Four edges, left to right
+#### Four edges, left to right
 
 The edges are drawn in the order `DrawTrack` uses, left to right across the
 picture:
@@ -420,7 +624,7 @@ of consecutive points is set up once, and only each edge's own division and
 line loop are done twice. Each stretch between two points takes the nearer
 point's colour.
 
-### One stretch of an edge: `raster`
+#### One stretch of an edge: `raster`
 
 Between a far point at line a and a nearer one at line b, the edge crosses
 n = |b − a| lines. They are usually down, from the horizon towards the
@@ -449,7 +653,7 @@ This loop is the hottest code in the edge stage, so it lives in registers:
 cross two to four lines, so n = 1, 2 and 4 are shifts or nothing, n = 3 is
 a lookup in `tbl_div3`, and the rest are unrolled shift-and-subtract.
 
-### Off the edges of the screen
+#### Off the edges of the screen
 
 - **Off the right (x ≥ 256):** no marker. There is nothing to its right to
   colour.
@@ -477,13 +681,13 @@ record at $EC00 + 32 × 40:  0C 88 00 80 | 31 FF  3B FF  C4 FF  CE 88
                                            (left verge) (right verge)
 ```
 
-## 8. Compose: `compose_screen`
+### 8. Compose: `compose_screen`
 
 This is the BBC's `DrawTrackBytes`, which fills between edges as it copies
 the finished view to the screen. The Spectrum has no buffer to copy:
 compose fills straight into screen memory, and that fill is the only write.
 
-### Screen layout
+#### Screen layout
 
 A Spectrum pixel row is 32 bytes. Row y is at:
 
@@ -498,7 +702,7 @@ Line 79 is drawn first, on row 16, down to line 0 on row 95. Every row is
 32-byte aligned, so within a line only E moves, and records are 32-byte
 aligned, so only C does.
 
-### Patterns
+#### Patterns
 
 Each colour is an 8-pixel byte (`patterns.s`), with 1 for ink (black):
 
@@ -516,7 +720,7 @@ fall between those of the line above rather than forming columns. There
 are two copies of the line code, `cs_line_odd` (with two `RRCA`s per
 pattern) and `cs_line_even`.
 
-### One line: `CS_LINE`
+#### One line: `CS_LINE`
 
 The registers:
 
@@ -571,7 +775,7 @@ Line 40 again. It is even, so patterns are unrotated:
 Track line 40 is pixel row 16 + 79 − 40 = 55, at `$47C0`, and those are the
 bytes the Z80 writes there.
 
-### Empty lines
+#### Empty lines
 
 A line with no markers is one pattern across. `cs_last` remembers, per
 line, the pattern an empty line was last filled with, or `NOT_EMPTY`.
@@ -586,7 +790,7 @@ line, the pattern an empty line was last filled with, or `NOT_EMPTY`.
   The stores come after because the frame interrupt does land in compose:
   stored first, its return address could have been left on screen.
 
-## Timing against the beam
+### Timing against the beam
 
 Compose writes the screen the viewer is looking at, with no back buffer. A
 frame must never show half of one view and half of the next.
@@ -640,7 +844,7 @@ takes a fourth.
 The `beam` test watches every write to the view over 200 updates and checks
 this. Without the padding, 59 updates in 60 tore.
 
-## Where to find things
+### Where to find things
 
 | File | What |
 |---|---|
