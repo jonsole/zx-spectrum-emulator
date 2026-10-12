@@ -9,7 +9,7 @@
 ;
 ;   $6000  a 12-bit log table (tables.py), low bytes then high, 4K each
 ;   $8000  code
-;   $A000  page-aligned lookup tables (tables.py), seven pages
+;   $A000  page-aligned lookup tables (tables.py), eight pages
 ;   $A800  the track data file, exactly as the BBC loads it (track_data.py)
 ;   $B000  eight pages of antilogarithms
 ;   $BA00  per-frame verge point lists
@@ -43,14 +43,18 @@ start:
     call im2_init
     call camera_init
     call camera_update
+    call verges_begin
     ei
 main_loop:
-    call verges_build
+    call verges_finish
     call edges_build
     halt
     ; Compose can't start until the beam has drawn the view's top row, so
-    ; the next update's camera moves in the meantime.
+    ; the next update's camera moves and its first verge points are found
+    ; in the meantime. They are bounded so that compose still starts in
+    ; time to finish before the beam comes round again (see compose.s).
     call camera_update
+    call verges_begin
     call wait_for_beam
     call compose_screen
     call fps_show

@@ -13,6 +13,7 @@ logft      256 * log2(distance / larger delta) for a ratio T = 256 * smaller /
            larger: GetObjectDistance's alpha max plus beta min (max + min / 8
            while the BBC's arctanY(T) is below 103, else max * 7/8 + min / 2),
            as a correction to the larger delta's log.
+div3       i / 3, for the edges' commonest division.
 a32_lo/hi  32 * arctanY(T), the BBC's arctanY being INT(0.5 + ATN(T / 256) *
            256 / ATN(1)): the octant's angle as a 16-bit yaw (256 units to a
            turn in the high byte).
@@ -60,6 +61,7 @@ def build():
     a32 = [32 * arctan_y(t) for t in range(256)]
     table("a32_lo", [v & 0xFF for v in a32])
     table("a32_hi", [v >> 8 for v in a32])
+    table("div3", [i // 3 for i in range(256)])
 
 
 def big_tables():

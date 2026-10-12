@@ -40,12 +40,12 @@ the file's own checksum, then caches it in `data/` (gitignored).
 `python track_data.py silverstone --from page.html` does the same from a
 saved copy of the page, for a machine without the network.
 
-The digit in the top-left corner is how many frames the last update took.
+The digit in the bottom-left corner is how many frames the last update took.
 
 ## How it works
 
-Each update runs four stages, the last of them straight after the frame
-interrupt:
+Each update runs four stages. They are interleaved round the frame
+interrupt, because compose has to wait for the beam (see below):
 
 1. **`camera.s`** moves the camera a fraction of a segment along the middle
    of the track, 500 units above it. It looks at the point three segments
@@ -69,8 +69,8 @@ interrupt:
    `DrawTrack` does: left verge, road, right verge, grass. Wherever an edge
    crosses a track line it leaves a marker saying "from this x rightwards,
    this colour". An edge off the left still sets the colour its lines start
-   with. A segment's last line is the next one's first, so each edge is one
-   pass through its points.
+   with. A verge's two edges go through the same points on the same lines,
+   so they are drawn in one pass per side.
 4. **`compose.s`** sorts each line's markers by x and fills between them in
    whole bytes, straight onto the screen. This is the BBC's trick of filling
    while it copies (`DrawTrackBytes`), taken one step further: with no
@@ -78,7 +78,23 @@ interrupt:
    beam has drawn the view's top row, and it is slower than the beam, so the
    beam never catches it: every row is rewritten after the beam has shown
    it, and a frame never shows two half-views. A line with no markers that
-   is filled the same as last time (most of the sky) is left alone.
+   is filled the same as last time (most of the sky) is left alone, but
+   still takes as long as the beam takes over a row, so compose never gets
+   ahead of it.
+
+The order within an update is:
+1. the rest of the verge points;
+2. the edges;
+3. HALT for the frame interrupt;
+4. the next camera position, and the next update's first six verge points;
+5. compose.
+
+The work in step 4 is time compose would otherwise spend waiting for the
+beam. Then `wait_for_beam` reads the floating bus, which on a 48K is
+whatever the ULA is fetching from the screen. The rows above the view hold
+nothing but a colour attribute used nowhere else, so any other value means
+the beam has reached the view. Step 4 is bounded so that compose starts in
+time to finish before the beam comes round again.
 
 `track.s` expands the track data into every segment's coordinates once, at
 startup. A section's first segment takes its coordinates from the section;
@@ -113,7 +129,7 @@ horizon at line 60, as the BBC does.
 |---|---|
 | `$6000` | the 12-bit log table: 4K of low bytes, 4K of high |
 | `$8000` | code |
-| `$A000` | seven pages of lookup tables |
+| `$A000` | eight pages of lookup tables |
 | `$A800` | the track data file, as the BBC loads it; read once at startup |
 | `$B000` | eight pages of antilogarithms |
 | `$BA00` | the two verge point lists |
@@ -124,40 +140,48 @@ horizon at line 60, as the BBC does.
 
 ## Speed
 
-On the emulator, which does not model contended memory, an update takes
-four frames: 12.5 updates a second. Measured in the profiler over 40
+On the emulator, which does not model contended memory, nearly every update
+takes three frames: 16.7 updates a second. Measured in the profiler over 40
 updates on Silverstone:
 
 | Stage | T-states |
 |---|---|
-| verges (projection) | 65,000 |
-| edges | 92,000 |
-| compose, onto the screen | 72,000 |
-| waiting for the beam to pass the view's top | 18,000 |
+| verges (projection), in two parts | 52,000 |
+| edges | 78,000 |
+| compose, onto the screen | 65,000 |
 | camera | 5,000 |
 
-That is about 252,000 of the four frames' 279,600. The first working
-version took six frames, about 420,000 T-states. These changes made the
-difference:
+Over a whole lap (1,100 updates), the work from one frame interrupt to the
+next HALT is 199,000 T-states at the median and 211,000 at the 99th
+percentile, against three frames' 209,664. 25 updates, all at a handful
+of corners, take a fourth frame; the worst needs 221,000.
+
+The first working version took six frames, about 420,000 T-states. These
+changes made the difference:
 
 - composing straight onto the screen instead of into a buffer copied after;
 - log and antilog tables in place of shifting loops;
-- the two verges projected together;
-- one pass per edge;
+- the projection written out in full for each verge, which are done
+  together;
+- both of a verge's edges drawn in one pass;
+- the next update's first points worked out while compose waits for the
+  beam;
 - hot loops in registers, with their constants patched into the
   instructions;
-- unrolling, and skipping lines that haven't changed.
+- unrolling, short cuts for the commonest divisions, and skipping lines
+  that haven't changed.
 
-For comparison, the BBC's main loop adds 9/100 of a second to the lap
-timer each time round, so the original runs at about 11 updates a second
-with everything else in the game going on too. To leave room for that here,
-the road needs to get to about three frames. What costs most now:
+For comparison, the BBC's main loop adds 9/100 of a second to the lap timer
+each time round, so the original runs at about 11 updates a second with
+everything else in the game going on too: the cars, the dashboard, the
+driving model and the sound. Those have to fit in the remaining time here.
+What costs most now:
 
-- **Per marker:** about 400 T-states between drawing it and filling from
+- **Per marker:** about 350 T-states between drawing it and filling from
   it, about 145 markers a frame.
-- **Per point projected:** about 2,400 T-states, 27 points a frame.
-- **Per edge segment set up:** about 700 T-states including its division,
-  44 segments a frame.
+- **Per point projected:** about 1,600 T-states, 27 points a frame.
+- **Per edge segment pair set up:** about 820 T-states including the two
+  divisions, 22 pairs a frame.
 
 ## Checking it
 
@@ -171,7 +195,11 @@ view from any segment (`python view_model.py 300` writes `output/view.png`).
   pictures showed the same verges, red-and-white kerbs and hairpins.
 - **Edges and compose.** A second model, of the Z80's own edge and compose
   stages, reproduced the Z80's screen byte for byte from the Z80's
-  point lists.
+  point lists. Compose's path for out-of-order lines was checked by
+  shuffling the markers in a third of the lines.
+- **Tearing.** Every write to the view was watched over a full lap, and
+  the first frame able to show it worked out from where the beam was: all
+  of an update's writes become visible in the same frame.
 
 ## Not done yet
 
@@ -188,6 +216,8 @@ view from any segment (`python view_model.py 300` writes `output/view.png`).
 - **Contended memory.** Timing is not checked against real contended
   memory, which the emulator does not model. On the real machine,
   compose's writes to the screen would be slowed while the beam is drawing.
-  Compose has to finish each row before the next frame's beam reaches it,
-  about 87,000 T-states from its start. It takes 72,000 now, so the margin
-  is not large.
+  Compose has to finish each row before the next frame's beam reaches it.
+  It starts about 28,000 T-states after the interrupt and takes about
+  65,000, against a limit of about 105,000.
+- **The floating bus.** `wait_for_beam` needs it, so this runs on the 48K
+  and 128K, not the +2A or +3.

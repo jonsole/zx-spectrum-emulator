@@ -31,7 +31,15 @@ SEG_AHEAD   equ 32              ; the BBC's first point, 32 segments ahead
 FOV_YAW     equ 20              ; half the field of view, in yaw high bytes
 POINTS      equ 16
 
-verges_build:
+; The lists are built in two goes: verges_begin does the first VB_EARLY
+; segments, straight after the frame interrupt while compose waits for the
+; beam, and verges_finish the rest. Everything the loop needs between the
+; two is in memory.
+VB_EARLY    equ 6
+
+verges_begin:
+    ld a,VB_EARLY
+    ld (verges_begin.stop+1),a
     ld hl,VERGE_R
     ld (vr_list),hl
     ld hl,VERGE_L
@@ -42,8 +50,6 @@ verges_build:
     xor a
     ld (vr_count),a
     ld (vl_count),a
-    ld (vr_close_i),a
-    ld (vl_close_i),a
     ld (vb_i),a
     inc a
     ld (vr_live),a
@@ -60,7 +66,15 @@ verges_build:
     add hl,de
     ld e,(hl)
     ld hl,(vb_seg)
-    call seg_sub
+    ASSERT low TRACK_LEN == 0       ; the wrap below needs whole pages
+    ld a,l                      ; back E segments, round the track
+    sub e
+    ld l,a
+    jr nc,.stepped
+    dec h
+    jp p,.stepped
+    ld h,high (TRACK_LEN - 1)
+.stepped:
     ld (vb_seg),hl
     ; The segment's flags: vergeScale is 5 for black verges (25 units
     ; wide), 4 for red ones on a curve or on both sides (50), 3 for a
@@ -116,7 +130,31 @@ verges_build:
     ld de,(cam_y)
     or a
     sbc hl,de
-    call pitch_height
+    ; As pitch_height, written out.
+    ld a,h
+    ld (pa_dysign),a
+    bit 7,h
+    jr z,.above
+    xor a
+    sub l
+    ld l,a
+    sbc a,a
+    sub h
+    ld h,a
+.above:
+    ld a,h
+    or l
+    jr z,.level
+    ex de,hl
+    LOG16
+    ld a,h
+    add a,5                     ; 256 / 8 = 2 ^ 5
+    ld h,a
+    jr .height
+.level:
+    ld hl,LOG_ZERO
+.height:
+    ld (pa_logdy),hl
     ld a,(vr_live)
     or a
     call nz,vr_point
@@ -130,9 +168,17 @@ verges_build:
     ld a,(vb_i)
     inc a
     ld (vb_i),a
-    cp POINTS
+.stop:
+    cp 0                        ; patched: VB_EARLY, then POINTS
     jp nz,.point
     ret
+
+; The rest of the lists. If both ended early, .point steps on a segment
+; and finds neither side live, which does no harm.
+verges_finish:
+    ld a,POINTS
+    ld (verges_begin.stop+1),a
+    jp verges_begin.point
 
 ; The point at segment vb_seg on one side: appended to the side's list, or
 ; the end of the list. There is a copy for each side, so that its state has
@@ -210,14 +256,15 @@ NAME_point:
     ld a,h
     ex af,af'                   ; the octant
     LOG16
-    ld (ya_logd),hl             ; the larger delta's log, for now
+    push hl                     ; the larger delta's log
     ld a,b
     or c
     jr z,.t                     ; A = 0: on an axis
     ld d,b
     ld e,c
     LOG16
-    ld de,(ya_logd)
+    pop de
+    push de
     or a
     sbc hl,de
     ld a,h
@@ -241,7 +288,7 @@ NAME_point:
     ld c,(hl)
     inc h
     ld b,(hl)                   ; BC = the angle within the octant
-    ld hl,(ya_logd)
+    pop hl
     add hl,de
     ld (ya_logd),hl             ; the distance's log
     ex af,af'
@@ -271,14 +318,15 @@ NAME_point:
     ld (vb_rel),hl
     ; The closest point so far, visible or not: beyond it the list is
     ; coming back towards the camera and must stay in the field of view.
+    ; C is 1 if this is the closest yet, 0 if the list is past it.
     ld de,(ya_logd)
     ld hl,(NAME_close)
     or a
     sbc hl,de
+    ld c,0
     jr c,.farther
     ld (NAME_close),de
-    ld a,(vb_i)
-    ld (NAME_close_i),a
+    inc c
 .farther:
     ; The pitch, as pitch_line: T = 256 * (|dy| / 8) / distance.
     ld hl,(pa_logdy)
@@ -309,10 +357,7 @@ NAME_point:
     jp m,.hidden                ; below the view
 .in_sight:
     ld (vb_line),a
-    ld a,(NAME_close_i)
-    ld b,a
-    ld a,(vb_i)
-    cp b
+    dec c
     jr z,.in_view
     ld a,(vb_rel+1)
     or a
@@ -488,7 +533,6 @@ NAME_list:      dw 0
 NAME_count:     db 0
 NAME_live:      db 0
 NAME_close:     dw 0            ; the log of the closest point's distance
-NAME_close_i:   db 0            ; and which point that was
 NAME_prev:      dw 0            ; the segment of the last point kept
     ENDM
 

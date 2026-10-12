@@ -13,6 +13,11 @@ screen_init:
     ld bc,768-1
     ld (hl),$38                 ; black ink on white paper
     ldir
+    ld hl,$5800                 ; above the view: see wait_for_beam
+    ld de,$5801
+    ld bc,64-1
+    ld (hl),SYNC_ATTR
+    ldir
     ret
 
 ; IM 2 through a 257-byte table of $FD at $FE00, so whatever the bus holds
@@ -41,25 +46,29 @@ im2_handler:
     ei
     reti
 
-; Waits, after a HALT and the camera's update, until the beam has drawn the
-; view's top row and a couple more, so compose_screen can follow it down:
-; 64 lines of top border and VIEW_TOP rows at 224 T-states each, less what
-; the interrupt and the HALT took, less the camera's update. That takes
-; 4,485 to 4,763 T-states (measured over 300 random places on the track),
-; so the shortest is taken off: compose can start late, never early.
-BEAM_WAIT   equ (64 + VIEW_TOP + 2) * 224 - 200
-CAMERA_MIN  equ 4485
+; Waits until the beam has fetched the view's top row, by reading the
+; floating bus: on a 48K, reading a port the ULA doesn't answer gives
+; whatever the ULA is fetching from the screen, or $FF while it fetches
+; nothing (the border and the end of each line). Rows 0-15, above the view,
+; hold nothing but zero bytes under SYNC_ATTR attributes, so anything else
+; -- a view row's attributes or pattern bytes, or anything lower down -- is
+; the beam at row 16 or below. Called after the frame interrupt's work,
+; which must not run into the bottom border (57,000 T-states), or this
+; waits for the next frame. The +2A and +3 have no floating bus.
+SYNC_ATTR   equ $3A             ; red ink: there is none to see
 
 wait_for_beam:
-    ld bc,(BEAM_WAIT - CAMERA_MIN) / 26
-.wait:
-    dec bc                      ; 26 T-states a turn
-    ld a,b
-    or c
-    jr nz,.wait
+    in a,($FF)
+    cp $FF
+    jr z,wait_for_beam
+    or a
+    jr z,wait_for_beam
+    cp SYNC_ATTR
+    jr z,wait_for_beam
     ret
 
-; Shows how many frames the last update took, top left, from the ROM font.
+; Shows how many frames the last update took, bottom left, from the ROM font
+; (the top rows must stay empty for wait_for_beam).
 fps_show:
     ld a,(fps_last)
     ld c,a
@@ -77,7 +86,7 @@ fps_show:
     ld h,0
     ld de,$3D00+('0'-' ')*8
     add hl,de
-    ld de,$4000
+    ld de,$50E0                 ; row 184, the bottom character row
     ld b,8
 .copy:
     ld a,(hl)

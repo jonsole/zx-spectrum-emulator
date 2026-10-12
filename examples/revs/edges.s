@@ -51,30 +51,33 @@ edges_build:
     EDUP
 .sp:
     ld sp,0                     ; patched
-    call edge_left_outside
-    call edge_left_track
-    call edge_right_track
-    jp edge_right_outside
+    call edges_left
+    jp edges_right
 
-; One edge through its side's points, far to near: a copy for each of the
-; four, so its list, field and colour are constants. LIST and COUNT are the
-; side's list and its length, FIELD the x to take from each point (0 for
-; the verge's track edge, 2 for its outside), COLOUR the colour to the
-; right of the edge or -1 for each point's own verge colour, and LEFT is 1
-; for an edge on the left. Each line segment between two points takes the
-; nearer point's colour.
+; One side's two edges through its points, far to near: the verge's outside
+; edge and its track edge go through the same points on the same lines, so
+; a point is read and a segment set up once for both, and only each edge's
+; own division and lines are done twice. A copy for each side, so its list
+; and fields are constants. A is the edge drawn first (the further left),
+; B the second: FA and FB are the x each takes from a point (0 for the
+; verge's track edge, 2 for its outside), CA and CB the colour to the
+; right of each, -1 for each point's own verge colour. LEFT is 1 on the
+; left. Each line segment between two points takes the nearer point's
+; colour.
 ;
 ; A segment's last line is the next one's first, so the marker record
 ; pointer (HL') runs on from one segment into the next.
-    MACRO EDGE ENAME, ELIST, ECOUNT, EFIELD, ECOL, ELEFT
-ENAME:
-    ld a,(ECOUNT)
+    MACRO SIDE SNAME, SLIST, SCOUNT, FA, CA, FB, CB, SLEFT
+SNAME:
+    ld a,(SCOUNT)
     or a
     ret z
     ld b,a
-    ld hl,ELIST
+    ld hl,SLIST
     call .read
-    ld (rs_ax),de
+    ld (rs_axa),de
+    ld de,(rs_bxb)
+    ld (rs_axb),de
     ld (rs_al),a
     ld (eg_low),a
     ld e,a
@@ -106,39 +109,47 @@ ENAME:
     ld (eg_low_colour),a
     ld a,l
 .not_lower:
-    IF ECOL < 0
-    ld l,a                      ; this segment's colour: the nearer point's
+    ld l,a
     ld a,c
     add a,low patterns
     ld c,a
     ld b,high patterns
     ld a,(bc)
-    ld (raster.pattern1+1),a
-    ld (raster.pattern2+1),a
+    ld (rs_pat_a),a
     ld a,l
-    ENDIF
     pop bc
     push bc
-    call raster
+    call raster2
     pop bc
     pop hl
     jr .next
 .end:
-    IF ELEFT
+    IF SLEFT
     ; Below its lowest point an edge on the left has gone off the left of
     ; the screen, where it still decides the colour those lines start with.
     ld a,(eg_low_colour)
+    call rs_pattern
+    ld a,(eg_low)
+    call raster_far_left
+    ld a,CB
     call rs_pattern
     ld a,(eg_low)
     jp raster_far_left
     ELSE
     ret
     ENDIF
-; The point at HL: DE = its x on this edge, A = its line, C = the colour.
-; Entries are 8-byte aligned, so only L moves, and HL is put back.
+; The point at HL: DE = edge A's x, rs_bxb = edge B's, A = the line, C =
+; edge A's colour. Entries are 8-byte aligned, so only L moves, and HL is
+; put back.
 .read:
     ld a,l
-    or EFIELD
+    or FB
+    ld l,a
+    ld e,(hl)
+    inc l
+    ld d,(hl)
+    ld (rs_bxb),de
+    xor FB ^ FA                 ; from edge B's x to edge A's
     ld l,a
     ld e,(hl)
     inc l
@@ -146,12 +157,12 @@ ENAME:
     and $F8
     or 4
     ld l,a
-    IF ECOL < 0
+    IF CA < 0
     inc l
     ld c,(hl)
     dec l
     ELSE
-    ld c,ECOL
+    ld c,CA
     ENDIF
     ld a,(hl)
     dec l
@@ -161,42 +172,28 @@ ENAME:
     ret
     ENDM
 
-edge_left_outside:              ; the left verge's outside edge: verge
-                                ; colours to its right
-    EDGE edge_lo, VERGE_L, vl_count, 2, -1, 1
-edge_left_track:                ; the left verge's track edge: road
-    ld a,COLOUR_ROAD
-    call rs_pattern
-    EDGE edge_lt, VERGE_L, vl_count, 0, COLOUR_ROAD, 1
-edge_right_track:               ; the right verge's track edge: verge
-    EDGE edge_rt, VERGE_R, vr_count, 0, -1, 0
-edge_right_outside:             ; the right verge's outside edge: grass
-    ld a,COLOUR_GRASS
-    call rs_pattern
-    EDGE edge_ro, VERGE_R, vr_count, 2, COLOUR_GRASS, 0
+edges_left:                     ; the left verge: outside edge (verge colours
+                                ; to its right), then track edge (road)
+    ld a,(patterns+COLOUR_ROAD)
+    ld (rs_pat_b),a
+    SIDE edges_l, VERGE_L, vl_count, 2, -1, 0, COLOUR_ROAD, 1
+edges_right:                    ; the right verge: track edge (verge
+                                ; colours), then outside edge (grass)
+    ld a,(patterns+COLOUR_GRASS)
+    ld (rs_pat_b),a
+    SIDE edges_r, VERGE_R, vr_count, 0, -1, 2, COLOUR_GRASS, 0
 
-; Marks the lines from (rs_ax, rs_al) to (DE, A), the next point, then makes
-; that point the start of the next segment: one marker per line, at the
-; line's x rounded to the nearest pixel, stepped Bresenham-fashion from a
-; single division, in the pattern last patched in. HL' is the first line's
-; record. The last line is left to the next segment, which starts there at
-; the same x and whose colour would win anyway, unless B is 1: this is the
-; edge's last segment.
-;
-; The loop is the hottest code in the edge stage, so it runs in registers
-; with its constants patched into its instructions: main set HL = x,
-; DE = the whole-pixel step per line (negative going left), C = the error
-; term, B = lines left; alternate set HL' = the line's marker record,
-; BC' = +-32 to the next record, DE' for the marker.
-raster:
+; Both of a side's edges from (rs_axa, rs_axb, rs_al) to (DE, rs_bxb, A),
+; the next point, then that point as the start of the next segment. B is
+; the points left: 1 for the side's last segment, whose last line is
+; marked too (otherwise the next segment's first line is the same line).
+raster2:
     dec b
-    ld ixl,b                    ; zero for the edge's last segment
+    ld ixl,b                    ; zero for the side's last segment
     ld c,a
     ld hl,rs_al
     sub (hl)                    ; lines, up or down
     ld (hl),c                   ; the next segment starts at this one's end
-    ld hl,(rs_ax)
-    ld (rs_ax),de
     jr z,.level
     exx
     ld bc,MARK_LINE
@@ -207,13 +204,87 @@ raster:
     ld bc,-MARK_LINE
     exx
 .up:
+    ld (raster.n1+1),a
+    ld (raster.n2+1),a
     ld c,a                      ; n
-    ld (.n1+1),a
-    ld (.n2+1),a
+    ld b,a
+    ld a,ixl
+    or a
+    jr nz,.lines
+    inc b                       ; the last segment's last line too
+.lines:
+    ld (rs_lines),bc
+    exx
+    ld (rs_rec),hl              ; both edges start from this record
+    exx
+    ld hl,(rs_axa)
+    ld (rs_axa),de
+    ld a,(rs_pat_a)
+    call raster
+    ld hl,(rs_rec)
+    push hl
+    exx
+    pop hl
+    exx
+    ld hl,(rs_axb)
+    ld de,(rs_bxb)
+    ld (rs_axb),de
+    ld a,(rs_pat_b)
+    jp raster
+.level:
+    ; Level: one marker for each edge at the nearer point, if this is the
+    ; last segment.
+    ld (rs_axa),de
+    ld hl,(rs_bxb)
+    ld (rs_axb),hl
+    ld a,ixl
+    or a
+    ret nz
+    inc a
+    ld (raster.n1+1),a
+    ld (raster.n2+1),a
+    ld (raster.r+1),a           ; the step can't matter: one line
+    exx
+    ld (rs_rec),hl
+    exx
+    ld a,(rs_pat_a)
+    call rs_set_pattern
+    ex de,hl
+    ld b,1
+    ld de,0
+    ld c,e
+    call raster.line
+    ld hl,(rs_rec)
+    push hl
+    exx
+    pop hl
+    exx
+    ld a,(rs_pat_b)
+    call rs_set_pattern
+    ld hl,(rs_bxb)
+    ld b,1
+    ld de,0
+    ld c,e
+    jp raster.line
+
+; Marks the lines from x = HL to x = DE, rs_lines (B lines, n = C) of them,
+; in pattern A, from the record at HL': one marker per line, at the line's x
+; rounded to the nearest pixel, stepped Bresenham-fashion from a single
+; division.
+;
+; The loop is the hottest code in the edge stage, so it runs in registers
+; with its constants patched into its instructions: main set HL = x,
+; DE = the whole-pixel step per line (negative going left), C = the error
+; term, B = lines left; alternate set HL' = the line's marker record,
+; BC' = +-32 to the next record, DE' for the marker.
+raster:
+    call rs_set_pattern
     ex de,hl
     push de                     ; the start x
     or a
     sbc hl,de                   ; dx
+    ld a,(rs_lines)
+    ld c,a                      ; n
     bit 7,h
     jr nz,.leftwards
     call div16_8                ; dx = q * n + r
@@ -238,26 +309,8 @@ raster:
     ex de,hl                    ; DE = -q
 .count:
     pop hl                      ; the start x
-    ld b,c
-    ld a,ixl
-    or a
-    jr nz,.lines
-    inc b                       ; the last segment's last line too
-.lines:
+    ld bc,(rs_lines)
     srl c                       ; the error starts at n / 2: rounding
-    jr .line
-.level:
-    ; Level: one marker, for the nearer point, if this is the last segment.
-    ld a,ixl
-    or a
-    ret nz
-    ex de,hl
-    ld b,1
-    ld de,0
-    ld c,e
-    inc a
-    ld (.n1+1),a
-    ld (.n2+1),a
 .line:
     ld a,h
     or a
@@ -328,7 +381,10 @@ raster:
     jr .next
 
 ; Lines 0 to A - 1 start with the pattern rs_pattern last patched in: they
-; lie below an edge that has gone off the left of the screen.
+; lie below an edge that has gone off the left of the screen. As a marker
+; that far left (FAR_LEFT) it beats only no marker at all, or another like
+; it -- a real one off the left is nearer -- so a line takes it if its
+; starting x's high byte is still $80.
 raster_far_left:
     cp VIEW_LINES
     jr c,.some
@@ -337,19 +393,24 @@ raster_far_left:
     or a
     ret z
     ld b,a
-    xor a
-    ld (raster.r+1),a           ; no slope: r = 0 ...
-    inc a
-    ld (raster.n1+1),a          ; ... against n = 1
-    ld (raster.n2+1),a
-    exx
-    ld hl,MARKERS
-    ld bc,MARK_LINE
-    exx
-    ld hl,FAR_LEFT
-    ld de,0
-    ld c,e
-    jp raster.line
+    ld a,(raster.pattern2+1)
+    ld c,a
+    ld hl,MARKERS+3             ; line 0's starting x, high byte
+    ld de,MARK_LINE
+.line:
+    ld a,(hl)
+    cp high FAR_LEFT
+    jr nz,.taken
+    dec l
+    ld (hl),low FAR_LEFT
+    dec l
+    ld (hl),c
+    inc l
+    inc l
+.taken:
+    add hl,de
+    djnz .line
+    ret
 
 ; Patches colour A's pattern into the raster loop.
 rs_pattern:
@@ -357,6 +418,8 @@ rs_pattern:
     add a,l
     ld l,a
     ld a,(hl)
+; Patches pattern A into the raster loop.
+rs_set_pattern:
     ld (raster.pattern1+1),a
     ld (raster.pattern2+1),a
     ret
@@ -387,9 +450,10 @@ rs_record:
     add hl,de
     ret
 
-; HL = HL / C, A = the remainder, for C below 128: unrolled, a bit at a
-; time. Most edges cross a line or two and move less than 256 pixels, so
-; those take short cuts.
+; HL = HL / C, A = the remainder, for C below 128. Most segments cross two
+; to four lines, so those divisors have short cuts: shifts for 2 and 4, a
+; table for 3. The rest are unrolled a bit at a time, eight bits for an x
+; that moves less than 256 pixels. Uses DE.
     MACRO DIV_BIT
     add hl,hl
     rla
@@ -402,8 +466,40 @@ rs_record:
 
 div16_8:
     ld a,c
+    cp 5
+    jr nc,.general
     dec a
     ret z                       ; n = 1: q = |dx|, r = 0 (A is 0)
+    dec a
+    jr z,.two
+    dec a
+    jr z,.three
+    ld a,l                      ; four
+    and 3
+    srl h
+    rr l
+    srl h
+    rr l
+    ret
+.two:
+    ld a,l
+    and 1
+    srl h
+    rr l
+    ret
+.three:
+    or h
+    jr nz,.general
+    ld e,l
+    ld d,high tbl_div3
+    ld a,(de)
+    ld l,a                      ; q, and H is 0
+    ld a,e
+    sub l
+    sub l
+    sub l                       ; r = x - 3q
+    ret
+.general:
     xor a
     or h
     jr z,.narrow
@@ -422,6 +518,12 @@ div16_8:
     ret
 
 eg_low:         db 0
+rs_axa:     dw 0                ; where the side's two edges are
+rs_axb:     dw 0
+rs_bxb:     dw 0                ; where edge B goes next
+rs_pat_a:   db 0
+rs_pat_b:   db 0
+rs_lines:   dw 0                ; n, then the lines to mark
+rs_rec:     dw 0
 eg_low_colour:  db 0
-rs_ax:      dw 0
 rs_al:      db 0

@@ -5,14 +5,18 @@
 ; Spectrum has no buffer to copy: the fill is the only write.
 ;
 ; It runs from the top line (79) down, starting once the beam has drawn the
-; view's top row, and it is slower than the beam (224 T-states a row), so it
-; never catches it up: every row is rewritten after the beam has shown it
-; and long before it comes round again, and no frame shows two views.
+; view's top row (wait_for_beam), and every line takes longer than the beam
+; takes over a row (224 T-states), even one left alone, so it never gets
+; ahead: every row is rewritten after the beam has shown it, and no frame
+; shows two views. It must also finish each row before the beam comes round
+; to it again, about 105,000 T-states after the interrupt for the bottom
+; row: as it takes about 65,000, it has to start by about 38,000. The work
+; done before it (revs.s) starts it at about 28,000.
 ;
 ; A span is whole bytes, written by jumping into an unrolled run of stores,
-; up to and including the byte the next marker falls in; then that byte gets
-; the next pattern from the marker's pixel rightwards. Several markers can
-; share a byte, and each just mixes the byte again.
+; up to the byte the next marker falls in; that byte is built from the span's
+; pattern left of the marker's pixel and the next pattern from it. Several
+; markers can share a byte, and each after the first mixes it again.
 ;
 ; In the line loop: BC = the next marker (records are 32-byte aligned, so
 ; only C moves), DE = the next byte of the screen row (rows are too),
@@ -75,7 +79,7 @@ compose_screen:
     ld a,c
 .end:
     cp 0                        ; patched
-    jr z,.last
+    jp z,.last
     ld a,(bc)                   ; x
     cp l
     jr c,.unsorted
@@ -89,12 +93,33 @@ compose_screen:
 .row_plus_1:
     add a,0                     ; patched: bytes up to and including x's
     jr z,NAME_mix               ; none: an earlier marker shares the byte
-    add a,a
+    dec a
+    jr z,NAME_edge              ; just x's own
+    add a,a                     ; the ones before x's in the current pattern
     neg
     add a,low RUNMIX
     ld iyl,a
     ld a,ixl
     jp (iy)
+NAME_edge:
+    ; x's byte: the current pattern left of x, the new one from x on. As
+    ; nothing has been stored there yet it is built from the two patterns,
+    ; byte = cur ^ ((cur ^ new) & mask), and the new one becomes current.
+    ld a,(bc)
+    inc c
+    IF ROT
+    rrca
+    rrca
+    ENDIF
+    ld ixh,a
+    xor ixl
+    and (hl)
+    xor ixl
+    ld (de),a
+    inc e
+    ld a,ixh
+    ld ixl,a
+    jp .marker
 NAME_mix:
     dec e                       ; back onto x's byte
     ld a,(bc)                   ; the pattern from x rightwards
@@ -268,9 +293,9 @@ cs_last:
 
     ALIGN 256
 fill_runs:
-    FILL_RUN cs_odd_mix
+    FILL_RUN cs_odd_edge
 fill_odd_end equ $ - 3
-    FILL_RUN cs_even_mix
+    FILL_RUN cs_even_edge
 fill_even_end equ $ - 3
     REPT 32
     ld (de),a
