@@ -7,10 +7,12 @@
 ;
 ; Memory, all uncontended above $8000 except the screen:
 ;
-;   $6000  a 12-bit log table (tables.py), low bytes then high, 4K each
+;   $6000  a 12-bit log table's fractions (tables.py), 4K, and at $7000 the
+;          three small tables that give its whole parts; free from $7210
 ;   $8000  code
 ;   $A000  page-aligned lookup tables (tables.py), eight pages
-;   $A800  the track data file, exactly as the BBC loads it (track_data.py)
+;   $A800  the track data file, exactly as the BBC loads it (track_data.py);
+;          only build_track reads it, so it is free once the track is built
 ;   $B000  eight pages of antilogarithms
 ;   $BA00  per-frame verge point lists
 ;   $C000  every segment's 16-bit coordinates: five arrays of 1024 words
@@ -86,7 +88,8 @@ track:
     ASSERT $ <= VERGE_R
 
     ORG $6000
-    INCLUDE "log12.s"           ; generated: 8K of logarithms
-    ASSERT $ == $8000
+    INCLUDE "log12.s"           ; generated: 4K of logarithms and their whole parts
+    ASSERT $ <= $8000
+log_free:                       ; to $7FFF, and $7110-$71FF
 
     SAVEBIN "output/revs.bin",$4000,$C000

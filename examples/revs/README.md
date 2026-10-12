@@ -146,10 +146,10 @@ horizon at line 60, as the BBC does.
 
 | Address | What |
 |---|---|
-| `$6000` | the 12-bit log table: 4K of low bytes, 4K of high |
+| `$6000` | the 12-bit log table's fractions, 4K; at `$7000` three small tables for its whole parts; free from `$7210` to `$7FFF` |
 | `$8000` | code |
 | `$A000` | eight pages of lookup tables |
-| `$A800` | the track data file, as the BBC loads it; read once at startup |
+| `$A800` | the track data file, as the BBC loads it; read once at startup, then free |
 | `$B000` | eight pages of antilogarithms |
 | `$BA00` | the two verge point lists |
 | `$C000` | every segment's coordinates: five arrays of 1,024 words |
@@ -171,11 +171,11 @@ updates on Silverstone:
 | camera | 5,000 |
 
 Over a whole lap at the camera's speed (1,639 updates of 160/256 of a
-segment), the work from one frame interrupt to the next HALT is 196,600
-T-states at the median and 210,400 at the 99th percentile, against three
-frames' 209,664. 22 updates (1.3%) take a fourth frame, all of them in the
+segment), the work from one frame interrupt to the next HALT is 198,200
+T-states at the median and 212,200 at the 99th percentile, against three
+frames' 209,664. 59 updates (3.6%) take a fourth frame, all of them in the
 tightest corners, where the camera sees most of the track. The worst needs
-214,600. The tests' speed check measures this (see below).
+216,600. The tests' speed check measures this (see below).
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:

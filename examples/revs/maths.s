@@ -16,8 +16,12 @@
 
 ; HL = 256 * log2(DE), for DE >= 1 (0 for 0): 0 to 4095, 8.8 fixed point.
 ; Below 4096 it is a lookup; above, DE's top twelve bits are, plus 4. The
-; table's high bytes are 4K above its low bytes, which is bit 4 of H. Uses
-; A, DE. A macro, for the code that can't spare a call, and a routine.
+; table holds only the fraction, the low byte: the whole part, the high
+; byte, is floor(log2), the position of the value's top bit, so it comes
+; from D (or from E when D is 0) through a small table. That is 3.8K less
+; than a second 4K of high bytes, and the shifted case is no slower: its 4
+; is in tbl_log_hl. Uses A, DE. A macro, for the code that can't spare a
+; call, and a routine.
     MACRO LOG16
     ld a,d
     cp 16
@@ -33,18 +37,25 @@
     ld hl,tbl_log12_lo
     add hl,de
     ld a,(hl)
-    set 4,h                     ; tbl_log12_hi
+    ld h,high tbl_log_hl        ; 12 + floor(log2 D): D is 1..15 here
+    ld l,d
     ld h,(hl)
     ld l,a
-    ld a,h
-    add a,4                     ; log2 16
-    ld h,a
     jr .done@
 .small@:
     ld hl,tbl_log12_lo
     add hl,de
+    or a                        ; A is still D
     ld a,(hl)
-    set 4,h
+    jr z,.byte@
+    ld h,high tbl_log_hs        ; 8 + floor(log2 D)
+    ld l,d
+    ld h,(hl)
+    ld l,a
+    jr .done@
+.byte@:
+    ld h,high tbl_log_he        ; floor(log2 E)
+    ld l,e
     ld h,(hl)
     ld l,a
 .done@:

@@ -8,7 +8,7 @@ A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Mic
 
 The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
 
-- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 196,600 T-states against a three-frame budget of 209,664. About 1.3% of updates need a fourth frame, all in the tightest corners.
+- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 198,200 T-states against a three-frame budget of 209,664. About 3.6% of updates need a fourth frame, all in the tightest corners.
 - **Picture:**
   - a solid black road;
   - red-and-white or black-and-white kerbs, 25, 50 or 100 units wide as the track data says;
@@ -16,7 +16,7 @@ The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the f
   - white sky.
   - The kerb stripes move with the track. The camera turns smoothly through corners.
 - **Correctness:** the screen matches Python models of both the BBC routines and the Z80's own stages, byte for byte where the model is exact. No frame shows two half-drawn views.
-- **Memory:** about 36K of the 48K is in use, with about 5 to 7K free in scattered pieces.
+- **Memory:** about 32K of the 48K is in use. About 10.5K is free, the largest pieces 3.5K at `$7210` and 2K at `$A800`.
 - **Runs on:** a 48K or 128K Spectrum, since it needs the floating bus. It does not run on the +2A or +3.
 
 None of this is on `master` yet. The commits are on branch `ccr-a5725d0e-ey56yb`, and no pull request has been opened.
@@ -166,11 +166,11 @@ A frame is 69,888 T-states, so three frames is 16.7 updates a second. The reques
 
 The tests' speed check runs the camera once round at its own speed: 1,639 updates of 160/256 of a segment. The work from one frame interrupt to the next HALT is:
 
-- 196,600 T-states at the median;
-- 210,400 at the 99th percentile;
-- 214,600 at worst.
+- 198,200 T-states at the median;
+- 212,200 at the 99th percentile;
+- 216,600 at worst.
 
-22 updates (1.3%) take a fourth frame, all in the tightest corners, where most of the track is in view. Before edges that had gone off the right stopped being stepped, it was 207 (12.6%), with a median of 200,200.
+59 updates (3.6%) take a fourth frame, all in the tightest corners, where most of the track is in view. Before edges that had gone off the right stopped being stepped, it was 207 (12.6%), with a median of 200,200. Halving the log table then cost 1,600 T-states a redraw (it had been 22 updates and 196,600).
 
 The scratch measurement before the camera was smoothed ran 1,100 updates at about one segment each. It gave 202,000, 213,000 and 218,000, with 118 over. At half a segment an update, which lingers longer in corners, 320 took a fourth frame. That was measured once and is not part of the tests.
 
@@ -237,10 +237,10 @@ About **36K of the 48K** is used. Most of it is tables and the expanded track, w
 | Address | Size | What |
 | --- | --- | --- |
 | `$4000`–`$5AFF` | 6.75K | Screen and attributes |
-| `$6000`–`$7FFF` | 8K | Log table: 4K of low bytes, 4K of high |
+| `$6000`–`$720F` | 4.5K | Log table: 4K of fractions, and three small tables for the whole parts |
 | `$8000`–`$97CD` | about 6K | Code |
 | `$A000`–`$A7FF` | 2K | Eight pages of lookup tables: yaw to x, arctangent, distance correction, masks, divide by 3 |
-| `$A800` | 1.8K | The track data file, read once at startup |
+| `$A800` | 1.8K | The track data file, read once at startup and free after |
 | `$B000`–`$B7FF` | 2K | Antilog table, a page per whole part |
 | `$BA00`–`$BBFF` | 0.5K | The two verge point lists |
 | `$C000`–`$E7FF` | 10K | Every segment's coordinates: five arrays of 1,024 words |
@@ -248,15 +248,15 @@ About **36K of the 48K** is used. Most of it is tables and the expanded track, w
 | `$EC00`–`$FBFF` | 4K | Edge markers: 32 bytes for each of 128 lines |
 | `$FDF0` down |  | Stack; IM 2 jump at `$FDFD`, vector table at `$FE00` |
 
-There is about 5.4K free:
+There is about 10.5K free:
 
+- `$7210`–`$7FFF` (3.5K), and `$7110`–`$71FF` (240 bytes) beside the small log tables;
+- `$A800`–`$AFFF` (2K) once `build_track` has run;
 - `$5B00`–`$5FFF` (1.25K);
 - `$97CE`–`$9FFF` (2K);
 - `$B800`–`$B9FF` (0.5K);
 - `$BC00`–`$BFFF` (1K);
 - small gaps round the stack.
-
-That grows to about 7K if the track file's 1.8K at `$A800` is reused once the segments are built.
 
 That is not much for the rest of a game. The cars, the dashboard graphics and the other four tracks will need room. Room could come from:
 
@@ -282,7 +282,7 @@ Roughly in the order the plan would add them, one feature at a time.
 
 ### The engine
 
-- [ ] **Corners that need a fourth frame** (1.3% of updates over a lap, down from 12.6%). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
+- [ ] **Corners that need a fourth frame** (3.6% of updates over a lap, down from 12.6%). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
 - [ ] **Time for the rest of the game.** The road should come down well below three frames if the game is to stay at four. The per-marker cost (about 350 T-states) is the biggest target.
 - [ ] **Stripes at about one segment an update.** At around 170 mph the two-segment kerb pattern is sampled once a stripe and seems to stand still or run backwards. A blend of red and white above some speed would hide it.
 - [ ] **Colour.** Green grass and blue sky through attributes, fitted round the 8×8 grid.

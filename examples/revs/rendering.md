@@ -188,25 +188,25 @@ One redraw to scale, in Z80 cycles (T-states) from the start of a TV frame. The 
 
 ```
 TV:   |------ frame 1 --------|------ frame 2 --------|------ frame 3 --------|
-Z80:  ccfffffPPPPPPPPPPPPPPPPPPPPPPrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeewwww
+Z80:  ccfffffPPPPPPPPPPPPPPPPPPPPPPPrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeewww
 beam:       ======                  ======                  ======
 ```
 
 | | Step | From | To |
 |---|---|---|---|
-| `c` | camera | 100 | 6,600 |
-| `f` | first points | 6,600 | 22,500 |
-| `P` | painting the screen | 22,500 | 86,900 |
-| `r` | rest of the points | 87,300 | 123,600 |
-| `e` | edges | 123,600 | 196,600 |
-| `w` | wait for the next frame | 196,600 | 209,664 |
+| `c` | camera | 100 | 6,700 |
+| `f` | first points | 6,700 | 23,000 |
+| `P` | painting the screen | 23,000 | 87,400 |
+| `r` | rest of the points | 87,900 | 125,300 |
+| `e` | edges | 125,300 | 198,200 |
+| `w` | wait for the next frame | 198,200 | 209,664 |
 | `=` | the beam drawing the road picture, each frame | 17,900 | 35,700 |
 
 Painting starts after the beam has drawn the road picture in frame 1 and ends before the beam draws it again in frame 2.
 
 To find the beam, it uses a quirk of the 48K Spectrum called the *floating bus*. Reading a port that nothing answers returns whatever byte the TV circuitry is fetching from the screen at that moment. The two character rows above the road are kept blank, in a colour used nowhere else. So the first other value it reads means the beam has reached the road. The +2A and +3 have no floating bus, so this only works on the 48K and 128K.
 
-One redraw takes three TV frames, which is 16.7 redraws a second. Only about one redraw in 75, in the tightest corners, takes four. The time the painting would otherwise spend waiting for the beam is used to start the next redraw's points.
+One redraw takes three TV frames, which is 16.7 redraws a second. Only about one redraw in 28, in the tightest corners, takes four. The time the painting would otherwise spend waiting for the beam is used to start the next redraw's points.
 
 ## Reference
 
@@ -390,8 +390,8 @@ time and are page-aligned, so a lookup is H = page, L = index.
 
 | Address | Table | Contents |
 |---|---|---|
-| `$6000` | `tbl_log12_lo` | low bytes of 256 × log2(i), i = 0 to 4,095 |
-| `$7000` | `tbl_log12_hi` | their high bytes, 4K above the low ones: one `set 4,h` gets from one to the other |
+| `$6000` | `tbl_log12_lo` | the fraction (low byte) of 256 × log2(i), i = 0 to 4,095 |
+| `$7000` | `tbl_log_he`, `tbl_log_hs`, `tbl_log_hl` | the whole part (high byte), which is floor(log2 i), the position of i's top bit: from E when D is 0, else from D (with 4 more after the shift for values of 4,096 or more). Three small tables instead of a second 4K |
 | `$A000` | `tbl_xhi_lo`, `tbl_xhi_hi` | 128 + yaw-high-byte × 256 / 40: the screen x of a yaw's high byte, signed 16-bit |
 | `$A200` | `tbl_xfrac` | the pixels a yaw's low byte adds: low × 256 / 40 / 256 |
 | `$A300` | `tbl_mask` | `$FF >> (x & 7)`, indexed by x itself: a byte's pixels from x rightwards |
@@ -406,9 +406,11 @@ logft, then a32_lo, then a32_hi. The code moves from one to the next with
 
 These are the routines (`maths.s`):
 
-- **`log16`**: 256 × log2 of a 16-bit value. Below 4,096 it is one lookup in
-  each half of the table. Above, the value's top 12 bits are looked up and 4
-  × 256 is added for the four bits dropped. The result is within 2/256 of
+- **`log16`**: 256 × log2 of a 16-bit value. Below 4,096 the fraction is
+  one lookup and the whole part another, from the value's high byte (or its
+  low byte when the high byte is 0). Above, the value's top 12 bits are
+  looked up the same way, with 4 more in the whole part for the four bits
+  dropped. The result is within 2/256 of
   exact. It is also a macro, `LOG16`, for the code that can't spare a call.
 - **`exp8` / `exp16`**: the antilogarithm. The log's high byte picks a page
   of `tbl_exp8` and its low byte the entry, so 2^x for x below 8 is one
@@ -838,7 +840,7 @@ T = 0       frame interrupt: the IM 2 handler counts frames
 ```
 
 Three frames is 16.7 updates a second. In corners, where more of the track
-is in view, about one update in 75 (22 of 1,639 over a lap) runs past the
+is in view, about one update in 28 (59 of 1,639 over a lap) runs past the
 third interrupt and takes a fourth.
 
 The `beam` test watches every write to the view over 200 updates and checks
