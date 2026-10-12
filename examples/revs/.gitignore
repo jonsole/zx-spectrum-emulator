@@ -1,0 +1,5 @@
+# Build output, and the generated track and table sources that go with it.
+output/
+# The Revs track data, fetched from revs.bbcelite.com (Acornsoft's -- never
+# committed, the same treatment as roms/).
+data/

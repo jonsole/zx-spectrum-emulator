@@ -52,6 +52,9 @@ zx-spectrum-emulator/
                                   #   templates and graphic-map editors, their
                                   #   schemas and tests, and room_designer.py,
                                   #   which serves the room page outside VS Code
+    revs/                         # a road engine after the BBC's Revs (its
+                                  #   README.md), assembled by its own build.py;
+                                  #   the track data is fetched, not committed
     zx-tape-loader/               # submodule: github.com/jonsole/zx-tape-loader --
                                   #   a fast custom tape loader, and the Python that
                                   #   renders its tapes to WAV

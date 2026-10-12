@@ -58,6 +58,20 @@
       "preLaunchTask": "filmation.build"
     },
     {
+      // The Revs-style road engine (examples/revs): Geoff Crammond's BBC
+      // design for the 48K, so far the track from a camera that drives
+      // itself. Assembled on every launch by the preLaunchTask; the first
+      // build fetches the track data from revs.bbcelite.com.
+      "name": "ZX Spectrum: Revs road",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/48.rom",
+      "snapshot": "${workspaceFolder}/examples/revs/output/revs.z80",
+      "sld": "${workspaceFolder}/examples/revs/output/revs.sld",
+      "asm": "${workspaceFolder}/examples/revs/revs.s",
+      "preLaunchTask": "revs.build"
+    },
+    {
       // Knight Lore 128K: the fork of the Filmation entry above that grows
       // into a bigger castle on the 128K (examples/filmation/knightlore128).
       "name": "ZX Spectrum: Knight Lore 128K",
