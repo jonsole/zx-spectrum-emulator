@@ -167,12 +167,12 @@ updates on Silverstone:
 | compose, onto the screen | 65,000 |
 | camera | 5,000 |
 
-Over a whole lap (1,100 updates at one segment an update), the work from
-one frame interrupt to the next HALT is 200,000 T-states at the median
-and 215,000 at the 99th percentile, against three frames' 209,664. 115
-updates take a fourth frame, nearly all of them in corners, where the
-camera sees more of the track. The worst needs 219,000. The tests' speed
-check measures this (see below).
+Over a whole lap at the camera's speed (1,639 updates of 160/256 of a
+segment), the work from one frame interrupt to the next HALT is 200,000
+T-states at the median and 215,000 at the 99th percentile, against three
+frames' 209,664. 205 updates (12.5%) take a fourth frame, nearly all of
+them in corners, where the camera sees more of the track. The worst needs
+219,000. The tests' speed check measures this (see below).
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:
@@ -211,7 +211,7 @@ cpp-core\build.ps1 -Release -Target snapshot_probe
 .\.venv-win\Scripts\python.exe examples\revs\tests\run_tests.py
 ```
 
-It takes about 20 seconds. Name checks to run only those (`run_tests.py
+It takes about 25 seconds. Name checks to run only those (`run_tests.py
 screen compose`); `--no-build` uses `output/` as it is. The checks:
 
 | Check | What it compares | Passes when |
@@ -221,7 +221,7 @@ screen compose`); `--no-build` uses `output/` as it is. The checks:
 | `screen` | the view on the screen against `tests/screen_model.py`, a model of the edge and compose stages, fed the Z80's own point lists | byte for byte |
 | `compose` | `compose_screen` on marker records with a third of the lines shuffled out of x order, against the same records filled in order | byte for byte |
 | `beam` | every write to the view over 200 updates, with the first frame able to show it worked out from where the beam was | all of an update's writes show in the same frame |
-| `speed` | the T-states from each frame interrupt to the next HALT over a lap | the median fits in three frames; the 99th percentile, the worst and the number needing a fourth frame are reported |
+| `speed` | the T-states from each frame interrupt to the next HALT over a lap at the camera's speed | the median fits in three frames; the 99th percentile, the worst and the number needing a fourth frame are reported |
 
 `view_model.py` is a Python model of the BBC routines, written from the
 disassembly's documentation. It also draws the reference view from any

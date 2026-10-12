@@ -15,8 +15,9 @@ runs it in cpp-core's snapshot_probe and checks:
            it has to sort them
   beam     that every update's writes to the screen show in the same frame,
            so no frame mixes two views
-  speed    the work from each frame interrupt to the next HALT over a lap,
-           whose median must fit in three frames
+  speed    the work from each frame interrupt to the next HALT, once round
+           the track at the camera's speed, whose median must fit in three
+           frames
 
 With names it runs only those. The probe has to have been built first:
 
@@ -59,8 +60,6 @@ BUDGET = 3 * FRAME_TSTATES
 STARTUP_FRAMES = 200
 # More than one update can take; a runto that needs longer has hung.
 UPDATE_FRAMES = 50
-# Updates for the camera to go once round Silverstone at its own speed.
-LAP_UPDATES = 1100
 
 
 class Views:
@@ -281,14 +280,17 @@ def check_speed(probe: Probe, symbols: dict, report: Report) -> None:
     probe.load(SNAPSHOT)
     probe.runto("main_loop", STARTUP_FRAMES)
     halt = symbols["main_loop.wait_frame"]
+    # Once round the track at the camera's own speed, in 256ths of a
+    # segment an update.
+    updates = -(-symbols["TRACK_LEN"] * 256 // probe.byte("cam_speed"))
     # From the first instruction after the HALT to the next HALT, back-dated
     # to the interrupt. The corners take longer, so it is only the median
     # that has to fit; the rest is reported.
-    r = probe.work(halt + 1, halt, LAP_UPDATES, BUDGET)
+    r = probe.work(halt + 1, halt, updates, BUDGET)
     report.result("speed", r["median"] <= BUDGET,
                   f"median {r['median']:,} T-states against three frames' {BUDGET:,}; "
                   f"99% {r['p99']:,}, worst {r['max']:,}; "
-                  f"{r['over']} of {LAP_UPDATES} updates need a fourth frame")
+                  f"{r['over']} of {updates} updates need a fourth frame")
 
 
 CHECKS = ["maths", "verges", "screen", "compose", "beam", "speed"]
