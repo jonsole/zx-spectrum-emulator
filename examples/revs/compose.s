@@ -11,7 +11,7 @@
 ; shows two views. It must also finish each row before the beam comes round
 ; to it again, about 105,000 T-states after the interrupt for the bottom
 ; row: as it takes about 65,000, it has to start by about 38,000. The work
-; done before it (revs.s) starts it at about 28,000.
+; done before it (revs.s) starts it at about 20,000 to 23,000.
 ;
 ; A span is whole bytes, written by jumping into an unrolled run of stores,
 ; up to the byte the next marker falls in; that byte is built from the span's
@@ -158,7 +158,10 @@ NAME_mix:
     ; No markers: one pattern across the row, mostly pushed. An interrupt
     ; pushes four bytes below SP, so the pushes stop four bytes short of the
     ; row's start, where that could reach into another screen row; those
-    ; four are stored.
+    ; four are stored after, once SP is back. Stored before, an interrupt
+    ; during the last pushes -- and the frame interrupt does land in
+    ; compose -- would write its return address and AF over them, and as
+    ; the line is then the same as last time it would never be redrawn.
     inc l
     ld a,(bc)
     cp (hl)
@@ -182,22 +185,25 @@ NAME_mix:
     ld h,a
     ld l,a
     ex de,hl                    ; DE = the pattern twice, HL = the row
-    ld (hl),e
-    inc l
-    ld (hl),e
-    inc l
-    ld (hl),e
-    inc l
-    ld (hl),e
-    ld bc,32-3
+    ld bc,32
     add hl,bc
     ld (.sp+1),sp
     ld sp,hl
     REPT 14
     push de
     ENDR
+    ld hl,0
+    add hl,sp                   ; the row's start + 4
 .sp:
     ld sp,0                     ; patched
+    dec l
+    ld (hl),e
+    dec l
+    ld (hl),e
+    dec l
+    ld (hl),e
+    dec l
+    ld (hl),e
     ret
 .last:
 .row_end:

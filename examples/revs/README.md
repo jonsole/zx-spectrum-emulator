@@ -170,7 +170,7 @@ updates on Silverstone:
 Over a whole lap at the camera's speed (1,639 updates of 160/256 of a
 segment), the work from one frame interrupt to the next HALT is 200,000
 T-states at the median and 215,000 at the 99th percentile, against three
-frames' 209,664. 205 updates (12.5%) take a fourth frame, nearly all of
+frames' 209,664. 207 updates (12.6%) take a fourth frame, nearly all of
 them in corners, where the camera sees more of the track. The worst needs
 219,000. The tests' speed check measures this (see below).
 
@@ -257,7 +257,7 @@ doubled widths. That is the split intended: geometry is `verges`' job.
   memory, which the emulator does not model. On the real machine,
   compose's writes to the screen would be slowed while the beam is drawing.
   Compose has to finish each row before the next frame's beam reaches it.
-  It starts about 28,000 T-states after the interrupt and takes about
+  It starts about 20,000 to 23,000 T-states after the interrupt and takes about
   65,000, against a limit of about 105,000.
 - **The floating bus.** `wait_for_beam` needs it, so this runs on the 48K
   and 128K, not the +2A or +3.

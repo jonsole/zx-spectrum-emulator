@@ -169,7 +169,7 @@ The tests' speed check runs the camera once round at its own speed: 1,639 update
 - 215,000 at the 99th percentile;
 - 219,000 at worst.
 
-205 updates (12.5%) take a fourth frame, nearly all in corners, where more of the track is in view.
+207 updates (12.6%) take a fourth frame, nearly all in corners, where more of the track is in view.
 
 The scratch measurement before the camera was smoothed ran 1,100 updates at about one segment each. It gave 202,000, 213,000 and 218,000, with 118 over. At half a segment an update, which lingers longer in corners, 320 took a fourth frame. That was measured once and is not part of the tests.
 
@@ -281,7 +281,7 @@ Roughly in the order the plan would add them, one feature at a time.
 
 ### The engine
 
-- [ ] **Corners that need a fourth frame** (12.5% of updates over a lap). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
+- [ ] **Corners that need a fourth frame** (12.6% of updates over a lap). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
 - [ ] **Time for the rest of the game.** The road should come down well below three frames if the game is to stay at four. The per-marker cost (about 350 T-states) is the biggest target.
 - [ ] **Stripes at about one segment an update.** At around 170 mph the two-segment kerb pattern is sampled once a stripe and seems to stand still or run backwards. A blend of red and white above some speed would hide it.
 - [ ] **Colour.** Green grass and blue sky through attributes, fitted round the 8×8 grid.
