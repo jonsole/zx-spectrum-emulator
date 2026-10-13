@@ -17,6 +17,7 @@
 //   call <addr> [AF BC DE HL IX IY] with interrupts off    -> <AF> <BC> <DE> <HL> <IX> <IY> <T> | timeout
 //   beam <addr> <first row> <rows> <updates>
 //   work <start> <halt> <updates> [budget]
+//   profile <start> <halt> <updates> <file>
 //
 // `call` pushes a return address of $0000 onto the stack the snapshot has and
 // runs until PC gets there, so the routine must return. T is the T-states it
@@ -40,6 +41,16 @@
 // Replies
 //   updates=<n> min=<t> median=<t> p90=<t> p99=<t> max=<t> over=<n>
 // where over is how many took longer than <budget> T-states (0 without one).
+//
+// `profile` says where that work goes: over the same <updates> passes as
+// `work`, it counts every instruction executed between <start> and <halt> by
+// the address it starts at, and writes one line per address to <file>,
+//   <addr> <times run> <T-states>
+// in hex, then decimal. An instruction is charged with what its step took,
+// so the one the frame interrupt lands after is charged with the interrupt's
+// acknowledge too; the handler's own instructions are counted at their own
+// addresses. Replies
+//   updates=<n> instructions=<n> tstates=<n>
 //
 // The 48K ROM is loaded from roms/48.rom when it is there; a program that
 // never calls the ROM runs the same without it.
@@ -256,6 +267,58 @@ void work(Spectrum& m, std::istringstream& args) {
                 (unsigned long long)spans[n - 1], over);
 }
 
+void profile(Spectrum& m, std::istringstream& args) {
+    unsigned start = 0, halt = 0;
+    int updates = 0;
+    std::string path;
+    args >> std::hex >> start >> halt >> std::dec >> updates >> path;
+    if (updates <= 0 || path.empty()) {
+        std::printf("error profile wants <start> <halt> <updates> <file>\n");
+        return;
+    }
+    std::vector<uint64_t> runs(0x10000, 0);
+    std::vector<uint64_t> hcs(0x10000, 0);
+    int done = 0;
+    bool on = false;
+    uint64_t instructions = 0, total = 0;
+    while (done < updates) {
+        uint16_t pc = m.registers().pc;
+        // While halted PC already reads as <start>, the address after the
+        // HALT, so the wait for the interrupt would otherwise count as work.
+        bool idle = m.cpu.halted;
+        if (pc == start && !idle) {
+            on = true;
+        } else if (pc == halt && on) {
+            on = false;
+            done++;
+        }
+        uint64_t before = m.global_hc();
+        m.step_instruction();
+        if (on && !idle) {
+            uint64_t took = m.global_hc() - before;
+            runs[pc]++;
+            hcs[pc] += took;
+            instructions++;
+            total += took;
+        }
+    }
+    std::ofstream f(path);
+    if (!f) {
+        std::printf("error cannot write %s\n", path.c_str());
+        return;
+    }
+    char row[64];
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (runs[a]) {
+            std::snprintf(row, sizeof row, "%04X %llu %llu\n", a, (unsigned long long)runs[a],
+                          (unsigned long long)(hcs[a] / HC_PER_TSTATE));
+            f << row;
+        }
+    }
+    std::printf("updates=%d instructions=%llu tstates=%llu\n", updates,
+                (unsigned long long)instructions, (unsigned long long)(total / HC_PER_TSTATE));
+}
+
 } // namespace
 
 int main() {
@@ -295,6 +358,8 @@ int main() {
             beam(m, args);
         } else if (command == "work") {
             work(m, args);
+        } else if (command == "profile") {
+            profile(m, args);
         } else {
             std::printf("error unknown command %s\n", command.c_str());
         }
