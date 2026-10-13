@@ -423,19 +423,27 @@ with `zx-live-verify` as well as CTest.
   updated in the same change that deprecates them.
 - The BBC server is unreleased, so it changes without aliases.
 
-## 9. Open questions
+## 9. Decisions and open questions
 
-1. **Hex notation in results.** This plan has each machine use its own
-   (`&` on the BBC, `$` on the Spectrum). One notation for both would be
-   more uniform, but less natural to read beside each machine's
-   documentation.
-2. **`run` default.** Should a blocking `run` keep blocking by default (with
-   the new timeout), or default to `wait: false`? Blocking is what the
-   Spectrum does now and what scripts expect.
-3. **Text capture on the 128K.** The 128 editor prints through ROM 0.
-   Capturing there as well as at PRINT-OUT needs checking against the ROM
-   before it is designed further.
-4. **Tool count.** With the Spectrum's own tools (rewind, video, trace,
-   views, profile) on top of the shared 40 it would have about 60. Could
-   the views and tracing, which are mostly for VS Code, be dropped from the
-   MCP list, or collected under one `view` tool?
+1. **Hex notation: decided.** Each machine reports addresses and values in
+   its own notation: `&1900` on the BBC, `$1900` on the Spectrum. Both
+   servers accept every form on input (`&1900`, `$1900`, `0x1900`, decimal),
+   so an agent used to one machine is understood by the other.
+2. **`run` default: decided.** Both behave as the Spectrum does now: `run`
+   blocks until the machine stops, and `run(wait: false)` starts it and
+   returns. The new `timeout_secs` (default 30) bounds the blocking form.
+   On the BBC, `run(wait_ms)` becomes this.
+3. **Text capture on the 128K: open.** On a 48K, everything printed on the
+   main screen goes through PRINT-OUT (&09F4), so capturing there catches
+   it all. A 128K has two ROMs. ROM 1 is the 48K BASIC ROM, and it holds
+   PRINT-OUT, so a program's `PRINT` is still caught there (the capture
+   must check that ROM 1 is the one paged in). ROM 0 is the 128K editor and
+   menu, and may draw the menu and the line being typed with its own
+   routines, which a PRINT-OUT capture would miss. The question is whether
+   `output` on a 128K may miss what the editor and menu draw, as long as it
+   catches what programs print. `get_screen_text` would still show the
+   editor's text, since it reads the screen. The plan assumes it may, and
+   item 5.4 checks ROM 0 to confirm what is missed.
+4. **Tool count: decided.** The Spectrum keeps its own tools (rewind,
+   video, trace, views, profile) in the MCP list as they are. It will have
+   about 60.
