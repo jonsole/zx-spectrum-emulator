@@ -50,6 +50,16 @@ decimal), or a string: a symbol expression such as `"KEY_INT+9"` once
 `write_memory`'s `data_hex`, so existing scripts keep working; both are
 deprecated (see [the MCP interface plan](mcp-interface-plan.md)).
 
+**Banks on a 128K.** `0xC000`-`0xFFFF` is whichever RAM bank is paged in and
+`0x0000`-`0x3FFF` ROM 0 or ROM 1, so an address there can name its bank in
+front: `"3:$C000"`, `"ROM1:$0038"` -- or give it as `bank` beside the
+address. A breakpoint, watchpoint or logpoint with a bank fires only while
+that bank is paged in there; without one it fires whatever is, as before.
+`read_memory` and `write_memory` with a bank reach it without paging it in.
+Where a bank can never be (bank 3 at `0x8000`, a RAM bank in the ROM) is
+refused. On a 128K, `get_registers` writes PC with the bank in front when it
+is in one of those two regions. A 48K's `0xC000` is bank 0 and its ROM is ROM0.
+
 **Available tools:**
 
 | Tool | Does |

@@ -127,6 +127,12 @@ std::string describe_address(const Sources& sources, uint16_t addr) {
     return out;
 }
 
+/// "3:$C000 (sprite_move+7)": an address and the bank it names, if it names one.
+std::string describe_banked(const Sources& sources, uint16_t addr, uint8_t bank) {
+    const std::string name = bank_name(bank);
+    return (name.empty() ? std::string() : name + ":") + describe_address(sources, addr);
+}
+
 /// F as a string, bit 7 down to bit 0: a letter for each flag set, '-' for
 /// each clear -- "SZ5H3PNC" with all of them up. 5 and 3 are the undocumented
 /// copies of result bits 5 and 3.
@@ -179,6 +185,9 @@ json watchpoint_json(const Watchpoint& w) {
                     {"on_change", w.on_change},
                     {"enabled", w.enabled},
                     {"hits", w.hits}};
+    if (w.bank != ANY_BANK) {
+        out["bank"] = bank_name(w.bank);
+    }
     if (w.test != Watchpoint::Test::None) {
         out["test"] = w.test == Watchpoint::Test::Equals ? "=" : "<>";
         out["value"] = w.value;
@@ -258,6 +267,9 @@ json logpoints_json(const std::vector<Logpoint>& list, const Sources& sources) {
                    {"message", lp.text},
                    {"hits", lp.hits},
                    {"set_by", g_mcp_log.ids.count(lp.id) ? "mcp" : "debugger"}};
+        if (lp.bank != ANY_BANK) {
+            entry["bank"] = bank_name(lp.bank);
+        }
         std::string name;
         uint16_t offset = 0;
         if (sources.resolve_symbol(lp.addr, name, offset)) {
@@ -279,6 +291,18 @@ json watch_stop_json(const WatchStop& stop) {
                 {"old_value", stop.old_value},
                 {"new_value", stop.new_value},
                 {"pc", stop.pc}};
+}
+
+/// An address as it stands on the machine described by `s`: on a 128K, where
+/// 0x0000-0x3FFF and 0xC000-0xFFFF hold whichever ROM or bank is paged in,
+/// with that bank in front -- "3:$C012 (music_play+4)", "ROM1:$0038" -- and
+/// otherwise as describe_address gives it.
+std::string describe_paged(const Sources& sources, const MachineState& s, uint16_t addr) {
+    const unsigned slot = addr >> 14;
+    if (s.model != Model::Spectrum128 || slot == 1 || slot == 2) {
+        return describe_address(sources, addr);
+    }
+    return describe_banked(sources, addr, bank_at(s.model, s.paging, addr));
 }
 
 /// The 128K's paging register, decoded; null on a 48K, which has none.
@@ -341,7 +365,7 @@ json readable_registers_json(Engine& engine, const Sources& sources) {
         return i < code.size() ? code[i] : uint8_t(0);
     };
     const Instruction instruction = disassemble_one(read, s.pc);
-    return json{{"pc", describe_address(sources, s.pc)},
+    return json{{"pc", describe_paged(sources, s, s.pc)},
                 {"sp", dollar_hex(r.sp, 4)},
                 {"af", dollar_hex(r.af(), 4)},
                 {"bc", dollar_hex(r.bc(), 4)},
@@ -462,6 +486,122 @@ bool arg_address(const json& args, const Sources& sources, uint16_t& out, std::s
     error = "'address' is required: a number, or a symbol expression like \"KEY_INT+9\" or "
             "\"$8000\"";
     return false;
+}
+
+/// A bank code as written: "0".."7" or a number for a RAM bank, "ROM0" or
+/// "ROM1" for a ROM. False for anything else.
+bool parse_bank(const json& v, uint8_t& out) {
+    if (v.is_number_integer()) {
+        const int64_t n = v.get<int64_t>();
+        if (n < 0 || n >= int64_t(RAM_BANKS)) {
+            return false;
+        }
+        out = uint8_t(n);
+        return true;
+    }
+    if (!v.is_string()) {
+        return false;
+    }
+    std::string text;
+    for (char c : v.get<std::string>()) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            text += char(std::toupper(static_cast<unsigned char>(c)));
+        }
+    }
+    if (text == "ROM0" || text == "ROM1") {
+        out = text == "ROM0" ? ROM0_BANK : ROM1_BANK;
+        return true;
+    }
+    if (text.size() == 1 && text[0] >= '0' && text[0] < char('0' + RAM_BANKS)) {
+        out = uint8_t(text[0] - '0');
+        return true;
+    }
+    return false;
+}
+
+/// The address a tool acts on and the bank it means, on a 128K where that is
+/// ambiguous: `address` written with a bank in front ("3:$C000",
+/// "ROM1:KEY_INT"), or a plain address with `bank` beside it. ANY_BANK -- what
+/// is paged in at the time -- when neither says. A bank that can never be at
+/// the address (bank 3 at 0x8000, a RAM bank in the ROM) is refused.
+bool arg_banked_address(const json& args, const Sources& sources, BankedAddress& out,
+                        std::string& error) {
+    out.bank = ANY_BANK;
+    json plain = args;
+    for (const char* name : {"address", "addr"}) {
+        const json& v = arg(args, name);
+        if (!v.is_string()) {
+            continue;
+        }
+        const std::string text = v.get<std::string>();
+        const size_t colon = text.find(':');
+        if (colon == std::string::npos) {
+            break;
+        }
+        if (!parse_bank(json(text.substr(0, colon)), out.bank)) {
+            error = "'" + std::string(name) + "': \"" + text.substr(0, colon)
+                    + "\" is not a bank: write 0-7 for a RAM bank, ROM0 or ROM1";
+            return false;
+        }
+        plain[name] = text.substr(colon + 1);
+        break;
+    }
+    if (!arg_address(plain, sources, out.addr, error)) {
+        return false;
+    }
+    const json& bank = arg(args, "bank");
+    if (!bank.is_null()) {
+        uint8_t given = ANY_BANK;
+        if (!parse_bank(bank, given)) {
+            error = "'bank' must be a RAM bank 0-7, or \"ROM0\" or \"ROM1\"";
+            return false;
+        }
+        if (out.bank != ANY_BANK && out.bank != given) {
+            error = "the address names bank " + bank_name(out.bank) + " and 'bank' says "
+                    + bank_name(given);
+            return false;
+        }
+        out.bank = given;
+    }
+    if (!bank_fits(out.bank, out.addr, error)) {
+        error = "bank " + bank_name(out.bank) + " at " + dollar_hex(out.addr, 4) + ": " + error;
+        return false;
+    }
+    return true;
+}
+
+/// Where in a RAM bank a memory tool reads or writes: `bank` with an
+/// `address` below 0x4000 is an offset within the bank, as these tools have
+/// always taken it; a banked address ("3:$C010", or bank 3 with $C010) is
+/// the CPU address with that bank paged in there. `banked` false means
+/// neither: the CPU's view as it is.
+bool arg_bank_offset(const json& args, const Sources& sources, bool& banked, uint8_t& bank,
+                     uint16_t& offset, uint16_t& addr, std::string& error) {
+    banked = false;
+    uint8_t given = ANY_BANK;
+    if (!arg(args, "bank").is_null() && parse_bank(arg(args, "bank"), given) && given < RAM_BANKS
+        && arg_address(args, sources, addr, error) && addr < BANK_SIZE) {
+        banked = true;
+        bank = given;
+        offset = addr;
+        return true;
+    }
+    BankedAddress where;
+    if (!arg_banked_address(args, sources, where, error)) {
+        return false;
+    }
+    addr = where.addr;
+    if (where.bank == ANY_BANK) {
+        return true;
+    }
+    if (where.bank >= RAM_BANKS) {
+        error = "the ROMs are read as the CPU sees them: page the ROM in with set_paging";
+        return false;
+    }
+    banked = true;
+    bank = where.bank;
+    offset = uint16_t(where.addr % BANK_SIZE);
+    return true;
 }
 
 bool arg_string(const json& args, const char* name, std::string& out, std::string& error) {
@@ -643,7 +783,15 @@ json number_prop(const char* description) {
 /// What every `address` argument takes.
 constexpr const char* ADDRESS_HELP =
     "A 16-bit address: a number, or a string -- a symbol expression (\"KEY_INT+9\"), or hex "
-    "as $8000, &8000, 0x8000 or a bare 8000.";
+    "as $8000, &8000, 0x8000 or a bare 8000. On a 128K it may name a bank in front: "
+    "\"3:$C000\" for 0xC000 with RAM bank 3 paged in, \"ROM1:$0038\" for ROM 1's.";
+
+/// What every `bank` beside an `address` means for breakpoints and the like.
+constexpr const char* BANK_HELP =
+    "On a 128K, only while this bank is paged in at the address: a RAM bank 0-7 (at 0xC000 "
+    "and above), or \"ROM0\"/\"ROM1\" (below 0x4000). The same as writing it in front of "
+    "the address. Omitted: whatever is paged in, as a plain address has always meant. On a "
+    "48K, 0xC000 is bank 0 and the ROM is ROM0.";
 
 json tools_list() {
     json tools = json::array();
@@ -755,7 +903,9 @@ json tools_list() {
                     {"value", integer_prop("Only stop when the value written is this (0-255). "
                                            "Implies on_change false.")},
                     {"not_value", integer_prop("...or when it is anything BUT this.")},
-                    {"id", integer_prop("Edit this existing watchpoint instead of adding one.")}},
+                    {"id", integer_prop("Edit this existing watchpoint instead of adding one.")},
+                    {"bank", json{{"type", json::array({"integer", "string"})},
+                                  {"description", BANK_HELP}}}},
                {"address"}));
     add("clear_watchpoint", "Remove a watchpoint by id, or all of them",
         schema(json{{"id", integer_prop("Which one, as listed by list_watchpoints. Omit to "
@@ -772,7 +922,9 @@ json tools_list() {
         schema(json{{"address", address_prop("Address or symbol expression to report at.")},
                     {"message", string_prop("What to report, with {value} holes, e.g. "
                                             "\"lives {(LIVES):d} at {HL}\".")},
-                    {"id", integer_prop("Edit this existing logpoint instead of adding one.")}},
+                    {"id", integer_prop("Edit this existing logpoint instead of adding one.")},
+                    {"bank", json{{"type", json::array({"integer", "string"})},
+                                  {"description", BANK_HELP}}}},
                {"address", "message"}));
     add("clear_logpoint", "Remove a logpoint set over MCP by id, or all of them",
         schema(json{{"id", integer_prop("Which one, as set_logpoint or list_logpoints gave it. "
@@ -793,11 +945,16 @@ json tools_list() {
                {}));
     add("set_breakpoint", "Set a breakpoint at an address",
         schema(json{{"address", address_prop(ADDRESS_HELP)},
-                    {"addr", address_prop("Deprecated name for address.")}},
+                    {"addr", address_prop("Deprecated name for address.")},
+                    {"bank", json{{"type", json::array({"integer", "string"})},
+                                  {"description", BANK_HELP}}}},
                {"address"}));
-    add("clear_breakpoint", "Clear a breakpoint at an address",
+    add("clear_breakpoint",
+        "Clear a breakpoint at an address: the plain one, or with a bank the one for that bank",
         schema(json{{"address", address_prop(ADDRESS_HELP)},
-                    {"addr", address_prop("Deprecated name for address.")}},
+                    {"addr", address_prop("Deprecated name for address.")},
+                    {"bank", json{{"type", json::array({"integer", "string"})},
+                                  {"description", BANK_HELP}}}},
                {"address"}));
     add("list_breakpoints",
         "Every breakpoint set, whoever set it (MCP or a VS Code debugger), with the symbol each "
@@ -807,13 +964,17 @@ json tools_list() {
         "Read memory starting at an address, as the CPU sees it -- or, with bank, straight out "
         "of one of a 128K's eight 16K RAM banks whether or not it is paged in",
         schema(json{{"address", address_prop("Where to start: a 16-bit address or a symbol "
-                                             "expression; with bank, an offset 0..16383 within "
-                                             "that bank.")},
+                                             "expression. With a bank -- in front, \"3:$C010\", "
+                                             "or as bank -- that address with the bank paged "
+                                             "in; with bank and an address below 0x4000, an "
+                                             "offset within the bank.")},
                     {"addr", address_prop("Deprecated name for address.")},
                     {"length", integer_prop("Bytes to read (default 1).")},
                     {"bank", integer_prop("RAM bank 0-7 to read directly, ignoring paging. "
                                           "Bank 5 is the screen (0x4000 on both models), 2 "
-                                          "is 0x8000, 7 the 128K's shadow screen.")}},
+                                          "is 0x8000, 7 the 128K's shadow screen. The "
+                                          "address is then 0xC000-0xFFFF as the bank would "
+                                          "be seen there, or an offset 0..16383 within it.")}},
                {"address"}));
     add("write_memory", "Write bytes to memory starting at an address",
         schema(json{{"address", address_prop(ADDRESS_HELP)},
@@ -824,8 +985,7 @@ json tools_list() {
                                                   "optional) or an array of numbers 0-255."}}},
                     {"data_hex", string_prop("Deprecated name for data, as hex.")},
                     {"bank", integer_prop("RAM bank 0-7 to write directly, ignoring paging, "
-                                          "with address an offset 0..16383 within it -- as "
-                                          "read_memory takes it.")}},
+                                          "the address taken as read_memory takes it.")}},
                {"address", "data"}));
     add("set_paging",
         "Change a 128K's paging (port 0x7FFD) as a debugger: which RAM bank is at 0xC000, which "
@@ -1556,13 +1716,12 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "set_watchpoint") {
         Watchpoint w;
-        bool present = false;
-        if (!arg_opt_address(args, "address", sources, present, w.addr, error)) {
+        BankedAddress where;
+        if (!arg_banked_address(args, sources, where, error)) {
             return error_result(error);
         }
-        if (!present) {
-            return error_result("'address' is required");
-        }
+        w.addr = where.addr;
+        w.bank = where.bank;
         const json& length = arg(args, "length");
         if (length.is_number_integer()) {
             const int64_t n = length.get<int64_t>();
@@ -1606,6 +1765,11 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             // be looked at -- including one that writes the same value again.
             w.on_change = false;
         }
+        if (w.bank != ANY_BANK && (w.addr >> 14) != ((uint32_t(w.addr) + w.length - 1) >> 14)) {
+            return error_result("a watchpoint for one bank must stay inside that bank's 16K: "
+                                + dollar_hex(w.addr, 4) + " + " + std::to_string(w.length)
+                                + " crosses into the next");
+        }
         const json& id = arg(args, "id");
         if (id.is_number_integer()) {
             w.id = uint32_t(id.get<int64_t>());
@@ -1631,13 +1795,15 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "set_logpoint") {
         Logpoint lp;
-        bool present = false;
-        if (!arg_opt_address(args, "address", sources, present, lp.addr, error)) {
+        BankedAddress where;
+        if (!arg_banked_address(args, sources, where, error)) {
             return error_result(error);
         }
+        lp.addr = where.addr;
+        lp.bank = where.bank;
         const json& message = arg(args, "message");
-        if (!present || !message.is_string()) {
-            return error_result("'address' and 'message' are required");
+        if (!message.is_string()) {
+            return error_result("'message' is required");
         }
         lp.text = message.get<std::string>();
         // Symbols in the message are looked up now, so a misspelt one is an
@@ -1724,22 +1890,23 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "set_breakpoint" || name == "clear_breakpoint") {
-        uint16_t addr = 0;
-        if (!arg_address(args, sources, addr, error)) {
+        BankedAddress where;
+        if (!arg_banked_address(args, sources, where, error)) {
             return error_result(error);
         }
+        const std::string at = describe_banked(sources, where.addr, where.bank);
         if (name == "set_breakpoint") {
-            engine.set_breakpoint(addr);
-            return text_result("breakpoint set at " + describe_address(sources, addr));
+            engine.set_breakpoint(where.addr, where.bank);
+            return text_result("breakpoint set at " + at);
         }
-        engine.clear_breakpoint(addr);
-        return text_result("breakpoint cleared at " + describe_address(sources, addr));
+        engine.clear_breakpoint(where.addr, where.bank);
+        return text_result("breakpoint cleared at " + at);
     }
 
     if (name == "list_breakpoints") {
         json list = json::array();
         for (const BankedAddress& bp : engine.state().breakpoints) {
-            json entry{{"address", describe_address(sources, bp.addr)}, {"addr", bp.addr}};
+            json entry{{"address", describe_banked(sources, bp.addr, bp.bank)}, {"addr", bp.addr}};
             if (bp.bank != ANY_BANK) {
                 entry["bank"] = bank_name(bp.bank);
             }
@@ -1749,8 +1916,11 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "read_memory") {
+        bool banked = false;
+        uint8_t bank = 0;
+        uint16_t offset = 0;
         uint16_t addr = 0;
-        if (!arg_address(args, sources, addr, error)) {
+        if (!arg_bank_offset(args, sources, banked, bank, offset, addr, error)) {
             return error_result(error);
         }
         const json& len = arg(args, "length");
@@ -1758,27 +1928,20 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         if (length < 0 || length > 0x10000) {
             return error_result("'length' must be between 0 and 65536");
         }
-        const json& bank = arg(args, "bank");
-        if (!bank.is_null()) {
-            if (!bank.is_number_integer() || bank.get<int64_t>() < 0
-                || bank.get<int64_t>() >= int64_t(RAM_BANKS)) {
-                return error_result("'bank' must be a RAM bank number 0..7");
-            }
-            if (addr >= BANK_SIZE) {
-                return error_result("with 'bank', 'addr' is an offset within the 16K bank (0..16383)");
-            }
-            const std::vector<uint8_t> data =
-                engine.read_bank(uint8_t(bank.get<int64_t>()), addr, size_t(length));
-            return json_result(json{{"bank", bank.get<int64_t>()}, {"addr", addr},
-                                    {"hex", hex_encode(data)}});
+        if (banked) {
+            const std::vector<uint8_t> data = engine.read_bank(bank, offset, size_t(length));
+            return json_result(json{{"bank", bank}, {"addr", offset}, {"hex", hex_encode(data)}});
         }
         const std::vector<uint8_t> data = engine.read_memory(addr, size_t(length));
         return json_result(json{{"addr", addr}, {"hex", hex_encode(data)}});
     }
 
     if (name == "write_memory") {
+        bool banked = false;
+        uint8_t bank = 0;
+        uint16_t offset = 0;
         uint16_t addr = 0;
-        if (!arg_address(args, sources, addr, error)) {
+        if (!arg_bank_offset(args, sources, banked, bank, offset, addr, error)) {
             return error_result(error);
         }
         const json& given = arg(args, "data").is_null() ? arg(args, "data_hex") : arg(args, "data");
@@ -1799,19 +1962,10 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         }
         const size_t count = data.size();
         const std::string bytes = std::to_string(count) + " byte" + (count == 1 ? "" : "s");
-        const json& bank = arg(args, "bank");
-        if (!bank.is_null()) {
-            if (!bank.is_number_integer() || bank.get<int64_t>() < 0
-                || bank.get<int64_t>() >= int64_t(RAM_BANKS)) {
-                return error_result("'bank' must be a RAM bank number 0..7");
-            }
-            if (addr >= BANK_SIZE) {
-                return error_result(
-                    "with 'bank', 'address' is an offset within the 16K bank (0..16383)");
-            }
-            engine.write_bank(uint8_t(bank.get<int64_t>()), addr, std::move(data));
-            return text_result("wrote " + bytes + " at offset " + dollar_hex(addr, 4)
-                               + " of bank " + std::to_string(bank.get<int64_t>()));
+        if (banked) {
+            engine.write_bank(bank, offset, std::move(data));
+            return text_result("wrote " + bytes + " at offset " + dollar_hex(offset, 4)
+                               + " of bank " + std::to_string(bank));
         }
         engine.write_memory(addr, std::move(data));
         return text_result("wrote " + bytes + " at " + describe_address(sources, addr));
