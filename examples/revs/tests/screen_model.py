@@ -50,7 +50,9 @@ class Layout:
 def object_parts(layout: Layout, memory: bytes) -> list[tuple]:
     """The objects' parts, in the order compose paints them: (lowest line,
     highest line, first byte, bytes after it, first byte's mask, last byte's
-    mask, pattern on an even line, on an odd one)."""
+    mask, pattern on an even line, on an odd one, the edges' patterns both
+    ways, the left edge's bit in the first byte, the right edge's in the
+    last, whether it has edges, then spare bytes)."""
     return [tuple(memory[layout.obj_parts + layout.part_size * i:
                          layout.obj_parts + layout.part_size * (i + 1)])
             for i in range(memory[layout.obj_count])]
@@ -58,7 +60,7 @@ def object_parts(layout: Layout, memory: bytes) -> list[tuple]:
 
 def part_extent(part: tuple) -> tuple[int, int]:
     """A part's first and last x, from its bytes and masks."""
-    lo, hi, first, more, fmask, lmask, even, odd = part
+    lo, hi, first, more, fmask, lmask = part[:6]
     lead = 8 - fmask.bit_length()               # the first byte's pixels before it
     last_mask = fmask if more == 0 else lmask
     trail = (last_mask & -last_mask).bit_length() - 1
@@ -66,14 +68,22 @@ def part_extent(part: tuple) -> tuple[int, int]:
 
 
 def paint_parts(row: bytearray, y: int, parts: list[tuple]) -> None:
-    """Paints the parts on line y over the 32 bytes of its row."""
-    for lo, hi, first, more, fmask, lmask, even, odd in parts:
+    """Paints the parts on line y over the 32 bytes of its row: each its
+    fill, then a pixel at each end in its edges' pattern."""
+    def mix(i, pattern, m):
+        row[i] = (row[i] & ~m & 0xFF) | (pattern & m)
+    for part in parts:
+        lo, hi, first, more, fmask, lmask, even, odd, eeven, eodd, fedge, ledge, edges = part[:13]
         if not lo <= y <= hi:
             continue
         pattern = odd if y & 1 else even
         masks = [fmask] if more == 0 else [fmask] + [0xFF] * (more - 1) + [lmask]
         for i, m in enumerate(masks):
-            row[first + i] = (row[first + i] & ~m & 0xFF) | (pattern & m)
+            mix(first + i, pattern, m)
+        if edges:
+            edge = eodd if y & 1 else eeven
+            mix(first + more, edge, ledge)
+            mix(first, edge, fedge)
 
 
 def verge_lists(layout: Layout, memory: bytes) -> dict[str, list]:

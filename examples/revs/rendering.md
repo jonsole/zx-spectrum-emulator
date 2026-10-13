@@ -33,7 +33,7 @@ That takes 11K of memory. In return, nothing about the track has to be worked ou
 
 ## 2. The camera
 
-The camera drives itself down the middle of the track, 500 units above the road. There is no steering yet.
+The camera drives itself down the middle of the track, 200 units above the road, about a car's height. The keys move it faster, slower and across the track; there is no steering yet.
 
 It moves 5/8 of a slice per redraw, so a lap is 1,639 redraws. It points at a spot three to four slices ahead, and that spot moves along smoothly with it. So the view turns gradually into a corner instead of jerking round once per slice.
 
@@ -111,7 +111,7 @@ For a kerb point (x, y, z), with the camera at (cx, cy, cz) facing `heading`:
    - **Screen x = 128 + angle / 40.**
 2. **Distance.** The same routine gives an approximate ground distance, the BBC's "alpha max plus beta min". It is the larger offset plus an eighth of the smaller, or seven-eighths of the larger plus half the smaller once the angle is wider. That is a cheap stand-in for √(dx² + dz²).
 3. **Up or down the screen.**
-   - Take dy = y − cy, the point's height relative to the eye, which is 500 units above the road.
+   - Take dy = y − cy, the point's height relative to the eye, which is 200 units above the road.
    - T = 256 × (|dy| / 8) / distance.
    - **Line = 60 + T** for a point above the eye, **60 − T** for one below.
 4. **Kerb width.** The kerb's real width, 25, 50 or 100 units, is divided by the same distance.
@@ -125,7 +125,7 @@ The camera's position and heading are completely free. Of what isn't, roll is le
 |  | Here | In BBC Revs |
 | --- | --- | --- |
 | Position (x, z) | Free. It doesn't have to be on the centre line, so a driving model can put the car anywhere across the track. | Free |
-| Eye height | Free. It is the road height + 500 now. | Free |
+| Eye height | Free. It is the road height + 200 now. | Free |
 | Heading (turning left or right) | Free: any angle, just subtracted from each bearing. | Free |
 | Pitch (looking up or down) | Not yet. The horizon is fixed on line 60. | Yes. A pitch angle is taken off every point's pitch, moving the whole view, horizon included, up or down. It comes from the nose lifting under acceleration and dipping under braking, jumps and drops, bumpy grass, and the car's tilt on a sloping slice. It is smoothed so the horizon doesn't judder. Adding it here is one subtraction in the up-or-down step. |
 | Roll (banking) | No | No. Revs only has pitch and yaw: "the simulation does not extend to rolling the car". |
@@ -359,7 +359,7 @@ segment shifts them along, and only two new ones are worked out. A centre is
 found with `midpoint`, which halves the difference rather than the sum,
 because the sum of two coordinates can overflow 16 bits.
 
-- **Position:** `cam_frac` of the way from C0 to C1, raised 500 units
+- **Position:** `cam_frac` of the way from C0 to C1, raised 200 units
   (`EYE_HEIGHT`).
 - **Look target:** the same fraction of the way from C3 to C4.
 - **Heading:** `yaw_angle` of the target from the position.

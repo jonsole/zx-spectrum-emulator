@@ -1,5 +1,5 @@
-; Objects beside the track, drawn into the view as compose paints it. So far
-; one sign, at SIGN_SEG, to prove the way of it; cars come the same way.
+; Objects on and beside the track, drawn into the view as compose paints
+; it: so far a sign, and a car parked on the track.
 ;
 ; There is no back buffer: compose paints the screen the viewer is looking
 ; at, a track line at a time. Drawing objects over the finished view, as the
@@ -15,40 +15,74 @@
 ; moved; and the top one is marked before compose, so compose_skip starts no
 ; lower than it.
 ;
-; Objects are the BBC's kind: parts of one colour on a scaffold scaled by
+; Objects are the BBC's kind: parts of one colour on a grid scaled by
 ; distance, not bitmaps -- a scaled bitmap would want a copy for every size.
-; The sign is two parts, a post and a board above it.
+; Their types are in object_types.py, which build.py writes out as
+; output/objects.s.gen: each part's heights and offsets as logs of their
+; sizes on screen at a distance of one, so that scaling one is a
+; subtraction and an antilogarithm. Each instance, below, is a type at a
+; place on the track. Objects are drawn far to near, so that a nearer one is
+; painted over a farther one.
 
-SIGN_SEG    equ 12              ; the segment it stands beside, on the right
+OBJ_SIGN_SEG equ 12             ; the sign stands beside the right verge here
+OBJ_CAR_SEG equ 24              ; and the car is parked on the track here
 
-; A part's half-width W, in track units, is 2 ^ ((LOGW - the distance's
-; log) / 256) pixels, as a verge mark's width is: LOGW = LOG2_WIDTH + 256 *
-; log2(W / 800). Its heights are in track units above the sign's foot.
-; Heights look about eight times smaller than widths: a track line is a
-; pitch of 1/32 of the distance, and a pixel a yaw of about 1/262 of it.
-POST_LOGW   equ LOG2_WIDTH - 1551   ; W = 12: 256 * log2(800 / 12) = 1551
-BOARD_LOGW  equ LOG2_WIDTH - 799    ; W = 92: 256 * log2(800 / 92) = 799
-POST_TOP    equ 500                 ; the eye's height: its top on the horizon
-BOARD_TOP   equ 875
+; An instance: its type, its foot, its segment, and from objects_build
+; whether it is shown, its distance's log, its centre's screen x and the
+; track line of its foot.
+INST_TYPE   equ 0
+INST_X      equ 2
+INST_Y      equ 4
+INST_Z      equ 6
+INST_SEG    equ 8
+INST_SHOWN  equ 10
+INST_LOGD   equ 11
+INST_SX     equ 13
+INST_LINE   equ 15
+INST_SIZE   equ 16
+OBJECTS     equ 2
 
-; At startup, after build_track: no parts, and the sign's foot, beyond the
-; right verge by half the track's width at SIGN_SEG.
+; Part records in object_types.py's output: four logs, then flags and colour.
+TP_BOTTOM   equ 0
+TP_TOP      equ 2
+TP_LEFT     equ 4
+TP_RIGHT    equ 6
+TP_FLAGS    equ 8               ; bit 0: the left is left of the centre line;
+TP_COLOUR   equ 9               ; bit 1: the right is
+TP_EDGE     equ 10              ; the edges' colour, or NO_EDGE for none
+TP_SIZE     equ 11
+NO_EDGE     equ 255
+
+; At startup, after build_track: no parts, and the instances' feet.
 objects_init:
     ld a,VIEW_LINES
     ld (obj_lo),a               ; no lines with parts: obj_lo > obj_hi
     xor a
     ld (obj_hi),a
     ld (obj_count),a
-    ld hl,(SEG_XI + SIGN_SEG * 2)
-    ld de,(SEG_XO + SIGN_SEG * 2)
+    ; The sign: beyond the right verge by half the track's width.
+    ld hl,(SEG_XI + OBJ_SIGN_SEG * 2)
+    ld de,(SEG_XO + OBJ_SIGN_SEG * 2)
     call .beyond
-    ld (sign_x),hl
-    ld hl,(SEG_ZI + SIGN_SEG * 2)
-    ld de,(SEG_ZO + SIGN_SEG * 2)
+    ld (obj_instances + INST_X),hl
+    ld hl,(SEG_ZI + OBJ_SIGN_SEG * 2)
+    ld de,(SEG_ZO + OBJ_SIGN_SEG * 2)
     call .beyond
-    ld (sign_z),hl
-    ld hl,(SEG_YI + SIGN_SEG * 2)
-    ld (sign_y),hl
+    ld (obj_instances + INST_Z),hl
+    ld hl,(SEG_YI + OBJ_SIGN_SEG * 2)
+    ld (obj_instances + INST_Y),hl
+    ; The car: five eighths of the way from the right verge to the left,
+    ; just left of the middle.
+    ld hl,(SEG_XI + OBJ_CAR_SEG * 2)
+    ld de,(SEG_XO + OBJ_CAR_SEG * 2)
+    call .across
+    ld (obj_instances + INST_SIZE + INST_X),hl
+    ld hl,(SEG_ZI + OBJ_CAR_SEG * 2)
+    ld de,(SEG_ZO + OBJ_CAR_SEG * 2)
+    call .across
+    ld (obj_instances + INST_SIZE + INST_Z),hl
+    ld hl,(SEG_YI + OBJ_CAR_SEG * 2)
+    ld (obj_instances + INST_SIZE + INST_Y),hl
     ret
 ; HL = HL + (HL - DE) / 2: from the outer verge (DE) through the inner one
 ; (HL) and half as far again.
@@ -61,13 +95,95 @@ objects_init:
     pop de
     add hl,de
     ret
+; HL = HL + (DE - HL) * 5 / 8: from the inner verge (HL) towards the outer.
+.across:
+    push hl
+    ex de,hl
+    or a
+    sbc hl,de                   ; outer - inner
+    sra h
+    rr l                        ; a half
+    ld d,h
+    ld e,l
+    sra d
+    rr e
+    sra d
+    rr e                        ; an eighth
+    add hl,de
+    pop de
+    add hl,de
+    ret
 
 ; The parts for the view compose will paint next, from the camera that made
 ; its markers: after edges_build, before the HALT.
 objects_build:
     call obj_clear
+    ld ix,obj_instances
+    ld b,OBJECTS
+.project:
+    push bc
+    call obj_project
+    pop bc
+    ld de,INST_SIZE
+    add ix,de
+    djnz .project
+    ; Far to near: the shown instance with the greatest distance, until
+    ; none is left.
+.farthest:
+    ld iy,0                     ; none yet
+    ld hl,0                     ; the greatest log so far
+    ld ix,obj_instances
+    ld b,OBJECTS
+.look:
+    ld a,(ix+INST_SHOWN)
+    or a
+    jr z,.next
+    ld e,(ix+INST_LOGD)
+    ld d,(ix+INST_LOGD+1)
+    push hl
+    or a
+    sbc hl,de                   ; logs are positive: an unsigned compare
+    pop hl
+    jr nc,.next
+    ex de,hl                    ; the farthest so far
+    push ix
+    pop iy
+.next:
+    ld de,INST_SIZE
+    add ix,de
+    djnz .look
+    ld a,iyh
+    or iyl
+    jr z,.drawn
+    push iy
+    pop ix
+    ld (ix+INST_SHOWN),0
+    call obj_draw
+    jr .farthest
+.drawn:
+    ; Compose's calls for the lines they cover, and the top one marked for
+    ; compose_skip.
+    ld hl,cs_obj_even
+    ld de,cs_obj_odd
+    call obj_calls
+    ld a,(obj_hi)
+    ld hl,obj_lo
+    cp (hl)
+    ret c
+    ld e,a
+    ld d,0
+    ld hl,cs_last
+    add hl,de
+    ld (hl),NOT_EMPTY
+    ret
+
+; The instance at IX, worked out from the camera: shown or not, and if so
+; its distance's log, its centre's screen x and its foot's track line.
+obj_project:
+    ld (ix+INST_SHOWN),0
     ; Only in the stretch that is drawn: 1 to 31 segments ahead.
-    ld hl,SIGN_SEG
+    ld l,(ix+INST_SEG)
+    ld h,(ix+INST_SEG+1)
     ld de,(cam_seg)
     call seg_sub
     ld a,h
@@ -79,12 +195,14 @@ objects_build:
     cp SEG_AHEAD
     ret nc
     ; Its yaw and distance from the camera, as a verge point's.
-    ld hl,(sign_x)
+    ld l,(ix+INST_X)
+    ld h,(ix+INST_X+1)
     ld de,(cam_x)
     or a
     sbc hl,de
     push hl
-    ld hl,(sign_z)
+    ld l,(ix+INST_Z)
+    ld h,(ix+INST_Z+1)
     ld de,(cam_z)
     or a
     sbc hl,de
@@ -103,91 +221,201 @@ objects_build:
     cp 2 * FOV_YAW              ; well outside the view: nothing of it shows
     ret nc
     YAW_TO_X
-    ld (obj_x),hl               ; its centre's screen x
-    ; The lines of its foot, the post's top and the board's.
-    ld hl,0
-    call obj_line_at
-    ld (obj_l0),a
-    ld hl,POST_TOP
-    call obj_line_at
-    ld (obj_l1),a
-    ld hl,BOARD_TOP
-    call obj_line_at
-    ld (obj_l2),a
-    ; The post, from its foot to the board, in black.
-    ld hl,POST_LOGW
-    ld a,(obj_l0)
-    ld b,a
-    ld a,(obj_l1)
-    ld c,a
-    ld a,(patterns+COLOUR_ROAD)
-    call obj_part
-    ; The board, in red.
-    ld hl,BOARD_LOGW
-    ld a,(obj_l1)
-    ld b,a
-    ld a,(obj_l2)
-    ld c,a
-    ld a,(patterns+3)           ; verge red: a half tone
-    call obj_part
-    ; Compose's calls for the lines they cover, and the top one marked for
-    ; compose_skip.
-    ld hl,cs_obj_even
-    ld de,cs_obj_odd
-    call obj_calls
-    ld a,(obj_hi)
-    ld hl,obj_lo
-    cp (hl)
-    ret c
-    ld e,a
-    ld d,0
-    ld hl,cs_last
-    add hl,de
-    ld (hl),NOT_EMPTY
-    ret
-
-; A = the track line (a signed byte) of the point HL above the sign's foot,
-; at its distance (ya_logd): -128 or 127 if it is too steep to have one.
-obj_line_at:
-    ld de,(sign_y)
-    add hl,de
+    ld (ix+INST_SX),l
+    ld (ix+INST_SX+1),h
+    ld hl,(ya_logd)
+    ld (ix+INST_LOGD),l
+    ld (ix+INST_LOGD+1),h
+    ; Its foot's track line: -128 or 127 if too steep to have one.
+    ld l,(ix+INST_Y)
+    ld h,(ix+INST_Y+1)
     ld de,(cam_y)
     or a
     sbc hl,de
     call pitch_height
     ld hl,(ya_logd)
     call pitch_line
-    ret nc
+    jr nc,.line
     ld a,(pa_dysign)
     or a
     ld a,127
-    ret p
+    jp p,.line
     ld a,-128
+.line:
+    ld (ix+INST_LINE),a
+    ld (ix+INST_SHOWN),1
     ret
 
-; One part, half-width log HL, from line B up to (not including) line C, in
-; pattern A: appended to obj_parts as compose will paint it, held to the
-; view, if any of it is in view.
-obj_part:
-    ld (.pattern+1),a
+; The parts of the instance at IX, scaled to its distance and stored for
+; compose.
+obj_draw:
+    ld l,(ix+INST_TYPE)
+    ld h,(ix+INST_TYPE+1)
+    ld b,(hl)                   ; the parts
+    inc hl
+.part:
     push bc
-    ld de,(ya_logd)
-    or a
-    sbc hl,de
-    call exp16                  ; HL = the half-width in pixels (uses B)
-    pop bc
-    ld a,h
-    or l
-    ret z                       ; under half a pixel: nothing to draw
-    ex de,hl
-    ld hl,(obj_x)
-    or a
-    sbc hl,de                   ; the first x
-    push hl
-    ld hl,(obj_x)
+    ld (obj_tp),hl
+    ; Its bottom and top, as lines: the foot's plus each height's size.
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    call obj_line
+    ld (.bottom+1),a
+    ld hl,(obj_tp)
+    inc hl
+    inc hl
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    call obj_line
+    ld (.top+1),a
+    ; Its left and right, as x: the centre's plus or minus each offset's
+    ; size, the right less one to be its last pixel.
+    ld hl,(obj_tp)
+    ld de,TP_LEFT
     add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld hl,(obj_tp)
+    ld bc,TP_FLAGS
+    add hl,bc
+    ld a,(hl)
+    call obj_x                  ; HL = the first x
+    push hl
+    ld hl,(obj_tp)
+    ld de,TP_RIGHT
+    add hl,de
+    ld e,(hl)
+    inc hl
+    ld d,(hl)
+    ld hl,(obj_tp)
+    ld bc,TP_FLAGS
+    add hl,bc
+    ld a,(hl)
+    rrca                        ; bit 1, the right's side, into bit 0
+    call obj_x
     dec hl                      ; the last x
     pop de
+    ; Its colours, as patterns: its edges' for obj_store, and its fill's.
+    push hl
+    ld hl,(obj_tp)
+    ld bc,TP_EDGE
+    add hl,bc
+    ld a,(hl)
+    cp NO_EDGE
+    ld a,0
+    jr z,.edge_set
+    ld a,(hl)
+    add a,low patterns
+    ld c,a
+    ld b,high patterns
+    ld a,(bc)
+    ld (obj_edge),a
+    ld a,1
+.edge_set:
+    ld (obj_edge_on),a
+    dec hl                      ; TP_COLOUR
+    ld a,(hl)
+    add a,low patterns
+    ld l,a
+    ld h,high patterns
+    ASSERT high patterns == high (patterns + 5)
+    ld a,(hl)
+    pop hl
+.bottom:
+    ld b,0                      ; patched
+.top:
+    ld c,0                      ; patched
+    push ix
+    call obj_store              ; which uses IX
+    pop ix
+    ld hl,(obj_tp)
+    ld de,TP_SIZE
+    add hl,de
+    pop bc
+    dec b
+    jp nz,.part
+    ret
+
+; A = the instance's foot line (IX) plus the size of the height whose log is
+; DE, held to a signed byte.
+obj_line:
+    call obj_size
+    ld a,(ix+INST_LINE)
+    ld e,a
+    rlca
+    sbc a,a
+    ld d,a                      ; DE = the foot's line
+    add hl,de
+    ; Held to -128..127: past the top of the view or under the bottom.
+    ld a,h
+    or a
+    jr z,.low_byte
+    inc a
+    jr z,.negative
+    ld a,127                    ; far above
+    ret
+.negative:
+    ld a,l
+    or a
+    ret m
+    ld a,-128                   ; far below
+    ret
+.low_byte:
+    ld a,l
+    or a
+    ret p
+    ld a,127
+    ret
+
+; HL = the instance's centre x (IX) plus the size of the offset whose log is
+; DE, or minus it if bit 0 of A is set.
+obj_x:
+    push af
+    call obj_size
+    pop af
+    ex de,hl
+    ld l,(ix+INST_SX)
+    ld h,(ix+INST_SX+1)
+    rrca
+    jr c,.left
+    add hl,de
+    ret
+.left:
+    or a
+    sbc hl,de
+    ret
+
+; HL = the size on screen of the measurement whose log is DE, at the
+; instance's distance (IX): 2 ^ ((DE - the distance's log) / 256).
+obj_size:
+    ld l,(ix+INST_LOGD)
+    ld h,(ix+INST_LOGD+1)
+    ex de,hl
+    or a
+    sbc hl,de
+    jp exp16
+
+; A part from x DE to x HL (inclusive, signed), from line B up to (not
+; including) line C (signed bytes), in pattern A, with edges in pattern
+; obj_edge if obj_edge_on: appended to obj_parts as compose will paint it,
+; held to the view, if any of it is in view. An edge held to the screen's
+; side is not drawn there: it is off the screen.
+obj_store:
+    ld (.pattern+1),a
+    ld a,(obj_edge_on)
+    ld (.ledge+1),a
+    ld (.redge+1),a
+    ld a,(obj_edge)
+    ld (.edge+1),a
+    ; Nothing across: its last x before its first.
+    push hl
+    or a
+    sbc hl,de
+    pop hl
+    ret m
     ; Off the right or the left altogether: nothing.
     bit 7,h
     ret nz                      ; last x < 0
@@ -195,6 +423,8 @@ obj_part:
     or a
     jp p,.first_on
     ld de,0                     ; first x < 0: from the left edge
+    xor a
+    ld (.ledge+1),a
 .first_on:
     ld a,d
     or a
@@ -203,6 +433,8 @@ obj_part:
     or a
     jr z,.last_on
     ld l,255                    ; last x > 255: to the right edge
+    xor a
+    ld (.redge+1),a
 .last_on:
     ; Its lines, held to the view: B (signed) up from 0, C to VIEW_LINES.
     bit 7,b
@@ -230,8 +462,9 @@ obj_part:
     dec a
     add a,a
     add a,a
-    add a,a                     ; PART_SIZE = 8
-    ASSERT PART_SIZE == 8
+    add a,a
+    add a,a                     ; PART_SIZE = 16
+    ASSERT PART_SIZE == 16
     ld e,a
     ld d,0
     ld ix,obj_parts
@@ -254,9 +487,20 @@ obj_part:
     ld a,c
     ld (obj_hi),a
 .hi_kept:
+    ; Its edges: the last and the first x's own pixels, a mask's bit less
+    ; the next one's.
+    ld h,high tbl_mask
+.redge:
+    ld a,0                      ; patched: 1 to draw its right edge
+    or a
+    jr z,.no_redge
+    ld a,(hl)                   ; L = the last x
+    srl a
+    xor (hl)
+.no_redge:
+    ld (ix+PART_LEDGE),a
     ; Its bytes and the masks of its end bytes: the first byte's bits from
     ; the first x on, and the last byte's up to the last x.
-    ld h,high tbl_mask
     ld a,(hl)                   ; L = the last x
     srl a
     cpl
@@ -269,6 +513,17 @@ obj_part:
     ld b,a                      ; the last byte
     ld l,e                      ; the first x
     ld c,(hl)                   ; its mask
+.ledge:
+    ld a,0                      ; patched: 1 to draw its left edge
+    or a
+    jr z,.no_ledge
+    ld a,c
+    srl a
+    xor c
+.no_ledge:
+    ld (ix+PART_FEDGE),a
+    or (ix+PART_LEDGE)
+    ld (ix+PART_EDGES),a        ; none: nothing to paint
     ld a,e
     rrca
     rrca
@@ -290,6 +545,12 @@ obj_part:
     rrca                        ; odd lines' patterns are turned two places
     rrca
     ld (ix+PART_ODD),a
+.edge:
+    ld a,0                      ; patched: the edges' pattern
+    ld (ix+PART_EEVEN),a
+    rrca
+    rrca
+    ld (ix+PART_EODD),a
     ret
 
 ; Points the calls in compose_lines of the lines obj_lo to obj_hi at HL (on
@@ -380,8 +641,8 @@ cs_obj:
     ret z
     ld b,a
 .part:
-    ; HL = the part's PART_LO. Parts sit in one page, 8-aligned, so only L
-    ; moves.
+    ; HL = the part's PART_LO. Parts sit in one page, 16-aligned, so only
+    ; L moves.
     ld a,c
     cp (hl)
     jr c,.below
@@ -395,6 +656,7 @@ cs_obj:
     ld a,(hl)                   ; PART_FIRST
     add a,e
     ld e,a                      ; DE = its first byte
+    ld (.first_byte+1),a
     inc l
     ld a,(hl)                   ; PART_MORE
     ex af,af'
@@ -444,10 +706,49 @@ cs_obj:
     xor (hl)
     ld (hl),a
     ex de,hl
+    ; Its edges: a pixel at each end in the edges' pattern. DE is at its
+    ; last byte.
+    ld a,l
+    and $F0
+    or PART_EDGES
+    ld l,a
+    ld a,(hl)
+    or a
+    jr z,.edged
+    dec l                       ; PART_LEDGE
+    ld c,(hl)
+    dec l                       ; PART_FEDGE
+    ld a,(hl)
+    ld (.fedge+1),a
+    ld a,l
+    and $F0
+    or PART_EEVEN
+    ld l,a
+    ld a,(.odd+1)
+    add a,l
+    ld l,a
+    ld b,(hl)                   ; the edges' pattern for this line
+    ld a,(de)                   ; the last byte: B where mask C has its bit
+    xor b
+    and c
+    ex de,hl
+    xor (hl)
+    ld (hl),a
+.first_byte:
+    ld l,0                      ; patched: the first byte
+.fedge:
+    ld c,0                      ; patched: its edge's bit
+    ld a,(hl)
+    xor b
+    and c
+    xor (hl)
+    ld (hl),a
+    ex de,hl
+.edged:
     pop de
     pop bc
     ld a,l
-    and $F8                     ; back to the part's start
+    and $F0                     ; back to the part's start
     add a,PART_SIZE
     ld l,a
     djnz .part
@@ -458,7 +759,8 @@ cs_obj:
     ld a,l
     add a,PART_SIZE
     ld l,a
-    djnz .part
+    dec b
+    jp nz,.part
     ret
 
 ; B into as many bytes from HL as calls it that many stores from the end.
@@ -480,19 +782,30 @@ PART_FMASK  equ 4               ; the first byte's bits it covers
 PART_LMASK  equ 5               ; the last byte's
 PART_EVEN   equ 6               ; its pattern on an even line
 PART_ODD    equ 7               ; and on an odd one, turned two places
-PART_SIZE   equ 8
-OBJ_PARTS   equ 8               ; parts an update can have
+PART_EEVEN  equ 8               ; its edges' pattern, both ways
+PART_EODD   equ 9
+PART_FEDGE  equ 10              ; its left edge's bit in its first byte
+PART_LEDGE  equ 11              ; its right edge's in its last
+PART_EDGES  equ 12              ; non-zero if it has either
+PART_SIZE   equ 16
+OBJ_PARTS   equ 16              ; parts an update can have
 
 obj_count:  db 0                ; the parts this update
-    ALIGN 8
-obj_parts:  ds OBJ_PARTS * PART_SIZE
+obj_parts   equ $BC00           ; free memory, a page of its own
     ASSERT high obj_parts == high (obj_parts + OBJ_PARTS * PART_SIZE - 1)
+    ASSERT (obj_parts & 15) == 0
 obj_lo:     db 0                ; the lines with parts: obj_lo to obj_hi
 obj_hi:     db 0
-obj_x:      dw 0                ; the sign's centre's screen x
-obj_l0:     db 0                ; the lines of its foot, post top, board top
-obj_l1:     db 0
-obj_l2:     db 0
-sign_x:     dw 0                ; its foot
-sign_y:     dw 0
-sign_z:     dw 0
+obj_tp:     dw 0                ; the part being drawn, in its type
+obj_edge:   db 0                ; its edges' pattern
+obj_edge_on: db 0               ; 1 if it has edges
+obj_instances:
+    dw obj_type_sign, 0, 0, 0, OBJ_SIGN_SEG
+    db 0
+    dw 0, 0
+    db 0
+    dw obj_type_car, 0, 0, 0, OBJ_CAR_SEG
+    db 0
+    dw 0, 0
+    db 0
+    ASSERT $ - obj_instances == OBJECTS * INST_SIZE

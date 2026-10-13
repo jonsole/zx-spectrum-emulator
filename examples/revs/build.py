@@ -22,6 +22,7 @@ REPO = HERE.parent.parent
 OUT_DIR = HERE / "output"
 sys.path.insert(0, str(HERE))
 
+import object_types  # noqa: E402
 import tables  # noqa: E402
 import track_data  # noqa: E402
 
@@ -56,6 +57,7 @@ def generate(track: str) -> None:
     (OUT_DIR / "log12.s").write_text(
         tables.big_source(["log12_lo", "log_he", "log_hs", "log_hl"], aligned=True))
     (OUT_DIR / "exp8.s").write_text(tables.big_source(["exp8"]))
+    (OUT_DIR / "objects.s.gen").write_text(object_types.source())
 
 
 def assemble(sjasmplus: str, defines: list[str]) -> None:

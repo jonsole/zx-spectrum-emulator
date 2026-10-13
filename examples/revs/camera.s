@@ -13,7 +13,7 @@
 ; 5). Sideways is square to the way it looks, so it slides across the track
 ; without turning.
 
-EYE_HEIGHT  equ 500
+EYE_HEIGHT  equ 200             ; about a car's height, as a driver's eye is
 TRACK_LEN   equ 1024            ; Silverstone; the data's trackLength
 LOOK_AHEAD  equ 3
 SPEED_STEP  equ 4               ; cam_speed's change an update while a key is held

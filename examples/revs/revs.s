@@ -11,13 +11,15 @@
 ;          three small tables that give its whole parts; free from $7210
 ;   $8000  code
 ;   $A000  page-aligned lookup tables (tables.py), eight pages
-;   $A800  the track data file, exactly as the BBC loads it (track_data.py);
-;          only build_track reads it, and then objects.s keeps its runs there
+;   $A800  objects.s and the objects' parts (object_types.py)
 ;   $B000  eight pages of antilogarithms
 ;   $BA00  per-frame verge point lists
+;   $BC00  per-frame object parts (objects.s)
 ;   $C000  every segment's 16-bit coordinates: five arrays of 1024 words
 ;   $E800  every segment's flags, 1024 bytes
-;   $EC00  the edge markers: 128 lines of 32 bytes (80 seen, the rest above)
+;   $EC00  the edge markers: 128 lines of 32 bytes (80 seen, the rest above);
+;          until markers_init, the track data file, exactly as the BBC loads
+;          it (track_data.py), for build_track
 ;   $FC00  the stack, down from $FDF0
 ;   $FDFD  the IM2 handler's jump, $FE00 its vector table
 
@@ -85,7 +87,6 @@ main_loop:
     INCLUDE "verges.s"
     INCLUDE "edges.s"
     INCLUDE "compose.s"
-    INCLUDE "objects.s"
     INCLUDE "patterns.s"
 code_end:
     ASSERT code_end <= $A000
@@ -95,9 +96,16 @@ code_end:
     ASSERT $ <= $A800
 
     ORG $A800
+    INCLUDE "objects.s"
+    INCLUDE "objects.s.gen"     ; generated, in output/: the objects' parts
+    ASSERT $ <= $B000
+
+    ; The track data file goes where the edge markers will be: only
+    ; build_track reads it, and that is done before markers_init.
+    ORG MARKERS
 track:
     INCLUDE "track.s.gen"       ; generated, in output/: the track data file
-    ASSERT $ <= $B000
+    ASSERT $ <= MARKERS + MARK_LINES * MARK_LINE
 
     ORG $B000
     INCLUDE "exp8.s"            ; generated: the antilogarithms

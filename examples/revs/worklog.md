@@ -6,6 +6,14 @@ A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Mic
 
 ## Where it stands
 
+**Stopped, 13 October 2026.** The engine works, but the 48K has no room
+for the rest of the game. The road alone takes about 32K; the BBC fits its
+whole game -- road, driving model, nineteen other cars, dashboard and sound
+-- in about 23.4K, and about 9K is left here, in pieces. If it is picked up
+again, the two ways to make room that were priced are a ring of 64 segments
+in place of the 11K expanded segment table (about 8K back, for about 700
+T-states a redraw), or the 128K. `handover.md` has the state it stopped in.
+
 The engine lives in `examples/revs`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
 
 - **Speed:** every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 187,700 T-states against a three-frame budget of 209,664, and the worst, in the tightest corner, 205,600.
@@ -16,7 +24,7 @@ The engine lives in `examples/revs`. It is the first stage of the plan: the trac
   - white sky.
   - The kerb stripes move with the track. The camera turns smoothly through corners.
 - **Correctness:** the screen matches Python models of both the BBC routines and the Z80's own stages, byte for byte where the model is exact. No frame shows two half-drawn views.
-- **Memory:** about 32K of the 48K is in use. About 10K is free, the largest pieces 3.5K at `$7210` and 2K at `$A800`.
+- **Memory:** about 34K of the 48K is in use. About 8.6K is free, the largest pieces 3.5K at `$7210` (contended) and 1.3K below `$A000`.
 - **Runs on:** a 48K or 128K Spectrum, since it needs the floating bus. It does not run on the +2A or +3.
 
 The work was done on branch `ccr-a5725d0e-ey56yb` and is now on `master`.
@@ -29,6 +37,7 @@ The work, newest first. Each row is one commit on the branch:
 
 | Commit | What it did | Frames per update |
 | --- | --- | --- |
+| — | A car parked on the track, the BBC's standard car from its part tables, with edge colours; the object types in `object_types.py`, drawn far to near; the track data file moved into the edge markers' room to free `$A800` for them; the eye lowered from 500 to 200, a car's height. Then stopped: no room left for the game. | 3 (more with objects close) |
 | — | A first object: a sign beside the track, its parts painted over each line inside compose, which has no buffer to draw into afterwards. About 1,000 T-states a covered line; a known limit for the synchronised build. | 3 (more with the sign close) |
 | — | Ran unsynchronised by default: no wait for the frame or the beam, so updates come as the work allows. `--define SYNCED` for the old way, which the tests use. | ~2.7 |
 | — | Keys to drive the camera (Q/A speed, O/P sideways, or an Interface II stick); kerbs fixed close to the camera (the list's last point kept below the view, the road's far end closed); stripes out to 12 segments. | 3 |
@@ -84,7 +93,7 @@ main_loop: call verges_finish   ; the rest of the verge points
 
 The stages are:
 
-1. **Camera** (`camera.s`). The camera is a fraction of the way along the track's centre line, 500 units up. It looks at the point the same fraction of the way from three segments ahead to four. The four centres it needs are cached, and only change when the camera passes a segment. This stands in for a driving model.
+1. **Camera** (`camera.s`). The camera is a fraction of the way along the track's centre line, 200 units up. It looks at the point the same fraction of the way from three segments ahead to four. The four centres it needs are cached, and only change when the camera passes a segment. This stands in for a driving model.
 2. **Verge points** (`verges.s`). This follows `GetSegmentAngles` and `GetVergeAndMarkers`. Both verges are projected together, a segment at a time, sharing its flags and height.
    - It starts 32 segments ahead, then steps back by 13 and 7 segments, then one at a time. That gives up to 16 points a side, and stripes out to 12 segments (the BBC steps 13, 6 and 3, with stripes to 9).
    - Each point gets a yaw (screen x), a pitch (track line), and a verge-mark width of 25, 50 or 100 units scaled by distance.

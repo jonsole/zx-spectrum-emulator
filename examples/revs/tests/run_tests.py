@@ -13,8 +13,8 @@ runs it in cpp-core's snapshot_probe and checks:
            edges and compose fed the Z80's own point lists
   compose  compose_screen on marker records shuffled out of x order, so that
            it has to sort them
-  objects  the sign's parts (objects.s), where it is in view, against its
-           projection through view_model.py
+  objects  the objects' parts (objects.s) where they are in view, against
+           object_types.py's parts projected through view_model.py
   beam     that every update's writes to the screen show in the same frame,
            so no frame mixes two views
   speed    the work from each frame interrupt to the next HALT, once round
@@ -42,6 +42,7 @@ REVS = HERE.parent
 sys.path.insert(0, str(REVS))
 sys.path.insert(0, str(HERE))
 
+import object_types as ot  # noqa: E402
 import screen_model as sm  # noqa: E402
 import track_data  # noqa: E402
 import view_model as vm  # noqa: E402
@@ -176,10 +177,22 @@ def check_verges(views: Views, symbols: dict, report: Report) -> None:
             # black) in the Z80's lists.
             want = [(128 + p[0] / 40, 128 + p[1] / 40, p[2], sm.VERGE_BLACK + p[3])
                     for p in want_sides[side]]
-            if len(got) != len(want):
+            # With the eye at a car's height, the points beside the camera
+            # are above the bottom of the view, and the one just ahead and the
+            # one just behind can be equally far away: the Z80, comparing logs,
+            # and the model, comparing distances, break that tie differently,
+            # and one ends its list a point sooner. Those points are well off
+            # the side of the screen, where they change nothing -- off the
+            # left, an edge only counts if it is the rightmost there -- so
+            # the lists may differ in length by such points at their ends.
+            n = min(len(got), len(want))
+            def off_screen(x0, x1):
+                return (x0 < 0 and x1 < 0) or (x0 > 255 and x1 > 255)
+            extra = [(g[0], g[1]) for g in got[n:]] + [(w[0], w[1]) for w in want[n:]]
+            if not all(off_screen(*e) for e in extra):
                 bad.append(f"segment {seg} {side}: {len(got)} points, model {len(want)}")
                 continue
-            for g, w in zip(got, want):
+            for g, w in zip(got[:n], want[:n]):
                 dx = abs(g[0] - w[0])
                 dw = abs((g[1] - g[0]) - (w[1] - w[0]))
                 dl = abs(g[2] - w[2])
@@ -271,34 +284,54 @@ def check_compose(probe: Probe, views: Views, symbols: dict, report: Report) -> 
         report.note(line)
 
 
-def sign_parts(view, cam, cam_seg: int, symbols: dict) -> dict[int, tuple]:
-    """The sign's parts as the screen should show them, by fill pattern: (first
-    x, last x, lowest line, highest line), held to the view, worked out from
-    the track and view_model.py's projection rather than from the Z80."""
-    seg = symbols["SIGN_SEG"]
+def object_feet(view, symbols: dict) -> list[tuple]:
+    """Each instance as objects.s places it: (type, foot, segment). The sign
+    stands beyond the right verge by half the track's width, and the car
+    five eighths of the way from the right verge to the left."""
+    feet = []
+    sg = view.t.segments[symbols["OBJ_SIGN_SEG"]]
+    feet.append((ot.TYPES[0], (sg.xi + ((sg.xi - sg.xo) >> 1), sg.yi, sg.zi + ((sg.zi - sg.zo) >> 1)),
+                 symbols["OBJ_SIGN_SEG"]))
+    sg = view.t.segments[symbols["OBJ_CAR_SEG"]]
+    def across(inner, outer):
+        half = (outer - inner) >> 1
+        return inner + half + (half >> 2)       # five eighths, as the Z80's shifts
+    feet.append((ot.TYPES[1], (across(sg.xi, sg.xo), sg.yi, across(sg.zi, sg.zo)),
+                 symbols["OBJ_CAR_SEG"]))
+    return feet
+
+
+def object_model(view, cam, cam_seg: int, symbols: dict) -> list[tuple]:
+    """The objects' parts as the screen should show them, far to near and in
+    each object's drawing order: (first x, last x, lowest line, highest
+    line), held to the view, from the track and view_model.py's projection
+    rather than from the Z80."""
     n = len(view.t.segments)
-    if not 1 <= (seg - cam_seg) % n < 32:
-        return {}
-    sg = view.t.segments[seg]
-    # Its foot: beyond the right verge by half the track's width.
-    fx, fz, fy = sg.xi + ((sg.xi - sg.xo) >> 1), sg.zi + ((sg.zi - sg.zo) >> 1), sg.yi
-    rel, _, dist = view.project(cam, fx, fy, fz)
-    if abs(rel) >> 8 >= 2 * symbols["FOV_YAW"]:
-        return {}
-    x = 128 + rel / 40
-    def line(h):
-        dy = fy + h - cam[1]
-        v = vm.pitch_line(dy, dist)
-        return v if v is not None else (127 if dy >= 0 else -128)
-    l0, l1, l2 = line(0), line(symbols["POST_TOP"]), line(symbols["BOARD_TOP"])
-    out = {}
-    # (half-width in track units, bottom, top, pattern): as objects.s says.
-    for w, lb, lt, pattern in ((12, l0, l1, 0xFF), (92, l1, l2, 0xCC)):
-        hw = w * 2 ** 23 / (40 * 800 * dist)       # as a verge mark's width
-        first, last = max(0, round(x - hw)), min(255, round(x + hw) - 1)
-        lb, lt = max(0, lb), min(symbols["VIEW_LINES"], lt)
-        if hw >= 1 and first <= last and lb < lt:
-            out[pattern] = (first, last, lb, lt - 1)
+    shown = []
+    for t, (fx, fy, fz), seg in object_feet(view, symbols):
+        if not 1 <= (seg - cam_seg) % n < symbols["SEG_AHEAD"]:
+            continue
+        rel, _, dist = view.project(cam, fx, fy, fz)
+        if abs(rel) >> 8 >= 2 * symbols["FOV_YAW"]:
+            continue
+        dy = fy - cam[1]
+        foot = vm.pitch_line(dy, dist)
+        if foot is None:
+            foot = 127 if dy >= 0 else -128
+        shown.append((dist, t, 128 + rel / 40, foot))
+    out = []
+    for dist, t, x, foot in sorted(shown, key=lambda o: -o[0]):
+        across = t.unit_x * ot.PX_PER_UNIT / dist
+        up = t.unit_y * ot.LINES_PER_UNIT / dist
+        for p in t.parts:
+            # Sizes truncated, as the Z80's antilogarithms are.
+            first = x + math.copysign(int(abs(p.left) * across), p.left)
+            last = x + math.copysign(int(abs(p.right) * across), p.right) - 1
+            lo, hi = foot + int(p.bottom * up), foot + int(p.top * up)
+            first, last = max(0, round(first)), min(255, round(last))
+            lo, hi = max(0, lo), min(symbols["VIEW_LINES"], hi)
+            if first <= last and lo < hi:
+                out.append((first, last, lo, hi - 1))
     return out
 
 
@@ -311,24 +344,29 @@ def check_objects(views: Views, symbols: dict, report: Report) -> None:
             a = symbols[name]
             return signed16(mem[a] | mem[a + 1] << 8)
         cam = (word("cam_x"), word("cam_y"), word("cam_z"), word("cam_heading") & 0xFFFF)
-        want = sign_parts(view, cam, word("cam_seg"), symbols)
-        got = {}
-        for part in sm.object_parts(sm.Layout(symbols, mem), mem):
-            first, last = sm.part_extent(part)
-            got[part[6]] = (first, last, part[0], part[1])
-        if want:
-            seen += 1
-        if set(got) != set(want):
-            bad.append(f"segment {seg}: parts {sorted(got)}, model {sorted(want)}")
-            continue
-        for pattern, (f, l, lo, hi) in got.items():
-            wf, wl, wlo, whi = want[pattern]
-            if abs(f - wf) > 3 or abs(l - wl) > 3 or abs(lo - wlo) > 1 or abs(hi - whi) > 1:
-                bad.append(f"segment {seg} part {pattern:02X}: x {f}..{l}, lines {lo}..{hi}; "
-                           f"model x {wf}..{wl}, lines {wlo}..{whi}")
+        want = object_model(view, cam, word("cam_seg"), symbols)
+        got = [sm.part_extent(part) + (part[0], part[1])
+               for part in sm.object_parts(sm.Layout(symbols, mem), mem)]
+        seen += 1 if want else 0
+        # Each part the model has in order, matched to the next of the Z80's
+        # within 3 pixels and a line. Parts a pixel or a line across can come
+        # and go with the log tables' rounding, so only those bigger than that
+        # are looked for.
+        k = 0
+        for w in want:
+            if w[1] - w[0] < 2 or w[3] - w[2] < 1:
+                continue
+            while k < len(got) and not (abs(got[k][0] - w[0]) <= 3 and abs(got[k][1] - w[1]) <= 3
+                                        and abs(got[k][2] - w[2]) <= 1 and abs(got[k][3] - w[3]) <= 1):
+                k += 1
+            if k == len(got):
+                bad.append(f"segment {seg}: no part like x {w[0]}..{w[1]}, lines {w[2]}..{w[3]} "
+                           f"in {got}")
+                break
+            k += 1
     report.result("objects", not bad and seen > 0,
-                  f"the sign in {seen} views, within 3 px and a line" if not bad
-                  else f"{len(bad)} wrong" if bad else "the sign was never in view")
+                  f"objects in {seen} views, every part within 3 px and a line" if not bad
+                  else f"{len(bad)} wrong" if bad else "no object was ever in view")
     for line in bad[:6]:
         report.note(line)
 
@@ -336,12 +374,12 @@ def check_objects(views: Views, symbols: dict, report: Report) -> None:
 def check_beam(probe: Probe, symbols: dict, report: Report) -> None:
     probe.load(SNAPSHOT)
     probe.runto("main_loop", STARTUP_FRAMES)
-    # From past the sign, so that no object is in view for the 200 updates
+    # From past the objects, so that none is in view for the 200 updates
     # (125 segments). An object close up adds about 1,000 T-states to every
     # line it covers, and with a big one compose runs past the beam's return
     # and the synchronised build tears: a known limit, accepted while the
     # default build runs unsynchronised (see objects.s).
-    probe.set_word("cam_seg", symbols["SIGN_SEG"] + 28)
+    probe.set_word("cam_seg", max(symbols["OBJ_SIGN_SEG"], symbols["OBJ_CAR_SEG"]) + 16)
     probe.runto("main_loop", UPDATE_FRAMES)
     probe.runto("main_loop", UPDATE_FRAMES)
     updates = 200

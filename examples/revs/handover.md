@@ -1,5 +1,13 @@
 # Revs road engine: handover
 
+**Stopped, 13 October 2026.** The engine works, but the 48K has no room
+for the rest of the game. The road alone takes about 32K; the BBC fits its
+whole game -- road, driving model, nineteen other cars, dashboard and sound
+-- in about 23.4K, and about 9K is left here, in pieces. If it is picked up
+again, the two ways to make room that were priced are a ring of 64 segments
+in place of the 11K expanded segment table (about 8K back, for about 700
+T-states a redraw), or the 128K. `handover.md` has the state it stopped in.
+
 As of 12 October 2026, updated the same day after a round of profiling. This is for whoever picks the engine up next: what it
 is, how to work on it, what is known to be true, what has been tried, and
 what to do next. The other documents go deeper:
@@ -50,17 +58,20 @@ By stage, averaged over the lap by `tests/profile.py`:
 | The rest of the verge points | ~37,400 | 84,000 |
 | Edges | ~66,600 | 121,000 |
 
-**Memory.** About 32K of 48K is used. About 10K is free:
+**Memory.** About 34K of 48K is used. About 8.6K is free, in pieces:
 
 | Where | Size |
 |---|---|
-| `$7210`–`$7FFF` | 3.5K |
-| `$A800`–`$AFFF` | 2K, once `build_track` has run |
-| `$99CE`–`$9FFF` | 1.5K |
-| `$5B00`–`$5FFF` | 1.25K |
-| `$BC00`–`$BFFF` | 1K |
-| `$B800`–`$B9FF` | 0.5K |
-| `$7110`–`$71FF` | 240 bytes |
+| `$7210`–`$7FFF` | 3.5K, contended |
+| `$99CE`–`$9FFF` | 1.3K |
+| `$5B00`–`$5FFF` | 1.25K, contended |
+| `$ACF3`–`$AFFF` | 0.75K, after `objects.s` |
+| `$BD00`–`$BFFF` | 0.75K, after the objects' parts |
+| `$B801`–`$B9FF` | 0.5K |
+| `$7110`–`$71FF` | 240 bytes, contended |
+
+The track data file now waits in the edge markers' room at `$EC00` until
+`markers_init`, which freed `$A800` for the objects.
 
 The worklog's Memory section has the full map.
 
@@ -166,15 +177,16 @@ apply.
 
 Roughly in order. The worklog's "Still to do" has the full list.
 
-0. **Objects, before the cars.** One sign is drawn (`objects.s`, and
-   README's Objects): parts painted over each line inside compose, at about
-   1,000 T-states a covered line. Close up that is about 29,000 an update,
-   and in the synchronised build it can make compose miss the beam, so the
-   `beam` check runs from past the sign. Drawing objects as markers in
-   compose's own pass, so that road and objects come out in one sweep,
-   should halve it; do that before adding cars, which multiply it. Only 546
-   bytes of code space are left below `$A000`; the 3.5K at `$7210` is
-   contended.
+0. **Objects.** A sign and a parked car are drawn (`objects.s`,
+   `object_types.py`, and README's Objects): parts painted over each line
+   inside compose, at about 1,000 T-states a covered line. Close up that is
+   about 29,000 an update, and in the synchronised build it can make compose
+   miss the beam, so the `beam` check runs from past the objects. Drawing
+   objects as markers in compose's own pass, so that road and objects come
+   out in one sweep, should halve it. The eye is 200 units up, about a
+   car's height, so that cars stand up around the horizon as in Revs; the
+   lower half of the view is then plain road, which the BBC covers with its
+   dashboard.
 1. **Driving model.** Speed, steering, the car's position across the track,
    heading. It replaces the self-driving camera (`camera.s`). The projection
    already takes any position and heading.

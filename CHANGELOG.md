@@ -25,10 +25,10 @@ GitHub takes its notes from that section.
 
 - **A Revs road engine, `examples/revs`.** Geoff Crammond's BBC Micro *Revs*
   rebuilt for the 48K in Z80, using the documented disassembly at
-  revs.bbcelite.com as its design: so far, Silverstone's track and one sign
-  beside it, seen from a camera you can speed up, slow down and move across
-  the track with Q, A, O and P or an Interface II stick. It runs
-  unsynchronised, as fast as the work allows (about 18 updates a second), or
+  revs.bbcelite.com as its design: Silverstone's track with a sign beside it
+  and a car parked on it, seen from a camera you can speed up, slow down and
+  move across the track with Q, A, O and P or an Interface II stick. It runs
+  unsynchronised, as fast as the work allows (about 20 updates a second), or
   synchronised to the beam at 16.7 with `build.py --define SYNCED`. Its
   launch configuration is **ZX Spectrum: Revs road**; the track data is
   fetched at build time, never committed. `examples/revs/tests/run_tests.py`
@@ -36,7 +36,9 @@ GitHub takes its notes from that section.
   screen, its timing against the beam, and its speed, through a new cpp-core
   tool, `snapshot_probe`, that drives a snapshot from a script;
   `tests/profile.py` shows where its time goes, by routine, source line or
-  instruction. See [examples/revs/README.md](examples/revs/README.md).
+  instruction. The experiment stops there: the road alone takes about 32K,
+  and the rest of the game would not fit the 48K. See
+  [examples/revs/README.md](examples/revs/README.md).
 
 - **The Filmation games' `extract.py` takes a Knight Lore saved at the menu.**
   Drawing the menu turns its frame's corner upside down in place, and the game

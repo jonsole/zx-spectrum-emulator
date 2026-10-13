@@ -4,8 +4,17 @@ A road engine for the 48K Spectrum, written in Z80 from scratch, in the
 manner of Geoff Crammond's *Revs* (Acornsoft, 1985, BBC Micro). It uses
 Mark Moxon's fully documented disassembly at
 [revs.bbcelite.com](https://revs.bbcelite.com) as a design guide. The plan is
-to build up to a game a feature at a time. So far there is the first step:
-the track, drawn from a camera that drives itself round Silverstone.
+to build up to a game a feature at a time. It got as far as the track,
+drawn from a camera you drive round Silverstone, with a sign beside it and
+a car parked on it.
+
+**Stopped, 13 October 2026.** The engine works, but the 48K has no room
+for the rest of the game. The road alone takes about 32K; the BBC fits its
+whole game -- road, driving model, nineteen other cars, dashboard and sound
+-- in about 23.4K, and about 9K is left here, in pieces. If it is picked up
+again, the two ways to make room that were priced are a ring of 64 segments
+in place of the 11K expanded segment table (about 8K back, for about 700
+T-states a redraw), or the 128K. `handover.md` has the state it stopped in.
 
 It is the BBC design throughout, with Spectrum maths underneath:
 
@@ -82,7 +91,8 @@ Each update runs four stages. They are interleaved round the frame
 interrupt, because compose has to wait for the beam (see below):
 
 1. **`camera.s`** moves the camera a fraction of a segment along the middle
-   of the track, 500 units above it. It looks at the point the same fraction
+   of the track, 200 units above it, about a car's height, as a driver's eye
+   is. It looks at the point the same fraction
    of the way from three segments ahead to four, so it turns smoothly through
    a corner. One segment ahead is not enough, because a new section restarts
    from its own coordinates and can skew a single step. This stands in for a
@@ -149,9 +159,18 @@ horizon at line 60, as the BBC does.
 
 ### Objects
 
-So far there is one: a sign, a black post and a red board, beside the right
-verge at segment 12 (`objects.s`). It is the first step towards the cars,
-which will be drawn the same way.
+There are two (`objects.s`): a sign, a black post and a red board, beside
+the right verge at segment 12, and a car parked on the track at segment 24,
+just left of the middle. The car is the BBC's standard car, object type 4,
+from its part tables at revs.bbcelite.com: helmet, body, sidepods, tyres
+and gearbox, roll hoop and rear wing, drawn in the BBC's order, each part's
+left and right edges a pixel in an edge colour as the BBC draws them. The
+types are in `object_types.py`, which `build.py` turns into assembler with
+every measurement already a log, so that scaling a part to its distance is
+a subtraction and an antilogarithm. Objects are drawn far to near, so that
+a nearer one is painted over a farther one. On a black road the car reads
+best grey with a white body (BBC white as the half tone, BBC red as white);
+the BBC gives each driver's car its own colours.
 
 As on the BBC, an object is parts of one colour on a scaffold scaled by its
 distance, not a bitmap: a scaled bitmap would want a copy for every size.
@@ -178,9 +197,9 @@ it, pointing compose's calls and back, and redrawing road that would
 otherwise have been skipped. The sign close up covers 24 to 35 lines, about
 29,000 T-states. In the default unsynchronised build that only slows those
 updates. In the synchronised build it can make compose run past the beam's
-return and tear, a known limit: the `beam` check is run from past the sign.
-Drawing objects as markers in compose's own pass would cost about half;
-that is the thing to do before the cars.
+return and tear, a known limit: the `beam` check is run from past the
+objects. Drawing objects as markers in compose's own pass would cost about
+half.
 
 ### Where the Spectrum differs
 
@@ -216,12 +235,13 @@ that is the thing to do before the cars.
 | `$6000` | the 12-bit log table's fractions, 4K; at `$7000` three small tables for its whole parts; free from `$7210` to `$7FFF` |
 | `$8000` | code |
 | `$A000` | eight pages of lookup tables |
-| `$A800` | the track data file, as the BBC loads it; read once at startup, then free |
+| `$A800` | `objects.s` and the objects' parts (`object_types.py`) |
 | `$B000` | eight pages of antilogarithms |
 | `$BA00` | the two verge point lists |
+| `$BC00` | the objects' parts on the screen, each update |
 | `$C000` | every segment's coordinates: five arrays of 1,024 words |
 | `$E800` | every segment's flags |
-| `$EC00` | the edge markers: a 32-byte record per track line, 128 of them (lines above the view are written but never read) |
+| `$EC00` | the edge markers: a 32-byte record per track line, 128 of them (lines above the view are written but never read); until `markers_init`, the track data file as the BBC loads it, for `build_track` |
 | `$FDF0` | the stack, downwards; the IM 2 jump at `$FDFD` and its table at `$FE00` |
 
 ## Speed
@@ -294,7 +314,7 @@ screen compose`); `--no-build` uses `output/` as it is. The checks:
 | `verges` | the Z80's verge point lists against `view_model.py`'s from the same camera, at a dozen places round the track | the same points and colours, within 3 pixels across and a line up or down |
 | `screen` | the view on the screen against `tests/screen_model.py`, a model of the edge and compose stages, fed the Z80's own point lists | byte for byte |
 | `compose` | `compose_screen` on marker records with a third of the lines shuffled out of x order, against the same records filled in order, with the objects' parts painted over them | byte for byte |
-| `objects` | the sign's parts where it is in view, against its foot projected through `view_model.py` and its parts scaled from their sizes | within 3 pixels across and a line up or down |
+| `objects` | every object's parts where it is in view, far to near, against `object_types.py`'s parts projected through `view_model.py` | within 3 pixels across and a line up or down |
 | `beam` | every write to the view over 200 updates, from a stretch with no object in view, with the first frame able to show it worked out from where the beam was | all of an update's writes show in the same frame |
 | `speed` | the T-states from each frame interrupt to the next HALT over a lap at the camera's speed | the median fits in three frames; the 99th percentile, the worst and the number needing a fourth frame are reported |
 
