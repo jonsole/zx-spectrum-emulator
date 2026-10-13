@@ -1,8 +1,9 @@
 # MCP interface plan: the ZX Spectrum and BBC Micro servers
 
 Status: **in progress.** Done so far: the BBC Micro's changes (section 4,
-items 1-9); the Spectrum's small fixes (5.1) and banked memory on the 128K
-(5.11), but for the profiler's counts per bank. The same document is in both repositories
+items 1-11, which bring it level with the Spectrum's own tools); the
+Spectrum's small fixes (5.1) and banked memory on the 128K (5.11), but for
+the profiler's counts per bank. The same document is in both repositories
 (`zx-spectrum-emulator/docs/mcp-interface-plan.md` and
 `vs-code-bbc/docs/mcp-interface-plan.md`); change both together.
 
@@ -247,11 +248,15 @@ Each machine keeps its own on top:
   `set_graphics_view`). `set_logpoint`, `list_logpoints` and
   `clear_logpoint` stay as aliases of the breakpoint tools for a release.
 - **BBC:** `load_disc(image, drive?)`, `reset(tube?)` and
-  `load_program(tube?)`.
+  `load_program(tube?)`; since 4.11 also the Spectrum's `load_rom`,
+  `tape_control`, `set_speed`, `set_break_on_interrupt`, the rewind group,
+  `profile`, video and tracing (an instruction trace: jsbeeb has no bus
+  cycles), and `get_audio`. The Spectrum's views (`set_raster_view`,
+  `set_write_overlay`, `set_graphics_view`) stay its own.
 
 ## 4. Changes to the BBC Micro server (`vs-code-bbc`)
 
-In order. Each item lists its files and its test. Items 1-9 are *done*.
+In order. Each item lists its files and its test. Items 1-11 are *done*.
 
 1. **Output becomes a transcript** (2.4). Hook OSWRCH by watching the WRCHV
    call, or the VDU driver's entry, through the engine's instruction hook,
@@ -288,8 +293,20 @@ In order. Each item lists its files and its test. Items 1-9 are *done*.
    attached. A stop caused by an MCP tool sent to VS Code with
    `preserveFocusHint: true`, so the editor does not jump.
 9. **Logpoint formats** as the Spectrum's: `{A:d}`, `{?addr:c}`, `{peekw(x):w}`.
-10. *Later, optional:* a frame-granularity step back on jsbeeb's own
-    `rewind.js` snapshot ring, and a profiler. Neither is in the shared set.
+10. **Stepping backwards**, to the instruction rather than the frame:
+    checkpoints every quarter second and exact replay from them
+    (`server/rewind.mjs`), the Spectrum's six tools, and DAP's Step Back and
+    Reverse Continue. jsbeeb replays exactly once the Master's clock reads
+    emulated time and the keyboard and typist are saved beside its snapshots.
+11. **The rest of the Spectrum's own tools**: `set_speed`,
+    `set_break_on_interrupt`, `tape_control`, `load_rom` and sideways banks
+    (`"4:&8000"`, as the 128K's `"5:$C000"`); `start_trace` / `stop_trace` /
+    `trace_status` (`server/trace.mjs`, a row per instruction with its
+    accesses); `profile` (`server/profiler.mjs`); `start_video` /
+    `stop_video` / `video_status` (`server/video.mjs`, ffmpeg); `get_audio`
+    and the screen panel's sound (`server/audio.mjs`); and more than one
+    emulator: free ports, a registry of running ones, `"ports": "auto"` in
+    a launch configuration and **Show Screen of…**.
 
 ## 5. Changes to the ZX Spectrum server (`zx-spectrum-emulator`)
 
