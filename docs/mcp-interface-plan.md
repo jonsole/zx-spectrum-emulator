@@ -1,7 +1,8 @@
 # MCP interface plan: the ZX Spectrum and BBC Micro servers
 
-Status: **in progress.** Done so far: the Spectrum's small fixes (5.1) and
-banked memory on the 128K (5.11), but for the profiler's counts per bank. The same document is in both repositories
+Status: **in progress.** Done so far: the BBC Micro's changes (section 4,
+items 1-9); the Spectrum's small fixes (5.1) and banked memory on the 128K
+(5.11), but for the profiler's counts per bank. The same document is in both repositories
 (`zx-spectrum-emulator/docs/mcp-interface-plan.md` and
 `vs-code-bbc/docs/mcp-interface-plan.md`); change both together.
 
@@ -250,7 +251,7 @@ Each machine keeps its own on top:
 
 ## 4. Changes to the BBC Micro server (`vs-code-bbc`)
 
-In order. Each item lists its files and its test.
+In order. Each item lists its files and its test. Items 1-9 are *done*.
 
 1. **Output becomes a transcript** (2.4). Hook OSWRCH by watching the WRCHV
    call, or the VDU driver's entry, through the engine's instruction hook,
