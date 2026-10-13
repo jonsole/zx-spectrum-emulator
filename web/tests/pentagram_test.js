@@ -119,9 +119,11 @@ function pgExtract(file) {
         'print(hashlib.sha256(bytes(m[0x5E00:0xD89E])).hexdigest())',
     ].join('\n');
     const python = process.env.PYTHON || 'python3';
+    // pg_extract.py is in pentagram/scripts, and original.py and layout.py,
+    // which it imports, in the scripts the Filmation games share.
     const filmation = path.join(ROOT, 'examples', 'filmation');
-    return childProcess.execFileSync(python, ['-I', '-c', script, filmation,
-                                              path.join(filmation, 'pentagram'), file],
+    return childProcess.execFileSync(python, ['-I', '-c', script, path.join(filmation, 'scripts'),
+                                              path.join(filmation, 'pentagram', 'scripts'), file],
                                      { encoding: 'utf8' }).trim().split('\n').pop();
 }
 

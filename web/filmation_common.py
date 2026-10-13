@@ -5,12 +5,29 @@ names -- rooms.py, rooms_source.py, sprite_sheet.py -- so a script imports one
 game's, and whatever both scripts need lives here instead.
 """
 import hashlib
+import shutil
 import subprocess
 import sys
 
 
+def copy_filmation(filmation, where):
+    """A copy of examples/filmation at `where`/filmation, to build in without
+    touching the working tree. Returns the copy.
+
+    What a build makes is left behind -- output/, and generated/ and
+    extracted/ in every game (layout.py) -- so the copy holds only what is
+    committed. Anything already extracted or generated would be what the
+    scripts read rather than what the caller writes in its place, and the
+    build makes generated/ afresh, as it does in a new checkout."""
+    game = where / "filmation"
+    shutil.copytree(filmation, game, ignore=shutil.ignore_patterns(
+        "output", "generated", "extracted", "__pycache__"))
+    return game
+
+
 def run(folder, *args):
-    """Runs a Python script in `folder`, stopping with its output if it fails."""
+    """Runs a Python script, named by its path in `folder` and run there,
+    stopping with its output if it fails."""
     done = subprocess.run([sys.executable, *args], cwd=folder, capture_output=True, text=True)
     if done.returncode != 0:
         sys.exit(" ".join(args) + " failed:\n" + done.stdout + done.stderr)

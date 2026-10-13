@@ -59,7 +59,6 @@ working tree is left as it was.
 import argparse
 import hashlib
 import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -69,13 +68,17 @@ ROOT = WEB.parent
 FILMATION = ROOT / "examples" / "filmation"
 KNIGHTLORE = FILMATION / "knightlore"
 
+# The Python the Filmation games share is in examples/filmation/scripts, and
+# Knight Lore's own in knightlore/scripts; layout.py says where in the game's
+# folder everything else is.
 sys.path.insert(0, str(WEB))
-sys.path.insert(0, str(FILMATION))
-sys.path.insert(0, str(KNIGHTLORE))
-from filmation_common import (differences, edited, emitted_rows,   # noqa: E402
-                              labels, outside, run)
+sys.path.insert(0, str(FILMATION / "scripts"))
+sys.path.insert(0, str(KNIGHTLORE / "scripts"))
+from filmation_common import (copy_filmation, differences, edited,   # noqa: E402
+                              emitted_rows, labels, outside, run)
 import castle                                                   # noqa: E402
 import kl_extract                                               # noqa: E402
+import layout                                                   # noqa: E402
 import rooms as rooms_py                                        # noqa: E402
 import rooms_source                                             # noqa: E402
 import sheet                                                    # noqa: E402
@@ -101,16 +104,7 @@ EMPTY_RECORDS = 6
 
 
 def copy_game(where):
-    game = where / "filmation"
-    shutil.copytree(FILMATION, game, ignore=shutil.ignore_patterns("output", "__pycache__"))
-    knightlore = game / "knightlore"
-    # A font sheet, or an extraction, already in the copy would be what the
-    # scripts read rather than what is written here.
-    for stale in ("font.png", "font.json", "font.s", "sprite_data.bin", "graphic_map.json"):
-        (knightlore / stale).unlink(missing_ok=True)
-    return knightlore
-
-
+    return copy_filmation(FILMATION, where) / "knightlore"
 
 
 def build(where, font, swap_ink=False, move_things=False):
@@ -119,9 +113,10 @@ def build(where, font, swap_ink=False, move_things=False):
     and of the collectables moved, if asked. Returns the 48K image, its
     labels, and the .z80."""
     knightlore = copy_game(where)
-    (knightlore / "font.bin").write_bytes(font)
+    layout.extracted(knightlore).mkdir(exist_ok=True)
+    (layout.extracted(knightlore) / "font.bin").write_bytes(font)
     if swap_ink:
-        swap_ink_and_paper(knightlore / "sprites.png")
+        swap_ink_and_paper(layout.art(knightlore) / "sprites.png")
     if move_things:
         move_positions(knightlore)
     run(knightlore, "build.py")
@@ -152,14 +147,14 @@ def move_positions(knightlore):
     """Every object in every room, and every collectable, a cell along in U:
     nothing the castle's shape or counts depend on changes, and everything
     that is a position does."""
-    path = knightlore / "rooms.json"
+    path = layout.metadata(knightlore) / "rooms.json"
     said = json.loads(path.read_text(encoding="utf-8"))
     for room in said["rooms"]:
         for group in room["objects"]:
             for spot in group["positions"]:
                 spot["u"] ^= 1
     path.write_text(json.dumps(said, indent=1) + "\n", encoding="utf-8")
-    path = knightlore / "specials.json"
+    path = layout.metadata(knightlore) / "specials.json"
     said = json.loads(path.read_text(encoding="utf-8"))
     for place in said["collectables"]:
         place["u"] ^= 1
@@ -194,9 +189,10 @@ def castle_policy():
 def read_carried_sheet():
     """The carried sheet: its sprites in sheet order with their rows, trims and
     a graphic number that draws each."""
+    meta = layout.metadata(KNIGHTLORE)
     _tree, entries, facts = sheet.read_sheet_files(
-        sprite_sheet, KNIGHTLORE / "sprites.json", KNIGHTLORE / "graphics.json")
-    rows = sheet.read_sheet(KNIGHTLORE / "sprites.png", entries, facts["palette"])
+        sprite_sheet, meta / "sprites.json", meta / "graphics.json")
+    rows = sheet.read_sheet(layout.art(KNIGHTLORE) / "sprites.png", entries, facts["palette"])
     trims = {}
 
     def walk(node, path):
@@ -205,7 +201,7 @@ def read_carried_sheet():
         for group, sub in (node.get("group") or {}).items():
             walk(sub, path + [group])
 
-    walk(json.loads((KNIGHTLORE / "sprites.json").read_text(encoding="utf-8")), [])
+    walk(json.loads((meta / "sprites.json").read_text(encoding="utf-8")), [])
     graphic_of = {}
     for graphic, n in enumerate(facts["graphicMap"]):
         if n is not None:
@@ -362,7 +358,7 @@ def add_castle(original):
         if at > end:
             sys.exit("the carried templates run past $%04X" % end)
 
-    said = json.loads((KNIGHTLORE / "specials.json").read_text(encoding="utf-8"))
+    said = json.loads((layout.metadata(KNIGHTLORE) / "specials.json").read_text(encoding="utf-8"))
     for row, place in enumerate(said["collectables"]):
         put(kl_extract.SPECIALS_TBL + row * SPECIALS_STRIDE + 1,
             (place["u"], place["v"], place["z"], place["room"]))
@@ -376,19 +372,21 @@ def check_test_original(where, original):
     knightlore = copy_game(where)
     path = where / "original.sna"
     path.write_bytes(original)
-    run(knightlore, "kl_extract.py", str(path))
-    run(knightlore, "rooms.py")
-    run(knightlore, "sprite_sheet.py")
-    made = Image.open(knightlore / "sprites.png").convert("RGBA")
-    carried = Image.open(KNIGHTLORE / "sprites.png").convert("RGBA")
+    run(knightlore, "scripts/kl_extract.py", str(path))
+    run(knightlore, "scripts/rooms.py")
+    run(knightlore, "scripts/sprite_sheet.py")
+    made = Image.open(layout.art(knightlore) / "sprites.png").convert("RGBA")
+    carried = Image.open(layout.art(KNIGHTLORE) / "sprites.png").convert("RGBA")
     if made.size != carried.size or made.tobytes() != carried.tobytes():
         sys.exit("the test original does not extract to the carried sprites.png")
     for name in ("sprites.json", "graphics.json", "rooms.json", "templates.json",
                  "specials.json"):
-        if (json.loads((knightlore / name).read_text(encoding="utf-8"))
-                != json.loads((KNIGHTLORE / name).read_text(encoding="utf-8"))):
+        if (json.loads((layout.metadata(knightlore) / name).read_text(encoding="utf-8"))
+                != json.loads((layout.metadata(KNIGHTLORE) / name).read_text(encoding="utf-8"))):
             sys.exit(f"the test original does not extract to the carried {name}")
-    return {name: hashlib.sha256((knightlore / name).read_bytes()).hexdigest()
+    # Keyed by the file's own name, as web/tests/knightlore_test.js looks
+    # them up, not by its path in the game's folder as original.json is.
+    return {name: hashlib.sha256((layout.extracted(knightlore) / name).read_bytes()).hexdigest()
             for name in ("font.bin", "sprite_data.bin")}
 
 
@@ -399,7 +397,7 @@ def check_carried_is_the_originals():
     castle has been edited -- which is what they are for -- no copy gives it,
     and the page would turn every one away; so that stops the build here, the
     way original.json's carried hashes stop a release."""
-    pins = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))
+    pins = json.loads((layout.metadata(KNIGHTLORE) / "original.json").read_text(encoding="utf-8"))
     changed = edited(KNIGHTLORE, pins)
     if changed:
         sys.exit(", ".join(changed) + " no longer what an original gives (original.json's "
@@ -447,7 +445,7 @@ def main():
         # them; and the sheet's pixels change nothing else.
         image = bytearray(ram)
         image[font_span[0]:font_span[0] + FONT_LENGTH] = bytes(FONT_LENGTH)
-        spans, layout = [], []
+        spans, places = [], []
         for sprite in sprites:
             at = found.get(sprite["label"])
             if at is None:
@@ -461,7 +459,7 @@ def main():
                          "would write them")
             image[offset + 2:offset + 2 + len(rows)] = bytes(len(rows))
             spans.append((offset + 2, len(rows)))
-            layout.append({"graphic": sprite["graphic"], "at": at + 2,
+            places.append({"graphic": sprite["graphic"], "at": at + 2,
                            "w": sprite["w"], "h": sprite["h"], "trim": sprite["trim"]})
         changed = differences(ram, ram_c)
         stray = outside(spans, changed)
@@ -506,7 +504,8 @@ def main():
             add_castle(original)
             pins = check_test_original(temp / "d", original)
 
-    extracted = json.loads((KNIGHTLORE / "original.json").read_text(encoding="utf-8"))["extracted"]
+    extracted = json.loads((layout.metadata(KNIGHTLORE) / "original.json")
+                           .read_text(encoding="utf-8"))["extracted"]
     out = Path(args.out) / "knightlore"
     out.mkdir(parents=True, exist_ok=True)
     (out / "template.bin").write_bytes(bytes(image))
@@ -518,7 +517,7 @@ def main():
         "font_at": font_at,
         "font_source": FONT_SOURCE,
         "font_length": FONT_LENGTH,
-        "font_sha256": extracted["font.bin"],
+        "font_sha256": extracted["extracted/font.bin"],
         "sprites_start": kl_extract.SPRITES_START,
         "sprites_end": kl_extract.SPRITES_END,
         "sprite_table": kl_extract.SPRITE_TBL,
@@ -560,10 +559,10 @@ def main():
             "sha256": hashlib.sha256(specials_bytes).hexdigest(),
         },
         "template_sha256": hashlib.sha256(bytes(image)).hexdigest(),
-        "sprites": layout,
+        "sprites": places,
     }, indent=1) + "\n", encoding="utf-8")
     print(f"wrote {out}: start ${found['start']:04X}, the font at ${font_at:04X} and "
-          f"{len(layout)} sprites to come from the original")
+          f"{len(places)} sprites to come from the original")
 
     if args.reference:
         reference = Path(args.reference)

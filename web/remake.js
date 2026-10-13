@@ -103,7 +103,7 @@
     }
 
     /// The 64K address space from a 48K .sna or .z80, the ROM left as zeros:
-    /// examples/filmation/original.py's load_snapshot, in the browser.
+    /// examples/filmation/scripts/original.py's load_snapshot, in the browser.
     function readSnapshot(raw, name) {
         const suffix = String(name || '').toLowerCase().split('.').pop();
         if (suffix === 'sna') {

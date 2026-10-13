@@ -32,6 +32,13 @@ and gives back the `knightlore.z80` that
 download, or to play: **Play it** puts it where the emulator page keeps its
 last snapshot and opens that page.
 
+The scripts named below are the game's own, in
+`examples/filmation/knightlore/scripts/` (Pentagram's in
+`pentagram/scripts/`), and `original.py` and `extract.py` are the ones the
+games share, in `examples/filmation/scripts/`. The template scripts build in
+a copy of `examples/filmation` that leaves out every game's `generated/` and
+`extracted/`, so nothing a local extraction left there reaches the site.
+
 The site has the remake with everything of Ultimate's left out -- the font,
 the sprites, the "DAY" lettering, the castle and the collectables -- and the
 page takes them from the visitor's copy. It needs no assembler, because
@@ -65,8 +72,8 @@ none of them changes the layout of the image, only bytes within it:
 - **The collectables** are four bytes of each of the 32 rows at `$6FF2` and
   the wizard's list at `$C27D`, copied as they are.
 
-The page checks the font against `knightlore/original.json`'s hash, and
-everything else against hashes of what the build puts in the image -- the
+The page checks the font against `knightlore/metadata/original.json`'s hash,
+and everything else against hashes of what the build puts in the image -- the
 castle along with the three counts the code is sized by. It does not check `sprite_data.bin`'s hash, as `extract.py` does:
 that covers bits of every record the build never reads -- the flags in a
 sprite's width byte, which the game leaves set or not depending on when the
@@ -93,9 +100,9 @@ game's -- and runs the real `kl_extract.py`, `rooms.py` and
 `sprite_sheet.py` on it: they must give back the carried sprite sheet,
 castle and collectables.
 `web/tests/knightlore_test.js` gives the page that original, in every form of
-48K snapshot (read as `examples/filmation/original.py` reads them, checked
-against it), and the page has to make the `.z80` `build.py` made, byte for
-byte.
+48K snapshot (read as `examples/filmation/scripts/original.py` reads them,
+checked against it), and the page has to make the `.z80` `build.py` made,
+byte for byte.
 
 The remake's encoding of the castle is therefore written twice, in
 `rooms_source.py` and in `remake.js`. The test is what keeps them together:
@@ -142,9 +149,10 @@ few numbers -- the highest note and the six tunes' lengths, not the tunes --
 are in `web/pentagram_layout.json`, read once from a copy `extract.py` checks
 out; the page checks every copy it is given against them.
 
-The page checks the font, quest and sound against `pentagram/original.json`'s
-hashes of what `pg_extract.py` extracts, and the sprites and castle against
-hashes of what the build puts in the image. `web/pentagram_template.py`
+The page checks the font, quest and sound against
+`pentagram/metadata/original.json`'s hashes of what `pg_extract.py`
+extracts, and the sprites and castle against hashes of what the build puts
+in the image. `web/pentagram_template.py`
 builds four ways -- blanks; the font, quest and sound patterned; the sheet's
 ink and paper swapped; the castle's positions moved -- and stops unless
 each changes only what the page fills in. Its test tape is made from the

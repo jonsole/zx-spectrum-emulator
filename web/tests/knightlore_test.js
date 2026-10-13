@@ -13,7 +13,7 @@
 // sheet, castle and collectables: as far as the build is concerned it is
 // Knight Lore, with a patterned font. So given it, the page has to make the .z80 build.py made with that
 // font, byte for byte -- in every form of 48K snapshot, read as
-// examples/filmation/original.py reads them, which is checked against
+// examples/filmation/scripts/original.py reads them, which is checked against
 // original.py itself.
 'use strict';
 
@@ -101,7 +101,8 @@ function originalPy(file) {
     ].join('\n');
     const python = process.env.PYTHON || 'python3';
     return childProcess.execFileSync(python, ['-I', '-c', script,
-                                              path.join(ROOT, 'examples', 'filmation'), file],
+                                              path.join(ROOT, 'examples', 'filmation', 'scripts'),
+                                              file],
                                      { encoding: 'utf8' }).trim();
 }
 

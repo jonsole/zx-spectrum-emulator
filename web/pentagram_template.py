@@ -59,7 +59,6 @@ working tree is left as it was.
 import argparse
 import hashlib
 import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -69,12 +68,16 @@ ROOT = WEB.parent
 FILMATION = ROOT / "examples" / "filmation"
 PENTAGRAM = FILMATION / "pentagram"
 
+# The Python the Filmation games share is in examples/filmation/scripts, and
+# Pentagram's own in pentagram/scripts; layout.py says where in the game's
+# folder everything else is.
 sys.path.insert(0, str(WEB))
-sys.path.insert(0, str(FILMATION))
-sys.path.insert(0, str(PENTAGRAM))
-from filmation_common import (differences, edited, emitted_rows,   # noqa: E402
-                              labels, outside, run)
+sys.path.insert(0, str(FILMATION / "scripts"))
+sys.path.insert(0, str(PENTAGRAM / "scripts"))
+from filmation_common import (copy_filmation, differences, edited,   # noqa: E402
+                              emitted_rows, labels, outside, run)
 import castle                                                   # noqa: E402
+import layout                                                   # noqa: E402
 import pg_extract                                               # noqa: E402
 import rooms as rooms_py                                        # noqa: E402
 import rooms_source                                             # noqa: E402
@@ -134,13 +137,7 @@ def sound_bin(pattern):
 # --- building ---------------------------------------------------------------
 
 def copy_game(where):
-    game = where / "filmation"
-    shutil.copytree(FILMATION, game, ignore=shutil.ignore_patterns("output", "__pycache__"))
-    pentagram = game / "pentagram"
-    for stale in ("font.png", "font.json", "font.s", "quest_data.s", "sound_data.s",
-                  "sound_title.s", "sprite_data.bin", "graphic_map.json", "room_data.bin"):
-        (pentagram / stale).unlink(missing_ok=True)
-    return pentagram
+    return copy_filmation(FILMATION, where) / "pentagram"
 
 
 def build(where, pattern=False, swap_ink=False, move_things=False):
@@ -148,11 +145,13 @@ def build(where, pattern=False, swap_ink=False, move_things=False):
     patterned, the sheet's ink and paper swapped and the castle's positions
     moved if asked. Returns the 48K image, its labels, and the .z80."""
     pentagram = copy_game(where)
-    (pentagram / "font.bin").write_bytes(font_bin(pattern))
-    (pentagram / "quest.bin").write_bytes(quest_bin(pattern))
-    (pentagram / "sound.bin").write_bytes(sound_bin(pattern))
+    extracted = layout.extracted(pentagram)
+    extracted.mkdir(exist_ok=True)
+    (extracted / "font.bin").write_bytes(font_bin(pattern))
+    (extracted / "quest.bin").write_bytes(quest_bin(pattern))
+    (extracted / "sound.bin").write_bytes(sound_bin(pattern))
     if swap_ink:
-        swap_ink_and_paper(pentagram / "sprites.png")
+        swap_ink_and_paper(layout.art(pentagram) / "sprites.png")
     if move_things:
         move_positions(pentagram)
     run(pentagram, "build.py")
@@ -181,7 +180,7 @@ def swap_ink_and_paper(path):
 def move_positions(pentagram):
     """Every object in every room a cell along in U: nothing the castle's
     shape or counts depend on changes, and everything that is a position does."""
-    path = pentagram / "rooms.json"
+    path = layout.metadata(pentagram) / "rooms.json"
     said = json.loads(path.read_text(encoding="utf-8"))
     for room in said["rooms"]:
         for group in room["objects"]:
@@ -196,9 +195,10 @@ def read_carried_sheet():
     """The carried sheet's sprites in sheet order -- which is the game's own --
     with their rows and trims, and for each one a graphic that draws it, or
     None for the two no graphic does."""
+    meta = layout.metadata(PENTAGRAM)
     _tree, entries, facts = sheet.read_sheet_files(
-        sprite_sheet, PENTAGRAM / "sprites.json", PENTAGRAM / "graphics.json")
-    rows = sheet.read_sheet(PENTAGRAM / "sprites.png", entries, facts["palette"])
+        sprite_sheet, meta / "sprites.json", meta / "graphics.json")
+    rows = sheet.read_sheet(layout.art(PENTAGRAM) / "sprites.png", entries, facts["palette"])
     trims = {}
 
     def walk(node, path):
@@ -207,7 +207,7 @@ def read_carried_sheet():
         for group, sub in (node.get("group") or {}).items():
             walk(sub, path + [group])
 
-    walk(json.loads((PENTAGRAM / "sprites.json").read_text(encoding="utf-8")), [])
+    walk(json.loads((meta / "sprites.json").read_text(encoding="utf-8")), [])
     graphic_of = {}
     for graphic, n in enumerate(facts["graphicMap"]):
         if n is not None:
@@ -425,22 +425,26 @@ def check_test_tape(where, tape):
     pentagram = copy_game(where)
     path = where / "pentagram.tap"
     path.write_bytes(tape)
-    run(pentagram, "pg_extract.py", str(path))
-    run(pentagram, "rooms.py")
-    run(pentagram, "sprite_sheet.py")
-    made = Image.open(pentagram / "sprites.png").convert("RGBA")
-    carried = Image.open(PENTAGRAM / "sprites.png").convert("RGBA")
+    run(pentagram, "scripts/pg_extract.py", str(path))
+    run(pentagram, "scripts/rooms.py")
+    run(pentagram, "scripts/sprite_sheet.py")
+    made = Image.open(layout.art(pentagram) / "sprites.png").convert("RGBA")
+    carried = Image.open(layout.art(PENTAGRAM) / "sprites.png").convert("RGBA")
     if made.size != carried.size or made.tobytes() != carried.tobytes():
         sys.exit("the test tape does not extract to the carried sprites.png")
     for name in ("sprites.json", "graphics.json", "rooms.json", "templates.json"):
-        if (json.loads((pentagram / name).read_text(encoding="utf-8"))
-                != json.loads((PENTAGRAM / name).read_text(encoding="utf-8"))):
+        if (json.loads((layout.metadata(pentagram) / name).read_text(encoding="utf-8"))
+                != json.loads((layout.metadata(PENTAGRAM) / name).read_text(encoding="utf-8"))):
             sys.exit(f"the test tape does not extract to the carried {name}")
-    pins = json.loads((PENTAGRAM / "original.json").read_text(encoding="utf-8"))["extracted"]
-    made = hashlib.sha256((pentagram / "sprite_data.bin").read_bytes()).hexdigest()
-    if made != pins["sprite_data.bin"]:
+    pins = json.loads((layout.metadata(PENTAGRAM) / "original.json")
+                      .read_text(encoding="utf-8"))["extracted"]
+    extracted = layout.extracted(pentagram)
+    made = hashlib.sha256((extracted / "sprite_data.bin").read_bytes()).hexdigest()
+    if made != pins["extracted/sprite_data.bin"]:
         sys.exit("the test tape's sprites are not original.json's sprite_data.bin")
-    return {name: hashlib.sha256((pentagram / name).read_bytes()).hexdigest()
+    # Keyed by the file's own name, as web/tests/pentagram_test.js looks them
+    # up, not by its path in the game's folder as original.json is.
+    return {name: hashlib.sha256((extracted / name).read_bytes()).hexdigest()
             for name in ("font.bin", "quest.bin", "sound.bin")}
 
 
@@ -452,7 +456,7 @@ def main():
                         help="where to write what web/tests/pentagram_test.js checks against")
     args = parser.parse_args()
 
-    pins = json.loads((PENTAGRAM / "original.json").read_text(encoding="utf-8"))
+    pins = json.loads((layout.metadata(PENTAGRAM) / "original.json").read_text(encoding="utf-8"))
     changed = edited(PENTAGRAM, pins)
     if changed:
         sys.exit(", ".join(changed) + " no longer what an original gives (original.json's "
@@ -498,7 +502,7 @@ def main():
 
         # The sprites: each one's rows where its label says, as the sheet has
         # them; and the sheet's pixels change nothing else.
-        spans, layout, rows = [], [], b""
+        spans, places, rows = [], [], b""
         for sprite in sprites:
             if sprite["graphic"] is None:
                 if sprite["label"] in found:
@@ -517,7 +521,7 @@ def main():
             image[offset + 2:offset + 2 + len(emitted)] = bytes(len(emitted))
             spans.append((offset + 2, len(emitted)))
             rows += emitted
-            layout.append({"graphic": sprite["graphic"], "at": at + 2,
+            places.append({"graphic": sprite["graphic"], "at": at + 2,
                            "w": sprite["w"], "h": sprite["h"], "trim": sprite["trim"]})
         changed = differences(ram, ram_c)
         stray = outside(spans, changed)
@@ -559,7 +563,7 @@ def main():
         "game_start": pg_extract.GAME_START,
         "game_name": pg_extract.GAME_NAME,
         "font": {"source": pg_extract.FONT_START, "length": FONT_LENGTH,
-                 "at": found["font"], "sha256": extracted["font.bin"]},
+                 "at": found["font"], "sha256": extracted["extracted/font.bin"]},
         "quest": {"table": pg_extract.QUEST_TABLE, "records": QUEST_RECORDS,
                   "record_length": pg_extract.QUEST_TABLE_LEN // QUEST_RECORDS,
                   "kept": QUEST_KEPT,
@@ -567,7 +571,7 @@ def main():
                   "targets": pg_extract.QUEST_TARGETS,
                   "targets_length": pg_extract.QUEST_TARGETS_LEN,
                   "at": found["quest_start"], "spots_at": found["quest_spots"],
-                  "targets_at": found["quest_targets"], "sha256": extracted["quest.bin"]},
+                  "targets_at": found["quest_targets"], "sha256": extracted["extracted/quest.bin"]},
         "sound": {"jingles": pg_extract.SOUND_JINGLES,
                   "jingles_length": pg_extract.SOUND_JINGLES_LEN,
                   "notes": pg_extract.SOUND_NOTES, "tunes": pg_extract.SOUND_TUNES,
@@ -577,7 +581,7 @@ def main():
                   "jingles_at": found["sound_jingles"], "notes_at": found["sound_notes"],
                   "tune_at": {name: found["sound_tune_%s_data" % name]
                               for name in PLAYED + ("title",)},
-                  "sha256": extracted["sound.bin"]},
+                  "sha256": extracted["extracted/sound.bin"]},
         "sprite_runs": pg_extract.SPRITE_RUNS,
         "sprite_table": pg_extract.GRAPHIC_TBL,
         "sprite_table_end": pg_extract.GRAPHIC_TBL_END,
@@ -587,7 +591,7 @@ def main():
         # pg_extract.py refuses it.
         "flags_mask": pg_extract.MIRRORED,
         "sprite_rows_sha256": hashlib.sha256(rows).hexdigest(),
-        "sprites": layout,
+        "sprites": places,
         "castle": dict(castle_policy(), **{
             "size_table": rooms_py.ROOM_SIZE_TBL,
             "directory": rooms_py.ROOM_DIR,
@@ -610,7 +614,7 @@ def main():
         }),
         "template_sha256": hashlib.sha256(bytes(image)).hexdigest(),
     }, indent=1) + "\n", encoding="utf-8")
-    print(f"wrote {out}: start ${found['start']:04X}, {len(layout)} sprites, the font, "
+    print(f"wrote {out}: start ${found['start']:04X}, {len(places)} sprites, the font, "
           "castle, quest and sound to come from the original")
 
     if args.reference:

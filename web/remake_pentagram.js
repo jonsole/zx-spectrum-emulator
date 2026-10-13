@@ -24,7 +24,7 @@
     // --- the copy ----------------------------------------------------------------
 
     /// A .tap's or .tzx's data blocks, flag and checksum included:
-    /// examples/filmation/original.py's tape_blocks.
+    /// examples/filmation/scripts/original.py's tape_blocks.
     function tapeBlocks(raw, name) {
         const blocks = [];
         if (name.toLowerCase().endsWith('.tap')) {
