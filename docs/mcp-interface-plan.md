@@ -317,7 +317,8 @@ with `zx-live-verify` as well as CTest.
    CURCHL, at &09F4 in the 48K ROM, while the 48K BASIC ROM is paged in.
    Expand keyword tokens the way the ROM does: it reprints them through the
    same routine, so record printable characters and skip the token code.
-   CLS (`CL-ALL`) is a break, and AT/TAB parameters are skipped. A
+   CLS (`CL-ALL`) is a break, and AT/TAB parameters are skipped. On a 128K
+   only ROM 1's PRINT-OUT is captured (see 9.3). A
    capture-only breakpoint kind on the CPU's fetch, like a logpoint that
    records instead of formatting. New `cpp-core/src/text_capture.{h,cpp}`.
    *Tests:* CTest against the real ROM (skipped without `roms/48.rom`):
@@ -423,7 +424,7 @@ with `zx-live-verify` as well as CTest.
   updated in the same change that deprecates them.
 - The BBC server is unreleased, so it changes without aliases.
 
-## 9. Decisions and open questions
+## 9. Decisions
 
 1. **Hex notation: decided.** Each machine reports addresses and values in
    its own notation: `&1900` on the BBC, `$1900` on the Spectrum. Both
@@ -433,17 +434,16 @@ with `zx-live-verify` as well as CTest.
    blocks until the machine stops, and `run(wait: false)` starts it and
    returns. The new `timeout_secs` (default 30) bounds the blocking form.
    On the BBC, `run(wait_ms)` becomes this.
-3. **Text capture on the 128K: open.** On a 48K, everything printed on the
-   main screen goes through PRINT-OUT (&09F4), so capturing there catches
-   it all. A 128K has two ROMs. ROM 1 is the 48K BASIC ROM, and it holds
+3. **Text capture on the 128K: decided.** On a 48K, everything printed on
+   the main screen goes through PRINT-OUT (&09F4), so capturing there
+   catches it all. A 128K has two ROMs. ROM 1 is the 48K BASIC ROM and holds
    PRINT-OUT, so a program's `PRINT` is still caught there (the capture
-   must check that ROM 1 is the one paged in). ROM 0 is the 128K editor and
-   menu, and may draw the menu and the line being typed with its own
-   routines, which a PRINT-OUT capture would miss. The question is whether
-   `output` on a 128K may miss what the editor and menu draw, as long as it
-   catches what programs print. `get_screen_text` would still show the
-   editor's text, since it reads the screen. The plan assumes it may, and
-   item 5.4 checks ROM 0 to confirm what is missed.
+   checks that ROM 1 is the one paged in). ROM 0, the 128K editor and menu,
+   may draw the menu and the line being typed with its own routines, which
+   this capture misses. That gap is accepted: on a 128K, `output` carries
+   what programs print, and `get_screen_text`, which reads the screen,
+   shows the editor's and menu's text. Item 5.4 confirms against ROM 0
+   what is missed, and `docs/mcp.md` says so; it does not capture in ROM 0.
 4. **Tool count: decided.** The Spectrum keeps its own tools (rewind,
    video, trace, views, profile) in the MCP list as they are. It will have
    about 60.
