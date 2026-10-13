@@ -152,45 +152,6 @@ json registers_json(const Registers& r) {
                 {"im", r.im}, {"wz", r.wz}};
 }
 
-/// The registers as a person reads them: hex in the Spectrum's notation, PC
-/// with its symbol, the flags spelled out, the instruction PC is at, and the
-/// counters that say how far the machine has got. registers_json is the raw
-/// form, for a script that wants numbers.
-json readable_registers_json(Engine& engine, const Sources& sources) {
-    const MachineState s = engine.state();
-    const Registers& r = s.registers;
-    // PC from the state, not Registers::pc: the overlapped fetch leaves the
-    // latter one behind (see AGENTS.md), and the state has already corrected it.
-    const std::vector<uint8_t> code = engine.read_memory(s.pc, 4);
-    const ReadFn read = [&code, &s](uint16_t a) {
-        const size_t i = size_t(uint16_t(a - s.pc));
-        return i < code.size() ? code[i] : uint8_t(0);
-    };
-    const Instruction instruction = disassemble_one(read, s.pc);
-    return json{{"pc", describe_address(sources, s.pc)},
-                {"sp", dollar_hex(r.sp, 4)},
-                {"af", dollar_hex(r.af(), 4)},
-                {"bc", dollar_hex(r.bc(), 4)},
-                {"de", dollar_hex(r.de(), 4)},
-                {"hl", dollar_hex(r.hl(), 4)},
-                {"ix", dollar_hex(r.ix, 4)},
-                {"iy", dollar_hex(r.iy, 4)},
-                {"af_", dollar_hex(uint16_t((r.a_ << 8) | r.f_), 4)},
-                {"bc_", dollar_hex(uint16_t((r.b_ << 8) | r.c_), 4)},
-                {"de_", dollar_hex(uint16_t((r.d_ << 8) | r.e_), 4)},
-                {"hl_", dollar_hex(uint16_t((r.h_ << 8) | r.l_), 4)},
-                {"i", dollar_hex(r.i, 2)},
-                {"r", dollar_hex(r.r, 2)},
-                {"im", r.im},
-                {"iff1", bool(r.iff1)},
-                {"iff2", bool(r.iff2)},
-                {"flags", flags_string(r.f)},
-                {"instruction", annotate_symbols(instruction.text, sources)},
-                {"halted", s.halted},
-                {"frame_count", s.frame_count},
-                {"tstate", s.tstate}};
-}
-
 /// "1x", "0.5x", "10x" -- trailing zeros trimmed, because a speed picker
 /// showing "0.50x" reads like a precision that is not there.
 std::string describe_multiplier(double multiplier) {
@@ -320,18 +281,25 @@ json watch_stop_json(const WatchStop& stop) {
                 {"pc", stop.pc}};
 }
 
+/// The 128K's paging register, decoded; null on a 48K, which has none.
+json paging_json(const MachineState& s) {
+    if (s.model != Model::Spectrum128) {
+        return json(nullptr);
+    }
+    return json{{"port_7ffd", s.paging},
+                {"rom", (s.paging & PAGING_ROM1) != 0 ? 1 : 0},
+                {"bank_at_c000", s.paging & PAGING_BANK_MASK},
+                {"screen_bank", (s.paging & PAGING_SHADOW_SCREEN) != 0 ? 7 : 5},
+                {"locked", (s.paging & PAGING_LOCK) != 0}};
+}
+
 json state_json(const MachineState& s) {
-    json paging = json{{"port_7ffd", s.paging},
-                       {"rom", (s.paging & PAGING_ROM1) != 0 ? 1 : 0},
-                       {"bank_at_c000", s.paging & PAGING_BANK_MASK},
-                       {"screen_bank", (s.paging & PAGING_SHADOW_SCREEN) != 0 ? 7 : 5},
-                       {"locked", (s.paging & PAGING_LOCK) != 0}};
     return json{{"pc", s.pc},
                 {"registers", registers_json(s.registers)},
                 {"halted", s.halted},
                 {"running", s.running},
                 {"model", model_name(s.model)},
-                {"paging", s.model == Model::Spectrum128 ? paging : json(nullptr)},
+                {"paging", paging_json(s)},
                 {"border", s.border},
                 {"tstate", s.tstate},
                 {"frame_count", s.frame_count},
@@ -346,6 +314,46 @@ json state_json(const MachineState& s) {
 #endif
                 {"in_past", s.in_past},
                 {"behind_tstates", s.behind_hc / HC_PER_TSTATE}};
+}
+
+/// The registers as a person reads them: hex in the Spectrum's notation, PC
+/// with its symbol, the flags spelled out, the instruction PC is at, and the
+/// counters that say how far the machine has got. registers_json is the raw
+/// form, for a script that wants numbers.
+json readable_registers_json(Engine& engine, const Sources& sources) {
+    const MachineState s = engine.state();
+    const Registers& r = s.registers;
+    // PC from the state, not Registers::pc: the overlapped fetch leaves the
+    // latter one behind (see AGENTS.md), and the state has already corrected it.
+    const std::vector<uint8_t> code = engine.read_memory(s.pc, 4);
+    const ReadFn read = [&code, &s](uint16_t a) {
+        const size_t i = size_t(uint16_t(a - s.pc));
+        return i < code.size() ? code[i] : uint8_t(0);
+    };
+    const Instruction instruction = disassemble_one(read, s.pc);
+    return json{{"pc", describe_address(sources, s.pc)},
+                {"sp", dollar_hex(r.sp, 4)},
+                {"af", dollar_hex(r.af(), 4)},
+                {"bc", dollar_hex(r.bc(), 4)},
+                {"de", dollar_hex(r.de(), 4)},
+                {"hl", dollar_hex(r.hl(), 4)},
+                {"ix", dollar_hex(r.ix, 4)},
+                {"iy", dollar_hex(r.iy, 4)},
+                {"af_", dollar_hex(uint16_t((r.a_ << 8) | r.f_), 4)},
+                {"bc_", dollar_hex(uint16_t((r.b_ << 8) | r.c_), 4)},
+                {"de_", dollar_hex(uint16_t((r.d_ << 8) | r.e_), 4)},
+                {"hl_", dollar_hex(uint16_t((r.h_ << 8) | r.l_), 4)},
+                {"i", dollar_hex(r.i, 2)},
+                {"r", dollar_hex(r.r, 2)},
+                {"im", r.im},
+                {"iff1", bool(r.iff1)},
+                {"iff2", bool(r.iff2)},
+                {"flags", flags_string(r.f)},
+                {"instruction", annotate_symbols(instruction.text, sources)},
+                {"halted", s.halted},
+                {"paging", paging_json(s)},
+                {"frame_count", s.frame_count},
+                {"tstate", s.tstate}};
 }
 
 #if ZX_REWIND
@@ -804,8 +812,28 @@ json tools_list() {
                                   {"items", json{{"type", "integer"}}},
                                   {"description", "The bytes: hex (\"3E 41 C9\", spaces "
                                                   "optional) or an array of numbers 0-255."}}},
-                    {"data_hex", string_prop("Deprecated name for data, as hex.")}},
+                    {"data_hex", string_prop("Deprecated name for data, as hex.")},
+                    {"bank", integer_prop("RAM bank 0-7 to write directly, ignoring paging, "
+                                          "with address an offset 0..16383 within it -- as "
+                                          "read_memory takes it.")}},
                {"address", "data"}));
+    add("set_paging",
+        "Change a 128K's paging (port 0x7FFD) as a debugger: which RAM bank is at 0xC000, which "
+        "ROM is in (0, the 128 editor; 1, 48K BASIC), which screen is shown (bank 5 or 7), and "
+        "the lock. Name only what should change; the rest stays as it is. A program that has "
+        "locked its paging (as 48K mode does) keeps it locked unless force is true. Takes "
+        "effect at once, at the next yield on a running machine, so set it on a stopped one. "
+        "get_state and get_registers report the paging; read_memory and write_memory with bank "
+        "reach any bank without changing it.",
+        schema(json{{"bank", integer_prop("RAM bank 0-7 to page in at 0xC000.")},
+                    {"rom", integer_prop("ROM 0 (128 editor and menu) or 1 (48K BASIC).")},
+                    {"screen", integer_prop("Screen bank shown: 5 (normal) or 7 (shadow).")},
+                    {"lock", bool_prop("Lock the paging until the next reset, as 48K mode "
+                                       "does.")},
+                    {"port_7ffd", integer_prop("Or the whole register value at once, instead "
+                                               "of the fields.")},
+                    {"force", bool_prop("Change it even though the program has locked it.")}},
+               {}));
     add("get_registers",
         "The Z80's registers: hex, PC with the symbol it is in, the flags spelled out (SZ5H3PNC, "
         "- for clear), the instruction at PC, and the frame and T-state counters. raw: true "
@@ -1756,9 +1784,72 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             return error_result("'data' is required: hex (\"3E 41 C9\") or an array of numbers");
         }
         const size_t count = data.size();
+        const std::string bytes = std::to_string(count) + " byte" + (count == 1 ? "" : "s");
+        const json& bank = arg(args, "bank");
+        if (!bank.is_null()) {
+            if (!bank.is_number_integer() || bank.get<int64_t>() < 0
+                || bank.get<int64_t>() >= int64_t(RAM_BANKS)) {
+                return error_result("'bank' must be a RAM bank number 0..7");
+            }
+            if (addr >= BANK_SIZE) {
+                return error_result(
+                    "with 'bank', 'address' is an offset within the 16K bank (0..16383)");
+            }
+            engine.write_bank(uint8_t(bank.get<int64_t>()), addr, std::move(data));
+            return text_result("wrote " + bytes + " at offset " + dollar_hex(addr, 4)
+                               + " of bank " + std::to_string(bank.get<int64_t>()));
+        }
         engine.write_memory(addr, std::move(data));
-        return text_result("wrote " + std::to_string(count) + " byte" + (count == 1 ? "" : "s")
-                           + " at " + describe_address(sources, addr));
+        return text_result("wrote " + bytes + " at " + describe_address(sources, addr));
+    }
+
+    if (name == "set_paging") {
+        const MachineState before = engine.state();
+        uint8_t value = before.paging;
+        const json& whole = arg(args, "port_7ffd");
+        if (!whole.is_null()) {
+            if (!whole.is_number_integer() || whole.get<int64_t>() < 0
+                || whole.get<int64_t>() > 255) {
+                return error_result("'port_7ffd' must be a byte, 0..255");
+            }
+            value = uint8_t(whole.get<int64_t>());
+        }
+        const json& bank = arg(args, "bank");
+        if (!bank.is_null()) {
+            if (!bank.is_number_integer() || bank.get<int64_t>() < 0 || bank.get<int64_t>() > 7) {
+                return error_result("'bank' must be a RAM bank number 0..7");
+            }
+            value = uint8_t((value & ~PAGING_BANK_MASK) | bank.get<int64_t>());
+        }
+        const json& rom = arg(args, "rom");
+        if (!rom.is_null()) {
+            if (!rom.is_number_integer() || (rom.get<int64_t>() != 0 && rom.get<int64_t>() != 1)) {
+                return error_result("'rom' must be 0 or 1");
+            }
+            value = uint8_t(rom.get<int64_t>() == 1 ? value | PAGING_ROM1 : value & ~PAGING_ROM1);
+        }
+        const json& screen = arg(args, "screen");
+        if (!screen.is_null()) {
+            if (!screen.is_number_integer()
+                || (screen.get<int64_t>() != 5 && screen.get<int64_t>() != 7)) {
+                return error_result("'screen' must be 5 or 7");
+            }
+            value = uint8_t(screen.get<int64_t>() == 7 ? value | PAGING_SHADOW_SCREEN
+                                                       : value & ~PAGING_SHADOW_SCREEN);
+        }
+        const json& lock = arg(args, "lock");
+        if (lock.is_boolean()) {
+            value = uint8_t(lock.get<bool>() ? value | PAGING_LOCK : value & ~PAGING_LOCK);
+        }
+        const json& force = arg(args, "force");
+        const std::string message =
+            engine.set_paging(value, force.is_boolean() && force.get<bool>());
+        if (!message.empty()) {
+            return error_result(message);
+        }
+        const MachineState after = engine.state();
+        return json_result(json{{"paging", paging_json(after)},
+                                {"described", describe_paging(after.paging)}});
     }
 
     if (name == "get_registers") {

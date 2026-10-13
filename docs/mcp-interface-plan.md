@@ -1,6 +1,7 @@
 # MCP interface plan: the ZX Spectrum and BBC Micro servers
 
-Status: **in progress.** Done so far: the Spectrum's small fixes (5.1). The same document is in both repositories
+Status: **in progress.** Done so far: the Spectrum's small fixes (5.1) and
+its paging tools (5.11.1). The same document is in both repositories
 (`zx-spectrum-emulator/docs/mcp-interface-plan.md` and
 `vs-code-bbc/docs/mcp-interface-plan.md`); change both together.
 
@@ -364,6 +365,35 @@ with `zx-live-verify` as well as CTest.
 10. **Breakpoints** with `condition`, `hit_count` and `log_message`, the
     logpoint tools becoming aliases (DAP's conditions are already there).
     Structured results (2.8).
+
+### 5.11 Banked memory on the 128K
+
+On a 128K, `$C000`-`$FFFF` is whichever of eight RAM banks the paging
+register selects, and `$0000`-`$3FFF` is ROM 0 or ROM 1. (`$4000` is always
+bank 5 and `$8000` always bank 2.) A plain address there is ambiguous, and
+today the server treats it as "whatever is paged in": a breakpoint at
+`$C000` fires in any bank, and source lines and symbols in that range are
+looked up without regard to bank, although sjasmplus's SLD records the page
+of every line.
+
+1. **Reading and changing the paging.** *Done.* `set_paging(bank, rom,
+   screen, lock, port_7ffd, force)` sets the register as a debugger: a
+   program's lock holds unless `force`, and the change is a rewind input, so
+   stepping back past it undoes it. `write_memory(bank)` writes a bank that
+   is not paged in, as `read_memory(bank)` reads one. `get_registers`
+   reports the paging; `get_state` already did.
+2. **Addresses that name a bank.** `"3:$C000"`, or `bank` beside
+   `address`, and `"ROM0:$0038"` for the ROMs. An address without one keeps
+   today's meaning, so nothing written for a 48K changes. A breakpoint,
+   watchpoint or logpoint with a bank fires only when that bank (or ROM) is
+   paged in at the address: one comparison on a hit, nothing while running.
+3. **The SLD's page used.** Source lines and symbols in `$C000`-`$FFFF`
+   are kept per bank, so a source breakpoint in banked code lands in its
+   bank, and where the machine stops is resolved against the bank actually
+   paged in. The DAP side needs the same, so VS Code and MCP agree; and the
+   profiler can then count banked code per bank.
+4. **Reported addresses carry the bank** where it matters: on a 128K, at
+   `$C000` and above, `"3:$C012 (music_play+4)"`.
 
 ## 6. What carries which way
 

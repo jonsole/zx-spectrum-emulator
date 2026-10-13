@@ -498,6 +498,14 @@ public:
     /// banks are reached from outside without paging them in, which would
     /// change the machine being looked at.
     std::vector<uint8_t> read_bank(uint8_t bank, uint16_t offset, size_t length);
+    /// Writes a RAM bank directly, whatever is paged -- read_bank's other
+    /// half. On a 48K only banks 5, 2 and 0 exist ($4000, $8000, $C000).
+    void write_bank(uint8_t bank, uint16_t offset, std::vector<uint8_t> data);
+    /// Writes the 128K's paging register (port 0x7FFD) as a debugger would:
+    /// the RAM bank at 0xC000, the ROM, the screen shown and the lock. A
+    /// program's lock is respected unless `force`. Empty on success, else why
+    /// not: a 48K has no paging, or it is locked.
+    std::string set_paging(uint8_t value, bool force);
     Registers registers();
     Registers set_registers(Registers r);
     MachineState state();

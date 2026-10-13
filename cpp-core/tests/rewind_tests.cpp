@@ -652,6 +652,79 @@ TEST(a_key_pressed_in_the_past_starts_a_new_timeline) {
     CHECK_EQ(m->read_memory(0x9000, 1)[0] & 0x1F, 0x1E);
 }
 
+// A debugger paging a 128K by hand, and writing into a bank that is not paged
+// in, are inputs like a key: undone by going back past them, and done again,
+// at the same moment, by running forward over them.
+TEST(a_debuggers_paging_and_bank_writes_rewind_and_replay) {
+    auto m = std::make_unique<Spectrum>();
+    m->set_model(Model::Spectrum128);
+    // READ_KEYS touches nothing above 0x9000 and no stack, so what is paged at
+    // 0xC000 is the debugger's business alone.
+    m->write_memory(PROGRAM, READ_KEYS.data(), READ_KEYS.size());
+    Registers regs{};
+    regs.pc = PROGRAM;
+    regs.sp = 0xFF00;
+    m->prime_cpu(regs);
+    History h(small_history());
+    h.start(*m);
+    run(*m, h, 20000);
+    const uint8_t before = m->memory.paging();
+    CHECK_EQ(int(before & PAGING_BANK_MASK), 0); // bank 0 after power-on
+
+    RewindInput poke;
+    poke.kind = RewindInputKind::BankMemory;
+    poke.value = 6;
+    poke.addr = 0x0010;
+    poke.bytes = {0x66};
+    h.record(*m, poke);
+    CHECK_EQ(int(m->read_memory(0xC010, 1)[0]), 0); // bank 6 is not paged in yet
+    RewindInput page;
+    page.kind = RewindInputKind::Paging;
+    page.value = uint8_t((before & ~PAGING_BANK_MASK) | 6);
+    h.record(*m, page);
+    CHECK_EQ(int(m->memory.paging() & PAGING_BANK_MASK), 6);
+    CHECK_EQ(int(m->read_memory(0xC010, 1)[0]), 0x66);
+
+    run(*m, h, 20000);
+    const uint64_t head = hash_of(*m);
+    const uint64_t head_hc = m->global_hc();
+
+    h.go_back(*m, RewindOp::ReverseContinue, 0, never); // to the start
+    CHECK_EQ(int(m->memory.paging()), int(before));
+    CHECK_EQ(int(m->memory.bank[6][0x0010]), 0);
+    while (m->global_hc() < head_hc) {
+        m->step_instruction();
+        h.on_instruction(*m);
+    }
+    CHECK_EQ(hash_of(*m), head);
+    CHECK_EQ(int(m->memory.paging() & PAGING_BANK_MASK), 6);
+    CHECK_EQ(int(m->read_memory(0xC010, 1)[0]), 0x66);
+}
+
+// A lock a program set holds against a debugger's plain write, and gives way
+// to a forced one -- in replay as at the time.
+TEST(a_forced_paging_write_passes_a_lock_and_a_plain_one_does_not) {
+    auto m = std::make_unique<Spectrum>();
+    m->set_model(Model::Spectrum128);
+    m->write_memory(PROGRAM, READ_KEYS.data(), READ_KEYS.size());
+    Registers regs{};
+    regs.pc = PROGRAM;
+    regs.sp = 0xFF00;
+    m->prime_cpu(regs);
+    History h(small_history());
+    h.start(*m);
+    m->write_paging(uint8_t(PAGING_LOCK | 1)); // the program locks bank 1 in
+    RewindInput plain;
+    plain.kind = RewindInputKind::Paging;
+    plain.value = 3;
+    h.record(*m, plain);
+    CHECK_EQ(int(m->memory.paging() & PAGING_BANK_MASK), 1);
+    RewindInput forced = plain;
+    forced.addr = 1;
+    h.record(*m, forced);
+    CHECK_EQ(int(m->memory.paging()), 3); // and unlocked, since 3 has no lock bit
+}
+
 TEST(the_window_drops_the_oldest_checkpoints) {
     auto m = machine_running(MAIN, SUB);
     RewindSettings settings;

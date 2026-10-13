@@ -121,6 +121,16 @@ void History::apply(Spectrum& m, const RewindInput& input) {
         case RewindInputKind::TapeFastLoad:
             m.tape.set_fast_load(input.value != 0);
             break;
+        case RewindInputKind::Paging:
+            if (input.addr != 0) {
+                m.load_paging(uint8_t(input.value));
+            } else {
+                m.write_paging(uint8_t(input.value));
+            }
+            break;
+        case RewindInputKind::BankMemory:
+            m.write_bank(uint8_t(input.value), input.addr, input.bytes.data(), input.bytes.size());
+            break;
         case RewindInputKind::RawClocks:
             break; // run by apply_due, not here
     }

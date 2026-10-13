@@ -118,6 +118,15 @@ void Spectrum::load_paging(uint8_t value) {
     ula.set_screen_bank(memory.screen_bank());
 }
 
+void Spectrum::write_bank(uint8_t b, uint16_t offset, const uint8_t* data, size_t length) {
+    if (b >= RAM_BANKS) {
+        return;
+    }
+    for (size_t i = 0; i < length; i++) {
+        memory.bank[b][(offset + i) % BANK_SIZE] = data[i];
+    }
+}
+
 void Spectrum::reset() {
     Registers regs;
     // Before priming, not after: reset() zeroes the ULA's counters, which

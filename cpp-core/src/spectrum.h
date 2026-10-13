@@ -171,6 +171,10 @@ public:
     /// where write_paging (the program's own OUT) rightly leaves a lock be.
     /// Ignored on a 48K, which has no paging to set.
     void load_paging(uint8_t value);
+    /// Writes straight into a RAM bank, whatever is paged in: `offset` is
+    /// within the bank's 16K and the write wraps at its end. Ignored for a
+    /// bank the machine does not have.
+    void write_bank(uint8_t bank, uint16_t offset, const uint8_t* data, size_t length);
 
     /// Last completed frame, RGB, border included.
     const std::vector<uint8_t>& screen() const { return ula.screen(); }

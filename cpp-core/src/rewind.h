@@ -61,6 +61,13 @@ enum class RewindInputKind : uint8_t {
     // stopped machine. Replayed the same way, because the two differ: only
     // step_instruction tracks the call stack and springs the tape trap.
     RawClocks,
+    // A debugger's write to the 128K's paging register: `value` is the byte,
+    // `addr` 1 if it was forced past a lock (Spectrum::load_paging) and 0 if
+    // it was written as the program would (Spectrum::write_paging).
+    Paging,
+    // A debugger's write straight into a RAM bank, whatever is paged:
+    // `value` is the bank, `addr` the offset within it, `bytes` the data.
+    BankMemory,
 };
 
 struct RewindInput {

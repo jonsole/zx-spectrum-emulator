@@ -805,6 +805,52 @@ std::vector<uint8_t> Engine::read_bank(uint8_t bank, uint16_t offset, size_t len
     });
 }
 
+void Engine::write_bank(uint8_t bank, uint16_t offset, std::vector<uint8_t> data) {
+    // Any bank may be the one on screen, so as for write_memory.
+    screen_dirty_.store(true);
+    submit_void([this, bank, offset, data = std::move(data)](Spectrum& m) {
+#if ZX_REWIND
+        RewindInput input;
+        input.kind = RewindInputKind::BankMemory;
+        input.value = bank;
+        input.addr = offset;
+        input.bytes = data;
+        history_.record(m, std::move(input));
+#else
+        m.write_bank(bank, offset, data.data(), data.size());
+#endif
+        publish_screen();
+    });
+}
+
+std::string Engine::set_paging(uint8_t value, bool force) {
+    screen_dirty_.store(true);
+    return submit<std::string>([this, value, force](Spectrum& m) {
+        if (m.model() != Model::Spectrum128) {
+            return std::string("a 48K has no paging to set");
+        }
+        if (m.memory.paging_locked() && !force) {
+            return std::string("the program has locked the paging (bit 5 of port 0x7FFD); pass "
+                               "force to set it anyway");
+        }
+#if ZX_REWIND
+        RewindInput input;
+        input.kind = RewindInputKind::Paging;
+        input.value = value;
+        input.addr = force ? 1 : 0;
+        history_.record(m, std::move(input));
+#else
+        if (force) {
+            m.load_paging(value);
+        } else {
+            m.write_paging(value);
+        }
+#endif
+        publish_screen();
+        return std::string();
+    });
+}
+
 std::string Engine::load_tape(std::vector<uint8_t> data, std::string name, bool auto_start) {
     std::string err = submit<std::string>(
         [this, data = std::move(data), name = std::move(name), auto_start](Spectrum& m) {
