@@ -1,7 +1,7 @@
 # MCP interface plan: the ZX Spectrum and BBC Micro servers
 
 Status: **in progress.** Done so far: the Spectrum's small fixes (5.1) and
-its paging tools (5.11.1). The same document is in both repositories
+banked memory on the 128K (5.11), but for the profiler's counts per bank. The same document is in both repositories
 (`zx-spectrum-emulator/docs/mcp-interface-plan.md` and
 `vs-code-bbc/docs/mcp-interface-plan.md`); change both together.
 
@@ -382,17 +382,18 @@ of every line.
    stepping back past it undoes it. `write_memory(bank)` writes a bank that
    is not paged in, as `read_memory(bank)` reads one. `get_registers`
    reports the paging; `get_state` already did.
-2. **Addresses that name a bank.** `"3:$C000"`, or `bank` beside
+2. **Addresses that name a bank.** *Done.* `"3:$C000"`, or `bank` beside
    `address`, and `"ROM0:$0038"` for the ROMs. An address without one keeps
    today's meaning, so nothing written for a 48K changes. A breakpoint,
    watchpoint or logpoint with a bank fires only when that bank (or ROM) is
    paged in at the address: one comparison on a hit, nothing while running.
-3. **The SLD's page used.** Source lines and symbols in `$C000`-`$FFFF`
+3. **The SLD's page used.** *Done, but for the profiler, which still counts
+   banked code by address.* Source lines and symbols in `$C000`-`$FFFF`
    are kept per bank, so a source breakpoint in banked code lands in its
    bank, and where the machine stops is resolved against the bank actually
    paged in. The DAP side needs the same, so VS Code and MCP agree; and the
    profiler can then count banked code per bank.
-4. **Reported addresses carry the bank** where it matters: on a 128K, at
+4. **Reported addresses carry the bank** *(done)* where it matters: on a 128K, at
    `$C000` and above, `"3:$C012 (music_play+4)"`.
 
 ## 6. What carries which way

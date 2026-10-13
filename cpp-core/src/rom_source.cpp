@@ -108,7 +108,28 @@ size_t file_index(RomSource& out, const std::string& base_dir, const std::string
     return out.files.size() - 1;
 }
 
+/// The page field, or -1: what sjasmplus writes with no device, and anything
+/// unreadable.
+int parse_page_field(const std::string& s) {
+    if (s.empty() || !std::isdigit(uint8_t(s[0]))) {
+        return -1;
+    }
+    return std::atoi(s.c_str());
+}
+
 void parse_sld(const std::string& text, const std::string& base_dir, RomSource& out) {
+    // The page of every T and F record, for sorting out banks once the whole
+    // file is read: the Z record that says whether pages are banks need not
+    // come first.
+    struct Paged {
+        int page;
+        uint16_t addr;
+        size_t file;
+        uint32_t line;
+        std::string name; // empty for a T record
+    };
+    std::vector<Paged> paged;
+    bool eight_banks = false;
     size_t pos = 0;
     while (pos < text.size()) {
         size_t end = text.find('\n', pos);
@@ -133,7 +154,15 @@ void parse_sld(const std::string& text, const std::string& base_dir, RomSource& 
         const std::string& addr_s = fields[5];
         const std::string& rec_type = fields[6];
         const std::string& data = fields[7];
+        const int page = parse_page_field(fields[4]);
 
+        if (rec_type == "Z") {
+            // sjasmplus's device: "pages.size:16384,pages.count:8,..." for the
+            // 128K (and +2, +3), whose eight 16K pages are its RAM banks.
+            eight_banks = data.find("pages.size:16384") != std::string::npos
+                          && data.find("pages.count:8") != std::string::npos;
+            continue;
+        }
         if (rec_type == "T") {
             uint32_t line_no = 0;
             uint16_t addr = 0;
@@ -149,6 +178,7 @@ void parse_sld(const std::string& text, const std::string& base_dir, RomSource& 
             loc.file = index;
             loc.line = line_no;
             out.addr_to_loc.emplace(addr, loc);
+            paged.push_back(Paged{page, addr, index, line_no, std::string()});
         } else if ((rec_type == "F" || rec_type == "D") && !data.empty()) {
             uint16_t addr = 0;
             if (!parse_addr_field(addr_s, addr)) {
@@ -159,8 +189,34 @@ void parse_sld(const std::string& text, const std::string& base_dir, RomSource& 
                 out.equates.insert(data);
             } else {
                 out.equates.erase(data);
+                paged.push_back(Paged{page, addr, 0, 0, data});
             }
         }
+    }
+
+    // In a banked program, code at 0xC000 and above is in the bank its page
+    // names. Below that the bank is fixed (5, 2) or ROM, so a plain address
+    // already says everything.
+    out.banked = eight_banks;
+    if (!out.banked) {
+        return;
+    }
+    for (const Paged& p : paged) {
+        if (p.addr < 0xC000 || p.page < 0 || p.page >= int(RAM_BANKS)) {
+            continue;
+        }
+        const uint8_t bank = uint8_t(p.page);
+        if (!p.name.empty()) {
+            if (out.equates.count(p.name) == 0) {
+                out.symbol_banks[p.name] = bank;
+            }
+            continue;
+        }
+        SourceLoc loc;
+        loc.file = p.file;
+        loc.line = p.line;
+        out.banked_loc.emplace(RomSource::bank_key(bank, p.addr), loc);
+        out.files[p.file].line_to_bank.emplace(p.line, bank);
     }
 }
 
@@ -307,12 +363,29 @@ void RomSource::index() {
 
     sorted_addrs_.clear();
     sorted_names_.clear();
+    sorted_banks_.clear();
     sorted_addrs_.reserve(pairs.size());
     sorted_names_.reserve(pairs.size());
+    sorted_banks_.reserve(pairs.size());
     for (auto& pair : pairs) {
         sorted_addrs_.push_back(pair.first);
+        sorted_banks_.push_back(symbol_bank(pair.second));
         sorted_names_.push_back(std::move(pair.second));
     }
+}
+
+const SourceLoc* RomSource::loc_at(uint16_t addr, uint8_t paged) const {
+    if (banked && addr >= 0xC000 && paged != ANY_BANK) {
+        const auto it = banked_loc.find(bank_key(paged, addr));
+        return it == banked_loc.end() ? nullptr : &it->second;
+    }
+    const auto it = addr_to_loc.find(addr);
+    return it == addr_to_loc.end() ? nullptr : &it->second;
+}
+
+uint8_t RomSource::symbol_bank(const std::string& name) const {
+    const auto it = symbol_banks.find(name);
+    return it == symbol_banks.end() ? ANY_BANK : it->second;
 }
 
 bool RomSource::file_for_path(const std::string& path, size_t& index) const {
@@ -324,6 +397,16 @@ bool RomSource::file_for_path(const std::string& path, size_t& index) const {
         }
     }
     return false;
+}
+
+bool RomSource::addr_for_line(size_t file, uint32_t line, uint16_t& addr,
+                              uint32_t& actual_line, uint8_t& bank) const {
+    if (!addr_for_line(file, line, addr, actual_line)) {
+        return false;
+    }
+    const auto it = files[file].line_to_bank.find(actual_line);
+    bank = it == files[file].line_to_bank.end() ? ANY_BANK : it->second;
+    return true;
 }
 
 bool RomSource::addr_for_line(size_t file, uint32_t line, uint16_t& addr,
@@ -348,20 +431,27 @@ bool RomSource::addr_for_line(size_t file, uint32_t line, uint16_t& addr,
 }
 
 bool RomSource::symbol_at(uint16_t addr, int32_t max_offset, std::string& name,
-                          uint16_t& offset) const {
+                          uint16_t& offset, uint8_t paged) const {
     // Index of the last entry <= addr.
-    const auto it = std::upper_bound(sorted_addrs_.begin(), sorted_addrs_.end(), addr);
-    if (it == sorted_addrs_.begin()) {
-        return false;
+    auto it = std::upper_bound(sorted_addrs_.begin(), sorted_addrs_.end(), addr);
+    while (it != sorted_addrs_.begin()) {
+        --it;
+        const size_t idx = size_t(it - sorted_addrs_.begin());
+        const uint16_t candidate = uint16_t(addr - sorted_addrs_[idx]);
+        if (max_offset != NO_MAX && candidate > uint16_t(max_offset)) {
+            return false;
+        }
+        // A label in another bank is not this code's: look further down. Only
+        // a banked program's labels at 0xC000 and up have a bank to differ in.
+        if (paged != ANY_BANK && addr >= 0xC000 && sorted_banks_[idx] != ANY_BANK
+            && sorted_banks_[idx] != paged) {
+            continue;
+        }
+        name = sorted_names_[idx];
+        offset = candidate;
+        return true;
     }
-    const size_t idx = size_t(it - sorted_addrs_.begin()) - 1;
-    const uint16_t candidate = uint16_t(addr - sorted_addrs_[idx]);
-    if (max_offset != NO_MAX && candidate > uint16_t(max_offset)) {
-        return false;
-    }
-    name = sorted_names_[idx];
-    offset = candidate;
-    return true;
+    return false;
 }
 
 bool RomSource::code_label_at(uint16_t addr, std::string& name, uint16_t& offset) const {
@@ -496,23 +586,41 @@ std::vector<RomSourcePtr> Sources::active() const {
     return sources;
 }
 
-bool Sources::resolve_symbol(uint16_t addr, std::string& name, uint16_t& offset) const {
+bool Sources::resolve_symbol(uint16_t addr, std::string& name, uint16_t& offset,
+                             uint8_t paged) const {
     for (const RomSourcePtr& source : active()) {
-        if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, name, offset)) {
+        if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, name, offset, paged)) {
             return true;
         }
     }
     return false;
 }
 
-bool Sources::label_at(uint16_t addr, std::string& name) const {
+bool Sources::label_at(uint16_t addr, std::string& name, uint8_t paged) const {
     uint16_t offset = 0;
     for (const RomSourcePtr& source : active()) {
-        if (source->symbol_at(addr, 0, name, offset)) {
+        if (source->symbol_at(addr, 0, name, offset, paged)) {
             return true;
         }
     }
     return false;
+}
+
+uint8_t Sources::symbol_bank(const std::string& name) const {
+    const std::vector<RomSourcePtr> sources = active();
+    for (const RomSourcePtr& source : sources) {
+        if (source->symbols.count(name) != 0) {
+            return source->symbol_bank(name);
+        }
+    }
+    for (const RomSourcePtr& source : sources) {
+        for (const auto& entry : source->symbols) {
+            if (equal_ignoring_case(entry.first, name)) {
+                return source->symbol_bank(entry.first);
+            }
+        }
+    }
+    return ANY_BANK;
 }
 
 bool Sources::symbol_value(const std::string& name, uint16_t& addr) const {

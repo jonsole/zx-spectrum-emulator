@@ -117,11 +117,11 @@ std::string dollar_hex(uint32_t v, int digits) {
 
 /// An address with the symbol it falls in: "$9C40 (sprite_move+7)", or just
 /// "$9C40" where nothing loaded names it.
-std::string describe_address(const Sources& sources, uint16_t addr) {
+std::string describe_address(const Sources& sources, uint16_t addr, uint8_t paged = ANY_BANK) {
     std::string out = dollar_hex(addr, 4);
     std::string name;
     uint16_t offset = 0;
-    if (sources.resolve_symbol(addr, name, offset)) {
+    if (sources.resolve_symbol(addr, name, offset, paged)) {
         out += " (" + name + (offset == 0 ? std::string() : "+" + std::to_string(offset)) + ")";
     }
     return out;
@@ -130,7 +130,7 @@ std::string describe_address(const Sources& sources, uint16_t addr) {
 /// "3:$C000 (sprite_move+7)": an address and the bank it names, if it names one.
 std::string describe_banked(const Sources& sources, uint16_t addr, uint8_t bank) {
     const std::string name = bank_name(bank);
-    return (name.empty() ? std::string() : name + ":") + describe_address(sources, addr);
+    return (name.empty() ? std::string() : name + ":") + describe_address(sources, addr, bank);
 }
 
 /// F as a string, bit 7 down to bit 0: a letter for each flag set, '-' for
@@ -548,6 +548,28 @@ bool arg_banked_address(const json& args, const Sources& sources, BankedAddress&
     }
     if (!arg_address(plain, sources, out.addr, error)) {
         return false;
+    }
+    // A label in a banked program's code knows its bank: "music_play" in
+    // bank 3 means bank 3's, so a breakpoint on it stops there and not in
+    // whatever else is paged in at the same address.
+    for (const char* name : {"address", "addr"}) {
+        const json& v = arg(plain, name);
+        // An explicit bank, in front or beside, says otherwise on purpose.
+        if (out.bank != ANY_BANK || !v.is_string() || !arg(args, "bank").is_null()) {
+            continue;
+        }
+        const std::string text = v.get<std::string>();
+        size_t end = 0;
+        while (end < text.size() && text[end] != '+' && text[end] != '-') {
+            end++;
+        }
+        std::string base = text.substr(0, end);
+        base.erase(0, base.find_first_not_of(" \t"));
+        base.erase(base.find_last_not_of(" \t") + 1);
+        if (!base.empty() && out.addr >= 0xC000) {
+            out.bank = sources.symbol_bank(base);
+        }
+        break;
     }
     const json& bank = arg(args, "bank");
     if (!bank.is_null()) {

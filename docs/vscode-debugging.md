@@ -1114,9 +1114,9 @@ you are, which is the whole of "what wrote that?" with no forward planning:
 notice the bad value, watch it, and run backwards.
 
 **Not yet:** hit counts (`stop on the 40th write`) are accepted from VS Code but
-ignored, with a message saying so; on a 128K a watchpoint watches the 16-bit
-address, whichever bank is paged there; and a watchpoint watches memory, not
-registers. Watching costs nothing measurable while a program runs -- see
+ignored, with a message saying so; on a 128K a watchpoint set from VS Code
+watches the 16-bit address, whichever bank is paged there (one set over MCP can
+name its bank: `"4:$C100"`); and a watchpoint watches memory, not registers. Watching costs nothing measurable while a program runs -- see
 [Testing and performance](testing-and-performance.md#performance) -- so leaving
 one armed is free.
 
@@ -1168,9 +1168,9 @@ Over MCP, `set_logpoint`, `get_log` and their companions do the same for an
 agent, the reports kept on the server until read (see
 [logpoints](mcp.md#logpoints)).
 
-**Not yet:** conditions and hit counts on logpoints; and,
-as with breakpoints, a logpoint on a 128K is on the 16-bit address, whichever
-bank is paged there. A rewind replays the machine without its logpoints, so
+**Not yet:** conditions and hit counts on logpoints. On a 128K, a logpoint on
+a line of banked code is for that line's bank, as a breakpoint is (see
+[128K programs with code in more than one bank](#128k-programs-with-code-in-more-than-one-bank)). A rewind replays the machine without its logpoints, so
 stepping back does not report the same lines again.
 
 ## Stepping backwards
@@ -1340,6 +1340,30 @@ of the same number.
 
 `examples/filmation/` is the worked example — one entry source plus the
 engine/ and knightlore/ files it includes; launch **"ZX Spectrum: Filmation"**.
+
+### 128K programs with code in more than one bank
+
+A 128K program can put different code at the same address in different RAM
+banks: `0xC000`-`0xFFFF` is whichever bank port `0x7FFD` has paged in. Built
+with sjasmplus's `DEVICE ZXSPECTRUM128` (`PAGE 3` / `ORG $C000` and so on), its
+SLD says which bank every line and label is in, and the debugger keeps them
+apart:
+
+- **A gutter breakpoint** on a line in banked code is for that line's bank: it
+  stops only while that bank is paged in, not when another bank's code at the
+  same address runs. So is a logpoint.
+- **The call stack** shows the line of the code that is running -- the bank
+  paged in now -- and a bank with no source of its own at that address shows
+  none rather than another bank's. A caller further down the stack is looked up
+  with what is paged in now too, since the stack does not record what was paged
+  when each call was made.
+- **The disassembly view** labels `0xC000`-`0xFFFF` with the paged bank's labels.
+
+Below `0xC000` nothing changes: `0x4000` is always bank 5 and `0x8000` bank 2.
+A program assembled for the 48K device, or with no device, has no banks and
+behaves exactly as before. Over MCP, an address can name its bank
+(`"3:$C000"`), and a breakpoint on a banked label takes its bank from the
+label -- see [Banks on a 128K](mcp.md#available-tools).
 
 Loading a *new* snapshot always clears the previously-attached debug info
 (it almost certainly doesn't match the new program's addresses) — reattach

@@ -296,3 +296,100 @@ TEST(a_file_the_program_does_not_include_resolves_to_nothing) {
 }
 
 RUN_TESTS()
+
+// ---- banked programs ---------------------------------------------------------
+
+namespace {
+
+// What sjasmplus 1.21 writes for a 128K program with a routine in bank 3 and
+// another in bank 4, both at 0xC000 (level_draw starts with a NOP, so their
+// later instructions fall at different addresses):
+//
+//       DEVICE ZXSPECTRUM128
+//       ORG $8000
+//   main: ...                      (lines 3-13, bank 2's code)
+//       PAGE 3 / ORG $C000
+//   music_play: ld ($C100),a / ret  (lines 17-19)
+//       PAGE 4 / ORG $C000
+//   level_draw: nop / ld ($C100),a / ret  (lines 23-26)
+const char* const BANKED_SLD_TEXT =
+    "|SLD.data.version|1\n"
+    "banked.asm|1||0|-1|-1|Z|pages.size:16384,pages.count:8,slots.count:4,slots.adr:0,16384,32768,49152\n"
+    "banked.asm|3||0|2|32768|F|main\n"
+    "banked.asm|4||0|2|32768|T|\n"
+    "banked.asm|5||0|2|32769|T|\n"
+    "banked.asm|17||0|3|49152|F|music_play\n"
+    "banked.asm|17||0|3|49152|L|,music_play,,+used\n"
+    "banked.asm|18||0|3|49152|T|\n"
+    "banked.asm|19||0|3|49155|T|\n"
+    "banked.asm|23||0|4|49152|F|level_draw\n"
+    "banked.asm|24||0|4|49152|T|\n"
+    "banked.asm|25||0|4|49153|T|\n"
+    "banked.asm|26||0|4|49156|T|\n";
+
+RomSourcePtr load_banked(const char* text) {
+    const std::string path = "zx_test_banked.sld";
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    std::string error;
+    RomSourcePtr source = load_source(path, "banked.asm", error);
+    CHECK(source != nullptr);
+    return source;
+}
+
+} // namespace
+
+TEST(a_128k_programs_sld_keeps_each_banks_code_apart) {
+    const RomSourcePtr src = load_banked(BANKED_SLD_TEXT);
+    CHECK(src->banked);
+    // The same address, two banks, two lines.
+    CHECK_EQ(src->loc_at(0xC000, 3)->line, uint32_t(18));
+    CHECK_EQ(src->loc_at(0xC000, 4)->line, uint32_t(24));
+    // Another bank's line is not this code's: bank 5 at 0xC000 has none.
+    CHECK(src->loc_at(0xC000, 5) == nullptr);
+    CHECK(src->loc_at(0xC003, 4) == nullptr); // music_play's ret, not level_draw's
+    CHECK_EQ(src->loc_at(0xC003, 3)->line, uint32_t(19));
+    // Below 0xC000 the bank is fixed, so a plain address is enough.
+    CHECK_EQ(src->loc_at(0x8001, 2)->line, uint32_t(5));
+    CHECK_EQ(src->loc_at(0x8001)->line, uint32_t(5));
+
+    // Labels know their bank, and the nearest label is this bank's.
+    CHECK_EQ(int(src->symbol_bank("music_play")), 3);
+    CHECK_EQ(int(src->symbol_bank("level_draw")), 4);
+    CHECK_EQ(int(src->symbol_bank("main")), int(ANY_BANK));
+    std::string name;
+    uint16_t offset = 0;
+    CHECK(src->symbol_at(0xC001, SYMBOL_MAX_OFFSET, name, offset, 4));
+    CHECK_EQ(name, std::string("level_draw"));
+    CHECK(src->symbol_at(0xC001, SYMBOL_MAX_OFFSET, name, offset, 3));
+    CHECK_EQ(name, std::string("music_play"));
+    CHECK_EQ(int(offset), 1);
+    // In a bank with no labels of its own the nearest is below 0xC000: main,
+    // far enough away that the bounded search gives up instead.
+    CHECK(!src->symbol_at(0xC001, SYMBOL_MAX_OFFSET, name, offset, 6));
+
+    // A breakpoint on a line lands in that line's bank.
+    uint16_t addr = 0;
+    uint32_t actual = 0;
+    uint8_t bank = ANY_BANK;
+    CHECK(src->addr_for_line(0, 25, addr, actual, bank));
+    CHECK_EQ(int(addr), 0xC001);
+    CHECK_EQ(int(bank), 4);
+    CHECK(src->addr_for_line(0, 4, addr, actual, bank));
+    CHECK_EQ(int(bank), int(ANY_BANK));
+}
+
+TEST(a_48k_programs_sld_has_no_banks) {
+    // The same records under sjasmplus's 48K device, whose four pages are
+    // just the four 16K of a flat 48K: nothing is banked.
+    std::string text = BANKED_SLD_TEXT;
+    const std::string eight = "pages.count:8";
+    text.replace(text.find(eight), eight.size(), "pages.count:4");
+    const RomSourcePtr src = load_banked(text.c_str());
+    CHECK(!src->banked);
+    CHECK_EQ(int(src->symbol_bank("music_play")), int(ANY_BANK));
+    // First at an address wins, as it always has.
+    CHECK_EQ(src->loc_at(0xC000, 4)->line, uint32_t(18));
+}

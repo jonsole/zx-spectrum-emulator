@@ -105,9 +105,13 @@ struct Connection {
     std::mutex write_mutex;
     std::atomic<int64_t> seq{1};
 
-    std::map<std::string, std::set<uint16_t>> source_breakpoints;
+    /// Source breakpoints by path, each as RomSource::bank_key(bank, addr):
+    /// a line of a banked 128K program at 0xC000 or above stops only in its
+    /// own bank, everything else in any (ANY_BANK).
+    std::map<std::string, std::set<uint32_t>> source_breakpoints;
     std::set<uint16_t> instruction_breakpoints;
-    std::set<uint16_t> known_breakpoints;
+    /// What this connection has set in the Engine, keyed as source_breakpoints.
+    std::set<uint32_t> known_breakpoints;
     /// Watchpoints this connection asked for, by dataId, and the Engine id
     /// each became. Only these are touched by its setDataBreakpoints, so a
     /// watchpoint set over MCP -- or from the editor's own command -- is not
@@ -573,7 +577,10 @@ uint16_t find_aligned_backward_start(const ReadFn& read, uint16_t base_addr,
     return base_addr;
 }
 
-json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, uint16_t addr) {
+/// `paged` is the bank code paged in at `addr` now: for a banked program, the
+/// line and label of that bank's code there, not another's.
+json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, uint16_t addr,
+                 uint8_t paged) {
     const Instruction inst = disassemble_one(read, addr);
     const std::string name = hex4(addr) + ": " + annotate_symbols(inst.text, sources);
 
@@ -589,18 +596,18 @@ json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, u
     // entries all sit far below PC -- and mislabel the frame rather than
     // simply showing no source for it.
     for (const RomSourcePtr& source : sources.active()) {
-        auto it = source->addr_to_loc.find(addr);
-        if (it == source->addr_to_loc.end()) {
+        const SourceLoc* found = source->loc_at(addr, paged);
+        if (found == nullptr) {
             continue;
         }
-        const SourceLoc& loc = it->second;
+        const SourceLoc& loc = *found;
         if (loc.file >= source->files.size()) {
             continue;
         }
         const std::string& file_path = source->files[loc.file].path;
         std::string label;
         uint16_t offset = 0;
-        if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, label, offset)) {
+        if (source->symbol_at(addr, SYMBOL_MAX_OFFSET, label, offset, paged)) {
             if (offset != 0) {
                 label += "+" + std::to_string(offset);
             }
@@ -618,6 +625,9 @@ json build_frame(const ReadFn& read, const Sources& sources, int64_t frame_id, u
 json do_disassemble(Engine& engine, const Sources& sources, const json& arguments,
                     uint16_t base_addr) {
     MemorySnapshot snapshot(engine);
+    // Labels as the code paged in now has them: a banked program's own at
+    // 0xC000 and above, not another bank's at the same address.
+    const MachineState state = engine.state();
     const ReadFn read = snapshot.reader();
 
     const int64_t instruction_offset = arg_int(arguments, "instructionOffset", 0);
@@ -645,7 +655,7 @@ json do_disassemble(Engine& engine, const Sources& sources, const json& argument
         }
         std::string label;
         std::string prefix;
-        if (sources.label_at(inst.addr, label)) {
+        if (sources.label_at(inst.addr, label, bank_at(state.model, state.paging, inst.addr))) {
             prefix = label + ":";
         }
         // DAP has a dedicated "symbol" field, which the spec says a client MAY
@@ -795,19 +805,30 @@ std::string describe_watch_stop(const WatchStop& stop, const Sources& sources) {
     return what + by;
 }
 
+uint16_t key_addr(uint32_t key) {
+    return uint16_t(key & 0xFFFF);
+}
+
+uint8_t key_bank(uint32_t key) {
+    return uint8_t(key >> 16);
+}
+
 void sync_breakpoints(Engine& engine, Connection& conn) {
-    std::set<uint16_t> desired = conn.instruction_breakpoints;
+    std::set<uint32_t> desired;
+    for (uint16_t addr : conn.instruction_breakpoints) {
+        desired.insert(RomSource::bank_key(ANY_BANK, addr));
+    }
     for (const auto& entry : conn.source_breakpoints) {
         desired.insert(entry.second.begin(), entry.second.end());
     }
-    for (uint16_t addr : desired) {
-        if (conn.known_breakpoints.count(addr) == 0) {
-            engine.set_breakpoint(addr);
+    for (uint32_t key : desired) {
+        if (conn.known_breakpoints.count(key) == 0) {
+            engine.set_breakpoint(key_addr(key), key_bank(key));
         }
     }
-    for (uint16_t addr : conn.known_breakpoints) {
-        if (desired.count(addr) == 0) {
-            engine.clear_breakpoint(addr);
+    for (uint32_t key : conn.known_breakpoints) {
+        if (desired.count(key) == 0) {
+            engine.clear_breakpoint(key_addr(key), key_bank(key));
         }
     }
     conn.known_breakpoints = std::move(desired);
@@ -834,9 +855,10 @@ std::map<uint32_t, LogpointOwner> g_logpoint_owners;
 /// at every hit.
 bool add_logpoint(Engine& engine, const Sources& sources, Connection& conn,
                   const std::string& group, uint16_t addr, const std::string& message,
-                  uint32_t& id, std::string& error) {
+                  uint32_t& id, std::string& error, uint8_t bank = ANY_BANK) {
     Logpoint lp;
     lp.addr = addr;
+    lp.bank = bank;
     lp.text = message;
     const SymbolResolver resolve = [&sources](const std::string& name, uint16_t& value) {
         return sources.symbol_value(name, value);
@@ -1340,7 +1362,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         size_t source_file = 0;
         const RomSourcePtr rom_source = sources.source_for_path(source_path, source_file);
 
-        std::set<uint16_t> addrs;
+        std::set<uint32_t> addrs;
         json results = json::array();
         // This source's logpoints are replaced with its breakpoints, as DAP
         // says: the list is the whole of what the client wants there now.
@@ -1360,8 +1382,9 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                 }
                 uint16_t addr = 0;
                 uint32_t actual_line = 0;
+                uint8_t bank = ANY_BANK;
                 if (!rom_source->addr_for_line(source_file, uint32_t(line), addr,
-                                               actual_line)) {
+                                               actual_line, bank)) {
                     results.push_back(json{{"verified", false},
                                            {"line", line},
                                            {"message", "no instruction at this line"}});
@@ -1373,7 +1396,8 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                 if (!log_message.empty()) {
                     uint32_t id = 0;
                     std::string error;
-                    if (!add_logpoint(engine, sources, conn, "", addr, log_message, id, error)) {
+                    if (!add_logpoint(engine, sources, conn, "", addr, log_message, id, error,
+                                      bank)) {
                         results.push_back(json{{"verified", false},
                                                {"line", line},
                                                {"message", "logpoint: " + error}});
@@ -1385,7 +1409,7 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
                                            {"instructionReference", hex4(addr)}});
                     continue;
                 }
-                addrs.insert(addr);
+                addrs.insert(RomSource::bank_key(bank, addr));
                 // `line` here is the line the breakpoint ACTUALLY landed on,
                 // which may be below the one clicked (see addr_for_line).
                 // DAP clients move their marker to it.
@@ -1510,7 +1534,8 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         } else if (is_step_over_as_run(inst.text)) {
             const uint16_t return_addr = uint16_t(state.pc + inst.length);
             // Don't clear a breakpoint the user actually set there.
-            const bool already_set = conn.known_breakpoints.count(return_addr) != 0;
+            const bool already_set =
+                conn.known_breakpoints.count(RomSource::bank_key(ANY_BANK, return_addr)) != 0;
             std::thread([&engine, return_addr, already_set] {
                 if (!already_set) {
                     engine.set_breakpoint(return_addr);
@@ -1823,7 +1848,10 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
             const size_t index = first + i;
             const uint16_t addr =
                 index == 0 ? state.pc : state.call_stack[state.call_stack.size() - index];
-            frames.push_back(build_frame(read, sources, int64_t(index), addr));
+            // A return address's bank is taken as what is paged in now: the
+            // call stack does not record what was paged when each call was made.
+            frames.push_back(build_frame(read, sources, int64_t(index), addr,
+                                         bank_at(state.model, state.paging, addr)));
         }
         body = json{{"stackFrames", frames}, {"totalFrames", total}};
 
@@ -2323,8 +2351,8 @@ void handle_connection(std::shared_ptr<Connection> conn, Engine& engine, Sources
     }
     // Leave the machine in a usable state for the next client rather than
     // leaving this connection's breakpoints armed forever.
-    for (uint16_t addr : conn->known_breakpoints) {
-        engine.clear_breakpoint(addr);
+    for (uint32_t key : conn->known_breakpoints) {
+        engine.clear_breakpoint(key_addr(key), key_bank(key));
     }
     for (auto& entry : conn->source_logpoints) {
         drop_logpoints(engine, entry.second);

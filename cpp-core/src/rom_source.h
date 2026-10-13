@@ -23,6 +23,8 @@
 // Z (device/page header). T, F and D are used here; L and Z carry no
 // address<->line information of their own.
 
+#include "memory.h"
+
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -52,6 +54,9 @@ struct SourceFile {
     /// request to read. Resolved beside the entry .asm; see load_source.
     std::string path;
     std::unordered_map<uint32_t, uint16_t> line_to_addr;
+    /// The RAM bank a line's code is in, for the lines of a banked program
+    /// (see RomSource::banked) at 0xC000 and above. Absent: no particular bank.
+    std::unordered_map<uint32_t, uint8_t> line_to_bank;
 };
 
 /// Where an address came from: which of RomSource::files, and the line in it.
@@ -77,6 +82,30 @@ public:
     /// 63486, seven bytes into turn_pace).
     std::set<std::string> equates;
 
+    /// Assembled for sjasmplus's 128K device -- eight 16K pages, the SLD's Z
+    /// record says -- so a record's page is the RAM bank its code is in. Then
+    /// 0xC000-0xFFFF can hold different code in different banks, and the
+    /// maps below keep them apart; everything else is as for a 48K program.
+    bool banked = false;
+    /// Each banked line's place, keyed bank_key(bank, addr). addr_to_loc keeps
+    /// only the first line at each address, whichever bank it was in, as it
+    /// always has; this has them all.
+    std::unordered_map<uint32_t, SourceLoc> banked_loc;
+    /// The RAM bank of each label at 0xC000 and above in a banked program.
+    std::map<std::string, uint8_t> symbol_banks;
+
+    static uint32_t bank_key(uint8_t bank, uint16_t addr) { return (uint32_t(bank) << 16) | addr; }
+
+    /// The source line for the code at `addr` with bank code `paged` in
+    /// there -- what the machine is executing. For a banked program at
+    /// 0xC000 and above, only that bank's line: another bank's at the same
+    /// address is not this code. ANY_BANK, or anywhere else: the line at the
+    /// address, as addr_to_loc has it. Null where there is none.
+    const SourceLoc* loc_at(uint16_t addr, uint8_t paged = ANY_BANK) const;
+
+    /// The bank a label's code is in, or ANY_BANK if it names no one bank.
+    uint8_t symbol_bank(const std::string& name) const;
+
     /// How far below a requested line to look for a real instruction. A
     /// clicked line often has no code of its own -- a label ("START:"), a
     /// blank, or a routine's header comment block -- and the instruction it
@@ -91,6 +120,10 @@ public:
     /// to move its marker to. False if nothing within MAX_BREAKPOINT_NUDGE
     /// has code, or if `file` is not an index this source holds.
     bool addr_for_line(size_t file, uint32_t line, uint16_t& addr, uint32_t& actual_line) const;
+    /// ...and the bank that code is in: ANY_BANK unless the program is banked
+    /// and the line is at 0xC000 or above.
+    bool addr_for_line(size_t file, uint32_t line, uint16_t& addr, uint32_t& actual_line,
+                       uint8_t& bank) const;
 
     /// Index of the file this path names, matched on the full path or just
     /// the file name (DAP clients are inconsistent about which they send).
@@ -106,7 +139,8 @@ public:
     /// known label, or if `max_offset` is exceeded (pass NO_MAX for an
     /// unbounded search).
     static constexpr int32_t NO_MAX = -1;
-    bool symbol_at(uint16_t addr, int32_t max_offset, std::string& name, uint16_t& offset) const;
+    bool symbol_at(uint16_t addr, int32_t max_offset, std::string& name, uint16_t& offset,
+                   uint8_t paged = ANY_BANK) const;
 
     /// The nearest label at or before `addr` that sits on a line of code --
     /// what a profile names a routine by. symbol_at alone would as readily
@@ -128,6 +162,7 @@ private:
     // Parallel arrays sorted by address, for the binary search symbol_at does.
     std::vector<uint16_t> sorted_addrs_;
     std::vector<std::string> sorted_names_;
+    std::vector<uint8_t> sorted_banks_;
 };
 
 using RomSourcePtr = std::shared_ptr<const RomSource>;
@@ -175,12 +210,20 @@ public:
     /// Nearest label at or before `addr`, bounded by SYMBOL_MAX_OFFSET.
     /// Unlike an exact lookup this does not require landing on a label, so a
     /// disassembled operand pointing partway into a routine still annotates.
-    bool resolve_symbol(uint16_t addr, std::string& name, uint16_t& offset) const;
+    ///
+    /// `paged`, where the caller knows it, is the bank code paged in at
+    /// `addr`: a banked program's label in another bank is not this code's.
+    bool resolve_symbol(uint16_t addr, std::string& name, uint16_t& offset,
+                        uint8_t paged = ANY_BANK) const;
 
     /// Exact-address match only -- for the Disassembly View's label column,
     /// which should head a line only when the instruction IS the start of a
     /// named routine, not merely near one.
-    bool label_at(uint16_t addr, std::string& name) const;
+    bool label_at(uint16_t addr, std::string& name, uint8_t paged = ANY_BANK) const;
+
+    /// The bank a symbol's code is in -- the loaded program's first, as
+    /// symbol_value looks it up -- or ANY_BANK if it names no one bank.
+    uint8_t symbol_bank(const std::string& name) const;
 
     /// A named symbol's address, searching the loaded program's own symbols
     /// before the ROM's. Exact match first, then case-insensitively -- a
