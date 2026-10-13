@@ -26,6 +26,7 @@
 #include "z80.h"
 
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -59,6 +60,45 @@ struct WatchHit {
     /// now. Only meaningful for accesses made from step_instruction(): the
     /// raw clocking paths (tick(), run_frame()) do not track it.
     uint16_t pc = 0;
+    /// The bank code paged in at `addr` when it was touched, for a watchpoint
+    /// that names a bank (see BankedAddress).
+    uint8_t bank = ANY_BANK;
+};
+
+/// PC breakpoints, each at an address and for a bank code: ANY_BANK for
+/// wherever that address is (the plain breakpoint), or one ROM or RAM bank,
+/// which fires only while that bank is paged in there. One address can hold
+/// several -- one per bank, and a plain one besides.
+///
+/// Checked before every instruction a run executes, so a hit test is the one
+/// map lookup the plain std::set it replaced was, and the bank compared only
+/// on an address that has a breakpoint at all.
+class Breakpoints {
+public:
+    void insert(uint16_t addr, uint8_t bank = ANY_BANK);
+    /// Removes exactly that one: a plain clear does not take a banked
+    /// breakpoint at the same address with it, nor the other way round.
+    void erase(uint16_t addr, uint8_t bank = ANY_BANK);
+    void clear() { at_.clear(); }
+    bool empty() const { return at_.empty(); }
+    /// Whether any breakpoint at `addr` applies with `paged` (the bank code
+    /// paged in there) -- what a run asks of PC before each instruction.
+    bool hit(uint16_t addr, uint8_t paged) const {
+        const auto it = at_.find(addr);
+        if (it == at_.end()) {
+            return false;
+        }
+        for (uint8_t want : it->second) {
+            if (bank_matches(want, paged)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    std::vector<BankedAddress> list() const;
+
+private:
+    std::map<uint16_t, std::vector<uint8_t>> at_;
 };
 
 class Spectrum {
@@ -74,7 +114,12 @@ public:
     Keyboard keyboard;
     Tape tape;
 
-    std::set<uint16_t> breakpoints;
+    Breakpoints breakpoints;
+    /// Whether a breakpoint applies at PC, with what is paged in there now.
+    bool at_breakpoint() const {
+        const uint16_t pc = registers().pc;
+        return breakpoints.hit(pc, memory.bank_at(pc));
+    }
 
     /// The access that tripped a watch, for whoever is driving the machine to
     /// notice between instructions. Cleared by the driver, not by the machine

@@ -725,6 +725,45 @@ TEST(a_forced_paging_write_passes_a_lock_and_a_plain_one_does_not) {
     CHECK_EQ(int(m->memory.paging()), 3); // and unlocked, since 3 has no lock bit
 }
 
+// The same address in two banks: reverse continue to a breakpoint for one
+// bank stops where that bank was paged in, passing over the other.
+TEST(reverse_continue_honours_a_breakpoints_bank) {
+    auto m = std::make_unique<Spectrum>();
+    m->set_model(Model::Spectrum128);
+    // Bank 3 and bank 4 each hold a RET at 0xC000. The program pages one in,
+    // calls it, pages the other in, calls that, and goes round again:
+    //   loop: LD BC,0x7FFD / LD A,3 / OUT (C),A / CALL 0xC000
+    //         LD A,4 / OUT (C),A / CALL 0xC000 / JR loop
+    const std::vector<uint8_t> code = {0xF3, 0x01, 0xFD, 0x7F, 0x3E, 0x03, 0xED, 0x79,
+                                       0xCD, 0x00, 0xC0, 0x3E, 0x04, 0xED, 0x79, 0xCD,
+                                       0x00, 0xC0, 0x18, 0xEC};
+    m->write_memory(PROGRAM, code.data(), code.size());
+    const uint8_t ret = 0xC9;
+    m->write_bank(3, 0, &ret, 1);
+    m->write_bank(4, 0, &ret, 1);
+    Registers regs{};
+    regs.pc = PROGRAM;
+    regs.sp = 0xBF00; // bank 2: not swapped out from under the calls
+    m->prime_cpu(regs);
+    History h(small_history());
+    h.start(*m);
+    run(*m, h, 5000);
+    run_to(*m, h, PROGRAM + 18); // the JR, after both calls
+
+    m->breakpoints.insert(0xC000, 3);
+    h.go_back(*m, RewindOp::ReverseContinue, 0, never);
+    CHECK_EQ(int(m->registers().pc), 0xC000);
+    CHECK_EQ(int(m->memory.bank_at_c000()), 3);
+    m->breakpoints.clear();
+
+    run_to(*m, h, PROGRAM + 18);
+    m->breakpoints.insert(0xC000, 4);
+    h.go_back(*m, RewindOp::ReverseContinue, 0, never);
+    CHECK_EQ(int(m->registers().pc), 0xC000);
+    CHECK_EQ(int(m->memory.bank_at_c000()), 4);
+    m->breakpoints.clear();
+}
+
 TEST(the_window_drops_the_oldest_checkpoints) {
     auto m = machine_running(MAIN, SUB);
     RewindSettings settings;

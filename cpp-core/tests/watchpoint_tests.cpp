@@ -331,6 +331,32 @@ TEST(a_cleared_watchpoint_stops_nothing) {
     CHECK(timed_out); // nothing to stop it: the watchdog did
 }
 
+// A watchpoint for a bank stops only on accesses while that bank is paged in.
+// On a 48K 0x9000 is always bank 2: a watch for bank 2 stops, and one for
+// another bank never can.
+TEST(a_banked_watchpoint_stops_only_in_its_bank) {
+    {
+        Engine engine;
+        start_counter(engine);
+        Watchpoint w = write_watch(DATA);
+        w.bank = 2;
+        engine.set_watchpoint(w);
+        bool timed_out = false;
+        run_guarded(engine, timed_out);
+        CHECK(!timed_out);
+    }
+    {
+        Engine engine;
+        start_counter(engine);
+        Watchpoint w = write_watch(DATA);
+        w.bank = 7;
+        engine.set_watchpoint(w);
+        bool timed_out = false;
+        run_guarded(engine, timed_out, 300);
+        CHECK(timed_out);
+    }
+}
+
 TEST(a_value_test_only_stops_on_the_value_asked_for) {
     Engine engine;
     start_counter(engine);

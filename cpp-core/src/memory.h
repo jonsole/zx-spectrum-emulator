@@ -68,6 +68,44 @@ constexpr uint8_t SHADOW_SCREEN_BANK = 7;
 /// Marks "this address is ROM" where a RAM bank number is expected.
 constexpr uint8_t NO_BANK = 0xFF;
 
+// ---- banked addresses ----------------------------------------------------
+//
+// On a 128K a 16-bit address is ambiguous: 0xC000-0xFFFF is whichever of the
+// eight RAM banks is paged in, and 0x0000-0x3FFF ROM 0 or ROM 1. A *bank
+// code* says which one an address means: a RAM bank 0-7, ROM0_BANK or
+// ROM1_BANK, or ANY_BANK -- whatever is paged in when it matters, which is
+// what a plain address has always meant and still does. A 48K's memory is
+// banks 5, 2 and 0 and its one ROM, which counts as ROM 0.
+
+constexpr uint8_t ROM0_BANK = 8;
+constexpr uint8_t ROM1_BANK = 9;
+constexpr uint8_t ANY_BANK = 0xFE;
+
+/// An address and the bank it means.
+struct BankedAddress {
+    uint16_t addr = 0;
+    uint8_t bank = ANY_BANK;
+    bool operator==(const BankedAddress& o) const { return addr == o.addr && bank == o.bank; }
+};
+
+/// The bank code paged in at `addr` on a machine of `model` with port
+/// 0x7FFD at `paging` -- for code that has a MachineState rather than the
+/// machine. SpectrumMemory::bank_at is the same for the live machine.
+uint8_t bank_at(Model model, uint8_t paging, uint16_t addr);
+
+/// Whether `addr` with bank code `want` means what is paged in there now.
+inline bool bank_matches(uint8_t want, uint8_t paged) {
+    return want == ANY_BANK || want == paged;
+}
+
+/// A bank code as it is written: "3", "ROM0", "ROM1", or "" for ANY_BANK.
+std::string bank_name(uint8_t bank);
+
+/// Whether bank code `bank` can ever be paged in at `addr`: a RAM bank only
+/// at 0xC000 and above (or 5 at 0x4000, 2 at 0x8000, where they always are),
+/// a ROM only below 0x4000. False and fills `error` if not.
+bool bank_fits(uint8_t bank, uint16_t addr, std::string& error);
+
 /// The Spectrum's memory: 16K of ROM at the bottom and RAM above it, with the
 /// 128K's paging layered on.
 ///
@@ -139,6 +177,8 @@ public:
     /// The bank the ULA is displaying: 5, or 7 when the 128K's shadow screen
     /// is selected.
     uint8_t screen_bank() const { return screen_bank_; }
+    /// The bank code paged in at `addr` now: see bank_at().
+    uint8_t bank_at(uint16_t addr) const { return zx::bank_at(model_, paging_, addr); }
     /// That bank's bytes, for the ULA to fetch from directly. Through the CPU
     /// map would be wrong: the shadow screen is displayed whether or not bank
     /// 7 is paged anywhere the CPU can see it.

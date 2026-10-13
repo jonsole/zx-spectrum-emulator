@@ -127,6 +127,43 @@ void Spectrum::write_bank(uint8_t b, uint16_t offset, const uint8_t* data, size_
     }
 }
 
+void Breakpoints::insert(uint16_t addr, uint8_t bank) {
+    std::vector<uint8_t>& banks = at_[addr];
+    for (uint8_t b : banks) {
+        if (b == bank) {
+            return;
+        }
+    }
+    banks.push_back(bank);
+}
+
+void Breakpoints::erase(uint16_t addr, uint8_t bank) {
+    const auto it = at_.find(addr);
+    if (it == at_.end()) {
+        return;
+    }
+    std::vector<uint8_t>& banks = it->second;
+    for (size_t i = 0; i < banks.size(); i++) {
+        if (banks[i] == bank) {
+            banks.erase(banks.begin() + std::ptrdiff_t(i));
+            break;
+        }
+    }
+    if (banks.empty()) {
+        at_.erase(it);
+    }
+}
+
+std::vector<BankedAddress> Breakpoints::list() const {
+    std::vector<BankedAddress> out;
+    for (const auto& [addr, banks] : at_) {
+        for (uint8_t bank : banks) {
+            out.push_back(BankedAddress{addr, bank});
+        }
+    }
+    return out;
+}
+
 void Spectrum::reset() {
     Registers regs;
     // Before priming, not after: reset() zeroes the ULA's counters, which
@@ -226,6 +263,7 @@ void Spectrum::note_watch(uint16_t addr, uint8_t old_value, uint8_t new_value, b
     watch_hit.old_value = old_value;
     watch_hit.new_value = new_value;
     watch_hit.pc = instruction_pc_;
+    watch_hit.bank = memory.bank_at(addr);
 }
 
 void Spectrum::service_bus() {

@@ -293,6 +293,16 @@ json paging_json(const MachineState& s) {
                 {"locked", (s.paging & PAGING_LOCK) != 0}};
 }
 
+/// Every breakpoint's address, as get_state has always listed them; which
+/// bank a banked one is for is list_breakpoints' to say.
+std::vector<uint16_t> breakpoint_addresses(const MachineState& s) {
+    std::vector<uint16_t> out;
+    for (const BankedAddress& bp : s.breakpoints) {
+        out.push_back(bp.addr);
+    }
+    return out;
+}
+
 json state_json(const MachineState& s) {
     return json{{"pc", s.pc},
                 {"registers", registers_json(s.registers)},
@@ -304,7 +314,7 @@ json state_json(const MachineState& s) {
                 {"tstate", s.tstate},
                 {"frame_count", s.frame_count},
                 {"interrupt_count", s.interrupt_count},
-                {"breakpoints", s.breakpoints},
+                {"breakpoints", breakpoint_addresses(s)},
                 {"call_stack", s.call_stack},
                 {"watch_stop", watch_stop_json(s.watch_stop)},
 #if ZX_REWIND
@@ -1728,8 +1738,12 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "list_breakpoints") {
         json list = json::array();
-        for (uint16_t addr : engine.state().breakpoints) {
-            list.push_back(json{{"address", describe_address(sources, addr)}, {"addr", addr}});
+        for (const BankedAddress& bp : engine.state().breakpoints) {
+            json entry{{"address", describe_address(sources, bp.addr)}, {"addr", bp.addr}};
+            if (bp.bank != ANY_BANK) {
+                entry["bank"] = bank_name(bp.bank);
+            }
+            list.push_back(entry);
         }
         return json_result(json{{"breakpoints", list}});
     }

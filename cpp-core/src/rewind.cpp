@@ -304,6 +304,7 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
         RewindMark mark;
         mark.hc = machine.global_hc();
         mark.pc = machine.registers().pc;
+        mark.bank = machine.memory.bank_at(mark.pc);
         mark.depth = uint32_t(machine.call_stack.size());
         mark.halted = machine.cpu.halted;
         // A HALT waiting is thousands of identical boundaries a frame; one
@@ -339,7 +340,7 @@ History::Result History::go_back(Spectrum& m, RewindOp op, uint16_t address,
                 case RewindOp::StepBackOver: match = b.depth <= depth; break;
                 case RewindOp::StepBackOut: match = b.depth < depth; break;
                 case RewindOp::ReverseContinue:
-                    match = m.breakpoints.count(b.pc) != 0 || b.watched;
+                    match = m.breakpoints.hit(b.pc, b.bank) || b.watched;
                     break;
                 case RewindOp::RunBackToAddress: match = b.pc == address; break;
                 case RewindOp::RunBackToWrite: match = b.watched; break;

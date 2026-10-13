@@ -715,9 +715,7 @@ MachineState Engine::snapshot(bool running) const {
     s.tstate = machine_.ula.tstate();
     s.frame_count = machine_.ula.frame_count();
     s.interrupt_count = machine_.cpu.interrupt_count;
-    for (uint16_t bp : machine_.breakpoints) {
-        s.breakpoints.push_back(bp);
-    }
+    s.breakpoints = machine_.breakpoints.list();
     s.call_stack = machine_.call_stack;
     s.watch_stop = watch_stop_;
     return s;
@@ -1060,7 +1058,7 @@ MachineState Engine::run() {
                 reason = StopReason::Interrupt;
                 break;
             }
-            if (m.breakpoints.count(m.registers().pc) != 0) {
+            if (m.at_breakpoint()) {
                 reason = StopReason::Breakpoint;
                 break;
             }
@@ -1165,7 +1163,7 @@ void Engine::arm_logpoints() {
 void Engine::note_logpoints(Spectrum& m) {
     const uint16_t pc = m.registers().pc;
     for (Logpoint& lp : logpoints_) {
-        if (lp.addr != pc) {
+        if (lp.addr != pc || !bank_matches(lp.bank, m.memory.bank_at(pc))) {
             continue;
         }
         lp.hits++;
@@ -1312,6 +1310,9 @@ Watchpoint* Engine::watch_wanted(const WatchHit& hit) {
         if (hit.write ? !w.on_write : !w.on_read) {
             continue;
         }
+        if (!bank_matches(w.bank, hit.bank)) {
+            continue;
+        }
         // Checked here as well as on the bus: two watchpoints over one byte
         // share a flag, so the machine reports what the laxer of them wants
         // and the stricter filters its own hits out again.
@@ -1342,12 +1343,12 @@ bool Engine::watch_stop_wanted(Spectrum& m) {
     return true;
 }
 
-void Engine::set_breakpoint(uint16_t addr) {
-    submit_void([addr](Spectrum& m) { m.breakpoints.insert(addr); });
+void Engine::set_breakpoint(uint16_t addr, uint8_t bank) {
+    submit_void([addr, bank](Spectrum& m) { m.breakpoints.insert(addr, bank); });
 }
 
-void Engine::clear_breakpoint(uint16_t addr) {
-    submit_void([addr](Spectrum& m) { m.breakpoints.erase(addr); });
+void Engine::clear_breakpoint(uint16_t addr, uint8_t bank) {
+    submit_void([addr, bank](Spectrum& m) { m.breakpoints.erase(addr, bank); });
 }
 
 std::vector<uint8_t> Engine::read_memory(uint16_t addr, size_t length) {
@@ -1453,8 +1454,9 @@ RewindOutcome Engine::rewind(RewindOp op, uint16_t address) {
     // forward twin's would be; everything else is a step.
     StopReason reason = StopReason::Step;
     if (op == RewindOp::ReverseContinue && out.moved) {
-        for (uint16_t bp : out.state.breakpoints) {
-            if (bp == out.state.pc) {
+        const uint8_t paged = bank_at(out.state.model, out.state.paging, out.state.pc);
+        for (const BankedAddress& bp : out.state.breakpoints) {
+            if (bp.addr == out.state.pc && bank_matches(bp.bank, paged)) {
                 reason = StopReason::Breakpoint;
             }
         }

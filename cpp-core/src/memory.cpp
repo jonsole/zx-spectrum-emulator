@@ -18,6 +18,56 @@ std::string describe_paging(uint8_t paging) {
     return out;
 }
 
+uint8_t bank_at(Model model, uint8_t paging, uint16_t addr) {
+    switch (addr >> 14) {
+        case 0:
+            return model == Model::Spectrum128 && (paging & PAGING_ROM1) != 0 ? ROM1_BANK
+                                                                                : ROM0_BANK;
+        case 1: return BANK_AT_4000;
+        case 2: return BANK_AT_8000;
+        default:
+            return model == Model::Spectrum128 ? uint8_t(paging & PAGING_BANK_MASK)
+                                               : DEFAULT_BANK_AT_C000;
+    }
+}
+
+std::string bank_name(uint8_t bank) {
+    if (bank == ANY_BANK) {
+        return std::string();
+    }
+    if (bank == ROM0_BANK) {
+        return "ROM0";
+    }
+    if (bank == ROM1_BANK) {
+        return "ROM1";
+    }
+    return std::to_string(bank);
+}
+
+bool bank_fits(uint8_t bank, uint16_t addr, std::string& error) {
+    if (bank == ANY_BANK) {
+        return true;
+    }
+    const unsigned slot = addr >> 14;
+    const bool rom = bank == ROM0_BANK || bank == ROM1_BANK;
+    if (rom != (slot == 0)) {
+        error = rom ? "a ROM is only ever at 0x0000-0x3FFF"
+                    : "a RAM bank is never paged in at 0x0000-0x3FFF: that is ROM";
+        return false;
+    }
+    if (bank >= RAM_BANKS && !rom) {
+        error = "there is no bank " + std::to_string(bank) + ": RAM banks are 0-7";
+        return false;
+    }
+    if ((slot == 1 && bank != BANK_AT_4000) || (slot == 2 && bank != BANK_AT_8000)) {
+        error = std::string("0x") + (slot == 1 ? "4000-0x7FFF is always bank 5"
+                                                : "8000-0xBFFF is always bank 2")
+                + ", never bank " + std::to_string(bank);
+        return false;
+    }
+    return true;
+}
+
 SpectrumMemory::SpectrumMemory() {
     remap();
 }

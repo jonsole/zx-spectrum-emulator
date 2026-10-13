@@ -563,3 +563,84 @@ TEST(real_128k_rom_boots_to_the_menu) {
 }
 
 RUN_TESTS()
+
+// ---- banked addresses -------------------------------------------------------
+
+TEST(bank_at_names_what_is_paged_in_at_each_address) {
+    Spectrum m;
+    m.set_model(Model::Spectrum128);
+    CHECK_EQ(int(m.memory.bank_at(0x0000)), int(ROM0_BANK));
+    CHECK_EQ(int(m.memory.bank_at(0x4000)), 5);
+    CHECK_EQ(int(m.memory.bank_at(0x8000)), 2);
+    CHECK_EQ(int(m.memory.bank_at(0xC000)), 0);
+    out_port(m, 0x7FFD, PAGING_ROM1 | 3);
+    CHECK_EQ(int(m.memory.bank_at(0x3FFF)), int(ROM1_BANK));
+    CHECK_EQ(int(m.memory.bank_at(0xFFFF)), 3);
+    // The same answer from a state as from the machine.
+    CHECK_EQ(int(bank_at(Model::Spectrum128, m.memory.paging(), 0xC000)), 3);
+    // A 48K: its one ROM counts as ROM 0, and 0xC000 is always bank 0.
+    CHECK_EQ(int(bank_at(Model::Spectrum48, 0x17, 0x0000)), int(ROM0_BANK));
+    CHECK_EQ(int(bank_at(Model::Spectrum48, 0x17, 0xC000)), 0);
+}
+
+TEST(bank_fits_says_where_a_bank_can_ever_be) {
+    std::string error;
+    CHECK(bank_fits(ANY_BANK, 0x1234, error));
+    CHECK(bank_fits(3, 0xC000, error));
+    CHECK(bank_fits(5, 0x4000, error));
+    CHECK(bank_fits(2, 0xBFFF, error));
+    CHECK(bank_fits(ROM1_BANK, 0x0038, error));
+    CHECK(!bank_fits(3, 0x8000, error)); // 0x8000 is always bank 2
+    CHECK(!bank_fits(3, 0x0038, error)); // ROM
+    CHECK(!bank_fits(ROM0_BANK, 0xC000, error));
+    CHECK(!bank_fits(8 + 4, 0xC000, error));
+    CHECK_EQ(bank_name(ANY_BANK), std::string());
+    CHECK_EQ(bank_name(6), std::string("6"));
+    CHECK_EQ(bank_name(ROM1_BANK), std::string("ROM1"));
+}
+
+TEST(a_banked_breakpoint_applies_only_with_its_bank_paged_in) {
+    Breakpoints bps;
+    bps.insert(0xC000, 3);
+    CHECK(bps.hit(0xC000, 3));
+    CHECK(!bps.hit(0xC000, 4));
+    CHECK(!bps.hit(0xC001, 3));
+    // A plain one at the same address is a second breakpoint, for any bank...
+    bps.insert(0xC000);
+    CHECK(bps.hit(0xC000, 4));
+    CHECK_EQ(bps.list().size(), size_t(2));
+    // ...and clearing it leaves the banked one.
+    bps.erase(0xC000);
+    CHECK(!bps.hit(0xC000, 4));
+    CHECK(bps.hit(0xC000, 3));
+    bps.erase(0xC000, 3);
+    CHECK(bps.empty());
+
+    // On the machine: PC at 0xC000, with bank 3 paged in and then bank 4.
+    Spectrum m;
+    m.set_model(Model::Spectrum128);
+    m.breakpoints.insert(0xC000, 3);
+    out_port(m, 0x7FFD, 3);
+    Registers r = m.registers();
+    r.pc = 0xC000;
+    m.set_registers(r);
+    CHECK(m.at_breakpoint());
+    out_port(m, 0x7FFD, 4);
+    m.set_registers(r);
+    CHECK(!m.at_breakpoint());
+}
+
+TEST(a_watch_hit_says_which_bank_it_touched) {
+    Spectrum m;
+    m.set_model(Model::Spectrum128);
+    out_port(m, 0x7FFD, 6);
+    std::vector<uint8_t> flags(WATCH_ADDRESSES, 0);
+    flags[0xC010] = WATCH_WRITE;
+    m.set_watch_flags(std::move(flags));
+    poke(m, 0x8000, {0x3E, 0x42,        // LD A,0x42
+                     0x32, 0x10, 0xC0}); // LD (0xC010),A
+    run_at(m, 0x8000, 2);
+    CHECK(m.watch_hit.hit);
+    CHECK_EQ(int(m.watch_hit.addr), 0xC010);
+    CHECK_EQ(int(m.watch_hit.bank), 6);
+}

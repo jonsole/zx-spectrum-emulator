@@ -102,6 +102,8 @@ struct RewindSettings {
 struct RewindMark {
     uint64_t hc = 0;
     uint16_t pc = 0;
+    /// The bank code paged in at pc, for a breakpoint that names a bank.
+    uint8_t bank = ANY_BANK;
     uint32_t depth = 0;
     bool halted = false;
     /// The instruction starting here tripped the watch the search installed.

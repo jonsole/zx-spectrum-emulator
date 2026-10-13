@@ -65,6 +65,9 @@ struct Watchpoint {
     bool on_read = false;
     /// Only stop when a write changes what is there. Ignored by reads.
     bool on_change = true;
+    /// Only accesses while this bank is paged in at the address: a bank code
+    /// (see BankedAddress), or ANY_BANK for whatever is there.
+    uint8_t bank = ANY_BANK;
 
     /// An optional test on the value written, on top of the rest.
     enum class Test : uint8_t { None, Equals, NotEquals };
@@ -83,6 +86,8 @@ struct Logpoint {
     /// Assigned by the Engine, and how a client names one later.
     uint32_t id = 0;
     uint16_t addr = 0;
+    /// Only while this bank is paged in at `addr` -- see BankedAddress.
+    uint8_t bank = ANY_BANK;
     std::vector<LogSegment> message;
     /// The message as it was written, for a client listing what is set.
     std::string text;
@@ -130,7 +135,7 @@ struct MachineState {
     uint64_t frame_count = 0;
     /// Interrupts accepted since power-on.
     uint64_t interrupt_count = 0;
-    std::vector<uint16_t> breakpoints;
+    std::vector<BankedAddress> breakpoints;
     std::vector<uint16_t> call_stack;
     /// The watchpoint the machine is stopped at, if it stopped at one.
     WatchStop watch_stop;
@@ -471,8 +476,11 @@ public:
     /// This tells a command whether it is being serviced that way, which
     /// matters mainly for whether it should announce a stop.
     bool running() const { return running_.load(); }
-    void set_breakpoint(uint16_t addr);
-    void clear_breakpoint(uint16_t addr);
+    /// A PC breakpoint; with a bank code, one that fires only while that
+    /// bank is paged in at the address (see BankedAddress).
+    void set_breakpoint(uint16_t addr, uint8_t bank = ANY_BANK);
+    /// Clears exactly that one, plain or banked.
+    void clear_breakpoint(uint16_t addr, uint8_t bank = ANY_BANK);
     /// Watches an address or range, and stops a run or a step when the program
     /// accesses it -- see Watchpoint. `w.id` of 0 adds a new one; an existing
     /// id replaces that one, which is how a client edits without a gap where
