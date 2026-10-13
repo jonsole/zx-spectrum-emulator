@@ -43,12 +43,19 @@ started with `--exit-on-disconnect`, so ending the VS Code debug session
 leaves it running and MCP clients connected. Killing the server (or the
 `stop-stale-server` task doing it before a rebuild) drops them.
 
+**Addresses.** Every `address` argument takes a number (JSON numbers are
+decimal), or a string: a symbol expression such as `"KEY_INT+9"` once
+`load_debug_info` has loaded symbols, or hex as `"$8000"`, `"&8000"`,
+`"0x8000"` or a bare `"8000"`. The older name `addr` is still accepted, as is
+`write_memory`'s `data_hex`, so existing scripts keep working; both are
+deprecated (see [the MCP interface plan](mcp-interface-plan.md)).
+
 **Available tools:**
 
 | Tool | Does |
 |---|---|
 | `load_rom(rom_base64)` | Load a ROM image (base64): 16K for the 48K, or the 32K 128K pair (ROM 0 then ROM 1) |
-| `load_snapshot(sna_base64)` | Load a `.sna` (48K or 128K) or `.z80` (v1-v3) snapshot (base64); the machine becomes the model the snapshot was taken on |
+| `load_snapshot(path)` / `load_snapshot(sna_base64)` | Load a `.sna` (48K or 128K) or `.z80` (v1-v3) snapshot, from a file or passed in as base64; the machine becomes the model the snapshot was taken on |
 | `save_snapshot(path)` | Save the machine as a `.sna` or `.z80` file (by extension), consistent even mid-run; a 128K's paging and AY state included |
 | `load_debug_info(sld_path, asm_path)` | Attach source-level debug info for the loaded program (see [source-level debugging](vscode-debugging.md#source-level-debugging-of-your-own-program)) |
 | `reset(machine=None)` | Reset the machine, optionally switching it to `"48"` or `"128"` first (the model's ROM must be loaded) |
@@ -58,13 +65,13 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `step_back(mode="over", count=1)` / `reverse_continue()` | Go back through what the program did: `"into"` the previous instruction, `"over"` the previous one in this routine, `"out"` the `CALL` that entered it; or back to the last breakpoint hit (see [stepping backwards](#stepping-backwards)) |
 | `run_back_to(address)` / `run_back_to_write(address)` | Back to the last time execution reached an address, or to the instruction that last wrote one |
 | `return_to_live()` / `history_status()` | From the past, replay to the newest instant; how much history there is and where the machine is in it |
-| `set_breakpoint(addr)` / `clear_breakpoint(addr)` | PC breakpoints |
+| `set_breakpoint(address)` / `clear_breakpoint(address)` / `list_breakpoints()` | PC breakpoints; the list has everyone's, VS Code's included, each with its symbol |
 | `set_watchpoint(address, length, access, on_change, value, not_value)` | Stop when the program reads or writes an address or range -- what wrote that? (see [watchpoints](#watchpoints)) |
 | `clear_watchpoint(id=None)` / `list_watchpoints()` | Remove one or all; what is being watched, with hit counts |
 | `set_logpoint(address, message, id=None)` | Report a message every time execution reaches an address, without stopping (see [logpoints](#logpoints)) |
 | `clear_logpoint(id=None)` / `list_logpoints()` / `get_log(since, max)` | Remove one or all of MCP's; every logpoint set, with hit counts; what MCP's have reported since a given line |
-| `read_memory(addr, length, bank=None)` / `write_memory(addr, data_hex)` | Memory access (hex-encoded), as the CPU sees it -- or with `bank`, straight out of one of a 128K's eight RAM banks whether or not it is paged in |
-| `get_registers()` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. Every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
+| `read_memory(address, length, bank=None)` / `write_memory(address, data)` | Memory access, as the CPU sees it -- or with `bank`, a read straight out of one of a 128K's eight RAM banks whether or not it is paged in. `data` is hex (`"3E 41 C9"`) or an array of numbers |
+| `get_registers(raw=false)` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. `get_registers` gives hex, PC with its symbol (`"$8003 (loop)"`), the flags spelled out (`SZ5H3PNC`, `-` for clear), the instruction at PC and the frame and T-state counters; `raw: true` gives every register as a number, as it used to. `set_registers` takes every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
 | `get_screen_sequence(frames, every)` | Several consecutive frames as separate images, each tagged with its frame number: motion, flicker and animation as still pictures (see [video](#video)) |
@@ -76,7 +83,7 @@ leaves it running and MCP clients connected. Killing the server (or the
 | `server_info()` | Which emulator this is: its pid, its build version (`serverVersion`), the DAP, MCP, screen and audio ports it is really on, when it started, its ROMs and the program last loaded by path, and where it advertises itself (see [more than one emulator](vscode-debugging.md#more-than-one-emulator)) |
 | `get_state()` | Full snapshot: PC, registers, breakpoints, running flag, border, call stack, and `rewind` (built with it), `in_past` and `behind_tstates` |
 | `resolve_symbol(name)` | Symbol name → address (loaded program's own debug info first, then the ROM's) |
-| `resolve_address(addr)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |
+| `resolve_address(address)` | Address → nearest symbol + offset (same sources as `resolve_symbol`) |
 | `profile(action, lines, routines, tree_min_percent, idle, period)` | Measure where execution time goes, on a running machine without pausing it: the most expensive source lines and routines, the call tree by call path, and the worst frames (see [execution profile](#execution-profile)) | (see [execution profile](vscode-debugging.md#execution-profile)) |
 
 ## Video

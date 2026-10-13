@@ -19,6 +19,7 @@
 #include "file_io.h"
 #include "log.h"
 #include "beeper.h"
+#include "disassembler.h"
 #include "http.h"
 #include "net.h"
 #include "profile_report.h"
@@ -106,6 +107,40 @@ std::string hex4(uint16_t v) {
     return buf;
 }
 
+/// "$9C40", "$3F": hex the way the Spectrum's own literature writes it, for
+/// results a person (or a model) reads rather than a script parses.
+std::string dollar_hex(uint32_t v, int digits) {
+    char buf[12];
+    std::snprintf(buf, sizeof buf, "$%0*X", digits, v);
+    return buf;
+}
+
+/// An address with the symbol it falls in: "$9C40 (sprite_move+7)", or just
+/// "$9C40" where nothing loaded names it.
+std::string describe_address(const Sources& sources, uint16_t addr) {
+    std::string out = dollar_hex(addr, 4);
+    std::string name;
+    uint16_t offset = 0;
+    if (sources.resolve_symbol(addr, name, offset)) {
+        out += " (" + name + (offset == 0 ? std::string() : "+" + std::to_string(offset)) + ")";
+    }
+    return out;
+}
+
+/// F as a string, bit 7 down to bit 0: a letter for each flag set, '-' for
+/// each clear -- "SZ5H3PNC" with all of them up. 5 and 3 are the undocumented
+/// copies of result bits 5 and 3.
+std::string flags_string(uint8_t f) {
+    static const char NAMES[] = "SZ5H3PNC";
+    std::string out(8, '-');
+    for (int i = 0; i < 8; i++) {
+        if ((f & (0x80 >> i)) != 0) {
+            out[size_t(i)] = NAMES[i];
+        }
+    }
+    return out;
+}
+
 json registers_json(const Registers& r) {
     return json{{"a", r.a},   {"f", r.f},     {"b", r.b},       {"c", r.c},
                 {"d", r.d},   {"e", r.e},     {"h", r.h},       {"l", r.l},
@@ -115,6 +150,45 @@ json registers_json(const Registers& r) {
                 {"ix", r.ix}, {"iy", r.iy},   {"sp", r.sp},     {"pc", r.pc},
                 {"i", r.i},   {"r", r.r},     {"iff1", r.iff1}, {"iff2", r.iff2},
                 {"im", r.im}, {"wz", r.wz}};
+}
+
+/// The registers as a person reads them: hex in the Spectrum's notation, PC
+/// with its symbol, the flags spelled out, the instruction PC is at, and the
+/// counters that say how far the machine has got. registers_json is the raw
+/// form, for a script that wants numbers.
+json readable_registers_json(Engine& engine, const Sources& sources) {
+    const MachineState s = engine.state();
+    const Registers& r = s.registers;
+    // PC from the state, not Registers::pc: the overlapped fetch leaves the
+    // latter one behind (see AGENTS.md), and the state has already corrected it.
+    const std::vector<uint8_t> code = engine.read_memory(s.pc, 4);
+    const ReadFn read = [&code, &s](uint16_t a) {
+        const size_t i = size_t(uint16_t(a - s.pc));
+        return i < code.size() ? code[i] : uint8_t(0);
+    };
+    const Instruction instruction = disassemble_one(read, s.pc);
+    return json{{"pc", describe_address(sources, s.pc)},
+                {"sp", dollar_hex(r.sp, 4)},
+                {"af", dollar_hex(r.af(), 4)},
+                {"bc", dollar_hex(r.bc(), 4)},
+                {"de", dollar_hex(r.de(), 4)},
+                {"hl", dollar_hex(r.hl(), 4)},
+                {"ix", dollar_hex(r.ix, 4)},
+                {"iy", dollar_hex(r.iy, 4)},
+                {"af_", dollar_hex(uint16_t((r.a_ << 8) | r.f_), 4)},
+                {"bc_", dollar_hex(uint16_t((r.b_ << 8) | r.c_), 4)},
+                {"de_", dollar_hex(uint16_t((r.d_ << 8) | r.e_), 4)},
+                {"hl_", dollar_hex(uint16_t((r.h_ << 8) | r.l_), 4)},
+                {"i", dollar_hex(r.i, 2)},
+                {"r", dollar_hex(r.r, 2)},
+                {"im", r.im},
+                {"iff1", bool(r.iff1)},
+                {"iff2", bool(r.iff2)},
+                {"flags", flags_string(r.f)},
+                {"instruction", annotate_symbols(instruction.text, sources)},
+                {"halted", s.halted},
+                {"frame_count", s.frame_count},
+                {"tstate", s.tstate}};
 }
 
 /// "1x", "0.5x", "10x" -- trailing zeros trimmed, because a speed picker
@@ -319,21 +393,6 @@ const json& arg(const json& args, const char* name) {
     return it == args.end() ? null_value : *it;
 }
 
-bool arg_u16(const json& args, const char* name, uint16_t& out, std::string& error) {
-    const json& v = arg(args, name);
-    if (!v.is_number_integer()) {
-        error = std::string("'") + name + "' is required and must be an integer";
-        return false;
-    }
-    const int64_t n = v.get<int64_t>();
-    if (n < 0 || n > 0xFFFF) {
-        error = std::string("'") + name + "' must be a 16-bit address (0..65535)";
-        return false;
-    }
-    out = uint16_t(n);
-    return true;
-}
-
 /// An OPTIONAL address argument in either shape a caller may write it: a JSON
 /// integer (decimal, as JSON numbers are), or a string holding a symbol
 /// expression -- "KEY_INT+9", "0x0038", "0038". `present` tells an omitted
@@ -366,6 +425,25 @@ bool arg_opt_address(const json& args, const char* name, const Sources& sources,
     }
     present = true;
     return true;
+}
+
+/// The address a tool acts on, from `address` -- or `addr`, its name before
+/// the shared interface (docs/mcp-interface-plan.md), still accepted so
+/// existing scripts keep working. Either may be a number or a symbol
+/// expression.
+bool arg_address(const json& args, const Sources& sources, uint16_t& out, std::string& error) {
+    bool present = false;
+    for (const char* name : {"address", "addr"}) {
+        if (!arg_opt_address(args, name, sources, present, out, error)) {
+            return false;
+        }
+        if (present) {
+            return true;
+        }
+    }
+    error = "'address' is required: a number, or a symbol expression like \"KEY_INT+9\" or "
+            "\"$8000\"";
+    return false;
 }
 
 bool arg_string(const json& args, const char* name, std::string& out, std::string& error) {
@@ -544,6 +622,11 @@ json number_prop(const char* description) {
     return json{{"type", "number"}, {"description", description}};
 }
 
+/// What every `address` argument takes.
+constexpr const char* ADDRESS_HELP =
+    "A 16-bit address: a number, or a string -- a symbol expression (\"KEY_INT+9\"), or hex "
+    "as $8000, &8000, 0x8000 or a bare 8000.";
+
 json tools_list() {
     json tools = json::array();
     auto add = [&tools](const char* name, const char* description, const json& input_schema) {
@@ -558,13 +641,16 @@ json tools_list() {
         schema(json{{"rom_base64", string_prop("Base64-encoded 16K (48K) or 32K (128K) ROM image.")}},
                {"rom_base64"}));
     add("load_snapshot",
-        "Load a .sna or .z80 snapshot (base64-encoded) -- restores RAM, registers, border and, "
-        "for a 128K snapshot, paging and the AY registers. The machine becomes whichever model "
-        "the snapshot was taken on (48K or 128K), so the matching ROM must already be loaded.",
-        schema(json{{"sna_base64", string_prop("Base64-encoded snapshot: a .sna (49179 bytes "
-                                               "for 48K, 131103 or 147487 for 128K) or a .z80 "
-                                               "of version 1, 2 or 3.")}},
-               {"sna_base64"}));
+        "Load a .sna or .z80 snapshot, from a file (path) or passed in (sna_base64) -- restores "
+        "RAM, registers, border and, for a 128K snapshot, paging and the AY registers. The "
+        "machine becomes whichever model the snapshot was taken on (48K or 128K), so the "
+        "matching ROM must already be loaded. Give one of path or sna_base64.",
+        schema(json{{"path", string_prop("A .sna or .z80 file on this computer, as save_snapshot "
+                                         "writes them.")},
+                    {"sna_base64", string_prop("Or the snapshot itself, base64-encoded: a .sna "
+                                               "(49179 bytes for 48K, 131103 or 147487 for "
+                                               "128K) or a .z80 of version 1, 2 or 3.")}},
+               {}));
     add("save_snapshot",
         "Save the machine as a .sna or .z80 file (by the path's extension; .sna unless it ends "
         "in .z80) -- RAM, registers, border and on a 128K the paging and AY state, taken "
@@ -688,24 +774,45 @@ json tools_list() {
                     {"max", integer_prop("At most this many lines (default 500).")}},
                {}));
     add("set_breakpoint", "Set a breakpoint at an address",
-        schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
+        schema(json{{"address", address_prop(ADDRESS_HELP)},
+                    {"addr", address_prop("Deprecated name for address.")}},
+               {"address"}));
     add("clear_breakpoint", "Clear a breakpoint at an address",
-        schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
+        schema(json{{"address", address_prop(ADDRESS_HELP)},
+                    {"addr", address_prop("Deprecated name for address.")}},
+               {"address"}));
+    add("list_breakpoints",
+        "Every breakpoint set, whoever set it (MCP or a VS Code debugger), with the symbol each "
+        "falls in. Logpoints are listed by list_logpoints.",
+        no_params());
     add("read_memory",
         "Read memory starting at an address, as the CPU sees it -- or, with bank, straight out "
         "of one of a 128K's eight 16K RAM banks whether or not it is paged in",
-        schema(json{{"addr", integer_prop("16-bit address; with bank, an offset 0..16383 "
-                                          "within that bank.")},
+        schema(json{{"address", address_prop("Where to start: a 16-bit address or a symbol "
+                                             "expression; with bank, an offset 0..16383 within "
+                                             "that bank.")},
+                    {"addr", address_prop("Deprecated name for address.")},
                     {"length", integer_prop("Bytes to read (default 1).")},
                     {"bank", integer_prop("RAM bank 0-7 to read directly, ignoring paging. "
                                           "Bank 5 is the screen (0x4000 on both models), 2 "
                                           "is 0x8000, 7 the 128K's shadow screen.")}},
-               {"addr"}));
-    add("write_memory", "Write hex-encoded bytes to memory starting at an address",
-        schema(json{{"addr", integer_prop("16-bit address.")},
-                    {"data_hex", string_prop("Hex-encoded bytes to write.")}},
-               {"addr", "data_hex"}));
-    add("get_registers", "Get the full Z80 register set", no_params());
+               {"address"}));
+    add("write_memory", "Write bytes to memory starting at an address",
+        schema(json{{"address", address_prop(ADDRESS_HELP)},
+                    {"addr", address_prop("Deprecated name for address.")},
+                    {"data", json{{"type", json::array({"string", "array"})},
+                                  {"items", json{{"type", "integer"}}},
+                                  {"description", "The bytes: hex (\"3E 41 C9\", spaces "
+                                                  "optional) or an array of numbers 0-255."}}},
+                    {"data_hex", string_prop("Deprecated name for data, as hex.")}},
+               {"address", "data"}));
+    add("get_registers",
+        "The Z80's registers: hex, PC with the symbol it is in, the flags spelled out (SZ5H3PNC, "
+        "- for clear), the instruction at PC, and the frame and T-state counters. raw: true "
+        "gives every register as a plain number instead, as earlier versions did.",
+        schema(json{{"raw", bool_prop("Plain numbers, every 8- and 16-bit register (default "
+                                      "false).")}},
+               {}));
     add("set_registers",
         "Set any Z80 registers (fetch-modify-writeback -- omit fields to leave them unchanged). "
         "Every register is addressable: the pairs, their 8-bit halves, the shadow set (af_, "
@@ -981,7 +1088,9 @@ json tools_list() {
     add("resolve_address",
         "Find the nearest named routine at or before a 16-bit address, with its offset (e.g. "
         "0x0005 -> {symbol: START, offset: 5}) -- same sources as resolve_symbol",
-        schema(json{{"addr", integer_prop("16-bit address.")}}, {"addr"}));
+        schema(json{{"address", address_prop(ADDRESS_HELP)},
+                    {"addr", address_prop("Deprecated name for address.")}},
+               {"address"}));
     add("set_break_on_interrupt",
         "Stop a run at the first instruction of the interrupt handler each time the CPU "
         "accepts an interrupt -- for seeing what a handler does, or what state it was "
@@ -1189,11 +1298,19 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
     }
 
     if (name == "load_snapshot") {
-        std::string b64;
-        if (!arg_string(args, "sna_base64", b64, error)) {
-            return error_result(error);
+        std::vector<uint8_t> data;
+        const json& path = arg(args, "path");
+        const json& b64 = arg(args, "sna_base64");
+        if (path.is_string() == b64.is_string()) {
+            return error_result("give one of 'path' (a .sna or .z80 file) or 'sna_base64'");
         }
-        const std::vector<uint8_t> data = base64_decode(b64);
+        if (path.is_string()) {
+            if (!read_file(path.get<std::string>(), data)) {
+                return error_result("couldn't read " + path.get<std::string>());
+            }
+        } else {
+            data = base64_decode(b64.get<std::string>());
+        }
         SnapshotInfo info;
         const std::string what = inspect_snapshot(data.data(), data.size(), info);
         if (!what.empty()) {
@@ -1570,20 +1687,28 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "set_breakpoint" || name == "clear_breakpoint") {
         uint16_t addr = 0;
-        if (!arg_u16(args, "addr", addr, error)) {
+        if (!arg_address(args, sources, addr, error)) {
             return error_result(error);
         }
         if (name == "set_breakpoint") {
             engine.set_breakpoint(addr);
-            return text_result("breakpoint set at " + hex4(addr));
+            return text_result("breakpoint set at " + describe_address(sources, addr));
         }
         engine.clear_breakpoint(addr);
-        return text_result("breakpoint cleared at " + hex4(addr));
+        return text_result("breakpoint cleared at " + describe_address(sources, addr));
+    }
+
+    if (name == "list_breakpoints") {
+        json list = json::array();
+        for (uint16_t addr : engine.state().breakpoints) {
+            list.push_back(json{{"address", describe_address(sources, addr)}, {"addr", addr}});
+        }
+        return json_result(json{{"breakpoints", list}});
     }
 
     if (name == "read_memory") {
         uint16_t addr = 0;
-        if (!arg_u16(args, "addr", addr, error)) {
+        if (!arg_address(args, sources, addr, error)) {
             return error_result(error);
         }
         const json& len = arg(args, "length");
@@ -1611,20 +1736,37 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "write_memory") {
         uint16_t addr = 0;
-        std::string data_hex;
-        if (!arg_u16(args, "addr", addr, error) || !arg_string(args, "data_hex", data_hex, error)) {
+        if (!arg_address(args, sources, addr, error)) {
             return error_result(error);
         }
+        const json& given = arg(args, "data").is_null() ? arg(args, "data_hex") : arg(args, "data");
         std::vector<uint8_t> data;
-        if (!hex_decode(data_hex, data)) {
-            return error_result("'data_hex' must be an even number of hex digits");
+        if (given.is_string()) {
+            if (!hex_decode(given.get<std::string>(), data)) {
+                return error_result("'data' as a string must be hex, an even number of digits");
+            }
+        } else if (given.is_array()) {
+            for (const json& b : given) {
+                if (!b.is_number_integer() || b.get<int64_t>() < 0 || b.get<int64_t>() > 255) {
+                    return error_result("'data' as an array must hold numbers 0-255");
+                }
+                data.push_back(uint8_t(b.get<int64_t>()));
+            }
+        } else {
+            return error_result("'data' is required: hex (\"3E 41 C9\") or an array of numbers");
         }
+        const size_t count = data.size();
         engine.write_memory(addr, std::move(data));
-        return text_result("memory written");
+        return text_result("wrote " + std::to_string(count) + " byte" + (count == 1 ? "" : "s")
+                           + " at " + describe_address(sources, addr));
     }
 
     if (name == "get_registers") {
-        return json_result(registers_json(engine.registers()));
+        const json& raw = arg(args, "raw");
+        if (raw.is_boolean() && raw.get<bool>()) {
+            return json_result(registers_json(engine.registers()));
+        }
+        return json_result(readable_registers_json(engine, sources));
     }
 
     if (name == "set_registers") {
@@ -2173,7 +2315,7 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
     if (name == "resolve_address") {
         uint16_t addr = 0;
-        if (!arg_u16(args, "addr", addr, error)) {
+        if (!arg_address(args, sources, addr, error)) {
             return error_result(error);
         }
         const std::vector<RomSourcePtr> active = sources.active();
@@ -2247,6 +2389,20 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
 
 // ---- JSON-RPC --------------------------------------------------------------
 
+/// What a client is told at the start, for its model to read before the tool
+/// list: where to begin, and the conventions every tool shares.
+constexpr const char* SERVER_INSTRUCTIONS =
+    "One live ZX Spectrum (48K or 128K), shared with a VS Code debugger and its screen panel: "
+    "there are no sessions to create, and a person may be watching. To start a program: "
+    "load_tape (it types LOAD \"\" for you), or load_snapshot a .sna/.z80 file. To see it: "
+    "get_screen, or get_screen_sequence for motion. To drive it: key_down and key_up with the "
+    "Spectrum's key names (\"A\", \"ENTER\", \"CAPS SHIFT\", \"SYM SHIFT\"). To debug: "
+    "set_breakpoint, set_watchpoint (what wrote that?), set_logpoint, step, get_state, "
+    "get_registers; with rewind, step_back and run_back_to_write go backwards. run blocks until "
+    "the machine stops; run with wait false leaves it running. Addresses are numbers or "
+    "strings: symbols and expressions (\"KEY_INT+9\") once load_debug_info has loaded a "
+    "program's symbols, or hex as $8000, &8000, 0x8000 or a bare 8000.";
+
 json rpc_error(const json& id, int code, const std::string& message) {
     return json{{"jsonrpc", "2.0"},
                 {"id", id},
@@ -2282,7 +2438,8 @@ json handle_rpc(Engine& engine, Sources& sources, const json& message, bool& han
         return rpc_result(
             id, json{{"protocolVersion", PROTOCOL_VERSION},
                      {"capabilities", json{{"tools", json{{"listChanged", false}}}}},
-                     {"serverInfo", json{{"name", SERVER_NAME}, {"version", SERVER_VERSION}}}});
+                     {"serverInfo", json{{"name", SERVER_NAME}, {"version", SERVER_VERSION}}},
+                     {"instructions", SERVER_INSTRUCTIONS}});
     }
     if (method == "ping") {
         return rpc_result(id, json::object());
@@ -2303,7 +2460,7 @@ json handle_rpc(Engine& engine, Sources& sources, const json& message, bool& han
         // person driving VS Code, nobody watched it happen.
         const std::string tool = name.get<std::string>();
         std::string detail;
-        for (const char* key : {"path", "addr", "speed", "action", "key", "symbol"}) {
+        for (const char* key : {"path", "address", "addr", "speed", "action", "key", "symbol"}) {
             const json& value = arg(arguments, key);
             if (value.is_string()) {
                 detail = " " + value.get<std::string>();

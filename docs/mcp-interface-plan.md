@@ -1,6 +1,6 @@
 # MCP interface plan: the ZX Spectrum and BBC Micro servers
 
-Status: **plan, not yet started.** The same document is in both repositories
+Status: **in progress.** Done so far: the Spectrum's small fixes (5.1). The same document is in both repositories
 (`zx-spectrum-emulator/docs/mcp-interface-plan.md` and
 `vs-code-bbc/docs/mcp-interface-plan.md`); change both together.
 
@@ -295,7 +295,7 @@ In order of value for effort. Item 1 is small and independent. Items 2-5
 are the core. Items 6-9 complete the shared set. Live behaviour is checked
 with `zx-live-verify` as well as CTest.
 
-1. **Small fixes, no engine change** (`mcp_server.cpp` only):
+1. **Small fixes, no engine change** (`mcp_server.cpp` only). *Done.*
    - `instructions` in the `initialize` result.
    - `load_snapshot(path)` alongside `sna_base64`.
    - `address` (and `addr` as an alias) accepting symbol expressions in

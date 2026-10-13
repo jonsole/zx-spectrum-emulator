@@ -196,7 +196,7 @@ public:
     ///     KEY_INT          the label's own address
     ///     KEY_INT+9        9 bytes into it
     ///     MASK_INT-2       ...and backwards, wrapping at 64K
-    ///     0x0038  $0038  0038      hex, however you like to write it
+    ///     0x0038  $0038  &0038  0038   hex, however you like to write it
     ///
     /// The two radix rules are the two the tools already PRINT, so anything
     /// this codebase shows can be pasted straight back in: a bare address is

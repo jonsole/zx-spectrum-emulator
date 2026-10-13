@@ -222,7 +222,8 @@ bool parse_number(const std::string& token, bool bare_is_hex, uint32_t& out) {
     if (body.size() > 2 && body[0] == '0' && (body[1] == 'x' || body[1] == 'X')) {
         body.erase(0, 2);
         base = 16;
-    } else if (body.size() > 1 && body[0] == '$') {
+    } else if (body.size() > 1 && (body[0] == '$' || body[0] == '&')) {
+        // $ as the Spectrum world writes hex, & as the BBC Micro's does.
         body.erase(0, 1);
         base = 16;
     }
@@ -251,8 +252,8 @@ bool term_value(const Sources& sources, const std::string& token, bool is_base, 
         return false;
     }
     const bool explicit_number =
-        token[0] == '$' || (token.size() > 2 && token[0] == '0'
-                            && (token[1] == 'x' || token[1] == 'X'));
+        token[0] == '$' || token[0] == '&'
+        || (token.size() > 2 && token[0] == '0' && (token[1] == 'x' || token[1] == 'X'));
     if (explicit_number) {
         if (!parse_number(token, true, out)) {
             error = "\"" + token + "\" is not a hex number";

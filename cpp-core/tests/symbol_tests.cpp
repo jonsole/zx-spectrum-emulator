@@ -101,6 +101,7 @@ TEST(an_offset_after_a_symbol_is_decimal) {
     // ...unless it says otherwise.
     CHECK_EQ(parsed(sources, "INT_HANDLER+0x60"), uint16_t(0x8060));
     CHECK_EQ(parsed(sources, "INT_HANDLER+$60"), uint16_t(0x8060));
+    CHECK_EQ(parsed(sources, "INT_HANDLER+&60"), uint16_t(0x8060));
     // Terms chain, which mostly falls out of the parser being a loop -- but
     // the distance between two labels is a genuinely useful thing to write.
     CHECK_EQ(parsed(sources, "INT_HANDLER+8-2"), uint16_t(0x8006));
@@ -116,6 +117,9 @@ TEST(a_bare_number_is_hex) {
     CHECK_EQ(parsed(sources, "0x0038"), uint16_t(0x0038));
     CHECK_EQ(parsed(sources, "0X38"), uint16_t(0x0038));
     CHECK_EQ(parsed(sources, "$0038"), uint16_t(0x0038));
+    // And as a BBC Micro programmer writes it, so an agent working on both
+    // machines is understood by either.
+    CHECK_EQ(parsed(sources, "&0038"), uint16_t(0x0038));
     // Not a symbol, so it falls through to being a number -- which is what
     // keeps a plain hex address working whatever letters it happens to have.
     CHECK_EQ(parsed(sources, "F000"), uint16_t(0xF000));
