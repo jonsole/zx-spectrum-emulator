@@ -2,14 +2,26 @@
 ; GetVergeAndMarkers: for each side of the track, the points the edges are
 ; drawn through, far to near.
 ;
-; Each side starts 32 segments ahead of the camera and steps back by 13, 6
-; and 3 segments, then one at a time, sixteen points in all -- big steps far
+; Each side starts 32 segments ahead of the camera and steps back by 13
+; and 7 segments, then one at a time, sixteen points in all -- big steps far
 ; away, where segments are a pixel or two apart, and small ones close up.
+; The kerb's stripes, a segment each, can only be drawn where the points are
+; a segment apart, so the single steps start 12 segments out, about as far
+; as a stripe is still a line tall. The BBC steps 13, 6 and 3 and starts
+; them at 9, with two more points in the middle distance and four behind the
+; camera, where the view hardly ever reaches.
 ; A side's list stops at the first point that cannot be seen: below the
 ; bottom of the view, too close to have a pitch angle, or -- once the points
 ; have started coming back towards the camera, past the closest one --
-; outside the field of view. Then it tries once more a quarter of the way
-; from the last point it kept, so the edge reaches the bottom of the view.
+; outside the field of view. That point is kept all the same, as the side's
+; last, with its own x, width and colour and its line even when that is
+; below the view: the last stretch heads for it, and edges.s stops it at
+; the bottom of the view. The BBC instead tries a point a quarter of the way
+; there with the last point's width and colour, and hides what that leaves
+; behind its dashboard; here that guess changed from one update to the next
+; as points came and went, and the kerb's stripes, width and edge jumped
+; close to the camera. A point's line can be negative only for a side's
+; last point.
 ;
 ; Both sides walk the same segments, so they are done together, a segment
 ; at a time: the segment's flags, its height and the log of its height
@@ -37,38 +49,21 @@ POINTS      equ 16
 ; two is in memory.
 VB_EARLY    equ 4
 
-verges_begin:
-    ld a,VB_EARLY
-    ld (verges_begin.stop+1),a
-    ld hl,VERGE_R
-    ld (vr_list),hl
-    ld hl,VERGE_L
-    ld (vl_list),hl
-    ld hl,$7FFF
-    ld (vr_close),hl
-    ld (vl_close),hl
-    xor a
-    ld (vr_count),a
-    ld (vl_count),a
-    ld (vb_i),a
-    inc a
-    ld (vr_live),a
-    ld (vl_live),a
-    ld hl,(cam_seg)
-    ld de,SEG_AHEAD
-    call seg_add
-    ld (vb_seg),hl
-.point:
-    ld a,(vb_i)
-    ld e,a
-    ld d,0
-    ld hl,vb_steps
-    add hl,de
-    ld e,(hl)
-    ld a,e
-    ld (vb_step),a
+; One segment's points on both sides: its flags, verge width, colours,
+; height and the log of its height above the eye, worked out once for the
+; two, then each live side's point. UNIT is 1 for the near points, a
+; segment apart, and 0 for the far ones, E segments back from the last.
+; Leaves Z set when both lists have ended. A macro rather than a routine
+; with the step in a register, so that the near points, which are most of
+; them, have no step to look up or test.
+    MACRO VB_SEGMENT UNIT
     ld hl,(vb_seg)
-    ASSERT low TRACK_LEN == 0       ; the wrap below needs whole pages
+    IF UNIT
+    dec hl                      ; back a segment, round the track
+    bit 7,h
+    jr z,.stepped
+    ld h,high (TRACK_LEN - 1)
+    ELSE
     ld a,l                      ; back E segments, round the track
     sub e
     ld l,a
@@ -76,6 +71,7 @@ verges_begin:
     dec h
     jp p,.stepped
     ld h,high (TRACK_LEN - 1)
+    ENDIF
 .stepped:
     ld (vb_seg),hl
     ; The segment's flags: vergeScale is 5 for black verges (25 units
@@ -102,20 +98,17 @@ verges_begin:
     ld l,low LOG2_WIDTH
     ld (vb_wlog),hl
     ; The marks alternate a segment at a time: odd ones white, even ones
-    ; red or black. But a point that ends a step of several segments --
-    ; the far ones, 13, 6 and 3 segments apart -- colours a stretch with
-    ; several marks in it, and by its own segment's parity it would swap
-    ; between white and red every time the camera passed a segment. Those
-    ; stretches take the red or black, so the distance holds still while
-    ; the marks close enough to draw one by one go past.
-    ld a,(vb_step)
-    dec a
-    jr nz,.solid
+    ; red or black. But a far point -- 13 and 7 segments apart -- colours
+    ; a stretch with several marks in it, and by its own segment's parity
+    ; it would swap between white and red every time the camera passed a
+    ; segment. Those stretches take the red or black, so the distance
+    ; holds still while the marks close enough to draw one by one go past.
+    IF UNIT
     ld a,(vb_seg)
     rrca
     ld bc,$0404
     jr c,.colours
-.solid:
+    ENDIF
     ld a,(vb_flags)
     ld bc,$0202
     bit 2,a
@@ -136,7 +129,6 @@ verges_begin:
     ld e,(hl)
     inc hl
     ld d,(hl)
-    ld (vb_py),de
     ex de,hl
     ld de,(cam_y)
     or a
@@ -175,21 +167,66 @@ verges_begin:
     ld a,(vr_live)
     ld hl,vl_live
     or (hl)
-    ret z
-    ld a,(vb_i)
+    ENDM
+
+; The far points, 32, 19 and 12 segments ahead, then the first near ones
+; up to VB_EARLY in all; verges_finish does the rest after compose. The
+; steps -- 0, 13, 7, then one at a time, POINTS in all -- are view_model.py's
+; SEGMENT_STEPS.
+    ASSERT VB_EARLY > 3
+verges_begin:
+    ld hl,VERGE_R
+    ld (vr_list),hl
+    ld hl,VERGE_L
+    ld (vl_list),hl
+    ld hl,$7FFF
+    ld (vr_close),hl
+    ld (vl_close),hl
+    xor a
+    ld (vr_count),a
+    ld (vl_count),a
     inc a
-    ld (vb_i),a
-.stop:
-    cp 0                        ; patched: VB_EARLY, then POINTS
+    ld (vr_live),a
+    ld (vl_live),a
+    ld hl,(cam_seg)
+    ld de,SEG_AHEAD
+    call seg_add
+    ld (vb_seg),hl
+    ld e,0
+    call vb_far
+    ret z
+    ld e,13
+    call vb_far
+    ret z
+    ld e,7
+    call vb_far
+    ret z
+    ld a,VB_EARLY - 3
+    jr vb_near
+
+; The rest of the lists, after compose: the near points still to come.
+verges_finish:
+    ld a,(vr_live)
+    ld hl,vl_live
+    or (hl)
+    ret z
+    ld a,POINTS - VB_EARLY
+
+; A near points, a segment apart each, while either list goes on.
+vb_near:
+    ld (vb_left),a
+.point:
+    VB_SEGMENT 1
+    ret z
+    ld hl,vb_left
+    dec (hl)
     jp nz,.point
     ret
 
-; The rest of the lists. If both ended early, .point steps on a segment
-; and finds neither side live, which does no harm.
-verges_finish:
-    ld a,POINTS
-    ld (verges_begin.stop+1),a
-    jp verges_begin.point
+; A far point, E segments back from the last.
+vb_far:
+    VB_SEGMENT 0
+    ret
 
 ; The point at segment vb_seg on one side: appended to the side's list, or
 ; the end of the list. There is a copy for each side, so that its state has
@@ -212,14 +249,16 @@ NAME_point:
     ld c,(hl)
     inc hl
     ld b,(hl)
-    ld hl,(cam_z)
+NAME_cz:
+    ld hl,0                     ; patched: cam_z (camera_update)
     ld a,c
     sub l
     ld c,a
     ld a,b
     sbc a,h
     ld b,a
-    ld hl,(cam_x)
+NAME_cx:
+    ld hl,0                     ; patched: cam_x
     ld a,e
     sub l
     ld e,a
@@ -301,7 +340,7 @@ NAME_point:
     ld b,(hl)                   ; BC = the angle within the octant
     pop hl
     add hl,de
-    ld (ya_logd),hl             ; the distance's log
+    push hl                     ; the distance's log, for after the yaw
     ex af,af'
     ld hl,yaw_angle.octants
     add a,l
@@ -323,14 +362,15 @@ NAME_point:
     and $C0
     add a,h
     ld h,a
-    ld de,(cam_heading)
+NAME_hd:
+    ld de,0                     ; patched: cam_heading
     or a
     sbc hl,de
     ld (vb_rel),hl
     ; The closest point so far, visible or not: beyond it the list is
     ; coming back towards the camera and must stay in the field of view.
     ; C is 1 if this is the closest yet, 0 if the list is past it.
-    ld de,(ya_logd)
+    pop de                      ; the distance's log
     ld hl,(NAME_close)
     or a
     sbc hl,de
@@ -347,7 +387,7 @@ NAME_point:
     jr nz,.level                ; T below 1
     ld a,h
     cp 7
-    jp nc,.hidden               ; T >= 128
+    jp nc,.too_close            ; T >= 128
     add a,high tbl_exp8
     ld h,a
     ld b,(hl)
@@ -365,7 +405,7 @@ NAME_point:
     jr .in_sight
 .below:
     sub b
-    jp m,.hidden                ; below the view
+    jp m,.last                  ; below the view
 .in_sight:
     ld (vb_line),a
     dec c
@@ -376,10 +416,8 @@ NAME_point:
     neg
 .abs:
     cp FOV_YAW
-    jp nc,.hidden
+    jp nc,.aside
 .in_view:
-    ld hl,(vb_seg)
-    ld (NAME_prev),hl
     ; The verge's width on screen: 2 ^ (vb_wlog - the distance's log).
     ld hl,(vb_wlog)
     or a
@@ -415,10 +453,8 @@ NAME_point:
     add hl,de
     ENDIF
     ex de,hl
-    ld a,(COLOUR)
-    ld (vb_colour),a
 .store:
-    ; BC = x, DE = the outside x, then vb_line and vb_colour.
+    ; BC = x, DE = the outside x, then vb_line and the colour.
     ld hl,(NAME_list)
     ld (hl),c
     inc l
@@ -431,7 +467,7 @@ NAME_point:
     ld a,(vb_line)
     ld (hl),a
     inc l
-    ld a,(vb_colour)
+    ld a,(COLOUR)
     ld (hl),a
     ld a,l
     add a,ENTRY-5
@@ -440,160 +476,77 @@ NAME_point:
     ld hl,NAME_count
     inc (hl)
     ret
-.hidden:
-    ; The last try: a quarter of the way from the last point kept towards
-    ; this one, with the last point's width and colour.
+.aside:
+    ld a,(vb_line)              ; in sight, but outside the field of view
+    jr .last
+.too_close:
+    ; T >= 128: closer than the eye is high. Above the eye that is a cliff
+    ; face, and the list just stops; below it, the line is far under the
+    ; view: 60 - T, with T read from the antilogarithms' last page, or 255
+    ; once it is past them, and held at -128 to fit a byte.
+    ld a,(pa_dysign)
+    or a
+    jp p,.stop
+    ld a,h
+    cp 7
+    ld a,255
+    jr nz,.far_below
+    ld h,high tbl_exp8 + 7
+    ld a,(hl)
+.far_below:
+    cp 60 + 128
+    ld b,a
+    ld a,-128
+    jr nc,.last
+    ld a,60
+    sub b
+.last:
+    ; This point ends the list, at line A, signed. It is kept all the same,
+    ; with no more points after it, if there is a point before it to draw
+    ; from. Its line is held to within 127 of that one's, so that the
+    ; stretch between them is one edges.s can step.
+    ld c,a
     xor a
     ld (NAME_live),a
     ld a,(NAME_count)
     or a
     ret z
-    ld hl,(pa_logdy)            ; the other side still needs this segment's
-    push hl
-    ld a,(pa_dysign)
-    push af
-    ld hl,(vb_off)              ; this point, which the main path kept in
-    ld de,XARR                  ; registers
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    ld (vb_px),de
-    ld hl,(vb_off)
-    ld de,ZARR
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    ld (vb_pz),de
-    ld hl,(NAME_prev)
-    add hl,hl
-    push hl
-    push hl
-    ld de,XARR
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    ld hl,(vb_px)
-    call quarter
-    ld (vb_px),hl
-    pop hl
-    ld de,ZARR
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    ld hl,(vb_pz)
-    call quarter
-    ld (vb_pz),hl
-    pop hl
-    ld de,SEG_YI
-    add hl,de
-    ld e,(hl)
-    inc hl
-    ld d,(hl)
-    ld hl,(vb_py)
-    call quarter
-    ld de,(cam_y)
-    or a
-    sbc hl,de
-    call pitch_height
-    call vb_project
-    ld hl,(ya_logd)
-    call pitch_line
-    jr c,.none
-    or a
-    jp m,.none
-    ld (vb_line),a
     ld hl,(NAME_list)
     ld a,l
-    sub ENTRY
-    ld l,a                      ; the last entry
-    ld c,(hl)
-    inc l
-    ld b,(hl)
-    inc l
-    ld e,(hl)
-    inc l
-    ld d,(hl)
-    inc l
-    inc l
-    ld a,(hl)
-    ld (vb_colour),a
-    ex de,hl
-    or a
-    sbc hl,bc                   ; its width on screen
-    push hl
-    ld hl,(vb_rel)
-    call yaw_to_x
-    pop de
-    ld b,h
-    ld c,l
-    add hl,de
-    ex de,hl
-    call .store
-.none:
-    pop af
-    ld (pa_dysign),a
-    pop hl
-    ld (pa_logdy),hl
+    sub ENTRY - 4
+    ld l,a
+    ld a,(hl)                   ; the last point's line
+    sub 127
+    xor $80
+    ld b,a                      ; the lowest it may be, biased to compare
+    ld a,c
+    xor $80
+    cp b
+    jr nc,.line_ok
+    ld a,b
+.line_ok:
+    xor $80
+    ld (vb_line),a
+    jp .in_view                 ; DE is still the distance's log
+.stop:
+    xor a
+    ld (NAME_live),a
     ret
 
 NAME_list:      dw 0
 NAME_count:     db 0
 NAME_live:      db 0
 NAME_close:     dw 0            ; the log of the closest point's distance
-NAME_prev:      dw 0            ; the segment of the last point kept
     ENDM
 
     VB_POINT vr, SEG_XI, SEG_ZI, vb_colours, 0
     VB_POINT vl, SEG_XO, SEG_ZO, vb_colours+1, 1
 
-; The yaw of (vb_px, vb_pz) relative to the camera's heading into vb_rel,
-; and the log of its distance in ya_logd.
-vb_project:
-    ld hl,(vb_px)
-    ld de,(cam_x)
-    or a
-    sbc hl,de
-    push hl
-    ld hl,(vb_pz)
-    ld de,(cam_z)
-    or a
-    sbc hl,de
-    ld b,h
-    ld c,l
-    pop de
-    call yaw_angle
-    ld de,(cam_heading)
-    or a
-    sbc hl,de
-    ld (vb_rel),hl
-    ret
-
-; HL = DE + (HL - DE) / 4, rounding down as the BBC's shifts do.
-quarter:
-    or a
-    sbc hl,de
-    sra h
-    rr l
-    sra h
-    rr l
-    add hl,de
-    ret
-
-vb_steps:   db 0,13,6,3,1,1,1,1,1,1,1,1,1,1,1,1
-vb_i:       db 0
+vb_left:    db 0                ; near points still to do
 vb_seg:     dw 0
-vb_step:    db 0                ; the segments from the last point to this
 vb_off:     dw 0
 vb_flags:   db 0
 vb_wlog:    dw 0
 vb_colours: dw 0
-vb_px:      dw 0
-vb_py:      dw 0
-vb_pz:      dw 0
 vb_rel:     dw 0
 vb_line:    db 0
-vb_colour:  db 0

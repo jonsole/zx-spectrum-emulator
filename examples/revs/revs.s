@@ -12,7 +12,7 @@
 ;   $8000  code
 ;   $A000  page-aligned lookup tables (tables.py), eight pages
 ;   $A800  the track data file, exactly as the BBC loads it (track_data.py);
-;          only build_track reads it, so it is free once the track is built
+;          only build_track reads it, and then objects.s keeps its runs there
 ;   $B000  eight pages of antilogarithms
 ;   $BA00  per-frame verge point lists
 ;   $C000  every segment's 16-bit coordinates: five arrays of 1024 words
@@ -41,6 +41,7 @@ start:
     ld sp,STACK_TOP
     call screen_init
     call build_track
+    call objects_init
     call markers_init
     call im2_init
     call camera_init
@@ -50,16 +51,30 @@ start:
 main_loop:
     call verges_finish
     call edges_build
+    call objects_build
 .wait_frame:                    ; named for the tests, which time from here
+    ; By default nothing waits for the frame or the beam: each update
+    ; starts as soon as the last one ends, and compose paints wherever the
+    ; beam is, so a frame can show the top of one update and the bottom of
+    ; the next. Seen running, the tearing is mild, and updates come as fast
+    ; as the work allows rather than every third frame. SYNCED
+    ; (build.py --define SYNCED) waits for the frame interrupt and then the
+    ; beam, so that no frame shows two updates (see compose.s); the tests
+    ; build that way, since the beam and speed checks are about it.
+    IFDEF SYNCED
     halt
+    ENDIF
     ; Compose can't start until the beam has drawn the view's top row, so
     ; the next update's camera moves and its first verge points are found
     ; in the meantime. They are bounded so that compose still starts in
     ; time to finish before the beam comes round again (see compose.s).
     call camera_update
     call verges_begin
+    call compose_skip           ; BC = where to start, below the sky
+    IFDEF SYNCED
     call wait_for_beam
-    call compose_screen
+    ENDIF
+    call compose_from
     call fps_show
     jr main_loop
 
@@ -70,6 +85,7 @@ main_loop:
     INCLUDE "verges.s"
     INCLUDE "edges.s"
     INCLUDE "compose.s"
+    INCLUDE "objects.s"
     INCLUDE "patterns.s"
 code_end:
     ASSERT code_end <= $A000

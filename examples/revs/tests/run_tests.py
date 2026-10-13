@@ -13,6 +13,8 @@ runs it in cpp-core's snapshot_probe and checks:
            edges and compose fed the Z80's own point lists
   compose  compose_screen on marker records shuffled out of x order, so that
            it has to sort them
+  objects  the sign's parts (objects.s), where it is in view, against its
+           projection through view_model.py
   beam     that every update's writes to the screen show in the same frame,
            so no frame mixes two views
   speed    the work from each frame interrupt to the next HALT, once round
@@ -202,7 +204,8 @@ def check_screen(views: Views, symbols: dict, report: Report) -> None:
         # started.
         lists_mem = views.at_halt[seg]
         layout = sm.Layout(symbols, lists_mem)
-        want = sm.compose(layout, sm.edges(layout, sm.verge_lists(layout, lists_mem)))
+        want = sm.compose(layout, sm.edges(layout, sm.verge_lists(layout, lists_mem)),
+                          sm.object_parts(layout, lists_mem))
         got = sm.screen_view(layout, views.composed[seg])
         wrong = [i for i in range(len(want)) if want[i] != got[i]]
         if wrong:
@@ -243,6 +246,7 @@ def check_compose(probe: Probe, views: Views, symbols: dict, report: Report) -> 
             recs[line] = (r[1], marks)
         probe.call("compose_screen")
         got = sm.screen_view(layout, probe.memory())
+        parts = sm.object_parts(layout, mem)
         for line in range(lines):
             start, marks = recs[line]
             pattern = (lambda p: sm.rotate2(p)) if line & 1 else (lambda p: p)
@@ -254,8 +258,9 @@ def check_compose(probe: Probe, views: Views, symbols: dict, report: Report) -> 
                 pos, cur = x, pattern(p)
             for i in range(pos, 256):
                 px[i] = cur
-            want = bytes(sum(((px[b * 8 + k] >> (7 - k)) & 1) << (7 - k) for k in range(8))
-                         for b in range(32))
+            want = bytearray(sum(((px[b * 8 + k] >> (7 - k)) & 1) << (7 - k) for k in range(8))
+                             for b in range(32))
+            sm.paint_parts(want, line, parts)
             row = (lines - 1 - line) * 32
             if got[row:row + 32] != want:
                 bad.append(f"segment {seg} line {line}: {recs[line]}")
@@ -266,11 +271,81 @@ def check_compose(probe: Probe, views: Views, symbols: dict, report: Report) -> 
         report.note(line)
 
 
+def sign_parts(view, cam, cam_seg: int, symbols: dict) -> dict[int, tuple]:
+    """The sign's parts as the screen should show them, by fill pattern: (first
+    x, last x, lowest line, highest line), held to the view, worked out from
+    the track and view_model.py's projection rather than from the Z80."""
+    seg = symbols["SIGN_SEG"]
+    n = len(view.t.segments)
+    if not 1 <= (seg - cam_seg) % n < 32:
+        return {}
+    sg = view.t.segments[seg]
+    # Its foot: beyond the right verge by half the track's width.
+    fx, fz, fy = sg.xi + ((sg.xi - sg.xo) >> 1), sg.zi + ((sg.zi - sg.zo) >> 1), sg.yi
+    rel, _, dist = view.project(cam, fx, fy, fz)
+    if abs(rel) >> 8 >= 2 * symbols["FOV_YAW"]:
+        return {}
+    x = 128 + rel / 40
+    def line(h):
+        dy = fy + h - cam[1]
+        v = vm.pitch_line(dy, dist)
+        return v if v is not None else (127 if dy >= 0 else -128)
+    l0, l1, l2 = line(0), line(symbols["POST_TOP"]), line(symbols["BOARD_TOP"])
+    out = {}
+    # (half-width in track units, bottom, top, pattern): as objects.s says.
+    for w, lb, lt, pattern in ((12, l0, l1, 0xFF), (92, l1, l2, 0xCC)):
+        hw = w * 2 ** 23 / (40 * 800 * dist)       # as a verge mark's width
+        first, last = max(0, round(x - hw)), min(255, round(x + hw) - 1)
+        lb, lt = max(0, lb), min(symbols["VIEW_LINES"], lt)
+        if hw >= 1 and first <= last and lb < lt:
+            out[pattern] = (first, last, lb, lt - 1)
+    return out
+
+
+def check_objects(views: Views, symbols: dict, report: Report) -> None:
+    view = vm.View(Track(track_data.fetch("silverstone")))
+    bad = []
+    seen = 0
+    for seg, mem in views.at_halt.items():
+        def word(name):
+            a = symbols[name]
+            return signed16(mem[a] | mem[a + 1] << 8)
+        cam = (word("cam_x"), word("cam_y"), word("cam_z"), word("cam_heading") & 0xFFFF)
+        want = sign_parts(view, cam, word("cam_seg"), symbols)
+        got = {}
+        for part in sm.object_parts(sm.Layout(symbols, mem), mem):
+            first, last = sm.part_extent(part)
+            got[part[6]] = (first, last, part[0], part[1])
+        if want:
+            seen += 1
+        if set(got) != set(want):
+            bad.append(f"segment {seg}: parts {sorted(got)}, model {sorted(want)}")
+            continue
+        for pattern, (f, l, lo, hi) in got.items():
+            wf, wl, wlo, whi = want[pattern]
+            if abs(f - wf) > 3 or abs(l - wl) > 3 or abs(lo - wlo) > 1 or abs(hi - whi) > 1:
+                bad.append(f"segment {seg} part {pattern:02X}: x {f}..{l}, lines {lo}..{hi}; "
+                           f"model x {wf}..{wl}, lines {wlo}..{whi}")
+    report.result("objects", not bad and seen > 0,
+                  f"the sign in {seen} views, within 3 px and a line" if not bad
+                  else f"{len(bad)} wrong" if bad else "the sign was never in view")
+    for line in bad[:6]:
+        report.note(line)
+
+
 def check_beam(probe: Probe, symbols: dict, report: Report) -> None:
     probe.load(SNAPSHOT)
     probe.runto("main_loop", STARTUP_FRAMES)
+    # From past the sign, so that no object is in view for the 200 updates
+    # (125 segments). An object close up adds about 1,000 T-states to every
+    # line it covers, and with a big one compose runs past the beam's return
+    # and the synchronised build tears: a known limit, accepted while the
+    # default build runs unsynchronised (see objects.s).
+    probe.set_word("cam_seg", symbols["SIGN_SEG"] + 28)
+    probe.runto("main_loop", UPDATE_FRAMES)
+    probe.runto("main_loop", UPDATE_FRAMES)
     updates = 200
-    r = probe.beam("compose_screen", symbols["VIEW_TOP"], symbols["VIEW_LINES"], updates)
+    r = probe.beam("compose_from", symbols["VIEW_TOP"], symbols["VIEW_LINES"], updates)
     report.result("beam", r["split"] == "0",
                   f"{r['split']} of {updates} updates shown across two frames; "
                   f"{r['writes']} writes; compose started {r['start']} T-states after the interrupt")
@@ -293,7 +368,7 @@ def check_speed(probe: Probe, symbols: dict, report: Report) -> None:
                   f"{r['over']} of {updates} updates need a fourth frame")
 
 
-CHECKS = ["maths", "verges", "screen", "compose", "beam", "speed"]
+CHECKS = ["maths", "verges", "screen", "compose", "objects", "beam", "speed"]
 
 
 def main() -> None:
@@ -312,7 +387,9 @@ def main() -> None:
     if exe is None:
         sys.exit("snapshot_probe not built -- run: cpp-core/build.ps1 -Release -Target snapshot_probe")
     if not args.no_build:
-        built = subprocess.run([sys.executable, str(REVS / "build.py")])
+        # Synchronised to the beam, which the beam and speed checks are
+        # about; the default build runs unsynchronised (see revs.s).
+        built = subprocess.run([sys.executable, str(REVS / "build.py"), "--define", "SYNCED"])
         if built.returncode != 0:
             sys.exit("build.py failed")
     symbols = read_symbols(SLD)
@@ -320,7 +397,7 @@ def main() -> None:
     report = Report()
     with Probe(exe, symbols) as probe:
         try:
-            views = Views(probe) if {"verges", "screen", "compose"} & set(names) else None
+            views = Views(probe) if {"verges", "screen", "compose", "objects"} & set(names) else None
             for name in names:
                 if name == "maths":
                     check_maths(probe, report)
@@ -330,6 +407,8 @@ def main() -> None:
                     check_screen(views, symbols, report)
                 elif name == "compose":
                     check_compose(probe, views, symbols, report)
+                elif name == "objects":
+                    check_objects(views, symbols, report)
                 elif name == "beam":
                     check_beam(probe, symbols, report)
                 elif name == "speed":

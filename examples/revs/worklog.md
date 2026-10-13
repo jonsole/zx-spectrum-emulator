@@ -2,13 +2,13 @@
 
 As of 12 October 2026.
 
-A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Micro Revs design, now draws Silverstone in three frames an update (16.7 a second) for nearly all of a lap. It lives in `examples/revs` of the zx-spectrum-emulator repository, on branch `ccr-a5725d0e-ey56yb`.
+A road engine for the 48K Spectrum, written in Z80 from Geoff Crammond's BBC Micro Revs design, now draws Silverstone in three frames an update (16.7 a second) all the way round. It lives in `examples/revs` of the zx-spectrum-emulator repository.
 
 ## Where it stands
 
-The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
+The engine lives in `examples/revs`. It is the first stage of the plan: the track, drawn in native Z80, from a camera that drives itself round Silverstone. There is no car, no driving model and no cockpit yet.
 
-- **Speed:** nearly every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 198,200 T-states against a three-frame budget of 209,664. About 3.6% of updates need a fourth frame, all in the tightest corners.
+- **Speed:** every update takes three frames, which is **16.7 updates a second**. The target was 12 to 15. Over a lap, the median work per update is about 187,700 T-states against a three-frame budget of 209,664, and the worst, in the tightest corner, 205,600.
 - **Picture:**
   - a solid black road;
   - red-and-white or black-and-white kerbs, 25, 50 or 100 units wide as the track data says;
@@ -16,10 +16,10 @@ The engine lives in `examples/revs` on branch `ccr-a5725d0e-ey56yb`. It is the f
   - white sky.
   - The kerb stripes move with the track. The camera turns smoothly through corners.
 - **Correctness:** the screen matches Python models of both the BBC routines and the Z80's own stages, byte for byte where the model is exact. No frame shows two half-drawn views.
-- **Memory:** about 32K of the 48K is in use. About 10.5K is free, the largest pieces 3.5K at `$7210` and 2K at `$A800`.
+- **Memory:** about 32K of the 48K is in use. About 10K is free, the largest pieces 3.5K at `$7210` and 2K at `$A800`.
 - **Runs on:** a 48K or 128K Spectrum, since it needs the floating bus. It does not run on the +2A or +3.
 
-None of this is on `master` yet. The commits are on branch `ccr-a5725d0e-ey56yb`, and no pull request has been opened.
+The work was done on branch `ccr-a5725d0e-ey56yb` and is now on `master`.
 
 ## What was done
 
@@ -29,6 +29,11 @@ The work, newest first. Each row is one commit on the branch:
 
 | Commit | What it did | Frames per update |
 | --- | --- | --- |
+| — | A first object: a sign beside the track, its parts painted over each line inside compose, which has no buffer to draw into afterwards. About 1,000 T-states a covered line; a known limit for the synchronised build. | 3 (more with the sign close) |
+| — | Ran unsynchronised by default: no wait for the frame or the beam, so updates come as the work allows. `--define SYNCED` for the old way, which the tests use. | ~2.7 |
+| — | Keys to drive the camera (Q/A speed, O/P sideways, or an Interface II stick); kerbs fixed close to the camera (the list's last point kept below the view, the road's far end closed); stripes out to 12 segments. | 3 |
+| — | Set up an edge's segments with each point's x read from the list once and kept in the instruction that loads it, the rest of a side's state patched in too; a rightward and a leftward copy of the line loop; the error term counted down. Median −7.3K. | ~3 → 3 |
+| — | Started compose below the sky when it is blank and stays so (`compose_skip`), with `wait_for_beam` waiting for the beam to get past it too. Median −3.1K. | ~3 |
 | `02d194d` | Made the road solid black, as on the BBC. A black kerb mark now runs into the road and the white marks show as dashes. | ~3 |
 | `f7bde4c` | Turned the camera smoothly through corners. Its look target is interpolated from three segments ahead to four. Its position is interpolated between segment centres, which can be more than 127 units apart. | ~3 |
 | `92a7a4e` | Kept the distant kerb stretches one colour, so they no longer flicker as the camera passes each segment. | ~3 |
@@ -81,7 +86,7 @@ The stages are:
 
 1. **Camera** (`camera.s`). The camera is a fraction of the way along the track's centre line, 500 units up. It looks at the point the same fraction of the way from three segments ahead to four. The four centres it needs are cached, and only change when the camera passes a segment. This stands in for a driving model.
 2. **Verge points** (`verges.s`). This follows `GetSegmentAngles` and `GetVergeAndMarkers`. Both verges are projected together, a segment at a time, sharing its flags and height.
-   - It starts 32 segments ahead, then steps back by 13, 6 and 3 segments, then one at a time. That gives up to 16 points a side.
+   - It starts 32 segments ahead, then steps back by 13 and 7 segments, then one at a time. That gives up to 16 points a side, and stripes out to 12 segments (the BBC steps 13, 6 and 3, with stripes to 9).
    - Each point gets a yaw (screen x), a pitch (track line), and a verge-mark width of 25, 50 or 100 units scaled by distance.
    - The list stops at the first point below the view, or outside the field of view once the points come back towards the camera. There is one last try a quarter of the way to that point.
 3. **Edges** (`edges.s`). This follows `DrawTrack`. Four edges are drawn through the points:
@@ -138,18 +143,18 @@ Compose writes the visible screen with no back buffer, so it must never be overt
 
 ## Speed
 
-The road takes 96% of a three-frame update. T-states per update by stage, measured in the emulator's profiler over 40 updates on Silverstone (48K timing, without contention):
+The road takes 90% of a three-frame update. T-states per update by stage, averaged over a lap by `tests/profile.py` (48K timing, without contention):
 
 | Stage | T-states |
 |---|---|
 | Verges (projection), in two parts | 53,000 |
-| Edges | 78,000 |
-| Compose, onto the screen | 65,000 |
-| Camera | 5,000 |
-| **Total** | **201,000** |
+| Edges | 67,000 |
+| Compose, onto the screen | 61,000 |
+| Camera | 6,600 |
+| **Total** | **189,500** |
 | Three frames | 209,664 |
 
-That leaves about 8,700 T-states for the rest of the game.
+That leaves about 20,000 T-states for the rest of the game at the median, and 4,000 in the worst corner.
 
 A frame is 69,888 T-states, so three frames is 16.7 updates a second. The request was 12 to 15. The BBC original runs at about 11 updates a second: its main loop adds 9/100 s to the lap timer each time round.
 
@@ -161,24 +166,26 @@ A frame is 69,888 T-states, so three frames is 16.7 updates a second. The reques
 - Writing the projection out per side and padding skipped lines brought it to **3.05**.
 - The early verge points, the floating bus and one pass per side brought it to **three**, with a fourth frame only in some corners.
 - Leaving an edge alone once it has gone off the right of the screen heading right took the corners that needed a fourth frame from 12.6% of updates to 1.3%.
+- A profile by instruction over a lap (`tests/profile.py`) showed two things. Edge segments average about four lines, so setting one up cost as much as drawing its lines. And compose padded twenty blank sky lines an update just to stay behind the beam. Starting compose below the sky and setting segments up more cheaply took the median from 198,200 to 187,700, and no update needs a fourth frame.
 
 ### Over a whole lap
 
 The tests' speed check runs the camera once round at its own speed: 1,639 updates of 160/256 of a segment. The work from one frame interrupt to the next HALT is:
 
-- 198,200 T-states at the median;
-- 212,200 at the 99th percentile;
-- 216,600 at worst.
+- 187,700 T-states at the median;
+- 201,100 at the 99th percentile;
+- 205,600 at worst.
 
-59 updates (3.6%) take a fourth frame, all in the tightest corners, where most of the track is in view. Before edges that had gone off the right stopped being stepped, it was 207 (12.6%), with a median of 200,200. Halving the log table then cost 1,600 T-states a redraw (it had been 22 updates and 196,600).
+None takes a fourth frame. Before the changes found by profiling it was 59 (3.6%), all in the tightest corners, where most of the track is in view, at a median of 198,200. Before edges that had gone off the right stopped being stepped, it was 207 (12.6%), with a median of 200,200. Halving the log table then cost 1,600 T-states a redraw (it had been 22 updates and 196,600).
 
 The scratch measurement before the camera was smoothed ran 1,100 updates at about one segment each. It gave 202,000, 213,000 and 218,000, with 118 over. At half a segment an update, which lingers longer in corners, 320 took a fourth frame. That was measured once and is not part of the tests.
 
 ### Where the time goes now
 
-- **Per marker:** about 350 T-states from drawing it to filling from it. There are about 145 a frame.
+- **Per marker:** about 330 T-states from drawing it to filling from it. There are about 145 a frame.
 - **Per point projected:** about 1,600 T-states. There are 27 a frame.
-- **Per edge segment pair set up:** about 820 T-states including its two divisions. There are 22 a frame.
+- **Per edge segment pair set up:** about 1,300 T-states including its two divisions. There are 22 a frame, and they cross about four lines each, so this is as much as drawing them.
+- **Compose's padding:** about 17 lines an update below the sky are unchanged and padded to about 245 T-states each.
 
 ### What this means for the game
 
@@ -189,7 +196,7 @@ The road alone fills three frames, so everything Revs adds has to fit in a fourt
 - the dashboard;
 - the sound.
 
-That gives 4 frames, 12.5 updates a second, still inside the 12 to 15 asked for, and faster than the BBC's 11. It leaves about 70,000 T-states a frame for everything else, which is tight for a car-drawing routine, and the corners that already overrun would need a fifth. Further savings on the road (see Still to do) buy that room back.
+That gives 4 frames, 12.5 updates a second, still inside the 12 to 15 asked for, and faster than the BBC's 11. It leaves about 90,000 T-states at the median for everything else, and about 74,000 in the worst corner. Further savings on the road (see Still to do) buy more room.
 
 ## Bugs found and fixed
 
@@ -200,6 +207,7 @@ That gives 4 frames, 12.5 updates a second, still inside the 12 to 15 asked for,
 | Segment centre overflowed | Averaging inner and outer verge coordinates overflowed 16 bits on parts of the track. | A `midpoint` routine that halves before adding. |
 | `sort_line` clobbered DE | Sorting an out-of-order line lost the screen pointer, and the rest of the frame was drawn in the wrong place. It was latent until a shuffled-marker test hit it. | `push de`/`pop de` round the sort. |
 | One-frame tear after skipped sky lines | Skipping unchanged lines let compose get ahead of the beam, so a frame showed half of each view. The beam check found 59 of 60 updates bad. | Skipped lines are padded to a row's time (about 245 T-states). 0 of 200 bad afterwards. |
+| First update hung, after skipping the sky | `wait_for_beam` waited for something non-blank below the skipped sky, and on the first update the whole screen is blank. The tests timed out. | The wait gives up after the time the beam takes to cross the rows that can be skipped. |
 | First update overran | Doing five verge points before the beam wait made the first compose start at 33.7K T-states, too late to stay behind the beam. | `VB_EARLY` set to 4. |
 | Kerbs swung left and right in corners | Two causes: the camera's heading changed once per segment, not smoothly, and `lerp` used only the low byte of a difference. That failed once segment centres were more than 127 units apart. | Interpolated look target from three to four segments ahead; 16-bit `lerp`. |
 | Kerb stripes flickered back and forth | Far stretches of 13, 6 or 3 segments took their colour from segment parity, which flipped every time the camera moved a segment. | Stretches of more than one segment are drawn steady red or black. |
@@ -238,7 +246,7 @@ About **36K of the 48K** is used. Most of it is tables and the expanded track, w
 | --- | --- | --- |
 | `$4000`–`$5AFF` | 6.75K | Screen and attributes |
 | `$6000`–`$720F` | 4.5K | Log table: 4K of fractions, and three small tables for the whole parts |
-| `$8000`–`$97CD` | about 6K | Code |
+| `$8000`–`$99CD` | about 6.5K | Code |
 | `$A000`–`$A7FF` | 2K | Eight pages of lookup tables: yaw to x, arctangent, distance correction, masks, divide by 3 |
 | `$A800` | 1.8K | The track data file, read once at startup and free after |
 | `$B000`–`$B7FF` | 2K | Antilog table, a page per whole part |
@@ -248,12 +256,12 @@ About **36K of the 48K** is used. Most of it is tables and the expanded track, w
 | `$EC00`–`$FBFF` | 4K | Edge markers: 32 bytes for each of 128 lines |
 | `$FDF0` down |  | Stack; IM 2 jump at `$FDFD`, vector table at `$FE00` |
 
-There is about 10.5K free:
+There is about 10K free:
 
 - `$7210`–`$7FFF` (3.5K), and `$7110`–`$71FF` (240 bytes) beside the small log tables;
 - `$A800`–`$AFFF` (2K) once `build_track` has run;
 - `$5B00`–`$5FFF` (1.25K);
-- `$97CE`–`$9FFF` (2K);
+- `$99CE`–`$9FFF` (1.5K);
 - `$B800`–`$B9FF` (0.5K);
 - `$BC00`–`$BFFF` (1K);
 - small gaps round the stack.
@@ -282,8 +290,8 @@ Roughly in the order the plan would add them, one feature at a time.
 
 ### The engine
 
-- [ ] **Corners that need a fourth frame** (3.6% of updates over a lap, down from 12.6%). Possible fixes: fewer far points when the view is busy, cheaper markers, or skipping verge marks a pixel wide.
-- [ ] **Time for the rest of the game.** The road should come down well below three frames if the game is to stay at four. The per-marker cost (about 350 T-states) is the biggest target.
+- [x] **Corners that need a fourth frame.** None does now over a lap (3.6% before compose skipped the sky and segment set-up got cheaper, 12.6% before that).
+- [ ] **Time for the rest of the game.** The road should come down well below three frames if the game is to stay at four. Priced but not done: the verge points' variables in registers and the camera's values patched in (2.5–4K), `verges_begin` unrolled (2.5–3.5K), a jump on n in `div16_8` (1.5–2K), compose's x >> 3 by table (1.5–2.5K), a quarter-square multiply in the camera (1.5K), and a shorter path for an edge off the left (1–1.5K).
 - [ ] **Stripes at about one segment an update.** At around 170 mph the two-segment kerb pattern is sampled once a stripe and seems to stand still or run backwards. A blend of red and white above some speed would hide it.
 - [ ] **Colour.** Green grass and blue sky through attributes, fitted round the 8×8 grid.
 - [ ] **Contended memory.** The emulator doesn't model it, so timing on a real 48K is unchecked. Compose's screen writes would be slowed while the beam is drawing.
@@ -294,7 +302,9 @@ Roughly in the order the plan would add them, one feature at a time.
 
 - [x] **Automated tests in the repo.** `tests/run_tests.py`, run against the real emulator core through `snapshot_probe`. They are not part of CTest, since they need sjasmplus and the track data, as filmation's Z80 tests do.
 - [ ] **A web page to watch it.** This was asked for and not done, because there is no Emscripten here to build the emulator for the browser. For now there are videos.
-- [ ] **Merge.** The work is on branch `ccr-a5725d0e-ey56yb`, with no pull request yet.
+- [x] **Merge.** On `master`.
+- [x] **A profiler.** `tests/profile.py`, through `snapshot_probe`'s `profile` command: T-states by routine and source line over a lap, or one routine instruction by instruction.
+- [x] **`snapshot_probe` on Windows.** It builds clean with MSVC's `/W4 /WX`.
 
 ## Sources
 

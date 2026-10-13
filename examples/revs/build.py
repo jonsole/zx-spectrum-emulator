@@ -123,10 +123,12 @@ def z80_snapshot(ram: bytes, pc: int) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Assemble the Revs-style road engine.")
     parser.add_argument("--track", default="silverstone")
+    parser.add_argument("--define", action="append", default=[], metavar="NAME",
+                        help="an assembler define, such as SYNCED (see revs.s)")
     args = parser.parse_args()
     sjasmplus = find_sjasmplus()
     generate(args.track)
-    assemble(sjasmplus, [])
+    assemble(sjasmplus, args.define)
 
 
 if __name__ == "__main__":

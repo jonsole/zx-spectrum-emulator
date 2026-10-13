@@ -35,7 +35,16 @@ Launch **"ZX Spectrum: Revs road"** from the Run and Debug view. Its
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\revs\build.py
+.\.venv-win\Scripts\python.exe examples\revs\build.py --define SYNCED
 ```
+
+By default the engine runs unsynchronised: each update starts as soon as
+the last one ends, and compose paints wherever the beam is, so a frame can
+show the top of one update and the bottom of the next. Updates then come as
+fast as the work allows rather than every third frame, and the tearing is
+mild. `--define SYNCED` builds it to wait for the frame interrupt and the
+beam instead, so that no frame shows two updates; the tests build it that
+way, since the `beam` and `speed` checks are about it.
 
 That needs `sjasmplus`: `tools/sjasmplus/sjasmplus.exe`, anywhere on PATH, or
 the path in the `SJASMPLUS` environment variable. It writes
@@ -52,6 +61,21 @@ saved copy of the page, for a machine without the network.
 
 The digit in the bottom-left corner is how many frames the last update took.
 
+Until there is a driving model, the keys drive the camera:
+
+| Keys | Interface II (either stick) | Does |
+|---|---|---|
+| Q | up | faster, up to a segment an update (about 170 mph) |
+| A | down | slower, down to a standstill |
+| O | left | move left |
+| P | right | move right |
+
+Sideways is square to the way the camera looks, so it slides across the
+track without turning, as far as about the track's edge. The view from
+beside a kerb costs more to draw than the view down the middle: over a lap
+at the left edge the median update is about 198,600 T-states, and 13 of
+1,639 take a fourth frame.
+
 ## How it works
 
 Each update runs four stages. They are interleaved round the frame
@@ -66,8 +90,9 @@ interrupt, because compose has to wait for the beam (see below):
 2. **`verges.s`** builds a list of points for each verge (after
    `GetSegmentAngles` and `GetVergeAndMarkers`). The two verges are done
    together, a segment at a time, sharing its flags and height.
-   - It starts 32 segments ahead, then steps back by 13, 6 and 3 segments,
-     then one at a time.
+   - It starts 32 segments ahead, then steps back by 13 and 7 segments,
+     then one at a time from 12 ahead, so the kerb's stripes reach 12
+     segments out. The BBC steps 13, 6 and 3, and its stripes stop at 9.
    - Each point gets a yaw angle and a track line (`maths.s`, after
      `GetObjYawAngle`, `GetObjectDistance` and `GetObjPitchAngle`).
    - Each point gets a verge mark: 25, 50 or 100 units wide, by the
@@ -104,8 +129,12 @@ The work in step 4 is time compose would otherwise spend waiting for the
 beam. Then `wait_for_beam` reads the floating bus, which on a 48K is
 whatever the ULA is fetching from the screen. The rows above the view hold
 nothing but a colour attribute used nowhere else, so any other value means
-the beam has reached the view. Step 4 is bounded so that compose starts in
-time to finish before the beam comes round again.
+the beam has reached the view. Compose leaves the sky alone when it is blank
+and stays blank (`compose_skip`), so it starts below it, and then
+`wait_for_beam` also waits for the beam to get past the sky: for a pattern
+byte rather than a blank one, or for as long as the beam takes to cross
+twenty rows, whichever comes first. Step 4 is bounded so that compose
+starts in time to finish before the beam comes round again.
 
 `track.s` expands the track data into every segment's coordinates once, at
 startup. A section's first segment takes its coordinates from the section;
@@ -117,6 +146,41 @@ segments of Silverstone fit in 11K of a 48K machine.
 The screen maps the BBC's 40-unit field of view across 256 pixels, so a
 point's x is 128 plus its yaw angle over 40. The 80 track lines put the
 horizon at line 60, as the BBC does.
+
+### Objects
+
+So far there is one: a sign, a black post and a red board, beside the right
+verge at segment 12 (`objects.s`). It is the first step towards the cars,
+which will be drawn the same way.
+
+As on the BBC, an object is parts of one colour on a scaffold scaled by its
+distance, not a bitmap: a scaled bitmap would want a copy for every size.
+The BBC draws its objects into its screen buffer after the track. Here
+there is no buffer, and compose paints the screen the viewer is looking at,
+so drawing over the finished view would show a frame of road where a car
+should be. Instead:
+
+- Before the HALT, `objects_build` projects the sign with the same maths as
+  a verge point, and turns each part into a block on the screen: its
+  lines, its first byte, how many bytes, the masks of its end bytes, and its
+  pattern for even and odd lines (`obj_parts`).
+- The calls in compose's unrolled code for the lines those parts cover are
+  pointed at `cs_obj_odd` and `cs_obj_even`. They let compose fill the line
+  with road as usual, then paint the parts on it over the road, before
+  compose goes on to the next line. Each line is finished before the beam
+  comes back to it.
+- A line painted that way is marked in `cs_last` so that it is drawn again
+  next update, to take the object away if it has moved. The top one is
+  marked before compose, so `compose_skip` starts no lower than it.
+
+It costs about 1,000 T-states for every line an object covers: painting
+it, pointing compose's calls and back, and redrawing road that would
+otherwise have been skipped. The sign close up covers 24 to 35 lines, about
+29,000 T-states. In the default unsynchronised build that only slows those
+updates. In the synchronised build it can make compose run past the beam's
+return and tear, a known limit: the `beam` check is run from past the sign.
+Drawing objects as markers in compose's own pass would cost about half;
+that is the thing to do before the cars.
 
 ### Where the Spectrum differs
 
@@ -132,8 +196,8 @@ horizon at line 60, as the BBC does.
   Grass and the other verge colours are dither patterns: white, a quarter
   (grass), a half (red). Odd lines use each pattern rotated two places.
 - **Distant verge colours.** The BBC colours every verge mark by its
-  segment's parity, and colours the far stretches between points 13, 6 and
-  3 segments apart the same way. Those stretches swapped between white and
+  segment's parity, and colours the far stretches between points several
+  segments apart the same way. Those stretches swapped between white and
   red each time the camera passed a segment, which made the distance flicker.
   Here a stretch of more than one segment takes the red or black, so only
   the marks close enough to draw one at a time alternate, and they move
@@ -162,23 +226,22 @@ horizon at line 60, as the BBC does.
 
 ## Speed
 
-On the emulator, which does not model contended memory, nearly every update
-takes three frames: 16.7 updates a second. Measured in the profiler over 40
-updates on Silverstone:
+On the emulator, which does not model contended memory, every update takes
+three frames: 16.7 updates a second. Averaged over a lap by
+`tests/profile.py` (see below):
 
 | Stage | T-states |
 |---|---|
 | verges (projection), in two parts | 53,000 |
-| edges | 73,000 |
-| compose, onto the screen | 65,000 |
-| camera | 5,000 |
+| edges | 67,000 |
+| compose, onto the screen | 61,000 |
+| camera | 6,600 |
 
 Over a whole lap at the camera's speed (1,639 updates of 160/256 of a
-segment), the work from one frame interrupt to the next HALT is 198,200
-T-states at the median and 212,200 at the 99th percentile, against three
-frames' 209,664. 59 updates (3.6%) take a fourth frame, all of them in the
-tightest corners, where the camera sees most of the track. The worst needs
-216,600. The tests' speed check measures this (see below).
+segment), the work from one frame interrupt to the next HALT is 187,700
+T-states at the median and 201,100 at the 99th percentile, against three
+frames' 209,664. The worst, in the tightest corner, is 205,600, so none
+takes a fourth frame. The tests' speed check measures this (see below).
 
 The first working version took six frames, about 420,000 T-states. These
 changes made the difference:
@@ -195,7 +258,9 @@ changes made the difference:
 - unrolling, short cuts for the commonest divisions, and skipping lines
   that haven't changed;
 - leaving an edge alone once it has gone off the right of the screen
-  heading right, which is most of what made corners slow.
+  heading right, which is most of what made corners slow;
+- starting compose below the sky, and setting up an edge's segments with
+  each point read once and its state patched into the code.
 
 For comparison, the BBC's main loop adds 9/100 of a second to the lap timer
 each time round, so the original runs at about 11 updates a second with
@@ -203,11 +268,12 @@ everything else in the game going on too: the cars, the dashboard, the
 driving model and the sound. Those have to fit in the remaining time here.
 What costs most now:
 
-- **Per marker:** about 350 T-states between drawing it and filling from
+- **Per marker:** about 330 T-states between drawing it and filling from
   it, about 145 markers a frame.
 - **Per point projected:** about 1,600 T-states, 27 points a frame.
-- **Per edge segment pair set up:** about 820 T-states including the two
-  divisions, 22 pairs a frame.
+- **Per edge segment pair set up:** about 1,300 T-states including the two
+  divisions, 22 pairs a frame. Segments are short, about four lines, so
+  this is as much as drawing their lines.
 
 ## Checking it
 
@@ -227,8 +293,9 @@ screen compose`); `--no-build` uses `output/` as it is. The checks:
 | `maths` | `log16`, `yaw_angle`, `pitch_line` and `verge_width`, called on their own with random arguments, against exact values and `view_model.py`'s BBC routines | logs within 2/256, angles within 96 units, distances within 1.2%, lines within one, widths within 2% |
 | `verges` | the Z80's verge point lists against `view_model.py`'s from the same camera, at a dozen places round the track | the same points and colours, within 3 pixels across and a line up or down |
 | `screen` | the view on the screen against `tests/screen_model.py`, a model of the edge and compose stages, fed the Z80's own point lists | byte for byte |
-| `compose` | `compose_screen` on marker records with a third of the lines shuffled out of x order, against the same records filled in order | byte for byte |
-| `beam` | every write to the view over 200 updates, with the first frame able to show it worked out from where the beam was | all of an update's writes show in the same frame |
+| `compose` | `compose_screen` on marker records with a third of the lines shuffled out of x order, against the same records filled in order, with the objects' parts painted over them | byte for byte |
+| `objects` | the sign's parts where it is in view, against its foot projected through `view_model.py` and its parts scaled from their sizes | within 3 pixels across and a line up or down |
+| `beam` | every write to the view over 200 updates, from a stretch with no object in view, with the first frame able to show it worked out from where the beam was | all of an update's writes show in the same frame |
 | `speed` | the T-states from each frame interrupt to the next HALT over a lap at the camera's speed | the median fits in three frames; the 99th percentile, the worst and the number needing a fourth frame are reported |
 
 `view_model.py` is a Python model of the BBC routines, written from the
@@ -249,13 +316,29 @@ Each check was shown to catch a bug planted for it:
 The `screen` check uses the Z80's own point lists, so it passed with the
 doubled widths. That is the split intended: geometry is `verges`' job.
 
+`tests/profile.py` says where the time goes, over the same lap as the
+`speed` check: the T-states each routine takes an update, and the source
+lines that take most, through `snapshot_probe`'s `profile` command, which
+counts every instruction by its address. A macro's expansion all has the
+one source line it was invoked from, so `--routine NAME` lists a routine
+instruction by instruction instead, with how often each ran: that is how to
+see inside `VB_POINT` or `CS_LINE`.
+
+```powershell
+.\.venv-win\Scripts\python.exe examples\revs\tests\profile.py
+.\.venv-win\Scripts\python.exe examples\revs\tests\profile.py --routine raster div16_8
+```
+
 ## Not done yet
 
 - **Driving.** The camera drives itself, with no steering, speed or
   car.
 - **The cockpit.** No dashboard, mirrors or wheel.
-- **Everything else in Revs:** the other cars, signs and objects by the
-  track, the horizon and its hills, laps and timing, sound, menus.
+- **Everything else in Revs:** the other cars, the BBC's signs and corner
+  markers (there is one test sign), the horizon and its hills, laps and
+  timing, sound, menus.
+- **Objects behind crests.** An object is drawn whether or not the road
+  hides it; Silverstone is nearly flat.
 - **Other tracks.** Only Silverstone's standard data format is
   read. The four extra tracks use a hook-driven variant that `track_data.py`
   does not take.

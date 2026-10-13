@@ -11,8 +11,8 @@ the oracle for the Z80 engine's geometry:
   alpha-max-plus-beta-min.
 * verge width: scaleUp * 2^(scaleDown - vergeScale) yaw units, which is a
   25, 50 or 100-unit physical width.
-* which segments: GetSegmentAngles' steps back from 32 segments ahead
-  (13, 6, 3, then 1 at a time).
+* which segments: steps back from 32 segments ahead (13, 7, then 1 at a
+  time; GetSegmentAngles steps 13, 6, 3 -- a Spectrum change, see verges.s).
 
 Screen mapping is the Spectrum's: x = 128 + yaw / 40 (the BBC's 40-unit
 field of view across 256 pixels), track lines 0 (bottom) to 79 (top).
@@ -24,7 +24,7 @@ import track_data as td
 from track_model import Track
 
 ARCTAN = [int(0.5 + math.atan(i / 256) * 256 / math.atan(1)) for i in range(256)]
-SEGMENT_STEPS = [13, 6, 3] + [1] * 13          # 16 entries, front to back
+SEGMENT_STEPS = [13, 7] + [1] * 14             # 16 entries, front to back
 VIEW_LINES = 80
 HORIZON = 60
 
@@ -140,7 +140,6 @@ class View:
             pts = []
             s = seg + 32
             closest = None
-            prev = None
             for i, step in enumerate([0] + SEGMENT_STEPS[:15]):
                 s -= step
                 sg = self.t.segments[s % n]
@@ -149,30 +148,8 @@ class View:
                     x, y, z = sg.xi, sg.yi, sg.zi
                 else:
                     x, y, z = sg.xo, sg.yi, sg.zo
-                rel, line, dist = self.project(cam, x, y, z)
-                if closest is None or dist <= closest[0]:
-                    closest = (dist, i)
-                past_closest = i > closest[1]
-                visible = line is not None and line >= 0 and not (past_closest and abs(rel) >= 20 * 256)
-                if not visible:
-                    # GetSegmentAngles' last try: a quarter of the way from the
-                    # previous (visible) point towards this one.
-                    if prev is not None:
-                        qx, qy, qz = (prev[0] + (x - prev[0]) // 4, prev[1] + (y - prev[1]) // 4,
-                                      prev[2] + (z - prev[2]) // 4)
-                        qrel, qline, qdist = self.project(cam, qx, qy, qz)
-                        if qline is not None and qline >= 0:
-                            pts.append((qrel, qrel + (pts[-1][1] - pts[-1][0]), qline, pts[-1][3]))
-                    break
-                prev = (x, y, z)
                 flags = sg.flags
                 red = bool(flags & (4 if side == "right" else 2))
-                curved = flags & 1
-                both_red = (flags & 6) == 6
-                both_black = (flags & 6) == 0
-                verge_scale = 5 if both_black else (4 if (curved or both_red) else 3)
-                width = (1 << 23) // max(1, dist << verge_scale)
-                outer = rel + width if side == "right" else rel - width
                 # The marks alternate by segment, but a point that ends a
                 # step of several segments colours a stretch of several
                 # marks: that takes the red or black, as the Z80 does, so
@@ -182,7 +159,36 @@ class View:
                     colour = 2
                 else:
                     colour = 1 if red else 0
+                rel, line, dist = self.project(cam, x, y, z)
+                if closest is None or dist <= closest[0]:
+                    closest = (dist, i)
+                past_closest = i > closest[1]
+                visible = line is not None and line >= 0 and not (past_closest and abs(rel) >= 20 * 256)
+                if not visible:
+                    # The point that ends the list is kept all the same, with
+                    # its own width and colour and its line even below the
+                    # view, so the last stretch heads for it and is cut at
+                    # the bottom of the view. The BBC tries a quarter of the
+                    # way instead (a Spectrum change: see verges.s).
+                    if not pts:
+                        break
+                    if line is None:
+                        dy = y - cam[1]
+                        if dy >= 0:
+                            break               # far above the eye: just stop
+                        ady = abs(dy) >> 3
+                        t = 255 if dist == 0 or ady >= dist else min(255, 256 * ady // dist)
+                        line = max(-128, HORIZON - t)
+                    line = max(line, pts[-1][2] - 127)
+                curved = flags & 1
+                both_red = (flags & 6) == 6
+                both_black = (flags & 6) == 0
+                verge_scale = 5 if both_black else (4 if (curved or both_red) else 3)
+                width = (1 << 23) // max(1, dist << verge_scale)
+                outer = rel + width if side == "right" else rel - width
                 pts.append((rel, outer, line, colour))
+                if not visible:
+                    break
             sides[side] = pts
         return sides
 

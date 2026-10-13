@@ -456,9 +456,13 @@ track, the list of points its edges are drawn through, far to near.
 #### Which segments
 
 Both sides start 32 segments ahead of the camera. They step back 13
-segments, then 6, then 3, then one at a time, up to 16 points in all
-(`vb_steps`). The steps are big far away, where a segment is a pixel or two
-deep, and small close up, where each one is many lines.
+segments, then 7, then one at a time, up to 16 points in all (`vb_steps`).
+The steps are big far away, where a segment is a pixel or two deep, and
+small close up, where each one is many lines. The kerb's stripes can only
+be drawn between points a segment apart, so they reach 12 segments out,
+about as far as a stripe is still a line tall. The BBC steps 13, 6 and 3,
+so its stripes stop at 9, and spends four points behind the camera, where
+the view hardly ever reaches.
 
 Both verges are walked together, a segment at a time, because they share
 what is worked out per segment:
@@ -536,7 +540,7 @@ stay behind the beam. With twelve, 157 of 200 updates tear.
 
 The BBC colours every mark by its segment's parity. That is right for the
 near points, a segment apart, and they move with the track. But the far
-points are 13, 6 and 3 segments apart, and each colours a stretch with
+points are 13 and 7 segments apart, and each colours a stretch with
 several marks in it. By parity, those stretches swapped between white and
 red each time the camera passed a segment, and the distance flickered. Here
 they take the verge's red or black instead, so only the marks close enough
@@ -623,7 +627,11 @@ edge is the one further right in the picture.
 A verge's two edges go through the same points, on the same track lines.
 So one side is one pass, the `SIDE` macro (`edges_l`, `edges_r`). Each pair
 of consecutive points is set up once, and only each edge's own division and
-line loop are done twice. Each stretch between two points takes the nearer
+line loop are done twice. Stretches are short, about four lines on average,
+so setting one up costs about as much as drawing its lines. `SIDE` keeps its
+state in its own instructions, patched as it goes: each edge's x at the
+last point, the lowest line so far, the record the stretch starts from. So a
+point's two x values are read from the list once, in order. Each stretch between two points takes the nearer
 point's colour.
 
 #### One stretch of an edge: `raster`
@@ -637,7 +645,11 @@ that time.
 Bresenham-fashion:
 
 - x moves q pixels a line, plus one more whenever the error term,
-  starting at n / 2 so x rounds to the nearest pixel, passes n.
+  starting at n / 2 so x rounds to the nearest pixel, passes n. The Z80
+  counts it the other way, down from (n − 1) / 2 by r a line, and moves x
+  the extra pixel when it would go below zero. That is the same error,
+  n − 1 less it. Then the carry is the subtraction's own borrow, with no
+  compare against n.
 - Each line it reaches gets a marker at x.
 - A stretch marks n lines, not n + 1. Its last line is the next stretch's
   first, so the record pointer runs on from one to the next.
@@ -648,8 +660,11 @@ This loop is the hottest code in the edge stage, so it lives in registers:
 - **Main set:** HL = x, DE = the whole-pixel step, C = the error,
   B = lines left.
 - **Alternate set:** HL' = the line's record, BC' = ±32 to the next one.
-- **Patched into the instructions:** r, n, the pattern, and whether the
-  carry step is `INC HL` or `DEC HL`.
+- **Patched into the instructions:** r, n and the pattern.
+- **Two copies of the loop,** `raster_r` for an edge heading right and
+  `raster_l` for one heading left. So the carry step's `INC HL` or `DEC HL`
+  isn't patched in, and only the rightward copy has the test for having
+  gone off the right.
 
 `div16_8` makes the one division cheap for the usual cases. Most stretches
 cross two to four lines, so n = 1, 2 and 4 are shifts or nothing, n = 3 is
@@ -700,9 +715,9 @@ $4000 | (y & $C0) << 5 | (y & 7) << 8 | (y & $38) << 2
 so consecutive rows are 256 bytes apart within a character row. Compose is
 unrolled, one call per track line. Each call carries that line's record
 address and screen row address as constants, worked out by the assembler.
-Line 79 is drawn first, on row 16, down to line 0 on row 95. Every row is
-32-byte aligned, so within a line only E moves, and records are 32-byte
-aligned, so only C does.
+Line 79 is drawn first, on row 16, down to line 0 on row 95, except that
+the sky is usually skipped (below). Every row is 32-byte aligned, so within
+a line only E moves, and records are 32-byte aligned, so only C does.
 
 #### Patterns
 
@@ -783,8 +798,14 @@ A line with no markers is one pattern across. `cs_last` remembers, per
 line, the pattern an empty line was last filled with, or `NOT_EMPTY`.
 
 - **Unchanged:** if the line is still empty and has the same pattern, it is
-  left alone. That is most of the sky. It still takes about 245 T-states, a little longer than the beam
-  takes over a row (224), for the reason below.
+  left alone. It still takes about 245 T-states, a little longer than the
+  beam takes over a row (224), for the reason below.
+- **Blank sky:** the lines at the top that are blank on the screen and stay
+  blank (no markers, a pattern of 0, and 0 last time) are not visited at
+  all. `compose_skip` looks at the lines from the horizon up and finds
+  where compose should start, and `compose_from` jumps into the unrolled
+  calls there. Over a lap that is 19 or 20 lines on every update but the
+  first, about 4,900 T-states of padding, for 1,300 spent looking.
 - **Changed:** it is filled by pointing SP at the row's end and pushing the
   pattern 14 times, 28 bytes. The first four bytes are stored separately
   after SP is put back. The pushes stop four bytes short because an
@@ -804,14 +825,14 @@ write every row after the beam has fetched it in this frame and before it
 fetches it in the next. Then all of one update's writes first appear
 together, in the next frame.
 
-- **After:** compose starts once the beam has reached row 16
-  (`wait_for_beam`), and every line takes at least as long as the beam
-  takes over a row. A line left alone is padded to about 245 T-states for
-  this. So compose can't catch the beam up.
+- **After:** compose starts once the beam has reached the first row it
+  will draw (`wait_for_beam`), and every line takes at least as long as the
+  beam takes over a row. A line left alone is padded to about 245 T-states
+  for this. So compose can't catch the beam up.
 - **Before:** the bottom row must be done before the next frame's beam
   reaches it, about 105,000 T-states after the interrupt. Compose takes
-  about 65,000, so it has to start by about 38,000. It starts at 20,000 to
-  23,000.
+  about 61,000, so it has to start by about 44,000. It starts at 22,500 to
+  29,000.
 
 `wait_for_beam` finds the beam on the **floating bus**. On a 48K, reading
 a port no device answers returns whatever the ULA is fetching from screen
@@ -822,6 +843,14 @@ each line).
   which nothing else on screen uses.
 - So `in a,($FF)` returning anything other than `$FF`, 0 or `$3A` means the
   ULA is at row 16 or below.
+- When the sky was skipped, it then waits for the beam to get past that
+  too. The skipped rows are blank: zero bytes under the view's own
+  attribute, `$38`. So a byte that is none of `$FF`, 0 and `$38` is the beam
+  on a row with something on it, at or below the first row compose will
+  draw. Nothing need be there yet (the first update's screen is blank), and
+  a row of solid black reads as `$FF` like no row at all, so the wait gives
+  up after the time the beam takes to cross twenty rows. By then it is past
+  the sky whatever is on it.
 
 This needs a 48K or 128K: the +2A and +3 have no floating bus.
 
@@ -829,19 +858,20 @@ An update runs like this:
 
 ```
 T = 0       frame interrupt: the IM 2 handler counts frames
-            camera_update                  ~5,000
+            camera_update                  ~6,600
             verges_begin: four segments    work compose would spend waiting
-            wait_for_beam                  until the beam reaches row 16
-~21,000     compose_screen                 ~65,000, behind the beam
-~86,000     fps_show                       the digit bottom left
+            compose_skip                   how much of the sky to leave alone
+            wait_for_beam                  until the beam is below the sky
+~23,000     compose_from                   ~61,000, behind the beam
+~84,000     fps_show                       the digit bottom left
             verges_finish                  the rest of the points
-            edges_build                    ~73,000
+            edges_build                    ~67,000
 < 209,664   HALT: wait for the next interrupt, the start of the next update
 ```
 
-Three frames is 16.7 updates a second. In corners, where more of the track
-is in view, about one update in 28 (59 of 1,639 over a lap) runs past the
-third interrupt and takes a fourth.
+Three frames is 16.7 updates a second. Over a lap the work takes 187,700
+T-states at the median and 205,600 at worst, in the tightest corner, where
+the camera sees most of the track: every update fits in three frames.
 
 The `beam` test watches every write to the view over 200 updates and checks
 this. Without the padding, 59 updates in 60 tore.

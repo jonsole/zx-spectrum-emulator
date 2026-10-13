@@ -4,10 +4,11 @@
 ; BBC's trick of filling as it copies (DrawTrackBytes), except that the
 ; Spectrum has no buffer to copy: the fill is the only write.
 ;
-; It runs from the top line (79) down, starting once the beam has drawn the
-; view's top row (wait_for_beam), and every line takes longer than the beam
-; takes over a row (224 T-states), even one left alone, so it never gets
-; ahead: every row is rewritten after the beam has shown it, and no frame
+; It runs from the top line (79) down -- or from below the sky, which is
+; left alone when it is blank and stays so (compose_skip) -- starting once
+; the beam has drawn the first row it will draw (wait_for_beam), and every
+; line takes longer than the beam takes over a row (224 T-states), even one
+; left alone, so it never gets ahead: every row is rewritten after the beam has shown it, and no frame
 ; shows two views. It must also finish each row before the beam comes round
 ; to it again, about 105,000 T-states after the interrupt for the bottom
 ; row: as it takes about 65,000, it has to start by about 38,000. The work
@@ -24,9 +25,19 @@
 ; into the run of stores. Odd lines' patterns are rotated right two places
 ; (patterns.s), so there is a copy of the line code for each.
 
+;
+; compose_screen does every line. The main loop uses compose_from instead,
+; which starts below the sky that compose_skip found it can leave alone.
 compose_screen:
+    ld bc,compose_lines
+; BC = where in compose_lines to start: compose_skip's answer.
+compose_from:
     ld a,high fill_runs
     ld iyh,a
+    ld h,b
+    ld l,c
+    jp (hl)
+compose_lines:
     ; Unrolled, so each line's record and screen row are constants.
 .y = VIEW_LINES - 1
     DUP VIEW_LINES
@@ -41,6 +52,38 @@ compose_screen:
     ENDIF
 .y = .y - 1
     EDUP
+    ASSERT $ - compose_lines == VIEW_LINES * CS_CALL
+    ret
+
+CS_CALL     equ 12              ; the bytes of one line's call in compose_lines
+
+; BC = where compose_from should start: past the lines at the top that are
+; blank on the screen and stay blank -- no markers, a pattern of 0, and a
+; pattern of 0 last time (cs_last) too. That is the sky, twenty lines of it
+; on almost every update, and as an unchanged line costs about 245 T-states
+; only to stay behind the beam, starting below them saves about 5,000.
+;
+; Starting lower down is only safe once the beam is past those lines too,
+; and wait_for_beam makes sure of it: it waits for something on the floating
+; bus that is not blank, and every row above the first line drawn is.
+;
+; Only the lines from HORIZON up are looked at. Below it a line starts with
+; the grass's pattern unless an edge off the left changes that, so it is
+; seldom blank, and the check would cost more than it found.
+compose_skip:
+.y = VIEW_LINES - 1
+    DUP VIEW_LINES - HORIZON
+    ld bc,compose_lines + (VIEW_LINES - 1 - .y) * CS_CALL
+    ld hl,(MARKERS + .y * MARK_LINE)    ; L = the next free marker, H = the
+    ld a,(cs_last + .y)                 ; pattern the line starts with
+    or h
+    ret nz
+    ld a,l
+    cp 4                        ; no markers
+    ret nz
+.y = .y - 1
+    EDUP
+    ld bc,compose_lines + (VIEW_LINES - 1 - .y) * CS_CALL
     ret
 
 ; One line, from the record at HL to the screen row at DE. BC is the
