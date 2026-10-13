@@ -140,6 +140,26 @@
       }
     },
     {
+      // Aviator (examples/aviator).
+      "label": "aviator.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["examples/aviator/spectrum/build.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/aviator"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
       // fast3d's routines and demo (examples/fast3d).
       "label": "fast3d.build",
       "type": "shell",

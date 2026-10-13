@@ -23,6 +23,19 @@ GitHub takes its notes from that section.
   through forty turning objects on the 128K. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 
+- **Aviator, `examples/aviator`.** Geoff Crammond's BBC Micro flight
+  simulator, being ported to the 48K from Mark Moxon's documented
+  disassembly at aviator.bbcelite.com. The original runs in Python on a 6502
+  interpreter as the reference; the whole game is ported to Python and
+  matches it byte for byte over three scripted flights; and the Z80 version
+  is checked against that port. Its first stage is the 3D view, flown along
+  a recorded stretch of a flight at about 8.8 frames a second, every frame's
+  state and canopy matching the port's; the flight model, the keys, the
+  dashboard's dials, the Theme and the sound are still to come. Its launch
+  configuration is **ZX Spectrum: Aviator**; Acornsoft's files are fetched
+  at build time, never committed. See
+  [examples/aviator/README.md](examples/aviator/README.md).
+
 - **A Revs road engine, `examples/revs`.** Geoff Crammond's BBC Micro *Revs*
   rebuilt for the 48K in Z80, using the documented disassembly at
   revs.bbcelite.com as its design: Silverstone's track with a sign beside it
