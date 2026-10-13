@@ -1787,7 +1787,7 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
             // be looked at -- including one that writes the same value again.
             w.on_change = false;
         }
-        if (w.bank != ANY_BANK && (w.addr >> 14) != ((uint32_t(w.addr) + w.length - 1) >> 14)) {
+        if (w.bank != ANY_BANK && (uint32_t(w.addr) >> 14) != ((uint32_t(w.addr) + w.length - 1) >> 14)) {
             return error_result("a watchpoint for one bank must stay inside that bank's 16K: "
                                 + dollar_hex(w.addr, 4) + " + " + std::to_string(w.length)
                                 + " crosses into the next");
