@@ -188,6 +188,9 @@ examples/filmation/knightlore128/output/
 examples/isoblocks/painter/output/
 examples/isoblocks/rays/output/
 
+# fast3d: the tables and the assembled checks and demo, from build.py.
+examples/fast3d/output/
+
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:
