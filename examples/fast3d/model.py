@@ -178,12 +178,31 @@ def outcode(x: int, y: int, window: tuple[int, int, int, int]) -> int:
             (TOP if y < top else BOTTOM if y > bottom else 0))
 
 
-def interpolate(a_p: int, a_q: int, b_p: int, b_q: int, b_edge: int) -> int:
-    """a where the line from (a_p, b_p) to (a_q, b_q) has b = b_edge: rounded
-    to the nearest, a half away from a_p."""
-    n = abs(a_q - a_p)
-    t = (n * abs(b_edge - b_p) + abs(b_q - b_p) // 2) // abs(b_q - b_p)
-    return a_p + t if a_q >= a_p else a_p - t
+CHOP_BITS = 7       # the fraction bits crossing keeps
+CHOP_HALF = 1 << (CHOP_BITS - 1)
+
+
+def crossing(a_p: int, a_q: int, b_p: int, b_q: int, edge: int) -> int:
+    """a where the line from (a_p, b_p) to (a_q, b_q) crosses b = edge, by
+    halving -- a binary chop. From P, a step toward Q is halved again and
+    again, and taken whenever b stays short of the edge: each halving is a
+    bit of how far along the line the edge is (a step of a division) and
+    adds that much of the line's a (a step of a multiplication). The steps
+    keep CHOP_BITS fraction bits, and halve until the larger is under half a
+    pixel: as many halvings as the bits in the larger of |a_q - a_p| and
+    |b_q - b_p|, plus one."""
+    sign = 1 if b_q > b_p else -1
+    r = sign * (b_p - edge) << CHOP_BITS          # <= 0: how far short of the edge
+    db = abs(b_q - b_p) << CHOP_BITS              # the step along b
+    da = (a_q - a_p) << CHOP_BITS                 # and along a
+    gone = 0                                      # how far along a, so far
+    for _ in range((abs(b_q - b_p) | abs(a_q - a_p)).bit_length() + 1):
+        db >>= 1
+        da >>= 1                                  # (floor, as SRA does)
+        if r + db < 0:
+            r += db
+            gone += da
+    return a_p + ((gone + (da >> 1) + CHOP_HALF) >> CHOP_BITS)
 
 
 def clip_line(x0: int, y0: int, x1: int, y1: int,
@@ -204,13 +223,13 @@ def clip_line(x0: int, y0: int, x1: int, y1: int,
             return None
         code = c0 or c1
         if code & LEFT:
-            x, y = left, interpolate(py, qy, px, qx, left)
+            x, y = left, crossing(py, qy, px, qx, left)
         elif code & RIGHT:
-            x, y = right, interpolate(py, qy, px, qx, right)
+            x, y = right, crossing(py, qy, px, qx, right)
         elif code & TOP:
-            x, y = interpolate(px, qx, py, qy, top), top
+            x, y = crossing(px, qx, py, qy, top), top
         else:
-            x, y = interpolate(px, qx, py, qy, bottom), bottom
+            x, y = crossing(px, qx, py, qy, bottom), bottom
         if c0:
             x0, y0 = x, y
         else:

@@ -13,8 +13,8 @@ GitHub takes its notes from that section.
   angles instead of multiplying; `rotate`, a vertex by that matrix
   (1,241 T-states), with the matrix written into its table addresses;
   `project`, `transform`, `draw_line` and `clear_box`; and lines clipped to
-  a window (`clip_line`, Cohen-Sutherland, each end within half a pixel of
-  the true line), with `project_wide` giving the 16-bit off-screen points to
+  a window (`clip_line`, Cohen-Sutherland, crossings found by a binary chop,
+  each end within 0.75 of a pixel of the true line), with `project_wide` giving the 16-bit off-screen points to
   clip. `check.py` holds every one to a Python model in SkoolKit's
   simulator, every multiply and every pixel. The launch configuration
   **ZX Spectrum: fast3d demo** shows a wireframe cube or icosahedron turning

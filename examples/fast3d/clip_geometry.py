@@ -1,5 +1,5 @@
 """model.clip_line against exact geometry: on 400,000 random lines and
-windows, every clipped end must lie within half a pixel of the true line
+windows, every clipped end must lie within 0.75 of a pixel of the true line
 (along x or along y), and no line with any of itself in the window may be
 left out. check.py holds the Z80 to model.clip_line; this holds the model to
 the geometry.
@@ -39,5 +39,5 @@ for _ in range(400000):
         worst = max(worst, off)
 print(f"{n:,} lines clipped; every end within {worst:.3f} px of the true line along x or y; "
       f"lines with some of themselves in the window left out: {rejected}")
-if worst > 0.5 + 1e-9 or rejected:
+if worst > 0.75 + 1e-9 or rejected:
     sys.exit("model.clip_line is not as close to the geometry as it should be")

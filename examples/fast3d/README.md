@@ -48,7 +48,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `divide_wide` | HL signed, C = 1..255 | HL = HL / C, held to ±16,383 | 418..1,107 |
 | `transform_wide` | as `transform` | x, y as 16-bit words; x = $8000 if at or behind the eye | |
 | `set_window` | B, C = left, top; D, E = right, bottom | lines clip to that, inclusive | |
-| `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,650 outside; ~5,300 cut at one end; ~11,600 at both |
+| `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,600 outside; ~4,400 cut at one end; ~11,100 at both |
+| `crossing_x`, `crossing_y` | DE = the edge; the line's ends | HL = where the line crosses it | ~3,000 (about 830 + 178 a halving) |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -74,10 +75,19 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   each end gets a code saying which of the window's edges it is beyond, so
   a line wholly inside, or wholly beyond one edge, is settled in a few
   hundred T-states. Only a line that crosses an edge pays for a crossing,
-  `a + round(Δa · Δb_edge / Δb)`, a 16 x 16 multiply and a 32 / 16 divide:
-  about 3,200 T-states each. Every crossing is worked out from the line's
-  own ends, never from an end already moved. A moved end has been rounded,
-  and on a shallow line the slope would multiply that rounding.
+  found by a binary chop: `crossing_x` for a left or right edge,
+  `crossing_y` for a top or bottom. From one end, a step toward the other is
+  halved again and again, and taken whenever the line stays short of the
+  edge. Each halving is one bit of how far along the line the edge is (a
+  division step) and adds that much of the other coordinate (a
+  multiplication step), all in registers, and it stops once the step is
+  under half a pixel: about 12 halvings, 3,000 T-states a crossing. That is
+  about a quarter quicker than the 16 x 16 multiply and 32 / 16 divide it
+  replaced, and slightly less exact: a clipped end is within 0.75 of a
+  pixel of the true line (0.21 on average), where the exact sum gave half a
+  pixel. Every crossing is worked out from the line's own ends, never from
+  an end already moved. A moved end has been rounded, and on a shallow line
+  the slope would multiply that rounding.
   `project_wide` divides the quick way whenever the quotient fits a byte,
   which it does for anything on the screen or near it.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
@@ -101,7 +111,7 @@ clears only the box the object filled on that screen last time.
 
 Far off, a frame takes about 82,000 T-states for the cube (8 vertices, 12
 edges) and 191,000 for the icosahedron (12 and 30). Up close it takes up to
-215,000 and 388,000. The lines are much longer then, the box to clear fills
+204,000 and 365,000. The lines are much longer then, the box to clear fills
 most of the window, and about a third of the edges cross an edge of the
 window. That is from about 25 frames a second down to 8 for the cube, before
 ULA contention, which the simulator does not model.
@@ -137,9 +147,9 @@ every result with `model.py`:
   writes every other one to `output/demo.gif`.
 
 `model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
-on 400,000 random lines and windows. Every clipped end must be within half a
-pixel of the true line, along x or y, and no line with any part of itself
-in the window may be left out:
+on 400,000 random lines and windows. Every clipped end must be within 0.75
+of a pixel of the true line, along x or y, and no line with any part of
+itself in the window may be left out:
 
 ```
 python clip_geometry.py
@@ -155,8 +165,8 @@ runto 804F 10
 work 804F 804E 580 70908
 ```
 
-Over a whole swing of the cube, in and out, that gave 82,831..214,756
-T-states an update, 150,730 the median. That agrees with the simulator, and
+Over a whole swing of the cube, in and out, that gave 82,831..206,740
+T-states an update, 146,354 the median. That agrees with the simulator, and
 both screens it left held one framed cube and nothing else.
 
 ## Not done
@@ -164,9 +174,10 @@ both screens it left held one framed cube and nothing else.
 - **Clipping to the eye.** A line is clipped to the window, but an edge
   with an end at or behind the eye (Z = 0) is still left out: that needs
   clipping in 3D, to a near plane, before projecting.
-- **Faster crossings.** `mul16` and `div32` are plain shift-and-add loops
-  (about 1,040 and 1,410 T-states). Unrolled, or built from `mul8s`, they
-  could be quicker.
+- **Faster crossings.** About 830 T-states of a crossing is setting up and
+  finishing, much of it moving the ends through memory, and the 24-bit
+  value kept in IX costs 8 T-states an access. Tightened, a crossing might
+  come down to about 2,300.
 - **Hidden lines.** The objects are wireframes, with every edge drawn.
 - **Contention.** The timings are for uncontended memory. On a real Spectrum,
   `draw_line` and `clear_box` write to the screen, which is contended memory,

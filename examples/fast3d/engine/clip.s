@@ -11,12 +11,20 @@
 ; window's edges it is beyond. Both inside, the line is drawn as it is; both
 ; beyond the same edge, none of it is in the window; otherwise an end beyond
 ; an edge moves to where the line crosses that edge, and the ends are coded
-; again. Every crossing is worked out from the line's own ends, as
-;   a = a_p + round((a_q - a_p) * |edge - b_p| / |b_q - b_p|)
-; and never from an end already moved: a moved end has been rounded, and on a
-; shallow line the slope would multiply that. So each end of a clipped line
-; is within half a pixel of the true line (model.clip_line, which check.py
-; holds this to, and against exact geometry).
+; again. Every crossing is worked out from the line's own ends, never from
+; an end already moved: a moved end has been rounded, and on a shallow line
+; the slope would multiply that.
+;
+; A crossing is found by halving (crossing_x for a left or right edge,
+; crossing_y for a top or bottom): from one end, a step toward the other is
+; halved again and again, and taken whenever the line stays short of the
+; edge. Each halving is one bit of how far along the line the edge is -- a
+; step of a division -- and adds that much of the line's other coordinate --
+; a step of a multiplication -- in about 150 T-states, with everything in
+; registers; and it stops once the step is under half a pixel, about 12
+; halvings on average. Each end of a clipped line is within 0.75 of a pixel
+; of the true line (model.crossing; clip_geometry.py holds the model to
+; exact geometry, check.py the Z80 to the model).
 
 WIDE_LIMIT			EQU		16383				; model.WIDE_LIMIT
 OFF_LEFT			EQU		1
@@ -84,7 +92,7 @@ outcode_is_top:		ld		a,c
 ; clip_line: the line from (clip_x0, clip_y0) to (clip_x1, clip_y1), 16-bit
 ; signed, cut to the window. Carry set if none of it is in the window; else
 ; carry clear and B, C = the first end, D, E = the second, as draw_line takes
-; them. Uses everything but IY and the alternate registers.
+; them. Uses everything but IY.
 
 clip_line:
 					call	.codes
@@ -131,48 +139,24 @@ clip_line:
 .top:				ld		de,(outcode_top + 1)
 .across:			ld		d,0					; DE = the edge's y
 					push	de
-					ld		hl,(clip_px)		; x where the line has that y
-					ld		(ip_ap),hl
-					ld		hl,(clip_qx)
-					ld		(ip_aq),hl
-					ld		hl,(clip_py)
-					ld		(ip_bp),hl
-					ld		hl,(clip_qy)
-					ld		(ip_bq),hl
-					call	interpolate
+					call	crossing_y			; HL = x there
 					pop		de
-					ex		de,hl				; DE = x, HL = y
-					ex		(sp),hl				; HL -> the end, y on the stack
-					ld		(hl),e
-					inc		hl
-					ld		(hl),d
-					inc		hl
-					pop		de
-					ld		(hl),e
-					inc		hl
-					ld		(hl),d
-					jp		.again
+					jr		.store
 .right:				ld		de,(outcode_right + 1)
 					jr		.down
 .left:				ld		de,(outcode_left + 1)
 .down:				ld		d,0					; DE = the edge's x
 					push	de
-					ld		hl,(clip_py)		; y where the line has that x
-					ld		(ip_ap),hl
-					ld		hl,(clip_qy)
-					ld		(ip_aq),hl
-					ld		hl,(clip_px)
-					ld		(ip_bp),hl
-					ld		hl,(clip_qx)
-					ld		(ip_bq),hl
-					call	interpolate
-					pop		de					; DE = x, HL = y
-					ex		(sp),hl				; HL -> the end, y on the stack
-					ld		(hl),e
+					call	crossing_x			; HL = y there
+					ex		de,hl
+					pop		hl
+.store:				ld		b,h					; HL = x, DE = y: into the end
+					ld		c,l
+					pop		hl
+					ld		(hl),c
 					inc		hl
-					ld		(hl),d
+					ld		(hl),b
 					inc		hl
-					pop		de
 					ld		(hl),e
 					inc		hl
 					ld		(hl),d
@@ -221,56 +205,174 @@ draw_line_clipped:
 
 
 ; ---------------------------------------------------------------------------
-; interpolate: HL = a_p + round((a_q - a_p) * |edge - b_p| / |b_q - b_p|),
-; rounded half away from a_p, for the edge in DE and a_p, a_q, b_p, b_q in
-; ip_ap... The edge must lie between b_p and b_q (and they differ), and every
-; difference within 32767. Uses everything but IY and the alternate registers.
+; crossing_x: HL = y where the line (clip_px, clip_py)-(clip_qx, clip_qy)
+; crosses x = DE; crossing_y: HL = x where it crosses y = DE. The edge must
+; lie between the ends (and the line must cross it, not run along it).
+; model.crossing has the arithmetic. Uses everything but IY.
 
-interpolate:
-					ld		hl,(ip_bp)
-					ex		de,hl
+CHOP_BITS			EQU		7					; model.CHOP_BITS
+CHOP_HALF			EQU		1 << (CHOP_BITS - 1)
+
+crossing_x:
+					ld		hl,(clip_px)		; along x to the edge,
+					or		a					; working out y
+					sbc		hl,de
+					ld		(chop_r),hl
+					ld		hl,(clip_qx)
+					ld		de,(clip_px)
 					or		a
-					sbc		hl,de				; edge - b_p
-					call	abs_hl
-					push	hl
-					ld		hl,(ip_bq)
+					sbc		hl,de
+					ld		(chop_db),hl
+					ld		hl,(clip_qy)
+					ld		de,(clip_py)
+					jr		chop
+
+crossing_y:
+					ld		hl,(clip_py)		; along y to the edge,
+					or		a					; working out x
+					sbc		hl,de
+					ld		(chop_r),hl
+					ld		hl,(clip_qy)
+					ld		de,(clip_py)
 					or		a
-					sbc		hl,de				; b_q - b_p
-					call	abs_hl
-					ld		(ip_d),hl
-					ld		hl,(ip_aq)
-					ld		de,(ip_ap)
+					sbc		hl,de
+					ld		(chop_db),hl
+					ld		hl,(clip_qx)
+					ld		de,(clip_px)
+
+; The halving: chop_r = b_p - edge, chop_db = b_q - b_p, and HL = a_q, DE =
+; a_p.
+chop:
+					ld		(chop_ap),de
 					or		a
-					sbc		hl,de				; a_q - a_p
+					sbc		hl,de
+					ld		(chop_da),hl		; a_q - a_p
+					ld		hl,(chop_db)		; toward the edge, positive: from
+					bit		7,h					; Q's side, flip b
+					jr		z,.toward
+					call	negate_hl
+					ld		(chop_db),hl
+					ld		hl,(chop_r)
+					call	negate_hl
+					ld		(chop_r),hl
+.toward:
+					ld		hl,(chop_da)		; B = the halvings: the bits in
+					call	abs_hl				; |b_q - b_p| | |a_q - a_p|, plus
+					ld		a,(chop_db)			; one
+					or		l
+					ld		l,a
+					ld		a,(chop_db + 1)
+					or		h
+					ld		h,a
+					ld		b,17
+					jr		nz,.length
+					ld		h,l					; (under 256: skip a byte)
+					ld		b,9
+.length:			add		hl,hl
+					jr		c,.counted
+					djnz	.length
+.counted:
+					ld		a,(chop_db + 1)		; C:D:E = the step along b,
+					srl		a					; << CHOP_BITS
+					ld		c,a
+					ld		a,(chop_db)
+					rra
+					ld		d,a
+					ld		a,0
+					rra
+					ld		e,a
+					ld		a,(chop_r + 1)		; IXH:H:L = how far short of the
+					sra		a					; edge, the same
+					ld		ixh,a
+					ld		a,(chop_r)
+					rra
+					ld		h,a
+					ld		a,0
+					rra
+					ld		l,a
+					exx
+					ld		a,(chop_da + 1)		; C':D':E' = the step along a
+					sra		a
+					ld		c,a
+					ld		a,(chop_da)
+					rra
+					ld		d,a
+					ld		a,0
+					rra
+					ld		e,a
+					ld		hl,0				; IXL:H':L' = how far along a,
+					ld		ixl,0				; so far
+					exx
+
+.halve:				srl		c					; the steps halved
+					rr		d
+					rr		e
+					exx
+					sra		c
+					rr		d
+					rr		e
+					exx
+					ld		a,l					; still short of the edge, after
+					add		a,e					; the step along b?
 					ld		a,h
-					ld		(ip_sign),a
-					call	abs_hl
-					ld		b,h
-					ld		c,l
-					pop		de
-					call	mul16				; DE:HL = |a_q - a_p| * |edge - b_p|
-					ld		bc,(ip_d)
-					push	bc					; + d / 2, to round
-					srl		b
-					rr		c
-					add		hl,bc
-					jr		nc,.halved
-					inc		de
-.halved:			pop		bc
-					call	div32				; HL = that / d
-					ld		a,(ip_sign)
-					rla
-					call	c,negate_hl
-					ld		de,(ip_ap)
+					adc		a,d
+					ld		a,ixh
+					adc		a,c
+					jp		p,.short			; no: stay
+					ld		a,l					; yes: take it, along b
+					add		a,e
+					ld		l,a
+					ld		a,h
+					adc		a,d
+					ld		h,a
+					ld		a,ixh
+					adc		a,c
+					ld		ixh,a
+					exx							; and along a
+					ld		a,l
+					add		a,e
+					ld		l,a
+					ld		a,h
+					adc		a,d
+					ld		h,a
+					ld		a,ixl
+					adc		a,c
+					ld		ixl,a
+					exx
+.short:				djnz	.halve
+
+					exx							; a = a_p + (gone + half the
+					sra		c					; last step + half a pixel)
+					rr		d					; >> CHOP_BITS
+					rr		e
+					ld		a,l
+					add		a,e
+					ld		l,a
+					ld		a,h
+					adc		a,d
+					ld		h,a
+					ld		a,ixl
+					adc		a,c
+					ld		c,a
+					ld		de,CHOP_HALF
 					add		hl,de
+					jr		nc,.rounded
+					inc		c
+.rounded:			add		hl,hl				; C:H:L >> 7 = (C:H:L << 1) >> 8
+					rl		c
+					ld		l,h
+					ld		h,c
+					ld		de,(chop_ap)
+					add		hl,de
+					push	hl
+					exx
+					pop		hl
 					ret
 
-ip_ap:				DW		0
-ip_aq:				DW		0
-ip_bp:				DW		0
-ip_bq:				DW		0
-ip_d:				DW		0
-ip_sign:			DB		0
+chop_r:				DW		0
+chop_db:			DW		0
+chop_da:			DW		0
+chop_ap:			DW		0
 
 ; HL = |HL|; and HL = -HL. Use A.
 abs_hl:
@@ -283,43 +385,6 @@ negate_hl:
 					sbc		a,a
 					sub		h
 					ld		h,a
-					ret
-
-; mul16: DE:HL = BC * DE, unsigned. Uses A.
-mul16:
-					ld		hl,0
-					ld		a,16
-.bit:				add		hl,hl
-					rl		e
-					rl		d
-					jr		nc,.next
-					add		hl,bc
-					jr		nc,.next
-					inc		de
-.next:				dec		a
-					jr		nz,.bit
-					ret
-
-; div32: HL = DE:HL / BC, unsigned, and DE the remainder; DE < BC <= 32767,
-; so the quotient fits and the remainder never passes 16 bits. Uses A.
-div32:
-					ld		a,16
-.bit:				add		hl,hl
-					rl		e
-					rl		d
-					ex		de,hl
-					or		a
-					sbc		hl,bc
-					jr		nc,.fits
-					add		hl,bc
-					ex		de,hl
-					dec		a
-					jr		nz,.bit
-					ret
-.fits:				ex		de,hl
-					inc		l
-					dec		a
-					jr		nz,.bit
 					ret
 
 
