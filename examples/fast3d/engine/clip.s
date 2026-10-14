@@ -20,9 +20,9 @@
 ; halved again and again, and taken whenever the line stays short of the
 ; edge. Each halving is one bit of how far along the line the edge is -- a
 ; step of a division -- and adds that much of the line's other coordinate --
-; a step of a multiplication -- in about 150 T-states, with everything in
-; registers; and it stops once the step is under half a pixel, about 12
-; halvings on average. Each end of a clipped line is within 0.75 of a pixel
+; a step of a multiplication -- with everything in registers, and in 16
+; bits once the numbers allow; and it stops once the step is under half a
+; pixel, about 12 halvings on average. Each end of a clipped line is within 0.75 of a pixel
 ; of the true line (model.crossing; clip_geometry.py holds the model to
 ; exact geometry, check.py the Z80 to the model).
 
@@ -217,12 +217,12 @@ crossing_x:
 					ld		hl,(clip_px)		; along x to the edge,
 					or		a					; working out y
 					sbc		hl,de
-					ld		(chop_r),hl
+					ex		de,hl				; DE = b_p - edge
 					ld		hl,(clip_qx)
-					ld		de,(clip_px)
+					ld		bc,(clip_px)
 					or		a
-					sbc		hl,de
-					ld		(chop_db),hl
+					sbc		hl,bc				; HL = b_q - b_p
+					exx
 					ld		hl,(clip_qy)
 					ld		de,(clip_py)
 					jr		chop
@@ -231,80 +231,102 @@ crossing_y:
 					ld		hl,(clip_py)		; along y to the edge,
 					or		a					; working out x
 					sbc		hl,de
-					ld		(chop_r),hl
+					ex		de,hl
 					ld		hl,(clip_qy)
-					ld		de,(clip_py)
+					ld		bc,(clip_py)
 					or		a
-					sbc		hl,de
-					ld		(chop_db),hl
+					sbc		hl,bc
+					exx
 					ld		hl,(clip_qx)
 					ld		de,(clip_px)
 
-; The halving: chop_r = b_p - edge, chop_db = b_q - b_p, and HL = a_q, DE =
-; a_p.
+; The halving: HL = b_q - b_p and DE = b_p - edge; HL' = a_q, DE' = a_p.
+;
+; The steps and the distance to the edge start as 24-bit numbers, CHOP_BITS
+; of them fraction, and halve once a round. The halvings are one more than
+; the bits in the larger step, so after all but the last 9 the steps are
+; under 2^15, and the distance to the edge (never more than the step along
+; b, and a unit) with them: those 9 (or all of them, on a short line) are
+; done in 16 bits, about 100 T-states a halving rather than 170.
+;
+;   main: B = halvings, C:D:E = the step along b, IXH:H:L = b short of
+;         the edge (from the edge's far side, so negative)
+;   alt:  C':D':E' = the step along a, B':H':L' = how far along a, so far,
+;         plus half a pixel for the rounding
 chop:
 					ld		(chop_ap),de
 					or		a
-					sbc		hl,de
-					ld		(chop_da),hl		; a_q - a_p
-					ld		hl,(chop_db)		; toward the edge, positive: from
-					bit		7,h					; Q's side, flip b
-					jr		z,.toward
+					sbc		hl,de				; HL' = a_q - a_p
+					ld		b,h					; B'C' = its size
+					ld		c,l
+					bit		7,h
+					jr		z,.size
+					xor		a
+					sub		c
+					ld		c,a
+					sbc		a,a
+					sub		b
+					ld		b,a
+.size:				exx
+					bit		7,h					; toward the edge, positive: from
+					jr		z,.toward			; Q's side, flip b
 					call	negate_hl
-					ld		(chop_db),hl
-					ld		hl,(chop_r)
+					ex		de,hl
 					call	negate_hl
-					ld		(chop_r),hl
-.toward:
-					ld		hl,(chop_da)		; B = the halvings: the bits in
-					call	abs_hl				; |b_q - b_p| | |a_q - a_p|, plus
-					ld		a,(chop_db)			; one
-					or		l
-					ld		l,a
-					ld		a,(chop_db + 1)
+					ex		de,hl
+.toward:			exx							; B = the halvings: the bits in
+					ld		a,b					; |b_q - b_p| | |a_q - a_p|,
+					exx							; plus one
 					or		h
-					ld		h,a
 					ld		b,17
 					jr		nz,.length
-					ld		h,l					; (under 256: skip a byte)
+					exx
+					ld		a,c
+					exx
+					or		l
 					ld		b,9
-.length:			add		hl,hl
+.length:			add		a,a
 					jr		c,.counted
 					djnz	.length
-.counted:
-					ld		a,(chop_db + 1)		; C:D:E = the step along b,
-					srl		a					; << CHOP_BITS
-					ld		c,a
-					ld		a,(chop_db)
-					rra
-					ld		d,a
-					ld		a,0
-					rra
-					ld		e,a
-					ld		a,(chop_r + 1)		; IXH:H:L = how far short of the
-					sra		a					; edge, the same
+.counted:			ex		de,hl				; IXH:H:L = b short of the edge,
+					ld		a,h					; << CHOP_BITS
+					sra		a
 					ld		ixh,a
-					ld		a,(chop_r)
+					ld		a,l
 					rra
 					ld		h,a
 					ld		a,0
 					rra
 					ld		l,a
-					exx
-					ld		a,(chop_da + 1)		; C':D':E' = the step along a
-					sra		a
+					ld		a,d					; C:D:E = the step along b
+					srl		a
 					ld		c,a
-					ld		a,(chop_da)
+					ld		a,e
 					rra
 					ld		d,a
 					ld		a,0
 					rra
 					ld		e,a
-					ld		hl,0				; IXL:H':L' = how far along a,
-					ld		ixl,0				; so far
 					exx
+					ld		a,h					; C':D':E' = the step along a
+					sra		a
+					ld		c,a
+					ld		a,l
+					rra
+					ld		d,a
+					ld		a,0
+					rra
+					ld		e,a
+					ld		b,0					; B':H':L' = half a pixel
+					ld		hl,CHOP_HALF
+					exx
+					ld		a,b					; more than 9 halvings: the
+					sub		9					; first ones in 24 bits
+					jr		c,.short_line
+					jr		z,.last_nine
+					ld		b,a
 
-.halve:				srl		c					; the steps halved
+.halve24:			srl		c					; the steps halved
 					rr		d
 					rr		e
 					exx
@@ -318,7 +340,7 @@ chop:
 					adc		a,d
 					ld		a,ixh
 					adc		a,c
-					jp		p,.short			; no: stay
+					jp		p,.stay24			; no: stay
 					ld		a,l					; yes: take it, along b
 					add		a,e
 					ld		l,a
@@ -335,33 +357,47 @@ chop:
 					ld		a,h
 					adc		a,d
 					ld		h,a
-					ld		a,ixl
+					ld		a,b
 					adc		a,c
-					ld		ixl,a
+					ld		b,a
 					exx
-.short:				djnz	.halve
+.stay24:			djnz	.halve24
+.last_nine:			ld		b,9
+					jr		.halve16
+.short_line:		add		a,9
+					ld		b,a
 
-					exx							; a = a_p + (gone + half the
-					sra		c					; last step + half a pixel)
-					rr		d					; >> CHOP_BITS
+.halve16:			srl		d					; the same in 16 bits: C is 0,
+					rr		e					; IXH all sign, C' all sign
+					exx
+					sra		d
 					rr		e
+					exx
 					ld		a,l
 					add		a,e
-					ld		l,a
 					ld		a,h
 					adc		a,d
-					ld		h,a
-					ld		a,ixl
-					adc		a,c
-					ld		c,a
-					ld		de,CHOP_HALF
+					jp		p,.stay16
 					add		hl,de
-					jr		nc,.rounded
-					inc		c
-.rounded:			add		hl,hl				; C:H:L >> 7 = (C:H:L << 1) >> 8
-					rl		c
+					exx
+					add		hl,de
+					ld		a,b
+					adc		a,c
+					ld		b,a
+					exx
+.stay16:			djnz	.halve16
+
+					exx							; a = a_p + (gone + half the
+					sra		c					; last step) >> CHOP_BITS
+					rr		d
+					rr		e
+					add		hl,de
+					ld		a,b
+					adc		a,c
+					add		hl,hl				; A:H:L << 1: the top two bytes
+					rla
 					ld		l,h
-					ld		h,c
+					ld		h,a
 					ld		de,(chop_ap)
 					add		hl,de
 					push	hl
@@ -369,9 +405,6 @@ chop:
 					pop		hl
 					ret
 
-chop_r:				DW		0
-chop_db:			DW		0
-chop_da:			DW		0
 chop_ap:			DW		0
 
 ; HL = |HL|; and HL = -HL. Use A.
