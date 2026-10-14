@@ -1,8 +1,9 @@
 # fast3d
 
 Fast 3D for the Z80: signed multiplication, a rotation matrix from three
-angles, rotating and projecting vertices, and drawing lines. With them comes
-a demo, a wireframe cube or icosahedron turning on the 128K. The same
+angles, rotating and projecting vertices, and drawing lines, clipped to a
+window. With them comes a demo, a wireframe cube or icosahedron turning and
+swinging in close on the 128K, clipped to a window. The same
 routines for the BBC Micro's 6502, with the same arithmetic, are in
 [vs-code-bbc/examples/fast3d](https://github.com/jonsole/vs-code-bbc/tree/master/examples/fast3d).
 
@@ -43,6 +44,12 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `transform` | HL -> vertices, DE -> points, B = count | x, y for each, y = $FF if off the screen | ~2,370 a vertex |
 | `draw_line` | (B, C) to (D, E); `screen_high` $00 or $80 | the pixels, on $4000 or $C000 | ~60 a pixel along x, ~82 along y |
 | `clear_box` | B rows from row C, E bytes from column D | blank | ~11 a byte, plus ~75 a row |
+| `project_wide` | `rot_*`, `zoff` | HL = x, DE = y, 16-bit, on the screen or off it; carry if Z is 0 | ~1,400 (70 when Z is 0) |
+| `divide_wide` | HL signed, C = 1..255 | HL = HL / C, held to ±16,383 | 418..1,107 |
+| `transform_wide` | as `transform` | x, y as 16-bit words; x = $8000 if at or behind the eye | |
+| `set_window` | B, C = left, top; D, E = right, bottom | lines clip to that, inclusive | |
+| `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,650 outside; ~5,300 cut at one end; ~11,600 at both |
+| `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
 
@@ -63,6 +70,16 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   `2032 sin(a)`. An entry is rounded once, at the end, and the scale was chosen
   so that no entry can round past 127. Across all angles the entries are
   within 0.55 of 127 times the true value.
+- **Clipping only where it is needed.** `clip_line` is Cohen-Sutherland:
+  each end gets a code saying which of the window's edges it is beyond, so
+  a line wholly inside, or wholly beyond one edge, is settled in a few
+  hundred T-states. Only a line that crosses an edge pays for a crossing,
+  `a + round(Δa · Δb_edge / Δb)`, a 16 x 16 multiply and a 32 / 16 divide:
+  about 3,200 T-states each. Every crossing is worked out from the line's
+  own ends, never from an end already moved. A moved end has been rounded,
+  and on a shallow line the slope would multiply that rounding.
+  `project_wide` divides the quick way whenever the quotient fits a byte,
+  which it does for anything on the screen or near it.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is eight blocks, one for each bit of a byte. A pixel
   is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -75,15 +92,19 @@ python build.py      # -> output/demo.z80, a 128K snapshot, with its SLD
 ```
 
 or **ZX Spectrum: fast3d demo** in VS Code. A cube or an icosahedron turns
-about all three axes; SPACE changes which. Each frame is drawn on the screen
+about all three axes; SPACE changes which. It also swings in from 400 units
+to 110 and out again, close enough that most of it is beyond the window
+(columns 24..231, rows 16..175, with a frame round it). Every edge is
+clipped to the window. Each frame is drawn on the screen
 that isn't being shown, then shown at the next interrupt. Before drawing, it
 clears only the box the object filled on that screen last time.
 
-A frame takes 66,000..92,000 T-states for the cube (8 vertices, 12 edges) and
-151,000..163,000 for the icosahedron (12 and 30). That is 25 and about 17 frames
-a second on a 128K, before ULA contention, which the simulator does not model.
-The cube's frame goes on: about 45,000 T-states drawing its lines, 19,000 on
-its vertices, 17,000 clearing and 4,000 on the matrix.
+Far off, a frame takes about 82,000 T-states for the cube (8 vertices, 12
+edges) and 191,000 for the icosahedron (12 and 30). Up close it takes up to
+215,000 and 388,000. The lines are much longer then, the box to clear fills
+most of the window, and about a third of the edges cross an edge of the
+window. That is from about 25 frames a second down to 8 for the cube, before
+ULA contention, which the simulator does not model.
 
 ![The demo's cube, a frame from check.py](demo.png)
 
@@ -107,24 +128,45 @@ every result with `model.py`:
 - `draw_line`, all 6,144 bytes of the screen after each batch of lines, on
   both screens: 3,031 lines;
 - `clear_box`;
-- the demo, 128 frames of `draw_frame`, whole screens against the model's
-  picture of the same frame. It writes them to `output/demo.gif`.
+- clipping: `divide_wide`, `project_wide` and `transform_wide`; then
+  `clip_line` on 60,000 lines across random windows, from inside the window
+  to 16,000 pixels beyond it, every end; and `draw_line_clipped`, every
+  pixel;
+- the demo, 580 frames of `draw_frame` (a whole swing in and out for each
+  object), whole screens against the model's picture of the same frame. It
+  writes every other one to `output/demo.gif`.
+
+`model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
+on 400,000 random lines and windows. Every clipped end must be within half a
+pixel of the true line, along x or y, and no line with any part of itself
+in the window may be left out:
+
+```
+python clip_geometry.py
+```
 
 The demo also runs on the emulator itself. `cpp-core`'s `snapshot_probe` can
-load `output/demo.z80` and measure its main loop:
+load `output/demo.z80` and measure its main loop, from the instruction after
+its `HALT` (`frame` + 4) to the `HALT` (`frame` + 3):
 
 ```
 load output/demo.z80
-runto 803D 10
-work 803D 803C 100 70908
+runto 804F 10
+work 804F 804E 580 70908
 ```
 
-That gives 66,694..95,907 T-states an update, 87,401 the median: two frames
-each.
+Over a whole swing of the cube, in and out, that gave 82,831..214,756
+T-states an update, 150,730 the median. That agrees with the simulator, and
+both screens it left held one framed cube and nothing else.
 
 ## Not done
 
-- **Clipping.** An edge with an end off the screen is left out, not clipped.
+- **Clipping to the eye.** A line is clipped to the window, but an edge
+  with an end at or behind the eye (Z = 0) is still left out: that needs
+  clipping in 3D, to a near plane, before projecting.
+- **Faster crossings.** `mul16` and `div32` are plain shift-and-add loops
+  (about 1,040 and 1,410 T-states). Unrolled, or built from `mul8s`, they
+  could be quicker.
 - **Hidden lines.** The objects are wireframes, with every edge drawn.
 - **Contention.** The timings are for uncontended memory. On a real Spectrum,
   `draw_line` and `clear_box` write to the screen, which is contended memory,

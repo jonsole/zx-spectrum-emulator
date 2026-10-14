@@ -1,5 +1,7 @@
 ; fast3d's demo: a wireframe cube or icosahedron, turning about all three
-; axes, drawn by the routines in fast3d.s. SPACE changes the object.
+; axes and swinging in towards the eye and out again, drawn by the routines
+; in fast3d.s through a window: whatever of it is beyond the window's frame
+; is clipped away. SPACE changes the object.
 ;
 ; A 128K program: each frame is drawn on the screen not being shown, then
 ; shown at the next interrupt, so nothing ever flickers. Only the box the
@@ -13,7 +15,12 @@
 IM2_TABLE			EQU		$BE00				; 257 bytes of $BD: wherever the
 IM2_ROUTINE			EQU		$BDBD				; bus leaves the vector, $BDBD
 ATTRIBUTES			EQU		%01000111			; bright white on black
-DISTANCE			EQU		400					; the eye from the object's centre
+NEAREST				EQU		110					; the eye from the object's centre,
+FARTHEST			EQU		400					; at its closest and farthest
+WINDOW_LEFT			EQU		24					; the window lines are clipped to
+WINDOW_TOP			EQU		16
+WINDOW_RIGHT		EQU		231
+WINDOW_BOTTOM		EQU		175
 
 					ORG		$8000
 
@@ -37,10 +44,18 @@ start:
 					call	clear_screen
 					ld		hl,$C000
 					call	clear_screen
-					ld		hl,DISTANCE * 128
+					ld		hl,FARTHEST * 128
 					ld		(zoff),hl
-					ld		a,$80				; draw on bank 7 first
-					ld		(screen_high),a
+					ld		b,WINDOW_LEFT
+					ld		c,WINDOW_TOP
+					ld		d,WINDOW_RIGHT
+					ld		e,WINDOW_BOTTOM
+					call	set_window
+					xor		a					; the window's frame, on both
+					call	draw_frame_lines	; screens
+					ld		a,$80
+					call	draw_frame_lines
+					ld		(screen_high),a		; draw on bank 7 first
 					ei
 
 frame:
@@ -75,12 +90,29 @@ draw_frame:
 					inc		(hl)
 					call	make_matrix
 
-					ld		ix,(object)			; the vertices to the screen
-					ld		l,(ix + 0)
+					ld		hl,(zoff)			; and swing in or out: 2 units a
+					ld		de,(.swing)			; frame, turning at the ends
+					add		hl,de
+					ld		(zoff),hl
+					ld		de,NEAREST * 128
+					or		a
+					sbc		hl,de
+					jr		z,.turn
+					ld		hl,(zoff)
+					ld		de,FARTHEST * 128
+					or		a
+					sbc		hl,de
+					jr		nz,.swung
+.turn:				ld		hl,(.swing)
+					call	negate_hl
+					ld		(.swing),hl
+.swung:
+					ld		ix,(object)			; the vertices to the screen,
+					ld		l,(ix + 0)			; on it or off it
 					ld		h,(ix + 1)
 					ld		b,(ix + 2)
 					ld		de,points
-					call	transform
+					call	transform_wide
 
 					call	box_of_screen		; clear the last box here
 					ld		a,(hl)
@@ -95,91 +127,71 @@ draw_frame:
 					ld		e,(hl)
 					call	clear_box
 .cleared:
-					ld		ix,(object)			; the edges
+					ld		a,255				; this screen's box, for next
+					ld		(.least_x),a		; time: round every end drawn
+					ld		(.least_y),a
+					xor		a
+					ld		(.most_x),a
+					ld		(.most_y),a
+
+					ld		ix,(object)			; the edges, clipped
 					ld		l,(ix + 3)
 					ld		h,(ix + 4)
 					ld		a,(ix + 5)
 .edge:				ld		(.edges_left),a
-					ld		a,(hl)				; B, C = the first end
+					ld		a,(hl)				; the first end
 					inc		hl
-					add		a,a
-					ld		e,a
-					ld		d,high points
-					ld		a,(de)
-					ld		b,a
-					inc		e
-					ld		a,(de)
-					ld		c,a
-					ld		a,(hl)				; D, E = the second
+					ld		de,clip_x0
+					call	.end
+					jr		c,.skip_second
+					ld		a,(hl)				; the second
 					inc		hl
+					ld		de,clip_x1
+					call	.end
+					jr		c,.next
 					ld		(.edge_at),hl
-					add		a,a
-					ld		l,a
-					ld		h,high points
-					ld		d,(hl)
-					inc		l
-					ld		e,(hl)
-					ld		a,c					; either end off the screen:
-					cp		$FF					; leave the edge out
-					jr		z,.next
+					call	clip_line
+					jr		c,.drawn			; none of it in the window
+					ld		hl,.least_x			; round its ends
+					ld		a,b
+					call	.least
+					ld		a,d
+					call	.least
+					inc		hl
+					ld		a,c
+					call	.least
 					ld		a,e
-					cp		$FF
-					call	nz,draw_line
-.next:				ld		hl,(.edge_at)
-					ld		a,(.edges_left)
+					call	.least
+					call	draw_line
+.drawn:				ld		hl,(.edge_at)
+					jr		.next
+.skip_second:		inc		hl
+.next:				ld		a,(.edges_left)
 					dec		a
 					jr		nz,.edge
 
-					; this screen's box, for next time: round the points on it
-					ld		ix,(object)
-					ld		b,(ix + 2)
-					ld		hl,points
-					ld		de,$FF00			; D = least x, E = most
-					ld		c,$FF				; C = least y
-					xor		a					; A' = most y
-					ex		af,af'
-.extent:			ld		a,(hl)				; x
-					inc		l
-					ex		af,af'
-					ld		ixl,a
-					ld		a,(hl)				; y
-					inc		l
-					cp		$FF
-					jr		z,.off
-					cp		c
-					jr		nc,.not_least_y
+					ld		a,(.least_y)		; the box, in rows and columns
+					cp		255
+					jr		z,.no_box			; nothing drawn
 					ld		c,a
-.not_least_y:		cp		ixl
-					jr		c,.not_most_y
-					ld		ixl,a
-.not_most_y:		ex		af,af'				; A = x
-					cp		d
-					jr		nc,.not_least_x
-					ld		d,a
-.not_least_x:		cp		e
-					jr		c,.not_most_x
-					ld		e,a
-.not_most_x:		ex		af,af'
-.off:				ld		a,ixl
-					ex		af,af'
-					djnz	.extent
-					ex		af,af'				; A = most y
+					ld		a,(.most_y)
 					sub		c
-					ld		b,a					; rows - 1
-					ld		a,c
-					cp		$FF
-					jr		z,.no_box			; nothing on the screen
-					inc		b
-					srl		d					; columns
-					srl		d
-					srl		d
-					srl		e
-					srl		e
-					srl		e
-					ld		a,e
+					inc		a
+					ld		b,a					; rows
+					ld		a,(.least_x)
+					rrca
+					rrca
+					rrca
+					and		31
+					ld		d,a					; first column
+					ld		a,(.most_x)
+					rrca
+					rrca
+					rrca
+					and		31
 					sub		d
 					inc		a
-					ld		e,a
+					ld		e,a					; columns
 					push	bc
 					push	de
 					call	box_of_screen
@@ -197,8 +209,90 @@ draw_frame:
 					ld		(hl),0
 					ret
 
+; Point A's x and y into (DE), (DE+2), as clip_line takes them: carry set
+; if the point is at or behind the eye. Keeps HL.
+.end:				push	hl
+					ld		l,a
+					ld		h,0
+					add		hl,hl
+					add		hl,hl
+					ld		bc,points
+					add		hl,bc
+					ld		a,(hl)
+					ld		(de),a
+					inc		hl
+					inc		de
+					ld		a,(hl)
+					ld		(de),a
+					inc		hl
+					inc		de
+					cp		high WIDE_BEHIND
+					jr		nz,.in_front
+					dec		hl
+					dec		hl
+					ld		a,(hl)
+					inc		hl
+					inc		hl
+					or		a
+					jr		nz,.in_front
+					pop		hl
+					scf
+					ret
+.in_front:			ldi
+					ldi
+					pop		hl
+					and		a
+					ret
+
+; (HL) = the least of it and A, (HL+2) the most.
+.least:				cp		(hl)
+					jr		nc,.not_least
+					ld		(hl),a
+.not_least:			inc		hl
+					inc		hl
+					cp		(hl)
+					jr		c,.not_most
+					ld		(hl),a
+.not_most:			dec		hl
+					dec		hl
+					ret
+
+.swing:				DW		-256				; 2 units a frame, inwards first
 .edges_left:		DB		0
 .edge_at:			DW		0
+.least_x:			DB		0
+.least_y:			DB		0
+.most_x:			DB		0
+.most_y:			DB		0
+
+; draw_frame_lines: the window's frame, a pixel outside it, on the screen A
+; says ($00 or $80, as screen_high). Keeps A.
+draw_frame_lines:
+					push	af
+					ld		(screen_high),a
+					ld		hl,frame_lines
+					ld		b,4
+.line:				push	bc
+					ld		b,(hl)
+					inc		hl
+					ld		c,(hl)
+					inc		hl
+					ld		d,(hl)
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					push	hl
+					call	draw_line
+					pop		hl
+					pop		bc
+					djnz	.line
+					pop		af
+					ret
+
+frame_lines:		DB		WINDOW_LEFT - 1, WINDOW_TOP - 1, WINDOW_RIGHT + 1, WINDOW_TOP - 1
+					DB		WINDOW_RIGHT + 1, WINDOW_TOP - 1, WINDOW_RIGHT + 1, WINDOW_BOTTOM + 1
+					DB		WINDOW_RIGHT + 1, WINDOW_BOTTOM + 1, WINDOW_LEFT - 1, WINDOW_BOTTOM + 1
+					DB		WINDOW_LEFT - 1, WINDOW_BOTTOM + 1, WINDOW_LEFT - 1, WINDOW_TOP - 1
 
 ; HL -> the box (rows, top, left column, columns) for the screen screen_high
 ; says. Uses A.
@@ -274,7 +368,7 @@ object:				DW		objects
 					INCLUDE	"fast3d.s"
 
 					ALIGN	256
-points:				DS		2 * 256				; x, y for each vertex
+points:				DS		4 * 128				; x, y (16-bit) for each vertex
 
 					ORG		IM2_ROUTINE
 					ei

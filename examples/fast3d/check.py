@@ -12,9 +12,16 @@ and every result is compared with the model's:
 5. draw_line, every pixel of every byte of the screen, against model.line,
    on lines every way and length and on both screens, $4000 and $C000; and
    clear_box.
-6. The demo: draw_frame, frame after frame for each object, on the screen at
-   $4000 (and so clearing its own last box), against model.py's picture of
-   the same frame; and timed. The frames go to output/demo.gif.
+6. Clipping: divide_wide, project_wide and transform_wide against the model;
+   clip_line on 60,000 lines across random windows, from inside the window
+   to 16,000 pixels out, against model.clip_line, every end; and
+   draw_line_clipped, every pixel. (model.clip_line is itself checked
+   against exact geometry by clip_geometry.py.)
+7. The demo: draw_frame, frame after frame for each object through a whole
+   swing in and out, on the screen at $4000 (and so clearing its own last
+   box), against model.py's picture of the same frame -- clipped to the
+   window, frame and all; and timed. Every other frame goes to
+   output/demo.gif.
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -279,6 +286,111 @@ def check_lines(m: Machine) -> list[str]:
     return failures
 
 
+def window_lines(rng: random.Random, count: int) -> list:
+    """(window, line) pairs: random windows, and lines from inside them to far
+    out, half of them aimed through the window so that most need clipping."""
+    cases = []
+    for _ in range(count):
+        w = sorted(rng.sample(range(256), 2))
+        h = sorted(rng.sample(range(192), 2))
+        window = (w[0], h[0], w[1], h[1])
+        far = rng.choice((40, 300, 2000, 16000))
+        line = [rng.randint(-far, far + 255), rng.randint(-far, far + 191),
+                rng.randint(-far, far + 255), rng.randint(-far, far + 191)]
+        if rng.random() < 0.5:
+            line[2] = 2 * rng.randint(window[0], window[2]) - line[0]
+            line[3] = 2 * rng.randint(window[1], window[3]) - line[1]
+        cases.append((window, tuple(line)))
+    return cases
+
+
+def check_clipping(m: Machine) -> list[str]:
+    failures = []
+    rng = random.Random(8)
+
+    times = []
+    for _ in range(20000):
+        n, c = rng.randrange(-32768, 32768), rng.randrange(1, 256)
+        if rng.random() < 0.3:
+            c = rng.randrange(1, 8)
+        times.append(m.call("divide_wide", H=(n >> 8) & 0xFF, L=n & 0xFF, C=c))
+        got, want = model.to_signed16(m.pair("H", "L")), model.divide_wide(n, c)
+        if got != want and len(failures) < 10:
+            failures.append(f"divide_wide {n} / {c}: {got}, not {want}")
+    report("divide_wide", times)
+
+    times = []
+    for _ in range(20000):
+        rotated = tuple(rng.randrange(-28672, 28673) for _ in range(3))
+        zoff = rng.randrange(0, 65536)
+        if not 0 <= rotated[2] + zoff < 65536:
+            continue    # outside what project_wide is for
+        for name, value in zip(("rot_x", "rot_y", "rot_z"), rotated):
+            m.poke_word(name, value)
+        m.poke_word("zoff", zoff)
+        times.append(m.call("project_wide"))
+        carry = m.sim.registers[1] & 1
+        got = None if carry else (model.to_signed16(m.pair("H", "L")), model.to_signed16(m.pair("D", "E")))
+        want = model.project_wide(rotated, zoff)
+        if got != want and len(failures) < 10:
+            failures.append(f"project_wide {rotated} zoff {zoff}: {got}, not {want}")
+    report("project_wide", times)
+
+    # transform_wide, close enough that points land far off the screen
+    vertex_at, point_at = m.label("checks_vertex"), m.label("checks_points")
+    for _ in range(200):
+        x, y, z = (rng.randrange(256) for _ in range(3))
+        set_angles(m, x, y, z)
+        m.call("make_matrix")
+        matrix = model.make_matrix(x, y, z)
+        zoff = rng.randrange(28800, 36000)
+        m.poke_word("zoff", zoff)
+        vertices = [tuple(rng.randrange(-128, 128) for _ in range(3)) for _ in range(8)]
+        m.poke(vertex_at, bytes(c & 0xFF for v in vertices for c in v))
+        m.call("transform_wide", H=vertex_at >> 8, L=vertex_at, D=point_at >> 8, E=point_at, B=8)
+        for i, vertex in enumerate(vertices):
+            want = model.project_wide(model.rotate(matrix, vertex), zoff)
+            words = [model.to_signed16(m.memory[point_at + 4 * i + k] | m.memory[point_at + 4 * i + k + 1] << 8)
+                     for k in (0, 2)]
+            got = None if words[0] == -32768 else tuple(words)
+            if got != want and len(failures) < 10:
+                failures.append(f"transform_wide {vertex} at {x},{y},{z}: {got}, not {want}")
+
+    kinds = {"inside": [], "outside": [], "clipped once": [], "clipped twice or more": []}
+    for window, line in window_lines(rng, 60000):
+        m.call("set_window", B=window[0], C=window[1], D=window[2], E=window[3])
+        for name, value in zip(("clip_x0", "clip_y0", "clip_x1", "clip_y1"), line):
+            m.poke_word(name, value)
+        t = m.call("clip_line")
+        carry = m.sim.registers[1] & 1
+        got = None if carry else (m.reg("B"), m.reg("C"), m.reg("D"), m.reg("E"))
+        want = model.clip_line(*line, window)
+        if got != want and len(failures) < 10:
+            failures.append(f"clip_line {line} to {window}: {got}, not {want}")
+        if want is None:
+            kinds["outside"].append(t)
+        else:
+            moved = sum(a != b for a, b in zip(want, line))
+            kinds["inside" if moved == 0 else "clipped once" if moved <= 2 and (want[:2] == line[:2] or want[2:] == line[2:]) else "clipped twice or more"].append(t)
+    for kind, times in kinds.items():
+        report(f"clip_line, {kind}", times)
+
+    # draw_line_clipped: the pixels
+    m.poke(m.label("screen_high"), bytes([0]))
+    for window, line in window_lines(rng, 2000):
+        m.poke(0x4000, bytes(6144))
+        m.call("set_window", B=window[0], C=window[1], D=window[2], E=window[3])
+        for name, value in zip(("clip_x0", "clip_y0", "clip_x1", "clip_y1"), line):
+            m.poke_word(name, value)
+        m.call("draw_line_clipped")
+        clipped = model.clip_line(*line, window)
+        if bytes(m.memory[0x4000:0x5800]) != render([clipped] if clipped else [], 0x4000):
+            failures.append(f"draw_line_clipped {line} to {window} differs from the model")
+            break
+    m.call("set_window", B=0, C=0, D=255, E=191)
+    return failures
+
+
 def check_demo(m: Machine) -> list[str]:
     from PIL import Image
     from build import objects
@@ -288,33 +400,56 @@ def check_demo(m: Machine) -> list[str]:
     sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
     sld = OUT / "demo.sld"
     label = {name: find_label(sld, name) for name in
-             ("draw_frame", "screen_high", "zoff", "angle_x", "object", "objects", "start")}
-    distance = 400
-    sim.memory[label["zoff"]:label["zoff"] + 2] = (distance * 128).to_bytes(2, "little")
-    sim.memory[label["screen_high"]] = 0
+             ("draw_frame", "screen_high", "zoff", "angle_x", "object", "objects", "start",
+              "set_window", "draw_frame_lines", "FARTHEST", "NEAREST",
+              "WINDOW_LEFT", "WINDOW_TOP", "WINDOW_RIGHT", "WINDOW_BOTTOM")}
+    window = tuple(label[f"WINDOW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
+    left, top, right, bottom = window
+    frame = [(left - 1, top - 1, right + 1, top - 1), (right + 1, top - 1, right + 1, bottom + 1),
+             (right + 1, bottom + 1, left - 1, bottom + 1), (left - 1, bottom + 1, left - 1, top - 1)]
+
+    def call(name: str, **registers: int) -> int:
+        for reg, value in registers.items():
+            sim.registers[{"A": A, "B": B, "C": C, "D": D, "E": E}[reg]] = value
+        sim.registers[SP] = STACK
+        sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
+        start = sim.registers[T]
+        sim.run(label[name], RETURN)
+        return sim.registers[T] - start
+
+    # as start does: the window, its frame, the object at its farthest
     for address in range(0x4000, 0x5800):
         sim.memory[address] = 0
+    call("set_window", B=left, C=top, D=right, E=bottom)
+    call("draw_frame_lines", A=0)
+    sim.memory[label["zoff"]:label["zoff"] + 2] = (label["FARTHEST"] * 128).to_bytes(2, "little")
+    sim.memory[label["screen_high"]] = 0
+    swing = 2 * (label["FARTHEST"] - label["NEAREST"]) // 2      # frames in and out again
     frames = []
     for index, (name, (vertices, edges)) in enumerate(objects().items()):
         pointer = label["objects"] + 6 * index
         sim.memory[label["object"]:label["object"] + 2] = pointer.to_bytes(2, "little")
-        times = []
-        for _ in range(64):
-            sim.registers[SP] = STACK
-            sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
-            start = sim.registers[T]
-            sim.run(label["draw_frame"], RETURN)
-            times.append(sim.registers[T] - start)
+        times, clipped = [], 0
+        for _ in range(swing):
+            times.append(call("draw_frame"))
             angles = sim.memory[label["angle_x"]:label["angle_x"] + 3]
+            zoff = sim.memory[label["zoff"]] | sim.memory[label["zoff"] + 1] << 8
             matrix = model.make_matrix(*angles)
-            points = [model.project(model.rotate(matrix, v), distance * 128) for v in vertices]
-            lines = [(*points[i], *points[j]) for i, j in edges if points[i] and points[j]]
+            points = [model.project_wide(model.rotate(matrix, v), zoff) for v in vertices]
+            lines = []
+            for i, j in edges:
+                if points[i] and points[j]:
+                    line = model.clip_line(*points[i], *points[j], window)
+                    clipped += line != (*points[i], *points[j])
+                    if line:
+                        lines.append(line)
             got = bytes(sim.memory[0x4000:0x5800])
-            if got != render(lines, 0x4000):
-                failures.append(f"demo: the {name} at angles {list(angles)} differs from the model")
+            if got != render(frame + lines, 0x4000):
+                failures.append(f"demo: the {name} at angles {list(angles)}, zoff {zoff}, differs from the model")
                 break
             frames.append(got)
         report(f"demo: {name}", times)
+        print(f"  {'':14} ({clipped:,} of its {len(edges) * swing:,} edges clipped, over a swing in and out)")
     # the frames, as the Spectrum shows them: bright white on black, twice the size
     images = []
     for screen in frames:
@@ -322,8 +457,9 @@ def check_demo(m: Machine) -> list[str]:
         image.putdata([1 if screen[model.screen_address(x, y) - 0x4000] & (0x80 >> (x & 7)) else 0
                        for y in range(192) for x in range(256)])
         images.append(image.convert("L").resize((512, 384), Image.NEAREST))
-    images[0].save(OUT / "demo.gif", save_all=True, append_images=images[1:], duration=40, loop=0)
-    images[20].save(OUT / "demo.png")
+    images = images[::2]
+    images[0].save(OUT / "demo.gif", save_all=True, append_images=images[1:], duration=80, loop=0)
+    images[100].save(OUT / "demo.png")
     print(f"  {len(frames)} frames to {OUT / 'demo.gif'}")
     return failures
 
@@ -331,7 +467,7 @@ def check_demo(m: Machine) -> list[str]:
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_demo):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_demo):
         failures += check(m)
     if failures:
         print("\n".join(failures[:20]))

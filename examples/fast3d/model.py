@@ -143,3 +143,76 @@ def line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
 def screen_address(x: int, y: int, base: int = 0x4000) -> int:
     """The byte holding pixel (x, y) of a Spectrum screen at base."""
     return base | ((y & 0xC0) << 5) | ((y & 7) << 8) | ((y & 0x38) << 2) | (x >> 3)
+
+
+# ---------------------------------------------------------------------------
+# Clipping: projected points as 16-bit screen coordinates, on the screen or
+# not, and lines cut to a window.
+
+WIDE_LIMIT = 16383      # the most a wide projection moves from the centre
+
+
+def divide_wide(s: int, z: int) -> int:
+    """S / Z, truncated toward zero, held to +-WIDE_LIMIT."""
+    q = min(abs(s) // z, WIDE_LIMIT)
+    return -q if s < 0 else q
+
+
+def project_wide(rotated: tuple[int, int, int], zoff: int,
+                 centre_x: int = 128, centre_y: int = 96) -> tuple[int, int] | None:
+    """Where a rotated vertex lands, on the screen or off it, as 16-bit
+    coordinates; None if Z is 0 (at or behind the eye)."""
+    sx, sy, sz = rotated
+    z = (sz + zoff) >> 8
+    if not 1 <= z <= 255:
+        return None
+    return centre_x + divide_wide(sx, z), centre_y - divide_wide(sy, z)
+
+
+LEFT, RIGHT, TOP, BOTTOM = 1, 2, 4, 8
+
+
+def outcode(x: int, y: int, window: tuple[int, int, int, int]) -> int:
+    left, top, right, bottom = window
+    return ((LEFT if x < left else RIGHT if x > right else 0) |
+            (TOP if y < top else BOTTOM if y > bottom else 0))
+
+
+def interpolate(a_p: int, a_q: int, b_p: int, b_q: int, b_edge: int) -> int:
+    """a where the line from (a_p, b_p) to (a_q, b_q) has b = b_edge: rounded
+    to the nearest, a half away from a_p."""
+    n = abs(a_q - a_p)
+    t = (n * abs(b_edge - b_p) + abs(b_q - b_p) // 2) // abs(b_q - b_p)
+    return a_p + t if a_q >= a_p else a_p - t
+
+
+def clip_line(x0: int, y0: int, x1: int, y1: int,
+              window: tuple[int, int, int, int]) -> tuple[int, int, int, int] | None:
+    """Cohen-Sutherland: the line cut to the window (left, top, right,
+    bottom, inclusive), or None if none of it is in the window. An end that
+    is outside is moved to the edge it is outside of, first of left, right,
+    top, bottom, the first end before the second. Every crossing is worked
+    out from the line's own ends, never from an end already moved: a moved
+    end is rounded, and on a shallow line the slope would multiply that."""
+    left, top, right, bottom = window
+    px, py, qx, qy = x0, y0, x1, y1             # the line itself
+    for _ in range(8):
+        c0, c1 = outcode(x0, y0, window), outcode(x1, y1, window)
+        if not c0 | c1:
+            return x0, y0, x1, y1
+        if c0 & c1:
+            return None
+        code = c0 or c1
+        if code & LEFT:
+            x, y = left, interpolate(py, qy, px, qx, left)
+        elif code & RIGHT:
+            x, y = right, interpolate(py, qy, px, qx, right)
+        elif code & TOP:
+            x, y = interpolate(px, qx, py, qy, top), top
+        else:
+            x, y = interpolate(px, qx, py, qy, bottom), bottom
+        if c0:
+            x0, y0 = x, y
+        else:
+            x1, y1 = x, y
+    return None     # never reached: each end moves at most twice (clip_line in Z80 gives up the same way)
