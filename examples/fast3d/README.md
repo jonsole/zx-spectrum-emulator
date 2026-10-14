@@ -45,7 +45,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `project` | `rot_*`, `zoff` | B = x, C = y (256 x 192, y down), or carry if off the screen | ~860 |
 | `divide` | HL signed, C = 1..255 | HL = HL / C, or carry if it will not fit a byte | 333..453 |
 | `transform` | HL -> vertices, DE -> points, B = count | x, y for each, y = $FF if off the screen | ~2,370 a vertex |
-| `draw_line` | (B, C) to (D, E); `screen_high` $00 or $80 | the pixels, on $4000 or $C000 | ~60 a pixel along x, ~82 along y |
+| `draw_line` | (B, C) to (D, E); `screen_high` $00 or $80 | the pixels, on $4000 or $C000 | ~60 a pixel along x, ~53 along y; ~270 to start |
 | `clear_box` | B rows from row C, E bytes from column D | blank | ~11 a byte, plus ~75 a row |
 | `project_wide` | `rot_*`, `zoff` | HL = x, DE = y, 16-bit, on the screen or off it; carry if Z is 0 | ~1,400 (70 when Z is 0) |
 | `divide_wide` | HL signed, C = 1..255 | HL = HL / C, held to ±16,383 | 418..1,107 |
@@ -156,9 +156,15 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   point it writes in the alternate registers, so nothing goes through
   memory that need not.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
-  the left or the right) is eight blocks, one for each bit of a byte. A pixel
-  is then one `SET b,(HL)`. `draw_line` pushes the address of the first
-  pixel's block and `RET`s into it.
+  the left or the right) is a set of blocks, one for each bit of a byte. A
+  pixel is then one `SET b,(HL)`. `draw_line` pushes the address of the first
+  pixel's block and `RET`s into it. Along y every pixel steps down a row,
+  and working out the next row on the Spectrum's screen cost as much as the
+  pixel; so there the blocks are one for each bit *and row of the
+  character cell*, laid out in chains that follow a step across, and seven
+  rows in eight step down with `INC H` alone, only the eighth working out
+  the next cell: 42 T-states a pixel instead of 75. build.py writes the
+  blocks.
 
 ## The demo
 
@@ -189,8 +195,8 @@ tenth, reckoned every ten pictures from the frames the interrupt counted
 and drawn in the 48K ROM's font (ROM 1 is kept paged in for it).
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 160,000..785,000
-T-states, 487,000 on average, with nothing lost waiting for the flip:
+drawn a frame, 5.1 on average, and a frame takes 154,000..759,000
+T-states, 472,000 on average, with nothing lost waiting for the flip:
 about 7 frames a second on a 128K, before ULA contention (511,000 without
 `CULL_SKIP`). Of an average frame (from the emulator's profiler), culling all
 forty objects takes about 23%, about 3,300 T-states an object; the
