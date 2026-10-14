@@ -126,6 +126,21 @@ examples/filmation/lightkeep/art/melkhior/
 examples/isoblocks/painter/output/
 examples/isoblocks/rays/output/
 
+# hullscroll: build.py's generated data and the assembled demo, rebuilt from
+# art/, levels/ and hull.py.
+examples/hullscroll/output/
+
+# charscroll: build.py's generated level (from the user's own Uridium tape)
+# and the assembled demo.
+examples/charscroll/output/
+
+# scramble: build.py's generated code and data and the assembled game,
+# rebuilt from levels/, art/ and terrain.py.
+examples/scramble/output/
+
+# chopper: the same, from levels/, art/, scenery.py and sounds.py.
+examples/chopper/output/
+
 # fast3d: the tables and the assembled checks and demo, from build.py.
 examples/fast3d/output/
 
