@@ -9,6 +9,15 @@ builds and runs against this emulator.
 
 *Played in this emulator and recorded with its `start_video` tool.*
 
+![The original Knight Lore beside the remake in the original's five slowest rooms, each counting the frames it draws: the remake runs 2.6 to 2.9 times as fast](knightlore/media/knightlore-original-vs-remake.gif)
+
+*The original (1984) beside the remake, at real Spectrum speed, in the five
+rooms where the original runs slowest -- found by timing all 128 rooms from
+five to nine spots each. The original manages 6.4 to 8 frames a second there
+and the remake 18 to 23. The knight can't be killed and the clock is held, so
+both play the same scene. Also as
+[an MP4](knightlore/media/knightlore-original-vs-remake.mp4).*
+
 It comes in two parts: [`engine/`](engine/README.md), an isometric engine
 with nothing of Knight Lore in it, and [`knightlore/`](knightlore/), the game
 built on it. `knightlore/knightlore.s` joins the two -- it lays out memory
