@@ -450,7 +450,7 @@ def check_objects(m: Machine) -> list[str]:
             obj_a = [rng.randrange(256) for _ in range(3)]
             model_at, vertices = shapes[rng.randrange(len(shapes))]
             record = (b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a)
-                      + model_at.to_bytes(2, "little") + bytes(3))           # (no spin)
+                      + model_at.to_bytes(2, "little") + bytes(8))           # (no spin; room to skip)
             m.poke(obj_at, record)
             m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
             t = m.call("cull_object")
@@ -464,6 +464,20 @@ def check_objects(m: Machine) -> list[str]:
                 got_t = tuple(signed24(m.memory[m.label("view_t") + 3 * i:m.label("view_t") + 3 * i + 3]) for i in range(3))
                 if got_t != want_t:
                     failures.append(f"cull_object T {got_t}, not {want_t}")
+            elif got:
+                # CULL_SKIP: the margin it leaves must be one some culling test allows,
+                # and the size and limit what the model makes of P - C
+                skip, dist, limit = m.word("cull_skip"), m.memory[m.label("cull_dist")], m.word("cull_limit")
+                if want_t is None:
+                    if skip:
+                        failures.append(f"cull_object {pos} from {cam_p}: out of the box, but a margin of {skip}")
+                else:
+                    k, q, room = model.skip_size([p - c for p, c in zip(pos, cam_p)])
+                    want_dist = (m.label("skip_bounds") + 2 * model.skip_index(k, q)) & 0xFF
+                    want_limit = (m.word("skip_odometer") + room) & 0xFFFF
+                    if skip > model.skip_margin(want_t, r) or dist != want_dist or limit != want_limit:
+                        failures.append(f"cull_object {pos} {obj_a} from {cam_p} {cam_a}: margin {skip} (at most "
+                                        f"{model.skip_margin(want_t, r)}), size at {dist} ({want_dist}), limit {limit} ({want_limit})")
             rough = want_t is not None and rough_out(rough_t(pos, cam_p, camera), r)
             if rough and not want:
                 failures.append(f"the rough step would cull {pos} from {cam_p}, which is in view")
@@ -573,10 +587,121 @@ def check_demo(m: Machine) -> list[str]:
     return failures
 
 
+def check_demo_jumps(m: Machine) -> list[str]:
+    """CULL_SKIP under a camera that jumps and swings: draw_frame frame after
+    frame with the camera moved between them at random -- small steps mostly,
+    now and then a leap or a half turn -- against the model's picture from
+    the camera as it then stood; and skip_bounds against model.skip_bounds,
+    or, for a jump, every object's margin cleared."""
+    from build import models, world
+    failures = []
+    rng = random.Random(11)
+    memory = bytearray(65536)
+    memory[0x4000:0xC000] = (OUT / "demo.bin").read_bytes()
+    sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
+    sld = OUT / "demo.sld"
+    label = {name: find_label(sld, name) for name in
+             ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles", "skip_bounds", "world",
+              "OBJECT_SIZE", "OBJECT_SKIP", "WORLD_OBJECTS", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
+    window = tuple(label[f"VIEW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
+    left, top, right, bottom = window
+    frame = [(left - 1, top - 1, right + 1, top - 1), (right + 1, top - 1, right + 1, bottom + 1),
+             (right + 1, bottom + 1, left - 1, bottom + 1), (left - 1, bottom + 1, left - 1, top - 1)]
+
+    def call(name: str) -> None:
+        sim.registers[SP] = STACK
+        sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
+        sim.run(label[name], RETURN)
+
+    def camera():
+        at = label["camera_x"]
+        pos = [model.to_signed16(sim.memory[at + 2 * i] | sim.memory[at + 2 * i + 1] << 8) for i in range(3)]
+        return pos, list(sim.memory[label["camera_angles"]:label["camera_angles"] + 3])
+
+    def set_camera(pos, angles) -> None:
+        at = label["camera_x"]
+        for i, v in enumerate(pos):
+            sim.memory[at + 2 * i:at + 2 * i + 2] = (v & 0xFFFF).to_bytes(2, "little")
+        sim.memory[label["camera_angles"]:label["camera_angles"] + 3] = bytes(a & 255 for a in angles)
+
+    for address in range(0x4000, 0x5800):
+        sim.memory[address] = 0
+    call("demo_setup")
+    shapes = {name: (vertices, model.faces_to_edges(faces), model.bounding_radius(vertices))
+              for name, (vertices, faces) in models().items()}
+    things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
+    last = ([0, 0, 0], [0] * 9)                        # as camera_last starts
+    stale = None                                       # skip_bounds as last left
+    kinds = {"step": 0, "swing": 0, "jump": 0, "leap": 0, "void": 0}
+    for i in range(240):
+        pos, angles = camera()
+        roll = rng.random()
+        if roll < 0.03:
+            kind = "leap"                               # far enough to void every margin
+            pos = [rng.choice((-1, 1)) * rng.randint(12000, 30000) for _ in range(3)]
+            angles = [rng.randrange(256) for _ in range(3)]
+        elif roll < 0.1:
+            kind = "jump"
+            pos = [rng.randint(-3000, 3000), rng.randint(-600, 600), rng.randint(-3000, 3000)]
+            angles = [rng.randrange(256) for _ in range(3)]
+        elif roll < 0.35:
+            kind = "swing"
+            pos = [max(-32000, min(32000, p + rng.randint(-250, 250))) for p in pos]
+            angles = [a + rng.randint(-24, 24) for a in angles]
+        else:
+            kind = "step"
+            pos = [max(-32000, min(32000, p + rng.randint(-40, 40))) for p in pos]
+            angles = [a + rng.randint(-3, 3) for a in angles]
+        kinds[kind] += 1
+        set_camera(pos, angles)
+        call("draw_frame")                          # (which moves the camera on itself)
+        cam_p, cam_a = camera()
+        rc = model.make_matrix(*cam_a)
+        lines, drawn = list(frame), 0
+        for thing in things:
+            tpos, tangles, spin, name = thing
+            thing[1] = tangles = [(a + s) & 255 for a, s in zip(tangles, spin)]
+            vertices, edges, r = shapes[name]
+            t = model.view_centre(tpos, cam_p, rc)
+            if t is None or model.culled(t, r):
+                continue
+            drawn += 1
+            mat = model.view_matrix(rc, model.make_matrix(*tangles))
+            points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
+            for a, b in edges:
+                if points[a] and points[b]:
+                    line = model.clip_line(*points[a], *points[b], window)
+                    if line:
+                        lines.append(line)
+        got_drawn = sim.memory[label["drawn"]]
+        if got_drawn != drawn or bytes(sim.memory[0x4000:0x5800]) != render(lines, 0x4000):
+            failures.append(f"demo with jumps: frame {i} ({kind}), camera at {cam_p} {cam_a}: "
+                            f"{got_drawn} objects drawn ({drawn} in the model), the screen "
+                            f"{'the same' if bytes(sim.memory[0x4000:0x5800]) == render(lines, 0x4000) else 'different'}")
+            break
+        seen = model.transpose(rc)
+        want = model.skip_bounds(last[1], seen, last[0], cam_p)
+        at = label["skip_bounds"]
+        got = {(k, q): sim.memory[at + 2 * model.skip_index(k, q)] | sim.memory[at + 2 * model.skip_index(k, q) + 1] << 8
+               for k in range(model.SKIP_K_LEAST, model.SKIP_K_LEAST + model.SKIP_K_COUNT) for q in range(4, 8)}
+        if want is None:
+            kinds["void"] += 1                         # (every margin cleared, then every
+            if got != stale:                           # object tested afresh: the picture
+                failures.append(f"demo with jumps: frame {i}: a jump, but skip_bounds remade")
+                break                                  # says so; the table is left alone)
+        elif got != want:
+            failures.append(f"demo with jumps: frame {i}: skip_bounds {got}, not {want}")
+            break
+        last, stale = (cam_p, seen), got
+    print(f"  demo with jumps: {kinds['step']} steps, {kinds['swing']} swings, {kinds['jump']} jumps, "
+          f"{kinds['leap']} leaps ({kinds['void']} frames voiding every margin), all as the model")
+    return failures
+
+
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_demo):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_demo, check_demo_jumps):
         failures += check(m)
     if failures:
         print("\n".join(failures[:20]))

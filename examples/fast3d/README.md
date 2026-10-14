@@ -54,7 +54,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,400 outside; ~3,550 cut at one end; ~8,950 at both |
 | `crossing_x`, `crossing_y` | DE = the edge; the line's ends | HL = where the line crosses it | ~2,240 (1,221..3,142) |
 | `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 9,399 a frame |
-| `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 272 out of the box; ~2,040 out roughly; ~8,190 in view |
+| `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 298 out of the box; ~3,240 out roughly; ~8,190 in view (with `CULL_SKIP`; ~1,200 less an object culled without) |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~8,330 |
 | `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,400 a vertex (~2,900 without mirrors) |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
@@ -128,6 +128,25 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   Of what reaches this step out of view, 72% goes here, for about 2,290. Only
   what is left, near a plane or in view, gets the exact T and the exact
   tests. The answer is always the exact test's.
+- **Skipping the cull.** With `CULL_SKIP` defined, an object the cull
+  leaves out is not tested again until it could have come into view. The
+  cull says how far past a plane the object was, its margin, and T, the
+  object's centre in camera space, can only move so far in a picture:
+  `T' - T = (M' - M)(P - C) + M'(C - C')` exactly, M the camera's matrix,
+  so on any axis by at most `E D + 127 m`, with E the largest row sum of
+  the change in M, D the object's largest distance on an axis and m the
+  camera's move. That is arithmetic on the matrices as they are, so it
+  holds whatever the camera does -- jump, spin, stand still -- and nothing
+  is assumed about its speed. Each picture `cull_skip_bounds` measures the
+  camera's change and tabulates the bound for each size D is held as (a
+  two-bit mantissa and a power of two, chosen with a quarter's room above
+  D, and an odometer limit for when the camera could have travelled that
+  room); the program cuts every skipping object's margin by its bound and
+  tests it again when nothing is left. In the demo's flight 25 of the 40
+  objects are skipped a picture, for 260 T-states each instead of 2,000
+  or more. model.py has the reasoning, and `check.py` holds the Z80 to it
+  under a camera that jumps and swings. Nothing of this changes what is
+  drawn.
 - **Any distance.** Before dividing, `transform_object` shifts each vertex's
   camera-space position right by just enough to bring its depth into a
   byte, so the quick divide works out to the far plane (8,191 units) with
@@ -144,7 +163,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 ## The demo
 
 ```
-python build.py      # -> output/demo.z80, a 128K snapshot, with its SLD
+python build.py                  # -> output/demo.z80, a 128K snapshot, with its SLD
+python build.py --no-cull-skip   # the same, culling every object every picture
 ```
 
 or **ZX Spectrum: fast3d demo** in VS Code. Forty cubes and icosahedra, each
@@ -166,9 +186,10 @@ every vertex in front of the eye, has its edges drawn without clipping:
 their ends go from `transform_object`'s points straight to `draw_line`.
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 199,000..805,000
-T-states, 511,000 on average, with nothing lost waiting for the flip:
-about 6 frames a second on a 128K, before ULA contention. Of an average frame (from the emulator's profiler), culling all
+drawn a frame, 5.1 on average, and a frame takes 160,000..785,000
+T-states, 487,000 on average, with nothing lost waiting for the flip:
+about 7 frames a second on a 128K, before ULA contention (511,000 without
+`CULL_SKIP`). Of an average frame (from the emulator's profiler), culling all
 forty objects takes about 23%, about 3,300 T-states an object; the
 matrices of those drawn 9%; their vertices 28%, more than half of it
 projecting them; drawing their lines 15% and clipping those that need it
@@ -207,7 +228,12 @@ every result with `model.py`:
 - the demo, 256 frames of `draw_frame` (`compute_frame` then
   `render_frame`, a whole circle of the flight), whole
   screens against the model's picture of the same frame, and how many
-  objects it drew. It writes every other one to `output/demo.gif`.
+  objects it drew. It writes every other one to `output/demo.gif`;
+- the demo again, 240 frames with the camera moved between them at random
+  -- small steps mostly, now and then a swing, a jump across the world or a
+  leap out of it -- against the model's picture from the camera as it then
+  stood, and `cull_skip_bounds`' table against the model's: the cull's
+  skipping is only ever right, whatever the camera does.
 
 `model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
 on 400,000 random lines and windows. Every clipped end must be within 0.75
@@ -250,10 +276,11 @@ picture.
   with an end at or behind the eye (Z = 0) is still left out: that needs
   clipping in 3D, to a near plane, before projecting. The demo's world keeps
   its objects 300 units from the camera's path for that reason.
-- **Quicker culling still.** An object far out of view now costs about
-  2,300 T-states a frame. One that was far out of view last frame cannot
-  be in view this one, at the camera's speed, so it need not be tested
-  every frame; nothing uses that yet.
+- **Skipping side-culled objects.** An object culled by a side plane in
+  the rough step keeps little margin -- the step's slack on `2t - z` is
+  three times ROUGH, 670 units -- so it is skipped seldom; the exact T
+  would give it more, at two rotates. What is skipped is mostly what is
+  behind the camera.
 - **Hidden lines.** The objects are wireframes, with every edge drawn.
 - **Contention.** The timings are for uncontended memory. On a real Spectrum,
   `draw_line` and `clear_box` write to the screen, which is contended memory,

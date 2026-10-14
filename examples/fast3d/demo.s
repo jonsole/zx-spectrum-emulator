@@ -23,6 +23,13 @@ VIEW_TOP			EQU		8
 VIEW_RIGHT			EQU		247
 VIEW_BOTTOM			EQU		183
 
+; Whether objects far out of view are skipped by the cull until they can
+; have come into it (engine/objects.s): 1 unless build.py is told
+; --no-cull-skip. The pictures are the same either way.
+					IFNDEF	CULL_SKIP
+CULL_SKIP			EQU		1
+					ENDIF
+
 					ORG		$8000
 
 start:
@@ -134,6 +141,18 @@ compute_frame:
 					ld		hl,camera_z
 					ld		de,matrix + 8
 					call	.step
+					IF CULL_SKIP
+					call	cull_skip_bounds	; how far T can have moved since
+					jr		nc,.steady			; the last picture; a jump voids
+					ld		ix,world			; every margin
+					ld		de,OBJECT_SIZE
+					ld		b,WORLD_OBJECTS
+.void:				ld		(ix + OBJECT_SKIP),0
+					ld		(ix + OBJECT_SKIP + 1),0
+					add		ix,de
+					djnz	.void
+.steady:
+					ENDIF
 
 					ld		a,255				; the box round every object
 					ld		(.least_x),a		; drawn
@@ -159,8 +178,50 @@ compute_frame:
 					ld		a,(ix + OBJECT_ANGLES + 2)
 					add		a,(ix + OBJECT_SPIN + 2)
 					ld		(ix + OBJECT_ANGLES + 2),a
+					IF CULL_SKIP
+					ld		e,(ix + OBJECT_SKIP)	; skipping? its margin
+					ld		d,(ix + OBJECT_SKIP + 1)
+					ld		a,d
+					or		e
+					jr		z,.test
+					ld		hl,(skip_odometer)	; travelled its room?
+					ld		c,(ix + OBJECT_LIMIT)
+					ld		b,(ix + OBJECT_LIMIT + 1)
+					or		a
+					sbc		hl,bc
+					jp		p,.test
+					ld		l,(ix + OBJECT_DIST)	; less this picture's bound
+					ld		h,high skip_bounds
+					ld		a,e
+					sub		(hl)
+					ld		e,a
+					inc		hl
+					ld		a,d
+					sbc		a,(hl)
+					ld		d,a
+					jr		c,.test				; none left: test it
+					or		e
+					jr		z,.test
+					ld		(ix + OBJECT_SKIP),e
+					ld		(ix + OBJECT_SKIP + 1),d
+					jp		.next_object
+.test:				call	cull_object
+					jr		nc,.in_view
+					ld		hl,(cull_skip)		; out: for how long it can be
+					ld		(ix + OBJECT_SKIP),l	; left alone, and how far
+					ld		(ix + OBJECT_SKIP + 1),h
+					ld		a,(cull_dist)
+					ld		(ix + OBJECT_DIST),a
+					ld		hl,(cull_limit)
+					ld		(ix + OBJECT_LIMIT),l
+					ld		(ix + OBJECT_LIMIT + 1),h
+					jp		.next_object
+.in_view:			ld		(ix + OBJECT_SKIP),0	; (no stale margin)
+					ld		(ix + OBJECT_SKIP + 1),0
+					ELSE
 					call	cull_object
 					jr		c,.next_object		; out of view
+					ENDIF
 					ld		(.object),ix		; (object_matrix and
 					ld		hl,drawn			; transform_object do not)
 					inc		(hl)

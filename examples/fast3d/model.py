@@ -263,6 +263,79 @@ VIEW_BOX = 10400        # an object whose centre is outside +-VIEW_BOX of the
 VIEW_SCALE = 127        # T and the rotated vertices are 127 times world units
 
 
+# ---------------------------------------------------------------------------
+# Skipping the cull (CULL_SKIP in objects.s). An object the cull leaves out
+# was some way past a plane of the view: its margin. T, its centre in camera
+# space, can only move so far from one picture to the next, and exactly how
+# far follows from the matrices as they are, nothing assumed about the
+# camera: with M the camera's installed matrix (Rc^T, 127 for 1.0) and C its
+# position, T' - T = (M' - M)(P - C) + M'(C - C'), so on any axis
+#
+#     |T' - T| <= E D + 127 m
+#
+# with E the largest sum over a row of |M' - M|, D the largest |P - C| on an
+# axis, and m the sum of |C' - C| over the axes. Each picture the margin is
+# cut by that, in its units of 256, and the object is skipped while something
+# is left. D is held as one of the sizes Q = q 2^k (q 4..7, k 5..11), chosen
+# above D with room to spare (a quarter at least), and a limit on the
+# odometer -- the camera's moves summed -- says when it could have travelled
+# that room, so that D could have reached Q: the object is tested again
+# then, as it is when its margin is gone, or when a move too big to sum
+# (JUMP or more) voids every margin. The side tests' 2t -+ z can move three
+# times as far as T, so a quarter of their margin is kept. None of this
+# changes what is drawn: an object skipped would have been culled, and
+# check.py's demo checks hold the Z80 to that, jumps and all.
+
+JUMP = 16384            # a move (the sum over the axes) this big voids every margin
+SKIP_K_LEAST = 5        # the smallest k a size Q = q 2^k has
+SKIP_K_COUNT = 7        # k = 5..11: Q up to 7 * 2048, past VIEW_BOX + its room
+SKIP_ROOM_SHIFT = 2     # the room above D a size must leave: D >> this, a quarter
+
+
+def skip_size(d):
+    """How cull_object holds D = max |d|, d being P - C: (k, q, room), Q = q 2^k
+    the first size at or above D + D / 4 + 1, and room = Q - D. A quarter:
+    a sixteenth had the camera travel it in a picture or two, so that the
+    odometer ended most skips long before the margin did."""
+    big = max(abs(v) for v in d)
+    above = big + (big >> SKIP_ROOM_SHIFT) + 1
+    k = SKIP_K_LEAST + (above >> 8).bit_length()
+    q = max(4, -(-above // (1 << k)))
+    if q == 8:
+        q, k = 4, k + 1
+    return k, q, (q << k) - big
+
+
+def skip_index(k: int, q: int) -> int:
+    """A size's place in skip_bounds, in words."""
+    return (k - SKIP_K_LEAST) * 4 + (q - 4)
+
+
+def skip_bounds(seen_before, seen_after, pos_before, pos_after):
+    """What cull_skip_bounds leaves in skip_bounds, by (k, q): the most a margin
+    can have shrunk this picture, floor(E Q / 256) + m / 2 + 2 (the 2 covers
+    the two floors), saturated at 65535; or None for a jump."""
+    e = max(sum(abs(a - b) for a, b in zip(seen_after[3 * i:3 * i + 3], seen_before[3 * i:3 * i + 3]))
+            for i in range(3))
+    m = sum(abs(a - b) for a, b in zip(pos_after, pos_before))
+    if m >= JUMP:
+        return None
+    return {(k, q): min(65535, min(65535, (e * q << k) >> 8) + (m >> 1) + 2)
+            for k in range(SKIP_K_LEAST, SKIP_K_LEAST + SKIP_K_COUNT) for q in range(4, 8)}
+
+
+def skip_margin(t, r: int):
+    """The most cull_object may leave as the margin for an object culled at T:
+    the largest any culling test allows, in units of 256 (depth) or 1024 (the
+    sides). A stored margin must be no more than this, since the Z80 works
+    from one test, roughly or exactly."""
+    tx, ty, tz = t
+    r_view, r5 = cull_radii(r)
+    margins = [(NEAR * VIEW_SCALE - (tz + r_view)) >> 8, ((tz - r_view) - FAR * 128) >> 8]
+    margins += [(2 * sg * v - tz - r5) >> 10 for v in (tx, ty) for sg in (1, -1)]
+    return max(margins)
+
+
 def transpose(m: list[int]) -> list[int]:
     return [m[3 * c + r] for r in range(3) for c in range(3)]
 

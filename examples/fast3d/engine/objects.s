@@ -50,6 +50,14 @@ VIEW_BOX_HIGH		EQU		VIEW_BOX >> 8		; (its low byte is not 0, which
 					ASSERT	(VIEW_BOX & $FF) != 0	; AXIS_APART relies on)
 ROUGH				EQU		28380				; >= 128 * 128 sqrt 3 (see step 2)
 
+; CULL_SKIP: cull_object also says how far out an object was, and
+; cull_skip_bounds how far T can have moved since the last picture, so that
+; a program can skip culling what cannot have come into view (the demo
+; does; see the section below). Off unless the program defines it.
+					IFNDEF	CULL_SKIP
+CULL_SKIP			EQU		0
+					ENDIF
+
 ; An object, OBJECT_SIZE bytes: x, y, z (16-bit), three angles, its model,
 ; and how much it turns a frame about each axis (the engine never reads
 ; the spin; it is here so that a program walks one record an object).
@@ -57,7 +65,10 @@ OBJECT_X			EQU		0
 OBJECT_ANGLES		EQU		6
 OBJECT_MODEL		EQU		9
 OBJECT_SPIN			EQU		11
-OBJECT_SIZE			EQU		14
+OBJECT_SKIP			EQU		14					; CULL_SKIP: DW the margin left (0:
+OBJECT_DIST			EQU		16					; test it), DB its size's place in
+OBJECT_LIMIT		EQU		17					; skip_bounds, DW its odometer limit
+OBJECT_SIZE			EQU		19
 
 ; A model: how many vertices and where, edges, faces; and its bounding
 ; radius, as 128 r and 128 r sqrt 5 (rounded up) -- what culling compares --
@@ -324,7 +335,12 @@ cull_object:
 					call	test_side
 cull_out:			ld		ix,(cull_at)		; (carry: out)
 					ret
-cull_box_out:		scf
+cull_box_out:
+					IF CULL_SKIP
+					ld		hl,0				; no margin to skip on
+					ld		(cull_skip),hl
+					ENDIF
+					scf
 					ret
 
 ; test_depth: carry set if the sphere at view_t, of the radii at cull_radius,
@@ -338,6 +354,9 @@ test_depth:
 					sbc		hl,de
 					ld		a,c
 					sbc		a,0
+					IF CULL_SKIP
+					ld		c,a					; (C:H:L: how far, for the margin)
+					ENDIF
 					jp		m,.out
 					LOAD24	view_t + 6			; farther than FAR?
 					SUB24	cull_radius
@@ -353,8 +372,12 @@ test_depth:
 					STORE24	cull_b
 					and		a
 					ret
+					IF CULL_SKIP
+.out:				jp		skip_depth_out
+					ELSE
 .out:				scf
 					ret
+					ENDIF
 
 ; test_side: carry set if the sphere is wholly beyond either plane of a pair:
 ; for t the 24 bits at HL (its x or y), 2 t - z > r sqrt 5 or 2 t + z +
@@ -376,8 +399,353 @@ test_side:
 					jr		nz,.out
 					and		a
 					ret
+					IF CULL_SKIP
+.out:				jp		skip_side_out
+					ELSE
 .out:				scf
 					ret
+					ENDIF
+
+; ---------------------------------------------------------------------------
+; Skipping the cull (CULL_SKIP): model.py has the reasoning. T can move on an
+; axis by at most E D + 127 m a picture, E the largest row sum of the change
+; in the camera's matrix, D the object's largest |P - C| on an axis, m the
+; camera's move summed over the axes: arithmetic on the matrices as they
+; are, whatever the camera did. cull_skip_bounds measures the camera's
+; change since its last call and leaves skip_bounds, that bound in units of
+; 256 for each size Q = q 2^k that D is held as, and adds m to the odometer.
+; cull_object leaves for an object it culls cull_skip, its margin past the
+; plane that culled it in units of 256 (a quarter of it for a side plane),
+; cull_dist, where in skip_bounds the size above its D is, and cull_limit,
+; the odometer at which the camera could have travelled the room between.
+; A program cuts each skipping object's margin by its bound each picture
+; and tests it again when nothing is left, or the odometer reaches its
+; limit, or cull_skip_bounds returns carry (a jump: every margin is void);
+; and clears the margin of one tested and found in view.
+
+					IF CULL_SKIP
+
+JUMP				EQU		16384				; model.JUMP, SKIP_K_LEAST, SKIP_K_COUNT
+SKIP_K_LEAST		EQU		5
+SKIP_K_COUNT		EQU		7
+
+; BC = the sum of |the change| over a row: three entries at DE against HL.
+; Each pair is biased by 128 first, so that the borrow is the true sign:
+; the entries are signed, and 0 - (-127) borrows.
+					MACRO	ROW_CHANGE
+					ld		c,0
+					ld		ixh,0
+					DUP		3
+					ld		a,(de)
+					xor		$80
+					ld		b,a
+					ld		a,(hl)
+					xor		$80
+					sub		b
+					jr		nc,$ + 4
+					neg
+					add		a,c
+					ld		c,a
+					jr		nc,$ + 4
+					inc		ixh
+					inc		hl
+					inc		de
+					EDUP
+					ld		b,ixh
+					ENDM
+
+; skip_e = the larger of it and BC. Keeps HL, DE.
+					MACRO	ROW_MOST
+					push	hl
+					push	de
+					ld		hl,(skip_e)
+					or		a
+					sbc		hl,bc
+					jr		nc,.kept
+					ld		(skip_e),bc
+.kept:				pop		de
+					pop		hl
+					ENDM
+
+; DE += |how camera_x + N has changed|; IXL = 1 if that will not fit.
+					MACRO	MOVE_AXIS	N
+					ld		hl,(camera_x + N)
+					push	de
+					ld		de,(camera_last + N)
+					or		a
+					sbc		hl,de
+					pop		de
+					jp		pe,.too_far			; the move does not fit 16 bits
+					jp		p,.moved
+					xor		a					; |the move|
+					sub		l
+					ld		l,a
+					sbc		a,a
+					sub		h
+					ld		h,a
+.moved:				add		hl,de
+					ex		de,hl
+					jr		nc,.summed
+.too_far:			ld		ixl,1
+.summed:
+					ENDM
+
+; skip_bounds' entry for k = _K, q = _Q: E q 2^_K / 256 (floor, saturated) + DE
+; (m / 2 + 2), saturated; E q is at skip_eq + 2 (_Q - 4).
+					MACRO	BOUND_ENTRY	_K, _Q
+					ld		hl,(skip_eq + 2 * (_Q - 4))
+					IF _K < 8
+					DUP		8 - _K
+					srl		h
+					rr		l
+					EDUP
+					ELSEIF _K > 8
+					DUP		_K - 8
+					add		hl,hl
+					jr		nc,$ + 5
+					ld		hl,$FFFF
+					EDUP
+					ENDIF
+					add		hl,de
+					jr		nc,$ + 5
+					ld		hl,$FFFF
+					ld		(skip_bounds + 2 * ((_K - SKIP_K_LEAST) * 4 + _Q - 4)),hl
+					ENDM
+
+; cull_skip_bounds: skip_bounds from how camera_x, _y, _z and camera_seen
+; have changed since the last call (camera_last), and the odometer moved on.
+; Carry set if the move was too big to sum, or JUMP or more: every margin is
+; void. Uses everything but IY.
+cull_skip_bounds:
+					ld		hl,0				; E: the largest row sum of the
+					ld		(skip_e),hl			; matrix's change
+					ld		hl,camera_seen
+					ld		de,camera_last + 9
+					ROW_CHANGE
+					ROW_MOST
+					ROW_CHANGE
+					ROW_MOST
+					ROW_CHANGE
+					ROW_MOST
+					ld		hl,(skip_e)			; E q, for q = 4..7
+					add		hl,hl
+					add		hl,hl
+					ld		(skip_eq),hl
+					ld		de,(skip_e)
+					add		hl,de
+					ld		(skip_eq + 2),hl
+					add		hl,de
+					ld		(skip_eq + 4),hl
+					add		hl,de
+					ld		(skip_eq + 6),hl
+					ld		de,0				; DE = m, the move summed
+					ld		ixl,d				; IXL: too big to
+					MOVE_AXIS	0
+					MOVE_AXIS	2
+					MOVE_AXIS	4
+					ld		hl,(skip_odometer)
+					add		hl,de
+					ld		(skip_odometer),hl
+					push	de
+					ld		hl,camera_x			; what the next call compares
+					ld		de,camera_last		; with: position, angles, matrix
+					ld		bc,18
+					ldir
+					pop		de
+					ld		a,d					; JUMP or more?
+					cp		high JUMP
+					jp		nc,.jump
+					ld		a,ixl
+					or		a
+					jp		nz,.jump
+					srl		d					; DE = m / 2 + 2: the move's
+					rr		e					; part, and the two floors
+					inc		de
+					inc		de
+					BOUND_ENTRY	5, 4
+					BOUND_ENTRY	5, 5
+					BOUND_ENTRY	5, 6
+					BOUND_ENTRY	5, 7
+					BOUND_ENTRY	6, 4
+					BOUND_ENTRY	6, 5
+					BOUND_ENTRY	6, 6
+					BOUND_ENTRY	6, 7
+					BOUND_ENTRY	7, 4
+					BOUND_ENTRY	7, 5
+					BOUND_ENTRY	7, 6
+					BOUND_ENTRY	7, 7
+					BOUND_ENTRY	8, 4
+					BOUND_ENTRY	8, 5
+					BOUND_ENTRY	8, 6
+					BOUND_ENTRY	8, 7
+					BOUND_ENTRY	9, 4
+					BOUND_ENTRY	9, 5
+					BOUND_ENTRY	9, 6
+					BOUND_ENTRY	9, 7
+					BOUND_ENTRY	10, 4
+					BOUND_ENTRY	10, 5
+					BOUND_ENTRY	10, 6
+					BOUND_ENTRY	10, 7
+					BOUND_ENTRY	11, 4
+					BOUND_ENTRY	11, 5
+					BOUND_ENTRY	11, 6
+					BOUND_ENTRY	11, 7
+					and		a					; carry clear
+					ret
+.jump:				scf
+					ret
+
+; HL = the larger of it and |P - C| on axis N, from cull_high and cull_low.
+					MACRO	DIST_AXIS	N
+					ld		a,(cull_low + N)
+					xor		$80
+					ld		e,a
+					ld		a,(cull_high + N)
+					ld		d,a
+					bit		7,d
+					jr		z,.sized
+					xor		a
+					sub		e
+					ld		e,a
+					sbc		a,a
+					sub		d
+					ld		d,a
+.sized:				or		a
+					sbc		hl,de
+					add		hl,de				; (carry: HL < DE)
+					jr		nc,.kept
+					ex		de,hl
+.kept:
+					ENDM
+
+; A test's quantity in C:H:L, either sign, is how far past the plane the
+; sphere was: skip_depth_out keeps it, in units of 256, as cull_skip;
+; skip_side_out a quarter of it, since 2t -+ z can move three times as far
+; as T. Then the size and the limit. Both return with carry set, as the
+; tests do for out.
+skip_side_out:
+					call	skip_size
+					srl		c
+					rr		h
+					rr		l
+					srl		c
+					rr		h
+					rr		l
+					jr		skip_margin
+skip_depth_out:
+					call	skip_size
+skip_margin:
+					ld		l,h					; the margin >> 8
+					ld		h,c
+					ld		(cull_skip),hl
+					ld		hl,0				; D, the largest |P - C| on an
+					DIST_AXIS	0				; axis
+					DIST_AXIS	1
+					DIST_AXIS	2
+					push	hl
+					ld		d,h					; HL = D + D / 4 + 1, what the
+					ld		e,l					; size must reach (model.
+					srl		d					; SKIP_ROOM_SHIFT)
+					rr		e
+					srl		d
+					rr		e
+					add		hl,de
+					inc		hl
+					ld		b,SKIP_K_LEAST		; B = k = that + the bits of H
+					ld		a,h
+.bits:				or		a
+					jr		z,.k
+					srl		a
+					inc		b
+					jr		.bits
+.k:					dec		hl					; q = that >> k, rounded up: (that
+					ld		a,b					; - 1) >> k, + 1. With k under 8,
+					cp		8					; << (8 - k) and take H
+					jr		nc,.wide
+					ld		a,8
+					sub		b
+.up:				add		hl,hl
+					dec		a
+					jr		nz,.up
+					ld		a,h
+					jr		.q
+.wide:				sub		8					; else H >> (k - 8)
+					ld		c,a
+					ld		a,h
+					jr		z,.q
+.down:				srl		a
+					dec		c
+					jr		nz,.down
+.q:					inc		a
+					cp		4					; q 4..7: under 4 is 4, and 8 is
+					jr		nc,.least			; 4 of the next k
+					ld		a,4
+.least:				cp		8
+					jr		nz,.sized
+					ld		a,4
+					inc		b
+.sized:				ld		c,a					; cull_dist = skip_bounds' low
+					ld		a,b					; byte + 2 (4 (k - 5) + q - 4)
+					add		a,a
+					add		a,a
+					add		a,a
+					add		a,c
+					add		a,c
+					add		a,low skip_bounds - 48
+					ld		(cull_dist),a
+					ld		a,b					; Q = q << k: q << 5 is a byte,
+					sub		SKIP_K_LEAST		; then the rest in 16 bits
+					ld		b,a
+					ld		a,c
+					add		a,a
+					add		a,a
+					add		a,a
+					add		a,a
+					add		a,a
+					ld		h,0
+					ld		l,a
+					inc		b
+.size:				dec		b
+					jr		z,.room
+					add		hl,hl
+					jr		.size
+.room:
+					pop		de					; the room: Q - D
+					or		a
+					sbc		hl,de
+					ld		de,(skip_odometer)	; and the odometer when it could
+					add		hl,de				; have been travelled
+					ld		(cull_limit),hl
+					scf
+					ret
+; C:H:L = |C:H:L|.
+skip_size:
+					bit		7,c
+					ret		z
+					xor		a
+					sub		l
+					ld		l,a
+					ld		a,0
+					sbc		a,h
+					ld		h,a
+					ld		a,0
+					sbc		a,c
+					ld		c,a
+					ret
+
+skip_e:				DW		0					; E, and E q for q = 4..7
+skip_eq:			DS		8
+skip_odometer:		DW		0					; the camera's moves summed
+camera_last:		DS		18					; camera_x, _y, _z, camera_angles
+													; and camera_seen at the last
+													; cull_skip_bounds
+					ALIGN	64					; (on one page: a byte indexes it)
+skip_bounds:		DS		2 * 4 * SKIP_K_COUNT	; by q 4..7 within k 5..11
+cull_skip:			DW		0					; the last culled object's margin,
+cull_dist:			DB		0					; its size's place in skip_bounds,
+cull_limit:			DW		0					; and its limit on the odometer
+
+					ENDIF
 
 ; The rough rows: a row of Rc^T times P - C's high bytes, by quarter squares
 ; as in rotate, into BC; set_camera writes the entries in. Then the rough T
