@@ -449,7 +449,8 @@ def check_objects(m: Machine) -> list[str]:
             pos = [max(-32768, min(32767, c + rng.randint(-reach, reach))) for c in cam_p]
             obj_a = [rng.randrange(256) for _ in range(3)]
             model_at, vertices = shapes[rng.randrange(len(shapes))]
-            record = b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a) + model_at.to_bytes(2, "little")
+            record = (b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a)
+                      + model_at.to_bytes(2, "little") + bytes(3))           # (no spin)
             m.poke(obj_at, record)
             m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
             t = m.call("cull_object")

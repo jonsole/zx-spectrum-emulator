@@ -20,7 +20,7 @@ GitHub takes its notes from that section.
   about 2,300 T-states, before a vertex is touched. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
-  through forty turning objects on the 128K, about 6 frames a second,
+  through forty turning objects on the 128K, about 7 frames a second,
   working out each picture while the last waits to be shown. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 

@@ -147,30 +147,22 @@ compute_frame:
 					ld		hl,point_pool		; the pool's first page, from 0
 					ld		(.slot),hl
 
-					ld		hl,world			; every object
-					ld		(.object),hl
-					ld		hl,world_spin
-					ld		(.spin),hl
-					ld		a,WORLD_OBJECTS
-.object_loop:		ld		(.objects_left),a
-					ld		ix,(.object)		; turned by its spin
-					ld		hl,(.spin)
-					ld		a,(ix + OBJECT_ANGLES)
-					add		a,(hl)
+					ld		ix,world			; every object: IX walks them,
+					ld		a,WORLD_OBJECTS		; and cull_object keeps IX
+					ld		(.objects_left),a
+.object_loop:		ld		a,(ix + OBJECT_ANGLES)	; turned by its spin
+					add		a,(ix + OBJECT_SPIN)
 					ld		(ix + OBJECT_ANGLES),a
-					inc		hl
 					ld		a,(ix + OBJECT_ANGLES + 1)
-					add		a,(hl)
+					add		a,(ix + OBJECT_SPIN + 1)
 					ld		(ix + OBJECT_ANGLES + 1),a
-					inc		hl
 					ld		a,(ix + OBJECT_ANGLES + 2)
-					add		a,(hl)
+					add		a,(ix + OBJECT_SPIN + 2)
 					ld		(ix + OBJECT_ANGLES + 2),a
-					inc		hl
-					ld		(.spin),hl
 					call	cull_object
-					jp		c,.next_object		; out of view
-					ld		hl,drawn
+					jr		c,.next_object		; out of view
+					ld		(.object),ix		; (object_matrix and
+					ld		hl,drawn			; transform_object do not)
 					inc		(hl)
 					call	object_matrix
 					ld		ix,(.object)
@@ -213,12 +205,11 @@ compute_frame:
 					ldi							; where they are
 					ldi
 					ld		(.entry),de
-.next_object:		ld		hl,(.object)
-					ld		de,OBJECT_SIZE
-					add		hl,de
-					ld		(.object),hl
-					ld		a,(.objects_left)
-					dec		a
+					ld		ix,(.object)
+.next_object:		ld		de,OBJECT_SIZE
+					add		ix,de
+					ld		hl,.objects_left
+					dec		(hl)
 					jp		nz,.object_loop
 
 					ld		a,(.most_y)			; the box, held to the window,
@@ -388,8 +379,7 @@ compute_frame:
 					cpl
 					jr		.y_held
 
-.object:			DW		0
-.spin:				DW		0
+.object:			DW		0					; the one being drawn
 .objects_left:		DB		0
 .model:				DW		0
 .entry:				DW		0					; -> the next entry in visible

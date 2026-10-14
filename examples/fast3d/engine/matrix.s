@@ -35,8 +35,9 @@
 					rl		d
 					ENDM
 
-; DE = the sum: round it to the entry and keep it in matrix + INDEX; DE = 0
-; and H = SINE's page again after.
+; DE = the sum: round it to the entry and keep it in matrix + INDEX, and in
+; its place in matrix_t, the transpose; DE = 0 and H = SINE's page again
+; after.
 					MACRO	ENTRY	INDEX
 					ld		hl,32
 					add		hl,de
@@ -44,6 +45,7 @@
 					add		hl,hl				; H = (sum + 32) >> 6
 					ld		a,h
 					ld		(matrix + INDEX),a
+					ld		(matrix_t + (INDEX % 3) * 3 + INDEX / 3),a
 					ld		h,high SINE_LO
 					ld		de,0
 					ENDM
@@ -253,6 +255,8 @@ angle_x:			DB		0
 angle_y:			DB		0
 angle_z:			DB		0
 matrix:				DS		9					; m00 m01 m02 m10 ... m22
+matrix_t:			DS		9					; and by columns: m00 m10 m20 m01 ...
+													; each a vector rotate can take
 
 
 ; ---------------------------------------------------------------------------

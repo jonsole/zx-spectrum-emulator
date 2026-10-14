@@ -83,7 +83,9 @@ divide:
 ; One bit of the quotient: the remainder in A takes the next bit of the
 ; dividend from L's top, which takes the last bit of the quotient, inverted,
 ; from the carry. A remainder past 255 (only possible when C > 128) is always
-; at least C.
+; at least C. The OR clears the borrow that subtraction can leave: taking it
+; out of line for that case alone was tried and lost, since Z is normalised
+; to 128..255 for anything far and the overflow then comes every other bit.
 					MACRO	DIVIDE_BIT
 					rl		l
 					rla
@@ -112,5 +114,5 @@ divide_unsigned:
 					ld		a,l
 					cpl
 					ld		l,a
-					ld		h,0					; and carry clear, from the OR
-					ret
+					ld		h,0					; and carry clear: the 0 the first
+					ret							; bit shifted in, out again
