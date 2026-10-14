@@ -713,69 +713,86 @@ to_c:				DS		9					; the vertex in camera space
 
 
 ; project_far: to_c to the screen: HL = x, DE = y, carry clear; or carry set
-; if at or behind the eye (c_z < 256). Uses everything but IX, IY and the
-; alternate registers.
+; if at or behind the eye (c_z < 256). Each number is shifted in registers,
+; z only as the 16 bits above its low byte -- Z is what is left of them --
+; and x and y each straight into divide24: shifting the three in memory, a
+; call apiece, took three times as long a bit. Uses everything but IX, IY
+; and the alternate registers.
 project_far:
-					ld		a,(to_c + 8)		; c_z's high byte
-					bit		7,a
+					ld		hl,(to_c + 7)		; c_z >> 8
+					bit		7,h
 					scf
 					ret		nz					; behind the eye
+					ld		a,h
 					or		a
 					jr		nz,.far
-					ld		a,(to_c + 7)
-					or		a
+					or		l
 					scf
 					ret		z					; c_z < 256: at the eye
-					jr		.divide
-.far:				ld		b,0					; B = the bits in c_z's high
-.bits:				inc		b					; byte: the shift
-					srl		a
-					jr		nz,.bits
-.shift:				ld		hl,to_c + 2			; c >>= 1, each, B times
-					call	.halve
-					ld		hl,to_c + 5
-					call	.halve
-					ld		hl,to_c + 8
-					call	.halve
-					djnz	.shift
-.divide:			ld		a,(to_c + 7)		; Z, a byte now
-					ld		c,a
-					ld		de,to_c + 3
+					ld		c,l					; Z, as it is
+					ld		hl,(to_c + 3)		; y
+					ld		a,(to_c + 5)
 					call	divide24
 					ex		de,hl
 					ld		hl,SCREEN_CENTRE_Y
 					or		a
 					sbc		hl,de				; y = centre - c_y / Z
 					push	hl
-					ld		de,to_c
+					ld		hl,(to_c)			; x
+					ld		a,(to_c + 2)
 					call	divide24
-					ld		de,SCREEN_CENTRE_X
+					jr		.x_on_screen
+
+.far:				ld		b,0					; B = the bits in c_z's high
+.bits:				inc		b					; byte: the shift
+					srl		a
+					jr		nz,.bits
+					ld		a,b
+					ld		(.shift),a
+.z:					srl		h					; Z = c_z >> (8 + the shift)
+					rr		l
+					djnz	.z
+					ld		c,l
+					ld		hl,(to_c + 3)		; y >> the shift, E:H:L
+					ld		a,(to_c + 5)
+					ld		e,a
+					ld		a,(.shift)
+					ld		b,a
+.y:					sra		e
+					rr		h
+					rr		l
+					djnz	.y
+					ld		a,e
+					call	divide24
+					ex		de,hl
+					ld		hl,SCREEN_CENTRE_Y
+					or		a
+					sbc		hl,de				; y = centre - c_y / Z
+					push	hl
+					ld		hl,(to_c)			; x the same
+					ld		a,(to_c + 2)
+					ld		e,a
+					ld		a,(.shift)
+					ld		b,a
+.x:					sra		e
+					rr		h
+					rr		l
+					djnz	.x
+					ld		a,e
+					call	divide24
+.x_on_screen:		ld		de,SCREEN_CENTRE_X
 					add		hl,de				; x = centre + c_x / Z
-					pop		de
+					pop		de					; y
 					and		a
 					ret
-; (HL) - 2 .. (HL), a 24-bit number, >> 1, arithmetically.
-.halve:				sra		(hl)
-					dec		hl
-					rr		(hl)
-					dec		hl
-					rr		(hl)
-					ret
+.shift:				DB		0
 
 
 ; ---------------------------------------------------------------------------
-; divide24: HL = the 24-bit signed number at DE (low byte first) / C,
-; truncated toward zero and held to +-WIDE_LIMIT. In: C = 1..255. Uses A,
-; B, DE, HL.
+; divide24: HL = the 24-bit signed number A:H:L / C, truncated toward zero
+; and held to +-WIDE_LIMIT. In: C = 1..255. Uses A, B, DE, HL.
 
 divide24:
-					ex		de,hl
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					inc		hl
-					ld		a,(hl)
-					ex		de,hl				; A:H:L
 					ld		b,a
 					push	bc					; B: the sign
 					bit		7,a

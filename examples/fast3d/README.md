@@ -56,7 +56,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 9,498 a frame |
 | `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 367 out of the box; ~2,290 out roughly; ~8,440 in view |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~10,700 |
-| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,900 a vertex (~3,450 without mirrors) |
+| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,750 a vertex (~3,300 without mirrors) |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -131,7 +131,9 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 - **Any distance.** Before dividing, `transform_object` shifts each vertex's
   camera-space position right by just enough to bring its depth into a
   byte, so the quick divide works out to the far plane (8,191 units) with
-  the depth to 8 bits.
+  the depth to 8 bits. The shifting is done in registers, x and y on their
+  way into the divide, and z only as the 16 bits above its low byte, since
+  what is left of those is the divisor.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is eight blocks, one for each bit of a byte. A pixel
   is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -162,8 +164,8 @@ every vertex in front of the eye, has its edges drawn without clipping:
 their ends go from `transform_object`'s points straight to `draw_line`.
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 223,000..910,000
-T-states, 575,000 on average, with nothing lost waiting for the flip:
+drawn a frame, 5.1 on average, and a frame takes 218,000..870,000
+T-states, 553,000 on average, with nothing lost waiting for the flip:
 about 6 frames a second on a 128K, before ULA contention. Of an average frame (from the emulator's profiler), culling all
 forty objects takes about 23%, about 3,300 T-states an object; the
 matrices of those drawn 9%; their vertices 28%, more than half of it
