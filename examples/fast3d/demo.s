@@ -324,7 +324,7 @@ read_space:
 					or		a
 					ret		z					; it has come up
 					ld		hl,(object)
-					ld		de,OBJECT_SIZE
+					ld		de,SHAPE_SIZE
 					add		hl,de
 					ld		de,objects_end
 					or		a
@@ -352,7 +352,7 @@ clear_screen:
 					ret
 
 ; Each object: its vertices and how many, its edges and how many.
-OBJECT_SIZE			EQU		6
+SHAPE_SIZE			EQU		6
 objects:			DW		cube_vertices
 					DB		CUBE_VERTICES
 					DW		cube_edges

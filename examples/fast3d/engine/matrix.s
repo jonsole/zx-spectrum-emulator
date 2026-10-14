@@ -9,11 +9,12 @@
 ; a turn more, a cosine a quarter. The sum is 4 * 2032 times the entry, and
 ; (sum + 32) >> 6 is the entry with 127 for 1.0, rounded once, never past 127.
 ;
-; The entries go into `matrix` (row by row, signed bytes) and, as the two
-; table addresses each product needs, into rotate's code.
+; compute_matrix leaves the entries in `matrix` (row by row, signed bytes);
+; make_matrix also installs them into rotate's code, as the two table
+; addresses each product needs (install_matrix).
 ;
 ; In: angle_x, angle_y, angle_z, 256 to the turn.
-; Uses everything but IY and the alternate registers. 3,814 T-states.
+; Uses everything but IY and the alternate registers.
 
 ; DE += SINE(A).
 					MACRO	SINE_ADD
@@ -34,31 +35,26 @@
 					rl		d
 					ENDM
 
-; DE = the sum: round it to the entry, keep it in matrix + index, and write
-; rotate's two addresses for it; DE = 0 and H = SINE's page again after.
-					MACRO	ENTRY	SUM_AT, DIFF_AT, INDEX
+; DE = the sum: round it to the entry and keep it in matrix + INDEX; DE = 0
+; and H = SINE's page again after.
+					MACRO	ENTRY	INDEX
 					ld		hl,32
 					add		hl,de
 					add		hl,hl
 					add		hl,hl				; H = (sum + 32) >> 6
 					ld		a,h
 					ld		(matrix + INDEX),a
-					ld		e,a
-					add		a,a
-					sbc		a,a
-					ld		d,a					; DE = m, sign-extended
-					ld		hl,SQ_CENTRE - 128
-					add		hl,de
-					ld		(SUM_AT + 1),hl		; for f(v + m)
-					ld		hl,SQ_CENTRE - 128
-					or		a
-					sbc		hl,de
-					ld		(DIFF_AT + 1),hl		; for f(v - m)
 					ld		h,high SINE_LO
 					ld		de,0
 					ENDM
 
+; make_matrix: compute_matrix, then install_matrix it into rotate.
 make_matrix:
+					call	compute_matrix
+					ld		hl,matrix
+					jp		install_matrix
+
+compute_matrix:
 					ld		a,(angle_z)
 					ld		ixl,a				; IXL = z
 					ld		a,(angle_y)
@@ -78,7 +74,7 @@ make_matrix:
 					add		a,64
 					SINE_ADD
 					DOUBLE
-					ENTRY	m00_sum, m00_diff, 0
+					ENTRY	0
 
 					; m01 = sx sy cz - cx sz
 					;     = -2 [s(z+x) + s(z-x)]
@@ -112,7 +108,7 @@ make_matrix:
 					add		a,ixl
 					add		a,192
 					SINE_ADD
-					ENTRY	m01_sum, m01_diff, 1
+					ENTRY	1
 
 					; m02 = cx sy cz + sx sz
 					;     = 2 [c(x-z) - c(x+z)]
@@ -144,7 +140,7 @@ make_matrix:
 					sub		ixl
 					add		a,128
 					SINE_ADD
-					ENTRY	m02_sum, m02_diff, 2
+					ENTRY	2
 
 					; m10 = cy sz = 2 [s(z+y) + s(z-y)]
 					ld		a,ixl
@@ -154,7 +150,7 @@ make_matrix:
 					sub		c
 					SINE_ADD
 					DOUBLE
-					ENTRY	m10_sum, m10_diff, 3
+					ENTRY	3
 
 					; m11 = sx sy sz + cx cz
 					;     = 2 [c(x-z) + c(x+z)]
@@ -186,7 +182,7 @@ make_matrix:
 					sub		c
 					add		a,128
 					SINE_ADD
-					ENTRY	m11_sum, m11_diff, 4
+					ENTRY	4
 
 					; m12 = cx sy sz - sx cz
 					;     = -2 [s(x+z) + s(x-z)]
@@ -220,7 +216,7 @@ make_matrix:
 					add		a,ixl
 					add		a,64
 					SINE_ADD
-					ENTRY	m12_sum, m12_diff, 5
+					ENTRY	5
 
 					; m20 = -sy = -4 s(y)
 					ld		a,c
@@ -228,7 +224,7 @@ make_matrix:
 					SINE_ADD
 					DOUBLE
 					DOUBLE
-					ENTRY	m20_sum, m20_diff, 6
+					ENTRY	6
 
 					; m21 = sx cy = 2 [s(x+y) + s(x-y)]
 					ld		a,b
@@ -238,7 +234,7 @@ make_matrix:
 					sub		c
 					SINE_ADD
 					DOUBLE
-					ENTRY	m21_sum, m21_diff, 7
+					ENTRY	7
 
 					; m22 = cx cy = 2 [c(x-y) + c(x+y)]
 					ld		a,b
@@ -250,10 +246,60 @@ make_matrix:
 					add		a,64
 					SINE_ADD
 					DOUBLE
-					ENTRY	m22_sum, m22_diff, 8
+					ENTRY	8
 					ret
 
 angle_x:			DB		0
 angle_y:			DB		0
 angle_z:			DB		0
 matrix:				DS		9					; m00 m01 m02 m10 ... m22
+
+
+; ---------------------------------------------------------------------------
+; install_matrix: the 9 signed bytes at HL, row by row (127 for 1.0), into
+; rotate: for each entry m, SQ_CENTRE - 128 + m and SQ_CENTRE - 128 - m into
+; the two LD HL,nn of its product. Uses everything but IY and the alternate
+; registers.
+
+install_matrix:
+					ld		ix,install_targets
+; install_into: the same, into the operands listed at IX (two a entry, as
+; install_targets).
+install_into:
+					ld		b,9
+.entry:				ld		a,(hl)
+					inc		hl
+					push	hl
+					ld		e,a
+					add		a,a
+					sbc		a,a
+					ld		d,a					; DE = m, sign-extended
+					ld		hl,SQ_CENTRE - 128
+					add		hl,de
+					ld		c,l					; for f(v + m)
+					ld		a,h
+					ld		l,(ix + 0)
+					ld		h,(ix + 1)
+					ld		(hl),c
+					inc		hl
+					ld		(hl),a
+					ld		hl,SQ_CENTRE - 128
+					or		a
+					sbc		hl,de
+					ld		c,l					; for f(v - m)
+					ld		a,h
+					ld		l,(ix + 2)
+					ld		h,(ix + 3)
+					ld		(hl),c
+					inc		hl
+					ld		(hl),a
+					ld		de,4
+					add		ix,de
+					pop		hl
+					djnz	.entry
+					ret
+
+; Where each entry's two addresses go: the operands of rotate's LD HL,nn.
+install_targets:	DW		m00_sum + 1, m00_diff + 1, m01_sum + 1, m01_diff + 1, m02_sum + 1, m02_diff + 1
+					DW		m10_sum + 1, m10_diff + 1, m11_sum + 1, m11_diff + 1, m12_sum + 1, m12_diff + 1
+					DW		m20_sum + 1, m20_diff + 1, m21_sum + 1, m21_diff + 1, m22_sum + 1, m22_diff + 1

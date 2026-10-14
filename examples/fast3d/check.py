@@ -17,7 +17,11 @@ and every result is compared with the model's:
    to 16,000 pixels out, against model.clip_line, every end; and
    draw_line_clipped, every pixel. (model.clip_line is itself checked
    against exact geometry by clip_geometry.py.)
-7. The demo: draw_frame, frame after frame for each object through a whole
+7. Objects and the camera: set_camera, then cull_object, object_matrix and
+   transform_object on objects all round the camera, near and far, against
+   the model -- the camera's matrix and constant, T, whether culled, M, and
+   every point. (cull_geometry.py holds the model to exact geometry.)
+8. The demo: draw_frame, frame after frame for each object through a whole
    swing in and out, on the screen at $4000 (and so clearing its own last
    box), against model.py's picture of the same frame -- clipped to the
    window, frame and all; and timed. Every other frame goes to
@@ -391,6 +395,104 @@ def check_clipping(m: Machine) -> list[str]:
     return failures
 
 
+def rough_out(t: tuple, r: int) -> bool:
+    """Whether cull_object's rough step settles it: the exact T less the low
+    bytes' rotation, tested with the radii a margin bigger. (Only for the
+    report: whatever the step, the answer is model.culled's.)"""
+    return rough_culled(t, r)
+
+
+ROUGH = 28380                                                   # objects.s
+
+
+def rough_t(position, camera_position, camera) -> tuple:
+    d = [p - c for p, c in zip(position, camera_position)]
+    seen = model.transpose(camera)
+    return tuple(256 * a + k for a, k in zip(model.rotate(seen, tuple(v >> 8 for v in d)),
+                                             model.camera_constant(camera)))
+
+
+def rough_culled(t, r: int) -> bool:
+    tx, ty, tz = t
+    r_view, r5 = model.cull_radii(r)
+    r_view, r5 = r_view + ROUGH, r5 + 3 * ROUGH
+    if tz + r_view < model.NEAR * 127 or tz - r_view > model.FAR * 128:
+        return True
+    return any(2 * s * v - tz > r5 for v in (tx, ty) for s in (1, -1))
+
+
+def check_objects(m: Machine) -> list[str]:
+    from build import models
+    failures = []
+    rng = random.Random(9)
+    shapes = [(m.label(f"{name}_model"), vertices) for name, (vertices, faces) in models().items()]
+    signed24 = lambda b: (b[0] | b[1] << 8 | b[2] << 16) - ((1 << 24) if b[2] & 0x80 else 0)
+    times = {"set_camera": [], "cull_object, out of the box": [], "cull_object, out roughly": [], "cull_object, culled": [],
+             "cull_object, in view": [], "object_matrix": [], "transform_object": []}
+    obj_at = m.label("checks_object")
+    point_at = m.label("checks_points")
+    for _ in range(400):
+        cam_a = [rng.randrange(256) for _ in range(3)]
+        camera = model.make_matrix(*cam_a)
+        cam_p = [rng.randrange(-30000, 30000) for _ in range(3)]
+        for name, value in zip(("camera_x", "camera_y", "camera_z"), cam_p):
+            m.poke_word(name, value)
+        m.poke(m.label("camera_angles"), bytes(cam_a))
+        times["set_camera"].append(m.call("set_camera"))
+        seen = [signed8(v) for v in m.memory[m.label("camera_seen"):m.label("camera_seen") + 9]]
+        k = [signed24(m.memory[m.label("camera_k") + 3 * i:m.label("camera_k") + 3 * i + 3]) for i in range(3)]
+        if seen != model.transpose(camera) or tuple(k) != model.camera_constant(camera):
+            failures.append(f"set_camera {cam_a}: {seen} {k}")
+            return failures
+        for _ in range(20):
+            reach = rng.choice((150, 600, 3000, 10000, 20000))
+            pos = [max(-32768, min(32767, c + rng.randint(-reach, reach))) for c in cam_p]
+            obj_a = [rng.randrange(256) for _ in range(3)]
+            model_at, vertices = shapes[rng.randrange(len(shapes))]
+            record = b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a) + model_at.to_bytes(2, "little")
+            m.poke(obj_at, record)
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
+            t = m.call("cull_object")
+            got = bool(m.sim.registers[1] & 1)
+            want_t = model.view_centre(pos, cam_p, camera)
+            r = model.bounding_radius(vertices)
+            want = want_t is None or model.culled(want_t, r)
+            if got != want:
+                failures.append(f"cull_object {pos} {obj_a} from {cam_p} {cam_a}: {'culled' if got else 'kept'}")
+            if not want:
+                got_t = tuple(signed24(m.memory[m.label("view_t") + 3 * i:m.label("view_t") + 3 * i + 3]) for i in range(3))
+                if got_t != want_t:
+                    failures.append(f"cull_object T {got_t}, not {want_t}")
+            rough = want_t is not None and rough_out(rough_t(pos, cam_p, camera), r)
+            if rough and not want:
+                failures.append(f"the rough step would cull {pos} from {cam_p}, which is in view")
+            times["cull_object, out of the box" if want_t is None else "cull_object, out roughly" if rough
+                  else "cull_object, culled" if want else "cull_object, in view"].append(t)
+            if want:
+                continue
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            times["object_matrix"].append(m.call("object_matrix"))
+            want_m = model.view_matrix(camera, model.make_matrix(*obj_a))
+            got_m = [signed8(v) for v in m.memory[m.label("view_m"):m.label("view_m") + 9]]
+            if got_m != want_m:
+                failures.append(f"object_matrix {obj_a} from {cam_a}: {got_m}, not {want_m}")
+                continue
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            times["transform_object"].append(m.call("transform_object", D=point_at >> 8, E=point_at) / len(vertices))
+            for i, v in enumerate(vertices):
+                want_p = model.project_far(model.rotate(want_m, v), want_t)
+                words = [model.to_signed16(m.memory[point_at + 4 * i + k] | m.memory[point_at + 4 * i + k + 1] << 8) for k in (0, 2)]
+                got_p = None if words[0] == -32768 else tuple(words)
+                if got_p != want_p:
+                    failures.append(f"transform_object {v} of {pos} {obj_a} from {cam_p} {cam_a}: {got_p}, not {want_p}")
+        if len(failures) > 10:
+            return failures
+    for name, ts in times.items():
+        report(name, [round(x) for x in ts])
+    print(f"  {'':14} (transform_object: per vertex)")
+    return failures
+
+
 def check_demo(m: Machine) -> list[str]:
     from PIL import Image
     from build import objects
@@ -467,7 +569,7 @@ def check_demo(m: Machine) -> list[str]:
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_demo):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_demo):
         failures += check(m)
     if failures:
         print("\n".join(failures[:20]))

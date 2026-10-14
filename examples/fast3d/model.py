@@ -235,3 +235,135 @@ def clip_line(x0: int, y0: int, x1: int, y1: int,
         else:
             x1, y1 = x, y
     return None     # never reached: each end moves at most twice (clip_line in Z80 gives up the same way)
+
+
+# ---------------------------------------------------------------------------
+# Objects and the camera.
+#
+# A model is a list of vertices (signed bytes) that its faces share: each face
+# is a loop of indices into the list, so a vertex is transformed once a frame
+# however many faces use it, and an edge two faces share is drawn once. An
+# object is a model at a 16-bit world position, turned by three angles; the
+# camera is a 16-bit position and three angles too. Camera space has x right,
+# y up and z forward, as project has always taken it.
+#
+# With Rc the camera's matrix (camera to world) and Ro the object's (model to
+# world), a vertex v of an object at P, seen from a camera at C, is at
+#   Rc^T (P - C) + (Rc^T Ro) v
+# in camera space: per object, one translation T and one matrix M.
+
+NEAR = 8                # world units: nothing nearer the eye than this is drawn
+FAR = 8191              # nor farther
+VIEW_BOX = 10400        # an object whose centre is outside +-VIEW_BOX of the
+                        # camera on any axis is culled without a rotation. In
+                        # the view's corner, (1/2, 1/2, 1), a point is 1.225
+                        # times as far as its depth: 1.225 (FAR + 256) < 10400.
+                        # T is then within 127 sqrt 3 10400 = 2.3M, and the
+                        # side tests' 2 T - T within 6.9M: 24 bits, signed
+VIEW_SCALE = 127        # T and the rotated vertices are 127 times world units
+
+
+def transpose(m: list[int]) -> list[int]:
+    return [m[3 * c + r] for r in range(3) for c in range(3)]
+
+
+def faces_to_edges(faces: list[list[int]]) -> list[tuple[int, int]]:
+    """Each edge of the faces once, in the order the faces first meet it."""
+    edges, seen = [], set()
+    for face in faces:
+        for i, a in enumerate(face):
+            b = face[(i + 1) % len(face)]
+            key = (min(a, b), max(a, b))
+            if key not in seen:
+                seen.add(key)
+                edges.append((a, b))
+    return edges
+
+
+def bounding_radius(vertices: list[tuple[int, int, int]]) -> int:
+    """The least whole r with every vertex within r of the model's origin."""
+    r2 = max(x * x + y * y + z * z for x, y, z in vertices)
+    r = math.isqrt(r2)
+    return r if r * r == r2 else r + 1
+
+
+def cull_radii(r: int) -> tuple[int, int]:
+    """The radius in view units (128 r, a little over 127 r), and that times
+    sqrt 5, rounded up: what the side planes compare against."""
+    r_view = 128 * r
+    r5 = math.isqrt(5 * r_view * r_view)
+    if r5 * r5 < 5 * r_view * r_view:
+        r5 += 1
+    return r_view, r5
+
+
+def camera_constant(camera: list[int]) -> tuple[int, int, int]:
+    """128 Rc^T (1, 1, 1): what turns the low bytes of P - C back from
+    signed to unsigned."""
+    return tuple(128 * v for v in rotate(transpose(camera), (1, 1, 1)))
+
+
+def view_centre(position, camera_position, camera: list[int]):
+    """T = Rc^T (P - C), 127 times world units; None if P is outside the box
+    of +-VIEW_BOX round the camera (or P - C will not fit 16 bits)."""
+    d = [p - c for p, c in zip(position, camera_position)]
+    if any(abs(v) > VIEW_BOX for v in d):
+        return None
+    high = tuple(v >> 8 for v in d)                   # signed
+    low = tuple((v & 0xFF) - 128 for v in d)          # unsigned, as signed
+    seen = transpose(camera)
+    k = camera_constant(camera)
+    return tuple(256 * a + b + c for a, b, c in
+                 zip(rotate(seen, high), rotate(seen, low), k))
+
+
+def culled(t, r: int) -> bool:
+    """Whether the sphere of radius r at T is wholly outside the view: nearer
+    than NEAR, farther than FAR, or beyond one of the planes |x| = z / 2,
+    |y| = z / 2 -- a 90-degree view, the screen's width and a little more than
+    its height, so that it never leaves out what the screen would show."""
+    tx, ty, tz = t
+    r_view, r5 = cull_radii(r)
+    if tz + r_view < NEAR * VIEW_SCALE or tz - r_view > FAR * 128:
+        return True
+    return any(2 * s * v - tz > r5 for v in (tx, ty) for s in (1, -1))
+
+
+def view_matrix(camera: list[int], obj: list[int]) -> list[int]:
+    """M = Rc^T Ro, 127 for 1.0: each column is Rc^T times a column of Ro --
+    a rotate of a vector of signed bytes -- and q / 127 is rounded as
+    (q + (q >> 7) + 64) >> 7, held to +-127."""
+    seen = transpose(camera)
+    columns = [rotate(seen, (obj[j], obj[3 + j], obj[6 + j])) for j in range(3)]
+    m = [0] * 9
+    for j, column in enumerate(columns):
+        for i, q in enumerate(column):
+            m[3 * i + j] = max(-127, min(127, (q + (q >> 7) + 64) >> 7))
+    return m
+
+
+def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96):
+    """Where a vertex lands: c = its rotation plus T, 24-bit; then shifted
+    right by just enough to bring its depth into 8 bits (Z = c_z >> (8 + s)),
+    so that one quick divide by a byte will do at any distance. None if at
+    or behind the eye."""
+    cx, cy, cz = (a + b for a, b in zip(rotated, t))
+    if cz < 256:
+        return None
+    s = max(0, (cz >> 8).bit_length() - 8)
+    z = cz >> (8 + s)
+
+    def divide(v: int) -> int:
+        v >>= s                                         # floor, as SRA does
+        q = min(abs(v) // z, WIDE_LIMIT)
+        return -q if v < 0 else q
+    return centre_x + divide(cx), centre_y - divide(cy)
+
+
+def ideal_view(vertex, position, angles, camera_position, camera_angles):
+    """Where a vertex of an object lands, in floating point."""
+    rc, ro = ideal_matrix(*camera_angles), ideal_matrix(*angles)
+    world = [position[i] + sum(ro[3 * i + j] * vertex[j] for j in range(3)) for i in range(3)]
+    d = [w - c for w, c in zip(world, camera_position)]
+    x, y, z = (sum(rc[3 * j + i] * d[j] for j in range(3)) for i in range(3))
+    return x, y, z
