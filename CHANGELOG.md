@@ -17,10 +17,11 @@ GitHub takes its notes from that section.
   each end within 0.75 of a pixel of the true line); and objects -- models
   whose faces share their vertices -- at 16-bit positions, seen from a
   camera, with `cull_object` leaving out what is out of view, most of it for
-  about 2,400 T-states, before a vertex is touched. `check.py` holds every
+  about 2,300 T-states, before a vertex is touched. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
-  through forty turning objects on the 128K. See
+  through forty turning objects on the 128K, about 6 frames a second,
+  working out each picture while the last waits to be shown. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 
 - **Aviator, `examples/aviator`.** Geoff Crammond's BBC Micro flight

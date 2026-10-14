@@ -6,5 +6,7 @@
 checks_object:		DS		OBJECT_SIZE			; an object, for check.py
 checks_vertex:		DS		3 * 16				; vertices, for check.py
 checks_points:		DS		2 * 16
+					ALIGN	256
+checks_points_far:	DS		256					; transform_object's
 end:
 					SAVEBIN	"output/checks.bin", $8000, end - $8000

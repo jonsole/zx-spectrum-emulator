@@ -39,8 +39,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | Routine | In | Out | T-states |
 |---|---|---|---|
 | `mul8s` | B, C signed | HL = B * C | 154 |
-| `make_matrix` | `angle_x`, `angle_y`, `angle_z` | `matrix` (9 bytes, row by row), and rotate's code | 5,425 |
-| `compute_matrix`, `install_matrix` | the same, in two: the entries, then HL -> 9 entries into rotate | | 2,932, 2,456 |
+| `make_matrix` | `angle_x`, `angle_y`, `angle_z` | `matrix` (9 bytes, row by row), and rotate's code | 3,982 |
+| `compute_matrix`, `install_matrix` | the same, in two: the entries, then HL -> 9 entries into rotate | | 2,932, 1,013 |
 | `rotate` | HL -> vertex | `rot_x`, `rot_y`, `rot_z` | 1,241 |
 | `project` | `rot_*`, `zoff` | B = x, C = y (256 x 192, y down), or carry if off the screen | ~860 |
 | `divide` | HL signed, C = 1..255 | HL = HL / C, or carry if it will not fit a byte | 333..453 |
@@ -53,10 +53,10 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `set_window` | B, C = left, top; D, E = right, bottom | lines clip to that, inclusive | |
 | `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,400 outside; ~3,550 cut at one end; ~8,950 at both |
 | `crossing_x`, `crossing_y` | DE = the edge; the line's ends | HL = where the line crosses it | ~2,240 (1,221..3,142) |
-| `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 10,941 a frame |
-| `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 367 out of the box; ~2,440 out roughly; ~9,100 in view |
+| `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 9,498 a frame |
+| `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 367 out of the box; ~2,290 out roughly; ~8,440 in view |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~10,700 |
-| `transform_object` | IX, DE -> points | its vertices to 16-bit screen points, at any distance | ~3,600 a vertex |
+| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,900 a vertex (~3,450 without mirrors) |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -107,6 +107,15 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   by a constant `set_camera` works out: exact in 24 bits. M is three
   rotates, of the columns of Ro. A model's vertices are shared by its faces,
   so each is transformed once, and each edge is drawn once.
+- **Mirrored vertices for nothing.** `M (-v)` is exactly `-M v`, so where a
+  model has a vertex and its mirror, as every vertex of a cube or an
+  icosahedron does, `transform_object` rotates the first and has the second
+  as `T - M v`. `build.py` puts such pairs first and says how many there
+  are (`MODEL_PAIRS`), and half the rotates go.
+- **The matrix installed unrolled.** A picture installs a matrix in
+  `rotate` ten times or so: the camera's, and each object's. Each of
+  `install_matrix`'s eighteen operands is written by its own `LD (nn),HL`,
+  1,013 T-states in all, where a loop through a list of addresses took 2,456.
 - **Culling in three steps, each quicker than the next.** An object is left
   out when its bounding sphere is wholly nearer than NEAR, farther than FAR,
   or beyond one of the planes `|x| = z / 2`, `|y| = z / 2`: a 90-degree view,
@@ -116,7 +125,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   bytes alone, a row at a time: depth first, so that an object behind the
   eye is out after one row (from 1,758 T-states), then x, then y, each
   tested with the sphere enlarged by the most the low bytes could add.
-  Of what reaches this step out of view, 72% goes here, for about 2,440. Only
+  Of what reaches this step out of view, 72% goes here, for about 2,290. Only
   what is left, near a plane or in view, gets the exact T and the exact
   tests. The answer is always the exact test's.
 - **Any distance.** Before dividing, `transform_object` shifts each vertex's
@@ -140,16 +149,26 @@ a frame, turning gently of its own accord; O and P turn it more, Q and A
 pitch it. Each frame every object is culled or drawn, and what is drawn is
 clipped to a window with a frame round it (columns and rows 8 from each
 edge). Each frame is drawn on the screen that isn't being shown, then shown
-at the next interrupt. Before drawing, it clears only the box drawn on that
-screen last time.
+at the next interrupt: the interrupt routine writes port $7FFD when the
+loop has asked it to. Meanwhile the loop goes on to the next frame's
+arithmetic (`compute_frame`: the camera, culling, the matrices and every
+drawn object's points, into a pool of pages), which touches no screen; by
+the time that is done the flip has happened, and `render_frame` draws on
+the screen it freed. Waiting for the flip before starting lost what was
+left of a frame each time. Before drawing, it clears only the box drawn on
+that screen last time: the box round the vertices of every object drawn,
+held to the window. An object whose box is wholly inside the window, with
+every vertex in front of the eye, has its edges drawn without clipping:
+their ends go from `transform_object`'s points straight to `draw_line`.
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 276,000..1,161,000
-T-states, 707,000 on average: about 5 frames a second on a 128K, before ULA
-contention. Of an average frame, culling all forty objects takes about
-138,000 T-states (3,400 an object), the matrices of those drawn 42,000,
-their vertices 158,000, and clearing and drawing their lines the rest,
-about 360,000.
+drawn a frame, 5.1 on average, and a frame takes 223,000..910,000
+T-states, 575,000 on average, with nothing lost waiting for the flip:
+about 6 frames a second on a 128K, before ULA contention. Of an average frame (from the emulator's profiler), culling all
+forty objects takes about 23%, about 3,300 T-states an object; the
+matrices of those drawn 9%; their vertices 28%, more than half of it
+projecting them; drawing their lines 15% and clipping those that need it
+6%; and clearing the last box 8%.
 
 ![The demo's cube, a frame from check.py](demo.png)
 
@@ -181,7 +200,8 @@ every result with `model.py`:
   and `transform_object` on 8,000 objects round 400 cameras, from 150 to
   20,000 units away: the camera's matrix, T, whether culled, M and every
   point;
-- the demo, 256 frames of `draw_frame` (a whole circle of the flight), whole
+- the demo, 256 frames of `draw_frame` (`compute_frame` then
+  `render_frame`, a whole circle of the flight), whole
   screens against the model's picture of the same frame, and how many
   objects it drew. It writes every other one to `output/demo.gif`.
 
@@ -204,19 +224,21 @@ worst, for objects as near as 40 units):
 python cull_geometry.py
 ```
 
-The demo also runs on the emulator itself. `cpp-core`'s `snapshot_probe` can
-load `output/demo.z80` and measure its main loop, from the instruction after
-its `HALT` (`frame` + 4) to the `HALT` (`frame` + 3):
+The demo also runs on the emulator itself, and its profiler measures the
+real loop, interrupts, flips and all. Load `output/demo.z80` with its SLD,
+run it, and profile with `compute_frame` as the period, so that a period is
+a picture (`docs/mcp.md`):
 
 ```
-load output/demo.z80
-runto 803A 10
-work 803A 8039 64 70908
+profile {action: "start", period: "compute_frame"}
+run                                   # a minute or so
+profile {action: "get"}               # frames / periods.count: frames a picture
 ```
 
-Over the first 64 frames of the flight that gave 276,906..995,917 T-states
-an update, 590,972 the median, and both screens it left held a framed view
-of the world.
+Over the first 103 pictures of the flight that gave 7.76 frames a picture,
+where the loop that waited for each flip before starting the next picture's
+arithmetic took 8.32: the same work, less half a frame of waiting a
+picture.
 
 ## Not done
 
@@ -225,7 +247,7 @@ of the world.
   clipping in 3D, to a near plane, before projecting. The demo's world keeps
   its objects 300 units from the camera's path for that reason.
 - **Quicker culling still.** An object far out of view now costs about
-  2,400 T-states a frame. One that was far out of view last frame cannot
+  2,300 T-states a frame. One that was far out of view last frame cannot
   be in view this one, at the camera's speed, so it need not be tested
   every frame; nothing uses that yet.
 - **Hidden lines.** The objects are wireframes, with every edge drawn.

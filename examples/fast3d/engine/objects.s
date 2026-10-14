@@ -55,12 +55,17 @@ OBJECT_MODEL		EQU		9
 OBJECT_SIZE			EQU		11
 
 ; A model: how many vertices and where, edges, faces; and its bounding
-; radius, as 128 r and 128 r sqrt 5 (rounded up) -- what culling compares.
+; radius, as 128 r and 128 r sqrt 5 (rounded up) -- what culling compares --
+; each 24-bit, first with the rough step's margins added (ROUGH and 3 ROUGH),
+; then as they are: cull_object copies each pair as it stands, rather than
+; working them out for every object every picture.
 MODEL_VERTICES		EQU		0					; DB count, DW -> x, y, z bytes
 MODEL_EDGES			EQU		3					; DB count, DW -> pairs of indices
 MODEL_FACES			EQU		6					; DB count, DW -> each a DB n and n indices
-MODEL_R_VIEW		EQU		9					; DW 128 r
-MODEL_R5			EQU		11					; DW 128 r sqrt 5
+MODEL_RADII			EQU		9					; D24 128 r + ROUGH, 128 r sqrt 5 +
+												; 3 ROUGH, 128 r, 128 r sqrt 5
+MODEL_PAIRS			EQU		21					; DB how many of the vertices, from
+												; the first, are v, -v pairs
 
 ; 24-bit numbers in C:H:L, from and to three bytes in memory, low first.
 					MACRO	LOAD24	AT
@@ -274,35 +279,18 @@ cull_object:
 					AXIS_APART	0
 					AXIS_APART	2
 					AXIS_APART	4
-					ld		l,(ix + OBJECT_MODEL)	; the model's radii, 24 bits
-					ld		h,(ix + OBJECT_MODEL + 1)
-					ld		de,MODEL_R_VIEW
+					ld		l,(ix + OBJECT_MODEL)	; first, the model's radii with
+					ld		h,(ix + OBJECT_MODEL + 1)	; the rough T's margins
+					ld		de,MODEL_RADII
 					add		hl,de
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					inc		hl
-					ld		(cull_r_view),de
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)
-					ld		(cull_r5),de
-					xor		a
-					ld		(cull_r_view + 2),a
-					ld		(cull_r5 + 2),a
-					ld		hl,(cull_r_view)	; first, the radii with the
-					ld		de,ROUGH & $FFFF	; rough T's margin
-					add		hl,de
-					ld		(cull_radius),hl
-					adc		a,ROUGH >> 16
-					ld		(cull_radius + 2),a
-					ld		hl,(cull_r5)
-					ld		de,(3 * ROUGH) & $FFFF
-					add		hl,de
-					ld		(cull_radius5),hl
-					ld		a,0
-					adc		a,(3 * ROUGH) >> 16
-					ld		(cull_radius5 + 2),a
+					ld		de,cull_radius
+					ldi
+					ldi
+					ldi
+					ldi
+					ldi
+					ldi
+					ld		(cull_exact),hl		; and where the exact ones are
 
 					call	rough_row_z			; the rough depth
 					ld		de,view_t + 6
@@ -337,10 +325,14 @@ cull_object:
 					AXIS_T	0
 					AXIS_T	1
 					AXIS_T	2
-					ld		hl,cull_r_view		; and the radii exactly
+					ld		hl,(cull_exact)		; and the radii exactly
 					ld		de,cull_radius
-					ld		bc,6
-					ldir
+					ldi
+					ldi
+					ldi
+					ldi
+					ldi
+					ldi
 					call	test_depth
 					jp		c,cull_out
 					ld		hl,view_t
@@ -471,8 +463,7 @@ cull_high:			DS		3					; P - C's high bytes
 cull_biased:		DS		3					; and + 128, for the rough rows
 cull_low:			DS		3					; and low, less 128
 cull_rotated:		DS		6					; the high bytes' rotation
-cull_r_view:		DS		3					; 128 r, 24 bits
-cull_r5:			DS		3					; 128 r sqrt 5
+cull_exact:			DW		0					; -> the model's radii, exactly
 view_t:				DS		9					; the object's centre in camera
 												; space: three 24-bit numbers
 
@@ -584,17 +575,47 @@ view_m:				DS		9					; M, row by row
 
 ; ---------------------------------------------------------------------------
 ; transform_object: the vertices of the object at IX to the screen, by
-; view_m and view_t (cull_object's and object_matrix's), into the points at
-; DE: x, y, 16-bit, four bytes a vertex; one at or behind the eye gets x =
-; WIDE_BEHIND. Each vertex's position in camera space is shifted right just
-; enough to bring its depth into a byte (model.project_far), so the quick
-; divide does at any distance. Uses everything but IY and the alternate
-; registers.
+; view_m and view_t (cull_object's and object_matrix's), into the points on
+; page D from E on (E + the vertices no more than 64): x and y, 16-bit, a
+; byte each in four tables of 64 (POINTS_X_LO and so on), so that a vertex's
+; number in L finds all four by setting bits 6 and 7, and a page can hold
+; several objects' points; one at or behind the eye gets x = WIDE_BEHIND,
+; the only x with $80 in its high byte. Each vertex's position in camera
+; space is shifted right just enough to bring its depth into a byte
+; (model.project_far), so the quick divide does at any distance.
+;
+; The model's first MODEL_PAIRS pairs of vertices are each a vertex and its
+; mirror, -v (build.py puts them so): M (-v) is -M v exactly, so the second
+; of a pair is T - M v, from the first's rotation, and costs no rotate --
+; half the rotates of a cube or an icosahedron. Uses everything but IY and
+; the alternate registers.
+
+; C = T - the rotation on one axis, 24 bits, for a mirror.
+					MACRO	MINUS_ROTATION	ROTATION, T, C
+					ld		de,(ROTATION)
+					ld		a,d
+					add		a,a
+					sbc		a,a
+					ld		b,a					; B:D:E = the rotation
+					ld		hl,(T)
+					or		a
+					sbc		hl,de
+					ld		a,(T + 2)
+					sbc		a,b
+					ld		(C + 2),a
+					ld		(C),hl
+					ENDM
 
 transform_object:
 					ld		(to_point),de
 					ld		l,(ix + OBJECT_MODEL)
 					ld		h,(ix + OBJECT_MODEL + 1)
+					push	hl
+					ld		de,MODEL_PAIRS
+					add		hl,de
+					ld		a,(hl)
+					ld		(to_pairs),a
+					pop		hl
 					ld		a,(hl)				; MODEL_VERTICES
 					ld		(to_count),a
 					inc		hl
@@ -603,12 +624,23 @@ transform_object:
 					ld		d,(hl)
 					ld		(to_vertex),de
 					xor		a
+					ld		(to_mirror),a
 					ld		(rotate_holds_camera),a
 					ld		hl,view_m
 					call	install_matrix
 .vertex:			ld		hl,(to_vertex)
+					ld		a,(to_mirror)		; the last one's mirror?
+					or		a
+					jp		nz,.mirror
 					call	rotate
-					ld		hl,(to_vertex)
+					ld		hl,to_pairs			; one of a pair?
+					ld		a,(hl)
+					or		a
+					jr		z,.single
+					dec		(hl)
+					ld		a,1
+					ld		(to_mirror),a		; then its mirror is next
+.single:			ld		hl,(to_vertex)
 					inc		hl
 					inc		hl
 					inc		hl
@@ -634,29 +666,49 @@ transform_object:
 					ld		c,a
 					ADD24	view_t + 6
 					STORE24	to_c + 6
-					call	project_far
+.project:			call	project_far
 					jr		nc,.store
 					ld		hl,WIDE_BEHIND
 .store:				ld		b,h
 					ld		c,l
 					ld		hl,(to_point)
-					ld		(hl),c
-					inc		hl
-					ld		(hl),b
-					inc		hl
-					ld		(hl),e
-					inc		hl
-					ld		(hl),d
-					inc		hl
+					ld		(hl),c				; POINTS_X_LO
+					set		6,l
+					ld		(hl),b				; POINTS_X_HI
+					set		7,l
+					ld		(hl),d				; POINTS_Y_HI
+					res		6,l
+					ld		(hl),e				; POINTS_Y_LO
+					res		7,l
+					inc		l
 					ld		(to_point),hl
 					ld		hl,to_count
 					dec		(hl)
-					jr		nz,.vertex
+					jp		nz,.vertex
 					ret
 
-to_point:			DW		0
+.mirror:			xor		a					; HL -> its own x, y, z, unread
+					ld		(to_mirror),a
+					inc		hl
+					inc		hl
+					inc		hl
+					ld		(to_vertex),hl
+					MINUS_ROTATION	rot_x, view_t, to_c
+					MINUS_ROTATION	rot_y, view_t + 3, to_c + 3
+					MINUS_ROTATION	rot_z, view_t + 6, to_c + 6
+					jp		.project
+
+to_point:			DW		0					; the next vertex's number, and the page
+
+; Where a vertex's x and y are, from the start of the points' page.
+POINTS_X_LO			EQU		0
+POINTS_X_HI			EQU		64
+POINTS_Y_LO			EQU		128
+POINTS_Y_HI			EQU		192
 to_vertex:			DW		0
 to_count:			DB		0
+to_pairs:			DB		0					; pairs still to come
+to_mirror:			DB		0					; non-zero: the next is a mirror
 to_c:				DS		9					; the vertex in camera space
 
 

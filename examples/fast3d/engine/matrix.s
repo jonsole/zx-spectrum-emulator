@@ -258,13 +258,44 @@ matrix:				DS		9					; m00 m01 m02 m10 ... m22
 ; ---------------------------------------------------------------------------
 ; install_matrix: the 9 signed bytes at HL, row by row (127 for 1.0), into
 ; rotate: for each entry m, SQ_CENTRE - 128 + m and SQ_CENTRE - 128 - m into
-; the two LD HL,nn of its product. Uses everything but IY and the alternate
-; registers.
+; the two LD HL,nn of its product. Unrolled, each operand written by its own
+; LD (nn),HL: a picture installs a matrix ten times or so -- the camera's,
+; and each object's -- and a loop through a list of where they go took 300
+; T-states an entry to this's 111. Uses A, BC, DE, HL.
+
+; The entry at DE into SUM and DIFF's operands; DE on to the next.
+					MACRO	INSTALL	SUM, DIFF
+					ld		a,(de)
+					inc		de
+					ld		c,a
+					add		a,a
+					sbc		a,a
+					ld		b,a					; BC = m, sign-extended
+					ld		hl,SQ_CENTRE - 128
+					add		hl,bc
+					ld		(SUM + 1),hl		; for f(v + m)
+					ld		hl,SQ_CENTRE - 128
+					or		a
+					sbc		hl,bc
+					ld		(DIFF + 1),hl		; for f(v - m)
+					ENDM
 
 install_matrix:
-					ld		ix,install_targets
-; install_into: the same, into the operands listed at IX (two a entry, as
-; install_targets).
+					ex		de,hl
+					INSTALL	m00_sum, m00_diff
+					INSTALL	m01_sum, m01_diff
+					INSTALL	m02_sum, m02_diff
+					INSTALL	m10_sum, m10_diff
+					INSTALL	m11_sum, m11_diff
+					INSTALL	m12_sum, m12_diff
+					INSTALL	m20_sum, m20_diff
+					INSTALL	m21_sum, m21_diff
+					INSTALL	m22_sum, m22_diff
+					ret
+
+; install_into: the same, into the operands listed at IX, two an entry: the
+; loop install_matrix was, for set_camera's rough rows, once a picture. Uses
+; everything but IY and the alternate registers.
 install_into:
 					ld		b,9
 .entry:				ld		a,(hl)
@@ -298,8 +329,3 @@ install_into:
 					pop		hl
 					djnz	.entry
 					ret
-
-; Where each entry's two addresses go: the operands of rotate's LD HL,nn.
-install_targets:	DW		m00_sum + 1, m00_diff + 1, m01_sum + 1, m01_diff + 1, m02_sum + 1, m02_diff + 1
-					DW		m10_sum + 1, m10_diff + 1, m11_sum + 1, m11_diff + 1, m12_sum + 1, m12_diff + 1
-					DW		m20_sum + 1, m20_diff + 1, m21_sum + 1, m21_diff + 1, m22_sum + 1, m22_diff + 1

@@ -430,7 +430,7 @@ def check_objects(m: Machine) -> list[str]:
     times = {"set_camera": [], "cull_object, out of the box": [], "cull_object, out roughly": [], "cull_object, culled": [],
              "cull_object, in view": [], "object_matrix": [], "transform_object": []}
     obj_at = m.label("checks_object")
-    point_at = m.label("checks_points")
+    point_at = m.label("checks_points_far")     # four tables of 64: x low, x high, y low, y high
     for _ in range(400):
         cam_a = [rng.randrange(256) for _ in range(3)]
         camera = model.make_matrix(*cam_a)
@@ -478,10 +478,10 @@ def check_objects(m: Machine) -> list[str]:
                 failures.append(f"object_matrix {obj_a} from {cam_a}: {got_m}, not {want_m}")
                 continue
             m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
-            times["transform_object"].append(m.call("transform_object", D=point_at >> 8, E=point_at) / len(vertices))
+            times["transform_object"].append(m.call("transform_object", D=point_at >> 8, E=0) / len(vertices))
             for i, v in enumerate(vertices):
                 want_p = model.project_far(model.rotate(want_m, v), want_t)
-                words = [model.to_signed16(m.memory[point_at + 4 * i + k] | m.memory[point_at + 4 * i + k + 1] << 8) for k in (0, 2)]
+                words = [model.to_signed16(m.memory[point_at + k + i] | m.memory[point_at + k + 64 + i] << 8) for k in (0, 128)]
                 got_p = None if words[0] == -32768 else tuple(words)
                 if got_p != want_p:
                     failures.append(f"transform_object {v} of {pos} {obj_a} from {cam_p} {cam_a}: {got_p}, not {want_p}")
@@ -556,6 +556,8 @@ def check_demo(m: Machine) -> list[str]:
     report("demo: a frame", times)
     print(f"  {'':14} {min(counts)}..{max(counts)} objects drawn a frame, of {len(things)}, "
           f"{sum(counts) / len(counts):.1f} on average, over a circle of the flight")
+    if not frames:
+        return failures
     # the frames, as the Spectrum shows them: bright white on black, twice the size
     images = []
     for screen in frames:
@@ -565,7 +567,7 @@ def check_demo(m: Machine) -> list[str]:
         images.append(image.convert("L").resize((512, 384), Image.NEAREST))
     images = images[::2]
     images[0].save(OUT / "demo.gif", save_all=True, append_images=images[1:], duration=80, loop=0)
-    images[100].save(OUT / "demo.png")
+    images[min(100, len(images) - 1)].save(OUT / "demo.png")
     print(f"  {len(frames)} frames to {OUT / 'demo.gif'}")
     return failures
 
