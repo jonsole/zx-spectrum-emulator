@@ -43,9 +43,9 @@ start:
 					ld		a,high IM2_TABLE
 					ld		i,a
 					im		2
-					ld		a,$07				; bank 7 at $C000, bank 5 shown
-					ld		bc,$7FFD
-					out		(c),a
+					ld		a,$17				; bank 7 at $C000, bank 5 shown,
+					ld		bc,$7FFD			; and ROM 1, the 48K's, for its
+					out		(c),a				; font (show_fps)
 					xor		a
 					out		($FE),a				; a black border
 					ld		hl,$4000
@@ -65,12 +65,13 @@ frame:
 					call	compute_frame
 					call	wait_flip
 					call	render_frame
+					call	show_fps
 					ld		a,(screen_high)		; show it at the next interrupt;
 					or		a					; draw on the other next
-					ld		a,$0F
+					ld		a,$1F
 					ld		c,$00
 					jr		nz,.show
-					ld		a,$07
+					ld		a,$17
 					ld		c,$80
 .show:				ld		(flip_to),a
 					ld		a,c
@@ -662,6 +663,98 @@ read_keys:
 					inc		(hl)
 					ret
 
+; ---------------------------------------------------------------------------
+; show_fps: pictures a second, to a tenth, in the screen's bottom left
+; corner below the window (rows 185..191, columns 0..3, so the frame's line
+; at row 184 is left alone): reckoned every FPS_PICTURES pictures from the
+; frames the interrupt counted meanwhile, and drawn each picture on the
+; screen screen_high says, in the ROM's font. The ROM is ROM 1, the 48K's,
+; paged in for the purpose; nothing else reads a ROM. (check.py calls
+; draw_frame, not the loop, so it never sees this.)
+
+FPS_PICTURES		EQU		10
+FPS_CORNER			EQU		$11E0				; row 185, column 0, from the screen
+ROM_FONT			EQU		$3C00				; the 48K ROM's characters: 8 bytes
+													; each, from the code times 8
+show_fps:
+					ld		hl,fps_left
+					dec		(hl)
+					jr		nz,.draw
+					ld		(hl),FPS_PICTURES
+					ld		a,(frames)			; the frames those pictures took
+					ld		hl,fps_frames
+					ld		c,a
+					sub		(hl)
+					ld		(hl),c
+					ld		c,a
+					ld		hl,FPS_PICTURES * 50 * 10	; tenths of a picture a second
+					call	divide_unsigned		; (carry: 256 or more, say 255)
+					jr		nc,.tenths
+					ld		l,255
+.tenths:			ld		a,l
+					ld		b,0					; B = pictures a second, A the
+.tens:				cp		10					; tenth over
+					jr		c,.tenth
+					sub		10
+					inc		b
+					jr		.tens
+.tenth:				add		a,'0'
+					ld		(fps_text + 3),a
+					ld		a,b
+					ld		c,0					; C = its tens, A its units
+.units:				cp		10
+					jr		c,.unit
+					sub		10
+					inc		c
+					jr		.units
+.unit:				add		a,'0'
+					ld		(fps_text + 1),a
+					ld		a,c					; the tens, or a space for none
+					or		a
+					jr		z,.blank
+					add		a,'0'
+					jr		.lead
+.blank:				ld		a,' '
+.lead:				ld		(fps_text),a
+.draw:				ld		a,(screen_high)
+					add		a,$40 + high FPS_CORNER
+					ld		h,a
+					ld		l,low FPS_CORNER
+					ld		a,(fps_text)
+					call	.glyph
+					ld		a,(fps_text + 1)
+					call	.glyph
+					ld		a,(fps_text + 2)
+					call	.glyph
+					ld		a,(fps_text + 3)
+; The character A at HL, the cell's row 185, in the ROM's font, rows 1..7;
+; HL on to the next column.
+.glyph:				push	hl
+					ld		l,a					; DE = its glyph's row 1
+					ld		h,0
+					add		hl,hl
+					add		hl,hl
+					add		hl,hl
+					ld		de,ROM_FONT + 1
+					add		hl,de
+					ex		de,hl
+					pop		hl
+					push	hl
+					ld		b,7
+.row:				ld		a,(de)
+					ld		(hl),a
+					inc		de
+					inc		h
+					djnz	.row
+					pop		hl
+					inc		l
+					ret
+
+frames:				DB		0					; the interrupt counts them
+fps_left:			DB		FPS_PICTURES		; pictures to the next reckoning
+fps_frames:			DB		0					; frames at the last
+fps_text:			DB		" 0.0"				; tens (or a space), units, '.', tenths
+
 ; clear_screen: the screen at HL blank, its attributes ATTRIBUTES.
 clear_screen:
 					ld		d,h
@@ -691,6 +784,9 @@ visible:			DS		VIS_SIZE * WORLD_OBJECTS
 ; The interrupt: the screen flip_to asks for, if it asks.
 					ORG		IM2_ROUTINE
 interrupt:			push	af
+					push	hl
+					ld		hl,frames			; a frame, for show_fps
+					inc		(hl)
 					ld		a,(flip_to)
 					or		a
 					jr		z,.done
@@ -700,7 +796,8 @@ interrupt:			push	af
 					pop		bc
 					xor		a
 					ld		(flip_to),a
-.done:				pop		af
+.done:				pop		hl
+					pop		af
 					ei
 					ret
 end:

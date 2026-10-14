@@ -184,6 +184,9 @@ that screen last time: the box round the vertices of every object drawn,
 held to the window. An object whose box is wholly inside the window, with
 every vertex in front of the eye, has its edges drawn without clipping:
 their ends go from `transform_object`'s points straight to `draw_line`.
+Below the window's bottom left corner it shows pictures a second, to a
+tenth, reckoned every ten pictures from the frames the interrupt counted
+and drawn in the 48K ROM's font (ROM 1 is kept paged in for it).
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
 drawn a frame, 5.1 on average, and a frame takes 160,000..785,000

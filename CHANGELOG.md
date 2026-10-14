@@ -23,8 +23,9 @@ GitHub takes its notes from that section.
   they are, whatever the camera did. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
-  through forty turning objects on the 128K, about 7 frames a second,
-  working out each picture while the last waits to be shown. See
+  through forty turning objects on the 128K, about 7 frames a second (it
+  says how many, in a corner), working out each picture while the last
+  waits to be shown. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 
 - **Aviator, `examples/aviator`.** Geoff Crammond's BBC Micro flight
