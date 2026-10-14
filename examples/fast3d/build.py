@@ -17,7 +17,7 @@ REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import model                                                      # noqa: E402
 
-sys.path.insert(0, str(HERE.parent / "filmation"))
+sys.path.insert(0, str(HERE.parent / "scripts"))
 import z80file                                                    # noqa: E402
 
 SJASMPLUS = [REPO / "tools" / "sjasmplus" / "sjasmplus.exe",

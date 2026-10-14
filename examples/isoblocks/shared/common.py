@@ -17,7 +17,7 @@ from PIL import Image
 SHARED = Path(__file__).resolve().parent
 ISOBLOCKS = SHARED.parent
 REPO = ISOBLOCKS.parent.parent
-sys.path.insert(0, str(ISOBLOCKS.parent / "filmation"))
+sys.path.insert(0, str(ISOBLOCKS.parent / "scripts"))
 import z80file                                                   # noqa: E402
 
 import isogeom                                                    # noqa: E402

@@ -42,10 +42,12 @@ zx-spectrum-emulator/
     make_toolbar_icons.py          # the extension's coloured debug-toolbar icons
   examples/
     hello_rom_call/              # tiny original demo, committed
+    scripts/                      # Python more than one example uses: z80file.py,
+                                  #   the .z80 writer for what sjasmplus assembles
     filmation/                    # isometric masked-sprite engine; multi-file,
                                   #   assembled by each game's own build.py
       engine/                     #   the engine every game includes, and its tests
-      scripts/                    #   the Python every game shares: layout.py (where
+      scripts/                    #   the Python only the games share: layout.py (where
                                   #   a game keeps what), castle.py, sheet.py,
                                   #   graphics.py, extract.py, room_budget.py ...
       knightlore/, pentagram/,    #   the games, each the same shape: build.py and

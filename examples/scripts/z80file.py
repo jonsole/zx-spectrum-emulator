@@ -1,8 +1,8 @@
-"""Version 3 .z80 snapshots of a Filmation game, 48K or 128K.
+"""Version 3 .z80 snapshots of a program sjasmplus assembled, 48K or 128K.
 
 sjasmplus has no .z80 output of its own, and its .sna has to push PC onto the
-stack -- into the bottom of the screen, for a 48K one. So a game's build saves
-its RAM raw and wraps it here as a machine about to run from `start`. The
+stack -- into the bottom of the screen, for a 48K one. So an example's build
+saves its RAM raw and wraps it here as a machine about to run from `start`. The
 format is the one cpp-core's save_z80 writes and load_z80 reads
 (cpp-core/src/snapshot.cpp).
 
@@ -10,9 +10,10 @@ Everything a snapshot could say beyond the RAM, PC and the paging is what
 `start` sets for itself anyway: it disables interrupts and loads SP first
 thing, and blacks the border.
 
-knightlore/build.py and pentagram/build.py still carry their own copy of the
-48K writer, which this one's is lifted from; knightlore128/build.py is the
-first to use this module.
+It lives in examples/scripts/ because it is not the Filmation games' alone:
+fast3d, isoblocks and the scrolling examples build their snapshots with it
+too. The Filmation games' knightlore/build.py and pentagram/build.py still
+carry their own copy of the 48K writer, which this one's is lifted from.
 """
 
 # The 30-byte version 1 header, then the length of what follows it, then the

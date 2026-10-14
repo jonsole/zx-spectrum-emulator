@@ -10,7 +10,7 @@ sjasmplus writes the RAM with the SAVEDEV at the bottom of knightlore128.s,
 the SLD that maps addresses to source lines, and a listing. It runs here, so
 the SLD names the game's sources relative to knightlore128.s, which is where
 the debugger resolves them. This wraps the RAM as a version 3 128K .z80 that
-starts at `start`, with ../z80file.py -- sjasmplus has no .z80 output of its
+starts at `start`, with examples/scripts/z80file.py -- sjasmplus has no .z80 output of its
 own.
 
 sprite_data.s, font.s, specials_gen.s and room_data.s are generated rather than
@@ -41,6 +41,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import layout                                                   # noqa: E402
 import z80file                                                  # noqa: E402
 

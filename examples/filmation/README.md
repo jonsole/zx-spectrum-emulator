@@ -134,9 +134,10 @@ supply.
 `layout.py` (where a game keeps what -- below), `castle.py` (the shape of
 `rooms.json` and `templates.json`), `sheet.py` and `graphics.py` (the sprite
 sheet and the graphic table), `extract.py` and `original.py` (making a game's
-data from your own copy), `z80file.py`, `room_budget.py`, and `tools/`, the
-font pipeline, where each game's `font_sheet.py` and `font_source.py` say only
-what its own characters are.
+data from your own copy), `room_budget.py`, and `tools/`, the font pipeline,
+where each game's `font_sheet.py` and `font_source.py` say only what its own
+characters are. Python that other examples use too, such as `z80file.py`, the
+.z80 writer, is in `examples/scripts/` instead.
 
 Every game folder -- `knightlore/`, `pentagram/`, `knightlore128/`,
 `lightkeep/` -- has the same shape, which `scripts/layout.py` names:
