@@ -1,10 +1,12 @@
 # fast3d
 
 Fast 3D for the Z80: signed multiplication, a rotation matrix from three
-angles, rotating and projecting vertices, and drawing lines, clipped to a
-window. With them comes a demo, a wireframe cube or icosahedron turning and
-swinging in close on the 128K, clipped to a window. The same
-routines for the BBC Micro's 6502, with the same arithmetic, are in
+angles, rotating and projecting vertices, drawing lines clipped to a
+window, and a world of objects seen from a camera, with what is out of view
+culled before any of its vertices is touched. With them comes a demo on the
+128K, a flight through forty turning cubes and icosahedra. The same
+routines for the BBC Micro's 6502, with the same arithmetic (objects and the
+camera not yet), are in
 [vs-code-bbc/examples/fast3d](https://github.com/jonsole/vs-code-bbc/tree/master/examples/fast3d).
 
 `INCLUDE "fast3d.s"` anywhere in an sjasmplus program. It aligns its own
@@ -37,7 +39,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | Routine | In | Out | T-states |
 |---|---|---|---|
 | `mul8s` | B, C signed | HL = B * C | 154 |
-| `make_matrix` | `angle_x`, `angle_y`, `angle_z` | `matrix` (9 bytes, row by row), and rotate's code | 3,814 |
+| `make_matrix` | `angle_x`, `angle_y`, `angle_z` | `matrix` (9 bytes, row by row), and rotate's code | 5,425 |
+| `compute_matrix`, `install_matrix` | the same, in two: the entries, then HL -> 9 entries into rotate | | 2,932, 2,456 |
 | `rotate` | HL -> vertex | `rot_x`, `rot_y`, `rot_z` | 1,241 |
 | `project` | `rot_*`, `zoff` | B = x, C = y (256 x 192, y down), or carry if off the screen | ~860 |
 | `divide` | HL signed, C = 1..255 | HL = HL / C, or carry if it will not fit a byte | 333..453 |
@@ -50,6 +53,10 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `set_window` | B, C = left, top; D, E = right, bottom | lines clip to that, inclusive | |
 | `clip_line` | `clip_x0`, `clip_y0`, `clip_x1`, `clip_y1`, 16-bit | B, C, D, E for `draw_line`, or carry if none of it is in the window | 537 inside; ~1,400 outside; ~3,550 cut at one end; ~8,950 at both |
 | `crossing_x`, `crossing_y` | DE = the edge; the line's ends | HL = where the line crosses it | ~2,240 (1,221..3,142) |
+| `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 10,941 a frame |
+| `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 367 out of the box; ~2,440 out roughly; ~9,100 in view |
+| `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~10,700 |
+| `transform_object` | IX, DE -> points | its vertices to 16-bit screen points, at any distance | ~3,600 a vertex |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -92,6 +99,30 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   the slope would multiply that rounding.
   `project_wide` divides the quick way whenever the quotient fits a byte,
   which it does for anything on the screen or near it.
+- **Objects for the price of rotates.** An object at P, turned by Ro, seen
+  from a camera at C turned by Rc, has its vertex v at
+  `Rc^T (P - C) + (Rc^T Ro) v` in camera space. With `Rc^T` installed in
+  `rotate`, both come from rotations of signed bytes. T is two rotates, of
+  P - C's high bytes and of its low bytes less 128, with the 128s put back
+  by a constant `set_camera` works out: exact in 24 bits. M is three
+  rotates, of the columns of Ro. A model's vertices are shared by its faces,
+  so each is transformed once, and each edge is drawn once.
+- **Culling in three steps, each quicker than the next.** An object is left
+  out when its bounding sphere is wholly nearer than NEAR, farther than FAR,
+  or beyond one of the planes `|x| = z / 2`, `|y| = z / 2`: a 90-degree view,
+  as wide as the screen and a little taller, so that the lines clip whatever
+  it lets through. First, an object more than 10,400 units from the camera
+  on any axis is out, for 367 T-states. Then a rough T from P - C's high
+  bytes alone, a row at a time: depth first, so that an object behind the
+  eye is out after one row (from 1,758 T-states), then x, then y, each
+  tested with the sphere enlarged by the most the low bytes could add.
+  Of what reaches this step out of view, 72% goes here, for about 2,440. Only
+  what is left, near a plane or in view, gets the exact T and the exact
+  tests. The answer is always the exact test's.
+- **Any distance.** Before dividing, `transform_object` shifts each vertex's
+  camera-space position right by just enough to bring its depth into a
+  byte, so the quick divide works out to the far plane (8,191 units) with
+  the depth to 8 bits.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is eight blocks, one for each bit of a byte. A pixel
   is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -103,20 +134,22 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 python build.py      # -> output/demo.z80, a 128K snapshot, with its SLD
 ```
 
-or **ZX Spectrum: fast3d demo** in VS Code. A cube or an icosahedron turns
-about all three axes; SPACE changes which. It also swings in from 400 units
-to 110 and out again, close enough that most of it is beyond the window
-(columns 24..231, rows 16..175, with a frame round it). Every edge is
-clipped to the window. Each frame is drawn on the screen
-that isn't being shown, then shown at the next interrupt. Before drawing, it
-clears only the box the object filled on that screen last time.
+or **ZX Spectrum: fast3d demo** in VS Code. Forty cubes and icosahedra, each
+turning, are scattered round a circle that the camera flies, about 32 units
+a frame, turning gently of its own accord; O and P turn it more, Q and A
+pitch it. Each frame every object is culled or drawn, and what is drawn is
+clipped to a window with a frame round it (columns and rows 8 from each
+edge). Each frame is drawn on the screen that isn't being shown, then shown
+at the next interrupt. Before drawing, it clears only the box drawn on that
+screen last time.
 
-Far off, a frame takes about 82,000 T-states for the cube (8 vertices, 12
-edges) and 191,000 for the icosahedron (12 and 30). Up close it takes up to
-195,000 and 348,000. The lines are much longer then, the box to clear fills
-most of the window, and about a third of the edges cross an edge of the
-window. That is from about 25 frames a second down to 8 for the cube, before
-ULA contention, which the simulator does not model.
+Over a whole circle of the flight, between 1 and 10 of the 40 objects are
+drawn a frame, 5.1 on average, and a frame takes 276,000..1,161,000
+T-states, 707,000 on average: about 5 frames a second on a 128K, before ULA
+contention. Of an average frame, culling all forty objects takes about
+138,000 T-states (3,400 an object), the matrices of those drawn 42,000,
+their vertices 158,000, and clearing and drawing their lines the rest,
+about 360,000.
 
 ![The demo's cube, a frame from check.py](demo.png)
 
@@ -144,9 +177,13 @@ every result with `model.py`:
   `clip_line` on 60,000 lines across random windows, from inside the window
   to 16,000 pixels beyond it, every end; and `draw_line_clipped`, every
   pixel;
-- the demo, 580 frames of `draw_frame` (a whole swing in and out for each
-  object), whole screens against the model's picture of the same frame. It
-  writes every other one to `output/demo.gif`.
+- objects and the camera: `set_camera`, then `cull_object`, `object_matrix`
+  and `transform_object` on 8,000 objects round 400 cameras, from 150 to
+  20,000 units away: the camera's matrix, T, whether culled, M and every
+  point;
+- the demo, 256 frames of `draw_frame` (a whole circle of the flight), whole
+  screens against the model's picture of the same frame, and how many
+  objects it drew. It writes every other one to `output/demo.gif`.
 
 `model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
 on 400,000 random lines and windows. Every clipped end must be within 0.75
@@ -157,25 +194,40 @@ itself in the window may be left out:
 python clip_geometry.py
 ```
 
+And `cull_geometry.py` holds the objects and the camera to it, on 100,000
+random scenes. T must be exactly `Rc^T (P - C)`. No object that has a vertex
+the model would draw on the screen may be culled. And it measures how far
+the points drawn are from the exact view (1.08 pixels on average, 8.9 at
+worst, for objects as near as 40 units):
+
+```
+python cull_geometry.py
+```
+
 The demo also runs on the emulator itself. `cpp-core`'s `snapshot_probe` can
 load `output/demo.z80` and measure its main loop, from the instruction after
 its `HALT` (`frame` + 4) to the `HALT` (`frame` + 3):
 
 ```
 load output/demo.z80
-runto 804F 10
-work 804F 804E 580 70908
+runto 803A 10
+work 803A 8039 64 70908
 ```
 
-Over a whole swing of the cube, in and out, that gave 82,831..200,502
-T-states an update, 143,951 the median. That agrees with the simulator, and
-both screens it left held one framed cube and nothing else.
+Over the first 64 frames of the flight that gave 276,906..995,917 T-states
+an update, 590,972 the median, and both screens it left held a framed view
+of the world.
 
 ## Not done
 
 - **Clipping to the eye.** A line is clipped to the window, but an edge
   with an end at or behind the eye (Z = 0) is still left out: that needs
-  clipping in 3D, to a near plane, before projecting.
+  clipping in 3D, to a near plane, before projecting. The demo's world keeps
+  its objects 300 units from the camera's path for that reason.
+- **Quicker culling still.** An object far out of view now costs about
+  2,400 T-states a frame. One that was far out of view last frame cannot
+  be in view this one, at the camera's speed, so it need not be tested
+  every frame; nothing uses that yet.
 - **Hidden lines.** The objects are wireframes, with every edge drawn.
 - **Contention.** The timings are for uncontended memory. On a real Spectrum,
   `draw_line` and `clear_box` write to the screen, which is contended memory,

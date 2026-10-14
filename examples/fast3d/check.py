@@ -495,63 +495,67 @@ def check_objects(m: Machine) -> list[str]:
 
 def check_demo(m: Machine) -> list[str]:
     from PIL import Image
-    from build import objects
+    from build import models, world
     failures = []
     memory = bytearray(65536)
     memory[0x4000:0xC000] = (OUT / "demo.bin").read_bytes()
     sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
     sld = OUT / "demo.sld"
     label = {name: find_label(sld, name) for name in
-             ("draw_frame", "screen_high", "zoff", "angle_x", "object", "objects", "start",
-              "set_window", "draw_frame_lines", "FARTHEST", "NEAREST",
-              "WINDOW_LEFT", "WINDOW_TOP", "WINDOW_RIGHT", "WINDOW_BOTTOM")}
-    window = tuple(label[f"WINDOW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
+             ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles",
+              "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
+    window = tuple(label[f"VIEW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
     left, top, right, bottom = window
     frame = [(left - 1, top - 1, right + 1, top - 1), (right + 1, top - 1, right + 1, bottom + 1),
              (right + 1, bottom + 1, left - 1, bottom + 1), (left - 1, bottom + 1, left - 1, top - 1)]
 
-    def call(name: str, **registers: int) -> int:
-        for reg, value in registers.items():
-            sim.registers[{"A": A, "B": B, "C": C, "D": D, "E": E}[reg]] = value
+    def call(name: str) -> int:
         sim.registers[SP] = STACK
         sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
         start = sim.registers[T]
         sim.run(label[name], RETURN)
         return sim.registers[T] - start
 
-    # as start does: the window, its frame, the object at its farthest
     for address in range(0x4000, 0x5800):
         sim.memory[address] = 0
-    call("set_window", B=left, C=top, D=right, E=bottom)
-    call("draw_frame_lines", A=0)
-    sim.memory[label["zoff"]:label["zoff"] + 2] = (label["FARTHEST"] * 128).to_bytes(2, "little")
-    sim.memory[label["screen_high"]] = 0
-    swing = 2 * (label["FARTHEST"] - label["NEAREST"]) // 2      # frames in and out again
-    frames = []
-    for index, (name, (vertices, edges)) in enumerate(objects().items()):
-        pointer = label["objects"] + 6 * index
-        sim.memory[label["object"]:label["object"] + 2] = pointer.to_bytes(2, "little")
-        times, clipped = [], 0
-        for _ in range(swing):
-            times.append(call("draw_frame"))
-            angles = sim.memory[label["angle_x"]:label["angle_x"] + 3]
-            zoff = sim.memory[label["zoff"]] | sim.memory[label["zoff"] + 1] << 8
-            matrix = model.make_matrix(*angles)
-            points = [model.project_wide(model.rotate(matrix, v), zoff) for v in vertices]
-            lines = []
+    call("demo_setup")                         # as start does: window and frame, $4000 to draw on
+
+    shapes = {name: (vertices, model.faces_to_edges(faces), model.bounding_radius(vertices))
+              for name, (vertices, faces) in models().items()}
+    things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
+    cam_p, cam_a = [0, 0, 0], [0, 0, 0]
+    frames, times, counts = [], [], []
+    for _ in range(256):
+        times.append(call("draw_frame"))
+        cam_p, cam_a, rc = model.fly(cam_p, cam_a)
+        lines, drawn = list(frame), 0
+        for thing in things:
+            pos, angles, spin, name = thing
+            thing[1] = angles = [(a + s) & 255 for a, s in zip(angles, spin)]
+            vertices, edges, r = shapes[name]
+            t = model.view_centre(pos, cam_p, rc)
+            if t is None or model.culled(t, r):
+                continue
+            drawn += 1
+            mat = model.view_matrix(rc, model.make_matrix(*angles))
+            points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
             for i, j in edges:
                 if points[i] and points[j]:
                     line = model.clip_line(*points[i], *points[j], window)
-                    clipped += line != (*points[i], *points[j])
                     if line:
                         lines.append(line)
-            got = bytes(sim.memory[0x4000:0x5800])
-            if got != render(frame + lines, 0x4000):
-                failures.append(f"demo: the {name} at angles {list(angles)}, zoff {zoff}, differs from the model")
-                break
-            frames.append(got)
-        report(f"demo: {name}", times)
-        print(f"  {'':14} ({clipped:,} of its {len(edges) * swing:,} edges clipped, over a swing in and out)")
+        counts.append(drawn)
+        got_drawn = sim.memory[label["drawn"]]
+        got = bytes(sim.memory[0x4000:0x5800])
+        if got_drawn != drawn or got != render(lines, 0x4000):
+            failures.append(f"demo: frame {len(frames)}, camera at {cam_p} {cam_a}: "
+                            f"{got_drawn} objects drawn ({drawn} in the model), the screen "
+                            f"{'the same' if got == render(lines, 0x4000) else 'different'}")
+            break
+        frames.append(got)
+    report("demo: a frame", times)
+    print(f"  {'':14} {min(counts)}..{max(counts)} objects drawn a frame, of {len(things)}, "
+          f"{sum(counts) / len(counts):.1f} on average, over a circle of the flight")
     # the frames, as the Spectrum shows them: bright white on black, twice the size
     images = []
     for screen in frames:

@@ -12,13 +12,15 @@ GitHub takes its notes from that section.
   `make_matrix`, the rotation for three angles, summing sines of sums of
   angles instead of multiplying; `rotate`, a vertex by that matrix
   (1,241 T-states), with the matrix written into its table addresses;
-  `project`, `transform`, `draw_line` and `clear_box`; and lines clipped to
-  a window (`clip_line`, Cohen-Sutherland, crossings found by a binary chop,
-  each end within 0.75 of a pixel of the true line), with `project_wide` giving the 16-bit off-screen points to
-  clip. `check.py` holds every one to a Python model in SkoolKit's
-  simulator, every multiply and every pixel. The launch configuration
-  **ZX Spectrum: fast3d demo** shows a wireframe cube or icosahedron turning
-  and swinging in close on the 128K, clipped to a window. See
+  `project`, `transform`, `draw_line` and `clear_box`; lines clipped to a
+  window (`clip_line`, Cohen-Sutherland, crossings found by a binary chop,
+  each end within 0.75 of a pixel of the true line); and objects -- models
+  whose faces share their vertices -- at 16-bit positions, seen from a
+  camera, with `cull_object` leaving out what is out of view, most of it for
+  about 2,400 T-states, before a vertex is touched. `check.py` holds every
+  routine to a Python model in SkoolKit's simulator, every multiply and every
+  pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
+  through forty turning objects on the 128K. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 
 - **A Revs road engine, `examples/revs`.** Geoff Crammond's BBC Micro *Revs*

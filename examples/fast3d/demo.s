@@ -1,11 +1,13 @@
-; fast3d's demo: a wireframe cube or icosahedron, turning about all three
-; axes and swinging in towards the eye and out again, drawn by the routines
-; in fast3d.s through a window: whatever of it is beyond the window's frame
-; is clipped away. SPACE changes the object.
+; fast3d's demo: a flight through a world of objects. Forty cubes and
+; icosahedra, each turning, are scattered round a circle the camera flies,
+; turning gently of its own accord; O and P turn it more, Q and A pitch it.
+; Each frame, every object is culled or drawn: what is out of view is left
+; out before a vertex of it is touched (engine/objects.s), and what is in
+; view is drawn through a window, its edges clipped to the window's frame.
 ;
 ; A 128K program: each frame is drawn on the screen not being shown, then
-; shown at the next interrupt, so nothing ever flickers. Only the box the
-; object took on that screen last time is cleared first.
+; shown at the next interrupt, so nothing ever flickers. Only the box drawn
+; on that screen last time is cleared first.
 ;
 ;   bank 2, $8000   this and fast3d
 ;   bank 5, $4000   the first screen
@@ -15,12 +17,10 @@
 IM2_TABLE			EQU		$BE00				; 257 bytes of $BD: wherever the
 IM2_ROUTINE			EQU		$BDBD				; bus leaves the vector, $BDBD
 ATTRIBUTES			EQU		%01000111			; bright white on black
-NEAREST				EQU		110					; the eye from the object's centre,
-FARTHEST			EQU		400					; at its closest and farthest
-WINDOW_LEFT			EQU		24					; the window lines are clipped to
-WINDOW_TOP			EQU		16
-WINDOW_RIGHT		EQU		231
-WINDOW_BOTTOM		EQU		175
+VIEW_LEFT			EQU		8					; the window lines are clipped to
+VIEW_TOP			EQU		8
+VIEW_RIGHT			EQU		247
+VIEW_BOTTOM			EQU		183
 
 					ORG		$8000
 
@@ -44,18 +44,9 @@ start:
 					call	clear_screen
 					ld		hl,$C000
 					call	clear_screen
-					ld		hl,FARTHEST * 128
-					ld		(zoff),hl
-					ld		b,WINDOW_LEFT
-					ld		c,WINDOW_TOP
-					ld		d,WINDOW_RIGHT
-					ld		e,WINDOW_BOTTOM
-					call	set_window
-					xor		a					; the window's frame, on both
-					call	draw_frame_lines	; screens
-					ld		a,$80
-					call	draw_frame_lines
-					ld		(screen_high),a		; draw on bank 7 first
+					call	demo_setup
+					ld		a,$80				; draw on bank 7 first
+					ld		(screen_high),a
 					ei
 
 frame:
@@ -72,47 +63,44 @@ frame:
 					out		(c),a
 					ld		a,c
 					ld		(screen_high),a
-					call	read_space
+					call	read_keys
 					jr		frame
 
 
+; demo_setup: the window, and its frame on both screens.
+demo_setup:
+					ld		b,VIEW_LEFT
+					ld		c,VIEW_TOP
+					ld		d,VIEW_RIGHT
+					ld		e,VIEW_BOTTOM
+					call	set_window
+					xor		a
+					call	draw_frame_lines
+					ld		a,$80
+					call	draw_frame_lines
+					xor		a
+					ld		(screen_high),a
+					ret
+
+
 ; ---------------------------------------------------------------------------
-; draw_frame: turn the object on, and draw it on the screen screen_high says,
-; clearing what it drew there last time.
+; draw_frame: fly the camera on and turn the objects, and draw what is in
+; view on the screen screen_high says, clearing what was drawn there last
+; time.
 
 draw_frame:
-					ld		hl,angle_x			; turn a little about each axis
+					ld		hl,camera_angles + 1	; turning gently, always
 					inc		(hl)
-					inc		hl
-					inc		(hl)
-					inc		(hl)
-					inc		hl
-					inc		(hl)
-					call	make_matrix
-
-					ld		hl,(zoff)			; and swing in or out: 2 units a
-					ld		de,(.swing)			; frame, turning at the ends
-					add		hl,de
-					ld		(zoff),hl
-					ld		de,NEAREST * 128
-					or		a
-					sbc		hl,de
-					jr		z,.turn
-					ld		hl,(zoff)
-					ld		de,FARTHEST * 128
-					or		a
-					sbc		hl,de
-					jr		nz,.swung
-.turn:				ld		hl,(.swing)
-					call	negate_hl
-					ld		(.swing),hl
-.swung:
-					ld		ix,(object)			; the vertices to the screen,
-					ld		l,(ix + 0)			; on it or off it
-					ld		h,(ix + 1)
-					ld		b,(ix + 2)
-					ld		de,points
-					call	transform_wide
+					call	set_camera
+					ld		hl,camera_x			; and on, a quarter of the
+					ld		de,matrix + 2		; forward column
+					call	.step
+					ld		hl,camera_y
+					ld		de,matrix + 5
+					call	.step
+					ld		hl,camera_z
+					ld		de,matrix + 8
+					call	.step
 
 					call	box_of_screen		; clear the last box here
 					ld		a,(hl)
@@ -133,11 +121,48 @@ draw_frame:
 					xor		a
 					ld		(.most_x),a
 					ld		(.most_y),a
+					ld		(drawn),a
 
-					ld		ix,(object)			; the edges, clipped
-					ld		l,(ix + 3)
-					ld		h,(ix + 4)
-					ld		a,(ix + 5)
+					ld		hl,world			; every object
+					ld		(.object),hl
+					ld		hl,world_spin
+					ld		(.spin),hl
+					ld		a,WORLD_OBJECTS
+.object_loop:		ld		(.objects_left),a
+					ld		ix,(.object)		; turned by its spin
+					ld		hl,(.spin)
+					ld		a,(ix + OBJECT_ANGLES)
+					add		a,(hl)
+					ld		(ix + OBJECT_ANGLES),a
+					inc		hl
+					ld		a,(ix + OBJECT_ANGLES + 1)
+					add		a,(hl)
+					ld		(ix + OBJECT_ANGLES + 1),a
+					inc		hl
+					ld		a,(ix + OBJECT_ANGLES + 2)
+					add		a,(hl)
+					ld		(ix + OBJECT_ANGLES + 2),a
+					inc		hl
+					ld		(.spin),hl
+					call	cull_object
+					jr		c,.next_object		; out of view
+					ld		hl,drawn
+					inc		(hl)
+					call	object_matrix
+					ld		de,points
+					call	transform_object
+					ld		ix,(.object)		; its edges, clipped
+					ld		l,(ix + OBJECT_MODEL)
+					ld		h,(ix + OBJECT_MODEL + 1)
+					inc		hl
+					inc		hl
+					inc		hl					; MODEL_EDGES
+					ld		a,(hl)
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ex		de,hl
 .edge:				ld		(.edges_left),a
 					ld		a,(hl)				; the first end
 					inc		hl
@@ -148,7 +173,7 @@ draw_frame:
 					inc		hl
 					ld		de,clip_x1
 					call	.end
-					jr		c,.next
+					jr		c,.next_edge
 					ld		(.edge_at),hl
 					call	clip_line
 					jr		c,.drawn			; none of it in the window
@@ -164,11 +189,18 @@ draw_frame:
 					call	.least
 					call	draw_line
 .drawn:				ld		hl,(.edge_at)
-					jr		.next
+					jr		.next_edge
 .skip_second:		inc		hl
-.next:				ld		a,(.edges_left)
+.next_edge:			ld		a,(.edges_left)
 					dec		a
 					jr		nz,.edge
+.next_object:		ld		hl,(.object)
+					ld		de,OBJECT_SIZE
+					add		hl,de
+					ld		(.object),hl
+					ld		a,(.objects_left)
+					dec		a
+					jp		nz,.object_loop
 
 					ld		a,(.least_y)		; the box, in rows and columns
 					cp		255
@@ -207,6 +239,24 @@ draw_frame:
 					ret
 .no_box:			call	box_of_screen
 					ld		(hl),0
+					ret
+
+; (HL) += the signed byte at DE >> 2: a step along the camera's forward
+; column. Uses A, BC.
+.step:				ld		a,(de)
+					sra		a
+					sra		a
+					ld		c,a
+					add		a,a
+					sbc		a,a
+					ld		b,a
+					ld		a,(hl)
+					add		a,c
+					ld		(hl),a
+					inc		hl
+					ld		a,(hl)
+					adc		a,b
+					ld		(hl),a
 					ret
 
 ; Point A's x and y into (DE), (DE+2), as clip_line takes them: carry set
@@ -257,13 +307,16 @@ draw_frame:
 					dec		hl
 					ret
 
-.swing:				DW		-256				; 2 units a frame, inwards first
+.object:			DW		0
+.spin:				DW		0
+.objects_left:		DB		0
 .edges_left:		DB		0
 .edge_at:			DW		0
 .least_x:			DB		0
 .least_y:			DB		0
 .most_x:			DB		0
 .most_y:			DB		0
+drawn:				DB		0					; objects drawn this frame
 
 ; draw_frame_lines: the window's frame, a pixel outside it, on the screen A
 ; says ($00 or $80, as screen_high). Keeps A.
@@ -289,10 +342,10 @@ draw_frame_lines:
 					pop		af
 					ret
 
-frame_lines:		DB		WINDOW_LEFT - 1, WINDOW_TOP - 1, WINDOW_RIGHT + 1, WINDOW_TOP - 1
-					DB		WINDOW_RIGHT + 1, WINDOW_TOP - 1, WINDOW_RIGHT + 1, WINDOW_BOTTOM + 1
-					DB		WINDOW_RIGHT + 1, WINDOW_BOTTOM + 1, WINDOW_LEFT - 1, WINDOW_BOTTOM + 1
-					DB		WINDOW_LEFT - 1, WINDOW_BOTTOM + 1, WINDOW_LEFT - 1, WINDOW_TOP - 1
+frame_lines:		DB		VIEW_LEFT - 1, VIEW_TOP - 1, VIEW_RIGHT + 1, VIEW_TOP - 1
+					DB		VIEW_RIGHT + 1, VIEW_TOP - 1, VIEW_RIGHT + 1, VIEW_BOTTOM + 1
+					DB		VIEW_RIGHT + 1, VIEW_BOTTOM + 1, VIEW_LEFT - 1, VIEW_BOTTOM + 1
+					DB		VIEW_LEFT - 1, VIEW_BOTTOM + 1, VIEW_LEFT - 1, VIEW_TOP - 1
 
 ; HL -> the box (rows, top, left column, columns) for the screen screen_high
 ; says. Uses A.
@@ -309,32 +362,32 @@ boxes:				DB		0, 0, 0, 0			; the screen at $4000
 
 
 ; ---------------------------------------------------------------------------
-; read_space: SPACE, newly down, changes the object.
+; read_keys: O and P turn the camera, Q and A pitch it.
 
-read_space:
-					ld		a,$7F
+read_keys:
+					ld		a,$DF				; P (bit 0) and O (bit 1)
 					in		a,($FE)
-					cpl
-					and		1					; 1: SPACE is down
-					ld		hl,.was
-					ld		c,(hl)
-					ld		(hl),a
-					cp		c
-					ret		z
-					or		a
-					ret		z					; it has come up
-					ld		hl,(object)
-					ld		de,SHAPE_SIZE
-					add		hl,de
-					ld		de,objects_end
-					or		a
-					sbc		hl,de
-					add		hl,de
-					jr		nz,.set
-					ld		hl,objects
-.set:				ld		(object),hl
+					ld		hl,camera_angles + 1
+					bit		0,a
+					jr		nz,.not_p
+					inc		(hl)
+					inc		(hl)
+.not_p:				bit		1,a
+					jr		nz,.not_o
+					dec		(hl)
+					dec		(hl)
+.not_o:				ld		hl,camera_angles
+					ld		a,$FB				; Q
+					in		a,($FE)
+					bit		0,a
+					jr		nz,.not_q
+					dec		(hl)
+.not_q:				ld		a,$FD				; A
+					in		a,($FE)
+					bit		0,a
+					ret		nz
+					inc		(hl)
 					ret
-.was:				DB		0
 
 ; clear_screen: the screen at HL blank, its attributes ATTRIBUTES.
 clear_screen:
@@ -351,24 +404,11 @@ clear_screen:
 					ldir
 					ret
 
-; Each object: its vertices and how many, its edges and how many.
-SHAPE_SIZE			EQU		6
-objects:			DW		cube_vertices
-					DB		CUBE_VERTICES
-					DW		cube_edges
-					DB		CUBE_EDGES
-					DW		icosahedron_vertices
-					DB		ICOSAHEDRON_VERTICES
-					DW		icosahedron_edges
-					DB		ICOSAHEDRON_EDGES
-objects_end:
-object:				DW		objects
-
-					INCLUDE	"output/objects_gen.s"
 					INCLUDE	"fast3d.s"
+					INCLUDE	"output/objects_gen.s"
+					INCLUDE	"output/world_gen.s"
 
-					ALIGN	256
-points:				DS		4 * 128				; x, y (16-bit) for each vertex
+points:				DS		4 * 64				; x, y (16-bit) for each vertex
 
 					ORG		IM2_ROUTINE
 					ei

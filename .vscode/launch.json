@@ -72,8 +72,8 @@
       "preLaunchTask": "revs.build"
     },
     {
-      // fast3d's demo (examples/fast3d): a wireframe cube or icosahedron
-      // turning, drawn by the fast 3D routines; SPACE changes the object.
+      // fast3d's demo (examples/fast3d): a flight through forty turning
+      // objects, culled and clipped; O/P turn, Q/A pitch.
       "name": "ZX Spectrum: fast3d demo",
       "type": "zxspectrum",
       "request": "launch",

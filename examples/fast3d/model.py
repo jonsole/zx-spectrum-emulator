@@ -367,3 +367,17 @@ def ideal_view(vertex, position, angles, camera_position, camera_angles):
     d = [w - c for w, c in zip(world, camera_position)]
     x, y, z = (sum(rc[3 * j + i] * d[j] for j in range(3)) for i in range(3))
     return x, y, z
+
+
+# ---------------------------------------------------------------------------
+# The demo's flight, as demo.s does it: a frame turns the camera, moves it a
+# quarter of its forward column (about 32 units) along where it looks, and
+# turns each object by its spin.
+
+def fly(camera_position, camera_angles, turn: int = 1):
+    """The camera after a frame: (position, angles, Rc)."""
+    angles = [camera_angles[0], (camera_angles[1] + turn) & 255, camera_angles[2]]
+    rc = make_matrix(*angles)
+    position = [((p + (rc[3 * i + 2] >> 2) + 32768) & 0xFFFF) - 32768
+                for i, p in enumerate(camera_position)]
+    return position, angles, rc
