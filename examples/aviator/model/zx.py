@@ -12,11 +12,14 @@ canopy becomes 120 rows (character rows 0 to 14) and its 96-row dashboard 72
   their BBC pixel: sx(x) = (8x + 4) // 5 and sy(row) = (3 row + 1) // 4,
   and lines are drawn between them (draw_line) at the Spectrum's
   resolution, rather than scaling the BBC's pixels.
-- The pictures that don't move -- the canopy's frame and rivets, and the
-  dashboard -- are drawn in BBC pixels and then mapped whole, every
-  Spectrum pixel that a lit BBC pixel covers being lit (scale_picture). The
-  dashboard image is Acornsoft's, fetched by acornsoft.py, so it is only
-  ever converted at run time and never stored here.
+- The canopy's frame and rivets, which don't move, are drawn in BBC pixels
+  and then mapped whole, every Spectrum pixel that a lit BBC pixel covers
+  being lit (scale_picture).
+- The dashboard is drawn for the Spectrum's resolution (model/zx_dash.py),
+  in the BBC's layout: lines one pixel thick through the mapped centres of
+  the BBC picture's pixels, and a font of its own. The BBC picture is
+  Acornsoft's, fetched by acornsoft.py, so it is only ever read at run time
+  and never stored here.
 
 The canopy view is drawn into a buffer, not on the screen. The BBC hides its
 redraw by swapping colours in the palette (see canopy.py); the Spectrum has
@@ -38,7 +41,7 @@ from pathlib import Path
 
 import acornsoft
 
-from . import canopy, clip, dashboard, flight, scoring
+from . import canopy, clip, dashboard, flight, scoring, zx_dash
 
 WIDTH, HEIGHT = 256, 192
 BBC_WIDTH, BBC_ROWS = 160, 256
@@ -219,7 +222,7 @@ class Screen:
         self.font = _font()
         self.score_text = None
         self.too_late = False
-        frame = scale_picture(_bbc_frame()) | scale_picture(_bbc_dashboard())
+        frame = scale_picture(_bbc_frame()) | zx_dash.picture(_bbc_dashboard())
         corner_lit, corner_cleared = _bbc_corners()
         corner_lit = scale_picture(corner_lit)
         corner_cleared = scale_picture(corner_cleared) - corner_lit
@@ -286,7 +289,12 @@ class Screen:
 
     def _fill(self, colour, row, rows):
         """FillCanopyRows: BBC character rows row to row + rows - 1, inside
-        the frame, set (any non-zero colour) or cleared, on the screen."""
+        the frame, set (any non-zero colour) or cleared, on the screen.
+        Clearing the whole canopy (ClearCanopy, as a new game starts) also
+        takes down the scores and TOO LATE!, which the BBC printed there."""
+        if not colour and (row, rows) == (canopy.CANOPY_ROW, canopy.CANOPY_ROWS):
+            self.score_text = None
+            self.too_late = False
         top, bottom = max(CANOPY_TOP, sy(row * 8)), min(CANOPY_BOTTOM, sy((row + rows) * 8) - 1)
         for y in range(top, bottom + 1):
             for x in range(sx(4), sx(156)):
@@ -334,10 +342,10 @@ class Screen:
             for x, y in bresenham(sx(x0), sy(y0), sx(x1), sy(y1)):
                 self.plot(x, y, not event.erase)
         else:
-            for n, colour in enumerate(event.colours()):
-                for x in range((8 * (event.x + n)) // 5, (8 * (event.x + n + 1) - 1) // 5 + 1):
-                    for y in range((3 * event.y) // 4, (3 * (event.y + 1) - 1) // 4 + 1):
-                        self.plot(x, y, colour != 0)
+            # The marks are the Spectrum's own (model/zx_dash.py): a run of
+            # them is the same mark whichever of its bytes this is.
+            for x, y, on in zx_dash.mark_plots(event.what, event.byte):
+                self.plot(x, y, on)
 
     def indicator(self, letter, lit):
         """The U, F, B and T lamps: the squares above the letters at the

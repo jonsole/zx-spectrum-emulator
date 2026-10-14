@@ -513,6 +513,12 @@ vl_flip: db 0
 ; rest being clear already; and make this view's extents the last view's. A
 ; row neither view drew in costs only the test that finds it empty.
 present:
+    ld a,(score_shown)
+    ld b,a
+    ld a,(too_late_shown)
+    or b
+    ld hl,buffer_plot_text
+    call nz,draw_messages       ; the messages that are up, into this view
     ld hl,ext_lo                ; H = this view's page (the last's is next), L = the row
 .scan:
     ld a,(hl)

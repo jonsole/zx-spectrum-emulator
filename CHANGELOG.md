@@ -27,13 +27,14 @@ GitHub takes its notes from that section.
   simulator, being ported to the 48K from Mark Moxon's documented
   disassembly at aviator.bbcelite.com. The original runs in Python on a 6502
   interpreter as the reference; the whole game is ported to Python and
-  matches it byte for byte over three scripted flights; and the Z80 version
-  is checked against that port. Its first stage is the 3D view, flown along
-  a recorded stretch of a flight at about 8.8 frames a second, every frame's
-  state and canopy matching the port's; the flight model, the keys, the
-  dashboard's dials, the Theme and the sound are still to come. Its launch
-  configuration is **ZX Spectrum: Aviator**; Acornsoft's files are fetched
-  at build time, never committed. See
+  matches it byte for byte over three scripted flights; and the Z80 version,
+  the whole game, is checked against that port: flight model, keys and an
+  Interface II stick, dashboard, the Theme's aliens and guns, scoring,
+  crashes, and the sound on the beeper, its state and screen matching the
+  port's every frame of four scripted flights. It runs at about 8.2 frames
+  a second (the BBC's is 9), before any optimising beyond the 3D view. Its
+  launch configuration is **ZX Spectrum: Aviator**; Acornsoft's files are
+  fetched at build time, never committed. See
   [examples/aviator/README.md](examples/aviator/README.md).
 
 - **A Revs road engine, `examples/revs`.** Geoff Crammond's BBC Micro *Revs*

@@ -1,8 +1,10 @@
 """Where the Spectrum version's time goes: snapshot_probe's profile of the
-stage 1 demo's iterations (from the HALT that starts each to the next),
-put back on the source by routine and by line.
+game flying itself (inputs.s's SCRIPTED mode, the tour's keys, the real
+clock), a pass of the main loop at a time from the --skip'th, put back on
+the source by routine and by line. The frame interrupt's time is counted
+where it lands, so the sound's is in.
 
-    python tests/zx_profile.py [--updates 100] [--lines 30] [--routine NAME ...]
+    python tests/zx_profile.py [--skip 600] [--updates 100] [--lines 30] [--routine NAME ...]
 
 A routine is the code from one non-local label to the next. --routine lists
 one routine instruction by instruction, with the runs and T-states an
@@ -35,6 +37,7 @@ def read_sld(sld):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--skip", type=int, default=600)
     ap.add_argument("--updates", type=int, default=100)
     ap.add_argument("--lines", type=int, default=30)
     ap.add_argument("--routine", nargs="+")
@@ -43,9 +46,11 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "profile.txt"
         with zxprobe.Spectrum() as z:
-            halt = z.address("fly_recorded.wait")
-            z.request(f"runto {halt:X} 50")
-            z.request(f"profile {halt + 1:X} {halt:X} {args.updates} {out.as_posix()}")
+            z.poke("input_mode", [2])               # SCRIPTED
+            loop, stepped = z.address("start.loop"), z.address("start.stepped")
+            if args.skip:
+                z.request(f"profile {loop:X} {stepped:X} {args.skip} {out.as_posix()}")
+            z.request(f"profile {loop:X} {stepped:X} {args.updates} {out.as_posix()}")
         counts = [tuple(int(v, 16) if i == 0 else int(v) for i, v in enumerate(row.split()))
                   for row in out.read_text().splitlines()]
     label_addrs = sorted(labels)
@@ -62,7 +67,7 @@ def main():
         by_line[source_of.get(addr, ("?", addr))][1] += t
         total += t
     n = args.updates
-    print(f"{n} iterations, {total / n:,.0f} T-states each ({total / n / 69888:.1f} frames)\n")
+    print(f"{n} frames of the game, {total / n:,.0f} T-states each ({total / n / 69888:.1f} TV frames)\n")
     if args.routine:
         named = {name: a for a, name in labels.items()}
         for routine in args.routine:

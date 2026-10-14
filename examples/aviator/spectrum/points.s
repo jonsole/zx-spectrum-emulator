@@ -446,13 +446,15 @@ add_point_to_object:
     MACRO APO_AXIS lo_table, hi_table, obj_lo, obj_hi
     POINT_DE lo_table, hi_table
     push hl
+    ld hl,obj_hi
+    add hl,bc
+    push hl                     ; (found first: ADD HL would lose the carry)
     ld hl,obj_lo
     add hl,bc
     ld a,(hl)
     add a,e
     ld (hl),a
-    ld hl,obj_hi
-    add hl,bc
+    pop hl
     ld a,(hl)
     adc a,d
     ld (hl),a

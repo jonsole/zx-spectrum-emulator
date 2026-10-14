@@ -78,12 +78,13 @@ def main():
     times = []
     started = time.time()
     with zxprobe.Spectrum() as z:
-        table = z.address("flight_table")
+        z.put_state(M)                          # the game as StartGame leaves it
         for i in range(iterations):
             entry = flight[i * 15:(i + 1) * 15]
             place_plane(entry)
             view_iteration()
-            z.call("place_plane", hl=table + i * 15)
+            for name, value in zip(build.PLANE_STATE, entry):
+                z.poke(name, [value])
             out = z.call("view_iteration")
             times.append(out["t"])
             got = z.get_state(bytearray(M))

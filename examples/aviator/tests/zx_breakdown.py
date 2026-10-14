@@ -25,14 +25,15 @@ def main():
     totals = defaultdict(list)
     with zxprobe.Spectrum() as z:
         z.put_state(memory.M)
-        table = z.address("flight_table")
+        flight = build.recorded_flight()
         steps = [("matrices", ["axis2", "axis1", "axis0", "set_matrices"]),
                  ("update_lines_to_show", ["update_lines_to_show"]),
                  ("process_lines_to_hide x9", ["process_lines_to_hide"] * 9),
                  ("process_lines_to_show", ["process_lines_to_show"]),
                  ("draw_canopy_view", ["draw_canopy_view"])]
         for i in range(iterations):
-            z.call("place_plane", hl=table + i * 15)
+            for name, value in zip(build.PLANE_STATE, flight[i * 15:(i + 1) * 15]):
+                z.poke(name, [value])
             for label, calls in steps:
                 t = 0
                 for name in calls:

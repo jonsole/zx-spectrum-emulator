@@ -7,14 +7,19 @@
 ; Memory:
 ;
 ;   $4000  the screen: the canopy in character rows 0-14, the dashboard 15-23
-;   $5B00  code that is not on any hot path
-;   $6000  the recorded flight stage 1 replays
+;   $5B00  starting up, and stage 1's view iteration for the tests
+;   $6000  the game: inputs, controls, flight model, dashboard, scoring, the
+;          Theme, the canopy, the main loop, sound
 ;   $8000  the original's data, at its BBC address + $8000 (layout.py), with
-;          Z80 code in the gaps where the 6502 code was
+;          the 3D code and the sound in the gaps where the 6502 code was
+;   $D000  KEYS_DOWN, the keys down by BBC key code
 ;   $D800  the canopy view's buffer, 114 rows of 32 bytes
 ;   $E800  quarter squares for multiplying, four pages
 ;   $EC00  the view's tables: x and y to the Spectrum's, pixel masks, screen
 ;          row addresses, the frame's overlay
+;   $F300  the view's extents, this view's and the last's
+;   $F500  the dashboard's tables: screen rows, BBC rows to Spectrum rows,
+;          the fixed marks and the lamps
 ;   $FC00  the stack, down from $FDF0
 ;   $FDFD  the IM 2 handler's jump, $FE00 its vector table
 
@@ -52,9 +57,18 @@ start:
     ld sp,STACK_TOP
     call im2_init
     ei
-    jp fly_recorded
+    call start_game
+.loop:
+    call scan_keys
+    call game_step
+.stepped:
+    ld a,(game_over)
+    or a
+    jr z,.loop
+    halt                        ; a flight over: look for RETURN a frame at a time
+    jr .loop
 
-; The frame interrupt only counts frames.
+; The frame interrupt counts frames and plays the sound.
 im2_init:
     ld hl,IM2_TABLE
     ld (hl),high IM2_JUMP
@@ -71,11 +85,18 @@ im2_init:
     ret
 
 frame_interrupt:
+    push af
+    push bc
+    push de
     push hl
     ld hl,(frames)
     inc hl
     ld (frames),hl
+    call sound_frame
     pop hl
+    pop de
+    pop bc
+    pop af
     ei
     reti
 
@@ -91,23 +112,32 @@ start_end:
     INCLUDE "project.s"
     INCLUDE "visibility.s"
     INCLUDE "clip.s"
+    INCLUDE "canopy.s"
     ASSERT $ <= $AE60
 
     ORG $AEA0
-    INCLUDE "canopy.s"
     INCLUDE "view.s"
     ASSERT $ <= $B400
 
-; ---- stage 1's driver, off the hot paths (assembled after the modules whose
-; macros it uses) ---------------------------------------------------------------
+; ---- the game (assembled after the modules whose macros it uses) --------------
+
+    ORG $6000
+    INCLUDE "inputs.s"
+    INCLUDE "controls.s"
+    INCLUDE "flight.s"
+    INCLUDE "dashboard.s"
+    INCLUDE "scoring.s"
+    INCLUDE "theme.s"
+    ASSERT $ <= $8000
 
     ORG start_end
     INCLUDE "stage1.s"
+    INCLUDE "game.s"
     ASSERT $ <= $6000
 
-    ORG $6000
-    INCLUDE "gen_flight.s"
-    ASSERT $ <= $8000
+    ORG $8180                   ; (a gap in the data window)
+    INCLUDE "sound.s"
+    ASSERT $ <= $8400
 
 ; ---- the original's data ---------------------------------------------------
 
@@ -123,5 +153,7 @@ start_end:
     INCLUDE "gen_tables.s"
     ORG view_x
     INCLUDE "gen_view.s"
+    INCLUDE "gen_dash.s"
+    ASSERT $ <= $FC00
 
     SAVEBIN "output/aviator.bin", $4000, $C000

@@ -75,6 +75,8 @@ mul16:
     MUL8                        ; S * I
     pop bc
     add hl,bc                   ; J * R + S * I + rounding, 17 bits
+    ld a,l
+    ld (mul16_w),a              ; the fraction, which ApplyAerodynamics keeps
     ld c,h
     push af                     ; the top nine of them: the carry and C
     ld a,(mul16_ji + 1)
@@ -92,6 +94,7 @@ mul16:
 
 mul16_ji:   dw 0
 mul16_s:    db 0
+mul16_w:    db 0
 
 ; The rounding constant inside Multiply16x16, which the original keeps as
 ; the operand of its ADC at mult1 and ApplyAerodynamics rewrites: 128 to

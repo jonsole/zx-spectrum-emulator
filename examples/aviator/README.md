@@ -12,13 +12,16 @@ with the Theme's aliens and the guns, and a crash followed by a new game). A
 renderer draws the Python port's game on a Spectrum screen, in the layout
 the Z80 version has.
 
-The Z80 version has its first stage: the 3D view, flown along a recorded
-stretch of the tour flight. Its state and its canopy's screen bytes match
-the Python port's after every one of the stretch's 520 iterations. A frame
-of the view takes 397,000 T-states on average (5.7 of the TV's 50 Hz
-frames), so it runs at about 8.8 frames a second, and 560,000 at most; the
-BBC game, flight model and all, runs at about 9. The flight model, the keys,
-the dashboard's dials, the Theme and the sound are still to come.
+The Z80 version is the whole game: the 3D view, the flight model, the keys
+and an Interface II joystick, the dashboard, the Theme's aliens and guns,
+scoring, crashes and new games, and the sound on the beeper. Flying four
+scripted flights side by side with the Python port, its whole game state
+and its whole screen match the port's after every frame, as does every
+routine of the flight model and the Theme on the port's own test cases.
+Flying itself, it takes about 426,000 T-states a frame (6.1 of the TV's 50
+Hz frames), so it runs at about 8.2 frames a second; the BBC runs at about
+9. It has not been optimised beyond the view yet, and about 5.7K of memory is
+left.
 
 ## The approach
 
@@ -55,12 +58,19 @@ the original's design.
   rows by 3/4), so the 160-row canopy becomes 120 rows (character rows 0 to
   14) and the 96-row dashboard 72 (rows 15 to 23). Lines are drawn between
   their mapped end points at the Spectrum's own resolution.
-- **The dashboard picture** is for now the BBC's image mapped across pixel
-  by pixel, which keeps every line but makes the numerals blobby; a picture
-  drawn for the Spectrum's resolution would look better.
+- **The dashboard picture** is drawn for the Spectrum's resolution
+  (`model/zx_dash.py`), in the BBC's layout: its lines one pixel thick
+  through the mapped centres of the BBC picture's pixels, its numerals and
+  letters in a 3 x 5 font of its own, and nothing anywhere a hand, a bar or
+  the joystick cross can rub out, which the Spectrum's 3 rows for the BBC's
+  4 would otherwise let happen. The marks the game rewrites are drawn the
+  same way.
 - **The keys.** The BBC's keys where they exist, with an Interface II
-  joystick as well. The BBC's analogue joystick has no Spectrum equivalent.
-- **The sound.** The beeper, to be designed.
+  joystick as well (see "Flying it"). The BBC's analogue joystick has no
+  Spectrum equivalent.
+- **The sound.** The BBC plays its sounds on a sound chip; the Spectrum's
+  beeper sounds only while the CPU works it, so the sound is played from
+  the frame interrupt, a little each frame (see "Flying it").
 
 The 48K is enough. The BBC game is about 20K, code and data; the Spectrum
 has about 41K free after its screen.
@@ -109,33 +119,78 @@ game runs at about 9 frames a second.
 
 ## The Spectrum version
 
-It is being built in three stages:
-
-1. **The view** (done): the maths, the matrices, the points, the
-   projection, which lines are visible, the clipping and the line drawing,
-   and the copy to the screen, flown along iterations 600 to 1119 of the
-   tour flight as the Python port flies them (`spectrum/stage1.s`). There
-   is no flight model yet, so the plane is put where the recording has it.
-2. The flight model, the keys and an Interface II joystick, and the
-   dashboard.
-3. The Theme (the aliens and the bullets), scoring, crashes and the sound.
+It was built in three stages: the view (the maths, the matrices, the
+points, the projection, which lines are visible, the clipping, the line
+drawing and the copy to the screen); then the flight model, the keys and
+the dashboard; then the Theme, scoring, crashes and the sound.
 
 ```powershell
 .\.venv-win\Scripts\python.exe examples\aviator\spectrum\build.py
 ```
 
-builds `output/aviator.z80`, which flies the recorded stretch round and
-round. Like everything else it reads Acornsoft's files from `data/`, and it
-writes the original's data into generated files in `output/`, which are not
-committed.
+builds `output/aviator.z80`, the game, which the **ZX Spectrum: Aviator**
+launch configuration builds and runs. Like everything else it reads
+Acornsoft's files from `data/`, and it writes the original's data into
+generated files in `output/`, which are not committed.
+
+### Flying it
+
+The plane starts on the runway with the engine off and an empty tank,
+which fills while the engine is off (about five seconds). T starts the
+engine, E opens the throttle, B lets the brakes off, and with full throttle
+the plane takes off by itself.
+
+| Keys | |
+|---|---|
+| L / SYMBOL SHIFT | Stick forward (dive) / back (climb) |
+| S / D | Bank left / right |
+| A / ENTER | Rudder left / right |
+| W / E | Throttle down / up |
+| T | Engine on and off |
+| U, B, F | Undercarriage, brakes, flaps |
+| SPACE | Fire (on the runway: start the Theme) |
+| I | Gun sights |
+| P | The scores |
+| X | End the flight, on the ground |
+| ENTER | A new game, after a flight ends |
+
+An Interface II joystick (keys 6 to 0) works the stick and fires. The BBC's
+TAB, for its analogue joystick, and 7 and 8, for the volume, have no keys.
+
+The sound is a first cut, played from the frame interrupt
+(`spectrum/sound.s`): the engine is a click train, up to one a frame, that
+speeds up with the throttle and the airspeed, as the BBC's engine buzz rises
+in pitch; the beep for points and the wings' strain, the stall warning, the
+guns, an alien exploding and touching down are short bursts of tone or noise
+each frame while they last, and a crash is a second of noise.
+
+### How it is put together
 
 **Memory.** The original's data sits where it was on the BBC, plus $8000
 (`spectrum/layout.py`): its tables and variables keep their relations, the
 labels keep their names, and a moment of the original or of the Python port
-goes into the Spectrum's memory region by region to be checked. The Z80 code
-fills the gaps between the regions, where the 6502 code was, with the rest
-from $5B00 to $7FFF; the tables of its own (quarter squares, the screen
-mapping, the canopy buffer and its extents) go above $D800.
+goes into the Spectrum's memory region by region to be checked. The 3D code
+and the sound fill gaps between the regions, where the 6502 code was; the
+rest of the game is at $6000 to $7FFF, with starting up below it; the
+tables of its own (quarter squares, the screen mapping, the canopy buffer
+and its extents, the dashboard's rows and marks) and the keys go above
+$D000. About 5.7K is left, in pieces: 1.8K at $D100, 900 bytes at $CB00,
+700 above $F944 (below the stack), 470 at the end of the $8D00 gap, 450 at
+$E640, 400 at $7E6A, and smaller ones (`aviator.s` has the map).
+
+**Inputs** go through `spectrum/inputs.s`: the keys are read once a pass of
+the main loop into a page with a byte for each BBC key code, and the clock
+and the random timer each through a routine. The tests switch it to their
+own keys, a clock that goes up 3 centiseconds a read and a fixed timer
+sequence, so the Z80 and the Python port see the same; its scripted mode
+plays the tour's keys a pass at a time with the real clock, so the game
+flies itself, which is what `tests/zx_profile.py` profiles.
+
+**The dashboard** is the BBC's: every hand, bar and radar blip is the
+original's vector line, drawn on the Spectrum between the mapped ends of
+its first and last pixels; the fixed marks the original rewrites whole
+bytes of, and the four lamps, are lists of screen bytes `build.py` works
+out from `model/zx.py`.
 
 **The arithmetic** gives exactly the original's results, quirks and all
 (see "Notes on the original"): products by quarter squares, or by the
@@ -152,8 +207,10 @@ would take 77,000 before clearing it. A shallow line, as most of the view's
 are, is drawn by eight copies of a pixel's step, one for each bit of a
 byte, which gather a byte's pixels in a register.
 
-`tests/zx_profile.py` shows where an iteration's time goes, by routine or
-instruction by instruction, from cpp-core's `snapshot_probe`.
+`tests/zx_profile.py` shows where a frame's time goes, by routine or
+instruction by instruction, from cpp-core's `snapshot_probe`; the biggest
+shares are rotating points (about a quarter), the projection's division and
+drawing the view and the dashboard.
 
 ## Tests
 
@@ -184,17 +241,30 @@ The Z80 version is checked against the Python port in cpp-core's
 snapshot_probe`):
 
 ```powershell
-.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_view.py      # stage 1 as a whole, about 30 seconds
-.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_maths.py     # and its parts
+.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_game.py tour    # a whole flight, about 2 minutes
+.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_flight.py       # the flight model
+.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_theme.py        # the Theme and scoring
+.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_view.py         # the view alone
+.\.venv-win\Scripts\python.exe examples\aviator\tests\test_zx_maths.py        # and its parts
 ```
 
-`test_zx_maths.py`, `test_zx_points.py`, `test_zx_project.py` and
-`test_zx_visibility.py` call each routine on the inputs recorded at the
-original's routine during the tour flight, and on random ones where it is
-pure, and compare the results and the state with the Python port's, giving
-each routine's T-states. `test_zx_view.py` flies the recorded stretch on both
-sides and compares the whole game state and the canopy's screen bytes after
-every iteration.
+`test_zx_game.py` starts both sides from the original's binary as its
+loader leaves it and flies a key script on both, with the same keys, clock
+and timer: `recorder.FLIGHTS`' tour, theme and crash, and `controls`, which
+works the undercarriage, the flaps, the gun sights and the scores and
+sweeps every control. After starting and after every frame, the whole game
+state and the whole screen must match `model/zx.py`'s. `test_zx_flight.py`
+and `test_zx_theme.py` run each routine on the cases `test_flight.py` and
+`test_theme.py` check the port against the original with: the recorded
+moments, random inputs, and moments made to reach what the flights don't
+(stalls, landings, crashes, turbulence, alien hits and explosions, the
+bridge and the town), comparing the state, the result, the sounds asked for
+and the timer reads. `test_zx_maths.py`, `test_zx_points.py`,
+`test_zx_project.py` and `test_zx_visibility.py` do the same for the view's
+routines, and `test_zx_view.py` flies a recorded stretch of the tour through
+the view alone (`spectrum/stage1.s`), comparing the canopy's screen after
+every frame. `zx_game_debug.py` finds where a game test's first mismatch
+comes from, step by step.
 
 Left out of the comparisons are the zero-page temporaries (which the port
 keeps in Python variables), the stack, the screen (except the two bytes the
@@ -222,15 +292,18 @@ which takes a minute or two.
 | `model/dashboard.py` | The dials, the horizon, the radar and the fuel gauge |
 | `model/theme.py`, `scoring.py` | The guns and the aliens; scores and flying skills |
 | `model/memory.py`, `names.py`, `hardware.py`, `sound.py`, `events.py` | The memory, its labels, the BBC's hardware as replaceable sources, sound requests, a flight's end |
-| `model/zx.py` | The Spectrum screen the Z80 version draws |
+| `model/zx.py`, `zx_dash.py` | The Spectrum screen the Z80 version draws; its dashboard picture |
 | `spectrum/build.py`, `layout.py` | Builds the Z80 version; where it keeps the original's data |
 | `spectrum/aviator.s` | The memory map, and the modules in it |
 | `spectrum/maths.s`, `matrices.s`, `points.s`, `project.s` | The arithmetic, the matrices, points in 3D, the projection |
 | `spectrum/visibility.s`, `clip.s`, `canopy.s`, `view.s` | Which lines are visible, clipping, the canopy view, drawing and showing it |
-| `spectrum/stage1.s` | Stage 1's driver: the view along the recorded flight |
+| `spectrum/inputs.s`, `controls.s`, `flight.s` | The keys, clock and timer; the controls; the flight model |
+| `spectrum/dashboard.s`, `scoring.s`, `theme.s` | The dashboard; the score and the tests of skill; the guns and the aliens |
+| `spectrum/game.s`, `sound.s` | Starting, the main loop and a flight's end; the beeper |
+| `spectrum/stage1.s` | The view's part of the main loop alone, for its test |
 | `tests/` | The checks of the port against the original, and the recorder |
 | `tests/zx.py`, `test_zx_*.py` | The checks of the Z80 version against the port |
-| `tests/zx_profile.py`, `zx_breakdown.py`, `zx_shots.py` | Where its time goes; screens of it running |
+| `tests/zx_profile.py`, `zx_breakdown.py`, `zx_shots.py`, `zx_game_debug.py` | Where its time goes; screens of it running; finding a game test's first mismatch |
 
 ## Notes on the original
 

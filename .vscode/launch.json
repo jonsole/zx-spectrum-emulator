@@ -73,10 +73,9 @@
     },
     {
       // Aviator (examples/aviator): Geoff Crammond's BBC Micro flight
-      // simulator ported to the 48K, so far its 3D view flown along a
-      // recorded stretch of a flight. Assembled on every launch by the
+      // simulator ported to the 48K. Assembled on every launch by the
       // preLaunchTask; the first build fetches Acornsoft's files from Mark
-      // Moxon's repository and records the flight, which takes a minute or two.
+      // Moxon's repository, which takes a minute or two.
       "name": "ZX Spectrum: Aviator",
       "type": "zxspectrum",
       "request": "launch",
