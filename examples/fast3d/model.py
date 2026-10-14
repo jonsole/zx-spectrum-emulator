@@ -108,3 +108,38 @@ def ideal_matrix(x: int, y: int, z: int) -> list[float]:
     return [cy * cz, sx * sy * cz - cx * sz, cx * sy * cz + sx * sz,
             cy * sz, sx * sy * sz + cx * cz, cx * sy * sz - sx * cz,
             -sy, sx * cy, cx * cy]
+
+
+def line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
+    """The pixels draw_line sets: Bresenham, drawn downwards (the ends
+    swapped if need be), stepping along the longer axis with the error
+    starting at half of it."""
+    if y1 < y0:
+        x0, y0, x1, y1 = x1, y1, x0, y0
+    dx, dy = abs(x1 - x0), y1 - y0
+    sx = 1 if x1 >= x0 else -1
+    x, y, pixels = x0, y0, []
+    if dx >= dy:
+        err = dx >> 1
+        for _ in range(dx + 1):
+            pixels.append((x, y))
+            err -= dy
+            if err < 0:
+                err += dx
+                y += 1
+            x += sx
+    else:
+        err = dy >> 1
+        for _ in range(dy + 1):
+            pixels.append((x, y))
+            err -= dx
+            if err < 0:
+                err += dy
+                x += sx
+            y += 1
+    return pixels
+
+
+def screen_address(x: int, y: int, base: int = 0x4000) -> int:
+    """The byte holding pixel (x, y) of a Spectrum screen at base."""
+    return base | ((y & 0xC0) << 5) | ((y & 7) << 8) | ((y & 0x38) << 2) | (x >> 3)

@@ -9,6 +9,12 @@ and every result is compared with the model's:
    every corner of the cube of signed bytes -- the largest sums.
 3. divide, on the edges of what fits a byte and a random spread between.
 4. project and transform, on random vertices, matrices and distances.
+5. draw_line, every pixel of every byte of the screen, against model.line,
+   on lines every way and length and on both screens, $4000 and $C000; and
+   clear_box.
+6. The demo: draw_frame, frame after frame for each object, on the screen at
+   $4000 (and so clearing its own last box), against model.py's picture of
+   the same frame; and timed. The frames go to output/demo.gif.
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -212,10 +218,120 @@ def check_transform(m: Machine) -> list[str]:
     return failures
 
 
+def render(lines: list, base: int) -> bytes:
+    screen = bytearray(6144)
+    for line in lines:
+        for x, y in model.line(*line):
+            screen[model.screen_address(x, y, base) - base] |= 0x80 >> (x & 7)
+    return bytes(screen)
+
+
+def check_lines(m: Machine) -> list[str]:
+    failures, times, per_pixel_x, per_pixel_y = [], [], [], []
+    rng = random.Random(6)
+    lines = [(0, 0, 255, 191), (255, 0, 0, 191), (0, 191, 255, 0), (5, 9, 5, 9), (0, 100, 255, 100),
+             (255, 50, 0, 50), (17, 0, 17, 191), (200, 191, 200, 0), (0, 0, 191, 191), (255, 0, 64, 191)]
+    for _ in range(3000):
+        x0, x1 = rng.randrange(256), rng.randrange(256)
+        y0, y1 = rng.randrange(192), rng.randrange(192)
+        if rng.randrange(4) == 0:   # short ones, every way
+            x1 = max(0, min(255, x0 + rng.randrange(-9, 10)))
+            y1 = max(0, min(191, y0 + rng.randrange(-9, 10)))
+        lines.append((x0, y0, x1, y1))
+    for i, (base, high) in enumerate(((0x4000, 0x00), (0xC000, 0x80))):
+        m.poke(m.label("screen_high"), bytes([high]))
+        for start in range(0, len(lines), 8 if i == 0 else 500):
+            batch = lines[start:start + 8] if i == 0 else lines[start:start + 3]
+            m.poke(base, bytes(6144))
+            for line in batch:
+                x0, y0, x1, y1 = line
+                t = m.call("draw_line", B=x0, C=y0, D=x1, E=y1)
+                times.append(t)
+                pixels = len(model.line(*line))
+                if pixels > 40:
+                    (per_pixel_x if abs(x1 - x0) >= abs(y1 - y0) else per_pixel_y).append(t / pixels)
+            got = bytes(m.memory[base:base + 6144])
+            if got != render(batch, base):
+                failures.append(f"draw_line at ${base:04X}: {batch} differ from the model")
+                if len(failures) > 5:
+                    return failures
+    report("draw_line", times)
+    print(f"  {'':14} {sum(per_pixel_x) / len(per_pixel_x):.0f} T-states a pixel along x, "
+          f"{sum(per_pixel_y) / len(per_pixel_y):.0f} along y (lines over 40 pixels)")
+
+    # clear_box: a full screen, blank a box, the rest untouched
+    clear_times = []
+    for _ in range(200):
+        rows, top = rng.randrange(1, 193), 0
+        top = rng.randrange(0, 193 - rows)
+        width = rng.randrange(1, 33)
+        left = rng.randrange(0, 33 - width)
+        m.poke(0x4000, bytes([0xFF]) * 6144)
+        m.poke(m.label("screen_high"), bytes([0]))
+        clear_times.append(m.call("clear_box", B=rows, C=top, D=left, E=width))
+        want = bytearray([0xFF]) * 6144
+        for y in range(top, top + rows):
+            for col in range(left, left + width):
+                want[model.screen_address(col * 8, y) - 0x4000] = 0
+        if bytes(m.memory[0x4000:0x5800]) != bytes(want):
+            failures.append(f"clear_box rows {top}+{rows} columns {left}+{width}")
+    report("clear_box", clear_times)
+    return failures
+
+
+def check_demo(m: Machine) -> list[str]:
+    from PIL import Image
+    from build import objects
+    failures = []
+    memory = bytearray(65536)
+    memory[0x4000:0xC000] = (OUT / "demo.bin").read_bytes()
+    sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
+    sld = OUT / "demo.sld"
+    label = {name: find_label(sld, name) for name in
+             ("draw_frame", "screen_high", "zoff", "angle_x", "object", "objects", "start")}
+    distance = 400
+    sim.memory[label["zoff"]:label["zoff"] + 2] = (distance * 128).to_bytes(2, "little")
+    sim.memory[label["screen_high"]] = 0
+    for address in range(0x4000, 0x5800):
+        sim.memory[address] = 0
+    frames = []
+    for index, (name, (vertices, edges)) in enumerate(objects().items()):
+        pointer = label["objects"] + 6 * index
+        sim.memory[label["object"]:label["object"] + 2] = pointer.to_bytes(2, "little")
+        times = []
+        for _ in range(64):
+            sim.registers[SP] = STACK
+            sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
+            start = sim.registers[T]
+            sim.run(label["draw_frame"], RETURN)
+            times.append(sim.registers[T] - start)
+            angles = sim.memory[label["angle_x"]:label["angle_x"] + 3]
+            matrix = model.make_matrix(*angles)
+            points = [model.project(model.rotate(matrix, v), distance * 128) for v in vertices]
+            lines = [(*points[i], *points[j]) for i, j in edges if points[i] and points[j]]
+            got = bytes(sim.memory[0x4000:0x5800])
+            if got != render(lines, 0x4000):
+                failures.append(f"demo: the {name} at angles {list(angles)} differs from the model")
+                break
+            frames.append(got)
+        report(f"demo: {name}", times)
+    # the frames, as the Spectrum shows them: bright white on black, twice the size
+    images = []
+    for screen in frames:
+        image = Image.new("1", (256, 192))
+        image.putdata([1 if screen[model.screen_address(x, y) - 0x4000] & (0x80 >> (x & 7)) else 0
+                       for y in range(192) for x in range(256)])
+        images.append(image.convert("L").resize((512, 384), Image.NEAREST))
+    images[0].save(OUT / "demo.gif", save_all=True, append_images=images[1:], duration=40, loop=0)
+    images[20].save(OUT / "demo.png")
+    print(f"  {len(frames)} frames to {OUT / 'demo.gif'}")
+    return failures
+
+
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_demo):
         failures += check(m)
     if failures:
         print("\n".join(failures[:20]))

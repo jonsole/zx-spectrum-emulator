@@ -140,6 +140,26 @@
       }
     },
     {
+      // fast3d's routines and demo (examples/fast3d).
+      "label": "fast3d.build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv-win\\Scripts\\python.exe",
+      "args": ["examples/fast3d/build.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "sjasmplus",
+        "fileLocation": ["autoDetect", "${workspaceFolder}/examples/fast3d"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
       // Knight Lore 128K (examples/filmation/knightlore128), the fork of the
       // Filmation build above that grows into the bigger castle.
       "label": "knightlore128.build",

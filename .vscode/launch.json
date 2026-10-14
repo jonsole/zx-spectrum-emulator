@@ -72,6 +72,19 @@
       "preLaunchTask": "revs.build"
     },
     {
+      // fast3d's demo (examples/fast3d): a wireframe cube or icosahedron
+      // turning, drawn by the fast 3D routines; SPACE changes the object.
+      "name": "ZX Spectrum: fast3d demo",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/128.rom",
+      "machine": "128",
+      "snapshot": "${workspaceFolder}/examples/fast3d/output/demo.z80",
+      "sld": "${workspaceFolder}/examples/fast3d/output/demo.sld",
+      "asm": "${workspaceFolder}/examples/fast3d/demo.s",
+      "preLaunchTask": "fast3d.build"
+    },
+    {
       // Knight Lore 128K: the fork of the Filmation entry above that grows
       // into a bigger castle on the 128K (examples/filmation/knightlore128).
       "name": "ZX Spectrum: Knight Lore 128K",
