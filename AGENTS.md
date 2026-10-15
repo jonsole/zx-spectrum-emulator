@@ -209,3 +209,17 @@ A change worth telling users about goes under **Unreleased** in
 `scripts/release.py` and published by pushing its `v*` tag
 ([docs/releasing.md](docs/releasing.md)) -- only ever when asked, since a
 pushed tag publishes a release.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues, driven with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named after its role: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` at the root and ADRs in `docs/adr/`, created lazily. See `docs/agents/domain.md`.
