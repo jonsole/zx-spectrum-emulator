@@ -56,7 +56,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 9,399 a frame |
 | `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 298 out of the box; ~3,240 out roughly; ~8,190 in view (with `CULL_SKIP`; ~1,200 less an object culled without) |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~8,330 |
-| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,400 a vertex (~2,900 without mirrors) |
+| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,330 a vertex (~2,830 without mirrors) |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -195,8 +195,8 @@ tenth, reckoned every ten pictures from the frames the interrupt counted
 and drawn in the 48K ROM's font (ROM 1 is kept paged in for it).
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 154,000..759,000
-T-states, 472,000 on average, with nothing lost waiting for the flip:
+drawn a frame, 5.1 on average, and a frame takes 154,000..753,000
+T-states, 467,000 on average, with nothing lost waiting for the flip:
 about 7 frames a second on a 128K, before ULA contention (511,000 without
 `CULL_SKIP`). Of an average frame (from the emulator's profiler), culling all
 forty objects takes about 23%, about 3,300 T-states an object; the

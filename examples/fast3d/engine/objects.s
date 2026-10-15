@@ -932,6 +932,20 @@ view_m:				DS		9					; M, row by row
 					ENDIF
 					ENDM
 
+; y = centre - c_y / Z, onto the stack: HL the quotient's size, B the
+; sign of c_y.
+					MACRO	Y_ON_SCREEN
+					ex		de,hl
+					ld		hl,SCREEN_CENTRE_Y
+					bit		7,b
+					jr		nz,.below
+					or		a
+					sbc		hl,de
+					jr		.y
+.below:				add		hl,de
+.y:					push	hl
+					ENDM
+
 ; The vertex whose rotation rot_x, rot_y, rot_z holds (or whose mirror's it
 ; is, SIGN 1) to the screen, and on to transform_object's .store with HL =
 ; x, DE = y -- or to .behind if it is at or behind the eye (c_z < 256).
@@ -946,11 +960,7 @@ view_m:				DS		9					; M, row by row
 					ld		c,h					; Z = c_z >> 8, as it is
 					COMBINE	SIGN, rot_y, view_t + 3
 					call	divide24
-					ex		de,hl
-					ld		hl,SCREEN_CENTRE_Y
-					or		a
-					sbc		hl,de				; y = centre - c_y / Z
-					push	hl
+					Y_ON_SCREEN
 					COMBINE	SIGN, rot_x, view_t
 					call	divide24
 					jp		transform_object.x_on_screen
@@ -975,11 +985,7 @@ view_m:				DS		9					; M, row by row
 					djnz	.y
 					ld		a,e
 					call	divide24
-					ex		de,hl
-					ld		hl,SCREEN_CENTRE_Y
-					or		a
-					sbc		hl,de				; y = centre - c_y / Z
-					push	hl
+					Y_ON_SCREEN
 					COMBINE	SIGN, rot_x, view_t
 					ld		e,a					; x the same
 					ld		a,(to_shift)
@@ -1044,9 +1050,16 @@ transform_object:
 
 .behind:			ld		hl,WIDE_BEHIND		; (DE: whatever)
 					jr		.store
-.x_on_screen:		ld		de,SCREEN_CENTRE_X
-					add		hl,de				; x = centre + c_x / Z
+.x_on_screen:		ex		de,hl				; x = centre + c_x / Z: HL the
+					ld		hl,SCREEN_CENTRE_X	; quotient's size, B the sign
+					bit		7,b
+					jr		nz,.left
+					add		hl,de
 					pop		de					; y
+					jr		.store
+.left:				or		a
+					sbc		hl,de
+					pop		de
 .store:				ld		b,h					; BC = x
 					ld		c,l
 					exx
@@ -1077,15 +1090,36 @@ to_shift:			DB		0					; the depth's shift, for x and y
 
 
 ; ---------------------------------------------------------------------------
-; divide24: HL = the 24-bit signed number A:H:L / C, truncated toward zero
-; and held to +-WIDE_LIMIT. In: C = 1..255. Uses A, B, DE, HL; the sign
-; is kept in B, which divide_unsigned leaves alone.
+; divide24: HL = |A:H:L| / C, truncated and held to WIDE_LIMIT, with B =
+; A:H:L's high byte, whose sign the caller gives the quotient (adding or
+; subtracting its size from the screen's centre costs less than negating it
+; here). In: C = 1..255. Uses A, B, DE, HL. One OR tests both the sign and
+; whether the number is under 65536, and the quick divide, a quotient that
+; fits a byte, is divide_unsigned written in rather than called.
 
 divide24:
 					ld		b,a					; B: the sign
-					bit		7,a
-					jr		z,.positive
-					ld		d,a					; negate A:H:L
+					or		a
+					jp		m,.negative
+					jr		nz,.wide
+.fits:				ld		a,h					; under 65536: the quotient fits
+					cp		c					; a byte unless H >= C
+					jr		nc,.wide0
+					DIVIDE_BIT					; (project.s)
+					DIVIDE_BIT
+					DIVIDE_BIT
+					DIVIDE_BIT
+					DIVIDE_BIT
+					DIVIDE_BIT
+					DIVIDE_BIT
+					DIVIDE_BIT
+					rl		l
+					ld		a,l
+					cpl
+					ld		l,a
+					ld		h,0
+					ret
+.negative:			ld		d,a					; |A:H:L|
 					xor		a
 					sub		l
 					ld		l,a
@@ -1094,11 +1128,9 @@ divide24:
 					ld		h,a
 					ld		a,0
 					sbc		a,d
-.positive:			or		a
-					jr		nz,.wide
-					call	divide_unsigned		; under 65536: the quotient fits
-					jr		nc,.signed			; a byte, the quick way
-					xor		a
+					jr		z,.fits
+					jr		.wide
+.wide0:				xor		a
 .wide:				cp		c
 					jr		nc,.limit			; 65536 C or more: past the limit
 					push	bc
@@ -1119,6 +1151,4 @@ divide24:
 .limit:				ld		hl,0
 					ld		de,WIDE_LIMIT
 .within:			add		hl,de
-.signed:			bit		7,b
-					ret		z
-					jp		negate_hl
+					ret
