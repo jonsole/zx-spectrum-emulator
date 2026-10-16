@@ -7,8 +7,8 @@ WIDE_LIMIT, as model.py says none can be. No other edge may be cut, every line m
 end, and only the vertices behind the plane may go unprojected. All of it
 through model.object_lines, which the Z80's cut_edges is held to.
 (Bringing the ends to those units, floor(c / 4), moves the edge by less
-than sqrt 3, and the halving finds x and y each within 0.75 of where that
-edge crosses: under 2.8 in all.) check.py holds the Z80 to the model.
+than sqrt 3, and near_crossing finds x and y each within 0.62 of where
+that edge crosses: under 2.7 in all.) check.py holds the Z80 to the model.
 
     python near_geometry.py
 """

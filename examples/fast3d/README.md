@@ -58,7 +58,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 298 out of the box; ~3,240 out roughly; ~8,190 in view (with `CULL_SKIP`; ~1,200 less an object culled without) |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~8,330 |
 | `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high; x = $8000 if behind the near plane | ~2,330 a vertex (~2,830 without mirrors) |
-| `cut_edges` | IX, straight after `transform_object`; HL = its points (H the page, L the first); DE -> room for the lines | each edge crossing the near plane, from its front end to where it crosses, as four words for `clip_line`; DE past them, A = how many | 45 with nothing behind the plane; ~9,600 a line cut |
+| `cut_edges` | IX, straight after `transform_object`; HL = its points (H the page, L the first); DE -> room for the lines | each edge crossing the near plane, from its front end to where it crosses, as four words for `clip_line`; DE past them, A = how many | 45 with nothing behind the plane; ~7,000 a line cut |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -164,18 +164,28 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   is drawn, and an edge wholly behind the plane is left out. The plane sits
   where Z is 4, so a point on it lands c_x / 4, c_y / 4 from the centre: a
   shift. Seen from above, with x and z both in units of c / 4 -- pixels
-  across, at the plane -- the cut is where a line crosses z = 256, which is
-  just what `clip_line`'s binary chop finds for a window's edge; so it
-  finds x, and seen from the side y, from the edge's two ends taken back
-  into camera space (rotated again, plus T). In those units every number
-  an object `cull_object` lets through can make fits 16 bits (model.py
-  says why), and each cut end lies on the plane within 3 of the edge in 3D,
-  in those units -- a pixel across, a 32nd of a unit deep -- and 1.92 at
-  worst on 84,000 edges (`near_geometry.py`). A cut end is never more than
-  about 15,900 pixels from the centre, so unlike a far projected point it
-  never needs holding to ±16,383. A line cut costs about 9,600
-  T-states, two rotates and two chops most of it; an object with nothing
-  behind the plane, 45 for the call and 13 more in `transform_object`.
+  across, at the plane -- the cut is t = (256 - a_z) / (b_z - a_z) of the
+  way along the edge, from its two ends taken back into camera space
+  (rotated again, plus T). `cut_crossing` works t out once, to 16 bits, by
+  a restoring division written out a bit at a time, all in 16 bits; then
+  x and y together, a + t (b - a), from t's bits the least first, each
+  adding b - a or not and halving -- x in the alternate registers, y in
+  the main ones, each an offset in HL with a byte of fraction in C, so a
+  bit is an `ADD HL,DE` and a three-byte shift. That is about 2,900
+  T-states, where running `clip_line`'s binary chop for x and again for y
+  took about 4,600. In those units every number an object `cull_object`
+  lets through can make fits 16 bits (model.py says why), and each cut end
+  lies on the plane within 3 of the edge in 3D, in those units -- a pixel
+  across, a 32nd of a unit deep -- and 1.81 at worst on 84,000 edges
+  (`near_geometry.py`). A cut end is never more than about 15,900 pixels
+  from the centre, so unlike a far projected point it never needs holding
+  to ±16,383. The walk over the edges is in registers, about 100 T-states
+  for an edge it doesn't cut; an end that was the same end of the last
+  edge cut is kept rather than rotated again, a quarter of a solid's ends
+  (a sixth of a flat strip's). A line cut costs about 7,000 T-states
+  (6,600 on an icosahedron, 7,400 on a runway-like strip), more than half
+  of it the rotates; an object with nothing behind the plane, 45 for the
+  call and 13 more in `transform_object`.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is a set of blocks, one for each bit of a byte. A
   pixel is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -305,7 +315,7 @@ quarter of them at the side of the view. Only the vertices behind the
 plane may go unprojected; every edge with one end in front and one behind
 must be cut, and no other, its line starting at the front end; and every
 cut end must lie on the plane within 3 of the edge in 3D, in units of
-c / 4, a pixel across at the plane and a 32nd of a unit deep (1.92 at
+c / 4, a pixel across at the plane and a 32nd of a unit deep (1.81 at
 worst, 0.66 on average, on 84,000 edges), and none be held:
 
 ```
@@ -330,10 +340,12 @@ picture.
 
 ## Not done
 
-- **A quicker cut.** `cut_edges` rotates both ends of each edge it cuts
-  again, so a vertex shared by several cut edges is rotated for each, and
-  it runs the chop twice, for x and for y, where one chop could step both:
-  the decisions come from z alone.
+- **Rotating each end once.** `cut_edges` keeps only the last edge's ends,
+  so a vertex shared by cut edges that aren't next to each other is
+  rotated again for each. A table of every vertex's camera-space position
+  would save a quarter to a half of a solid's rotates (a cube's, an
+  icosahedron's) but only 6% of a flat strip's, the runway's, for about
+  450 bytes.
 - **Cutting in `transform_wide`.** Only objects are cut at the near plane;
   `transform_wide` and `project_wide`, the older single-matrix path, still
   leave out a vertex at or behind the eye (Z = 0) and every edge to it.

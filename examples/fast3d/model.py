@@ -446,8 +446,11 @@ def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96):
 # The plane is at c_z = NEAR_PLANE = 1024, Z = 4 to the projection, so a
 # point on it lands at c_x / 4, c_y / 4 from the centre: no divide. Seen
 # from above, with x and z both in units of c / 4 -- pixels across, at the
-# plane -- the cut is where a line crosses z = 256, and clip_line's halving
-# (crossing) finds that, once for x and once for y. Bringing c into those
+# plane -- the cut is where a line crosses z = 256: t = (256 - a_z) / (b_z -
+# a_z) of the way along, worked out once to 16 bits by a restoring
+# division, and then x and y together, a + t (b - a), from t's bits the
+# least first: each bit adds d = b - a or not, and halves, with a byte of
+# fraction kept (near_crossing). Bringing c into those
 # units, floor(c / 4), keeps the numbers in 16 bits: for an object
 # cull_object lets through, with a vertex behind the plane, |T_z| is under
 # 1024 + 127 r and 2 |T_x| under T_z + 128 r sqrt 5, so with r <= 222 (a
@@ -468,15 +471,46 @@ NEAR_PLANE = NEAR * 128     # c_z of the near plane: 8.06 units, 1024 / 127
 NEAR_SHIFT = 2              # c >> NEAR_SHIFT: units of a pixel at the plane
 
 
+NEAR_T_BITS = 16           # the bits of t near_crossing works out
+
+
 def near_crossing(behind, front) -> tuple[int, int]:
     """Where the edge from c = behind (c_z < NEAR_PLANE) to c = front (c_z
     >= NEAR_PLANE) crosses the near plane: x and y in units of c / 4, the
-    offsets from the screen's centre there (y up)."""
+    offsets from the screen's centre there (y up).
+
+    t = (256 - a_z) / (b_z - a_z), in 0..1, to NEAR_T_BITS bits by a
+    restoring division (what is left, doubled; take b_z - a_z when it
+    will go). Then, on each axis, a + d t with d = b - a: an offset with
+    eight bits of fraction starts at half of d -- half the last bit of t,
+    to centre its truncation -- and for each bit of t, the least first,
+    d is added if the bit is set and the offset halved (floor, as SRA
+    does): d t, in a 16-bit offset and a byte of fraction, never more than
+    2 |d|. Rounded to the nearest at the end. Within 0.62 of a pixel of a
+    + d t exactly: 0.11 for t's truncation, under 0.01 for the halvings,
+    and the rounding."""
     a = [v >> NEAR_SHIFT for v in behind]
     b = [v >> NEAR_SHIFT for v in front]
-    assert all(-32768 <= v <= 32767 for v in a + b) and b[2] - a[2] < 32768
-    edge = NEAR_PLANE >> NEAR_SHIFT
-    return crossing(a[0], b[0], a[2], b[2], edge), crossing(a[1], b[1], a[2], b[2], edge)
+    assert all(-32768 <= v <= 32767 for v in a + b)
+    dz, left = b[2] - a[2], (NEAR_PLANE >> NEAR_SHIFT) - a[2]
+    assert 0 < left <= dz < 32768 and all(abs(q - p) < 16384 for p, q in zip(a[:2], b[:2]))
+    t = 0
+    for _ in range(NEAR_T_BITS):
+        left <<= 1
+        t <<= 1
+        if left >= dz:
+            left -= dz
+            t |= 1
+
+    def along(p: int, q: int) -> int:
+        d = q - p
+        offset = d << 7
+        for k in range(NEAR_T_BITS):
+            if t >> k & 1:
+                offset += d << 8
+            offset >>= 1
+        return p + ((offset + 128) >> 8)
+    return along(a[0], b[0]), along(a[1], b[1])
 
 
 def cut_edge(behind, front, centre_x: int = 128, centre_y: int = 96) -> tuple[int, int]:

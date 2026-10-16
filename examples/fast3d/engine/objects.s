@@ -1114,9 +1114,8 @@ transform_behind:	DB		0					; non-zero: a vertex was behind
 ; The plane is at c_z = NEAR_PLANE, where Z is 4, so a point on it lands
 ; c_x / 4, c_y / 4 from the centre. Both ends are taken back into camera
 ; space -- rotated again, plus T -- and into units of c / 4, pixels across
-; at the plane; and then, seen from above and from the side, chop finds
-; where the edge crosses z = NEAR_PLANE / 4, as it finds where a line
-; crosses a window's edge. model.py says why the numbers fit 16 bits.
+; at the plane; and then cut_crossing finds where the edge crosses z =
+; NEAR_PLANE / 4. model.py says why the numbers fit 16 bits.
 
 NEAR_PLANE			EQU		NEAR * 128			; model.NEAR_PLANE, NEAR_SHIFT: Z = 4
 NEAR_SHIFT			EQU		2					; there, so c >> 2 is in pixels
@@ -1133,24 +1132,6 @@ NEAR_SHIFT			EQU		2					; there, so c >> 2 is in pixels
 					rr		l
 					ENDM
 
-; HL = where the edge crosses the plane on AXIS (0 x, 2 y), in units of c / 4,
-; by chop: along z to the plane, working out the axis.
-					MACRO	CUT_AXIS	AXIS
-					ld		de,(cut_behind + 4)	; a_z
-					ld		hl,(cut_front + 4)	; b_z
-					or		a
-					sbc		hl,de				; HL = b_z - a_z
-					ex		de,hl
-					ld		bc,-(NEAR_PLANE >> NEAR_SHIFT)
-					add		hl,bc
-					ex		de,hl				; DE = a_z - the plane
-					exx
-					ld		hl,(cut_front + AXIS)
-					ld		de,(cut_behind + AXIS)
-					call	chop
-					call	hold_wide
-					ENDM
-
 cut_edges:
 					xor		a
 					ld		(cut_count),a
@@ -1159,6 +1140,12 @@ cut_edges:
 					ret		z					; nothing behind: none, DE as it was
 					ld		(cut_out),de
 					ld		(cut_points),hl
+					ld		a,$FF				; no last cut's ends to keep
+					ld		(cut_front_vertex),a
+					ld		(cut_behind_vertex),a
+					ld		a,l					; C = the first vertex's x, high
+					add		a,POINTS_X_HI		; byte: an end's place, added
+					ld		c,a
 					ld		l,(ix + OBJECT_MODEL)
 					ld		h,(ix + OBJECT_MODEL + 1)
 					inc		hl
@@ -1167,52 +1154,74 @@ cut_edges:
 					ld		d,(hl)
 					inc		hl
 					ld		(cut_vertices),de
-					ld		a,(hl)				; MODEL_EDGES
+					ld		b,(hl)				; B = MODEL_EDGES
 					inc		hl
 					ld		e,(hl)
 					inc		hl
-					ld		d,(hl)
-					ex		de,hl
-.edge:				ld		(cut_left),a
-					ld		a,(cut_points)		; C = the first vertex's point
-					ld		c,a
-					ld		e,(hl)				; E, D = the ends' vertices
-					inc		hl
-					ld		d,(hl)
-					inc		hl
-					ld		(cut_edge_at),hl
+					ld		d,(hl)				; DE -> the edges
 					ld		a,(cut_points + 1)
-					ld		h,a					; the points' page
-					ld		a,e					; the first end behind?
+					ld		h,a					; H = the points' page
+
+; The walk, in registers: most edges are drawn as ever or left out, and
+; cost no more than reading their ends' x.
+.edge:				ld		a,(de)				; the first end behind?
 					add		a,c
-					or		POINTS_X_HI
 					ld		l,a
 					ld		a,(hl)
+					inc		de
 					cp		high WIDE_BEHIND
-					ld		a,d
+					ld		a,(de)
+					inc		de
 					jr		z,.first_behind
 					add		a,c					; no: the second?
-					or		POINTS_X_HI
 					ld		l,a
 					ld		a,(hl)
 					cp		high WIDE_BEHIND
-					jp		nz,.next			; neither: drawn as ever
-					jr		.cut				; E in front, D behind
+					jr		z,.second_behind
+.next:				djnz	.edge				; neither: drawn as ever
+					ld		de,(cut_out)
+					ld		a,(cut_count)
+					ret
 .first_behind:		add		a,c
-					or		POINTS_X_HI
 					ld		l,a
 					ld		a,(hl)
 					cp		high WIDE_BEHIND
-					jp		z,.next				; both: left out
-					ld		a,d					; D in front, E behind
-					ld		d,e
-					ld		e,a
-.cut:				ld		a,d
-					ld		(cut_behind_vertex),a
-					ld		a,e
-					ld		(cut_front_vertex),a
-					add		a,c					; the front end's point, as the
-					ld		l,a					; line's first end
+					jr		z,.next				; both: left out
+					push	bc					; the second in front
+					push	de
+					dec		de
+					dec		de
+					ld		a,(de)
+					inc		de
+					jr		.cut
+.second_behind:		push	bc					; the first in front
+					push	de
+					dec		de
+					ld		a,(de)
+					dec		de
+; Each end into camera space, unless it was the same end of the last edge
+; cut, still in cut_front or cut_behind: a quarter of a solid's are.
+.cut:				ld		hl,cut_behind_vertex
+					cp		(hl)
+					jr		z,.behind_kept
+					ld		(hl),a
+					push	de
+					ld		de,cut_behind
+					call	.camera_space
+					pop		de
+.behind_kept:		ld		a,(de)
+					ld		hl,cut_front_vertex
+					cp		(hl)
+					jr		z,.front_kept
+					ld		(hl),a
+					ld		de,cut_front
+					call	.camera_space
+.front_kept:		ld		a,(cut_points)		; the front end's point, as the
+					ld		hl,cut_front_vertex	; line's first end
+					add		a,(hl)
+					ld		l,a
+					ld		a,(cut_points + 1)
+					ld		h,a
 					ld		de,(cut_out)
 					ld		a,(hl)				; POINTS_X_LO
 					ld		(de),a
@@ -1231,31 +1240,18 @@ cut_edges:
 					ld		(de),a
 					inc		de
 					ld		(cut_out),de
-					ld		a,(cut_front_vertex)	; both ends in camera space
-					ld		de,cut_front
-					call	.camera_space
-					ld		a,(cut_behind_vertex)
-					ld		de,cut_behind
-					call	.camera_space
-					CUT_AXIS	0				; x = centre + the cut's x
-					ld		de,SCREEN_CENTRE_X
-					add		hl,de
-					call	.store
-					CUT_AXIS	2				; y = centre - the cut's y
-					ex		de,hl
-					ld		hl,SCREEN_CENTRE_Y
-					or		a
-					sbc		hl,de
-					call	.store
+					call	cut_crossing		; and where it crosses the plane
+					push	de
+					call	.store				; x
+					pop		hl
+					call	.store				; y
 					ld		hl,cut_count
 					inc		(hl)
-.next:				ld		hl,(cut_edge_at)
-					ld		a,(cut_left)
-					dec		a
-					jp		nz,.edge
-					ld		de,(cut_out)
-					ld		a,(cut_count)
-					ret
+					pop		de					; and on to the next edge
+					pop		bc
+					ld		a,(cut_points + 1)
+					ld		h,a
+					jr		.next
 
 ; HL to the line at cut_out, and on.
 .store:				ex		de,hl
@@ -1296,14 +1292,14 @@ cut_edges:
 
 cut_points:			DW		0					; L the first vertex, H the page
 cut_vertices:		DW		0					; -> the model's vertices
-cut_edge_at:		DW		0					; -> the next edge
-cut_left:			DB		0					; edges left
 cut_out:			DW		0					; -> where the next line goes
 cut_count:			DB		0					; lines so far
-cut_front_vertex:	DB		0
-cut_behind_vertex:	DB		0
-cut_front:			DS		6					; x, y, z, in units of c / 4
+cut_front_vertex:	DB		0					; the last edge cut's ends
+cut_behind_vertex:	DB		0					; ($FF: none yet)
+cut_front:			DS		6					; and where they are, x, y, z,
+													; in units of c / 4
 cut_behind:			DS		6
+cut_t:				DW		0					; how far along the plane is
 
 ; hold_wide: HL held to +-WIDE_LIMIT, as a projected point is. Uses A.
 hold_wide:
@@ -1320,6 +1316,127 @@ hold_wide:
 					adc		a,high WIDE_LIMIT
 					ret		c
 					ld		hl,-WIDE_LIMIT
+					ret
+
+
+; cut_crossing: where the edge from cut_behind to cut_front crosses the
+; near plane, on the screen (model.near_crossing): HL = x, DE = y. Uses
+; everything but IX and IY, the alternate registers too.
+;
+; First t = (the plane - a_z) / (b_z - a_z), to 16 bits, by a restoring
+; division written out a bit at a time. Then x and y together, a + d t
+; with d = b - a, from t's bits the least first: each adds d or not and
+; halves, an offset in H:L with a byte of fraction in C, y here and x in
+; the alternates. It never needs more than 16 bits and a byte: the offset
+; stays within d, and with d added within 2 d. That replaced two of
+; clip_line's halvings, one for x and one for y, each working out t again,
+; in 24 bits until the steps fitted 16: about 2,900 T-states for 4,600.
+
+; A bit of t: what is left, HL, doubled, less DE if DE will go; the bit,
+; inverted, into A. Doubling never carries -- what is left is never more
+; than DE, under 32768 -- so SBC takes DE alone; and when DE will not go,
+; adding it back carries, which is the inverted bit.
+					MACRO	T_BIT
+					add		hl,hl
+					sbc		hl,de
+					jr		nc,$ + 3
+					add		hl,de
+					rla
+					ENDM
+
+; The offset on both axes for each of the bits of A, the least first:
+; added to if the bit is set, then halved.
+					MACRO	ALONG
+					ld		b,8
+.bit:				rra
+					jr		nc,.zero
+					add		hl,de				; y
+					sra		h
+					rr		l
+					rr		c
+					exx
+					add		hl,de				; x
+					sra		h
+					rr		l
+					rr		c
+					exx
+					djnz	.bit
+					jr		.done
+.zero:				sra		h
+					rr		l
+					rr		c
+					exx
+					sra		h
+					rr		l
+					rr		c
+					exx
+					djnz	.bit
+.done:
+					ENDM
+
+; HL = d on AXIS, b - a, into DE too; and H:L.C, the offset, half of it --
+; half t's last bit, to centre its truncation.
+					MACRO	HALF_D	AXIS
+					ld		hl,(cut_front + AXIS)
+					ld		de,(cut_behind + AXIS)
+					or		a
+					sbc		hl,de
+					ld		d,h
+					ld		e,l
+					ld		c,0
+					sra		h
+					rr		l
+					rr		c
+					ENDM
+
+cut_crossing:
+					ld		de,(cut_behind + 4)	; t: what is left, the plane - a_z
+					ld		hl,NEAR_PLANE >> NEAR_SHIFT
+					or		a
+					sbc		hl,de
+					ld		b,h
+					ld		c,l
+					ld		hl,(cut_front + 4)
+					or		a
+					sbc		hl,de
+					ex		de,hl				; DE = b_z - a_z
+					ld		h,b
+					ld		l,c
+					DUP		8
+					T_BIT
+					EDUP
+					cpl
+					ld		(cut_t + 1),a
+					DUP		8
+					T_BIT
+					EDUP
+					cpl
+					ld		(cut_t),a
+					HALF_D	2					; y here
+					exx
+					HALF_D	0					; x in the alternates
+					exx
+					ld		a,(cut_t)
+					ALONG
+					ld		a,(cut_t + 1)
+					ALONG
+					sla		c					; y = centre - (a_y + the offset,
+					ld		de,(cut_behind + 2)	; rounded)
+					adc		hl,de
+					call	hold_wide
+					ex		de,hl
+					ld		hl,SCREEN_CENTRE_Y
+					or		a
+					sbc		hl,de
+					push	hl
+					exx
+					sla		c					; x = centre + (a_x + ...)
+					ld		de,(cut_behind)
+					adc		hl,de
+					call	hold_wide
+					ld		de,SCREEN_CENTRE_X
+					add		hl,de
+					pop		de
 					ret
 
 
