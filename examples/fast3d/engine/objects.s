@@ -886,7 +886,7 @@ view_m:				DS		9					; M, row by row
 ; page D from E on (E + the vertices no more than 64): x and y, 16-bit, a
 ; byte each in four tables of 64 (POINTS_X_LO and so on), so that a vertex's
 ; number in L finds all four by setting bits 6 and 7, and a page can hold
-; several objects' points; one at or behind the eye gets x = WIDE_BEHIND,
+; several objects' points; one behind the near plane gets x = WIDE_BEHIND,
 ; the only x with $80 in its high byte. Each vertex's position in camera
 ; space is shifted right just enough to bring its depth into a byte
 ; (model.project_far), so the quick divide does at any distance.
@@ -948,15 +948,16 @@ view_m:				DS		9					; M, row by row
 
 ; The vertex whose rotation rot_x, rot_y, rot_z holds (or whose mirror's it
 ; is, SIGN 1) to the screen, and on to transform_object's .store with HL =
-; x, DE = y -- or to .behind if it is at or behind the eye (c_z < 256).
+; x, DE = y -- or to .behind if it is behind the near plane (c_z <
+; NEAR_PLANE, which is 4 << 8: one compare of the middle byte).
 					MACRO	PROJECT	SIGN
 					COMBINE	SIGN, rot_z, view_t + 6
 					ld		c,a					; C:H:L = c_z
 					jp		m,transform_object.behind
 					jp		nz,.far
 					ld		a,h
-					or		a
-					jp		z,transform_object.behind
+					cp		high NEAR_PLANE
+					jp		c,transform_object.behind
 					ld		c,h					; Z = c_z >> 8, as it is
 					COMBINE	SIGN, rot_y, view_t + 3
 					call	divide24
@@ -1021,6 +1022,7 @@ transform_object:
 					exx							; all kept in the alternates
 					xor		a
 					ld		(rotate_holds_camera),a
+					ld		(transform_behind),a
 					ld		hl,view_m
 					call	install_matrix
 					exx
@@ -1049,6 +1051,8 @@ transform_object:
 					PROJECT	1
 
 .behind:			ld		hl,WIDE_BEHIND		; (DE: whatever)
+					ld		a,h					; (for cut_edges)
+					ld		(transform_behind),a
 					jr		.store
 .x_on_screen:		ex		de,hl				; x = centre + c_x / Z: HL the
 					ld		hl,SCREEN_CENTRE_X	; quotient's size, B the sign
@@ -1087,6 +1091,236 @@ POINTS_X_HI			EQU		64
 POINTS_Y_LO			EQU		128
 POINTS_Y_HI			EQU		192
 to_shift:			DB		0					; the depth's shift, for x and y
+transform_behind:	DB		0					; non-zero: a vertex was behind
+													; the near plane
+
+
+; ---------------------------------------------------------------------------
+; cut_edges: the edges of an object that cross the near plane, cut there
+; (model.object_lines). An edge with one end in front of the plane and the
+; other behind it becomes a line from its front end, as transform_object
+; put it, to where the edge crosses the plane: four words, x0, y0, x1, y1,
+; as clip_x0 to clip_y1 take them. An edge wholly behind the plane is left
+; out, and one wholly in front is the program's to draw from the points,
+; as ever.
+;
+; In: IX -> the object, straight after transform_object (its matrix still
+; in rotate, view_t its T); HL -> its points as transform_object was given
+; them (H the page, L its first vertex); DE -> where the lines go, with
+; room for as many as the model has edges. Out: DE -> past the last line,
+; A = how many. Quick when transform_object found nothing behind the plane.
+; Uses everything but IY, the alternate registers too.
+;
+; The plane is at c_z = NEAR_PLANE, where Z is 4, so a point on it lands
+; c_x / 4, c_y / 4 from the centre. Both ends are taken back into camera
+; space -- rotated again, plus T -- and into units of c / 4, pixels across
+; at the plane; and then, seen from above and from the side, chop finds
+; where the edge crosses z = NEAR_PLANE / 4, as it finds where a line
+; crosses a window's edge. model.py says why the numbers fit 16 bits.
+
+NEAR_PLANE			EQU		NEAR * 128			; model.NEAR_PLANE, NEAR_SHIFT: Z = 4
+NEAR_SHIFT			EQU		2					; there, so c >> 2 is in pixels
+					ASSERT	(NEAR_PLANE & $FF) == 0	; (PROJECT tests its high byte)
+
+; A:H:L >> NEAR_SHIFT into H:L: units of c / 4.
+					ASSERT	NEAR_SHIFT == 2		; (QUARTER is written out for it)
+					MACRO	QUARTER
+					sra		a
+					rr		h
+					rr		l
+					sra		a
+					rr		h
+					rr		l
+					ENDM
+
+; HL = where the edge crosses the plane on AXIS (0 x, 2 y), in units of c / 4,
+; by chop: along z to the plane, working out the axis.
+					MACRO	CUT_AXIS	AXIS
+					ld		de,(cut_behind + 4)	; a_z
+					ld		hl,(cut_front + 4)	; b_z
+					or		a
+					sbc		hl,de				; HL = b_z - a_z
+					ex		de,hl
+					ld		bc,-(NEAR_PLANE >> NEAR_SHIFT)
+					add		hl,bc
+					ex		de,hl				; DE = a_z - the plane
+					exx
+					ld		hl,(cut_front + AXIS)
+					ld		de,(cut_behind + AXIS)
+					call	chop
+					call	hold_wide
+					ENDM
+
+cut_edges:
+					xor		a
+					ld		(cut_count),a
+					ld		a,(transform_behind)
+					or		a
+					ret		z					; nothing behind: none, DE as it was
+					ld		(cut_out),de
+					ld		(cut_points),hl
+					ld		l,(ix + OBJECT_MODEL)
+					ld		h,(ix + OBJECT_MODEL + 1)
+					inc		hl
+					ld		e,(hl)				; MODEL_VERTICES
+					inc		hl
+					ld		d,(hl)
+					inc		hl
+					ld		(cut_vertices),de
+					ld		a,(hl)				; MODEL_EDGES
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ex		de,hl
+.edge:				ld		(cut_left),a
+					ld		a,(cut_points)		; C = the first vertex's point
+					ld		c,a
+					ld		e,(hl)				; E, D = the ends' vertices
+					inc		hl
+					ld		d,(hl)
+					inc		hl
+					ld		(cut_edge_at),hl
+					ld		a,(cut_points + 1)
+					ld		h,a					; the points' page
+					ld		a,e					; the first end behind?
+					add		a,c
+					or		POINTS_X_HI
+					ld		l,a
+					ld		a,(hl)
+					cp		high WIDE_BEHIND
+					ld		a,d
+					jr		z,.first_behind
+					add		a,c					; no: the second?
+					or		POINTS_X_HI
+					ld		l,a
+					ld		a,(hl)
+					cp		high WIDE_BEHIND
+					jp		nz,.next			; neither: drawn as ever
+					jr		.cut				; E in front, D behind
+.first_behind:		add		a,c
+					or		POINTS_X_HI
+					ld		l,a
+					ld		a,(hl)
+					cp		high WIDE_BEHIND
+					jp		z,.next				; both: left out
+					ld		a,d					; D in front, E behind
+					ld		d,e
+					ld		e,a
+.cut:				ld		a,d
+					ld		(cut_behind_vertex),a
+					ld		a,e
+					ld		(cut_front_vertex),a
+					add		a,c					; the front end's point, as the
+					ld		l,a					; line's first end
+					ld		de,(cut_out)
+					ld		a,(hl)				; POINTS_X_LO
+					ld		(de),a
+					inc		de
+					set		6,l
+					ld		a,(hl)				; POINTS_X_HI
+					ld		(de),a
+					inc		de
+					set		7,l
+					res		6,l
+					ld		a,(hl)				; POINTS_Y_LO
+					ld		(de),a
+					inc		de
+					set		6,l
+					ld		a,(hl)				; POINTS_Y_HI
+					ld		(de),a
+					inc		de
+					ld		(cut_out),de
+					ld		a,(cut_front_vertex)	; both ends in camera space
+					ld		de,cut_front
+					call	.camera_space
+					ld		a,(cut_behind_vertex)
+					ld		de,cut_behind
+					call	.camera_space
+					CUT_AXIS	0				; x = centre + the cut's x
+					ld		de,SCREEN_CENTRE_X
+					add		hl,de
+					call	.store
+					CUT_AXIS	2				; y = centre - the cut's y
+					ex		de,hl
+					ld		hl,SCREEN_CENTRE_Y
+					or		a
+					sbc		hl,de
+					call	.store
+					ld		hl,cut_count
+					inc		(hl)
+.next:				ld		hl,(cut_edge_at)
+					ld		a,(cut_left)
+					dec		a
+					jp		nz,.edge
+					ld		de,(cut_out)
+					ld		a,(cut_count)
+					ret
+
+; HL to the line at cut_out, and on.
+.store:				ex		de,hl
+					ld		hl,(cut_out)
+					ld		(hl),e
+					inc		hl
+					ld		(hl),d
+					inc		hl
+					ld		(cut_out),hl
+					ret
+
+; Vertex A of the model, in camera space and units of c / 4, into the three
+; words at DE: rotated by M, plus T.
+.camera_space:		push	de
+					ld		l,a
+					ld		h,0
+					ld		e,l
+					ld		d,h
+					add		hl,hl
+					add		hl,de
+					ld		de,(cut_vertices)
+					add		hl,de
+					call	rotate
+					pop		ix
+					COMBINE	0, rot_x, view_t
+					QUARTER
+					ld		(ix + 0),l
+					ld		(ix + 1),h
+					COMBINE	0, rot_y, view_t + 3
+					QUARTER
+					ld		(ix + 2),l
+					ld		(ix + 3),h
+					COMBINE	0, rot_z, view_t + 6
+					QUARTER
+					ld		(ix + 4),l
+					ld		(ix + 5),h
+					ret
+
+cut_points:			DW		0					; L the first vertex, H the page
+cut_vertices:		DW		0					; -> the model's vertices
+cut_edge_at:		DW		0					; -> the next edge
+cut_left:			DB		0					; edges left
+cut_out:			DW		0					; -> where the next line goes
+cut_count:			DB		0					; lines so far
+cut_front_vertex:	DB		0
+cut_behind_vertex:	DB		0
+cut_front:			DS		6					; x, y, z, in units of c / 4
+cut_behind:			DS		6
+
+; hold_wide: HL held to +-WIDE_LIMIT, as a projected point is. Uses A.
+hold_wide:
+					bit		7,h
+					jr		nz,.negative
+					ld		a,h					; up to WIDE_LIMIT: $3FFF
+					cp		high (WIDE_LIMIT + 1)
+					ret		c
+					ld		hl,WIDE_LIMIT
+					ret
+.negative:			ld		a,l					; HL + WIDE_LIMIT carries
+					add		a,low WIDE_LIMIT	; unless HL is beyond it
+					ld		a,h
+					adc		a,high WIDE_LIMIT
+					ret		c
+					ld		hl,-WIDE_LIMIT
+					ret
 
 
 ; ---------------------------------------------------------------------------

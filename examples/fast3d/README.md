@@ -3,7 +3,8 @@
 Fast 3D for the Z80: signed multiplication, a rotation matrix from three
 angles, rotating and projecting vertices, drawing lines clipped to a
 window, and a world of objects seen from a camera, with what is out of view
-culled before any of its vertices is touched. With them comes a demo on the
+culled before any of its vertices is touched and edges that pass behind
+the eye cut at a near plane. With them comes a demo on the
 128K, a flight through forty turning cubes and icosahedra. The same
 routines for the BBC Micro's 6502, with the same arithmetic (objects and the
 camera not yet), are in
@@ -56,7 +57,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `set_camera` | `camera_x`, `_y`, `_z`, `camera_angles` | the camera's matrix, its transpose in rotate | 9,399 a frame |
 | `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 298 out of the box; ~3,240 out roughly; ~8,190 in view (with `CULL_SKIP`; ~1,200 less an object culled without) |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~8,330 |
-| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high | ~2,330 a vertex (~2,830 without mirrors) |
+| `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high; x = $8000 if behind the near plane | ~2,330 a vertex (~2,830 without mirrors) |
+| `cut_edges` | IX, straight after `transform_object`; HL = its points (H the page, L the first); DE -> room for the lines | each edge crossing the near plane, from its front end to where it crosses, as four words for `clip_line`; DE past them, A = how many | 45 with nothing behind the plane; ~9,600 a line cut |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
 ### How they are quick
@@ -155,6 +157,25 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   handed straight to the divide; the loop keeps its vertex, count and the
   point it writes in the alternate registers, so nothing goes through
   memory that need not.
+- **Cutting at the near plane, with no divide.** A vertex nearer than the
+  near plane (8.06 units: c_z under 1,024, where c is 127 times world units)
+  is left unprojected, and `cut_edges` cuts each edge running from it to
+  a vertex in front, in camera space, before projecting; the part in front
+  is drawn, and an edge wholly behind the plane is left out. The plane sits
+  where Z is 4, so a point on it lands c_x / 4, c_y / 4 from the centre: a
+  shift. Seen from above, with x and z both in units of c / 4 -- pixels
+  across, at the plane -- the cut is where a line crosses z = 256, which is
+  just what `clip_line`'s binary chop finds for a window's edge; so it
+  finds x, and seen from the side y, from the edge's two ends taken back
+  into camera space (rotated again, plus T). In those units every number
+  an object `cull_object` lets through can make fits 16 bits (model.py
+  says why), and each cut end lies on the plane within 3 of the edge in 3D,
+  in those units -- a pixel across, a 32nd of a unit deep -- and 1.92 at
+  worst on 84,000 edges (`near_geometry.py`). A cut end is never more than
+  about 15,900 pixels from the centre, so unlike a far projected point it
+  never needs holding to ±16,383. A line cut costs about 9,600
+  T-states, two rotates and two chops most of it; an object with nothing
+  behind the plane, 45 for the call and 13 more in `transform_object`.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is a set of blocks, one for each bit of a byte. A
   pixel is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -182,21 +203,30 @@ edge). Each frame is drawn on the screen that isn't being shown, then shown
 at the next interrupt: the interrupt routine writes port $7FFD when the
 loop has asked it to. Meanwhile the loop goes on to the next frame's
 arithmetic (`compute_frame`: the camera, culling, the matrices and every
-drawn object's points, into a pool of pages), which touches no screen; by
+drawn object's points, into a pool of pages, and its edges cut at the near
+plane, into a list of lines), which touches no screen; by
 the time that is done the flip has happened, and `render_frame` draws on
 the screen it freed. Waiting for the flip before starting lost what was
 left of a frame each time. Before drawing, it clears only the box drawn on
 that screen last time: the box round the vertices of every object drawn,
-held to the window. An object whose box is wholly inside the window, with
-every vertex in front of the eye, has its edges drawn without clipping:
-their ends go from `transform_object`'s points straight to `draw_line`.
+and the ends of every line cut at the near plane, held to the window. An
+object whose box is wholly inside the window, with every vertex in front
+of the near plane, has its edges drawn without clipping: their ends go
+from `transform_object`'s points straight to `draw_line`. The lines cut
+at the near plane are drawn last, clipped. The pool, the list of objects
+drawn and the cut lines are in bank 5 at $6000, above the screen, leaving
+bank 2 to the code (on a real Spectrum that is contended memory). The
+world keeps its objects 300 units from the camera's path, as it did before
+there was a cut at the near plane, so that a flight that isn't steered
+cuts nothing and its pictures are the same as they were.
 Below the window's bottom left corner it shows pictures a second, to a
 tenth, reckoned every ten pictures from the frames the interrupt counted
 and drawn in the 48K ROM's font (ROM 1 is kept paged in for it).
 
 Over a whole circle of the flight, between 1 and 10 of the 40 objects are
-drawn a frame, 5.1 on average, and a frame takes 154,000..753,000
-T-states, 467,000 on average, with nothing lost waiting for the flip:
+drawn a frame, 5.1 on average, and a frame takes 154,000..754,000
+T-states, 468,000 on average (the near plane's cut adds about 270 when
+it cuts nothing), with nothing lost waiting for the flip:
 about 7 frames a second on a 128K, before ULA contention (511,000 without
 `CULL_SKIP`). Of an average frame (from the emulator's profiler), culling all
 forty objects takes about 23%, about 3,300 T-states an object; the
@@ -234,15 +264,21 @@ every result with `model.py`:
   and `transform_object` on 8,000 objects round 400 cameras, from 150 to
   20,000 units away: the camera's matrix, T, whether culled, M and every
   point;
+- the near plane: `cut_edges` on 5,400 objects straddling it, round 300
+  cameras -- the demo's models, a box as big as signed bytes allow and a
+  flat strip like a runway's -- every point, and every end of the 22,500
+  lines cut;
 - the demo, 256 frames of `draw_frame` (`compute_frame` then
   `render_frame`, a whole circle of the flight), whole
   screens against the model's picture of the same frame, and how many
   objects it drew. It writes every other one to `output/demo.gif`;
 - the demo again, 240 frames with the camera moved between them at random
-  -- small steps mostly, now and then a swing, a jump across the world or a
-  leap out of it -- against the model's picture from the camera as it then
-  stood, and `cull_skip_bounds`' table against the model's: the cull's
-  skipping is only ever right, whatever the camera does.
+  -- small steps mostly, now and then a swing, a jump across the world, a
+  leap out of it, or a place close enough to an object to cut it at the
+  near plane (69 frames, 465 edges cut) -- against the model's picture
+  from the camera as it then stood, and `cull_skip_bounds`' table against
+  the model's: the cull's skipping is only ever right, whatever the camera
+  does.
 
 `model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
 on 400,000 random lines and windows. Every clipped end must be within 0.75
@@ -263,6 +299,19 @@ worst, for objects as near as 40 units):
 python cull_geometry.py
 ```
 
+And `near_geometry.py` holds the cut at the near plane to it, through
+`model.object_lines`, on 20,000 random objects straddling the plane, a
+quarter of them at the side of the view. Only the vertices behind the
+plane may go unprojected; every edge with one end in front and one behind
+must be cut, and no other, its line starting at the front end; and every
+cut end must lie on the plane within 3 of the edge in 3D, in units of
+c / 4, a pixel across at the plane and a 32nd of a unit deep (1.92 at
+worst, 0.66 on average, on 84,000 edges), and none be held:
+
+```
+python near_geometry.py
+```
+
 The demo also runs on the emulator itself, and its profiler measures the
 real loop, interrupts, flips and all. Load `output/demo.z80` with its SLD,
 run it, and profile with `compute_frame` as the period, so that a period is
@@ -281,10 +330,17 @@ picture.
 
 ## Not done
 
-- **Clipping to the eye.** A line is clipped to the window, but an edge
-  with an end at or behind the eye (Z = 0) is still left out: that needs
-  clipping in 3D, to a near plane, before projecting. The demo's world keeps
-  its objects 300 units from the camera's path for that reason.
+- **A quicker cut.** `cut_edges` rotates both ends of each edge it cuts
+  again, so a vertex shared by several cut edges is rotated for each, and
+  it runs the chop twice, for x and for y, where one chop could step both:
+  the decisions come from z alone.
+- **Cutting in `transform_wide`.** Only objects are cut at the near plane;
+  `transform_wide` and `project_wide`, the older single-matrix path, still
+  leave out a vertex at or behind the eye (Z = 0) and every edge to it.
+- **Room for every cut.** The demo keeps 64 cut lines a picture, and
+  leaves out an object's cut lines if it has more edges than there is room
+  left for. Its world never comes near that (`check.py` models the rule),
+  but a world of big models crowded round the eye could.
 - **Skipping side-culled objects.** An object culled by a side plane in
   the rough step keeps little margin -- the step's slack on `2t - z` is
   three times ROUGH, 670 units -- so it is skipped seldom; the exact T

@@ -124,38 +124,48 @@ def models() -> dict:
     the shared vertices, each wound anticlockwise seen from outside, and
     found from the shape itself: the convex hull's faces, made of the
     vertices on each plane that has them all on one side."""
+    return {name: (vertices, hull_faces(vertices)) for name, (vertices, _) in objects().items()}
+
+
+def check_models() -> dict:
+    """Models for the checks alone, as models(): a box as big as signed bytes
+    allow, and a flat strip like a runway's, so that the near plane's cut is
+    tried at the extremes of a model's camera-space coordinates."""
+    box = paired([(x, y, z) for x in (-127, 127) for y in (-127, 127) for z in (-127, 127)])
+    strip = paired([(x, 0, z) for x in (-24, 24) for z in (-127, 127)])
+    return {name: (vertices, hull_faces(vertices)) for name, vertices in (("box", box), ("strip", strip))}
+
+
+def hull_faces(vertices: list) -> list:
+    """The faces of the vertices' convex hull (models() says how)."""
     import itertools
-    result = {}
-    shapes = {name: vertices for name, (vertices, _) in objects().items()}
-    for name, vertices in shapes.items():
-        faces, seen = [], set()
-        for a, b, c in itertools.combinations(range(len(vertices)), 3):
-            pa, pb, pc = vertices[a], vertices[b], vertices[c]
-            u = [pb[i] - pa[i] for i in range(3)]
-            v = [pc[i] - pa[i] for i in range(3)]
-            n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
-            if n == (0, 0, 0):
-                continue
-            side = [sum(n[i] * (q[i] - pa[i]) for i in range(3)) for q in vertices]
-            if max(side) > 0 and min(side) < 0:
-                continue
-            on = tuple(sorted(i for i, s in enumerate(side) if s == 0))
-            if on in seen:
-                continue
-            seen.add(on)
-            if max(side) > 0:
-                n = tuple(-x for x in n)                  # outwards
-            centre = [sum(vertices[i][k] for i in on) / len(on) for k in range(3)]
-            # round the face's centre, anticlockwise seen from outside (along -n)
-            ref = [vertices[on[0]][k] - centre[k] for k in range(3)]
-            other = (n[1] * ref[2] - n[2] * ref[1], n[2] * ref[0] - n[0] * ref[2], n[0] * ref[1] - n[1] * ref[0])
-            import math
-            def angle(i):
-                d = [vertices[i][k] - centre[k] for k in range(3)]
-                return math.atan2(sum(d[k] * other[k] for k in range(3)), sum(d[k] * ref[k] for k in range(3)))
-            faces.append(sorted(on, key=angle))
-        result[name] = (vertices, faces)
-    return result
+    faces, seen = [], set()
+    for a, b, c in itertools.combinations(range(len(vertices)), 3):
+        pa, pb, pc = vertices[a], vertices[b], vertices[c]
+        u = [pb[i] - pa[i] for i in range(3)]
+        v = [pc[i] - pa[i] for i in range(3)]
+        n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+        if n == (0, 0, 0):
+            continue
+        side = [sum(n[i] * (q[i] - pa[i]) for i in range(3)) for q in vertices]
+        if max(side) > 0 and min(side) < 0:
+            continue
+        on = tuple(sorted(i for i, s in enumerate(side) if s == 0))
+        if on in seen:
+            continue
+        seen.add(on)
+        if max(side) > 0:
+            n = tuple(-x for x in n)                  # outwards
+        centre = [sum(vertices[i][k] for i in on) / len(on) for k in range(3)]
+        # round the face's centre, anticlockwise seen from outside (along -n)
+        ref = [vertices[on[0]][k] - centre[k] for k in range(3)]
+        other = (n[1] * ref[2] - n[2] * ref[1], n[2] * ref[0] - n[0] * ref[2], n[0] * ref[1] - n[1] * ref[0])
+        import math
+        def angle(i):
+            d = [vertices[i][k] - centre[k] for k in range(3)]
+            return math.atan2(sum(d[k] * other[k] for k in range(3)), sum(d[k] * ref[k] for k in range(3)))
+        faces.append(sorted(on, key=angle))
+    return faces
 
 
 def write_objects(path: Path) -> None:
@@ -173,19 +183,34 @@ def write_objects(path: Path) -> None:
               "; step's margins, then without; and how many of the vertices, from the",
               "; first, come as a vertex and its mirror.", ""]
     for name, (vertices, faces) in models().items():
-        edges = model.faces_to_edges(faces)
-        r = model.bounding_radius(vertices)
-        r_view, r5 = model.cull_radii(r)
-        lines += [f"{name}_model:\t\tDB\t\t{len(vertices)}", f"\t\t\t\t\tDW\t\t{name}_vertices",
-                  f"\t\t\t\t\tDB\t\t{len(edges)}", f"\t\t\t\t\tDW\t\t{name}_model_edges",
-                  f"\t\t\t\t\tDB\t\t{len(faces)}", f"\t\t\t\t\tDW\t\t{name}_faces",
-                  f"\t\t\t\t\tD24\t\t{r_view} + ROUGH, {r5} + 3 * ROUGH, {r_view}, {r5}\t\t; r = {r}",
-                  f"\t\t\t\t\tDB\t\t{mirror_pairs(vertices)}\t\t\t\t\t; v, -v pairs",
-                  f"{name}_model_edges:"]
-        lines += [f"\t\t\t\t\tDB\t\t{a}, {b}" for a, b in edges]
-        lines += [f"{name}_faces:"]
-        lines += [f"\t\t\t\t\tDB\t\t{len(f)}, " + ", ".join(str(i) for i in f) for f in faces]
-        lines += [""]
+        lines += model_block(name, vertices, faces)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def model_block(name: str, vertices: list, faces: list) -> list[str]:
+    """A model as engine/objects.s reads it, at {name}_model; its vertices,
+    at {name}_vertices, are written apart."""
+    edges = model.faces_to_edges(faces)
+    r = model.bounding_radius(vertices)
+    r_view, r5 = model.cull_radii(r)
+    lines = [f"{name}_model:\t\tDB\t\t{len(vertices)}", f"\t\t\t\t\tDW\t\t{name}_vertices",
+             f"\t\t\t\t\tDB\t\t{len(edges)}", f"\t\t\t\t\tDW\t\t{name}_model_edges",
+             f"\t\t\t\t\tDB\t\t{len(faces)}", f"\t\t\t\t\tDW\t\t{name}_faces",
+             f"\t\t\t\t\tD24\t\t{r_view} + ROUGH, {r5} + 3 * ROUGH, {r_view}, {r5}\t\t; r = {r}",
+             f"\t\t\t\t\tDB\t\t{mirror_pairs(vertices)}\t\t\t\t\t; v, -v pairs",
+             f"{name}_model_edges:"]
+    lines += [f"\t\t\t\t\tDB\t\t{a}, {b}" for a, b in edges]
+    lines += [f"{name}_faces:"]
+    lines += [f"\t\t\t\t\tDB\t\t{len(f)}, " + ", ".join(str(i) for i in f) for f in faces]
+    return lines + [""]
+
+
+def write_check_models(path: Path) -> None:
+    """check_models(), for checks.s alone."""
+    lines = ["; Generated by build.py. Do not edit.", "; Models for check.py alone.", ""]
+    for name, (vertices, faces) in check_models().items():
+        lines += [f"{name}_vertices:"] + [f"\t\t\t\t\tDB\t\t{x}, {y}, {z}" for x, y, z in vertices]
+        lines += model_block(name, vertices, faces)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -195,7 +220,8 @@ WORLD_OBJECTS = 40
 def world() -> list:
     """The demo's world: (position, angles, spin, model name) for each object,
     scattered round the circle the camera flies, but none within 300 units of
-    its path (there is no clipping at the eye yet)."""
+    its path, as before edges were cut at the near plane: the flight cuts
+    nothing unless it is steered, and its pictures are as they were."""
     import random
     rng = random.Random(1983)
     path, position, angles = [], [0, 0, 0], [0, 0, 0]
@@ -330,6 +356,7 @@ def main() -> None:
     write_lines(OUT / "lines_gen.s")
     write_objects(OUT / "objects_gen.s")
     write_world(OUT / "world_gen.s")
+    write_check_models(OUT / "check_models_gen.s")
     assemble("checks", CULL_SKIP=1)                                # check.py reads what it leaves
     print(f"Wrote {OUT / 'checks.bin'}")
     if (HERE / "demo.s").is_file():

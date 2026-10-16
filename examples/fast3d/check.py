@@ -21,11 +21,15 @@ and every result is compared with the model's:
    transform_object on objects all round the camera, near and far, against
    the model -- the camera's matrix and constant, T, whether culled, M, and
    every point. (cull_geometry.py holds the model to exact geometry.)
-8. The demo: draw_frame, frame after frame for each object through a whole
+8. The near plane: cut_edges on objects straddling it, from cameras all
+   round, against model.object_lines -- every point and every cut line.
+   (near_geometry.py holds the model to exact geometry.)
+9. The demo: draw_frame, frame after frame for each object through a whole
    swing in and out, on the screen at $4000 (and so clearing its own last
    box), against model.py's picture of the same frame -- clipped to the
    window, frame and all; and timed. Every other frame goes to
-   output/demo.gif.
+   output/demo.gif. Then again with the camera jumping about, now and then
+   close enough to an object to cut it at the near plane.
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -508,6 +512,92 @@ def check_objects(m: Machine) -> list[str]:
     return failures
 
 
+def check_near_cut(m: Machine) -> list[str]:
+    """cut_edges on objects straddling the near plane, seen from cameras all
+    round: set_camera, cull_object, object_matrix and transform_object as
+    the demo calls them, then cut_edges, against model.object_lines -- every
+    point, and every cut line's ends, how many and where they end."""
+    from build import check_models, models
+    failures = []
+    rng = random.Random(13)
+    shapes = [(m.label(f"{name}_model"), vertices, model.faces_to_edges(faces))
+              for name, (vertices, faces) in list(models().items()) + list(check_models().items())]
+    obj_at = m.label("checks_object")
+    point_at = m.label("checks_points_far")
+    cuts_at = m.label("checks_cuts")
+    times = {"cut_edges, nothing behind": [], "cut_edges, a line": []}
+    counts, objects = 0, 0
+    for _ in range(300):
+        cam_a = [rng.randrange(256) for _ in range(3)]
+        camera = model.make_matrix(*cam_a)
+        ideal = model.ideal_matrix(*cam_a)
+        cam_p = [rng.randrange(-30000, 30000) for _ in range(3)]
+        for name, value in zip(("camera_x", "camera_y", "camera_z"), cam_p):
+            m.poke_word(name, value)
+        m.poke(m.label("camera_angles"), bytes(cam_a))
+        m.call("set_camera")
+        for _ in range(20):
+            model_at, vertices, edges = shapes[rng.randrange(len(shapes))]
+            r = model.bounding_radius(vertices)
+            # where it is to be seen: its centre within r of the near plane
+            want = [rng.uniform(-r, r), rng.uniform(-r, r), model.NEAR_PLANE / 127 + rng.uniform(-r, r)]
+            pos = [c + round(sum(ideal[3 * i + j] * want[j] for j in range(3))) for i, c in enumerate(cam_p)]
+            obj_a = [rng.randrange(256) for _ in range(3)]
+            t = model.view_centre(pos, cam_p, camera)
+            if t is None or model.culled(t, r):
+                continue
+            objects += 1
+            record = (b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a)
+                      + model_at.to_bytes(2, "little") + bytes(8))
+            m.poke(obj_at, record)
+            for routine in ("cull_object", "object_matrix"):
+                m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
+                m.call(routine)
+            first = rng.randrange(65 - len(vertices))
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            m.call("transform_object", D=point_at >> 8, E=first)
+            mat = model.view_matrix(camera, model.make_matrix(*obj_a))
+            want_points, want_cuts = model.object_lines(vertices, edges, mat, t)
+            for i, want_p in enumerate(want_points):
+                words = [model.to_signed16(m.memory[point_at + k + first + i] | m.memory[point_at + k + 64 + first + i] << 8)
+                         for k in (0, 128)]
+                got_p = None if words[0] == -32768 else tuple(words)
+                if got_p != want_p:
+                    failures.append(f"transform_object {vertices[i]} of {pos} {obj_a} from {cam_p} {cam_a}: {got_p}, not {want_p}")
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            took = m.call("cut_edges", H=point_at >> 8, L=first, D=cuts_at >> 8, E=cuts_at & 0xFF)
+            count, end = m.reg("A"), m.pair("D", "E")
+            got_cuts = [tuple(model.to_signed16(m.memory[cuts_at + 8 * n + 2 * k] | m.memory[cuts_at + 8 * n + 2 * k + 1] << 8)
+                              for k in range(4)) for n in range(count)]
+            if count != len(want_cuts) or end != cuts_at + 8 * count or got_cuts != want_cuts:
+                failures.append(f"cut_edges of {pos} {obj_a} from {cam_p} {cam_a}: {count} lines to {end:04X}, "
+                                f"{got_cuts}, not {want_cuts}")
+            if count:
+                times["cut_edges, a line"].append(took / count)
+            elif None not in want_points:
+                times["cut_edges, nothing behind"].append(took)
+            counts += count
+        if len(failures) > 10:
+            return failures
+    for name, ts in times.items():
+        report(name, [round(x) for x in ts])
+    print(f"  {'':14} {objects:,} objects straddling the near plane, {counts:,} edges cut, every point as the model")
+    return failures
+
+
+def object_picture(vertices, edges, mat, t, window, room: int) -> tuple[list, list, list]:
+    """An object's lines in the demo, clipped to the window: each edge with
+    both ends in front of the near plane, and each one cut at it -- unless,
+    as compute_frame has it, there is room for fewer cut lines than the
+    object has edges, when they are left out. And its points and its cuts."""
+    points, cuts = model.object_lines(vertices, edges, mat, t)
+    if len(edges) > room:
+        cuts = []
+    lines = [model.clip_line(*points[i], *points[j], window) for i, j in edges if points[i] and points[j]]
+    lines += [model.clip_line(*cut, window) for cut in cuts]
+    return [line for line in lines if line], points, cuts
+
+
 def check_demo(m: Machine) -> list[str]:
     from PIL import Image
     from build import models, world
@@ -518,7 +608,7 @@ def check_demo(m: Machine) -> list[str]:
     sld = OUT / "demo.sld"
     label = {name: find_label(sld, name) for name in
              ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles",
-              "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
+              "CUT_LINES", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
     window = tuple(label[f"VIEW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
     left, top, right, bottom = window
     frame = [(left - 1, top - 1, right + 1, top - 1), (right + 1, top - 1, right + 1, bottom + 1),
@@ -540,10 +630,11 @@ def check_demo(m: Machine) -> list[str]:
     things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
     cam_p, cam_a = [0, 0, 0], [0, 0, 0]
     frames, times, counts = [], [], []
+    behind = 0                                  # vertices behind the near plane
     for _ in range(256):
         times.append(call("draw_frame"))
         cam_p, cam_a, rc = model.fly(cam_p, cam_a)
-        lines, drawn = list(frame), 0
+        lines, drawn, cuts_now = list(frame), 0, 0
         for thing in things:
             pos, angles, spin, name = thing
             thing[1] = angles = [(a + s) & 255 for a, s in zip(angles, spin)]
@@ -553,12 +644,8 @@ def check_demo(m: Machine) -> list[str]:
                 continue
             drawn += 1
             mat = model.view_matrix(rc, model.make_matrix(*angles))
-            points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
-            for i, j in edges:
-                if points[i] and points[j]:
-                    line = model.clip_line(*points[i], *points[j], window)
-                    if line:
-                        lines.append(line)
+            picture, points, cuts = object_picture(vertices, edges, mat, t, window, label["CUT_LINES"] - cuts_now)
+            lines, cuts_now, behind = lines + picture, cuts_now + len(cuts), behind + points.count(None)
         counts.append(drawn)
         got_drawn = sim.memory[label["drawn"]]
         got = bytes(sim.memory[0x4000:0x5800])
@@ -570,7 +657,10 @@ def check_demo(m: Machine) -> list[str]:
         frames.append(got)
     report("demo: a frame", times)
     print(f"  {'':14} {min(counts)}..{max(counts)} objects drawn a frame, of {len(things)}, "
-          f"{sum(counts) / len(counts):.1f} on average, over a circle of the flight")
+          f"{sum(counts) / len(counts):.1f} on average, over a circle of the flight, "
+          f"{behind} vertices behind the near plane")
+    if behind:                                  # the world keeps clear of the flight
+        failures.append(f"demo: {behind} vertices behind the near plane, so its pictures have changed")
     if not frames:
         return failures
     # the frames, as the Spectrum shows them: bright white on black, twice the size
@@ -602,7 +692,7 @@ def check_demo_jumps(m: Machine) -> list[str]:
     sld = OUT / "demo.sld"
     label = {name: find_label(sld, name) for name in
              ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles", "skip_bounds", "world",
-              "OBJECT_SIZE", "OBJECT_SKIP", "WORLD_OBJECTS", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
+              "OBJECT_SIZE", "OBJECT_SKIP", "WORLD_OBJECTS", "CUT_LINES", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
     window = tuple(label[f"VIEW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
     left, top, right, bottom = window
     frame = [(left - 1, top - 1, right + 1, top - 1), (right + 1, top - 1, right + 1, bottom + 1),
@@ -632,7 +722,8 @@ def check_demo_jumps(m: Machine) -> list[str]:
     things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
     last = ([0, 0, 0], [0] * 9)                        # as camera_last starts
     stale = None                                       # skip_bounds as last left
-    kinds = {"step": 0, "swing": 0, "jump": 0, "leap": 0, "void": 0}
+    kinds = {"step": 0, "swing": 0, "jump": 0, "leap": 0, "close": 0, "void": 0}
+    cut, cuts_seen = 0, 0                              # edges cut, frames with any
     for i in range(240):
         pos, angles = camera()
         roll = rng.random()
@@ -644,7 +735,14 @@ def check_demo_jumps(m: Machine) -> list[str]:
             kind = "jump"
             pos = [rng.randint(-3000, 3000), rng.randint(-600, 600), rng.randint(-3000, 3000)]
             angles = [rng.randrange(256) for _ in range(3)]
-        elif roll < 0.35:
+        elif roll < 0.25:
+            kind = "close"                              # an object straddling the near
+            angles = [rng.randrange(256) for _ in range(3)]     # plane, once the frame
+            ahead = model.make_matrix(*angles)[2::3]            # has moved the camera on
+            target = things[rng.randrange(len(things))][0]
+            back = rng.uniform(-60, 140)
+            pos = [round(p - back * f / 127) for p, f in zip(target, ahead)]
+        elif roll < 0.4:
             kind = "swing"
             pos = [max(-32000, min(32000, p + rng.randint(-250, 250))) for p in pos]
             angles = [a + rng.randint(-24, 24) for a in angles]
@@ -657,7 +755,7 @@ def check_demo_jumps(m: Machine) -> list[str]:
         call("draw_frame")                          # (which moves the camera on itself)
         cam_p, cam_a = camera()
         rc = model.make_matrix(*cam_a)
-        lines, drawn = list(frame), 0
+        lines, drawn, cut_before = list(frame), 0, cut
         for thing in things:
             tpos, tangles, spin, name = thing
             thing[1] = tangles = [(a + s) & 255 for a, s in zip(tangles, spin)]
@@ -667,12 +765,9 @@ def check_demo_jumps(m: Machine) -> list[str]:
                 continue
             drawn += 1
             mat = model.view_matrix(rc, model.make_matrix(*tangles))
-            points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
-            for a, b in edges:
-                if points[a] and points[b]:
-                    line = model.clip_line(*points[a], *points[b], window)
-                    if line:
-                        lines.append(line)
+            picture, _, cuts = object_picture(vertices, edges, mat, t, window, label["CUT_LINES"] - (cut - cut_before))
+            lines, cut = lines + picture, cut + len(cuts)
+        cuts_seen += cut > cut_before
         got_drawn = sim.memory[label["drawn"]]
         if got_drawn != drawn or bytes(sim.memory[0x4000:0x5800]) != render(lines, 0x4000):
             failures.append(f"demo with jumps: frame {i} ({kind}), camera at {cam_p} {cam_a}: "
@@ -694,14 +789,16 @@ def check_demo_jumps(m: Machine) -> list[str]:
             break
         last, stale = (cam_p, seen), got
     print(f"  demo with jumps: {kinds['step']} steps, {kinds['swing']} swings, {kinds['jump']} jumps, "
-          f"{kinds['leap']} leaps ({kinds['void']} frames voiding every margin), all as the model")
+          f"{kinds['leap']} leaps ({kinds['void']} frames voiding every margin), {kinds['close']} "
+          f"close to an object ({cuts_seen} frames with edges cut at the near plane, {cut} edges), "
+          f"all as the model")
     return failures
 
 
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_demo, check_demo_jumps):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_near_cut, check_demo, check_demo_jumps):
         failures += check(m)
     if failures:
         print("\n".join(failures[:20]))

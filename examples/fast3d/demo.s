@@ -3,7 +3,8 @@
 ; turning gently of its own accord; O and P turn it more, Q and A pitch it.
 ; Each frame, every object is culled or drawn: what is out of view is left
 ; out before a vertex of it is touched (engine/objects.s), and what is in
-; view is drawn through a window, its edges clipped to the window's frame.
+; view is drawn through a window, its edges clipped to the window's frame,
+; and those that pass behind the eye cut at the near plane first.
 ;
 ; A 128K program: each frame is drawn on the screen not being shown, then
 ; shown at the next interrupt, so nothing ever flickers. Only the box drawn
@@ -128,6 +129,9 @@ VIS_BASE			EQU		1					; and its first vertex there
 VIS_INSIDE			EQU		2					; non-zero: wholly in the window
 VIS_EDGES			EQU		3					; how many edges, and where
 VIS_SIZE			EQU		6
+CUT_LINES			EQU		64					; room for lines cut at the near
+												; plane (an object's are left out
+												; if its edges might overflow it)
 
 compute_frame:
 					ld		hl,camera_angles + 1	; turning gently, always
@@ -162,6 +166,9 @@ compute_frame:
 					ld		(.most_x),a
 					ld		(.most_y),a
 					ld		(drawn),a
+					ld		(cuts),a			; and no lines cut yet
+					ld		hl,cut_lines
+					ld		(.cut_at),hl
 					ld		hl,visible
 					ld		(.entry),hl
 					ld		hl,point_pool		; the pool's first page, from 0
@@ -249,7 +256,31 @@ compute_frame:
 					ld		b,(hl)
 					ld		hl,(.first)
 					call	.object_box
-					ld		hl,(.model)			; and the entry
+					ld		a,(transform_behind)	; the edges cut at the near
+					or		a					; plane, if any vertex is behind
+					jr		z,.cuts_done		; it and there is room for as
+					ld		ix,(.object)		; many lines as it has edges
+					ld		hl,(.model)			; (there always is, in this
+					inc		hl					; world)
+					inc		hl
+					inc		hl
+					ld		a,(cuts)
+					add		a,(hl)				; MODEL_EDGES
+					jr		c,.cuts_done
+					cp		CUT_LINES + 1
+					jr		nc,.cuts_done
+					ld		hl,(.first)
+					ld		de,(.cut_at)
+					push	de
+					call	cut_edges
+					ld		(.cut_at),de
+					pop		hl
+					ld		b,a
+					ld		a,(cuts)
+					add		a,b
+					ld		(cuts),a
+					call	.cut_box			; their cut ends into the box
+.cuts_done:			ld		hl,(.model)			; and the entry
 					inc		hl
 					inc		hl
 					inc		hl					; MODEL_EDGES
@@ -431,6 +462,7 @@ compute_frame:
 					ret
 .behind:			ld		ixh,1
 					jr		.next_vertex
+
 ; Off the screen's 256: 0 if negative, 255 if not.
 .x_far:				add		a,a
 					sbc		a,a
@@ -441,6 +473,59 @@ compute_frame:
 					cpl
 					jr		.y_held
 
+; The B lines cut_edges just wrote from HL: each one's second end, where it
+; was cut, into the picture's box, held to 0..255 as .object_box holds the
+; vertices. (The first end is a vertex, in the box already.) Uses A, BC,
+; DE, HL.
+.cut_box:			inc		b
+					dec		b
+					ret		z
+.cut_end:			ld		de,4				; x1, y1
+					add		hl,de
+					ld		e,(hl)
+					inc		hl
+					ld		a,(hl)
+					inc		hl
+					call	.held
+					ld		c,a
+					ld		a,(.least_x)
+					cp		c
+					jr		c,.cut_not_least_x
+					ld		a,c
+					ld		(.least_x),a
+.cut_not_least_x:	ld		a,(.most_x)
+					cp		c
+					jr		nc,.cut_not_most_x
+					ld		a,c
+					ld		(.most_x),a
+.cut_not_most_x:	ld		e,(hl)
+					inc		hl
+					ld		a,(hl)
+					inc		hl
+					call	.held
+					ld		c,a
+					ld		a,(.least_y)
+					cp		c
+					jr		c,.cut_not_least_y
+					ld		a,c
+					ld		(.least_y),a
+.cut_not_least_y:	ld		a,(.most_y)
+					cp		c
+					jr		nc,.cut_not_most_y
+					ld		a,c
+					ld		(.most_y),a
+.cut_not_most_y:	djnz	.cut_end
+					ret
+; A:E, 16-bit, held to 0..255.
+.held:				or		a
+					jr		nz,.held_far
+					ld		a,e
+					ret
+.held_far:			add		a,a					; 0 if negative, 255 if not
+					sbc		a,a
+					cpl
+					ret
+
 .object:			DW		0					; the one being drawn
 .objects_left:		DB		0
 .model:				DW		0
@@ -448,12 +533,14 @@ compute_frame:
 .slot:				DW		0					; where the next points go: the
 													; vertex, then the page
 .first:				DW		0					; and where this object's went
+.cut_at:			DW		0					; where the next cut line goes
 .least_x:			DB		0
 .least_y:			DB		0
 .most_x:			DB		0
 .most_y:			DB		0
 .all_inside:		DB		0					; this object needs no clipping
 drawn:				DB		0					; objects drawn this frame
+cuts:				DB		0					; lines cut at the near plane
 new_box:			DB		0, 0, 0, 0			; rows (0: none), top, column, columns
 
 
@@ -462,8 +549,8 @@ new_box:			DB		0, 0, 0, 0			; rows (0: none), top, column, columns
 ; last time, and draw what compute_frame worked out.
 
 ; L = a vertex's number, H = the points' page: its x and y into TO_X and
-; TO_X + 2, as clip_line takes them, or on to SKIP_TO if it is at or behind
-; the eye. Keeps B and C. A macro, not a call: twice an edge, a hundred
+; TO_X + 2, as clip_line takes them, or on to SKIP_TO if it is behind
+; the near plane. Keeps B and C. A macro, not a call: twice an edge, a hundred
 ; edges a picture.
 					MACRO	END_AT	TO_X, SKIP_TO
 					set		6,l
@@ -530,7 +617,8 @@ render_frame:
 					dec		c
 					jr		nz,.inside_edge
 
-; An object reaching outside the window, or behind the eye: each edge clipped.
+; An object reaching outside the window, or behind the near plane: each
+; edge clipped (and those cut at the plane drawn after every object).
 .edge:				ld		(.edges_left),a
 					ld		hl,(.edge_at)
 					ld		a,(hl)				; its ends
@@ -544,7 +632,7 @@ render_frame:
 					ld		c,a
 .page1:				ld		h,0
 					ld		l,b
-					END_AT	clip_x0, render_frame.next_edge	; neither behind the eye
+					END_AT	clip_x0, render_frame.next_edge	; neither behind the plane
 					ld		l,c
 					END_AT	clip_x1, render_frame.next_edge
 					call	clip_line
@@ -585,6 +673,24 @@ render_frame:
 					ld		a,(.objects_left)
 					dec		a
 					jp		nz,.object
+
+; The edges cut at the near plane: each line, front end then the cut, as
+; clip_line takes it.
+					ld		a,(cuts)
+					or		a
+					ret		z
+					ld		hl,cut_lines
+.cut_line:			ld		(.edges_left),a
+					ld		de,clip_x0
+					ld		bc,8
+					ldir
+					ld		(.edge_at),hl
+					call	clip_line
+					call	nc,draw_line
+					ld		hl,(.edge_at)
+					ld		a,(.edges_left)
+					dec		a
+					jr		nz,.cut_line
 					ret
 
 .objects_left:		DB		0
@@ -774,12 +880,20 @@ clear_screen:
 					INCLUDE	"output/objects_gen.s"
 					INCLUDE	"output/world_gen.s"
 
+code_end:
+					ASSERT	code_end <= IM2_ROUTINE
+
 ; Each object drawn: its points, from transform_object, in the four tables
 ; of 64 on one of these pages (POINT_PAGES, from build.py, is enough for
-; every object at once), and its entry.
-					ALIGN	256
+; every object at once), and its entry; and the lines cut at the near
+; plane. In bank 5 above the screen, where nothing else is, rather than in
+; bank 2 with the code (on a real Spectrum, contended memory: the emulator
+; doesn't model that).
+					ORG		$6000
 point_pool:			DS		256 * POINT_PAGES
 visible:			DS		VIS_SIZE * WORLD_OBJECTS
+cut_lines:			DS		8 * CUT_LINES
+					ASSERT	$ <= $7E00			; well below the stack
 
 ; The interrupt: the screen flip_to asks for, if it asks.
 					ORG		IM2_ROUTINE

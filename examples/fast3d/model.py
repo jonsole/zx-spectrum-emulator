@@ -415,13 +415,18 @@ def view_matrix(camera: list[int], obj: list[int]) -> list[int]:
     return m
 
 
+def view_point(rotated, t):
+    """c, a vertex in camera space: its rotation plus T, 24-bit."""
+    return tuple(a + b for a, b in zip(rotated, t))
+
+
 def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96):
     """Where a vertex lands: c = its rotation plus T, 24-bit; then shifted
     right by just enough to bring its depth into 8 bits (Z = c_z >> (8 + s)),
-    so that one quick divide by a byte will do at any distance. None if at
-    or behind the eye."""
-    cx, cy, cz = (a + b for a, b in zip(rotated, t))
-    if cz < 256:
+    so that one quick divide by a byte will do at any distance. None if
+    behind the near plane (c_z < NEAR_PLANE)."""
+    cx, cy, cz = view_point(rotated, t)
+    if cz < NEAR_PLANE:
         return None
     s = max(0, (cz >> 8).bit_length() - 8)
     z = cz >> (8 + s)
@@ -431,6 +436,70 @@ def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96):
         q = min(abs(v) // z, WIDE_LIMIT)
         return -q if v < 0 else q
     return centre_x + divide(cx), centre_y - divide(cy)
+
+
+# ---------------------------------------------------------------------------
+# The near plane. An edge with one end in front of the near plane and the
+# other behind it is cut where it crosses the plane, in camera space, and
+# the part in front drawn; an edge wholly behind it is left out.
+#
+# The plane is at c_z = NEAR_PLANE = 1024, Z = 4 to the projection, so a
+# point on it lands at c_x / 4, c_y / 4 from the centre: no divide. Seen
+# from above, with x and z both in units of c / 4 -- pixels across, at the
+# plane -- the cut is where a line crosses z = 256, and clip_line's halving
+# (crossing) finds that, once for x and once for y. Bringing c into those
+# units, floor(c / 4), keeps the numbers in 16 bits: for an object
+# cull_object lets through, with a vertex behind the plane, |T_z| is under
+# 1024 + 127 r and 2 |T_x| under T_z + 128 r sqrt 5, so with r <= 222 (a
+# signed byte's) |c_x| / 4 stays under 19,000, and an edge spans at most
+# 127 * 255 sqrt 3 / 4, 14,000. Where the edge crosses the plane is nearer
+# still: inside the sphere (radius R = 127 r) and on the plane, with the
+# centre inside the side planes, x is at most 512 + sqrt 5 R -- under
+# 16,000 once divided by 4. So the cut never needs holding to
+# +-WIDE_LIMIT, as a far projected point does; it is held all the same, for
+# a program that cuts what the cull has not passed, so that clip_line can
+# always take the line. near_geometry.py holds this to exact geometry.
+#
+# The cull's own near test is NEAR * 127, a hair nearer than the plane
+# (1024 is 8.06 units): an object it lets through between the two has
+# every vertex behind the plane, and draws nothing.
+
+NEAR_PLANE = NEAR * 128     # c_z of the near plane: 8.06 units, 1024 / 127
+NEAR_SHIFT = 2              # c >> NEAR_SHIFT: units of a pixel at the plane
+
+
+def near_crossing(behind, front) -> tuple[int, int]:
+    """Where the edge from c = behind (c_z < NEAR_PLANE) to c = front (c_z
+    >= NEAR_PLANE) crosses the near plane: x and y in units of c / 4, the
+    offsets from the screen's centre there (y up)."""
+    a = [v >> NEAR_SHIFT for v in behind]
+    b = [v >> NEAR_SHIFT for v in front]
+    assert all(-32768 <= v <= 32767 for v in a + b) and b[2] - a[2] < 32768
+    edge = NEAR_PLANE >> NEAR_SHIFT
+    return crossing(a[0], b[0], a[2], b[2], edge), crossing(a[1], b[1], a[2], b[2], edge)
+
+
+def cut_edge(behind, front, centre_x: int = 128, centre_y: int = 96) -> tuple[int, int]:
+    """The screen point near_crossing's crossing lands on, held to
+    +-WIDE_LIMIT from the centre as project_far's are (which, for an object
+    the cull lets through, it never needs: see above)."""
+    x, y = (max(-WIDE_LIMIT, min(WIDE_LIMIT, v)) for v in near_crossing(behind, front))
+    return centre_x + x, centre_y - y
+
+
+def object_lines(vertices, edges, m, t) -> tuple[list, list]:
+    """An object's points (transform_object's: None behind the near plane)
+    and its cut lines (cut_edges'): for each edge, in order, that crosses
+    the near plane, its front end's point and where it is cut, x0, y0, x1,
+    y1. The edges with both ends in front are drawn between the points."""
+    rotated = [rotate(m, v) for v in vertices]
+    points = [project_far(r, t) for r in rotated]
+    cuts = []
+    for i, j in edges:
+        if (points[i] is None) != (points[j] is None):
+            front, behind = (i, j) if points[j] is None else (j, i)
+            cuts.append(points[front] + cut_edge(view_point(rotated[behind], t), view_point(rotated[front], t)))
+    return points, cuts
 
 
 def ideal_view(vertex, position, angles, camera_position, camera_angles):
