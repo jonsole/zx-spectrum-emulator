@@ -10,6 +10,7 @@ checks_points:		DS		2 * 16
 					ALIGN	256
 checks_points_far:	DS		256					; transform_object's
 checks_cuts:		DS		8 * 64				; cut_edges'
+checks_edges:		DS		2 * 255				; facing_edges'
 end:
 					IF WORLD_WRAP
 					SAVEBIN	"output/checks_wrap.bin", $8000, end - $8000

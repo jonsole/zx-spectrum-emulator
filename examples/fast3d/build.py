@@ -128,12 +128,45 @@ def models() -> dict:
 
 
 def check_models() -> dict:
-    """Models for the checks alone, as models(): a box as big as signed bytes
-    allow, and a flat strip like a runway's, so that the near plane's cut is
-    tried at the extremes of a model's camera-space coordinates."""
-    box = paired([(x, y, z) for x in (-127, 127) for y in (-127, 127) for z in (-127, 127)])
-    strip = paired([(x, 0, z) for x in (-24, 24) for z in (-127, 127)])
-    return {name: (vertices, hull_faces(vertices)) for name, vertices in (("box", box), ("strip", strip))}
+    """Models for the checks alone: {name: (vertices, faces, parts)}, parts
+    being how many of the faces each part has, in order ([] for a model with
+    no faces, drawn whole). A box as big as signed bytes allow and a flat
+    strip like a runway's, facing up, so that the near plane's cut is tried
+    at the extremes of a model's camera-space coordinates; an aeroplane of
+    three convex parts, body, wings and tail, for back faces part by part;
+    and a frame, a cube with no faces."""
+    box = [(x, y, z) for x in (-127, 127) for y in (-127, 127) for z in (-127, 127)]
+    strip = [(x, 0, z) for x in (-24, 24) for z in (-127, 127)]
+    body = [(x, y, z) for x in (-14, 14) for y in (-16, 14) for z in (-70, 50)]
+    wings = [(x, y, z) for x in (-120, 120) for y in (16, 22) for z in (-6, 30)]
+    # the tail rises from the body's rear top edge, which both parts have
+    tail = [(-14, 14, -70), (14, 14, -70), (0, 14, -110), (0, 44, -110), (0, 40, -92)]
+    frame = [(x, y, z) for x in (-60, 60) for y in (-60, 60) for z in (-60, 60)]
+    result = {name: parts_model(parts) for name, parts in
+              (("box", [box]), ("strip", [strip]), ("aeroplane", [body, wings, tail]))}
+    vertices, faces, _ = parts_model([frame])
+    result["frame"] = (vertices, faces, [])
+    return result
+
+
+def parts_model(parts: list) -> tuple:
+    """A model of convex parts, each a list of vertices, which parts that
+    meet share: (vertices, faces, parts) as check_models() has them, the
+    vertices paired, each part's faces its convex hull's -- or, for a flat
+    part, its one face, wound to face up (+y) or else towards +z."""
+    vertices = paired(list(dict.fromkeys(v for part in parts for v in part)))
+    faces, counts = [], []
+    for part in parts:
+        part_faces = [[vertices.index(part[i]) for i in face] for face in hull_faces(part)]
+        if len(part_faces) == 1:                      # flat: which way it faces is ours to say
+            a, b, c = (vertices[i] for i in part_faces[0][:3])
+            u, w = [b[k] - a[k] for k in range(3)], [c[k] - a[k] for k in range(3)]
+            n = (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
+            if (n[1], n[2]) < (0, 0):
+                part_faces[0].reverse()
+        faces += part_faces
+        counts.append(len(part_faces))
+    return vertices, faces, counts
 
 
 def hull_faces(vertices: list) -> list:
@@ -177,40 +210,47 @@ def write_objects(path: Path) -> None:
         lines += [f"{name}_edges:"]
         lines += [f"\t\t\t\t\tDB\t\t{i}, {j}" for i, j in edges]
         lines += [""]
-    lines += ["; The models, as engine/objects.s reads them: vertices, edges and faces",
-              "; (the vertices shared, each edge once), and the bounding radius, 24-bit,",
-              "; as cull_object tests with it: 128 r and 128 r sqrt 5 with the rough",
-              "; step's margins, then without; and how many of the vertices, from the",
-              "; first, come as a vertex and its mirror.", ""]
+    lines += ["; The models, as engine/objects.s reads them: vertices and edges (the",
+              "; vertices shared, each edge once), and no faces, so drawn whole; the",
+              "; bounding radius, 24-bit, as cull_object tests with it: 128 r and",
+              "; 128 r sqrt 5 with the rough step's margins, then without; and how many",
+              "; of the vertices, from the first, come as a vertex and its mirror.", ""]
     for name, (vertices, faces) in models().items():
-        lines += model_block(name, vertices, faces)
+        lines += model_block(name, vertices, faces, [])         # no faces: every edge drawn
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def model_block(name: str, vertices: list, faces: list) -> list[str]:
+def model_block(name: str, vertices: list, faces: list, parts: list) -> list[str]:
     """A model as engine/objects.s reads it, at {name}_model; its vertices,
-    at {name}_vertices, are written apart."""
-    edges = model.faces_to_edges(faces)
+    at {name}_vertices, are written apart. parts: how many of the faces each
+    convex part has (model.part_edges); [] for a model with no faces, drawn
+    whole, whose faces only say what its edges are."""
+    edges, edge_faces = model.part_edges(faces, parts)
+    assert len(edges) <= 255 and (not parts or len(faces) <= 64), "facing_edges' table holds 64 faces"
     r = model.bounding_radius(vertices)
     r_view, r5 = model.cull_radii(r)
     lines = [f"{name}_model:\t\tDB\t\t{len(vertices)}", f"\t\t\t\t\tDW\t\t{name}_vertices",
              f"\t\t\t\t\tDB\t\t{len(edges)}", f"\t\t\t\t\tDW\t\t{name}_model_edges",
-             f"\t\t\t\t\tDB\t\t{len(faces)}", f"\t\t\t\t\tDW\t\t{name}_faces",
+             f"\t\t\t\t\tDB\t\t{len(faces) if parts else 0}", f"\t\t\t\t\tDW\t\t{name}_faces" if parts else "\t\t\t\t\tDW\t\t0",
              f"\t\t\t\t\tD24\t\t{r_view} + ROUGH, {r5} + 3 * ROUGH, {r_view}, {r5}\t\t; r = {r}",
              f"\t\t\t\t\tDB\t\t{mirror_pairs(vertices)}\t\t\t\t\t; v, -v pairs",
+             f"\t\t\t\t\tDW\t\t{name}_edge_faces" if parts else "\t\t\t\t\tDW\t\t0",
              f"{name}_model_edges:"]
     lines += [f"\t\t\t\t\tDB\t\t{a}, {b}" for a, b in edges]
-    lines += [f"{name}_faces:"]
-    lines += [f"\t\t\t\t\tDB\t\t{len(f)}, " + ", ".join(str(i) for i in f) for f in faces]
+    if parts:
+        lines += [f"{name}_faces:"]
+        lines += [f"\t\t\t\t\tDB\t\t{len(f)}, " + ", ".join(str(i) for i in f) for f in faces]
+        lines += [f"{name}_edge_faces:"]
+        lines += [f"\t\t\t\t\tDB\t\t{f1}, {f2}" for f1, f2 in edge_faces]
     return lines + [""]
 
 
 def write_check_models(path: Path) -> None:
     """check_models(), for checks.s alone."""
     lines = ["; Generated by build.py. Do not edit.", "; Models for check.py alone.", ""]
-    for name, (vertices, faces) in check_models().items():
+    for name, (vertices, faces, parts) in check_models().items():
         lines += [f"{name}_vertices:"] + [f"\t\t\t\t\tDB\t\t{x}, {y}, {z}" for x, y, z in vertices]
-        lines += model_block(name, vertices, faces)
+        lines += model_block(name, vertices, faces, parts)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

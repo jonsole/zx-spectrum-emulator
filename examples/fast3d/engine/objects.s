@@ -86,13 +86,24 @@ OBJECT_SIZE			EQU		19
 ; each 24-bit, first with the rough step's margins added (ROUGH and 3 ROUGH),
 ; then as they are: cull_object copies each pair as it stands, rather than
 ; working them out for every object every picture.
+;
+; A model with faces is made of convex parts. Each face belongs to one
+; part, and so does each edge, with the two faces either side of it in its
+; part (one face twice, at the edge of a flat part); two parts that meet
+; each have the edge. facing_edges keeps an edge only if a face either side
+; looks towards the eye, so each part loses its own back edges and no part
+; hides another. A model with no faces (0) is drawn whole.
 MODEL_VERTICES		EQU		0					; DB count, DW -> x, y, z bytes
 MODEL_EDGES			EQU		3					; DB count, DW -> pairs of indices
-MODEL_FACES			EQU		6					; DB count, DW -> each a DB n and n indices
+MODEL_FACES			EQU		6					; DB count (0: none), DW -> each a DB
+												; n and n indices, anticlockwise
+												; seen from outside, up to 64 faces
 MODEL_RADII			EQU		9					; D24 128 r + ROUGH, 128 r sqrt 5 +
 												; 3 ROUGH, 128 r, 128 r sqrt 5
 MODEL_PAIRS			EQU		21					; DB how many of the vertices, from
 												; the first, are v, -v pairs
+MODEL_EDGE_FACES	EQU		22					; DW -> for each edge, DB the faces
+												; either side of it
 
 ; 24-bit numbers in C:H:L, from and to three bytes in memory, low first.
 					MACRO	LOAD24	AT
@@ -1022,6 +1033,18 @@ transform_object:
 					ld		l,(ix + OBJECT_MODEL)
 					ld		h,(ix + OBJECT_MODEL + 1)
 					push	hl
+					inc		hl					; the edges to draw: all the
+					inc		hl					; model's, unless facing_edges
+					inc		hl					; leaves out some
+					ld		a,(hl)				; MODEL_EDGES
+					ld		(view_edge_count),a
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ld		(view_edges),de
+					pop		hl
+					push	hl
 					ld		de,MODEL_PAIRS
 					add		hl,de
 					ld		c,(hl)				; C = the pairs
@@ -1111,13 +1134,289 @@ transform_behind:	DB		0					; non-zero: a vertex was behind
 
 
 ; ---------------------------------------------------------------------------
-; cut_edges: the edges of an object that cross the near plane, cut there
-; (model.object_lines). An edge with one end in front of the plane and the
-; other behind it becomes a line from its front end, as transform_object
-; put it, to where the edge crosses the plane: four words, x0, y0, x1, y1,
-; as clip_x0 to clip_y1 take them. An edge wholly behind the plane is left
-; out, and one wholly in front is the program's to draw from the points,
-; as ever.
+; facing_edges: of an object's edges, those a face either side of looks
+; towards the eye (model.facing_edges), so that each convex part of the
+; model loses its back edges.
+;
+; In: IX -> the object, after transform_object; HL -> its points as
+; transform_object was given them (H the page, L its first vertex); DE ->
+; room for the model's edges, two bytes each. Out: view_edges -> the edges
+; kept, at DE, and view_edge_count and A how many; DE -> past them. A model
+; with no faces keeps every edge: view_edges is left as transform_object set
+; it, the model's own, and DE as it was. Uses everything but IY.
+;
+; A face is judged by a sign test on the projected face: the first three of
+; its vertices, in its loop's order, that are in front of the near plane,
+; (x0, y0), (x1, y1), (x2, y2), look towards the eye if (x1 - x0) (y2 - y0)
+; >= (y1 - y0) (x2 - x0) -- the face wound anticlockwise seen from outside,
+; the screen's y down, and edge on counting as facing. The four differences
+; are shifted right together first, until each fits a signed byte, so that
+; the products are two of mul8s. A face without three vertices in front is
+; kept. model.faces_front says why each step is right.
+
+; A difference into the spread: D, E |= the high and low bytes of d ^ (d >>
+; 15), whose bits above the seventh say how far all four must be shifted.
+					MACRO	SPREAD	AT
+					ld		hl,(AT)
+					ld		a,h
+					add		a,a
+					sbc		a,a					; A = d's sign, all eight bits
+					ld		b,a
+					xor		l
+					or		e
+					ld		e,a
+					ld		a,b
+					xor		h
+					or		d
+					ld		d,a
+					ENDM
+
+; BC = corner 0's x (AXIS 0) or y (AXIS 128), from the points' page in D:
+; face_corners holds each corner's x high byte, and y's is 128 on.
+					MACRO	CORNER0	AXIS
+					ld		a,(face_corners)
+					IF AXIS
+					or		AXIS
+					ENDIF
+					ld		l,a
+					ld		h,d
+					ld		b,(hl)
+					res		6,l
+					ld		c,(hl)
+					ENDM
+
+; face_d + AT = corner P's x or y (AXIS as CORNER0) less corner 0's, in BC;
+; and E gathers whether it does not fit a signed byte (H not all L's sign).
+					MACRO	DIFFERENCE	AT, P, AXIS
+					ld		a,(face_corners + P)
+					IF AXIS
+					or		AXIS
+					ENDIF
+					ld		l,a
+					ld		h,d
+					ld		a,(hl)				; the high byte
+					res		6,l
+					ld		l,(hl)				; and the low
+					ld		h,a
+					or		a
+					sbc		hl,bc
+					ld		(face_d + AT),hl
+					ld		a,l
+					rla
+					sbc		a,a
+					xor		h
+					or		e
+					ld		e,a
+					ENDM
+
+facing_edges:
+					ld		(face_out),de
+					ld		a,l					; a vertex's x, high byte: its
+					add		a,POINTS_X_HI		; number added to this
+					ld		l,a
+					ld		(face_points),hl
+					ld		l,(ix + OBJECT_MODEL)
+					ld		h,(ix + OBJECT_MODEL + 1)
+					ld		(face_model),hl
+					ld		de,MODEL_FACES
+					add		hl,de
+					ld		a,(hl)
+					or		a
+					jr		nz,.faces
+					ld		de,(face_out)		; no faces: every edge, as it is
+					ld		a,(view_edge_count)
+					ret
+.faces:				inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ex		de,hl				; HL -> the faces
+					ld		c,low face_front	; C = where this face's flag goes
+
+; Each face: where its first three vertices in front of the near plane
+; have their points, into face_corners -- the differences are read from the
+; points' page after, corner 0's x and y once each.
+.face:				ld		(faces_left),a
+					ld		b,(hl)				; B = its vertices
+					inc		hl
+					ld		a,l					; and where the next face is
+					add		a,b
+					ld		e,a
+					ld		a,h
+					adc		a,0
+					ld		d,a
+					ld		(face_next),de
+					push	bc					; (C: the flag's place)
+					ld		a,(face_points + 1)
+					ld		d,a					; D = the points' page
+					ld		a,(face_points)
+					ld		c,a					; C = vertex 0's x high byte
+					ld		ix,face_corners
+.corner:			ld		a,(hl)				; this vertex in front?
+					inc		hl
+					add		a,c
+					ld		e,a
+					ld		a,(de)				; POINTS_X_HI
+					cp		high WIDE_BEHIND
+					jr		z,.behind
+					ld		(ix + 0),e
+					inc		ix
+					ld		a,ixl
+					cp		low (face_corners + 3)
+					jr		z,.judge			; three
+.behind:			djnz	.corner
+					pop		bc
+					ld		a,1					; fewer than three: kept
+					jp		.flag
+
+; The sign of (x1 - x0) (y2 - y0) - (y1 - y0) (x2 - x0), the differences
+; shifted to bytes -- most often they are bytes already, and the spread
+; and the shifting are skipped.
+.judge:				ld		e,0					; E: any not a byte?
+					CORNER0	0
+					DIFFERENCE	0, 1, 0			; x1 - x0
+					DIFFERENCE	4, 2, 0			; x2 - x0
+					CORNER0	128
+					DIFFERENCE	2, 1, 128		; y1 - y0
+					DIFFERENCE	6, 2, 128		; y2 - y0
+					ld		a,e
+					or		a
+					jr		z,.fits
+					ld		de,0
+					SPREAD	face_d
+					SPREAD	face_d + 2
+					SPREAD	face_d + 4
+					SPREAD	face_d + 6
+.spread:			ld		a,d					; under 128: they all fit
+					or		a
+					jr		nz,.shift
+					bit		7,e
+					jr		z,.fits
+.shift:				srl		d
+					rr		e
+					ld		hl,face_d + 7		; all four halved
+					sra		(hl)
+					dec		hl
+					rr		(hl)
+					dec		hl
+					sra		(hl)
+					dec		hl
+					rr		(hl)
+					dec		hl
+					sra		(hl)
+					dec		hl
+					rr		(hl)
+					dec		hl
+					sra		(hl)
+					dec		hl
+					rr		(hl)
+					jr		.spread
+.fits:				ld		a,(face_d)			; (x1 - x0) (y2 - y0)
+					ld		b,a
+					ld		a,(face_d + 6)
+					ld		c,a
+					call	mul8s
+					push	hl
+					ld		a,(face_d + 2)		; (y1 - y0) (x2 - x0)
+					ld		b,a
+					ld		a,(face_d + 4)
+					ld		c,a
+					call	mul8s
+					ex		de,hl
+					pop		hl
+					or		a
+					sbc		hl,de				; the first less the second: its
+					ld		a,h					; sign (each product is within
+					rlca						; 16,384, the difference 32,640)
+					and		1
+					xor		1					; 1: looks towards the eye
+					pop		bc
+.flag:				ld		e,c
+					ld		d,high face_front
+					ld		(de),a
+					inc		c
+					ld		hl,(face_next)
+					ld		a,(faces_left)
+					dec		a
+					jp		nz,.face
+
+; Then the edges: kept if a face either side looks towards the eye.
+; (A label of its own, so that check.py can time the faces and the edges
+; apart.)
+keep_facing_edges:
+					ld		hl,(face_model)
+					ld		de,MODEL_EDGE_FACES
+					add		hl,de
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					push	de
+					pop		ix					; IX -> each edge's faces
+					ld		hl,(face_model)
+					inc		hl
+					inc		hl
+					inc		hl
+					ld		b,(hl)				; B = MODEL_EDGES
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)				; DE -> the edges
+					ld		hl,(face_out)
+					ld		(view_edges),hl
+					ld		c,0					; C = how many kept
+.edge:				ld		h,high face_front
+					ld		l,(ix + 0)
+					ld		a,(hl)
+					ld		l,(ix + 1)
+					or		(hl)
+					jr		z,.hidden
+					ld		hl,(face_out)		; kept: into the list
+					ld		a,(de)
+					ld		(hl),a
+					inc		de
+					inc		hl
+					ld		a,(de)
+					ld		(hl),a
+					inc		de
+					inc		hl
+					ld		(face_out),hl
+					inc		c
+					jr		.next_edge
+.hidden:			inc		de
+					inc		de
+.next_edge:			inc		ix
+					inc		ix
+					djnz	.edge
+					ld		a,c
+					ld		(view_edge_count),a
+					ld		de,(face_out)
+					ret
+
+face_points:		DW		0					; L the first vertex's x high byte
+face_model:			DW		0
+face_out:			DW		0					; -> where the next edge kept goes
+face_next:			DW		0					; -> the next face
+faces_left:			DB		0
+face_d:				DS		8					; x1 - x0, y1 - y0, x2 - x0, y2 - y0
+view_edges:			DW		0					; -> the edges to draw, pairs of
+view_edge_count:	DB		0					; vertices, and how many
+					ALIGN	256
+face_front:			DS		64					; each face: 1 if it looks towards
+												; the eye (a byte indexes it)
+face_corners:		DS		3					; three corners: where their x high
+												; bytes are on the points' page
+					ASSERT	low face_corners <= 253	; (counted by IXL: low byte 64)
+
+
+; ---------------------------------------------------------------------------
+; cut_edges: of the edges of an object to draw (view_edges: all the
+; model's, or those facing_edges kept), those that cross the near plane,
+; cut there (model.object_lines). An edge with one end in front of the
+; plane and the other behind it becomes a line from its front end, as
+; transform_object put it, to where the edge crosses the plane: four words,
+; x0, y0, x1, y1, as clip_x0 to clip_y1 take them. An edge wholly behind
+; the plane is left out, and one wholly in front is the program's to draw
+; from the points, as ever.
 ;
 ; In: IX -> the object, straight after transform_object (its matrix still
 ; in rotate, view_t its T); HL -> its points as transform_object was given
@@ -1167,13 +1466,12 @@ cut_edges:
 					ld		e,(hl)				; MODEL_VERTICES
 					inc		hl
 					ld		d,(hl)
-					inc		hl
 					ld		(cut_vertices),de
-					ld		b,(hl)				; B = MODEL_EDGES
-					inc		hl
-					ld		e,(hl)
-					inc		hl
-					ld		d,(hl)				; DE -> the edges
+					ld		a,(view_edge_count)	; B = the edges to draw: the
+					or		a					; model's, or facing_edges'
+					jr		z,.none
+					ld		b,a
+					ld		de,(view_edges)		; DE -> them
 					ld		a,(cut_points + 1)
 					ld		h,a					; H = the points' page
 
@@ -1194,7 +1492,7 @@ cut_edges:
 					cp		high WIDE_BEHIND
 					jr		z,.second_behind
 .next:				djnz	.edge				; neither: drawn as ever
-					ld		de,(cut_out)
+.none:				ld		de,(cut_out)
 					ld		a,(cut_count)
 					ret
 .first_behind:		add		a,c

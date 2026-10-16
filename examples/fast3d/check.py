@@ -37,6 +37,11 @@ and every result is compared with the model's:
    the whole world moved by 32,768 on each axis, so that the flight
    straddles every edge, against the model's picture of it where it was.
    (cull_geometry.py holds the wrapping model to the scene moved.)
+11. Back faces: facing_edges on objects of one part, of three and of none,
+   from cameras all round, near, far and straddling the near plane, against
+   model.facing_edges -- every edge kept or left out -- and cut_edges after
+   it, on just those; the faces and the edges timed apart.
+   (face_geometry.py holds the model to exact geometry.)
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -82,15 +87,24 @@ class Machine:
 
     def call(self, name: str, **registers: int) -> int:
         """Run a routine to its RET; the T-states it took."""
+        return sum(self.call_until(name, None, **registers))
+
+    def call_until(self, name: str, until: str | None, **registers: int) -> tuple[int, int]:
+        """Run a routine to its RET: the T-states to the label until, and
+        from there to the RET (all in the second, with no until)."""
         regs = self.sim.registers
         for reg, value in registers.items():
             regs[{"A": A, "B": B, "C": C, "D": D, "E": E, "H": H, "L": L}[reg]] = value & 0xFF
         regs[SP] = STACK
         self.memory[STACK] = RETURN & 0xFF
         self.memory[STACK + 1] = RETURN >> 8
-        start = regs[T]
-        self.sim.run(self.label(name), RETURN)
-        return regs[T] - start
+        start = middle = regs[T]
+        pc = self.label(name)
+        if until:
+            self.sim.run(pc, self.label(until))
+            middle, pc = regs[T], self.label(until)
+        self.sim.run(pc, RETURN)
+        return middle - start, regs[T] - middle
 
     def reg(self, name: str) -> int:
         return self.sim.registers[{"A": A, "B": B, "C": C, "D": D, "E": E, "H": H, "L": L}[name]]
@@ -547,8 +561,10 @@ def check_near_cut(m: Machine) -> list[str]:
     from build import check_models, models
     failures = []
     rng = random.Random(13)
-    shapes = [(m.label(f"{name}_model"), vertices, model.faces_to_edges(faces))
-              for name, (vertices, faces) in list(models().items()) + list(check_models().items())]
+    shapes = ([(m.label(f"{name}_model"), vertices, model.faces_to_edges(faces))
+               for name, (vertices, faces) in models().items()] +
+              [(m.label(f"{name}_model"), vertices, model.part_edges(faces, parts)[0])
+               for name, (vertices, faces, parts) in check_models().items()])
     obj_at = m.label("checks_object")
     point_at = m.label("checks_points_far")
     cuts_at = m.label("checks_cuts")
@@ -609,6 +625,94 @@ def check_near_cut(m: Machine) -> list[str]:
     for name, ts in times.items():
         report(name, [round(x) for x in ts])
     print(f"  {'':14} {objects:,} objects straddling the near plane, {counts:,} edges cut, every point as the model")
+    return failures
+
+
+def check_faces(m: Machine) -> list[str]:
+    """facing_edges on objects of one part (a box, a strip), of three (an
+    aeroplane) and of none (a frame), from cameras all round, near --
+    straddling the near plane too -- and far, against model.facing_edges:
+    the edges kept, in order, how many and where they end; then cut_edges
+    on just those, against model.object_lines."""
+    from build import check_models
+    failures = []
+    rng = random.Random(17)
+    shapes = [(name, m.label(f"{name}_model"), vertices, faces, parts, *model.part_edges(faces, parts))
+              for name, (vertices, faces, parts) in check_models().items()]
+    obj_at = m.label("checks_object")
+    point_at = m.label("checks_points_far")
+    edges_at = m.label("checks_edges")
+    cuts_at = m.label("checks_cuts")
+    per_face, per_edge, faceless, kept, hidden = [], [], [], 0, 0
+    objects = {name: 0 for name, *_ in shapes}
+    for _ in range(300):
+        cam_a = [rng.randrange(256) for _ in range(3)]
+        camera = model.make_matrix(*cam_a)
+        ideal = model.ideal_matrix(*cam_a)
+        cam_p = [rng.randrange(-30000, 30000) for _ in range(3)]
+        for name, value in zip(("camera_x", "camera_y", "camera_z"), cam_p):
+            m.poke_word(name, value)
+        m.poke(m.label("camera_angles"), bytes(cam_a))
+        m.call("set_camera")
+        for _ in range(20):
+            name, model_at, vertices, faces, parts, edges, edge_faces = shapes[rng.randrange(len(shapes))]
+            r = model.bounding_radius(vertices)
+            depth = rng.choice((model.NEAR_PLANE / 127 + rng.uniform(-r, r), rng.uniform(r, 12 * r),
+                                rng.uniform(12 * r, 3000)))
+            want = [rng.uniform(-depth / 2, depth / 2), rng.uniform(-depth / 2, depth / 2), depth]
+            pos = [c + round(sum(ideal[3 * i + j] * want[j] for j in range(3))) for i, c in enumerate(cam_p)]
+            obj_a = [rng.randrange(256) for _ in range(3)]
+            t = model.view_centre(pos, cam_p, camera)
+            if t is None or model.culled(t, r) or any(abs(p) > 32767 for p in pos):
+                continue
+            objects[name] += 1
+            m.poke(obj_at, b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a)
+                   + model_at.to_bytes(2, "little") + bytes(8))
+            for routine in ("cull_object", "object_matrix"):
+                m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
+                m.call(routine)
+            first = rng.randrange(65 - len(vertices))
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            m.call("transform_object", D=point_at >> 8, E=first)
+            mat = model.view_matrix(camera, model.make_matrix(*obj_a))
+            points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
+            want_edges = model.facing_edges(points, faces if parts else [], edges, edge_faces)
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            if parts:
+                took_faces, took_edges = m.call_until("facing_edges", "keep_facing_edges", H=point_at >> 8,
+                                                      L=first, D=edges_at >> 8, E=edges_at & 0xFF)
+            else:
+                took = m.call("facing_edges", H=point_at >> 8, L=first, D=edges_at >> 8, E=edges_at & 0xFF)
+            count, end = m.reg("A"), m.pair("D", "E")
+            at, n = m.word("view_edges"), m.memory[m.label("view_edge_count")]
+            got_edges = [(m.memory[at + 2 * i], m.memory[at + 2 * i + 1]) for i in range(n)]
+            want_end = edges_at + 2 * len(want_edges) if parts else edges_at
+            if got_edges != want_edges or count != len(want_edges) or end != want_end:
+                failures.append(f"facing_edges, {name} at {pos} {obj_a} from {cam_p} {cam_a}: {count} edges "
+                                f"to {end:04X}, {got_edges}, not {want_edges}")
+                continue
+            if parts:
+                per_face.append(took_faces / len(faces))
+                per_edge.append(took_edges / len(edges))
+            else:
+                faceless.append(took)
+            kept, hidden = kept + len(want_edges), hidden + len(edges) - len(want_edges)
+            m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
+            m.call("cut_edges", H=point_at >> 8, L=first, D=cuts_at >> 8, E=cuts_at & 0xFF)
+            count = m.reg("A")
+            got_cuts = [tuple(model.to_signed16(m.memory[cuts_at + 8 * k + 2 * j] | m.memory[cuts_at + 8 * k + 2 * j + 1] << 8)
+                              for j in range(4)) for k in range(count)]
+            want_cuts = model.object_lines(vertices, want_edges, mat, t)[1]
+            if got_cuts != want_cuts:
+                failures.append(f"cut_edges after facing_edges, {name} at {pos} {obj_a} from {cam_p} {cam_a}: "
+                                f"{got_cuts}, not {want_cuts}")
+        if len(failures) > 10:
+            return failures
+    report("facing_edges, a face", [round(x) for x in per_face])
+    report("  then an edge", [round(x) for x in per_edge])
+    report("facing_edges, no faces", faceless)
+    print(f"  {'':14} {', '.join(f'{n} {k:,}' for n, k in objects.items())} objects: {kept:,} edges "
+          f"kept, {hidden:,} hidden, every one as the model, and cut at the near plane after")
     return failures
 
 
@@ -841,7 +945,7 @@ def check_demo_jumps(m: Machine, wrap: bool = False) -> list[str]:
 def main() -> None:
     m = Machine()
     failures = []
-    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_near_cut, check_demo, check_demo_jumps):
+    for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_near_cut, check_faces, check_demo, check_demo_jumps):
         failures += check(m)
     failures += check_objects(Machine("checks_wrap"), wrap=True)
     failures += check_demo_jumps(m, wrap=True)

@@ -361,6 +361,74 @@ def faces_to_edges(faces: list[list[int]]) -> list[tuple[int, int]]:
     return edges
 
 
+def part_edges(faces: list[list[int]], parts: list[int]) -> tuple[list, list]:
+    """A model's edges and, for each, the faces either side of it: (edges,
+    edge_faces). parts says how many of the faces, in order, each convex part
+    has. Each part has its own edges -- an edge two parts meet at is in both
+    -- and an edge on one face only has that face twice. With no parts the
+    model has no faces: its edges are faces_to_edges' and edge_faces is []."""
+    if not parts:
+        return faces_to_edges(faces), []
+    edges, edge_faces, first = [], [], 0
+    for count in parts:
+        seen = {}
+        for f in range(first, first + count):
+            face = faces[f]
+            for i, a in enumerate(face):
+                b = face[(i + 1) % len(face)]
+                key = (min(a, b), max(a, b))
+                if key in seen:
+                    edge_faces[seen[key]] = (edge_faces[seen[key]][0], f)
+                else:
+                    seen[key] = len(edges)
+                    edges.append((a, b))
+                    edge_faces.append((f, f))
+        first += count
+    return edges, edge_faces
+
+
+def faces_front(points, faces: list[list[int]]) -> list[bool]:
+    """Which faces look towards the eye, by a sign test on the projected
+    face (facing_edges in Z80): the first three of its vertices, in its
+    loop's order, that are in front of the near plane, (x0, y0), (x1, y1),
+    (x2, y2) on the screen. A face is wound anticlockwise seen from outside,
+    and the screen's y runs down, so it looks towards the eye if (x1 - x0)
+    (y2 - y0) - (y1 - y0) (x2 - x0) > 0 -- or is 0, edge on, where its edges
+    had better be kept. Three vertices of a convex face in front of the eye,
+    in order, project to a triangle wound as the face is seen, so any three
+    will do. A face without three in front counts as looking towards the
+    eye: its edges are kept, and cut at the near plane as ever.
+
+    The four differences are first shifted right together (floor, as SRA
+    does) until each fits a signed byte, so that the products are two of
+    mul8s: d ^ (d >> 15) is |d| (less one if negative), and the shift is
+    what brings the largest of those under 128."""
+    result = []
+    for face in faces:
+        corners = [points[v] for v in face if points[v] is not None][:3]
+        if len(corners) < 3:
+            result.append(True)
+            continue
+        (x0, y0), (x1, y1), (x2, y2) = corners
+        d = [x1 - x0, y1 - y0, x2 - x0, y2 - y0]
+        spread = 0
+        for v in d:
+            spread |= v ^ (v >> 15)
+        shift = max(0, spread.bit_length() - 7)
+        dx1, dy1, dx2, dy2 = (v >> shift for v in d)
+        result.append(dx1 * dy2 >= dy1 * dx2)
+    return result
+
+
+def facing_edges(points, faces, edges, edge_faces) -> list[tuple[int, int]]:
+    """The edges facing_edges keeps: those with a face either side that looks
+    towards the eye, in order -- or, for a model with no faces, every one."""
+    if not faces:
+        return list(edges)
+    front = faces_front(points, faces)
+    return [e for e, (f1, f2) in zip(edges, edge_faces) if front[f1] or front[f2]]
+
+
 def bounding_radius(vertices: list[tuple[int, int, int]]) -> int:
     """The least whole r with every vertex within r of the model's origin."""
     r2 = max(x * x + y * y + z * z for x, y, z in vertices)

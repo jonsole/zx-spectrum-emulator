@@ -24,8 +24,8 @@ from build import check_models, models                           # noqa: E402
 TOLERANCE = 3
 
 rng = random.Random(7)
-shapes = [(v, model.faces_to_edges(f), model.bounding_radius(v))
-          for v, f in list(models().values()) + list(check_models().values())]
+shapes = ([(v, model.faces_to_edges(f), model.bounding_radius(v)) for v, f in models().values()] +
+          [(v, model.part_edges(f, p)[0], model.bounding_radius(v)) for v, f, p in check_models().values()])
 
 
 def off_edge(p, a, b) -> float:
