@@ -1,0 +1,3 @@
+# Cub has its own flight model, not the Aviator port's
+
+The Aviator port in `examples/aviator` already flies an aeroplane in Z80, so reusing its flight model would have been the quick route. We write Cub's own instead, for two reasons. Aviator's flight model is Geoff Crammond's code, ported from Acornsoft's game, which is published with no licence, and Cub is a new public game that should carry none of it. And Aviator flies a fast aerobatic fighter, where Cub is a slow, floaty taildragger that sits tail-down on the ground and lifts its tail as it gathers speed; tuning Aviator's model into that would leave little of it behind. Aviator stays a reference for what feels right, not a source of code.
