@@ -14,6 +14,26 @@ camera not yet), are in
 tables (2K of them, from a 512-byte boundary). It never touches IY, so the
 ROM's interrupt routine can keep running.
 
+Two defines change what it does, both off unless the program defines them
+(`-DNAME=1` to sjasmplus, or an `EQU` before the `INCLUDE`):
+
+- `CULL_SKIP`: the cull says how far out of view an object was, so that it
+  can be left alone until it could have come into view (see
+  [Skipping the cull](#how-they-are-quick)).
+- `WORLD_WRAP`: the world wraps. World positions are 16-bit, a world
+  65,536 units square; without the define, an object whose distance from
+  the camera will not fit 16 bits on some axis is culled, as out of view
+  across the world. With it, that distance is taken modulo 65,536 on each
+  axis, -32,768..32,767, so an object just across an edge or a corner of
+  the world is seen from the other side, exactly as the same scene moved
+  away from the edges would be; and the camera crossing an edge moves a
+  step, not a jump that voids `CULL_SKIP`'s margins. Skipping stays right:
+  an object is tested again before the camera could have travelled its
+  room, so its distance never comes near 32,768 and wraps to the other
+  side while it is skipped. It costs nothing: two overflow tests (`JP PE`)
+  are left out, one in `cull_object` and one in `cull_skip_bounds`.
+  Without it, the code is the same, byte for byte.
+
 ## The numbers
 
 | What | Form |
@@ -288,7 +308,17 @@ every result with `model.py`:
   near plane (69 frames, 465 edges cut) -- against the model's picture
   from the camera as it then stood, and `cull_skip_bounds`' table against
   the model's: the cull's skipping is only ever right, whatever the camera
-  does.
+  does;
+- with `WORLD_WRAP` (`output/checks_wrap.bin`, `demo_wrap.bin`, built
+  beside the others): the objects and the camera again, 400 cameras most
+  of whose axes are within 3,000 units of an edge, and 8,000 objects round
+  them, 3,100 of them across an edge from the camera and 1,000 across a
+  corner, against the model's
+  answers for the same scene moved from the edges -- T, whether culled, the
+  cull's margin, M and every point; and the demo with jumps again, every
+  object and the camera moved 32,768 units on each axis, so that the
+  flight straddles every edge of the world and its corner, against the
+  model's pictures of the world where it was, skipping and all.
 
 `model.clip_line` is itself held to exact geometry by `clip_geometry.py`,
 on 400,000 random lines and windows. Every clipped end must be within 0.75
@@ -303,7 +333,11 @@ And `cull_geometry.py` holds the objects and the camera to it, on 100,000
 random scenes. T must be exactly `Rc^T (P - C)`. No object that has a vertex
 the model would draw on the screen may be culled. And it measures how far
 the points drawn are from the exact view (1.08 pixels on average, 8.9 at
-worst, for objects as near as 40 units):
+worst, for objects as near as 40 units). And for `WORLD_WRAP`, 50,000
+ordinary scenes, away from the world's edges and seen without wrapping,
+are each moved so that the camera is by an edge -- 20,000 of the objects
+then across one from it, 6,000 across a corner -- and seen with wrapping
+must give the same T:
 
 ```
 python cull_geometry.py

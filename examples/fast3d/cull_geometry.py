@@ -6,6 +6,8 @@ geometry, on random scenes:
 2. Culling never leaves out an object any of whose vertices the model would
    draw on the screen -- in front of the eye, nearer than FAR.
 3. How far the points the model draws are from the exact view.
+4. With wrap (WORLD_WRAP), a scene across an edge or a corner of the world
+   gives the same T as the scene moved from the edges, without wrapping.
 
     python cull_geometry.py
 """
@@ -67,3 +69,33 @@ print(f"points on the screen, from the exact view (z > 40): mean {statistics.mea
       f"99% {errs[int(.99 * len(errs))]:.2f}, worst {errs[-1]:.2f} ({len(errs):,})")
 if missed:
     sys.exit("culling left out something on the screen")
+
+# 4. A world that wraps (WORLD_WRAP): an ordinary scene, the camera and the
+# object nowhere near the world's edges, seen without wrapping; then the
+# same scene moved so that the camera is by an edge on most axes and the
+# object often across one or two of them -- an edge or a corner -- and
+# seen with wrapping, must give the same T. T is all that the positions
+# come into: whether culled, and every point, follow from it.
+differ, across, corner, seen = 0, 0, 0, 0
+for _ in range(50000):
+    cam_a = [rng.randrange(256) for _ in range(3)]
+    cam = model.make_matrix(*cam_a)
+    C0 = [rng.randint(-20000, 20000) for _ in range(3)]
+    reach = rng.choice((150, 600, 3000, 9000, 20000))
+    P0 = [c + rng.randint(-reach, reach) for c in C0]
+    vertices, r = shapes[rng.randrange(len(shapes))]
+    want = model.view_centre(P0, C0, cam)
+    to = [rng.choice((-32768, 32767)) + rng.randint(-3000, 3000) if rng.random() < 0.7
+          else rng.randrange(-32768, 32768) for _ in range(3)]       # where the camera goes
+    move = [t - c for t, c in zip(to, C0)]
+    P = [model.to_signed16(p + v) for p, v in zip(P0, move)]
+    C = [model.to_signed16(c + v) for c, v in zip(C0, move)]
+    crossed = sum(abs(p - c) > 32767 for p, c in zip(P, C))
+    across += crossed > 0
+    corner += crossed > 1
+    differ += model.view_centre(P, C, cam, wrap=True) != want
+    seen += want is not None and not model.culled(want, r)
+print(f"wrapping: 50,000 scenes moved to the world's edges ({across:,} across one, {corner:,} across "
+      f"a corner, {seen:,} in view), each seen as it was away from them: {differ} differ")
+if differ:
+    sys.exit("a scene across the world's edge is not seen as the same scene away from it")

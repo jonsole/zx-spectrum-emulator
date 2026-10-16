@@ -342,9 +342,11 @@ def write_lines(path: Path) -> None:
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
-def assemble(name: str, **defines: int) -> None:
-    subprocess.run([find_sjasmplus(), f"--sld=output/{name}.sld", "--fullpath",
-                    f"--lst=output/{name}.lst"] + [f"-D{k}={v}" for k, v in defines.items()]
+def assemble(name: str, out: str | None = None, **defines: int) -> None:
+    """name.s, with its SLD and listing as output/out (name unless said)."""
+    out = out or name
+    subprocess.run([find_sjasmplus(), f"--sld=output/{out}.sld", "--fullpath",
+                    f"--lst=output/{out}.lst"] + [f"-D{k}={v}" for k, v in defines.items()]
                    + [f"{name}.s"], cwd=HERE, check=True)
 
 
@@ -358,8 +360,10 @@ def main() -> None:
     write_world(OUT / "world_gen.s")
     write_check_models(OUT / "check_models_gen.s")
     assemble("checks", CULL_SKIP=1)                                # check.py reads what it leaves
-    print(f"Wrote {OUT / 'checks.bin'}")
+    assemble("checks", out="checks_wrap", CULL_SKIP=1, WORLD_WRAP=1)   # and with the world wrapping
+    print(f"Wrote {OUT / 'checks.bin'} and {OUT / 'checks_wrap.bin'}")
     if (HERE / "demo.s").is_file():
+        assemble("demo", out="demo_wrap", CULL_SKIP=1, WORLD_WRAP=1)  # for check.py, which moves its world
         assemble("demo", CULL_SKIP=cull_skip)
         start = find_label(OUT / "demo.sld", "start")
         banks = (OUT / "demo.banks").read_bytes()

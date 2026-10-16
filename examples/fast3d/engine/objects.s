@@ -58,6 +58,17 @@ ROUGH				EQU		28380				; >= 128 * 128 sqrt 3 (see step 2)
 CULL_SKIP			EQU		0
 					ENDIF
 
+; WORLD_WRAP: the world wraps. P - C, an object's distance from the camera,
+; and the camera's move from one picture to the next are each taken modulo
+; 65,536 on every axis, as -32768..32767, so that an object just across the
+; world's edge is seen from the other side rather than culled because the
+; distance would not fit 16 bits; and a camera crossing the edge has moved
+; a step, not a jump. Off unless the program defines it, when a distance
+; that overflows is out of the box, and a move that overflows a jump.
+					IFNDEF	WORLD_WRAP
+WORLD_WRAP			EQU		0
+					ENDIF
+
 ; An object, OBJECT_SIZE bytes: x, y, z (16-bit), three angles, its model,
 ; and how much it turns a frame about each axis (the engine never reads
 ; the spin; it is here so that a program walks one record an object).
@@ -235,7 +246,9 @@ rotate_holds_camera: DB		0
 					ld		de,(camera_x + OFFSET)
 					or		a
 					sbc		hl,de
+					IF !WORLD_WRAP
 					jp		pe,cull_box_out			; P - C will not fit 16 bits
+					ENDIF							; (wrapping, HL is P - C modulo 65,536)
 					ld		a,h
 					add		a,VIEW_BOX_HIGH			; -VIEW_BOX_HIGH..VIEW_BOX_HIGH - 1:
 					cp		2 * VIEW_BOX_HIGH		; within
@@ -475,7 +488,9 @@ SKIP_K_COUNT		EQU		7
 					or		a
 					sbc		hl,de
 					pop		de
+					IF !WORLD_WRAP
 					jp		pe,.too_far			; the move does not fit 16 bits
+					ENDIF						; (wrapping, HL is the move modulo 65,536)
 					jp		p,.moved
 					xor		a					; |the move|
 					sub		l

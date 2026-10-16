@@ -311,13 +311,21 @@ def skip_index(k: int, q: int) -> int:
     return (k - SKIP_K_LEAST) * 4 + (q - 4)
 
 
-def skip_bounds(seen_before, seen_after, pos_before, pos_after):
+def skip_bounds(seen_before, seen_after, pos_before, pos_after, wrap: bool = False):
     """What cull_skip_bounds leaves in skip_bounds, by (k, q): the most a margin
     can have shrunk this picture, floor(E Q / 256) + m / 2 + 2 (the 2 covers
-    the two floors), saturated at 65535; or None for a jump."""
+    the two floors), saturated at 65535; or None for a jump. With wrap
+    (WORLD_WRAP), the move on each axis is taken modulo 65,536, as -32768..
+    32767, like P - C: a camera crossing the world's edge moves a step. The
+    bound still holds: a skipped object is tested again before the camera
+    could have travelled its room, so its P - C never gets near 32768 and
+    never wraps to the other side while it is skipped."""
     e = max(sum(abs(a - b) for a, b in zip(seen_after[3 * i:3 * i + 3], seen_before[3 * i:3 * i + 3]))
             for i in range(3))
-    m = sum(abs(a - b) for a, b in zip(pos_after, pos_before))
+    moves = [a - b for a, b in zip(pos_after, pos_before)]
+    if wrap:
+        moves = [to_signed16(v) for v in moves]
+    m = sum(abs(v) for v in moves)
     if m >= JUMP:
         return None
     return {(k, q): min(65535, min(65535, (e * q << k) >> 8) + (m >> 1) + 2)
@@ -376,10 +384,15 @@ def camera_constant(camera: list[int]) -> tuple[int, int, int]:
     return tuple(128 * v for v in rotate(transpose(camera), (1, 1, 1)))
 
 
-def view_centre(position, camera_position, camera: list[int]):
+def view_centre(position, camera_position, camera: list[int], wrap: bool = False):
     """T = Rc^T (P - C), 127 times world units; None if P is outside the box
-    of +-VIEW_BOX round the camera (or P - C will not fit 16 bits)."""
+    of +-VIEW_BOX round the camera (or P - C will not fit 16 bits). With
+    wrap (WORLD_WRAP), P - C is taken modulo 65,536 on each axis, as
+    -32768..32767: the world wraps, and an object across its edge is seen
+    from the other side."""
     d = [p - c for p, c in zip(position, camera_position)]
+    if wrap:
+        d = [to_signed16(v) for v in d]
     if any(abs(v) > VIEW_BOX for v in d):
         return None
     high = tuple(v >> 8 for v in d)                   # signed

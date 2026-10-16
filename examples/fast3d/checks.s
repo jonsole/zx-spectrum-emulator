@@ -11,4 +11,8 @@ checks_points:		DS		2 * 16
 checks_points_far:	DS		256					; transform_object's
 checks_cuts:		DS		8 * 64				; cut_edges'
 end:
+					IF WORLD_WRAP
+					SAVEBIN	"output/checks_wrap.bin", $8000, end - $8000
+					ELSE
 					SAVEBIN	"output/checks.bin", $8000, end - $8000
+					ENDIF

@@ -916,5 +916,9 @@ interrupt:			push	af
 					ret
 end:
 					ASSERT	end <= IM2_TABLE
+					IF WORLD_WRAP				; (for check.py alone)
+					SAVEBIN	"output/demo_wrap.bin", $4000, $8000
+					ELSE
 					SAVEDEV	"output/demo.banks", 0, 0, $20000
 					SAVEBIN	"output/demo.bin", $4000, $8000
+					ENDIF

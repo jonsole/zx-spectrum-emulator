@@ -30,6 +30,13 @@ and every result is compared with the model's:
    window, frame and all; and timed. Every other frame goes to
    output/demo.gif. Then again with the camera jumping about, now and then
    close enough to an object to cut it at the near plane.
+10. A world that wraps (WORLD_WRAP, output/checks_wrap.bin and
+   demo_wrap.bin): the objects-and-camera check with cameras by the world's
+   edges and corners and objects across them, against the model's answers
+   for the same scene moved from the edges; and the demo with jumps again,
+   the whole world moved by 32,768 on each axis, so that the flight
+   straddles every edge, against the model's picture of it where it was.
+   (cull_geometry.py holds the wrapping model to the scene moved.)
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -58,13 +65,14 @@ STACK = 0x7FF0
 
 
 class Machine:
-    def __init__(self) -> None:
+    def __init__(self, build: str = "checks") -> None:
+        """build: checks, or checks_wrap (with WORLD_WRAP)."""
         memory = bytearray(65536)
-        image = (OUT / "checks.bin").read_bytes()
+        image = (OUT / f"{build}.bin").read_bytes()
         memory[0x8000:0x8000 + len(image)] = image
         self.sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
         self.memory = self.sim.memory
-        self.sld = OUT / "checks.sld"
+        self.sld = OUT / f"{build}.sld"
         self.labels: dict[str, int] = {}
 
     def label(self, name: str) -> int:
@@ -425,10 +433,17 @@ def rough_culled(t, r: int) -> bool:
     return any(2 * s * v - tz > r5 for v in (tx, ty) for s in (1, -1))
 
 
-def check_objects(m: Machine) -> list[str]:
+def check_objects(m: Machine, wrap: bool = False) -> list[str]:
+    """With wrap, on the WORLD_WRAP build: cameras by the world's edges and
+    corners, objects across them, and the model's answers those for the
+    same scene moved from the edges -- the camera at the origin, the object
+    where it is from the camera -- with no wrapping."""
     from build import models
     failures = []
     rng = random.Random(9)
+    objects, across, corner = 0, 0, 0                 # (with wrap)
+    if wrap:
+        print("  with WORLD_WRAP, cameras and objects by the world's edges:")
     shapes = [(m.label(f"{name}_model"), vertices) for name, (vertices, faces) in models().items()]
     signed24 = lambda b: (b[0] | b[1] << 8 | b[2] << 16) - ((1 << 24) if b[2] & 0x80 else 0)
     times = {"set_camera": [], "cull_object, out of the box": [], "cull_object, out roughly": [], "cull_object, culled": [],
@@ -439,6 +454,9 @@ def check_objects(m: Machine) -> list[str]:
         cam_a = [rng.randrange(256) for _ in range(3)]
         camera = model.make_matrix(*cam_a)
         cam_p = [rng.randrange(-30000, 30000) for _ in range(3)]
+        if wrap:                                # most axes within 3,000 of an edge
+            cam_p = [model.to_signed16(rng.choice((-32768, 32767)) + rng.randint(-3000, 3000))
+                     if rng.random() < 0.7 else c for c in cam_p]
         for name, value in zip(("camera_x", "camera_y", "camera_z"), cam_p):
             m.poke_word(name, value)
         m.poke(m.label("camera_angles"), bytes(cam_a))
@@ -451,6 +469,12 @@ def check_objects(m: Machine) -> list[str]:
         for _ in range(20):
             reach = rng.choice((150, 600, 3000, 10000, 20000))
             pos = [max(-32768, min(32767, c + rng.randint(-reach, reach))) for c in cam_p]
+            seen_p, seen_c = pos, cam_p         # what the model is given
+            if wrap:
+                pos = [model.to_signed16(c + rng.randint(-reach, reach)) for c in cam_p]
+                seen_p, seen_c = [model.to_signed16(p - c) for p, c in zip(pos, cam_p)], [0, 0, 0]
+                crossed = sum(abs(p - c) > 32767 for p, c in zip(pos, cam_p))
+                objects, across, corner = objects + 1, across + (crossed > 0), corner + (crossed > 1)
             obj_a = [rng.randrange(256) for _ in range(3)]
             model_at, vertices = shapes[rng.randrange(len(shapes))]
             record = (b"".join((v & 0xFFFF).to_bytes(2, "little") for v in pos) + bytes(obj_a)
@@ -459,7 +483,7 @@ def check_objects(m: Machine) -> list[str]:
             m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF      # IX
             t = m.call("cull_object")
             got = bool(m.sim.registers[1] & 1)
-            want_t = model.view_centre(pos, cam_p, camera)
+            want_t = model.view_centre(seen_p, seen_c, camera)
             r = model.bounding_radius(vertices)
             want = want_t is None or model.culled(want_t, r)
             if got != want:
@@ -476,13 +500,13 @@ def check_objects(m: Machine) -> list[str]:
                     if skip:
                         failures.append(f"cull_object {pos} from {cam_p}: out of the box, but a margin of {skip}")
                 else:
-                    k, q, room = model.skip_size([p - c for p, c in zip(pos, cam_p)])
+                    k, q, room = model.skip_size([p - c for p, c in zip(seen_p, seen_c)])
                     want_dist = (m.label("skip_bounds") + 2 * model.skip_index(k, q)) & 0xFF
                     want_limit = (m.word("skip_odometer") + room) & 0xFFFF
                     if skip > model.skip_margin(want_t, r) or dist != want_dist or limit != want_limit:
                         failures.append(f"cull_object {pos} {obj_a} from {cam_p} {cam_a}: margin {skip} (at most "
                                         f"{model.skip_margin(want_t, r)}), size at {dist} ({want_dist}), limit {limit} ({want_limit})")
-            rough = want_t is not None and rough_out(rough_t(pos, cam_p, camera), r)
+            rough = want_t is not None and rough_out(rough_t(seen_p, seen_c, camera), r)
             if rough and not want:
                 failures.append(f"the rough step would cull {pos} from {cam_p}, which is in view")
             times["cull_object, out of the box" if want_t is None else "cull_object, out roughly" if rough
@@ -509,6 +533,9 @@ def check_objects(m: Machine) -> list[str]:
     for name, ts in times.items():
         report(name, [round(x) for x in ts])
     print(f"  {'':14} (transform_object: per vertex)")
+    if wrap:
+        print(f"  {'':14} {across:,} of {objects:,} objects across an edge from the camera, {corner:,} across "
+              f"a corner, all as the same scene away from the edges")
     return failures
 
 
@@ -677,21 +704,28 @@ def check_demo(m: Machine) -> list[str]:
     return failures
 
 
-def check_demo_jumps(m: Machine) -> list[str]:
+def check_demo_jumps(m: Machine, wrap: bool = False) -> list[str]:
     """CULL_SKIP under a camera that jumps and swings: draw_frame frame after
     frame with the camera moved between them at random -- small steps mostly,
     now and then a leap or a half turn -- against the model's picture from
     the camera as it then stood; and skip_bounds against model.skip_bounds,
-    or, for a jump, every object's margin cleared."""
+    or, for a jump, every object's margin cleared.
+
+    With wrap, the same on the WORLD_WRAP build with the whole world -- every
+    object, and the camera -- moved by 32,768 on each axis, so that the
+    flight straddles every edge of the world and its corner, against the
+    model's picture of the world where it was."""
     from build import models, world
     failures = []
     rng = random.Random(11)
+    build = "demo_wrap" if wrap else "demo"
+    shift = 32768 if wrap else 0
     memory = bytearray(65536)
-    memory[0x4000:0xC000] = (OUT / "demo.bin").read_bytes()
+    memory[0x4000:0xC000] = (OUT / f"{build}.bin").read_bytes()
     sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
-    sld = OUT / "demo.sld"
+    sld = OUT / f"{build}.sld"
     label = {name: find_label(sld, name) for name in
-             ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles", "skip_bounds", "world",
+             ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles", "camera_last", "skip_bounds", "world",
               "OBJECT_SIZE", "OBJECT_SKIP", "WORLD_OBJECTS", "CUT_LINES", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
     window = tuple(label[f"VIEW_{edge}"] for edge in ("LEFT", "TOP", "RIGHT", "BOTTOM"))
     left, top, right, bottom = window
@@ -703,20 +737,29 @@ def check_demo_jumps(m: Machine) -> list[str]:
         sim.memory[STACK:STACK + 2] = RETURN.to_bytes(2, "little")
         sim.run(label[name], RETURN)
 
-    def camera():
+    def camera():                                # (where the model has it)
         at = label["camera_x"]
-        pos = [model.to_signed16(sim.memory[at + 2 * i] | sim.memory[at + 2 * i + 1] << 8) for i in range(3)]
+        pos = [model.to_signed16((sim.memory[at + 2 * i] | sim.memory[at + 2 * i + 1] << 8) - shift)
+               for i in range(3)]
         return pos, list(sim.memory[label["camera_angles"]:label["camera_angles"] + 3])
 
     def set_camera(pos, angles) -> None:
         at = label["camera_x"]
         for i, v in enumerate(pos):
-            sim.memory[at + 2 * i:at + 2 * i + 2] = (v & 0xFFFF).to_bytes(2, "little")
+            sim.memory[at + 2 * i:at + 2 * i + 2] = ((v + shift) & 0xFFFF).to_bytes(2, "little")
         sim.memory[label["camera_angles"]:label["camera_angles"] + 3] = bytes(a & 255 for a in angles)
 
     for address in range(0x4000, 0x5800):
         sim.memory[address] = 0
     call("demo_setup")
+    if shift:                                       # the world moved, and the camera
+        for i in range(label["WORLD_OBJECTS"]):     # last seen where it now starts
+            at = label["world"] + i * label["OBJECT_SIZE"]
+            for axis in range(3):
+                v = (sim.memory[at + 2 * axis] | sim.memory[at + 2 * axis + 1] << 8) + shift
+                sim.memory[at + 2 * axis:at + 2 * axis + 2] = (v & 0xFFFF).to_bytes(2, "little")
+        sim.memory[label["camera_last"]:label["camera_last"] + 6] = (shift & 0xFFFF).to_bytes(2, "little") * 3
+        set_camera([0, 0, 0], [0, 0, 0])
     shapes = {name: (vertices, model.faces_to_edges(faces), model.bounding_radius(vertices))
               for name, (vertices, faces) in models().items()}
     things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
@@ -760,7 +803,7 @@ def check_demo_jumps(m: Machine) -> list[str]:
             tpos, tangles, spin, name = thing
             thing[1] = tangles = [(a + s) & 255 for a, s in zip(tangles, spin)]
             vertices, edges, r = shapes[name]
-            t = model.view_centre(tpos, cam_p, rc)
+            t = model.view_centre(tpos, cam_p, rc, wrap=wrap)
             if t is None or model.culled(t, r):
                 continue
             drawn += 1
@@ -775,7 +818,7 @@ def check_demo_jumps(m: Machine) -> list[str]:
                             f"{'the same' if bytes(sim.memory[0x4000:0x5800]) == render(lines, 0x4000) else 'different'}")
             break
         seen = model.transpose(rc)
-        want = model.skip_bounds(last[1], seen, last[0], cam_p)
+        want = model.skip_bounds(last[1], seen, last[0], cam_p, wrap=wrap)
         at = label["skip_bounds"]
         got = {(k, q): sim.memory[at + 2 * model.skip_index(k, q)] | sim.memory[at + 2 * model.skip_index(k, q) + 1] << 8
                for k in range(model.SKIP_K_LEAST, model.SKIP_K_LEAST + model.SKIP_K_COUNT) for q in range(4, 8)}
@@ -788,7 +831,7 @@ def check_demo_jumps(m: Machine) -> list[str]:
             failures.append(f"demo with jumps: frame {i}: skip_bounds {got}, not {want}")
             break
         last, stale = (cam_p, seen), got
-    print(f"  demo with jumps: {kinds['step']} steps, {kinds['swing']} swings, {kinds['jump']} jumps, "
+    print(f"  demo with jumps{', the world moved across its edges (WORLD_WRAP)' if wrap else ''}: {kinds['step']} steps, {kinds['swing']} swings, {kinds['jump']} jumps, "
           f"{kinds['leap']} leaps ({kinds['void']} frames voiding every margin), {kinds['close']} "
           f"close to an object ({cuts_seen} frames with edges cut at the near plane, {cut} edges), "
           f"all as the model")
@@ -800,6 +843,8 @@ def main() -> None:
     failures = []
     for check in (check_mul8s, check_matrix_and_rotate, check_divide, check_transform, check_lines, check_clipping, check_objects, check_near_cut, check_demo, check_demo_jumps):
         failures += check(m)
+    failures += check_objects(Machine("checks_wrap"), wrap=True)
+    failures += check_demo_jumps(m, wrap=True)
     if failures:
         print("\n".join(failures[:20]))
         sys.exit(f"{len(failures)} failures")
