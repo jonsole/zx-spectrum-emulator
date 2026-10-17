@@ -666,18 +666,20 @@ def cut_edge(behind, front, centre_x: int = 128, centre_y: int = 96) -> tuple[in
     return centre_x + x, centre_y - y
 
 
-def object_lines(vertices, edges, m, t) -> tuple[list, list]:
+def object_lines(vertices, edges, m, t, centre_x: int = 128, centre_y: int = 96) -> tuple[list, list]:
     """An object's points (transform_object's: None behind the near plane)
     and its cut lines (cut_edges'): for each edge, in order, that crosses
     the near plane, its front end's point and where it is cut, x0, y0, x1,
-    y1. The edges with both ends in front are drawn between the points."""
+    y1. The edges with both ends in front are drawn between the points.
+    The centre is the engine's SCREEN_CENTRE_X and _Y."""
     rotated = [rotate(m, v) for v in vertices]
-    points = [project_far(r, t) for r in rotated]
+    points = [project_far(r, t, centre_x, centre_y) for r in rotated]
     cuts = []
     for i, j in edges:
         if (points[i] is None) != (points[j] is None):
             front, behind = (i, j) if points[j] is None else (j, i)
-            cuts.append(points[front] + cut_edge(view_point(rotated[behind], t), view_point(rotated[front], t)))
+            cuts.append(points[front] + cut_edge(view_point(rotated[behind], t), view_point(rotated[front], t),
+                                                 centre_x, centre_y))
     return points, cuts
 
 

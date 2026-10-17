@@ -15,7 +15,9 @@ tables (2K of them, from a 512-byte boundary). It never touches IY, so the
 ROM's interrupt routine can keep running.
 
 Three defines change what it does, all off unless the program defines them
-(`-DNAME=1` to sjasmplus, or an `EQU` before the `INCLUDE`):
+(`-DNAME=1` to sjasmplus, or `DEFINE NAME 1` before the `INCLUDE`; an `EQU`
+will not do, since the engine tests them with `IFNDEF`, which sees only
+defines):
 
 - `CULL_SKIP`: the cull says how far out of view an object was, so that it
   can be left alone until it could have come into view (see
@@ -37,6 +39,12 @@ Three defines change what it does, all off unless the program defines them
   the model's space, rather than by its projection (see
   [Back faces](#how-they-are-quick)): dearer an object, cheaper a face, a
   face behind the eye judged too, and misjudged far less often.
+
+Two more say where the view's centre is on the screen: `SCREEN_CENTRE_X`
+and `SCREEN_CENTRE_Y`, 128 and 96 unless the program defines them, for a
+view that is not the whole screen. Cub's view, 144 rows above a panel, is
+centred on row 72. `model.project_far` and `model.object_lines` take the
+same centre.
 
 ## The numbers
 

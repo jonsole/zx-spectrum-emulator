@@ -308,14 +308,21 @@ def write_world(path: Path) -> None:
              "; frame, about each axis; and room for the cull to skip it (OBJECT_SIZE",
              "; bytes).", "world:"]
     for pos, angles, spin, name in world():
-        lines.append(f"\t\t\t\t\tDW\t\t{pos[0]}, {pos[1]}, {pos[2]}")
-        lines.append(f"\t\t\t\t\tDB\t\t{angles[0]}, {angles[1]}, {angles[2]}")
-        lines.append(f"\t\t\t\t\tDW\t\t{name}_model")
-        lines.append(f"\t\t\t\t\tDB\t\t{spin[0]}, {spin[1]}, {spin[2]}")
-        lines.append("\t\t\t\t\tDW\t\t0\t\t\t\t\t; OBJECT_SKIP, OBJECT_DIST, OBJECT_LIMIT")
-        lines.append("\t\t\t\t\tDB\t\t0")
-        lines.append("\t\t\t\t\tDW\t\t0")
+        lines += object_record(pos, angles, f"{name}_model", spin)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def object_record(position, angles, model_label: str, spin=(0, 0, 0)) -> list[str]:
+    """An object as engine/objects.s reads it, OBJECT_SIZE bytes: x, y, z;
+    its three angles; its model; its spin; and the cull's room to skip it,
+    empty."""
+    return [f"\t\t\t\t\tDW\t\t{position[0]}, {position[1]}, {position[2]}",
+            f"\t\t\t\t\tDB\t\t{angles[0]}, {angles[1]}, {angles[2]}",
+            f"\t\t\t\t\tDW\t\t{model_label}",
+            f"\t\t\t\t\tDB\t\t{spin[0]}, {spin[1]}, {spin[2]}",
+            "\t\t\t\t\tDW\t\t0\t\t\t\t\t; OBJECT_SKIP, OBJECT_DIST, OBJECT_LIMIT",
+            "\t\t\t\t\tDB\t\t0",
+            "\t\t\t\t\tDW\t\t0"]
 
 
 

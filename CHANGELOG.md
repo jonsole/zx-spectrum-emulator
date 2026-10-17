@@ -27,13 +27,20 @@ GitHub takes its notes from that section.
   side. Models can have faces, in convex parts, and `facing_edges` keeps
   only the edges of each part's faces that look towards the eye, judged by
   their projections or, with `FACE_EYE`, against the eye in the model's
-  space; `build.py --faces` shows it in the demo. `check.py` holds every
+  space; `build.py --faces` shows it in the demo. `SCREEN_CENTRE_X` and
+  `SCREEN_CENTRE_Y` say where the view's centre is, for a view that is not
+  the whole screen. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
   through forty turning objects on the 128K, about 7 frames a second (it
   says how many, in a corner), working out each picture while the last
   waits to be shown. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
+
+- **A snapshot-probe driver for the examples, `examples/scripts/probe.py`.**
+  Loads a program's .z80 into cpp-core's `snapshot_probe`, reads its labels
+  from the SLD, and pokes, peeks and calls its routines by name, for
+  checking a Z80 program against a model of it in Python.
 
 - **Aviator, `examples/aviator`.** Geoff Crammond's BBC Micro flight
   simulator, being ported to the 48K from Mark Moxon's documented

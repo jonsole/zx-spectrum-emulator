@@ -99,6 +99,19 @@
       "preLaunchTask": "fast3d.build"
     },
     {
+      // Cub (examples/cub): a Piper Cub flight simulator on fast3d. So far
+      // it stands at the start of the runway, looking down it.
+      "name": "ZX Spectrum: Cub",
+      "type": "zxspectrum",
+      "request": "launch",
+      "rom": "${workspaceFolder}/roms/128.rom",
+      "machine": "128",
+      "snapshot": "${workspaceFolder}/examples/cub/output/cub.z80",
+      "sld": "${workspaceFolder}/examples/cub/output/cub.sld",
+      "asm": "${workspaceFolder}/examples/cub/cub.s",
+      "preLaunchTask": "cub.build"
+    },
+    {
       // Knight Lore 128K: the fork of the Filmation entry above that grows
       // into a bigger castle on the 128K (examples/filmation/knightlore128).
       "name": "ZX Spectrum: Knight Lore 128K",

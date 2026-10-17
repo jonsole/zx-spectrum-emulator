@@ -43,7 +43,11 @@ zx-spectrum-emulator/
   examples/
     hello_rom_call/              # tiny original demo, committed
     scripts/                      # Python more than one example uses: z80file.py,
-                                  #   the .z80 writer for what sjasmplus assembles
+                                  #   the .z80 writer for what sjasmplus assembles;
+                                  #   probe.py, which drives a program's snapshot in
+                                  #   cpp-core's snapshot_probe for checks against a model
+    cub/                          # submodule (jonsole/zx-cub): Cub, a Piper Cub flight
+                                  #   simulator on fast3d; its issues live there
     filmation/                    # isometric masked-sprite engine; multi-file,
                                   #   assembled by each game's own build.py
       engine/                     #   the engine every game includes, and its tests

@@ -9,8 +9,15 @@
 ; Out: B = x, 0..255; C = y, 0..191 downwards -- or carry set if the vertex
 ;      is off the screen, or Z is 0. Uses A, BC, DE, HL.
 
+; Where the view's centre is on the screen: the middle unless the program
+; defines them before the INCLUDE, for a view that is not the whole screen
+; (model.project_far and model.object_lines take the same).
+					IFNDEF	SCREEN_CENTRE_X
 SCREEN_CENTRE_X		EQU		128
+					ENDIF
+					IFNDEF	SCREEN_CENTRE_Y
 SCREEN_CENTRE_Y		EQU		96
+					ENDIF
 SCREEN_HEIGHT		EQU		192
 
 project:
