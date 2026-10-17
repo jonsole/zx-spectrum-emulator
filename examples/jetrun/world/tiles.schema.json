@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jetrun tiles",
+  "description": "Every tile a page of the world can hold, keyed by the tile's name, in the form Cyberun's landscape renderer reads (ADR 0007): a list of pieces, straight runs of identical steps, given as Cyberun's tile records give them. Pages are 224 pixels across and 160 down; a piece may run on into the next page. See examples/jetrun/GLOSSARY.md and world.py.",
+  "type": "object",
+  "required": ["tiles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "tiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/tile"}
+    }
+  },
+  "$defs": {
+    "tile": {
+      "type": "object",
+      "required": ["pieces"],
+      "additionalProperties": false,
+      "properties": {
+        "pieces": {"type": "array", "maxItems": 7, "items": {"$ref": "#/$defs/piece"}},
+        "upsideDown": {"description": "Drawn upside down, Cyberun's $99 marker: floors become ceilings, a flat piece's y is XORed with 12, a wall moves 8 pixels.", "type": "boolean"},
+        "mirrored": {"description": "Drawn mirrored left to right, Cyberun's $FF marker. A flat run ending on the page's edge (end code 22) is left where it is.", "type": "boolean"}
+      }
+    },
+    "piece": {
+      "type": "object",
+      "required": ["x", "y", "direction", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "x": {"description": "The piece's start, its lowest point, in Cyberun's page coordinates: 8 is the page's left edge. For a piece climbing left, the left edge of its lowest step; for a rock-left wall, the byte left of its edge.", "type": "integer", "minimum": 0, "maximum": 255},
+        "y": {"description": "The bottom line of the piece's lowest step, in Cyberun's page coordinates: 24 is the page's top line.", "type": "integer", "minimum": 0, "maximum": 255},
+        "direction": {
+          "description": "The steps' shape: Cyberun's sixteen. Flat steps are 24 pixels long; gentle slopes 16 across and 8 up, plain ones 8 and 8, steep ones 8 and 16; walls 16 high. Floors have rock below, ceilings rock above; 'up' climbs to the right, 'down' climbs to the left.",
+          "enum": [
+            "floor", "floor-up-gentle", "floor-up", "floor-up-steep",
+            "floor-down-gentle", "floor-down", "floor-down-steep",
+            "ceiling", "ceiling-up-gentle", "ceiling-up", "ceiling-up-steep",
+            "ceiling-down-gentle", "ceiling-down", "ceiling-down-steep",
+            "wall-rock-right", "wall-rock-left"
+          ]
+        },
+        "steps": {"type": "integer", "minimum": 1, "maximum": 16},
+        "ends": {
+          "description": "Flat pieces only: Cyberun's end codes for the run's first and last steps, which pick the caps it draws there. 0 none; 16 and 17 a left end, 18 and 19 a right end, the odd ones where the end is a drop; 22 ($16) only the first column of the last step, which ends a run on the page's right edge.",
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "integer", "minimum": 0, "maximum": 255}
+        }
+      }
+    }
+  }
+}

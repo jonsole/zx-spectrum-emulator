@@ -1,0 +1,771 @@
+{
+  "$schema": "./tiles.schema.json",
+  "tiles": {
+    "t00": {"pieces": []},
+    "t01": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 119, "direction": "floor-up", "steps": 8}
+    ]},
+    "t02": {"pieces": [
+      {"x": 8, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t03": {"pieces": [
+      {"x": 72, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 200, "y": 119, "direction": "floor-up", "steps": 4}
+    ]},
+    "t04": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 87, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t05": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ]},
+    "t06": {"pieces": [
+      {"x": 40, "y": 119, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ]},
+    "t07": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8}
+    ]},
+    "t08": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 12},
+      {"x": 104, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ]},
+    "t09": {"pieces": [
+      {"x": 136, "y": 183, "direction": "floor-up", "steps": 12}
+    ]},
+    "t0A": {"pieces": [
+      {"x": 40, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 19]},
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 4},
+      {"x": 192, "y": 183, "direction": "floor-down-steep", "steps": 8}
+    ]},
+    "t0B": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ]},
+    "t0C": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 4, "ends": [16, 18]},
+      {"x": 32, "y": 151, "direction": "floor-down", "steps": 4},
+      {"x": 136, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ]},
+    "t0D": {"pieces": [
+      {"x": 200, "y": 183, "direction": "floor-up-steep", "steps": 4}
+    ]},
+    "t0E": {"pieces": [
+      {"x": 40, "y": 87, "direction": "floor", "steps": 2, "ends": [17, 19]},
+      {"x": 8, "y": 119, "direction": "floor-up", "steps": 4},
+      {"x": 112, "y": 119, "direction": "floor-down", "steps": 4},
+      {"x": 144, "y": 183, "direction": "floor-down-steep", "steps": 4}
+    ]},
+    "t0F": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ]},
+    "t10": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ]},
+    "t11": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up", "steps": 16}
+    ]},
+    "t12": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4}
+    ]},
+    "t13": {"pieces": [
+      {"x": 168, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 200, "y": 119, "direction": "floor-up", "steps": 4}
+    ]},
+    "t14": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 40, "y": 151, "direction": "floor-up-steep", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ]},
+    "t15": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up", "steps": 8}
+    ]},
+    "t16": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]}
+    ]},
+    "t17": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 8}
+    ]},
+    "t18": {"pieces": [
+      {"x": 88, "y": 151, "direction": "floor", "steps": 6, "ends": [17, 0]},
+      {"x": 72, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ]},
+    "t19": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ]},
+    "t1A": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 1, "ends": [19, 19]},
+      {"x": 208, "y": 151, "direction": "floor", "steps": 1, "ends": [17, 17]},
+      {"x": 40, "y": 183, "direction": "floor-down-steep", "steps": 2},
+      {"x": 192, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ]},
+    "t1B": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 40, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ]},
+    "t1C": {"pieces": [
+      {"x": 88, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ]},
+    "t1D": {"pieces": [
+      {"x": 8, "y": 119, "direction": "floor-up-steep", "steps": 4},
+      {"x": 40, "y": 55, "direction": "floor-up", "steps": 4}
+    ]},
+    "t1E": {"pieces": [
+      {"x": 40, "y": 59, "direction": "ceiling", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]},
+      {"x": 32, "y": 55, "direction": "ceiling-down", "steps": 4}
+    ]},
+    "t1F": {"pieces": [
+      {"x": 160, "y": 151, "direction": "floor", "steps": 3, "ends": [17, 0]},
+      {"x": 136, "y": 183, "direction": "floor-up-steep", "steps": 1},
+      {"x": 144, "y": 167, "direction": "floor-up", "steps": 2}
+    ]},
+    "t20": {"pieces": []},
+    "t21": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 119, "direction": "floor-up", "steps": 8}
+    ], "mirrored": true},
+    "t22": {"pieces": [
+      {"x": 8, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t23": {"pieces": [
+      {"x": 72, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 200, "y": 119, "direction": "floor-up", "steps": 4}
+    ], "mirrored": true},
+    "t24": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 87, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t25": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "mirrored": true},
+    "t26": {"pieces": [
+      {"x": 40, "y": 119, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "mirrored": true},
+    "t27": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8}
+    ], "mirrored": true},
+    "t28": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 12},
+      {"x": 104, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ], "mirrored": true},
+    "t29": {"pieces": [
+      {"x": 136, "y": 183, "direction": "floor-up", "steps": 12}
+    ], "mirrored": true},
+    "t2A": {"pieces": []},
+    "t2B": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ], "mirrored": true},
+    "t2C": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 4, "ends": [16, 18]},
+      {"x": 32, "y": 151, "direction": "floor-down", "steps": 4},
+      {"x": 136, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ], "mirrored": true},
+    "t2D": {"pieces": [
+      {"x": 200, "y": 183, "direction": "floor-up-steep", "steps": 4}
+    ], "mirrored": true},
+    "t2E": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ], "upsideDown": true, "mirrored": true},
+    "t2F": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "mirrored": true},
+    "t30": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ], "mirrored": true},
+    "t31": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up", "steps": 16}
+    ], "mirrored": true},
+    "t32": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4}
+    ], "mirrored": true},
+    "t33": {"pieces": [
+      {"x": 168, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 200, "y": 119, "direction": "floor-up", "steps": 4}
+    ], "mirrored": true},
+    "t34": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 40, "y": 151, "direction": "floor-up-steep", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ], "mirrored": true},
+    "t35": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "mirrored": true},
+    "t36": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "mirrored": true},
+    "t37": {"pieces": [
+      {"x": 88, "y": 151, "direction": "floor", "steps": 6, "ends": [17, 0]},
+      {"x": 72, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ], "mirrored": true},
+    "t38": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ], "mirrored": true},
+    "t39": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 1, "ends": [19, 19]},
+      {"x": 208, "y": 151, "direction": "floor", "steps": 1, "ends": [17, 17]},
+      {"x": 40, "y": 183, "direction": "floor-down-steep", "steps": 2},
+      {"x": 192, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ], "mirrored": true},
+    "t3A": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 40, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ], "mirrored": true},
+    "t3B": {"pieces": [
+      {"x": 88, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "mirrored": true},
+    "t3C": {"pieces": [
+      {"x": 8, "y": 119, "direction": "floor-up-steep", "steps": 4},
+      {"x": 40, "y": 55, "direction": "floor-up", "steps": 4}
+    ], "mirrored": true},
+    "t3D": {"pieces": [
+      {"x": 40, "y": 59, "direction": "ceiling", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]},
+      {"x": 32, "y": 55, "direction": "ceiling-down", "steps": 4}
+    ], "mirrored": true},
+    "t3E": {"pieces": [
+      {"x": 24, "y": 99, "direction": "ceiling", "steps": 8, "ends": [17, 19]},
+      {"x": 24, "y": 111, "direction": "floor", "steps": 8, "ends": [17, 19]},
+      {"x": 16, "y": 95, "direction": "ceiling-down-steep", "steps": 2},
+      {"x": 216, "y": 95, "direction": "ceiling-up-steep", "steps": 2},
+      {"x": 8, "y": 143, "direction": "floor-up-steep", "steps": 2},
+      {"x": 224, "y": 143, "direction": "floor-down-steep", "steps": 2}
+    ]},
+    "t3F": {"pieces": [
+      {"x": 160, "y": 151, "direction": "floor", "steps": 3, "ends": [17, 0]},
+      {"x": 136, "y": 183, "direction": "floor-up-steep", "steps": 1},
+      {"x": 144, "y": 167, "direction": "floor-up", "steps": 2}
+    ], "mirrored": true},
+    "t40": {"pieces": [
+      {"x": 8, "y": 63, "direction": "ceiling-up", "steps": 5},
+      {"x": 40, "y": 183, "direction": "floor-down", "steps": 5},
+      {"x": 208, "y": 151, "direction": "floor", "steps": 1, "ends": [17, 17]},
+      {"x": 192, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ]},
+    "t41": {"pieces": [
+      {"x": 64, "y": 71, "direction": "floor-down-steep", "steps": 3},
+      {"x": 168, "y": 71, "direction": "floor-up-steep", "steps": 3},
+      {"x": 64, "y": 183, "direction": "wall-rock-left", "steps": 7},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 7}
+    ]},
+    "t42": {"pieces": [
+      {"x": 40, "y": 103, "direction": "wall-rock-left", "steps": 5},
+      {"x": 8, "y": 183, "direction": "ceiling-up-steep", "steps": 5},
+      {"x": 192, "y": 135, "direction": "wall-rock-right", "steps": 7},
+      {"x": 168, "y": 183, "direction": "floor-up-steep", "steps": 3}
+    ]},
+    "t43": {"pieces": [
+      {"x": 8, "y": 119, "direction": "ceiling-up", "steps": 4},
+      {"x": 40, "y": 87, "direction": "ceiling-up-gentle", "steps": 8},
+      {"x": 72, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ]},
+    "t44": {"pieces": [
+      {"x": 168, "y": 183, "direction": "ceiling-up", "steps": 8}
+    ]},
+    "t45": {"pieces": [
+      {"x": 160, "y": 87, "direction": "wall-rock-left", "steps": 4},
+      {"x": 72, "y": 183, "direction": "ceiling-up", "steps": 12}
+    ]},
+    "t46": {"pieces": [
+      {"x": 136, "y": 59, "direction": "ceiling", "steps": 4, "ends": [16, 0]},
+      {"x": 184, "y": 151, "direction": "floor", "steps": 2, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 16},
+      {"x": 152, "y": 167, "direction": "floor-up-gentle", "steps": 2},
+      {"x": 136, "y": 183, "direction": "floor-up", "steps": 2}
+    ]},
+    "t47": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor-up", "steps": 8},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t48": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [0, 22]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]}
+    ]},
+    "t49": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [0, 22]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 19]},
+      {"x": 152, "y": 183, "direction": "floor-down-gentle", "steps": 4}
+    ]},
+    "t4A": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 3, "ends": [0, 18]},
+      {"x": 112, "y": 79, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 5},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ]},
+    "t4B": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 168, "y": 119, "direction": "wall-rock-right", "steps": 6},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t4C": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [0, 22]}
+    ]},
+    "t4D": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 6, "ends": [0, 19]},
+      {"x": 136, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 0]},
+      {"x": 160, "y": 39, "direction": "wall-rock-left", "steps": 1},
+      {"x": 152, "y": 55, "direction": "ceiling-up", "steps": 2},
+      {"x": 72, "y": 183, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t4E": {"pieces": [
+      {"x": 184, "y": 59, "direction": "ceiling", "steps": 2, "ends": [16, 0]},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 10},
+      {"x": 88, "y": 103, "direction": "ceiling-up-gentle", "steps": 6}
+    ]},
+    "t4F": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 8, "ends": [0, 19]},
+      {"x": 200, "y": 55, "direction": "ceiling-up", "steps": 4}
+    ]},
+    "t50": {"pieces": [
+      {"x": 168, "y": 55, "direction": "wall-rock-right", "steps": 2},
+      {"x": 224, "y": 183, "direction": "ceiling-down-steep", "steps": 8}
+    ]},
+    "t51": {"pieces": [
+      {"x": 120, "y": 87, "direction": "ceiling-down-gentle", "steps": 8},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ]},
+    "t52": {"pieces": [
+      {"x": 168, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ]},
+    "t53": {"pieces": [
+      {"x": 224, "y": 55, "direction": "ceiling-down", "steps": 4}
+    ]},
+    "t54": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [17, 22]}
+    ]},
+    "t55": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [16, 18]},
+      {"x": 56, "y": 55, "direction": "floor-down-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ]},
+    "t56": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 19]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 192, "y": 183, "direction": "floor-down", "steps": 4}
+    ]},
+    "t57": {"pieces": [
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 10}
+    ]},
+    "t58": {"pieces": [
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 8}
+    ]},
+    "t59": {"pieces": [
+      {"x": 160, "y": 87, "direction": "wall-rock-left", "steps": 4},
+      {"x": 72, "y": 183, "direction": "ceiling-up", "steps": 12}
+    ], "upsideDown": true, "mirrored": true},
+    "t5A": {"pieces": [
+      {"x": 8, "y": 63, "direction": "ceiling-up", "steps": 5},
+      {"x": 224, "y": 63, "direction": "ceiling-down", "steps": 5},
+      {"x": 40, "y": 183, "direction": "floor-down", "steps": 5},
+      {"x": 192, "y": 183, "direction": "floor-up", "steps": 5}
+    ]},
+    "t5B": {"pieces": [
+      {"x": 136, "y": 87, "direction": "wall-rock-right", "steps": 4},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ]},
+    "t5C": {"pieces": [
+      {"x": 64, "y": 183, "direction": "wall-rock-left", "steps": 10},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 10}
+    ]},
+    "t5D": {"pieces": [
+      {"x": 64, "y": 119, "direction": "wall-rock-left", "steps": 6},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 8},
+      {"x": 168, "y": 55, "direction": "wall-rock-right", "steps": 2},
+      {"x": 224, "y": 119, "direction": "ceiling-down", "steps": 8}
+    ]},
+    "t5E": {"pieces": [
+      {"x": 72, "y": 119, "direction": "ceiling-up", "steps": 12},
+      {"x": 72, "y": 183, "direction": "wall-rock-left", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 2}
+    ]},
+    "t5F": {"pieces": [
+      {"x": 64, "y": 59, "direction": "ceiling", "steps": 7, "ends": [16, 0]},
+      {"x": 64, "y": 151, "direction": "floor", "steps": 7, "ends": [16, 0]},
+      {"x": 32, "y": 127, "direction": "wall-rock-left", "steps": 3},
+      {"x": 56, "y": 151, "direction": "floor-down", "steps": 3},
+      {"x": 40, "y": 79, "direction": "ceiling-up", "steps": 3}
+    ]},
+    "t60": {"pieces": [
+      {"x": 64, "y": 119, "direction": "floor-down", "steps": 8},
+      {"x": 64, "y": 183, "direction": "wall-rock-left", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 2}
+    ]},
+    "t61": {"pieces": [
+      {"x": 8, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t62": {"pieces": [
+      {"x": 64, "y": 59, "direction": "ceiling", "steps": 7, "ends": [17, 0]},
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [16, 0]},
+      {"x": 40, "y": 47, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 56, "y": 55, "direction": "ceiling-down", "steps": 1},
+      {"x": 32, "y": 151, "direction": "floor-down", "steps": 4}
+    ]},
+    "t63": {"pieces": [
+      {"x": 64, "y": 119, "direction": "wall-rock-left", "steps": 6},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 8}
+    ]},
+    "t64": {"pieces": [
+      {"x": 96, "y": 55, "direction": "floor", "steps": 2, "ends": [17, 19]},
+      {"x": 96, "y": 155, "direction": "ceiling", "steps": 2, "ends": [17, 19]},
+      {"x": 72, "y": 103, "direction": "floor-up-steep", "steps": 3},
+      {"x": 88, "y": 151, "direction": "ceiling-down-steep", "steps": 3},
+      {"x": 160, "y": 103, "direction": "floor-down-steep", "steps": 3},
+      {"x": 144, "y": 151, "direction": "ceiling-up-steep", "steps": 3}
+    ]},
+    "t65": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true},
+    "t66": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 87, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "upsideDown": true},
+    "t67": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "upsideDown": true},
+    "t68": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 87, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t69": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ], "upsideDown": true, "mirrored": true},
+    "t6A": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-steep", "steps": 8}
+    ], "upsideDown": true},
+    "t6B": {"pieces": [
+      {"x": 168, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 200, "y": 119, "direction": "floor-up", "steps": 4}
+    ], "upsideDown": true},
+    "t6C": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true},
+    "t6D": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 40, "y": 151, "direction": "floor-up-steep", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t6E": {"pieces": [
+      {"x": 40, "y": 119, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "upsideDown": true, "mirrored": true},
+    "t6F": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true, "mirrored": true},
+    "t70": {"pieces": [
+      {"x": 88, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "upsideDown": true, "mirrored": true},
+    "t71": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "upsideDown": true, "mirrored": true},
+    "t72": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 151, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true, "mirrored": true},
+    "t73": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 8},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "upsideDown": true, "mirrored": true},
+    "t74": {"pieces": [
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 8}
+    ], "upsideDown": true},
+    "t75": {"pieces": [
+      {"x": 120, "y": 87, "direction": "ceiling-down-gentle", "steps": 8},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t76": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up", "steps": 16}
+    ], "upsideDown": true, "mirrored": true},
+    "t77": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 168, "y": 119, "direction": "wall-rock-right", "steps": 6},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 4}
+    ], "upsideDown": true},
+    "t78": {"pieces": [
+      {"x": 120, "y": 87, "direction": "ceiling-down-gentle", "steps": 8},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "upsideDown": true},
+    "t79": {"pieces": [
+      {"x": 160, "y": 87, "direction": "wall-rock-left", "steps": 4},
+      {"x": 72, "y": 183, "direction": "ceiling-up", "steps": 12}
+    ], "upsideDown": true},
+    "t7A": {"pieces": [
+      {"x": 40, "y": 119, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 4},
+      {"x": 136, "y": 119, "direction": "floor-up", "steps": 12}
+    ], "upsideDown": true},
+    "t7B": {"pieces": [
+      {"x": 88, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "upsideDown": true},
+    "t7C": {"pieces": [
+      {"x": 8, "y": 183, "direction": "floor-up-steep", "steps": 10}
+    ], "upsideDown": true},
+    "t7D": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 19]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 192, "y": 183, "direction": "floor-down", "steps": 4}
+    ], "upsideDown": true},
+    "t7E": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4}
+    ], "upsideDown": true},
+    "t7F": {"pieces": [
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t80": {"pieces": [
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 10}
+    ], "upsideDown": true},
+    "t81": {"pieces": [
+      {"x": 168, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "upsideDown": true},
+    "t82": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up", "steps": 16}
+    ], "upsideDown": true},
+    "t83": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 3, "ends": [0, 18]},
+      {"x": 112, "y": 79, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 5},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "upsideDown": true},
+    "t84": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [0, 22]}
+    ], "upsideDown": true},
+    "t85": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 3, "ends": [0, 18]},
+      {"x": 112, "y": 79, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 5},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t86": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true},
+    "t87": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]}
+    ], "upsideDown": true},
+    "t88": {"pieces": [
+      {"x": 64, "y": 59, "direction": "ceiling", "steps": 7, "ends": [16, 0]},
+      {"x": 64, "y": 151, "direction": "floor", "steps": 7, "ends": [16, 0]},
+      {"x": 32, "y": 127, "direction": "wall-rock-left", "steps": 3},
+      {"x": 56, "y": 151, "direction": "floor-down", "steps": 3},
+      {"x": 40, "y": 79, "direction": "ceiling-up", "steps": 3}
+    ], "upsideDown": true},
+    "t89": {"pieces": [
+      {"x": 40, "y": 59, "direction": "ceiling", "steps": 8, "ends": [17, 0]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 10, "ends": [0, 22]},
+      {"x": 32, "y": 55, "direction": "ceiling-down", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t8A": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ], "upsideDown": true},
+    "t8B": {"pieces": [
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 8}
+    ], "upsideDown": true, "mirrored": true},
+    "t8C": {"pieces": [
+      {"x": 72, "y": 55, "direction": "floor", "steps": 4, "ends": [16, 18]},
+      {"x": 56, "y": 55, "direction": "floor-down-gentle", "steps": 4},
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4}
+    ], "upsideDown": true},
+    "t8D": {"pieces": [
+      {"x": 32, "y": 55, "direction": "ceiling-up-steep", "steps": 2},
+      {"x": 128, "y": 151, "direction": "floor-up-steep", "steps": 8},
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 1, "ends": [19, 19]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 5, "ends": [0, 18]}
+    ], "mirrored": true},
+    "t8E": {"pieces": [
+      {"x": 8, "y": 119, "direction": "ceiling-up", "steps": 4},
+      {"x": 40, "y": 87, "direction": "ceiling-up-gentle", "steps": 8},
+      {"x": 72, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 8}
+    ], "mirrored": true},
+    "t8F": {"pieces": [
+      {"x": 168, "y": 183, "direction": "ceiling-up", "steps": 8}
+    ], "mirrored": true},
+    "t90": {"pieces": [
+      {"x": 160, "y": 87, "direction": "wall-rock-left", "steps": 4},
+      {"x": 72, "y": 183, "direction": "ceiling-up", "steps": 12}
+    ], "mirrored": true},
+    "t91": {"pieces": [
+      {"x": 136, "y": 59, "direction": "ceiling", "steps": 4, "ends": [16, 0]},
+      {"x": 184, "y": 151, "direction": "floor", "steps": 2, "ends": [17, 0]},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 16},
+      {"x": 152, "y": 167, "direction": "floor-up-gentle", "steps": 2},
+      {"x": 136, "y": 183, "direction": "floor-up", "steps": 2}
+    ], "mirrored": true},
+    "t92": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor-up", "steps": 8},
+      {"x": 8, "y": 119, "direction": "floor-up-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t93": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 10, "ends": [0, 22]},
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 19]},
+      {"x": 152, "y": 183, "direction": "floor-down-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t94": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 3, "ends": [0, 18]},
+      {"x": 112, "y": 79, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 5},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "mirrored": true},
+    "t95": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 4, "ends": [0, 18]},
+      {"x": 168, "y": 119, "direction": "wall-rock-right", "steps": 6},
+      {"x": 104, "y": 151, "direction": "floor-up-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t96": {"pieces": [
+      {"x": 120, "y": 87, "direction": "ceiling-down-gentle", "steps": 8},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "mirrored": true},
+    "t97": {"pieces": [
+      {"x": 168, "y": 55, "direction": "wall-rock-right", "steps": 2},
+      {"x": 224, "y": 183, "direction": "ceiling-down-steep", "steps": 8}
+    ], "mirrored": true},
+    "t98": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 6, "ends": [0, 19]},
+      {"x": 136, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 0]},
+      {"x": 160, "y": 39, "direction": "wall-rock-left", "steps": 1},
+      {"x": 152, "y": 55, "direction": "ceiling-up", "steps": 2},
+      {"x": 72, "y": 183, "direction": "floor-up-gentle", "steps": 4}
+    ], "mirrored": true},
+    "t99": {"pieces": [
+      {"x": 72, "y": 87, "direction": "floor", "steps": 4, "ends": [17, 18]},
+      {"x": 8, "y": 183, "direction": "floor-up", "steps": 4},
+      {"x": 40, "y": 151, "direction": "floor-up-steep", "steps": 4},
+      {"x": 168, "y": 87, "direction": "floor-up-steep", "steps": 4}
+    ], "upsideDown": true},
+    "t9A": {"pieces": [
+      {"x": 72, "y": 151, "direction": "floor", "steps": 4, "ends": [17, 19]},
+      {"x": 8, "y": 183, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 192, "y": 183, "direction": "floor-down", "steps": 4}
+    ], "mirrored": true},
+    "t9B": {"pieces": [
+      {"x": 40, "y": 55, "direction": "floor", "steps": 4, "ends": [17, 19]},
+      {"x": 8, "y": 87, "direction": "floor-up", "steps": 4},
+      {"x": 192, "y": 183, "direction": "floor-down-steep", "steps": 8}
+    ], "upsideDown": true},
+    "t9C": {"pieces": [
+      {"x": 200, "y": 183, "direction": "floor-up-steep", "steps": 4}
+    ], "upsideDown": true, "mirrored": true},
+    "t9D": {"pieces": [
+      {"x": 136, "y": 87, "direction": "wall-rock-right", "steps": 4},
+      {"x": 160, "y": 119, "direction": "ceiling-down", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "mirrored": true},
+    "t9E": {"pieces": [
+      {"x": 64, "y": 59, "direction": "ceiling", "steps": 7, "ends": [17, 0]},
+      {"x": 40, "y": 151, "direction": "floor", "steps": 8, "ends": [16, 0]},
+      {"x": 40, "y": 47, "direction": "ceiling-down-gentle", "steps": 3},
+      {"x": 56, "y": 55, "direction": "ceiling-down", "steps": 1},
+      {"x": 32, "y": 151, "direction": "floor-down", "steps": 4}
+    ], "mirrored": true},
+    "t9F": {"pieces": [
+      {"x": 168, "y": 55, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 8}
+    ], "mirrored": true},
+    "tA0": {"pieces": [
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 10}
+    ], "mirrored": true},
+    "tA1": {"pieces": [
+      {"x": 168, "y": 119, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 168, "y": 183, "direction": "wall-rock-right", "steps": 4}
+    ], "mirrored": true},
+    "tA2": {"pieces": [
+      {"x": 184, "y": 59, "direction": "ceiling", "steps": 2, "ends": [16, 0]},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 10},
+      {"x": 88, "y": 103, "direction": "ceiling-up-gentle", "steps": 6}
+    ], "mirrored": true},
+    "tA3": {"pieces": [
+      {"x": 8, "y": 59, "direction": "ceiling", "steps": 8, "ends": [0, 19]},
+      {"x": 200, "y": 55, "direction": "ceiling-up", "steps": 4}
+    ], "mirrored": true},
+    "tA4": {"pieces": [
+      {"x": 64, "y": 119, "direction": "wall-rock-left", "steps": 6},
+      {"x": 8, "y": 183, "direction": "ceiling-up", "steps": 8},
+      {"x": 168, "y": 55, "direction": "wall-rock-right", "steps": 2},
+      {"x": 224, "y": 119, "direction": "ceiling-down", "steps": 8}
+    ], "mirrored": true},
+    "tA5": {"pieces": [
+      {"x": 8, "y": 63, "direction": "ceiling-up", "steps": 5},
+      {"x": 40, "y": 183, "direction": "floor-down", "steps": 5},
+      {"x": 208, "y": 151, "direction": "floor", "steps": 1, "ends": [17, 17]},
+      {"x": 192, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ], "mirrored": true},
+    "tA6": {"pieces": []},
+    "tA7": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 1, "ends": [19, 19]},
+      {"x": 40, "y": 183, "direction": "floor-down-steep", "steps": 2}
+    ]},
+    "tA8": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 1, "ends": [19, 19]},
+      {"x": 40, "y": 183, "direction": "floor-down-steep", "steps": 2}
+    ], "mirrored": true},
+    "tA9": {"pieces": [
+      {"x": 8, "y": 151, "direction": "floor", "steps": 1, "ends": [19, 19]},
+      {"x": 208, "y": 151, "direction": "floor", "steps": 1, "ends": [17, 17]},
+      {"x": 40, "y": 183, "direction": "floor-down-steep", "steps": 2},
+      {"x": 192, "y": 183, "direction": "floor-up-steep", "steps": 2}
+    ]},
+    "tAA": {"pieces": [
+      {"x": 216, "y": 95, "direction": "ceiling-up-steep", "steps": 2},
+      {"x": 16, "y": 95, "direction": "ceiling-down-steep", "steps": 2}
+    ]}
+  }
+}
