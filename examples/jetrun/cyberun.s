@@ -1751,6 +1751,9 @@ next_piece_box:
 ; C' Steps left in the piece
 ; D' Steps drawn so far
 landscape_step_loop:
+  LD A,(fast_slope)       ; Jetrun: a slope step after the piece's first drawn
+  AND A                   ; one: the fast path (landscape_step_loop_fast).
+  JP NZ,landscape_step_loop_fast ;
   LD A,(piece_rise)       ; Move to this step: up by the direction's rise,
   LD B,A                  ; across by its run.
   LD A,(piece_page_y)     ;
@@ -1767,10 +1770,8 @@ landscape_step_loop:
   LD A,(piece_page_x)     ;
   ADD A,B                 ;
   LD (piece_page_x),A     ;
-  LD A,(fast_slope)       ; Jetrun: a slope step after the piece's first drawn
-  AND A                   ; one, inside the view and clear of every edge, goes
-  JP NZ,landscape_step_loop_fast ; straight to its blitter.
-; This entry point is used by the routine at draw_landscape.
+; This entry point is used by the routines at draw_landscape and
+; landscape_step_loop_fast.
 landscape_step_loop_0:
   XOR A                   ; A piece's first step enters here (from
   LD (edge_flags),A       ; draw_landscape): no edge flags yet.
@@ -1905,13 +1906,12 @@ landscape_step_loop_7:
   LD (slope_step_at_right_edge_0+1),A                ;
 landscape_step_loop_first:
   LD A,(piece_rise)           ; Jetrun: a slope's later steps may take the
-  AND A                       ; fast path (landscape_step_loop_fast).
-  JR Z,landscape_step_loop_8  ;
+  AND A                       ; fast path (landscape_step_loop_fast), with
+  JR Z,landscape_step_loop_8  ; this piece's constants patched into it.
   LD A,(piece_dx_copy)        ;
   AND A                       ;
   JR Z,landscape_step_loop_8  ;
-  LD A,$01                    ;
-  LD (fast_slope),A           ;
+  CALL patch_fast_step        ;
 landscape_step_loop_8:
   LD A,(piece_dx_copy)        ; A vertical wall: once a step is drawn the rest
   AND A                       ; go straight to the draw; before that piece_dx =
@@ -3803,59 +3803,67 @@ current_piece:
 ;
 ; HL Address of this step's variant byte (in column_varieties)
 landscape_step_loop_fast:
-  LD A,(piece_page_y)     ; Up and down.
-  LD B,A                  ;
-  LD A,(ground_cell)      ;
-  RRCA                    ;
-  JR C,landscape_step_loop_fast_0 ;
-  LD A,(view_y)           ; An upper cell: below the top edge.
-  CP B                    ;
+  LD A,(piece_page_y)     ; The advance, as landscape_step_loop makes it:
+fast_rise_page:
+  SUB $00                 ; up by the rise (patched) and across by the run.
+  LD (piece_page_y),A     ;
+  LD B,A                  ; B = the page y.
+  LD A,(piece_y)          ;
+fast_rise_screen:
+  SUB $00                 ;
+  LD (piece_y),A          ;
+  LD E,A                  ; E = the screen y.
+  LD A,(piece_page_x)     ;
+fast_run_page:
+  ADD A,$00               ;
+  LD (piece_page_x),A     ;
+  LD A,(piece_x)          ;
+fast_run_screen:
+  ADD A,$00               ;
+  LD (piece_x),A          ;
+  CP $D1                  ; Clear of the right edge (slope_step_at_right_edge)
   JP NC,landscape_step_loop_0 ;
-  JR landscape_step_loop_fast_1 ;
-landscape_step_loop_fast_0:
-  LD A,(piece_rows)       ; A lower cell: above the bottom edge.
-  LD E,A                  ;
-  LD A,B                  ;
-  SUB E                   ;
-  LD B,A                  ;
-  LD A,(view_y)           ;
-  CP B                    ;
-  JP C,landscape_step_loop_0 ;
-  JP Z,landscape_step_loop_0 ;
-landscape_step_loop_fast_1:
-  LD A,(piece_page_x)     ; Across.
-  LD B,A                  ;
-  LD A,(ground_cell)      ;
-  AND $02                 ;
-  JR NZ,landscape_step_loop_fast_2 ;
-  LD A,(piece_step_x)     ; A left-hand cell: ends right of the left edge.
-  ADD A,B                 ;
-  LD B,A                  ;
-  LD A,(view_x)           ;
-  CP B                    ;
-  JP NC,landscape_step_loop_0 ;
-  JR landscape_step_loop_fast_3 ;
-landscape_step_loop_fast_2:
-  LD A,(view_x)           ; A right-hand cell: starts left of the right edge.
-  CP B                    ;
-  JP C,landscape_step_loop_0 ;
-  JP Z,landscape_step_loop_0 ;
-landscape_step_loop_fast_3:
-  LD A,(piece_x)          ; Clear of the right and left edges.
-  CP $D1                  ;
-  JP NC,landscape_step_loop_0 ;
-  ADD A,$08               ;
+  ADD A,$08               ; and the left (slope_step_at_left_edge).
   CP $0F                  ;
   JP C,landscape_step_loop_0 ;
-  LD A,(piece_y)          ; Clear of the bottom and the top.
+  LD A,E                  ; Clear of the bottom (draw_step) ...
   CP $B8                  ;
   JP NC,landscape_step_loop_0 ;
-  LD B,A                  ;
-  LD A,(piece_rows)       ;
-  NEG                     ;
-  ADD A,B                 ;
-  SUB $18                 ;
+fast_rows_top:
+  SUB $00                 ; ... and the top: (y - rows) AND $FF from $18.
+  CP $18                  ;
   JP C,landscape_step_loop_0 ;
+fast_vertical:
+  JP fast_upper           ; (patched: fast_upper or fast_lower)
+fast_upper:
+  LD A,B                  ; An upper cell: below view_y (not on it).
+fast_view_y_1:
+  CP $00                  ; (view_y + 1)
+  JP C,landscape_step_loop_0 ;
+  JP fast_across          ;
+fast_lower:
+  LD A,B                  ; A lower cell: (y - rows) AND $FF above view_y.
+fast_rows_cull:
+  SUB $00                 ; (rows)
+fast_view_y:
+  CP $00                  ; (view_y)
+  JP NC,landscape_step_loop_0 ;
+fast_across:
+  JP fast_left            ; (patched: fast_left or fast_right)
+fast_left:
+  LD A,(piece_page_x)     ; A left-hand cell: (x + the x step) AND $FF right
+fast_step_x:
+  ADD A,$00               ; of view_x.
+fast_view_x_1:
+  CP $00                  ; (view_x + 1)
+  JP C,landscape_step_loop_0 ;
+  JP fast_draw            ;
+fast_right:
+  LD A,(piece_page_x)     ; A right-hand cell: left of view_x.
+fast_view_x:
+  CP $00                  ; (view_x)
+  JP NC,landscape_step_loop_0 ;
+fast_draw:
   LD A,(HL)               ; Drawn whole, as draw_step draws it: SP the
   EXX                     ; variant's graphic, A and E the row pairs, B the
   LD HL,(piece_offsets)   ; step's screen y, HL the address kept for it.
@@ -3873,6 +3881,48 @@ landscape_step_loop_fast_3:
   LD E,A                  ;
   LD HL,(column_address)  ;
   JP (IY)                 ;
+
+; Jetrun: patch a slope piece's constants into landscape_step_loop_fast, at
+; its first drawn step: the rise and run, the step's height and x step, the
+; view's edges (this pass's), and which cell's tests apply.
+patch_fast_step:
+  LD A,(piece_rise)       ;
+  LD (fast_rise_page+1),A ;
+  LD (fast_rise_screen+1),A ;
+  LD A,(piece_dx)         ;
+  LD (fast_run_page+1),A  ;
+  LD (fast_run_screen+1),A ;
+  LD A,(piece_rows)       ;
+  LD (fast_rows_top+1),A  ;
+  LD (fast_rows_cull+1),A ;
+  LD A,(piece_step_x)     ;
+  LD (fast_step_x+1),A    ;
+  LD A,(view_y)           ;
+  LD (fast_view_y+1),A    ;
+  INC A                   ;
+  LD (fast_view_y_1+1),A  ;
+  LD A,(view_x)           ;
+  LD (fast_view_x+1),A    ;
+  INC A                   ;
+  LD (fast_view_x_1+1),A  ;
+  PUSH HL                 ;
+  LD A,(ground_cell)      ;
+  LD HL,fast_upper        ;
+  BIT 0,A                 ;
+  JR Z,patch_fast_step_0  ;
+  LD HL,fast_lower        ;
+patch_fast_step_0:
+  LD (fast_vertical+1),HL ;
+  LD HL,fast_left         ;
+  BIT 1,A                 ;
+  JR Z,patch_fast_step_1  ;
+  LD HL,fast_right        ;
+patch_fast_step_1:
+  LD (fast_across+1),HL   ;
+  POP HL                  ;
+  LD A,$01                ;
+  LD (fast_slope),A       ;
+  RET                     ;
 
 ; Jetrun: a slope's steps may take landscape_step_loop_fast once one is drawn.
 fast_slope:
