@@ -40,4 +40,5 @@ Keys: Interface II (9 thrust, 6 left, 7 right) or Q, O, P.
 | `sprite.s` | the astronaut's masked sprite and its cells' colours |
 | `world.py`, `world/*.json` | the map and tiles, and their geometry |
 | `model.py`, `game.py`, `sprites.py` | the Python model `check.py` compares with |
+| `docs/renderer.md` | how the landscape is drawn, with a pass traced step by step |
 | `GLOSSARY.md`, `docs/adr/` | the words used, and the decisions made |
