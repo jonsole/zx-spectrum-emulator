@@ -1301,6 +1301,9 @@ draw_landscape:
   JR Z,draw_landscape_0   ;
   LD (record_ground),A    ;
 draw_landscape_0:
+  LD A,(record_ground)    ; Jetrun: a new window: which slot holds each map
+  AND A                   ; cell's tile (assign_slots).
+  CALL NZ,assign_slots    ;
   LD A,(origin_y)         ; The vertical offset for the first tile.
   ADD A,$60               ;
   LD (origin_y),A         ;
@@ -1328,17 +1331,35 @@ draw_landscape_1:
   LD (ground_cell),A      ;
 ; This entry point is used by the routine at after_step_drawn.
 draw_landscape_2:
-  LD IX,ground_cell_top_left             ; Each tile: its box list.
-  LD A,(ground_cell)             ;
-  AND A                          ;
-  JR Z,draw_landscape_3          ;
-  LD IX,ground_cell_bottom_left  ;
-  CP $01                         ;
-  JR Z,draw_landscape_3          ;
-  LD IX,ground_cell_top_right    ;
-  CP $02                         ;
-  JR Z,draw_landscape_3          ;
-  LD IX,ground_cell_bottom_right ;
+  LD A,(ground_cell)      ; Each tile: its box list. Jetrun: the box list,
+  LD E,A                  ; and the pieces' cache, of the slot that holds
+  LD D,$00                ; the tile (assign_slots); and whether its pieces
+  LD A,(record_ground)    ; are decoded this pass (only on a new window, and
+  AND A                   ; only a tile no slot held) or restored.
+  JR Z,draw_landscape_slot ;
+  LD HL,cell_decode       ;
+  ADD HL,DE               ;
+  LD A,(HL)               ;
+draw_landscape_slot:
+  LD (tile_decode),A      ;
+  LD HL,cell_slot         ;
+  ADD HL,DE               ;
+  LD A,(HL)               ;
+  ADD A,A                 ;
+  LD E,A                  ;
+  LD HL,slot_table        ;
+  ADD HL,DE               ;
+  LD E,(HL)               ;
+  INC HL                  ;
+  LD D,(HL)               ;
+  PUSH DE                 ;
+  POP IX                  ;
+  LD HL,36            ;
+  ADD HL,DE               ;
+  LD (piece_cache_pointer),HL ;
+  LD HL,169 ;
+  ADD HL,DE               ;
+  LD (piece_cull_pointer),HL ;
 draw_landscape_3:
   LD HL,(map_window_pointer) ; The next tile record's address from the list.
   LD E,(HL)                  ;
@@ -1379,6 +1400,9 @@ draw_landscape_6:
 ; This entry point is used by the routine at after_step_drawn.
 draw_landscape_7:
   LD IX,current_piece        ; Each piece: its state at current_piece, and the
+  LD A,(tile_decode)         ; Jetrun: decoded on the pass its tile came into
+  AND A                      ; a slot; since then, restored from the slot.
+  JP Z,draw_landscape_cached ;
   XOR A                      ; per-piece flags cleared.
   LD (piece_steps_done),A    ;
   LD (clipped_columns),A     ;
@@ -1389,6 +1413,7 @@ draw_landscape_7:
   LD (piece_ceiling),A       ;
   LD (piece_rows),A          ;
   LD (last_step_in_border),A ;
+  LD (fast_slope),A          ; Jetrun: no fast steps till one is drawn.
   LD (IX+$01),A              ;
   LD A,(HL)               ; Its x and y in the page (the y kept unchanged in
   LD (piece_page_x),A     ; box_height too).
@@ -1416,11 +1441,14 @@ draw_landscape_8:
   LD C,A                  ;
   INC HL                  ; The end pieces, and a mirrored tile's changes
   CALL piece_ends         ; (piece_ends).
+  CALL keep_piece         ; Jetrun: and keep it all in piece_cache.
+; This entry point is used by the routine at draw_landscape_cached.
+draw_landscape_decoded:
   LD HL,column_varieties  ; The column-variety sequence in HL; the direction
   LD B,(IX+$03)           ; kept in B.
   EXX                      ; The box, filled only while building
-  LD IX,(collision_object) ; (record_ground).
-  LD A,(record_ground)     ;
+  LD IX,(collision_object) ; (record_ground). Jetrun: as its pieces are decoded
+  LD A,(tile_decode)       ; (tile_decode); the slot keeps them.
   AND A                    ;
   JP Z,draw_landscape_15   ;
   LD A,(current_piece+3)            ; Its class, steps, x and y.
@@ -1495,6 +1523,9 @@ draw_landscape_14:
   LD (IX+$03),E           ;
   LD (IX+$02),D           ;
 draw_landscape_15:
+  LD A,(tile_decode)        ; Jetrun: decoded this pass: keep the numbers the
+  AND A                     ; cull compares (keep_cull).
+  CALL NZ,keep_cull         ;
   LD A,(view_x)             ; Wholly to the left or right of the view?
   LD B,A                    ;
   LD A,(ground_cell)        ;
@@ -1518,6 +1549,7 @@ draw_landscape_18:
 draw_landscape_19:
   JP NZ,draw_landscape_20    ;
   CALL next_piece_box      ; It can be seen: on to the next collision record,
+  CALL restore_piece_rest  ; (Jetrun: the rest of a cached piece)
   JP landscape_step_loop_0 ; and draw it.
 draw_landscape_20:
   CALL next_piece_box     ; It cannot: on to the next collision record and the
@@ -1735,6 +1767,9 @@ landscape_step_loop:
   LD A,(piece_page_x)     ;
   ADD A,B                 ;
   LD (piece_page_x),A     ;
+  LD A,(fast_slope)       ; Jetrun: a slope step after the piece's first drawn
+  AND A                   ; one, inside the view and clear of every edge, goes
+  JP NZ,landscape_step_loop_fast ; straight to its blitter.
 ; This entry point is used by the routine at draw_landscape.
 landscape_step_loop_0:
   XOR A                   ; A piece's first step enters here (from
@@ -1865,9 +1900,18 @@ landscape_step_loop_7:
   LD (slope_step_at_right_edge_0+1),A                ; (mirrored_slope_far_right copies it too).
   LD A,(IX+$00)               ;
   AND $07                     ;
-  JR NZ,landscape_step_loop_8 ;
+  JR NZ,landscape_step_loop_first ;
   LD A,$01                    ;
   LD (slope_step_at_right_edge_0+1),A                ;
+landscape_step_loop_first:
+  LD A,(piece_rise)           ; Jetrun: a slope's later steps may take the
+  AND A                       ; fast path (landscape_step_loop_fast).
+  JR Z,landscape_step_loop_8  ;
+  LD A,(piece_dx_copy)        ;
+  AND A                       ;
+  JR Z,landscape_step_loop_8  ;
+  LD A,$01                    ;
+  LD (fast_slope),A           ;
 landscape_step_loop_8:
   LD A,(piece_dx_copy)        ; A vertical wall: once a step is drawn the rest
   AND A                       ; go straight to the draw; before that piece_dx =
@@ -3739,6 +3783,571 @@ scroll_landscape_5:
 current_piece:
   DEFS $05
 
+; Jetrun: the fast path for a slope's step
+;
+; Used by the routine at landscape_step_loop.
+;
+; Cyberun decides for every step whether to cull it, whether it sits exactly
+; on an edge of the view, whether it needs clipping at the right or left edge
+; or at the bottom or top, and only then draws it -- about a thousand
+; T-states a step before the blitter. For a step of a slope whose first step
+; has been drawn (fast_slope), this makes the same comparisons, the same way,
+; and if none of them asks for anything but the plain draw, sets up the
+; blitter as draw_step would and jumps to it; otherwise it hands the step to
+; landscape_step_loop_0 to decide in full. The checks, in Cyberun's order:
+; the step not culled and not exactly on an edge, up and down
+; (landscape_step_loop_0/1) and across (landscape_step_loop_3/4); not near
+; the right edge (slope_step_at_right_edge, screen x below $D1) or the left
+; (slope_step_at_left_edge); not hanging below the play area or above it
+; (draw_step).
+;
+; HL Address of this step's variant byte (in column_varieties)
+landscape_step_loop_fast:
+  LD A,(piece_page_y)     ; Up and down.
+  LD B,A                  ;
+  LD A,(ground_cell)      ;
+  RRCA                    ;
+  JR C,landscape_step_loop_fast_0 ;
+  LD A,(view_y)           ; An upper cell: below the top edge.
+  CP B                    ;
+  JP NC,landscape_step_loop_0 ;
+  JR landscape_step_loop_fast_1 ;
+landscape_step_loop_fast_0:
+  LD A,(piece_rows)       ; A lower cell: above the bottom edge.
+  LD E,A                  ;
+  LD A,B                  ;
+  SUB E                   ;
+  LD B,A                  ;
+  LD A,(view_y)           ;
+  CP B                    ;
+  JP C,landscape_step_loop_0 ;
+  JP Z,landscape_step_loop_0 ;
+landscape_step_loop_fast_1:
+  LD A,(piece_page_x)     ; Across.
+  LD B,A                  ;
+  LD A,(ground_cell)      ;
+  AND $02                 ;
+  JR NZ,landscape_step_loop_fast_2 ;
+  LD A,(piece_step_x)     ; A left-hand cell: ends right of the left edge.
+  ADD A,B                 ;
+  LD B,A                  ;
+  LD A,(view_x)           ;
+  CP B                    ;
+  JP NC,landscape_step_loop_0 ;
+  JR landscape_step_loop_fast_3 ;
+landscape_step_loop_fast_2:
+  LD A,(view_x)           ; A right-hand cell: starts left of the right edge.
+  CP B                    ;
+  JP C,landscape_step_loop_0 ;
+  JP Z,landscape_step_loop_0 ;
+landscape_step_loop_fast_3:
+  LD A,(piece_x)          ; Clear of the right and left edges.
+  CP $D1                  ;
+  JP NC,landscape_step_loop_0 ;
+  ADD A,$08               ;
+  CP $0F                  ;
+  JP C,landscape_step_loop_0 ;
+  LD A,(piece_y)          ; Clear of the bottom and the top.
+  CP $B8                  ;
+  JP NC,landscape_step_loop_0 ;
+  LD B,A                  ;
+  LD A,(piece_rows)       ;
+  NEG                     ;
+  ADD A,B                 ;
+  SUB $18                 ;
+  JP C,landscape_step_loop_0 ;
+  LD A,(HL)               ; Drawn whole, as draw_step draws it: SP the
+  EXX                     ; variant's graphic, A and E the row pairs, B the
+  LD HL,(piece_offsets)   ; step's screen y, HL the address kept for it.
+  ADD A,A                 ;
+  LD E,A                  ;
+  LD D,$00                ;
+  ADD HL,DE               ;
+  LD E,(HL)               ;
+  LD HL,(piece_graphic)   ;
+  ADD HL,DE               ;
+  LD SP,HL                ;
+  LD A,(piece_y)          ;
+  LD B,A                  ;
+  LD A,(half_rows)        ;
+  LD E,A                  ;
+  LD HL,(column_address)  ;
+  JP (IY)                 ;
+
+; Jetrun: a slope's steps may take landscape_step_loop_fast once one is drawn.
+fast_slope:
+  DEFB $00
+
+; Jetrun: a piece's decoded state, kept and restored
+;
+; Used by the routine at draw_landscape.
+;
+; What draw_landscape works out for a piece before it culls it -- its place,
+; direction, steps, end codes, where the next one starts, and the shape
+; set_piece_shape sets (with the JR it patches) -- depends only on the tile
+; record, never on the view. So on a pass whose window is new (record_ground)
+; it is worked out as Cyberun does and kept here (19 bytes a piece, seven
+; pieces for each of the four map cells), and on the others restored instead.
+; First only what the cull reads (piece_off_left_edge and its partners: the
+; rise, the run, the place, the way it climbs) with the direction and the
+; steps; the rest, and the flags draw_landscape clears for each piece, only
+; for a piece the cull keeps (restore_piece_rest).
+keep_piece:
+  PUSH DE                 ;
+  LD HL,(piece_cache_pointer) ;
+  LD A,(piece_rise)            ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_dx_copy)         ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_page_x)          ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_page_y)          ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(direction_flag)        ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(current_piece+3)       ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_steps)           ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(box_height)            ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_extra_a)         ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_extra_b)         ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(next_piece)            ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(next_piece+1)          ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_dx)              ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_dcolumn)         ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_ceiling)         ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(landscape_step_loop_10+1) ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_rows)            ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_step_y)          ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_step_x)          ;
+  LD (HL),A               ;
+  INC HL                  ;
+  LD (piece_cache_pointer),HL ;
+  POP DE                  ;
+  RET                     ;
+draw_landscape_cached:
+  LD HL,(piece_cull_pointer) ; The cull first, from the numbers keep_cull
+  LD A,(ground_cell)      ; kept, as draw_landscape_15 decides it: across,
+  BIT 1,A                 ; a left-hand cell's piece is off if its right end
+  JR NZ,cached_cull_right ; is left of view_x, a right-hand cell's if its
+  LD A,(HL)               ; left end is right of it.
+  LD B,A                  ;
+  LD A,(view_x)           ;
+  CP B                    ;
+  JR Z,cached_cull_down   ;
+  JR NC,cached_off        ;
+  JR cached_cull_down     ;
+cached_cull_right:
+  INC HL                  ;
+  LD A,(view_x)           ;
+  CP (HL)                 ;
+  JR C,cached_off         ;
+  DEC HL                  ;
+cached_cull_down:
+  INC HL                  ; Up and down: an upper cell's piece is off if its
+  INC HL                  ; top is above view_y, a lower cell's if its bottom
+  LD A,(ground_cell)      ; is below it.
+  BIT 0,A                 ;
+  JR NZ,cached_cull_lower ;
+  LD A,(HL)               ;
+  LD B,A                  ;
+  LD A,(view_y)           ;
+  CP B                    ;
+  JR Z,cached_on          ;
+  JR NC,cached_off        ;
+  JR cached_on            ;
+cached_cull_lower:
+  INC HL                  ;
+  LD A,(view_y)           ;
+  CP (HL)                 ;
+  JR C,cached_off         ;
+cached_on:
+  LD HL,(piece_cull_pointer) ;
+  LD DE,4                 ;
+  ADD HL,DE               ;
+  LD (piece_cull_pointer),HL ;
+  JR cached_restore       ;
+cached_off:
+  LD HL,(piece_cull_pointer) ; Off the view: on to the next piece as
+  LD DE,4                 ; draw_landscape_20 goes, with nothing restored.
+  ADD HL,DE               ;
+  LD (piece_cull_pointer),HL ;
+  LD HL,(piece_cache_pointer) ;
+  LD DE,19                ;
+  ADD HL,DE               ;
+  LD (piece_cache_pointer),HL ;
+  LD IX,(collision_object) ;
+  LD DE,$0005             ;
+  ADD IX,DE               ;
+  LD (collision_object),IX ;
+  LD IX,current_piece     ;
+  JP after_step_drawn_16  ;
+cached_restore:
+  PUSH DE                 ;
+  LD HL,(piece_cache_pointer) ;
+  LD A,(HL)               ;
+  LD (piece_rise),A            ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_dx_copy),A         ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_page_x),A          ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_page_y),A          ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (direction_flag),A        ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (current_piece+3),A       ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_steps),A           ;
+  INC HL                  ;
+  LD (piece_cache_rest),HL ;
+  LD DE,12       ;
+  ADD HL,DE               ;
+  LD (piece_cache_pointer),HL ;
+  POP DE                  ;
+  LD A,(piece_steps)      ; C = the steps, as draw_landscape leaves it.
+  LD C,A                  ;
+  JP draw_landscape_decoded ;
+restore_piece_rest:
+  LD A,(tile_decode)      ; Decoded this pass: nothing to restore.
+  AND A                   ;
+  RET NZ                  ;
+  PUSH HL                 ;
+  XOR A                   ; The per-piece flags draw_landscape clears.
+  LD (piece_steps_done),A ;
+  LD (clipped_columns),A  ;
+  LD (piece_clip),A       ;
+  LD (piece_kept),A       ;
+  LD (last_step_in_border),A ;
+  LD (fast_slope),A       ;
+  LD HL,(piece_cache_rest) ;
+  LD A,(HL)               ;
+  LD (box_height),A            ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_extra_a),A         ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_extra_b),A         ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (next_piece),A            ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (next_piece+1),A          ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_dx),A              ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_dcolumn),A         ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_ceiling),A         ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (landscape_step_loop_10+1),A ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_rows),A            ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_step_y),A          ;
+  INC HL                  ;
+  LD A,(HL)               ;
+  LD (piece_step_x),A          ;
+  INC HL                  ;
+  POP HL                  ;
+  RET                     ;
+
+; Jetrun: keep the numbers draw_landscape_15's cull compares, for a decoded
+; piece: the right end piece_off_left_edge works out, the left end
+; piece_off_right_edge does, the top piece_off_top_edge does and the bottom
+; piece_off_bottom_edge does, each as they work it out. IX is the piece's box.
+keep_cull:
+  PUSH HL                 ;
+  LD HL,(piece_cull_pointer) ;
+  LD A,(piece_rise)       ; The right end.
+  AND A                   ;
+  JR NZ,keep_cull_0       ;
+  LD A,(IX+$00)           ;
+  ADD A,(IX+$02)          ;
+  JR keep_cull_2          ;
+keep_cull_0:
+  LD A,(piece_dx_copy)    ;
+  AND A                   ;
+  JR NZ,keep_cull_1       ;
+  LD A,(piece_page_x)     ;
+  ADD A,$08               ;
+  JR keep_cull_2          ;
+keep_cull_1:
+  LD A,(direction_flag)   ;
+  CP $01                  ;
+  LD A,(IX+$02)           ;
+  JR NZ,keep_cull_2       ;
+  LD A,(IX+$00)           ;
+keep_cull_2:
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_dx_copy)    ; The left end.
+  AND A                   ;
+  JR Z,keep_cull_3        ;
+  LD A,(direction_flag)   ;
+  CP $FF                  ;
+  JR Z,keep_cull_3        ;
+  LD A,(IX+$02)           ;
+  DEC A                   ;
+  JR keep_cull_4          ;
+keep_cull_3:
+  LD A,(piece_page_x)     ;
+keep_cull_4:
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_page_y)     ; The top.
+  LD (HL),A               ;
+  INC HL                  ;
+  LD A,(piece_rise)       ; The bottom.
+  AND A                   ;
+  JR NZ,keep_cull_5       ;
+  LD A,(piece_page_y)     ;
+  SUB $04                 ;
+  JR keep_cull_7          ;
+keep_cull_5:
+  LD A,(piece_dx_copy)    ;
+  AND A                   ;
+  JR NZ,keep_cull_6       ;
+  LD A,(IX+$01)           ;
+  SUB (IX+$03)            ;
+  JR keep_cull_7          ;
+keep_cull_6:
+  LD A,(IX+$03)           ;
+keep_cull_7:
+  LD (HL),A               ;
+  INC HL                  ;
+  LD (piece_cull_pointer),HL ;
+  POP HL                  ;
+  RET                     ;
+
+piece_cull_pointer:
+  DEFW slot_0 + 169
+piece_cache_pointer:
+  DEFW slot_0 + 36
+piece_cache_rest:
+  DEFW slot_0 + 36
+
+; Jetrun: which slot holds each map cell's tile
+;
+; Used by the routine at draw_landscape.
+;
+; Four slots each keep one tile's collision boxes (the list draw_landscape
+; records and culls from: a count and seven boxes of five bytes) and its
+; pieces' decoded state (keep_piece, 19 bytes a piece). When the window
+; moves to new map cells (record_ground), each of the four cells (in
+; ground_cell's order, the order map_window_tiles lists them) is given the
+; slot that already holds its tile, kept as it is; each tile no slot holds
+; takes a slot no cell of the window needs, and is decoded into it as it is
+; drawn -- once, if two cells have it, by the first. A rebuild of the window
+; (map_rebuild) forgets every slot. So moving a page across or down decodes
+; only the cells that are new.
+assign_slots:
+  LD A,(map_rebuild)      ; A rebuild: no slot holds anything.
+  AND A                   ;
+  JR Z,assign_slots_0     ;
+  LD HL,slot_tiles        ;
+  LD B,$08                ;
+assign_slots_forget:
+  LD (HL),$00             ;
+  INC HL                  ;
+  DJNZ assign_slots_forget ;
+assign_slots_0:
+  LD HL,slot_used         ; No slot claimed yet.
+  LD B,$04                ;
+assign_slots_free:
+  LD (HL),$00             ;
+  INC HL                  ;
+  DJNZ assign_slots_free  ;
+  LD C,$00                ; First the cells whose tile a slot holds.
+assign_slots_1:
+  CALL cell_tile          ;
+  CALL find_slot          ;
+  CP $FF                  ;
+  JR Z,assign_slots_2     ;
+  LD B,$00                ; Kept: restored, not decoded.
+  CALL set_cell           ;
+  JR assign_slots_3       ;
+assign_slots_2:
+  LD HL,cell_slot         ; Not held: the second round.
+  LD B,$00                ;
+  ADD HL,BC               ;
+  LD (HL),$FF             ;
+assign_slots_3:
+  INC C                   ;
+  LD A,C                  ;
+  CP $04                  ;
+  JR NZ,assign_slots_1    ;
+  LD C,$00                ; Then the others.
+assign_slots_4:
+  LD HL,cell_slot         ;
+  LD B,$00                ;
+  ADD HL,BC               ;
+  LD A,(HL)               ;
+  CP $FF                  ;
+  JR NZ,assign_slots_7    ;
+  CALL cell_tile          ;
+  CALL find_slot          ; Claimed by an earlier cell this round: it is
+  CP $FF                  ; decoded there first.
+  JR Z,assign_slots_5     ;
+  LD B,$00                ;
+  CALL set_cell           ;
+  JR assign_slots_7       ;
+assign_slots_5:
+  LD HL,slot_used         ; A slot no cell needs.
+  XOR A                   ;
+assign_slots_6:
+  CP $04                  ;
+  RET Z                   ; (cannot happen: four slots, four cells)
+  LD B,(HL)               ;
+  INC B                   ;
+  DEC B                   ;
+  JR Z,assign_slots_claim ;
+  INC HL                  ;
+  INC A                   ;
+  JR assign_slots_6       ;
+assign_slots_claim:
+  PUSH AF                 ; It holds this tile now.
+  ADD A,A                 ;
+  LD HL,slot_tiles        ;
+  ADD A,L                 ;
+  LD L,A                  ;
+  ADC A,H                 ;
+  SUB L                   ;
+  LD H,A                  ;
+  LD (HL),E               ;
+  INC HL                  ;
+  LD (HL),D               ;
+  POP AF                  ;
+  LD B,$01                ; Decoded as it is drawn.
+  CALL set_cell           ;
+assign_slots_7:
+  INC C                   ;
+  LD A,C                  ;
+  CP $04                  ;
+  JR NZ,assign_slots_4    ;
+  RET                     ;
+
+; DE = the tile record of map cell C (map_window_tiles).
+cell_tile:
+  LD HL,map_window_tiles  ;
+  LD A,C                  ;
+  ADD A,A                 ;
+  ADD A,L                 ;
+  LD L,A                  ;
+  ADC A,H                 ;
+  SUB L                   ;
+  LD H,A                  ;
+  LD E,(HL)               ;
+  INC HL                  ;
+  LD D,(HL)               ;
+  RET                     ;
+
+; A = the slot holding tile record DE, or $FF.
+find_slot:
+  LD HL,slot_tiles        ;
+  LD B,$00                ;
+find_slot_0:
+  LD A,(HL)               ;
+  INC HL                  ;
+  CP E                    ;
+  JR NZ,find_slot_1       ;
+  LD A,(HL)               ;
+  CP D                    ;
+  JR NZ,find_slot_1       ;
+  LD A,B                  ;
+  RET                     ;
+find_slot_1:
+  INC HL                  ;
+  INC B                   ;
+  LD A,B                  ;
+  CP $04                  ;
+  JR NZ,find_slot_0       ;
+  LD A,$FF                ;
+  RET                     ;
+
+; Map cell C to slot A, decoded this pass if B is 1; the slot claimed.
+set_cell:
+  PUSH DE                 ;
+  LD HL,cell_slot         ;
+  LD E,C                  ;
+  LD D,$00                ;
+  ADD HL,DE               ;
+  LD (HL),A               ;
+  LD HL,cell_decode       ;
+  ADD HL,DE               ;
+  LD (HL),B               ;
+  LD E,A                  ;
+  LD HL,slot_used         ;
+  ADD HL,DE               ;
+  LD (HL),$01             ;
+  POP DE                  ;
+  RET                     ;
+
+cell_slot:
+  DEFB $00,$01,$02,$03
+cell_decode:
+  DEFB $01,$01,$01,$01
+slot_used:
+  DEFS 4
+slot_tiles:
+  DEFS 8
+tile_decode:
+  DEFB $01
+slot_table:
+  DEFW slot_0, slot_1, slot_2, slot_3
+slot_0:
+  DEFS 197
+slot_1:
+  DEFS 197
+slot_2:
+  DEFS 197
+slot_3:
+  DEFS 197
+
 ; Jetrun: decide whether the pieces are coloured this pass
 ;
 ; Used by the routine at scroll_landscape.
@@ -4542,7 +5151,19 @@ fill_under_slope_2:
   LD (HL),D               ; Fill the column: D, up a row, E, up a row
   DEC H                   ;
   LD (HL),E               ;
-  CALL line_up_hl         ;
+  DEC H                   ; Jetrun: line_up_hl written in, without the CALL.
+  LD A,H                  ;
+  INC A                   ;
+  AND $07                 ;
+  JR NZ,fill_under_slope_5 ;
+  LD A,L                  ;
+  SUB $20                 ;
+  LD L,A                  ;
+  JR C,fill_under_slope_5 ;
+  LD A,H                  ;
+  ADD A,$08               ;
+  LD H,A                  ;
+fill_under_slope_5:
   DJNZ fill_under_slope_2 ;
   LD A,(piece_dcolumn)    ; On to the next column, by the piece's width in
   ADD A,L                 ; bytes

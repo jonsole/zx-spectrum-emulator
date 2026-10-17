@@ -152,10 +152,12 @@ def write_data(world: W.World) -> None:
     lines += ["", "; Each direction's surface row in each column of a step.", "surface_offsets:"]
     for dx, dy in W.TOGGLE_DIRECTIONS:
         lines.extend(db([W.surface_offset(dx, dy, i) if i < dx else 0 for i in range(16)]))
-    lines += ["", "; The astronaut: frame * 8 + shift -> its bytes.", "sprite_frames:"]
-    lines.extend(dw([f"frame_{f}_{s}" for f in range(S.FRAME_COUNT) for s in range(S.SHIFT_COUNT)]))
+    # The sprite is drawn at even x only (sprite.s's sprite_screen), so only
+    # the even shifts are built; an odd entry points at the shift below it.
+    lines += ["", "; The astronaut: frame * 8 + shift -> its bytes (even shifts only).", "sprite_frames:"]
+    lines.extend(dw([f"frame_{f}_{s & ~1}" for f in range(S.FRAME_COUNT) for s in range(S.SHIFT_COUNT)]))
     for f in range(S.FRAME_COUNT):
-        for s in range(S.SHIFT_COUNT):
+        for s in range(0, S.SHIFT_COUNT, 2):
             lines.append(f"frame_{f}_{s}:")
             lines.extend(db(S.frame_bytes(f, s), 6))
     OUT.mkdir(exist_ok=True)
@@ -172,7 +174,9 @@ def assemble() -> None:
     if result.returncode != 0:
         sys.exit("sjasmplus failed")
     counts = re.search(r"Errors: (\d+), warnings: (\d+)", result.stdout + result.stderr)
-    if not counts or counts.group(2) != "0":
+    if not counts or counts.group(1) != "0":
+        sys.exit("sjasmplus found errors")
+    if counts.group(2) != "0":
         sys.exit("sjasmplus warned: fix it")
 
 
