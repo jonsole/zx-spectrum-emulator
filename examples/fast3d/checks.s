@@ -15,5 +15,9 @@ end:
 					IF WORLD_WRAP
 					SAVEBIN	"output/checks_wrap.bin", $8000, end - $8000
 					ELSE
+					IF FACE_EYE
+					SAVEBIN	"output/checks_eye.bin", $8000, end - $8000
+					ELSE
 					SAVEBIN	"output/checks.bin", $8000, end - $8000
+					ENDIF
 					ENDIF

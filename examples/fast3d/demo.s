@@ -31,6 +31,15 @@ VIEW_BOTTOM			EQU		183
 CULL_SKIP			EQU		1
 					ENDIF
 
+; Whether each object loses its back edges (facing_edges, engine/objects.s):
+; 1 if build.py is told --faces. Its models have their faces either way.
+					IFNDEF	FACES
+FACES				EQU		0
+					ENDIF
+					IFNDEF	CHECK_BUILD			; (check.py's build of it)
+CHECK_BUILD			EQU		0
+					ENDIF
+
 					ORG		$8000
 
 start:
@@ -169,6 +178,10 @@ compute_frame:
 					ld		(cuts),a			; and no lines cut yet
 					ld		hl,cut_lines
 					ld		(.cut_at),hl
+					IF FACES
+					ld		hl,edge_pool		; and no edges kept
+					ld		(.edges_at),hl
+					ENDIF
 					ld		hl,visible
 					ld		(.entry),hl
 					ld		hl,point_pool		; the pool's first page, from 0
@@ -252,6 +265,13 @@ compute_frame:
 					ld		(.slot),de			; where the next object's go
 					ld		de,(.first)
 					call	transform_object
+					IF FACES
+					ld		ix,(.object)		; only the edges a face either
+					ld		hl,(.first)			; side of looks towards the eye
+					ld		de,(.edges_at)
+					call	facing_edges
+					ld		(.edges_at),de
+					ENDIF
 					ld		hl,(.model)			; into the box
 					ld		b,(hl)
 					ld		hl,(.first)
@@ -280,11 +300,7 @@ compute_frame:
 					add		a,b
 					ld		(cuts),a
 					call	.cut_box			; their cut ends into the box
-.cuts_done:			ld		hl,(.model)			; and the entry
-					inc		hl
-					inc		hl
-					inc		hl					; MODEL_EDGES
-					ld		de,(.entry)
+.cuts_done:			ld		de,(.entry)			; and the entry
 					ld		a,(.first + 1)
 					ld		(de),a				; VIS_PAGE
 					inc		de
@@ -294,10 +310,16 @@ compute_frame:
 					ld		a,(.all_inside)
 					ld		(de),a				; VIS_INSIDE
 					inc		de
-					ldi							; VIS_EDGES: the count, and
-					ldi							; where they are
-					ldi
-					ld		(.entry),de
+					ld		a,(view_edge_count)	; VIS_EDGES: the count, and
+					ld		(de),a				; where they are -- all the
+					inc		de					; model's, or those facing_edges
+					ld		hl,(view_edges)		; kept
+					ex		de,hl
+					ld		(hl),e
+					inc		hl
+					ld		(hl),d
+					inc		hl
+					ld		(.entry),hl
 					ld		ix,(.object)
 .next_object:		ld		de,OBJECT_SIZE
 					add		ix,de
@@ -534,6 +556,7 @@ compute_frame:
 													; vertex, then the page
 .first:				DW		0					; and where this object's went
 .cut_at:			DW		0					; where the next cut line goes
+.edges_at:			DW		0					; and the next edges kept (FACES)
 .least_x:			DB		0
 .least_y:			DB		0
 .most_x:			DB		0
@@ -613,6 +636,8 @@ render_frame:
 					inc		hl
 					ld		(.entry),hl
 					ld		(.edge_at),de
+					or		a					; (none kept: nothing to draw)
+					jp		z,.next_object
 					inc		c
 					dec		c
 					jr		nz,.inside_edge
@@ -893,6 +918,9 @@ code_end:
 point_pool:			DS		256 * POINT_PAGES
 visible:			DS		VIS_SIZE * WORLD_OBJECTS
 cut_lines:			DS		8 * CUT_LINES
+					IF FACES
+edge_pool:			DS		2 * WORLD_EDGES		; the edges facing_edges keeps,
+					ENDIF						; for every object at once
 					ASSERT	$ <= $7E00			; well below the stack
 
 ; The interrupt: the screen flip_to asks for, if it asks.
@@ -919,6 +947,14 @@ end:
 					IF WORLD_WRAP				; (for check.py alone)
 					SAVEBIN	"output/demo_wrap.bin", $4000, $8000
 					ELSE
+					IF CHECK_BUILD == 1			; (and these)
+					SAVEBIN	"output/demo_faces.bin", $4000, $8000
+					ELSE
+					IF CHECK_BUILD == 2
+					SAVEBIN	"output/demo_faces_eye.bin", $4000, $8000
+					ELSE
 					SAVEDEV	"output/demo.banks", 0, 0, $20000
 					SAVEBIN	"output/demo.bin", $4000, $8000
+					ENDIF
+					ENDIF
 					ENDIF

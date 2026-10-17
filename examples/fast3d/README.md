@@ -14,7 +14,7 @@ camera not yet), are in
 tables (2K of them, from a 512-byte boundary). It never touches IY, so the
 ROM's interrupt routine can keep running.
 
-Two defines change what it does, both off unless the program defines them
+Three defines change what it does, all off unless the program defines them
 (`-DNAME=1` to sjasmplus, or an `EQU` before the `INCLUDE`):
 
 - `CULL_SKIP`: the cull says how far out of view an object was, so that it
@@ -33,6 +33,10 @@ Two defines change what it does, both off unless the program defines them
   side while it is skipped. It costs nothing: two overflow tests (`JP PE`)
   are left out, one in `cull_object` and one in `cull_skip_bounds`.
   Without it, the code is the same, byte for byte.
+- `FACE_EYE`: `facing_edges` judges each face against the eye carried into
+  the model's space, rather than by its projection (see
+  [Back faces](#how-they-are-quick)): dearer an object, cheaper a face, a
+  face behind the eye judged too, and misjudged far less often.
 
 ## The numbers
 
@@ -78,7 +82,7 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 | `cull_object` | IX -> an object | carry if out of view; else `view_t`, its centre in camera space | 298 out of the box; ~3,240 out roughly; ~8,190 in view (with `CULL_SKIP`; ~1,200 less an object culled without) |
 | `object_matrix` | IX -> an object in view | `view_m` = Rc^T Ro | ~8,330 |
 | `transform_object` | IX; D = the points' page, E = the first vertex's place on it | its vertices to 16-bit screen points, at any distance, in the page's four tables of 64 bytes: x low, x high, y low, y high; x = $8000 if behind the near plane; and `view_edges`, `view_edge_count`, the model's edges | ~2,330 a vertex (~2,830 without mirrors) |
-| `facing_edges` | IX, after `transform_object`; HL = its points (H the page, L the first); DE -> room for the model's edges | `view_edges`, `view_edge_count` (and A): the edges with a face either side that looks towards the eye, as pairs of vertices at DE; DE past them. A model with no faces keeps them all | ~1,500 a face, ~200 an edge; 187 with no faces |
+| `facing_edges` | IX, after `transform_object`; HL = its points (H the page, L the first); DE -> room for the model's edges | `view_edges`, `view_edge_count` (and A): the edges with a face either side that looks towards the eye, as pairs of vertices at DE; DE past them. A model with no faces keeps them all | ~1,500 a face, ~200 an edge; 187 with no faces. With `FACE_EYE`, ~5,600 an object and ~850 a face |
 | `cut_edges` | IX, straight after `transform_object` (or `facing_edges`), and `view_edges`; HL = its points (H the page, L the first); DE -> room for the lines | each edge crossing the near plane, from its front end to where it crosses, as four words for `clip_line`; DE past them, A = how many | 45 with nothing behind the plane; ~7,000 a line cut |
 | `draw_line_clipped` | as `clip_line` | `clip_line`, then `draw_line` | |
 
@@ -229,7 +233,23 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
   exact view, so a face nearly edge on can be misjudged: 4% of faces, 6%
   on an object 8 to 32 pixels across and 1.4% on one over 128, each within
   what its points' error could make of it (`face_geometry.py`). A model
-  with no faces is drawn whole, for 187 T-states; the demo's are.
+  with no faces is drawn whole, for 187 T-states.
+
+  With `FACE_EYE` a face is judged in 3D instead: is the eye on the outer
+  side of its plane, n . e > d? The eye is carried into the model's space
+  once an object -- T shifted into signed bytes, T', then U = -M^T T' by
+  one `rotate` with M^T installed (M is 127 times a rotation, near enough,
+  so M^T / 127^2 undoes it), and U shifted into signed bytes, U' -- and
+  each face carries its outward normal n as signed bytes and D = 127^2 d.
+  Then a face looks towards the eye if n . U' > D >> s, s the two shifts:
+  three quarter-square products, U' written into the code as `rotate`'s
+  matrix is, and D's top bytes shifted. About 5,600 T-states an object
+  (1,000 more when `cut_edges` will want M back in `rotate`) and 850 a
+  face, against the projection's 1,500 a face: dearer below about 8
+  faces, a box's 6, cheaper above, an icosahedron's 20. Every face is
+  judged, those with corners behind the eye too, and only 0.4% are
+  misjudged, each with the eye within a few percent of its plane
+  (`face_geometry.py`), against the projection's 4%.
 - **An unrolled line.** Each of the four ways a line can go (along x or y, to
   the left or the right) is a set of blocks, one for each bit of a byte. A
   pixel is then one `SET b,(HL)`. `draw_line` pushes the address of the first
@@ -246,6 +266,8 @@ T-states were measured in SkoolKit's simulator on uncontended memory; see
 ```
 python build.py                  # -> output/demo.z80, a 128K snapshot, with its SLD
 python build.py --no-cull-skip   # the same, culling every object every picture
+python build.py --faces          # each object losing its back edges
+python build.py --faces --face-eye   # judged against the eye (FACE_EYE)
 ```
 
 or **ZX Spectrum: fast3d demo** in VS Code. Forty cubes and icosahedra, each
@@ -273,7 +295,10 @@ bank 2 to the code (on a real Spectrum that is contended memory). The
 world keeps its objects 300 units from the camera's path, as it did before
 there was a cut at the near plane, so that a flight that isn't steered
 cuts nothing and its pictures are the same as they were.
-Below the window's bottom left corner it shows pictures a second, to a
+With `--faces` each object loses its back edges (`facing_edges`; its
+models have their faces either way), and with `--face-eye` too they are
+judged against the eye in the model's space; see Not done for what that
+costs this demo. Below the window's bottom left corner it shows pictures a second, to a
 tenth, reckoned every ten pictures from the frames the interrupt counted
 and drawn in the 48K ROM's font (ROM 1 is kept paged in for it).
 
@@ -326,10 +351,15 @@ every result with `model.py`:
   far and straddling the near plane -- the box and the strip of one part,
   the aeroplane of three, two of which share an edge, the frame of none --
   every edge kept or left out, and `cut_edges` after it on just those;
+  and again with `FACE_EYE` (`output/checks_eye.bin`), against
+  `model.faces_front_eye`;
 - the demo, 256 frames of `draw_frame` (`compute_frame` then
   `render_frame`, a whole circle of the flight), whole
   screens against the model's picture of the same frame, and how many
   objects it drew. It writes every other one to `output/demo.gif`;
+- the demo with back faces removed, `--faces` (`output/demo_faces.bin`),
+  and judged against the eye, `--face-eye` too (`demo_faces_eye.bin`),
+  the same 256 frames each against the model's picture;
 - the demo again, 240 frames with the camera moved between them at random
   -- small steps mostly, now and then a swing, a jump across the world, a
   leap out of it, or a place close enough to an object to cut it at the
@@ -394,7 +424,10 @@ points and the shift could make of it (it says how many, by the object's
 size on the screen). And the edges kept must be, part by part, the edges
 of the faces towards the eye, worked out from each part's faces alone --
 the aeroplane's tail and body share an edge, kept for each part that has
-a face towards the eye:
+a face towards the eye. `FACE_EYE`'s verdicts are held to the same truth:
+every face is judged, and a misjudged face must have the eye within 8% of
+the model's distance of its plane, what `model.eye_in_model`'s error
+allows (2.6% at worst):
 
 ```
 python face_geometry.py
@@ -439,11 +472,18 @@ picture.
 - **Hidden lines.** Each convex part of a model loses its own back edges,
   but nothing is hidden behind another part or another object: that needs
   filled faces, or clipping lines against them.
-- **Faces behind the eye.** A face without three vertices in front of the
-  near plane cannot be judged from its projection, and is kept: an object
-  straddling the near plane, a building beside the cockpit, draws its back
-  edges there, cut at the plane. It could be judged in camera space, from
-  `view_m` and `view_t`, at the price of rotating its normal.
+- **Faces behind the eye.** Without `FACE_EYE`, a face without three
+  vertices in front of the near plane cannot be judged from its
+  projection, and is kept: an object straddling the near plane, a building
+  beside the cockpit, draws its back edges there, cut at the plane.
+  `FACE_EYE` judges it.
+- **Back faces on small objects.** Either test costs more than the lines
+  it saves on an object small on the screen: the demo, whose objects
+  hide edges about 10 pixels long, takes 539,000 T-states a frame with
+  `--faces` and 519,000 with `--face-eye` too, against 468,000 drawing
+  every edge. Leaving the faces of an object smaller than some size on the
+  screen untested would cost the cull's radius and depth, which are to
+  hand.
 - **Contention.** The timings are for uncontended memory. On a real Spectrum,
   `draw_line` and `clear_box` write to the screen, which is contended memory,
   and will run slower.

@@ -69,6 +69,16 @@ CULL_SKIP			EQU		0
 WORLD_WRAP			EQU		0
 					ENDIF
 
+; FACE_EYE: facing_edges judges each face against the eye carried into the
+; model's space, n . e > d, rather than by its projection: about 850
+; T-states a face after some 5,600 an object, where the projection's test
+; is about 1,500 a face; a face with corners behind the eye judged as well;
+; and misjudged only within a few percent of edge on (model.eye_in_model).
+; Off unless the program defines it.
+					IFNDEF	FACE_EYE
+FACE_EYE			EQU		0
+					ENDIF
+
 ; An object, OBJECT_SIZE bytes: x, y, z (16-bit), three angles, its model,
 ; and how much it turns a frame about each axis (the engine never reads
 ; the spin; it is here so that a program walks one record an object).
@@ -104,6 +114,8 @@ MODEL_PAIRS			EQU		21					; DB how many of the vertices, from
 												; the first, are v, -v pairs
 MODEL_EDGE_FACES	EQU		22					; DW -> for each edge, DB the faces
 												; either side of it
+MODEL_FACE_PLANES	EQU		24					; DW -> for each face, DB its normal,
+												; DD 127^2 d (FACE_EYE's)
 
 ; 24-bit numbers in C:H:L, from and to three bytes in memory, low first.
 					MACRO	LOAD24	AT
@@ -1226,7 +1238,125 @@ facing_edges:
 					ld		de,(face_out)		; no faces: every edge, as it is
 					ld		a,(view_edge_count)
 					ret
-.faces:				inc		hl
+.faces:
+					IF FACE_EYE
+
+; FACE_EYE: each face against the eye in the model's space, U' (eye_setup):
+; it looks towards the eye if n . U' > D >> s, n its normal and D 127^2 d
+; (model.faces_front_eye).
+					ld		(faces_left),a
+					call	eye_setup
+					ld		hl,(face_model)
+					ld		de,MODEL_FACE_PLANES
+					add		hl,de
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ex		de,hl				; HL -> each face's plane
+					ld		c,low face_front	; C = where this face's flag goes
+					ld		a,(faces_left)
+.eye_face:			ld		(faces_left),a
+					push	bc
+					ld		a,(hl)				; its normal, biased by 128
+					xor		$80
+					ld		ixl,a
+					inc		hl
+					ld		a,(hl)
+					xor		$80
+					ld		ixh,a
+					inc		hl
+					ld		a,(hl)
+					xor		$80
+					inc		hl
+					ld		(face_at),hl		; -> D
+
+; BC = n . U', by quarter squares as in rotate, U' written into the code.
+					ld		e,a
+					ld		d,0
+.eye_z_sum:			ld		hl,0
+					add		hl,de
+					SQ_LOAD
+.eye_z_diff:		ld		hl,0
+					add		hl,de
+					SQ_SUB
+					ld		e,ixh
+.eye_y_sum:			ld		hl,0
+					add		hl,de
+					SQ_ADD
+.eye_y_diff:		ld		hl,0
+					add		hl,de
+					SQ_SUB
+					ld		e,ixl
+.eye_x_sum:			ld		hl,0
+					add		hl,de
+					SQ_ADD
+.eye_x_diff:		ld		hl,0
+					add		hl,de
+					SQ_SUB
+
+; L:D:E = D >> s: D's bytes from the second (or third), then the rest of s.
+					ld		hl,(face_at)
+					inc		hl
+					ld		a,(eye_far)
+					or		a
+					jr		z,.eye_three
+					inc		hl
+					ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					ld		a,d
+					add		a,a
+					sbc		a,a
+					ld		l,a					; (sign-extended)
+					jr		.eye_rest
+.eye_three:			ld		e,(hl)
+					inc		hl
+					ld		d,(hl)
+					inc		hl
+					ld		l,(hl)
+.eye_rest:			ld		a,(eye_r)
+					or		a
+					jr		z,.eye_compare
+.eye_halve:			sra		l
+					rr		d
+					rr		e
+					dec		a
+					jr		nz,.eye_halve
+
+; It looks towards the eye if D >> s - n . U' is negative: 24 bits, in A.
+.eye_compare:		ld		a,b
+					add		a,a
+					sbc		a,a
+					ld		h,a					; H = n . U' sign-extended
+					ld		a,e
+					sub		c
+					ld		a,d
+					sbc		a,b
+					ld		a,l
+					sbc		a,h
+					rlca
+					and		1					; 1: looks towards the eye
+					pop		bc
+					ld		e,c
+					ld		d,high face_front
+					ld		(de),a
+					inc		c
+					ld		hl,(face_at)		; the next face's plane
+					ld		de,4
+					add		hl,de
+					ld		a,(faces_left)
+					dec		a
+					jp		nz,.eye_face
+					ld		a,(transform_behind)	; M back in rotate, if cut_edges
+					or		a					; will want it
+					jp		z,keep_facing_edges
+					ld		hl,view_m
+					call	install_matrix
+					jp		keep_facing_edges
+
+					ELSE
+
+					inc		hl
 					ld		e,(hl)
 					inc		hl
 					ld		d,(hl)
@@ -1340,6 +1470,8 @@ facing_edges:
 					dec		a
 					jp		nz,.face
 
+					ENDIF
+
 ; Then the edges: kept if a face either side looks towards the eye.
 ; (A label of its own, so that check.py can time the faces and the edges
 ; apart.)
@@ -1406,6 +1538,228 @@ face_front:			DS		64					; each face: 1 if it looks towards
 face_corners:		DS		3					; three corners: where their x high
 												; bytes are on the points' page
 					ASSERT	low face_corners <= 253	; (counted by IXL: low byte 64)
+
+
+					IF FACE_EYE
+; ---------------------------------------------------------------------------
+; eye_setup: the eye in the model's space, for facing_edges with FACE_EYE
+; (model.eye_in_model). T, view_t, is shifted right by k into signed bytes,
+; T'; one rotate with M^T installed makes U = -M^T T'; U is shifted right
+; by j into signed bytes, U', which goes into facing_edges' products; and s
+; = k + j, at least 8, says how far each face's D is to be shifted: a byte
+; and eye_r more, or two bytes (eye_far) and eye_r more. Leaves M^T in
+; rotate. Uses everything but IY.
+
+; C, D, E |= the high, middle and low bytes of the 24-bit number at HL,
+; each xor its sign: the spread, whose bits above the seventh are k. HL on.
+					MACRO	EYE_SPREAD24
+					ld		a,(hl)
+					inc		hl
+					ld		ixl,a				; the low byte
+					ld		a,(hl)
+					inc		hl
+					ld		ixh,a				; the middle
+					ld		a,(hl)
+					inc		hl
+					ld		b,a					; the high
+					add		a,a
+					sbc		a,a					; its sign, all eight bits
+					xor		b
+					or		c
+					ld		c,a
+					ld		a,b
+					add		a,a
+					sbc		a,a
+					xor		ixh
+					or		d
+					ld		d,a
+					ld		a,b
+					add		a,a
+					sbc		a,a
+					xor		ixl
+					or		e
+					ld		e,a
+					ENDM
+
+; TO = the low byte of the 24-bit number at FROM, shifted right by eye_k:
+; from the 16 bits it lies in, the lower two bytes or the upper.
+					MACRO	EYE_BYTE	FROM, TO
+					ld		a,(eye_k)
+					cp		8
+					jr		c,.low
+					ld		hl,(FROM + 1)
+					sub		8
+					jr		.window
+.low:				ld		hl,(FROM)
+.window:			call	eye_window
+					ld		(TO),a
+					ENDM
+
+; The word at AT negated, and its spread into D, E (as EYE_SPREAD24's).
+					MACRO	EYE_NEGATE	AT
+					ld		hl,(AT)
+					xor		a
+					sub		l
+					ld		l,a
+					sbc		a,a
+					sub		h
+					ld		h,a
+					ld		(AT),hl
+					add		a,a
+					sbc		a,a
+					ld		b,a
+					xor		h
+					or		d
+					ld		d,a
+					ld		a,b
+					xor		l
+					or		e
+					ld		e,a
+					ENDM
+
+; TO = the low byte of the word at FROM shifted right by A, which C keeps.
+					MACRO	EYE_WORD_BYTE	FROM, TO
+					ld		hl,(FROM)
+					call	eye_window
+					ld		(TO),a
+					ld		a,c
+					ENDM
+
+; An entry of M^T, M's at AT, into rotate's SUM and DIFF, as install_matrix
+; does: M^T installed straight from view_m, with no copy transposed.
+					MACRO	EYE_INSTALL	AT, SUM, DIFF
+					ld		a,(AT)
+					ld		c,a
+					add		a,a
+					sbc		a,a
+					ld		b,a
+					ld		hl,SQ_CENTRE - 128
+					add		hl,bc
+					ld		(SUM + 1),hl
+					ld		hl,SQ_CENTRE - 128
+					or		a
+					sbc		hl,bc
+					ld		(DIFF + 1),hl
+					ENDM
+
+; eye_window: A = (HL >> A)'s low byte, A 0..8, a byte that fits. From 4
+; up, HL shifted left 8 - A has it as its high byte, for fewer shifts: the
+; right shifts of a U of 13 to 15 bits were 7 or 8 a part. Uses B, HL.
+eye_window:
+					cp		4
+					jr		c,.right
+					sub		8
+					jr		z,.high
+					neg
+					ld		b,a
+.left:				add		hl,hl
+					djnz	.left
+.high:				ld		a,h
+					ret
+.right:				or		a
+					jr		z,.low
+					ld		b,a
+.shift:				sra		h
+					rr		l
+					djnz	.shift
+.low:				ld		a,l
+					ret
+
+eye_setup:
+					ld		c,0					; T's spread, C:D:E
+					ld		de,0
+					ld		hl,view_t
+					EYE_SPREAD24
+					EYE_SPREAD24
+					EYE_SPREAD24
+					ld		b,0					; k: 9 + the bits of C, or 1 +
+					ld		a,c					; those of D, or 1 if E is 128
+					or		a					; or more
+					jr		z,.k_middle
+					ld		b,9
+.k_high:			inc		b
+					srl		a
+					jr		nz,.k_high
+					jr		.k
+.k_middle:			ld		a,d
+					or		a
+					jr		z,.k_low
+					ld		b,1
+.k_mid:				inc		b
+					srl		a
+					jr		nz,.k_mid
+					jr		.k
+.k_low:				bit		7,e
+					jr		z,.k
+					inc		b
+.k:					ld		a,b
+					ld		(eye_k),a
+					EYE_BYTE	view_t, eye_t		; T' = T >> k
+					EYE_BYTE	view_t + 3, eye_t + 1
+					EYE_BYTE	view_t + 6, eye_t + 2
+					EYE_INSTALL	view_m + 0, m00_sum, m00_diff	; M^T into rotate
+					EYE_INSTALL	view_m + 3, m01_sum, m01_diff
+					EYE_INSTALL	view_m + 6, m02_sum, m02_diff
+					EYE_INSTALL	view_m + 1, m10_sum, m10_diff
+					EYE_INSTALL	view_m + 4, m11_sum, m11_diff
+					EYE_INSTALL	view_m + 7, m12_sum, m12_diff
+					EYE_INSTALL	view_m + 2, m20_sum, m20_diff
+					EYE_INSTALL	view_m + 5, m21_sum, m21_diff
+					EYE_INSTALL	view_m + 8, m22_sum, m22_diff
+					ld		hl,eye_t
+					call	rotate				; M^T T'
+					ld		de,0				; U = -that, and its spread
+					EYE_NEGATE	rot_x
+					EYE_NEGATE	rot_y
+					EYE_NEGATE	rot_z
+					ld		c,0					; j: 1 + the bits of D, or 1 if
+					ld		a,d					; E is 128 or more
+					or		a
+					jr		z,.j_low
+					ld		c,1
+.j_high:			inc		c
+					srl		a
+					jr		nz,.j_high
+					jr		.j
+.j_low:				bit		7,e
+					jr		z,.j
+					inc		c
+.j:					ld		a,(eye_k)			; and at least 8 - k
+					ld		b,a
+					ld		a,8
+					sub		b
+					jr		c,.j_kept
+					cp		c
+					jr		c,.j_kept
+					ld		c,a
+.j_kept:			ld		a,c					; U' = U >> j
+					EYE_WORD_BYTE	rot_x, eye_u
+					EYE_WORD_BYTE	rot_y, eye_u + 1
+					EYE_WORD_BYTE	rot_z, eye_u + 2
+					ld		a,(eye_k)			; s = k + j: a byte, and the
+					add		a,c					; rest; or two, and the rest
+					sub		8
+					ld		b,0
+					cp		8
+					jr		c,.near
+					sub		8
+					inc		b
+.near:				ld		(eye_r),a
+					ld		a,b
+					ld		(eye_far),a
+					ld		de,eye_u			; and U' into the products
+					INSTALL	facing_edges.eye_x_sum, facing_edges.eye_x_diff
+					INSTALL	facing_edges.eye_y_sum, facing_edges.eye_y_diff
+					INSTALL	facing_edges.eye_z_sum, facing_edges.eye_z_diff
+					ret
+
+eye_k:				DB		0
+eye_t:				DS		3					; T', signed bytes
+eye_u:				DS		3					; U', signed bytes
+eye_far:			DB		0					; 1: D's top two bytes, not three
+eye_r:				DB		0					; and how far further
+face_at:			DW		0					; -> this face's D
+					ENDIF
 
 
 ; ---------------------------------------------------------------------------

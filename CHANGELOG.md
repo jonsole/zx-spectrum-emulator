@@ -25,7 +25,9 @@ GitHub takes its notes from that section.
   part in front drawn, rather than the whole edge left out. With `WORLD_WRAP`
   defined the world wraps, an object across its edge seen from the other
   side. Models can have faces, in convex parts, and `facing_edges` keeps
-  only the edges of each part's faces that look towards the eye. `check.py` holds every
+  only the edges of each part's faces that look towards the eye, judged by
+  their projections or, with `FACE_EYE`, against the eye in the model's
+  space; `build.py --faces` shows it in the demo. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
   through forty turning objects on the 128K, about 7 frames a second (it

@@ -21,6 +21,10 @@ part and of several, from every angle and distance:
    two parts share once for each part that has a face towards the eye --
    with the misjudged faces and those kept by rule as model.faces_front
    has them. The aeroplane's tail and body share an edge.
+4. FACE_EYE: model.faces_front_eye against the same truth. Every face is
+   judged, behind the eye or not; a misjudged face must have the eye
+   within EYE_BOUND of the model's distance of its plane -- what
+   model.eye_in_model's errors allow -- and it says how many, by size.
 
     python face_geometry.py
 """
@@ -68,6 +72,22 @@ from collections import Counter                                   # noqa: E402
 judged, wrong, kept, worst_slack, edges_drawn, edges_hidden, edges_differ = 0, 0, 0, 0.0, 0, 0, 0
 by_shape = {name: 0 for name in shapes}
 by_size = {}                                     # radius on the screen: [faces, misjudged]
+SIZES = ("under 8 px", "8 to 32", "32 to 128", "over 128")
+eye_wrong, eye_worst, eye_tally = 0, 0.0, {size: [0, 0] for size in SIZES}   # FACE_EYE's
+planes = {name: model.face_planes(v, f) for name, (v, f, p) in shapes.items()}
+EYE_BOUND = 0.08            # model.eye_in_model's error, against the eye's distance from the
+                            # model: M^T for 127^2 M^-1 1.2%, T' and U' floored to 7 bits 2.7%
+                            # each, the normal rounded 0.7% -- 7.3% at worst
+
+
+def inverse_times(m, v):
+    """M^-1 v, in floating point: Cramer's rule."""
+    rows = [m[0:3], m[3:6], m[6:9]]
+    det = sum(rows[0][i] * cross3(rows[1], rows[2])[i] for i in range(3))
+    cols = [cross3(rows[1], rows[2]), cross3(rows[2], rows[0]), cross3(rows[0], rows[1])]
+    return [sum(cols[j][i] * v[j] for j in range(3)) / det for i in range(3)]
+
+
 for _ in range(30000):
     name = rng.choice(list(shapes))
     vertices, faces, parts = shapes[name]
@@ -91,10 +111,21 @@ for _ in range(30000):
     c = [model.view_point(rv, t) for rv in rotated]
     points = [model.project_far(rv, t) for rv in rotated]
     front = model.faces_front(points, faces)
+    front_eye = model.faces_front_eye(planes[name], model.eye_in_model(m, t))
+    eye_exact = inverse_times(m, [-x for x in t])                 # -M^-1 T, the eye in model space
     toward = []                                  # the truth, but where the model may differ
     for f, face in enumerate(faces):
         a, b, cc = (c[v] for v in face[:3])
         truth = sum(n * p for n, p in zip(cross3(sub(b, a), sub(cc, a)), a)) < 0
+        eye_tally[size][0] += 1
+        if front_eye[f] != truth:
+            # how near the eye is to the face's plane, for its distance from the model
+            va, vb, vc = (vertices[v] for v in face[:3])
+            n = cross3(sub(vb, va), sub(vc, va))
+            gap = abs(sum(p * q for p, q in zip(n, sub(eye_exact, va)))) / math.sqrt(sum(p * p for p in n))
+            eye_worst = max(eye_worst, gap / math.sqrt(sum(p * p for p in eye_exact)))
+            eye_wrong += 1
+            eye_tally[size][1] += 1
         corners = [v for v in face if points[v] is not None][:3]
         if len(corners) < 3:
             kept += 1
@@ -144,7 +175,15 @@ print("  misjudged by the object's radius on the screen: " +
                 for size in ("under 8 px", "8 to 32", "32 to 128", "over 128") if by_size.get(size, [0])[0]))
 print(f"  {edges_drawn:,} edges drawn, {edges_hidden:,} hidden; objects whose edges are not, part by part, "
       f"those of the faces towards the eye: {edges_differ}")
+eye_faces = sum(n for n, _ in eye_tally.values())
+print(f"FACE_EYE: {eye_faces:,} faces judged, every one, behind the eye or not; {eye_wrong:,} "
+      f"({eye_wrong / eye_faces:.1%}) otherwise than exactly, every one with the eye within "
+      f"{eye_worst:.1%} of the model's distance of its plane (at most {EYE_BOUND:.0%})")
+print("  misjudged by the object's radius on the screen: " +
+      ", ".join(f"{size} {eye_tally[size][1] / eye_tally[size][0]:.1%}" for size in SIZES if eye_tally[size][0]))
 if worst_slack > 1:
     sys.exit("model.faces_front misjudges a face that is not nearly edge on")
+if eye_worst > EYE_BOUND:
+    sys.exit("model.faces_front_eye misjudges a face that is not nearly edge on")
 if edges_differ:
     sys.exit("model.facing_edges does not keep the edges of the faces towards the eye, part by part")

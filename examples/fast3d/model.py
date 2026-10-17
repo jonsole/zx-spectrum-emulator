@@ -420,13 +420,77 @@ def faces_front(points, faces: list[list[int]]) -> list[bool]:
     return result
 
 
-def facing_edges(points, faces, edges, edge_faces) -> list[tuple[int, int]]:
+def facing_edges(points, faces, edges, edge_faces, front=None) -> list[tuple[int, int]]:
     """The edges facing_edges keeps: those with a face either side that looks
-    towards the eye, in order -- or, for a model with no faces, every one."""
+    towards the eye, in order -- or, for a model with no faces, every one.
+    front: which faces look towards the eye, if not faces_front's verdicts
+    (faces_front_eye's, with FACE_EYE)."""
     if not faces:
         return list(edges)
-    front = faces_front(points, faces)
+    if front is None:
+        front = faces_front(points, faces)
     return [e for e, (f1, f2) in zip(edges, edge_faces) if front[f1] or front[f2]]
+
+
+# ---------------------------------------------------------------------------
+# FACE_EYE: faces judged against the eye, carried into the model's space
+# once an object, rather than by their projections. A face looks towards
+# the eye when the eye is on the outer side of its plane, n . e > d: three
+# products a face, and right for a face with corners behind the eye too.
+#
+# The eye in model space is -M^-1 T; M is 127 times a rotation, near
+# enough, so -M^T T / 127^2. T is first shifted right by k until each part
+# fits a signed byte, T', so that one rotate (with M^T installed) makes U =
+# -M^T T', 16-bit; and U is shifted right by j to signed bytes too, U'. So
+# U' is the eye times 127^2 / 2^(k + j), and n . e > d becomes
+# n . U' > 127^2 d / 2^(k + j) -- for whole numbers on the left, the same
+# as n . U' > (127^2 d) >> (k + j). Each face carries n, its outward normal
+# as signed bytes 127 long, and D = 127^2 d, d the least n . v over its
+# corners: with n rounded, its corners are not quite on one plane, and the
+# least puts the plane where the face counts as looking towards the eye
+# when in doubt. face_geometry.py says how near edge on a face must be to
+# be misjudged.
+
+EYE_SCALE = 127 * 127           # M^T M, near enough
+
+
+def face_planes(vertices, faces) -> list[tuple[tuple[int, int, int], int]]:
+    """Each face's (n, D) for FACE_EYE: n its outward normal, by its winding,
+    as signed bytes 127 long (rounded), and D = EYE_SCALE d, d the least
+    n . v over its corners."""
+    planes = []
+    for face in faces:
+        a, b, c = (vertices[v] for v in face[:3])
+        u, w = [q - p for p, q in zip(a, b)], [q - p for p, q in zip(a, c)]
+        raw = (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
+        length = math.sqrt(sum(x * x for x in raw))
+        n = tuple(int(math.floor(127 * x / length + 0.5)) for x in raw)
+        d = min(sum(p * q for p, q in zip(n, vertices[v])) for v in face)
+        planes.append((n, EYE_SCALE * d))
+    return planes
+
+
+def eye_in_model(m: list[int], t) -> tuple[list[int], int]:
+    """The eye in the model's space, as facing_edges works it out with
+    FACE_EYE: (U', s), U' signed bytes that are the eye times EYE_SCALE /
+    2^s. Each shift is the least that brings every part into a signed byte:
+    d ^ (d >> bits) is |d| (less one if negative), as in faces_front."""
+    spread = 0
+    for v in t:
+        spread |= v ^ (v >> 23)
+    k = max(0, spread.bit_length() - 7)
+    u = [-v for v in rotate(transpose(m), [v >> k for v in t])]
+    spread = 0
+    for v in u:
+        spread |= v ^ (v >> 15)
+    j = max(0, spread.bit_length() - 7, 8 - k)      # s at least 8, so that D >> s fits 24 bits
+    return [v >> j for v in u], k + j
+
+
+def faces_front_eye(planes, eye) -> list[bool]:
+    """Which faces look towards the eye, with FACE_EYE: n . U' > D >> s."""
+    u, s = eye
+    return [sum(p * q for p, q in zip(n, u)) > (big_d >> s) for n, big_d in planes]
 
 
 def bounding_radius(vertices: list[tuple[int, int, int]]) -> int:

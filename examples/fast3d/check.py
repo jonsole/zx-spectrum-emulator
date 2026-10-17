@@ -41,7 +41,11 @@ and every result is compared with the model's:
    from cameras all round, near, far and straddling the near plane, against
    model.facing_edges -- every edge kept or left out -- and cut_edges after
    it, on just those; the faces and the edges timed apart.
-   (face_geometry.py holds the model to exact geometry.)
+   (face_geometry.py holds the model to exact geometry.) And again on the
+   FACE_EYE build (checks_eye.bin), against model.faces_front_eye.
+12. The demo with back faces removed (--faces: demo_faces.bin) and judged
+   against the eye (--face-eye too: demo_faces_eye.bin), the same frames
+   against the model's picture.
 
 The T-states come from the simulator's clock, so the timings are exact; the
 routines run from uncontended memory ($8000 up), as they should on a real
@@ -628,17 +632,22 @@ def check_near_cut(m: Machine) -> list[str]:
     return failures
 
 
-def check_faces(m: Machine) -> list[str]:
+def check_faces(m: Machine, eye: bool = False) -> list[str]:
     """facing_edges on objects of one part (a box, a strip), of three (an
     aeroplane) and of none (a frame), from cameras all round, near --
     straddling the near plane too -- and far, against model.facing_edges:
     the edges kept, in order, how many and where they end; then cut_edges
-    on just those, against model.object_lines."""
+    on just those, against model.object_lines. With eye, on the FACE_EYE
+    build, the faces judged against the eye in the model's space
+    (model.faces_front_eye)."""
     from build import check_models
     failures = []
     rng = random.Random(17)
+    if eye:
+        print("  with FACE_EYE, faces judged against the eye in the model's space:")
     shapes = [(name, m.label(f"{name}_model"), vertices, faces, parts, *model.part_edges(faces, parts))
               for name, (vertices, faces, parts) in check_models().items()]
+    planes = {name: model.face_planes(vertices, faces) for name, (vertices, faces, parts) in check_models().items()}
     obj_at = m.label("checks_object")
     point_at = m.label("checks_points_far")
     edges_at = m.label("checks_edges")
@@ -676,7 +685,8 @@ def check_faces(m: Machine) -> list[str]:
             m.call("transform_object", D=point_at >> 8, E=first)
             mat = model.view_matrix(camera, model.make_matrix(*obj_a))
             points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
-            want_edges = model.facing_edges(points, faces if parts else [], edges, edge_faces)
+            front = model.faces_front_eye(planes[name], model.eye_in_model(mat, t)) if eye and parts else None
+            want_edges = model.facing_edges(points, faces if parts else [], edges, edge_faces, front)
             m.sim.registers[8], m.sim.registers[9] = obj_at >> 8, obj_at & 0xFF
             if parts:
                 took_faces, took_edges = m.call_until("facing_edges", "keep_facing_edges", H=point_at >> 8,
@@ -716,27 +726,39 @@ def check_faces(m: Machine) -> list[str]:
     return failures
 
 
-def object_picture(vertices, edges, mat, t, window, room: int) -> tuple[list, list, list]:
+def object_picture(vertices, edges, mat, t, window, room: int, faces=None, planes=None) -> tuple[list, list, list]:
     """An object's lines in the demo, clipped to the window: each edge with
     both ends in front of the near plane, and each one cut at it -- unless,
     as compute_frame has it, there is room for fewer cut lines than the
-    object has edges, when they are left out. And its points and its cuts."""
+    object has edges, when they are left out. With faces, (faces,
+    edge_faces), only the edges facing_edges keeps (FACES) -- with planes,
+    the faces judged against the eye (FACE_EYE). And its points and its
+    cuts."""
+    room_needed = len(edges)
+    if faces:
+        points = [model.project_far(model.rotate(mat, v), t) for v in vertices]
+        front = model.faces_front_eye(planes, model.eye_in_model(mat, t)) if planes else None
+        edges = model.facing_edges(points, faces[0], edges, faces[1], front)
     points, cuts = model.object_lines(vertices, edges, mat, t)
-    if len(edges) > room:
+    if room_needed > room:
         cuts = []
     lines = [model.clip_line(*points[i], *points[j], window) for i, j in edges if points[i] and points[j]]
     lines += [model.clip_line(*cut, window) for cut in cuts]
     return [line for line in lines if line], points, cuts
 
 
-def check_demo(m: Machine) -> list[str]:
+def check_demo(m: Machine, faces: bool = False, eye: bool = False) -> list[str]:
+    """With faces, the demo built with FACES (output/demo_faces.bin), each
+    object losing its back edges, against the model's picture of the same;
+    with eye too, built with FACE_EYE as well (demo_faces_eye.bin)."""
     from PIL import Image
     from build import models, world
     failures = []
+    build = "demo_faces_eye" if eye else "demo_faces" if faces else "demo"
     memory = bytearray(65536)
-    memory[0x4000:0xC000] = (OUT / "demo.bin").read_bytes()
+    memory[0x4000:0xC000] = (OUT / f"{build}.bin").read_bytes()
     sim = (CSimulator or Simulator)(memory, state={"iff": 0, "im": 1, "tstates": 0})
-    sld = OUT / "demo.sld"
+    sld = OUT / f"{build}.sld"
     label = {name: find_label(sld, name) for name in
              ("draw_frame", "demo_setup", "drawn", "camera_x", "camera_angles",
               "CUT_LINES", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM")}
@@ -756,8 +778,11 @@ def check_demo(m: Machine) -> list[str]:
         sim.memory[address] = 0
     call("demo_setup")                         # as start does: window and frame, $4000 to draw on
 
-    shapes = {name: (vertices, model.faces_to_edges(faces), model.bounding_radius(vertices))
-              for name, (vertices, faces) in models().items()}
+    shapes = {name: (vertices, model.faces_to_edges(model_faces), model.bounding_radius(vertices))
+              for name, (vertices, model_faces) in models().items()}
+    one_part = {name: (model_faces, model.part_edges(model_faces, [len(model_faces)])[1])
+                for name, (vertices, model_faces) in models().items()}
+    planes = {name: model.face_planes(vertices, model_faces) for name, (vertices, model_faces) in models().items()}
     things = [[list(pos), list(angles), spin, name] for pos, angles, spin, name in world()]
     cam_p, cam_a = [0, 0, 0], [0, 0, 0]
     frames, times, counts = [], [], []
@@ -775,7 +800,9 @@ def check_demo(m: Machine) -> list[str]:
                 continue
             drawn += 1
             mat = model.view_matrix(rc, model.make_matrix(*angles))
-            picture, points, cuts = object_picture(vertices, edges, mat, t, window, label["CUT_LINES"] - cuts_now)
+            picture, points, cuts = object_picture(vertices, edges, mat, t, window, label["CUT_LINES"] - cuts_now,
+                                                   one_part[name] if faces else None,
+                                                   planes[name] if eye else None)
             lines, cuts_now, behind = lines + picture, cuts_now + len(cuts), behind + points.count(None)
         counts.append(drawn)
         got_drawn = sim.memory[label["drawn"]]
@@ -786,7 +813,8 @@ def check_demo(m: Machine) -> list[str]:
                             f"{'the same' if got == render(lines, 0x4000) else 'different'}")
             break
         frames.append(got)
-    report("demo: a frame", times)
+    report("demo, back faces judged by the eye: a frame" if eye else
+           "demo, back faces removed: a frame" if faces else "demo: a frame", times)
     print(f"  {'':14} {min(counts)}..{max(counts)} objects drawn a frame, of {len(things)}, "
           f"{sum(counts) / len(counts):.1f} on average, over a circle of the flight, "
           f"{behind} vertices behind the near plane")
@@ -802,9 +830,9 @@ def check_demo(m: Machine) -> list[str]:
                        for y in range(192) for x in range(256)])
         images.append(image.convert("L").resize((512, 384), Image.NEAREST))
     images = images[::2]
-    images[0].save(OUT / "demo.gif", save_all=True, append_images=images[1:], duration=80, loop=0)
-    images[min(100, len(images) - 1)].save(OUT / "demo.png")
-    print(f"  {len(frames)} frames to {OUT / 'demo.gif'}")
+    images[0].save(OUT / f"{build}.gif", save_all=True, append_images=images[1:], duration=80, loop=0)
+    images[min(100, len(images) - 1)].save(OUT / f"{build}.png")
+    print(f"  {len(frames)} frames to {OUT / f'{build}.gif'}")
     return failures
 
 
@@ -949,6 +977,9 @@ def main() -> None:
         failures += check(m)
     failures += check_objects(Machine("checks_wrap"), wrap=True)
     failures += check_demo_jumps(m, wrap=True)
+    failures += check_demo(m, faces=True)
+    failures += check_faces(Machine("checks_eye"), eye=True)
+    failures += check_demo(m, faces=True, eye=True)
     if failures:
         print("\n".join(failures[:20]))
         sys.exit(f"{len(failures)} failures")
