@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+Cub, the `examples/cub` submodule, keeps its issues in its own repository, `jonsole/zx-cub`: add `-R jonsole/zx-cub` to the commands below for those (its parent issue is #1). An issue for fast3d or for the Python the examples share stays here, even when Cub asked for it; a cross-repository reference is written `jonsole/zx-cub#1`.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.

@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [Cub](./examples/cub/GLOSSARY.md): a Piper Cub flight simulator for the 128K, built on fast3d
+- [Cub](./examples/cub/GLOSSARY.md): a Piper Cub flight simulator for the 128K, built on fast3d; the `examples/cub` submodule, `jonsole/zx-cub`
 
 ## Relationships
 

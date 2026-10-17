@@ -4,3 +4,6 @@
 [submodule "examples/zx-tape-loader"]
 	path = examples/zx-tape-loader
 	url = https://github.com/jonsole/zx-tape-loader.git
+[submodule "examples/cub"]
+	path = examples/cub
+	url = https://github.com/jonsole/zx-cub.git
