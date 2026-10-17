@@ -123,6 +123,80 @@ landscape_pass                        (landscape.s) the view's move since last p
   JR displacement (`draw_step_7`) to send the step to one of four clipping
   blitters, and `flat_step_clip` patches the flat blitter's own JRs.
 
+### Moving up the screen
+
+A screen byte's address is `010 y7 y6 y2 y1 y0` in H and `y5 y4 y3 x4 x3 x2
+x1 x0` in L: H's low three bits are the line within a character row, L's top
+three the character row within a third, and H's bits 3-4 the third. Going up
+a line inside a character row is just `DEC H`; going up from line 0 of a
+character row to line 7 of the one above is the awkward case. The blitters
+climb with `DEC H` and correct the address once a pair of rows -- here
+`blit_two`, one pair of rows a time round (the others are the same with more
+bytes):
+
+```
+blit_two_0:
+  POP DE          ; two graphic bytes
+  LD (HL),E       ; the bottom row, left to right
+  INC L
+  LD (HL),D
+  DEC H           ; up a line -- never crosses a character row (below)
+  POP DE
+  LD (HL),E       ; the row above, right to left
+  DEC L
+  LD (HL),D
+  DEC H           ; up again -- this one may cross
+  LD A,H          ; did it? (the line was 0 before the DEC H)
+  INC A
+  AND $07
+  JR NZ,blit_two_1
+  LD A,L          ; yes: back a character row
+  SUB $20
+  LD L,A
+  JR C,blit_two_1 ; borrowed: it was the third's top row, and H's borrow was right
+  LD A,H          ; no borrow: still the same third, so undo H's borrow
+  ADD A,$08
+  LD H,A
+blit_two_1:
+  DJNZ blit_two_0
+  JP after_step_drawn
+```
+
+Three things make it cheap:
+
+- **One check a pair of rows.** Every step's bottom line is odd -- line 1, 3, 5
+  or 7 of its character row -- so the first `DEC H` of a pair lands on an even
+  line in the same character row and cannot cross. Only the second can, from
+  line 0 to line 7 above, and it is checked after it. That is why Cyberun has
+  every piece's y odd.
+- **The zig-zag.** The bottom row is written left to right and the row above
+  right to left, so L ends each pair back at the column it began at, and the
+  graphic is stored in that order so that the POPs come out in drawing order.
+- **The crossing is rare.** The check costs 27 T-states; the fix-up about 30
+  more, on one pair in four.
+
+In the worked example below, piece 1's step 3 enters at `$53C4`: H =
+`010 10 011` (the bottom third, line 3), L = `110 00100` (character row 6,
+column 4), so y = 128 + 48 + 3 = 179. Its four pairs:
+
+| Pair | Lines | After it |
+|---|---|---|
+| 1 | 179, 178 | line 177: H = `$51`, nothing crossed |
+| 2 | 177, 176 | the second `DEC H` takes H from `$50` (line 0) to `$4F`: line 7 is right, but the borrow has knocked the third from `10` to `01`. The check sees it; `L - $20` takes character row 6 to 5 without borrowing -- the same third -- so `H + 8` gives `$57`: line 175 = 128 + 40 + 7 |
+| 3 | 175, 174 | line 173 |
+| 4 | 173, 172 | line 171 |
+
+It leaves at `$53A6` -- line 171, column 6 -- which is where step 4 starts.
+
+Going up between thirds is the other branch: from line 128 (H `$50`, character
+row 0 of the bottom third) to 127, `DEC H` gives `$4F` and `L - $20` borrows
+from row 0 into row 7; the borrow says H's own borrow into the third was
+right, and `JR C` skips the `+ 8`.
+
+`line_up_hl`, which the fills use, is the same check done every line rather
+than every pair, which is why writing it into `fill_under_slope`'s loop saves a
+CALL each row pair.
+
 ### Why nothing is cleared, and what is filled
 
 Sky (black) and the inside of rock ($55 on odd lines, $AA on even) are
