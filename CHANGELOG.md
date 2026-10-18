@@ -29,7 +29,9 @@ GitHub takes its notes from that section.
   their projections or, with `FACE_EYE`, against the eye in the model's
   space; `build.py --faces` shows it in the demo. `SCREEN_CENTRE_X` and
   `SCREEN_CENTRE_Y` say where the view's centre is, for a view that is not
-  the whole screen. `check.py` holds every
+  the whole screen. `set_camera_matrix` takes a camera matrix the program
+  has made itself, for a camera turned more finely than fast3d's angles of
+  256 to the turn. `check.py` holds every
   routine to a Python model in SkoolKit's simulator, every multiply and every
   pixel. The launch configuration **ZX Spectrum: fast3d demo** flies a camera
   through forty turning objects on the 128K, about 7 frames a second (it

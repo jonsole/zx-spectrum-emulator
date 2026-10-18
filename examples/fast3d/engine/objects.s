@@ -181,6 +181,10 @@ MODEL_FACE_PLANES	EQU		24					; DW -> for each face, DB its normal,
 ; camera_angles. Works out its matrix, installs its transpose in rotate,
 ; and 128 Rc^T (1, 1, 1). Once a frame, before cull_object. Uses everything
 ; but IY and the alternate registers.
+;
+; set_camera_matrix: the same, for a camera whose matrix the caller has
+; made, in some other way than from three angles of 256 to the turn: Rc^T
+; already in matrix_t, row by row, 127 for 1.0 (and camera_angles unused).
 
 set_camera:
 					ld		hl,camera_angles
@@ -188,6 +192,7 @@ set_camera:
 					ld		bc,3
 					ldir
 					call	compute_matrix
+set_camera_matrix:
 					ld		hl,matrix_t			; Rc^T: the rows of Rc^T are
 					ld		de,camera_seen		; Rc's columns
 					ld		bc,9
