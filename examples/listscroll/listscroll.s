@@ -9,9 +9,9 @@
 ; is the page row in its high byte and the line in the page in its low. Each
 ; page is a tile, and a tile is a list of pieces: column in the page, bottom
 ; line in the page, graphic. It holds them twice, sorted by bottom line and
-; by column, each with an index of where each line's or column's run starts,
-; so that the pieces arriving on a line or in a column are read and no
-; others.
+; by column, each with an index of where each character row's or column's
+; run starts, so that only the pieces in the arriving line's row (skipping
+; those on its other lines) or in the arriving column are read.
 ;
 ; The table holds the pieces that touch what shows: columns 1 to 30 of rows 1
 ; to 22 (columns 0 and 31 and rows 0 and 23 are black on black). That is
@@ -40,7 +40,7 @@
 
 IM2_TABLE   equ 0xFE00
 IM2_JUMP    equ 0xFDFD
-MAX_TABLE   equ 64          ; entries the table holds (a screen has about 30)
+MAX_TABLE   equ 160         ; entries the table holds
 FIRST_LINE  equ 9           ; the bottom lines a piece in the table has: those
 LAST_LINE   equ 189         ; touching rows 1 to 22, all of it on the bitmap
 
@@ -113,6 +113,8 @@ isr:
 fill_table:
     xor a
     ld (count),a
+    ld hl,table
+    ld (table_end),hl
     ld de,FIRST_LINE
 .line:
     push de
@@ -403,9 +405,13 @@ left:
 ; table: in its page column, in the page rows of screen lines FIRST_LINE and
 ; LAST_LINE (one or two).
 add_column:
-    ld hl,take
+    ld hl,take_in_column
     ld (scan_page.take + 1),hl
     ld c,a
+    ld hl,view_column
+    sub (hl)
+    ld (take_in_column.column + 1),a    ; its screen column
+    ld a,c
     and PAGE_COLUMNS - 1
     add a,COLUMN_INDEX
     ld e,a                  ; E: its column's entry in a tile's index
@@ -428,11 +434,52 @@ add_column:
     cp b
     jr z,.last
     push bc
-    call scan_at
+    call column_at
     pop bc
 .last:
     ld a,b
-    jr scan_at
+    jr column_at
+
+; column_at: scan_page on the page at row A, column C, for add_column: first
+; take_in_column's range for that page. The page's offset is view_y less its
+; first world line (0 to 255 for the page holding the screen's top, negative
+; for the one below); its lines on the screen run from offset + FIRST_LINE
+; (or 0) to offset + LAST_LINE (or 255). B, C and E kept.
+column_at:
+    push bc
+    push af
+    ld b,a
+    ld hl,(view_y)
+    ld a,h
+    sub b
+    ld h,a                  ; HL: the page's offset
+    push hl
+    ld bc,FIRST_LINE
+    add hl,bc
+    ld a,l
+    bit 7,h
+    jr z,.first
+    xor a                   ; the page starts below the screen's first line
+.first:
+    ld (take_in_column.first + 1),a
+    ld d,a                  ; D: its first line on the screen
+    pop hl
+    sub l
+    ld (take_in_column.base + 1),a      ; that line's screen line
+    ld bc,LAST_LINE
+    add hl,bc
+    ld a,h
+    or a
+    ld a,l
+    jr z,.last
+    ld a,255                ; the screen goes on past the page's end
+.last:
+    sub d
+    inc a
+    ld (take_in_column.span + 1),a
+    pop af
+    pop bc
+    jp scan_at
 
 ; move_entries: every entry's screen address C bytes across (1 or -1), in its
 ; column's 5 bits (a column stays in its character row); those that come to
@@ -485,8 +532,12 @@ add_line:
     ld hl,(view_y)
     add hl,de
     ld a,l
-    srl a
-    ld e,a                  ; E: the line's entry in a tile's index (odd: line / 2)
+    ld (arriving_line),a
+    rrca
+    rrca
+    rrca
+    and 0x1F
+    ld e,a                  ; E: its character row's entry in a tile's index
     ld b,h                  ; B: the page row
     ld a,(view_column)
     ld l,a
@@ -523,7 +574,7 @@ scan_at:
 
 ; scan_page: the pieces of page B that its tile's index entry E names (the
 ; run on a line, or in a column) into the table if they touch what shows, by
-; take or take_on_line. B, C and E kept.
+; take_in_column or take_on_line. B, C and E kept.
 scan_page:
     push bc
     push de
@@ -531,25 +582,26 @@ scan_page:
     ld d,0
     push hl
     add hl,de               ; at the index entry
-    ld c,(hl)               ; C: the run's first piece, as an offset from PIECES
+    ld c,(hl)               ; C: the run's first piece's number
     inc hl
     ld a,(hl)               ; A: the next run's
     pop hl
-    sub c                   ; 4 bytes a piece
+    sub c
     jr z,.done
-    rrca
-    rrca
     push af
     ld de,PIECES
     add hl,de
     ld e,c
     ld d,0
+    ex de,hl
+    add hl,hl               ; 4 bytes a piece
+    add hl,hl
     add hl,de               ; HL: the run's first piece
     pop af
     ld d,a                  ; D: how many
 .piece:
 .take:
-    call take               ; or take_on_line (add_column, add_line set it)
+    call take_in_column     ; or take_on_line (add_column, add_line set it)
     inc hl
     inc hl
     inc hl
@@ -561,10 +613,16 @@ scan_page:
     pop bc
     ret
 
-; take_on_line: the piece at HL in page B, whose bottom is on the arriving
-; line (line_address: its screen address at column 0), into the table if its
-; window is at screen column 0 to 30. B, D and HL kept.
+; take_on_line: the piece at HL in page B, whose bottom is in the arriving
+; line's character row, into the table if its bottom is on that line
+; (arriving_line in the page; line_address its screen address at column 0)
+; and its window at screen column 0 to 30. B, D and HL kept.
 take_on_line:
+    inc hl
+    ld a,(arriving_line)
+    cp (hl)                 ; another line of the row?
+    dec hl
+    ret nz
     ld a,(count)
     cp MAX_TABLE
     ret z
@@ -580,115 +638,74 @@ take_on_line:
     cp 31
     ret nc
     push de
-    push hl
     ld c,a
-    ld hl,(line_address)
-    ld a,l
+    ld a,(line_address)
     add a,c
     ld e,a
-    ld d,h                  ; DE: its screen address
-    pop hl
-    push hl
-    inc hl
-    inc hl
-    ld c,(hl)
-    inc hl
-    ld a,(hl)
-    push af                 ; A, C: its graphic
-    ld a,(count)
-    inc a
-    ld (count),a
-    dec a
-    call entry_at
-    ld (hl),e
-    inc hl
-    ld (hl),d
-    inc hl
-    ld (hl),c
-    inc hl
-    pop af
-    ld (hl),a
-    pop hl
-    pop de
-    ret
+    ld a,(line_address + 1)
+    ld d,a                  ; DE: its screen address
+    jr store_piece
 
-; take: the piece at HL in page B into the table if it touches what shows:
-; its window at screen column 0 to 30 and its bottom at line FIRST_LINE to
-; LAST_LINE. Its entry: line_table at its bottom line, plus its column; its
-; graphic. All registers but A kept.
-take:
-    push bc
-    push de
-    push hl
+; take_in_column: the piece at HL, in the arriving column, into the table if
+; its bottom is on the screen's lines FIRST_LINE to LAST_LINE. column_at
+; patches in, for the page being scanned, the first of its lines that is on
+; the screen, how many are, and the screen line of the first; add_column
+; patches in the column's screen column. B, D and HL kept.
+take_in_column:
+    inc hl
+    ld a,(hl)               ; its bottom line in the page
+    dec hl
+.first:
+    sub 0                   ; less the page's first line on the screen
+.span:
+    cp 0                    ; past the page's lines on the screen (or before)?
+    ret nc
+    ld c,a
     ld a,(count)
     cp MAX_TABLE
-    jr z,.done
-    ld a,b                  ; its world column: page column * 32 + column
-    rrca
-    rrca
-    rrca
-    and 0xE0
-    add a,(hl)
-    ld c,a
-    ld a,(view_column)
-    ld e,a
+    ret z
+    push de
+    push hl
     ld a,c
-    sub e                   ; its screen column, round the world
-    cp 31
-    jr nc,.done
-    ld c,a                  ; C: its screen column
-    inc hl
-    ld e,(hl)               ; DE: its world line: page row, line in the page
-    ld a,b
-    rrca
-    rrca
-    rrca
-    and 0x1F
-    ld d,a
-    inc hl
-    push hl                 ; at its graphic
-    ld hl,(view_y)
-    ex de,hl
-    or a
-    sbc hl,de               ; HL: its screen line
-    ld a,h
-    or a
-    jr nz,.off
-    ld a,l
-    cp FIRST_LINE
-    jr c,.off
-    cp LAST_LINE + 1
-    jr nc,.off
+.base:
+    add a,0                 ; its screen line
+    ld l,a
+    ld h,0
     add hl,hl
     ld de,line_table
     add hl,de
     ld a,(hl)
-    add a,c
+.column:
+    add a,0                 ; its screen column: 0 or 30
     ld e,a
     inc hl
     ld d,(hl)               ; DE: its screen address
     pop hl
+    ; fall into store_piece
+
+; store_piece: the piece at HL into the table at table_end, its screen
+; address DE, and counted; the DE pushed by its caller restored. HL kept.
+store_piece:
+    push hl
+    inc hl
+    inc hl
     ld c,(hl)
     inc hl
-    ld b,(hl)               ; BC: its graphic
-    ld a,(count)
-    call entry_at
+    ld a,(hl)               ; A, C: its graphic
+    ld hl,(table_end)
     ld (hl),e
     inc hl
     ld (hl),d
     inc hl
     ld (hl),c
     inc hl
-    ld (hl),b
+    ld (hl),a
+    inc hl
+    ld (table_end),hl
     ld hl,count
     inc (hl)
-    jr .done
-.off:
-    pop hl
-.done:
     pop hl
     pop de
-    pop bc
     ret
 
 ; ---------------------------------------------------------------------------
@@ -702,8 +719,10 @@ remove_entry:
     push hl
     ld hl,count
     dec (hl)
-    ld a,(hl)
-    call entry_at           ; the last
+    ld hl,(table_end)       ; the last
+    ld bc,-4
+    add hl,bc
+    ld (table_end),hl
     pop de
     push de
     ld bc,4
@@ -711,18 +730,6 @@ remove_entry:
     pop hl
     pop de
     pop bc
-    ret
-
-; entry_at: HL = table entry A. DE kept.
-entry_at:
-    ld l,a
-    ld h,0
-    add hl,hl
-    add hl,hl
-    push de
-    ld de,table
-    add hl,de
-    pop de
     ret
 
 ; tile_of: HL = the tile of page B (its count, then its pieces). BC, DE kept.
@@ -759,16 +766,18 @@ set_offset:
     ret
 
 PAGE_COLUMNS    equ 32
-LINE_INDEX      equ 0       ; a tile: 129 bytes of index by line,
-COLUMN_INDEX    equ 129     ; 33 by column,
-PIECES          equ 162     ; then its pieces by line, then by column
+LINE_INDEX      equ 0       ; a tile: 33 bytes of index by character row,
+COLUMN_INDEX    equ 33      ; 33 by column (each a piece's number),
+PIECES          equ 66      ; then its pieces by line, then by column
 
 saved_sp:       dw 0
 fine:           db 0        ; the world's fine position: 0, 2, 4, 6
 view_column:    db 0        ; the world column at screen column 0
 view_y:         dw VIEW_Y_START ; the world line at screen line 0
 count:          db 0        ; the entries in the table
+table_end:      dw table    ; and where the next one goes
 line_address:   dw 0        ; the arriving line's screen address, at column 0
+arriving_line:  db 0        ; and its line in the page
 
     INCLUDE "output/data.s"
 
