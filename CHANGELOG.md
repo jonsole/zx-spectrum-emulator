@@ -44,8 +44,10 @@ GitHub takes its notes from that section.
   and flies, from the keyboard or an Interface II joystick, by a fixed-point
   flight model tuned in Python to the J-3's published figures and run on
   the Z80 operation for operation; `tests/frames_test.py` holds the Z80 to
-  the Python model frame by frame. The panel, landings, the chase view and
-  the rest of the world are still to come. The launch configuration **ZX
+  the Python model frame by frame, panel and all: airspeed, height and
+  heading, the throttle and climb bars and the stall light, redrawn only
+  where they change. Landings, the chase view and the rest of the world
+  are still to come. The launch configuration **ZX
   Spectrum: Cub** builds and runs it. See
   [examples/cub/README.md](examples/cub/README.md).
 
