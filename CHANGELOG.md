@@ -39,6 +39,16 @@ GitHub takes its notes from that section.
   waits to be shown. See
   [examples/fast3d/README.md](examples/fast3d/README.md).
 
+- **Cub, `examples/cub`.** A Piper Cub flight simulator for the 128K on
+  fast3d, in its own repository as a submodule. It takes off from a runway
+  and flies, from the keyboard or an Interface II joystick, by a fixed-point
+  flight model tuned in Python to the J-3's published figures and run on
+  the Z80 operation for operation; `tests/frames_test.py` holds the Z80 to
+  the Python model frame by frame. The panel, landings, the chase view and
+  the rest of the world are still to come. The launch configuration **ZX
+  Spectrum: Cub** builds and runs it. See
+  [examples/cub/README.md](examples/cub/README.md).
+
 - **A snapshot-probe driver for the examples, `examples/scripts/probe.py`.**
   Loads a program's .z80 into cpp-core's `snapshot_probe`, reads its labels
   from the SLD, and pokes, peeks and calls its routines by name, for
