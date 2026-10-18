@@ -1,6 +1,13 @@
-"""Build listscroll: a world of rock (the $55/$AA checker) and sky, wider
-than the screen and wrapping round, whose edges are pieces drawn by a display
-list; then assemble listscroll.s with sjasmplus.
+"""Build listscroll: a world of rock (the $55/$AA checker) and sky, a map of
+pages wrapping round, each page a tile whose edges are pieces drawn by a
+display list; then assemble listscroll.s with sjasmplus.
+
+The map is MAP, rows of pages, a tile name a page; a page is 256 pixels (32
+byte columns) by 256 lines. A tile is sky, rock, or a list of hills on flat
+ground that starts and ends on the ground, with sky above and rock below, so
+that the landscape tiles join each other across and the sky and rock pages
+above and below. Its pieces are made once, and shared by every page that
+holds it.
 
 The screen is drawn once from the world at the start (screen_start). After
 that only the edges are redrawn, because the checker inside the rock and the
@@ -28,15 +35,12 @@ surface in the middle, so that their top and bottom 2 lines hold no edge.
 Every graphic is what the world shows in its window, so overlapping pieces
 write the same bytes, and more pieces never put anything wrong on the screen:
 all that matters is that after any move every byte that changed is in a
-piece on the screen (column 0 to 30). Columns 0 and 31 are black on black,
-so only columns 1 to 30 show: every byte there is in a window that starts in
-0 to 30, so it is drawn. coverage() checks that for every
-position round the world and every move from it, and adds a piece wherever a
-changed byte is in none: the corners, where an edge across meets one up and
-down.
-
-The pieces are kept sorted by world column (world_pieces); listscroll.s's
-table holds the run of them on the screen.
+piece that is drawn. Columns 0 and 31 and rows 0 and 23 are black on black,
+so only columns 1 to 30 of rows 1 to 22 show, and every piece touching that
+is drawn (its window at column 0 to 30, its bottom line 9 to 189). So
+coverage() checks the world alone: at each fine position and for each move,
+every world byte that changes must be in some piece's window. The build
+stops if one is in none, naming the tile that needs another.
 
     python examples/listscroll/build.py      # output/listscroll.sna
 """
@@ -53,32 +57,72 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 OUT = HERE / "output"
 
-WORLD_W = 768           # the world's width in pixels; it wraps round
-COLUMNS = WORLD_W // 8
-GROUND = 151            # the ground: rock from the line below this
-TOP = 95                # the hills' tops
-# The hills: (where the slope up leaves the ground, where the slope down
-# starts). Each slope climbs or falls 2 pixels every 2 lines, 56 lines; the
-# slope up starts 2 pixels into a byte and the slope down on a byte, so that
-# every slope piece is a character row (edge_pieces checks).
-HILLS = [(82, 160), (338, 432), (586, 664)]
-MAX_VMOVE = 24          # the most the world moves up or down, in lines
+PAGE_W = 256            # a page's width in pixels: 32 byte columns
+PAGE_H = 256            # and its height in lines: a line in the page is a byte
+PAGE_COLUMNS = PAGE_W // 8
+GROUND = 151            # a landscape tile's ground: rock from the line below this
 PAIRS = 4               # every piece is 8 lines: 4 pairs
 
+# The tiles: sky, rock, or a list of hills on flat ground (where the slope up
+# leaves the ground, where the slope down starts, the last sky line above the
+# top). Slopes climb and fall 2 pixels every 2 lines; a hill's height is a
+# multiple of 8 lines, its slope up starts 2 pixels into a byte and its slope
+# down where a byte starts, so that every slope piece is a character row
+# (tile_pieces checks).
+TILES = {
+    "sky": "sky",
+    "rock": "rock",
+    "flat": [],
+    "hill": [(66, 144, 95)],
+    "wide": [(58, 168, 95)],
+    "twin": [(42, 96, 119), (146, 200, 119)],
+}
+# The map: rows of pages, a tile a page, round the world across (8 pages: a
+# world column is a byte) and stopping at the top and bottom.
+MAP = [
+    ["sky"] * 8,
+    ["flat", "hill", "twin", "wide", "flat", "hill", "wide", "twin"],
+    ["rock"] * 8,
+]
+MAP_COLUMNS = len(MAP[0])
+MAP_ROWS = len(MAP)
+WORLD_W = PAGE_W * MAP_COLUMNS
+WORLD_H = PAGE_H * MAP_ROWS
+COLUMNS = WORLD_W // 8
+if COLUMNS != 256:
+    sys.exit("the map's columns are counted in a byte, round the world: 8 pages across")
+VIEW_Y_START = PAGE_H                   # the screen's top line as the world starts
+VIEW_Y_MAX = WORLD_H - 192              # the lowest the view goes
 
-def surface(x: int) -> int:
-    """The last sky line above the rock at world x."""
-    x %= WORLD_W
-    for up, down in HILLS:
+
+def tile_surface(name: str, x: int) -> int:
+    """The last sky line above the rock at x in a page of this tile (outside
+    the page, the ground)."""
+    hills = TILES[name]
+    if hills == "sky":
+        return PAGE_H - 1
+    if hills == "rock":
+        return -1
+    for up, down, top in hills:
+        rise = GROUND - top
         if up <= x < down:
-            return max(TOP, GROUND - 2 * ((x - up) // 2 + 1))
-        if down <= x < down + (GROUND - TOP):
-            return min(GROUND, TOP + 2 * ((x - down) // 2))
+            return max(top, GROUND - 2 * ((x - up) // 2 + 1))
+        if down <= x < down + rise:
+            return min(GROUND, top + 2 * ((x - down) // 2))
     return GROUND
 
 
+def screen_offset(column: int, y: int) -> int:
+    return ((y & 0xC0) << 5) | ((y & 7) << 8) | ((y & 0x38) << 2) | column
+
+
+# ---- the world's pixels ----------------------------------------------------------
+
 def rock(x: int, y: int) -> bool:
-    return y > surface(x)
+    x %= WORLD_W
+    if y < 0 or y >= WORLD_H:
+        return y >= WORLD_H
+    return y % PAGE_H > tile_surface(MAP[y // PAGE_H][x // PAGE_W], x % PAGE_W)
 
 
 def pixel(x: int, y: int) -> int:
@@ -87,16 +131,12 @@ def pixel(x: int, y: int) -> int:
 
 
 def byte(column: int, y: int, shift: int) -> int:
-    """A byte of world column `column` on line y, with the world moved
+    """A byte of world column `column` on world line y, with the world moved
     `shift` pixels right."""
     value = 0
     for b in range(8):
         value = value << 1 | pixel(column * 8 + b - shift, y)
     return value
-
-
-def screen_offset(column: int, y: int) -> int:
-    return ((y & 0xC0) << 5) | ((y & 7) << 8) | ((y & 0x38) << 2) | column
 
 
 def window(column: int, bottom: int, shift: int) -> tuple[int, ...]:
@@ -109,31 +149,32 @@ def window(column: int, bottom: int, shift: int) -> tuple[int, ...]:
     return tuple(data)
 
 
-# ---- the pieces: (world column, bottom line as the world starts) -----------------
+# ---- a tile's pieces: (column in the page, bottom line in the page) ---------------
 
-def edges(y: int) -> list[int]:
-    """Where line y goes from sky to rock or back round the world: x of the
-    first pixel past each change."""
-    return [x for x in range(WORLD_W) if rock(x, y) != rock(x - 1, y)]
+def tile_pieces(name: str) -> list[tuple[int, int]]:
+    """A tile's pieces, from its edges up and down (each a character row, in
+    a window with every edge 2-8 pixels in) and its flat surfaces (8 lines
+    with the surface in the middle: the ground every other column, the
+    hilltops in their windows)."""
+    hills = TILES[name]
 
+    def surf(x: int) -> int:
+        return tile_surface(name, x)
 
-def window_column(x: int) -> int:
-    """The window whose fine-position-0 offsets 2-8 hold an edge at x."""
-    if x % 2:
-        sys.exit(f"an edge at odd x {x}: no 2-byte window holds it")
-    return ((x - 2) // 8) % COLUMNS
+    def solid(x: int, y: int) -> bool:
+        return y > surf(x)
 
+    def window_column(x: int) -> int:
+        if x % 2:
+            sys.exit(f"tile {name}: an edge at odd x {x}: no 2-byte window holds it")
+        return (x - 2) // 8
 
-def edge_pieces() -> list[tuple[int, int]]:
-    """Every edge up and down the world's lines, a pair of lines at a time
-    from the bottom (an odd line, as the blit needs), in runs of PAIRS pairs
-    that share a window: each a character row."""
+    out = []
     runs: dict[int, list[int]] = {}
-    for bottom in range(191, 0, -2):
-        found = set(edges(bottom)) | set(edges(bottom - 1))
+    for bottom in range(PAGE_H - 1, 0, -2):
+        found = {x for y in (bottom, bottom - 1) for x in range(PAGE_W) if solid(x, y) != solid(x - 1, y)}
         for column in {window_column(x) for x in found}:
             runs.setdefault(column, []).append(bottom)
-    out = []
     for column, bottoms in runs.items():
         i = 0
         while i < len(bottoms):
@@ -141,109 +182,105 @@ def edge_pieces() -> list[tuple[int, int]]:
             while n < PAIRS and i + n < len(bottoms) and bottoms[i + n] == bottoms[i] - 2 * n:
                 n += 1
             if n != PAIRS or bottoms[i] % 8 != 7:
-                sys.exit(f"a piece of {2 * n} lines from line {bottoms[i]} in column {column}: "
-                         f"every piece must be a character row")
+                sys.exit(f"tile {name}: a piece of {2 * n} lines from line {bottoms[i]} in column "
+                         f"{column}: every piece must be a character row")
             out.append((column, bottoms[i]))
             i += n
-    return out
+    if isinstance(hills, list):
+        for column in range(0, PAGE_COLUMNS, 2):
+            if any(surf(x) == GROUND for x in range(column * 8, column * 8 + 16)):
+                out.append((column, GROUND + 4))
+        for up, down, top in hills:
+            for column in sorted({window_column(x) for x in range(0, PAGE_W, 2) if surf(x) == top}):
+                out.append((column, top + 4))
+    for column, bottom in out:
+        if not 0 <= column < PAGE_COLUMNS or not 7 <= bottom < PAGE_H:
+            sys.exit(f"tile {name}: the piece at column {column}, line {bottom} is outside its page")
+    return sorted(set(out))
 
 
-def surface_pieces() -> list[tuple[int, int]]:
-    """The flat surfaces, in pieces of 8 lines with the surface between
-    their fourth and fifth lines: the ground's every other column where its
-    window holds ground, and the hills' tops."""
-    out = []
-    for column in range(0, COLUMNS, 2):
-        if any(surface(x) == GROUND for x in range(column * 8, column * 8 + 16)):
-            out.append((column, GROUND + 4))
-    for column in sorted({window_column(x) for x in range(0, WORLD_W, 2) if surface(x) == TOP}):
-        out.append((column, TOP + 4))
-    return out
-
+# ---- the check -------------------------------------------------------------------
 
 def world_bits():
-    """The world's pixels (rock showing the checker), a world and a screen
-    wide so that any window onto it is a slice, MAX_VMOVE lines over and
-    under."""
+    """The world's pixels (rock showing the checker), with a screen's width
+    more round the world so that any window onto it is a slice."""
     xs = np.arange(WORLD_W + 256)
-    ys = np.arange(-MAX_VMOVE, 192 + MAX_VMOVE)
-    surfaces = np.array([surface(int(x)) for x in xs])
-    return ((ys[:, None] > surfaces[None, :]) & ((xs[None, :] + ys[:, None]) % 2 == 0)).astype(np.uint8)
+    ys = np.arange(WORLD_H)
+    surfaces = np.array([[tile_surface(MAP[row][(int(x) % WORLD_W) // PAGE_W], int(x) % PAGE_W) for x in xs]
+                         for row in range(MAP_ROWS)])
+    surf = surfaces[ys // PAGE_H]                           # each line's row of surfaces
+    return (((ys % PAGE_H)[:, None] > surf) & ((xs[None, :] + ys[:, None]) % 2 == 0)).astype(np.uint8)
 
 
-def screen(bits, view: int, dy: int):
-    """The screen's 192 lines of 32 bytes with the view's left edge at world
-    x `view` (even) and the world moved dy lines down."""
-    v = view % WORLD_W
-    return np.packbits(bits[MAX_VMOVE - dy:MAX_VMOVE - dy + 192, v:v + 256], axis=1)
+def screen(bits, view_x: int, view_y: int):
+    """The screen's 192 lines of 32 bytes with its left edge at world x
+    view_x (even) and its top at world line view_y."""
+    v = view_x % WORLD_W
+    return np.packbits(bits[view_y:view_y + 192, v:v + 256], axis=1)
 
 
-def on_screen(pieces, view: int, dy: int):
-    """Which bytes the pieces on the screen cover: a piece's window is at
-    screen column (its world column - the view's column) round the world,
-    with the world's fine position view's AND 6 (left of a byte the window
-    is a byte further left), drawn while that is 0 to 30."""
-    cover = np.zeros((192, 32), dtype=bool)
-    first = -(-view // 8)                   # the world column at screen column 0, rounding up
+def coverage(pieces: list) -> None:
+    """After any move, every byte that changed must be in a piece that is
+    drawn. Every piece touching the part of the screen that shows (columns 1
+    to 30, rows 1 to 22) is drawn, so this is a check on the world alone: with
+    the world's bytes cut at each fine position, every byte that differs from
+    the one the move brings into its place must be in some piece's window."""
+    bits = world_bits()[:, :WORLD_W]
+    covered = np.zeros((WORLD_H, COLUMNS), dtype=bool)
     for column, bottom in pieces:
-        c = (column - first) % COLUMNS
-        if c <= 30:
-            b = bottom + dy
-            cover[max(0, b - 7):b + 1, c:c + 2] = True
-    return cover
+        covered[bottom - 7:bottom + 1, column] = True
+        covered[bottom - 7:bottom + 1, (column + 1) % COLUMNS] = True
 
+    def cut(x: int):
+        """Each world byte starting at x + 8 * column."""
+        return np.packbits(np.roll(bits, -x, axis=1), axis=1)
 
-def coverage(pieces: list) -> list:
-    """For every position round the world (the view's x even, up and down
-    within MAX_VMOVE) and every move from it, the bytes that change must be
-    in a piece on the screen at the new position. A piece is added for any
-    byte that is not, until none is left; the added pieces are returned."""
-    bits = world_bits()
-    added = []
-    for dy in range(-MAX_VMOVE, MAX_VMOVE + 1, 2):
-        for view in range(0, WORLD_W, 2):
-            here = screen(bits, view, dy)
-            for move_x, move_y in ((2, 0), (-2, 0), (0, 2), (0, -2)):
-                nview, ndy = view + move_x, dy + move_y
-                if abs(ndy) > MAX_VMOVE:
-                    continue
-                changed = here != screen(bits, nview, ndy)
-                changed[:, 0] = changed[:, 31] = False      # black on black
-                while True:
-                    left = changed & ~on_screen(pieces, nview, ndy)
-                    if not left.any():
-                        break
-                    y, c = (int(v) for v in np.argwhere(left)[0])
-                    first = -(-nview // 8)
-                    window_c = c & ~1 if c < 31 else 30         # even columns, so neighbours share
-                    piece = ((window_c + first) % COLUMNS, (y - ndy + 3) | 1)
-                    if piece in pieces:
-                        sys.exit(f"coverage: line {y} column {c} at view {nview}, {ndy} is in no piece")
-                    pieces.append(piece)
-                    added.append(piece)
-    for column, bottom in pieces:           # up and down, every piece stays on the screen
-        if not 7 + MAX_VMOVE <= bottom <= 191 - MAX_VMOVE:
-            sys.exit(f"the piece at column {column}, line {bottom} goes off the screen moving up or down")
-    return added
+    for fine in (0, 2, 4, 6):
+        now = cut(-fine)
+        for move_x, move_y in ((2, 0), (-2, 0), (0, 2), (0, -2)):
+            before = cut(-fine + move_x)
+            changed = np.zeros_like(covered)
+            if move_y > 0:
+                changed[:-move_y] = now[:-move_y] != before[move_y:]
+            elif move_y < 0:
+                changed[-move_y:] = now[-move_y:] != before[:move_y]
+            else:
+                changed = now != before
+            left = changed & ~covered
+            if left.any():
+                y, column = (int(v) for v in np.argwhere(left)[0])
+                sys.exit(f"coverage: line {y % PAGE_H} of page column {column % PAGE_COLUMNS} (tile "
+                         f"{MAP[y // PAGE_H][column // PAGE_COLUMNS]}) changes in no piece at fine "
+                         f"position {fine}, moving {move_x}, {move_y}")
 
 
 # ---- output ---------------------------------------------------------------------
 
 def data_s() -> str:
-    pieces = edge_pieces() + surface_pieces()
-    added = coverage(pieces)
-    print(f"{len(pieces) - len(added)} pieces from the edges and surfaces; coverage added {len(added)}")
-    pieces.sort()
-    if len(pieces) > 255:
-        sys.exit(f"{len(pieces)} pieces: the table counts them in a byte")
-    graphics: dict[tuple, str] = {}          # four positions' graphics -> its label
-    labels = []
-    for column, bottom in pieces:
-        four = tuple(window(column, bottom, shift) for shift in (0, 2, 4, 6))
-        labels.append(graphics.setdefault(four, f"gfx_{len(graphics)}"))
+    tiles = {name: tile_pieces(name) for name in TILES}
+    world = [(page_column * PAGE_COLUMNS + column, page_row * PAGE_H + bottom)
+             for page_row, names in enumerate(MAP) for page_column, name in enumerate(names)
+             for column, bottom in tiles[name]]
+    coverage(world)
+    # Each tile's graphics, from the world: the same wherever the tile is.
+    graphics: dict[tuple, str] = {}
+    labels: dict[str, list[str]] = {}
+    for name, pieces in tiles.items():
+        found = []
+        for column, bottom in pieces:
+            fours = {tuple(window(page_column * PAGE_COLUMNS + column, page_row * PAGE_H + bottom, shift)
+                           for shift in (0, 2, 4, 6))
+                     for page_row, names in enumerate(MAP) for page_column, n in enumerate(names) if n == name}
+            if len(fours) != 1:
+                sys.exit(f"tile {name}: the piece at column {column}, line {bottom} looks different "
+                         f"in different places: it reaches its neighbours")
+            four = fours.pop()
+            found.append(graphics.setdefault(four, f"gfx_{len(graphics)}"))
+        labels[name] = found
+    names = list(TILES)
     lines = ["; Generated by build.py.", "",
-             f"COLUMNS         equ {COLUMNS}", f"MAX_VMOVE       equ {MAX_VMOVE}",
-             f"WORLD_PIECES    equ {len(pieces)}", "",
+             f"MAP_COLUMNS     equ {MAP_COLUMNS}", f"MAP_ROWS        equ {MAP_ROWS}",
+             f"VIEW_Y_START    equ {VIEW_Y_START}", f"VIEW_Y_MAX      equ {VIEW_Y_MAX}", "",
              "; The pieces' graphics: each at fine positions 0, 2, 4, 6, 16 bytes apart,",
              "; 64 bytes on a 64-byte boundary, so that the four are in one page and the",
              "; walker adds the position's offset to the low byte alone.", "gfx:"]
@@ -251,21 +288,43 @@ def data_s() -> str:
         lines += ["    ALIGN 64", f"{label}:"]
         for shift in range(4):
             lines.append("    db " + ", ".join(f"0x{v:02X}" for v in four[shift]))
-    lines += ["", "; The world's pieces sorted by column: column, bottom line as the world",
-              "; starts, graphic.", "world_pieces:"]
-    lines += [f"    db {column}, {bottom}\n    dw {label}" for (column, bottom), label in zip(pieces, labels)]
-    on = [i for i, (column, _) in enumerate(pieces) if column <= 30]
-    lines += ["", "; Those on the screen as the world starts: world_pieces from FIRST_ON,",
-              "; ON_COUNT of them.", f"FIRST_ON        equ {on[0]}", f"ON_COUNT        equ {len(on)}",
-              "", "; The screen address of each line's first byte.", "line_table:"]
+    lines += ["", "; The map: a tile number a page, row by row (page = row * 8 + column).", "map:"]
+    lines += ["    db " + ", ".join(str(names.index(name)) for name in row) for row in MAP]
+    # A tile with the same pieces as an earlier one (sky and rock: none) is
+    # that one.
+    same: dict[str, str] = {}
+    for name in names:
+        same[name] = next((n for n in names if n in same.values() and tiles[n] == tiles[name]), name)
+    lines += ["", "; Each tile's address.", "tile_table:", "    dw " + ", ".join(f"tile_{same[name]}" for name in names),
+              "", "; Each tile: its pieces' indexes and its pieces twice, sorted by bottom line",
+              "; and by column, each piece its column and bottom line in the page and its",
+              "; graphic. LINE_INDEX: for each odd line (n * 2 + 1), the offset from PIECES",
+              "; of the first piece on it, sorted by line, and one more for the end;",
+              "; COLUMN_INDEX: the same for each column, into those sorted by column."]
+    for name in names:
+        if same[name] != name:
+            continue
+        by_line = sorted(zip(tiles[name], labels[name]), key=lambda p: (p[0][1], p[0][0]))
+        by_column = sorted(zip(tiles[name], labels[name]))
+        n = len(by_line)
+        line_index = [4 * sum(1 for (c, b), _ in by_line if b < 2 * k + 1) for k in range(PAGE_H // 2 + 1)]
+        column_index = [4 * n + 4 * sum(1 for (c, b), _ in by_column if c < k) for k in range(PAGE_COLUMNS + 1)]
+        if column_index[-1] > 255:
+            sys.exit(f"tile {name}: {n} pieces, more than an index's byte reaches")
+        lines += [f"tile_{name}:"]
+        lines += ["    db " + ", ".join(str(v) for v in line_index[i:i + 16]) for i in range(0, len(line_index), 16)]
+        lines += ["    db " + ", ".join(str(v) for v in column_index[i:i + 16]) for i in range(0, len(column_index), 16)]
+        lines += [f"    db {column}, {bottom}\n    dw {label}" for (column, bottom), label in by_line + by_column]
+    lines += ["", "; The screen address of each line's first byte.", "line_table:"]
     lines += [f"    dw 0x{0x4000 + screen_offset(0, y):04X}" for y in range(192)]
     lines += ["", "; The screen as the world starts.", "screen_start:"]
     for offset in range(0, 6144, 32):
         third, line_in_cell, row_in_third = offset >> 11, (offset >> 8) & 7, (offset >> 5) & 7
         y = third * 64 + row_in_third * 8 + line_in_cell
-        lines.append("    db " + ", ".join(f"0x{byte(c, y, 0):02X}" for c in range(32)))
-    print(f"{len(pieces)} pieces round the world, {len(on)} on the screen at the start, "
-          f"{len(graphics)} graphics")
+        lines.append("    db " + ", ".join(f"0x{byte(c, VIEW_Y_START + y, 0):02X}" for c in range(32)))
+    print(f"{MAP_COLUMNS} x {MAP_ROWS} pages of {len(TILES)} tiles: "
+          + ", ".join(f"{n} {len(p)} pieces" for n, p in tiles.items())
+          + f"; {len(world)} in the world, {len(graphics)} graphics")
     return "\n".join(lines) + "\n"
 
 
