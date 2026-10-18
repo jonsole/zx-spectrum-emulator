@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "stepscroll tiles",
+  "description": "Every tile a page of the world can hold, keyed by the tile's name. A page is 256 pixels across and 256 lines down. A tile is a list of pieces in Cyberun's form (examples/jetrun/world/tiles.schema.json), drawn with Cyberun's own step graphics: straight runs of identical steps. Rock is decided down each world column: sky above the world, turned by every floor or ceiling crossed, so sky and solid rock are tiles with no pieces. A tile may instead be another tile drawn mirrored or upside down, Cyberun's way. See world.py and cyberun_steps.py.",
+  "type": "object",
+  "required": ["tiles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "tiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/tile"}
+    }
+  },
+  "$defs": {
+    "tile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["pieces"],
+          "additionalProperties": false,
+          "properties": {"pieces": {"type": "array", "items": {"$ref": "#/$defs/piece"}}}
+        },
+        {
+          "type": "object",
+          "required": ["from"],
+          "additionalProperties": false,
+          "properties": {
+            "from": {"description": "The tile whose pieces this one draws.", "type": "string"},
+            "mirrored": {"description": "Drawn mirrored left to right, Cyberun's $FF marker.", "type": "boolean"},
+            "upsideDown": {"description": "Drawn upside down, Cyberun's $99 marker: floors become ceilings in place.", "type": "boolean"}
+          }
+        }
+      ]
+    },
+    "piece": {
+      "type": "object",
+      "required": ["x", "y", "direction", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "x": {"description": "The left edge of the piece's lowest step, in pixels from the page's left edge (a multiple of 8).", "type": "integer", "minimum": 0, "maximum": 255, "multipleOf": 8},
+        "y": {"description": "The bottom line of the piece's lowest step in the page: odd, as the blitters go up a row pair at a time.", "type": "integer", "minimum": 1, "maximum": 255},
+        "direction": {
+          "description": "Cyberun's sixteen: flat steps 24 pixels long, gentle slopes 16 across and 8 up, plain ones 8 and 8, steep ones 8 and 16, walls 16 high. Floors have rock below, ceilings rock above; 'up' climbs to the right, 'down' climbs to the left.",
+          "enum": [
+            "floor", "floor-up-gentle", "floor-up", "floor-up-steep",
+            "floor-down-gentle", "floor-down", "floor-down-steep",
+            "ceiling", "ceiling-up-gentle", "ceiling-up", "ceiling-up-steep",
+            "ceiling-down-gentle", "ceiling-down", "ceiling-down-steep",
+            "wall-rock-right", "wall-rock-left"
+          ]
+        },
+        "steps": {"type": "integer", "minimum": 1, "maximum": 16},
+        "ends": {
+          "description": "Flat pieces only: Cyberun's end codes for the run's first and last steps (bit 4: draw an end cap, the low two bits which; $16: only the last step's first column).",
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "integer", "minimum": 0, "maximum": 255}
+        }
+      }
+    }
+  }
+}
