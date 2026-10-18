@@ -989,25 +989,69 @@ view_m:				DS		9					; M, row by row
 .y:					push	hl
 					ENDM
 
+; The T a vertex is projected from: view_t; or with VERTEX_NUDGE, vertex_t,
+; view_t plus the vertex's own nudge (nudge_vertex).
+					IFDEF	VERTEX_NUDGE
+POINT_FROM			EQU		vertex_t
+					ELSE
+POINT_FROM			EQU		view_t
+					ENDIF
+
+; A:H:L <<= (to_lift): PROJECT_FINE's near shift. Uses B, E.
+					MACRO	LIFT
+					ld		e,a
+					ld		a,(to_lift)
+					or		a
+					ld		b,a
+					ld		a,e
+					jr		z,.lifted
+.lift:				add		hl,hl
+					rla
+					djnz	.lift
+.lifted:
+					ENDM
+
 ; The vertex whose rotation rot_x, rot_y, rot_z holds (or whose mirror's it
 ; is, SIGN 1) to the screen, and on to transform_object's .store with HL =
 ; x, DE = y -- or to .behind if it is behind the near plane (c_z <
-; NEAR_PLANE, which is 4 << 8: one compare of the middle byte).
+; NEAR_PLANE, which is 4 << 8: one compare of the middle byte). With
+; PROJECT_FINE, a near depth is shifted left until its middle byte has 8
+; bits, and x and y with it (model.project_far's fine).
 					MACRO	PROJECT	SIGN
-					COMBINE	SIGN, rot_z, view_t + 6
+					COMBINE	SIGN, rot_z, POINT_FROM + 6
 					ld		c,a					; C:H:L = c_z
 					jp		m,transform_object.behind
 					jp		nz,.far
 					ld		a,h
 					cp		high NEAR_PLANE
 					jp		c,transform_object.behind
-					ld		c,h					; Z = c_z >> 8, as it is
-					COMBINE	SIGN, rot_y, view_t + 3
+					IFDEF	PROJECT_FINE
+					ld		b,0					; B = the shift that brings H to
+.near_bits:			bit		7,h					; 128..255 (at most 5: H is at
+					jr		nz,.near_z			; least 4)
+					add		hl,hl
+					inc		b
+					jr		.near_bits
+.near_z:			ld		a,b
+					ld		(to_lift),a
+					ld		c,h					; Z = (c_z << the shift) >> 8
+					COMBINE	SIGN, rot_y, POINT_FROM + 3
+					LIFT
 					call	divide24
 					Y_ON_SCREEN
-					COMBINE	SIGN, rot_x, view_t
+					COMBINE	SIGN, rot_x, POINT_FROM
+					LIFT
 					call	divide24
 					jp		transform_object.x_on_screen
+					ELSE
+					ld		c,h					; Z = c_z >> 8, as it is
+					COMBINE	SIGN, rot_y, POINT_FROM + 3
+					call	divide24
+					Y_ON_SCREEN
+					COMBINE	SIGN, rot_x, POINT_FROM
+					call	divide24
+					jp		transform_object.x_on_screen
+					ENDIF
 
 .far:				ld		b,0					; B = the bits in c_z's high
 .bits:				inc		b					; byte: the shift
@@ -1019,7 +1063,7 @@ view_m:				DS		9					; M, row by row
 					rr		h
 					djnz	.z
 					ld		c,h
-					COMBINE	SIGN, rot_y, view_t + 3
+					COMBINE	SIGN, rot_y, POINT_FROM + 3
 					ld		e,a					; y >> the shift, E:H:L
 					ld		a,(to_shift)
 					ld		b,a
@@ -1030,7 +1074,7 @@ view_m:				DS		9					; M, row by row
 					ld		a,e
 					call	divide24
 					Y_ON_SCREEN
-					COMBINE	SIGN, rot_x, view_t
+					COMBINE	SIGN, rot_x, POINT_FROM
 					ld		e,a					; x the same
 					ld		a,(to_shift)
 					ld		b,a
@@ -1074,6 +1118,12 @@ transform_object:
 					ex		de,hl				; HL -> the vertices
 					pop		de					; E = the point
 					ld		d,0					; D = 1 when a mirror is next
+					IFDEF	VERTEX_NUDGE
+					push	hl
+					ld		hl,(vertex_nudges)	; the first vertex's nudge
+					ld		(nudge_at),hl
+					pop		hl
+					ENDIF
 					exx							; all kept in the alternates
 					xor		a
 					ld		(rotate_holds_camera),a
@@ -1096,6 +1146,9 @@ transform_object:
 .single:			exx
 					pop		hl
 					call	rotate
+					IFDEF	VERTEX_NUDGE
+					call	nudge_vertex
+					ENDIF
 					PROJECT	0
 
 .mirror:			ld		d,0					; HL -> its own x, y, z, unread
@@ -1103,6 +1156,9 @@ transform_object:
 					inc		hl
 					inc		hl
 					exx
+					IFDEF	VERTEX_NUDGE
+					call	nudge_vertex
+					ENDIF
 					PROJECT	1
 
 .behind:			ld		hl,WIDE_BEHIND		; (DE: whatever)
@@ -1146,6 +1202,59 @@ POINTS_X_HI			EQU		64
 POINTS_Y_LO			EQU		128
 POINTS_Y_HI			EQU		192
 to_shift:			DB		0					; the depth's shift, for x and y
+to_lift:			DB		0					; PROJECT_FINE's, left, for a near one
+
+					IFDEF	VERTEX_NUDGE
+; nudge_vertex: vertex_t = view_t plus the nudge at nudge_at, three signed
+; bytes, x, y, z, and nudge_at on to the next; or with vertex_nudges 0,
+; view_t as it is. Uses AF, BC, DE, HL.
+nudge_vertex:
+					ld		hl,(nudge_at)
+					ld		a,h
+					or		l
+					jr		z,.plain
+					ld		de,view_t
+					ld		bc,vertex_t
+					call	.axis
+					call	.axis
+					call	.axis
+					ld		(nudge_at),hl
+					ret
+.plain:				ld		hl,view_t
+					ld		de,vertex_t
+					ld		bc,9
+					ldir
+					ret
+; (BC) = (DE) + (HL), 24 bits plus a signed byte; each on.
+.axis:				push	hl
+					ld		a,(hl)
+					ld		l,a
+					rla
+					sbc		a,a
+					ld		h,a					; H = the nudge's sign
+					ld		a,(de)
+					add		a,l
+					ld		(bc),a
+					inc		de
+					inc		bc
+					ld		a,(de)
+					adc		a,h
+					ld		(bc),a
+					inc		de
+					inc		bc
+					ld		a,(de)
+					adc		a,h
+					ld		(bc),a
+					inc		de
+					inc		bc
+					pop		hl
+					inc		hl
+					ret
+
+vertex_nudges:		DW		0					; the object's nudges, 3 a vertex: the
+nudge_at:			DW		0					; program's to set; 0 for none
+vertex_t:			DS		9					; view_t, nudged, for one vertex
+					ENDIF
 transform_behind:	DB		0					; non-zero: a vertex was behind
 													; the near plane
 
@@ -1936,8 +2045,25 @@ cut_edges:
 					ret
 
 ; Vertex A of the model, in camera space and units of c / 4, into the three
-; words at DE: rotated by M, plus T.
+; words at DE: rotated by M, plus T (with VERTEX_NUDGE, the vertex's own).
 .camera_space:		push	de
+					IFDEF	VERTEX_NUDGE
+					push	af
+					ld		hl,(vertex_nudges)	; its nudge: 3 A in
+					ld		a,h
+					or		l
+					jr		z,.no_nudges
+					pop		af
+					push	af
+					ld		e,a
+					ld		d,0
+					add		hl,de
+					add		hl,de
+					add		hl,de
+.no_nudges:			ld		(nudge_at),hl
+					call	nudge_vertex
+					pop		af
+					ENDIF
 					ld		l,a
 					ld		h,0
 					ld		e,l
@@ -1948,15 +2074,15 @@ cut_edges:
 					add		hl,de
 					call	rotate
 					pop		ix
-					COMBINE	0, rot_x, view_t
+					COMBINE	0, rot_x, POINT_FROM
 					QUARTER
 					ld		(ix + 0),l
 					ld		(ix + 1),h
-					COMBINE	0, rot_y, view_t + 3
+					COMBINE	0, rot_y, POINT_FROM + 3
 					QUARTER
 					ld		(ix + 2),l
 					ld		(ix + 3),h
-					COMBINE	0, rot_z, view_t + 6
+					COMBINE	0, rot_z, POINT_FROM + 6
 					QUARTER
 					ld		(ix + 4),l
 					ld		(ix + 5),h
@@ -2122,6 +2248,26 @@ cut_crossing:
 
 divide24:
 					ld		b,a					; B: the sign
+					IFDEF	PROJECT_FINE
+					or		a					; rounded: |A:H:L| + C / 2
+					jp		p,.rounding
+					ld		d,a
+					xor		a
+					sub		l
+					ld		l,a
+					ld		a,0
+					sbc		a,h
+					ld		h,a
+					ld		a,0
+					sbc		a,d
+.rounding:			ld		e,c
+					srl		e
+					ld		d,0
+					add		hl,de
+					adc		a,d
+					jr		nz,.wide
+					jr		.fits
+					ENDIF
 					or		a
 					jp		m,.negative
 					jr		nz,.wide

@@ -565,20 +565,32 @@ def view_point(rotated, t):
     return tuple(a + b for a, b in zip(rotated, t))
 
 
-def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96):
+def to_signed24(value: int) -> int:
+    return ((value + 0x800000) & 0xFFFFFF) - 0x800000
+
+
+def project_far(rotated, t, centre_x: int = 128, centre_y: int = 96, fine: bool = False):
     """Where a vertex lands: c = its rotation plus T, 24-bit; then shifted
     right by just enough to bring its depth into 8 bits (Z = c_z >> (8 + s)),
     so that one quick divide by a byte will do at any distance. None if
-    behind the near plane (c_z < NEAR_PLANE)."""
+    behind the near plane (c_z < NEAR_PLANE).
+
+    With fine (PROJECT_FINE), a near depth is shifted left as far as a far
+    one is right, so that Z is always 128..255: as it is, c_z >> 8 near the
+    eye is a few units, and a point 20 units away lands up to a tenth out.
+    x and y go left with it, in 24 bits; and the quotient is rounded,
+    |v| + Z / 2 divided, rather than truncated."""
     cx, cy, cz = view_point(rotated, t)
     if cz < NEAR_PLANE:
         return None
-    s = max(0, (cz >> 8).bit_length() - 8)
-    z = cz >> (8 + s)
+    s = (cz >> 8).bit_length() - 8
+    if not fine:
+        s = max(0, s)
+    z = cz >> (8 + s) if s >= 0 else (cz << -s) >> 8
 
     def divide(v: int) -> int:
-        v >>= s                                         # floor, as SRA does
-        q = min(abs(v) // z, WIDE_LIMIT)
+        v = v >> s if s >= 0 else to_signed24(v << -s)  # floor, as SRA does
+        q = min((abs(v) + (z >> 1 if fine else 0)) // z, WIDE_LIMIT)
         return -q if v < 0 else q
     return centre_x + divide(cx), centre_y - divide(cy)
 
@@ -666,20 +678,24 @@ def cut_edge(behind, front, centre_x: int = 128, centre_y: int = 96) -> tuple[in
     return centre_x + x, centre_y - y
 
 
-def object_lines(vertices, edges, m, t, centre_x: int = 128, centre_y: int = 96) -> tuple[list, list]:
+def object_lines(vertices, edges, m, t, centre_x: int = 128, centre_y: int = 96, fine: bool = False,
+                 nudges=None) -> tuple[list, list]:
     """An object's points (transform_object's: None behind the near plane)
     and its cut lines (cut_edges'): for each edge, in order, that crosses
     the near plane, its front end's point and where it is cut, x0, y0, x1,
     y1. The edges with both ends in front are drawn between the points.
-    The centre is the engine's SCREEN_CENTRE_X and _Y."""
+    The centre is the engine's SCREEN_CENTRE_X and _Y. fine is
+    PROJECT_FINE's projection; nudges (VERTEX_NUDGE), for each vertex, a
+    small offset its T takes, the program's to give."""
     rotated = [rotate(m, v) for v in vertices]
-    points = [project_far(r, t, centre_x, centre_y) for r in rotated]
+    ts = [t if nudges is None else tuple(a + b for a, b in zip(t, nudge)) for nudge in (nudges or [None] * len(vertices))]
+    points = [project_far(r, tk, centre_x, centre_y, fine) for r, tk in zip(rotated, ts)]
     cuts = []
     for i, j in edges:
         if (points[i] is None) != (points[j] is None):
             front, behind = (i, j) if points[j] is None else (j, i)
-            cuts.append(points[front] + cut_edge(view_point(rotated[behind], t), view_point(rotated[front], t),
-                                                 centre_x, centre_y))
+            cuts.append(points[front] + cut_edge(view_point(rotated[behind], ts[behind]),
+                                                 view_point(rotated[front], ts[front]), centre_x, centre_y))
     return points, cuts
 
 
