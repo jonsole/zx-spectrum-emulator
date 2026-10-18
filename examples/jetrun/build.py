@@ -13,6 +13,7 @@ modules, so the Z80 and the Python model cannot disagree about them.
 """
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import shutil
@@ -152,22 +153,26 @@ def write_data(world: W.World) -> None:
     lines += ["", "; Each direction's surface row in each column of a step.", "surface_offsets:"]
     for dx, dy in W.TOGGLE_DIRECTIONS:
         lines.extend(db([W.surface_offset(dx, dy, i) if i < dx else 0 for i in range(16)]))
-    # The sprite is drawn at even x only (sprite.s's sprite_screen), so only
-    # the even shifts are built; an odd entry points at the shift below it.
-    lines += ["", "; The astronaut: frame * 8 + shift -> its bytes (even shifts only).", "sprite_frames:"]
-    lines.extend(dw([f"frame_{f}_{s & ~1}" for f in range(S.FRAME_COUNT) for s in range(S.SHIFT_COUNT)]))
+    # The view keeps the sprite at CENTRE_X on a byte boundary, and it never
+    # lags behind across (its 2-pixel step is the astronaut's top speed), so
+    # the sprite is only ever drawn at shift 0: only that is built, and every
+    # entry points at it. (check.py's model draws at whatever shift the place
+    # asks for, so a sprite off a byte boundary would show there.)
+    assert (M.PLAY_LEFT + G.CENTRE_X) % 8 == 0 and G.MAX_SPEED <= W.MOVE << 8
+    lines += ["", "; The astronaut: frame * 8 + shift -> its bytes (shift 0 only: see build.py).", "sprite_frames:"]
+    lines.extend(dw([f"frame_{f}_0" for f in range(S.FRAME_COUNT) for s in range(S.SHIFT_COUNT)]))
     for f in range(S.FRAME_COUNT):
-        for s in range(0, S.SHIFT_COUNT, 2):
-            lines.append(f"frame_{f}_{s}:")
-            lines.extend(db(S.frame_bytes(f, s), 6))
+        lines.append(f"frame_{f}_0:")
+        lines.extend(db(S.frame_bytes(f, 0), 6))
     OUT.mkdir(exist_ok=True)
     (OUT / "data.s").write_text(NEWLINE.join(lines) + NEWLINE, encoding="utf-8")
 
 
-def assemble() -> None:
+def assemble(defines: list[str]) -> None:
     result = subprocess.run(
         [find_sjasmplus(), "--nologo", "--fullpath", "--sld=output/jetrun.sld",
-         "--sym=output/jetrun.sym", "--lst=output/jetrun.lst", "jetrun.s"],
+         "--sym=output/jetrun.sym", "--lst=output/jetrun.lst"]
+        + [f"-D{name}" for name in defines] + ["jetrun.s"],
         cwd=HERE, capture_output=True, text=True)
     sys.stdout.write(result.stdout)
     sys.stderr.write(result.stderr)
@@ -180,13 +185,29 @@ def assemble() -> None:
         sys.exit("sjasmplus warned: fix it")
 
 
+def free_memory() -> int:
+    """Bytes between the end of the game and the interrupt's jump."""
+    table = {}
+    for line in (OUT / "jetrun.sym").read_text().splitlines():
+        if ": EQU " in line:
+            name, value = line.split(": EQU ")
+            table[name.strip()] = int(value, 16)
+    return table["IM2_JUMP"] - table["end_of_game"]
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--free-run", action="store_true",
+                        help="start each pass as soon as the last is done, not every two frames")
+    parser.add_argument("--border-timing", action="store_true",
+                        help="colour the border by the stage of the pass running (jetrun.s)")
+    args = parser.parse_args()
     W.check_schemas()
     world = W.load()
     world.validate()
     write_data(world)
-    assemble()
-    print(f"wrote {OUT / 'jetrun.sna'}")
+    assemble((["FREE_RUN"] if args.free_run else []) + (["BORDER_TIMING"] if args.border_timing else []))
+    print(f"wrote {OUT / 'jetrun.sna'}; {free_memory()} bytes free")
 
 
 if __name__ == "__main__":

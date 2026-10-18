@@ -4,15 +4,16 @@ to compare with the built game step for step.
 A pass, which the game starts on the frame interrupt (ADR 0003):
 
 1. put back what lay under the astronaut's sprite;
-2. draw the landscape for the view: Cyberun's renderer, which the model
+2. save what lies under the sprite at its new place and draw it;
+3. draw the landscape for the view: Cyberun's renderer, which the model
    does not imitate -- draw() is handed it, and check.py hands it the Z80's;
-3. save what lies under the sprite at its new place and draw it;
+4. mend the sprite where the landscape drew over it (mend_sprite);
 5. read the controls and move the astronaut (the physics below);
-6. move the view to keep the astronaut in the dead zone.
+6. move the view to keep the astronaut at the centre.
 
-Steps 1-4 draw what steps 5-6 of the pass before worked out; they come first
-so the sprite is gone from the screen only while the beam is still in the
-top border.
+Steps 1-4 draw what steps 5-6 of the pass before worked out; they come first,
+and the sprite before the landscape, so the sprite is gone from the screen
+only while the beam is still in the top border.
 
 The physics works in 256ths of a pixel and probes the rock where the screen
 shows it: rock is the checker, so a pair of pixels with either set is rock,
@@ -37,7 +38,8 @@ RIGHT, LEFT, DOWN, UP, FIRE = 1, 2, 4, 8, 16
 GRAVITY = 0x0030        # a pass, per pass, in 256ths of a pixel
 THRUST = 0x0070         # the jetpack's push up, the same units
 ACCEL = 0x0030          # steering in the air
-WALK = 0x0100           # walking speed: a pixel a pass
+WALK = 0x0200           # walking speed: 2 pixels a pass, so the view scrolls
+                        # its 2-pixel step every pass rather than every other
 MAX_SPEED = 0x0200      # each way: the view can follow 2 pixels a pass
 
 # The body inside the sprite's 16 x 24 box: what collides.
@@ -132,6 +134,31 @@ class Game:
             for c in range(sx >> 3, ((sx + 15) >> 3) + 1):
                 self.attrs[r * 32 + c] = ASTRONAUT_ATTR
 
+    def mend_sprite(self) -> None:
+        """The sprite again where the landscape drew over it: a byte that is
+        not what place_sprite left is the landscape's, so it is what lies
+        under the sprite now. Cells likewise, by the astronaut's colour."""
+        sx, sy = self.drawn_at
+        data = S.frame_bytes(self.frame, sx & 7)
+        for r in range(S.HEIGHT):
+            for b in range(3):
+                at = M.screen_offset((sx >> 3) + b, sy + r)
+                i = r * 3 + b
+                mask, ink = data[r * 6 + b * 2], data[r * 6 + b * 2 + 1]
+                now = self.screen.pixels[at]
+                if now != (self.saved[i] & mask) | ink:
+                    self.saved[i] = now
+                    self.screen.pixels[at] = (now & mask) | ink
+        rows = 3 if sy & 7 == 0 else 4
+        columns = 2 if sx & 7 == 0 else 3
+        for r in range(4):
+            for c in range(3):
+                at = ((sy >> 3) + r) * 32 + (sx >> 3) + c
+                if self.attrs[at] != ASTRONAUT_ATTR:
+                    self.saved_attrs[r * 3 + c] = self.attrs[at]
+                if r < rows and c < columns:
+                    self.attrs[at] = ASTRONAUT_ATTR
+
     # ---- probing the rock ------------------------------------------------------
 
     def rock(self, px: int, py: int) -> bool:
@@ -174,10 +201,11 @@ class Game:
     # ---- a pass ----------------------------------------------------------------
 
     def draw(self, landscape) -> None:
-        """Steps 1-3; `landscape(game)` is step 2."""
+        """Steps 1-4; `landscape(game)` is step 3."""
         self.restore_sprite()
-        landscape(self)
         self.place_sprite()
+        landscape(self)
+        self.mend_sprite()
 
     def move(self, keys: int) -> None:
         """Steps 5-6."""

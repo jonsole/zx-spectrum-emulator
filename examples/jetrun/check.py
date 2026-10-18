@@ -11,16 +11,19 @@ the model:
    to the view), the sprite and the attributes;
 3. a journey of a few thousand passes -- walking up hills, flying, falling
    down the shaft into the cavern and round it -- each pass restore_sprite,
-   landscape_pass, place_sprite and move with the controls set,
+   place_sprite, landscape_pass, mend_sprite and move with the controls set,
    against the model's: every byte of the screen and attributes, and the
    astronaut's and the view's state. The landscape itself is Cyberun's
    renderer (ADR 0007), which the model does not imitate: the model takes
    the Z80's screen and attributes after landscape_pass (Cyberun's
    colour_piece colours the cells along the surfaces). Every 100 passes the
    screen is also
-   compared with a fresh landscape_full at the same view and the bytes that
-   differ counted: Cyberun's renderer is not exact at the view's edges, so
-   this is reported, not failed;
+   compared, with the sprite taken off, with a fresh landscape_full at the
+   same view and the bytes that differ counted: Cyberun's renderer is not
+   exact at the view's edges, and mend_sprite cannot see a landscape byte
+   written over the sprite that happens to equal what the sprite left there
+   (it then keeps the old byte as what lies under it), so this is reported,
+   not failed;
 4. the whole game from its start, with the frame interrupt: every pass must
    begin exactly two frames after the last (ADR 0003), and the step graphics
    that Cyberun's blitters read with SP must never be left changed by the
@@ -156,11 +159,14 @@ def take_screen(z: Z80):
 
 def fresh_difference(z: Z80) -> int:
     """How many play-area bytes differ from a fresh landscape_full at the
-    same view, run on a copy of the machine."""
+    same view, run on a copy of the machine with the sprite taken off: so
+    this also checks that mend_sprite kept what lies under it."""
     copy = Z80()
     copy.memory[:] = z.memory[:]
+    copy.call("restore_sprite")
+    before = play_area(copy)
     copy.call("landscape_full")
-    return sum(a != b for a, b in zip(play_area(z), play_area(copy)))
+    return sum(a != b for a, b in zip(before, play_area(copy)))
 
 
 def compare(z: Z80, game: G.Game, what: str) -> None:
@@ -206,13 +212,16 @@ def check_journey(world: W.World, z: Z80) -> None:
             t = z.call("restore_sprite")
             game.restore_sprite()
             compare(z, game, f"pass {passes}: restore_sprite")
-            land = z.call("landscape_pass")
-            if passes % 100 == 0:
-                apart.append(fresh_difference(z))
-            take_screen(z)(game)
             t += z.call("place_sprite")
             game.place_sprite()
             compare(z, game, f"pass {passes}: place_sprite")
+            land = z.call("landscape_pass")
+            take_screen(z)(game)
+            t += z.call("mend_sprite")
+            game.mend_sprite()
+            compare(z, game, f"pass {passes}: mend_sprite")
+            if passes % 100 == 0:
+                apart.append(fresh_difference(z))
             draws.append(t + land)
             landscapes.append(land)
             z.poke("controls", keys)
@@ -289,6 +298,11 @@ def check_interrupts() -> None:
                 sys.exit(f"4. with interrupts: pass {passes}: the step graphics changed at 0x{lo + k:04X}")
     gaps = [b - a for a, b in zip(starts[1:], starts[2:])]
     late = [g for g in gaps if abs(g - PASS_T) > 100]
+    if "free_run" in z.sym:
+        print(f"4. with interrupts, free-running (build.py --free-run): {passes} passes, "
+              f"{min(gaps)}-{max(gaps)} T-states apart, {sum(gaps) / len(gaps):.0f} average; "
+              f"the step graphics never changed")
+        return
     print(f"4. with interrupts: {passes} passes, {len(gaps) - len(late)} of {len(gaps)} began two frames "
           f"after the last ({min(gaps)}-{max(gaps)} T-states apart); the step graphics never changed")
     if late:

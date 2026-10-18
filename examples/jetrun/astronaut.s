@@ -70,18 +70,29 @@ read_controls:
     ret
 
 ; ---------------------------------------------------------------------------
-; rock: whether world pixel HL, DE (x, y; 16-bit) is rock. NZ if it is.
+; The rock probes. Rock is read from the screen a byte at a time: a pair of
+; pixels with either set is rock (the checker), so a byte answers for four
+; pairs at once under a mask, and a column is walked down the screen rather
+; than worked out again for every row. Inside the sprite's box the bytes come
+; from what was saved from under it, so the astronaut never collides with
+; itself. game.py's rock() asks the same question a pixel at a time; the
+; answers are the same.
 
-rock:
+; above: carry if world row DE is above CEILING: nothing flies there.
+above:
     bit 7,d
-    jp nz,.above            ; nothing flies above CEILING
+    scf
+    ret nz
     ld a,d
     or a
-    jr nz,.below_ceiling
+    ret nz                  ; carry clear
     ld a,e
     cp CEILING
-    jp c,.above
-.below_ceiling:
+    ret
+
+; to_screen: world pixel HL, DE (x, y; 16-bit) on the screen: rk_sx, and
+; rk_sy in C.
+to_screen:
     push de
     ld de,(view_x)
     or a
@@ -108,84 +119,129 @@ rock:
     add a,PLAY_TOP
     ld (rk_sy),a
     ld c,a
-    ; Inside the sprite's box: the saved bytes.
+    ret
+
+; mask_of: A = the mask from table HL for the pair at screen x A.
+mask_of:
+    and 6
+    rra
+    add a,l
+    ld l,a
+    jr nc,.same_page
+    inc h
+.same_page:
+    ld a,(hl)
+    ret
+
+; probe_byte: A = the byte rock is read from at screen column B, row C: what
+; was saved from under the sprite inside its box, else the screen's.
+probe_byte:
+    ld a,(drawn_y)
+    ld e,a
+    ld a,c
+    sub e
+    cp SPRITE_H
+    jr nc,.screen
+    ld e,a                  ; the row within the box
     ld a,(drawn_x)
     rra
     rra
     rra
     and 0x1F
-    ld b,a                  ; the sprite's first column
+    ld d,a
+    ld a,b
+    sub d
+    cp 3
+    jr nc,.screen
+    ld d,a                  ; saved[row * 3 + column]
+    ld a,e
+    add a,a
+    add a,e
+    add a,d
+    ld e,a
+    ld d,0
+    ld hl,sprite_saved
+    add hl,de
+    ld a,(hl)
+    ret
+.screen:
+    ld a,b
+    call screen_address
+    ld a,(de)
+    ret
+
+pair_masks:                 ; one pair
+    db 0xC0, 0x30, 0x0C, 0x03
+first_masks:                ; a pair and those right of it in the byte
+    db 0xFF, 0x3F, 0x0F, 0x03
+last_masks:                 ; a pair and those left of it
+    db 0xC0, 0xF0, 0xFC, 0xFF
+
+; row_rock: any rock in world row DE across the body, the sprite's left at
+; HL: x from HL + BODY_LEFT to HL + BODY_RIGHT. NZ if any. Two or three
+; bytes: the first and last masked down to the body's pairs.
+row_rock:
+    call above
+    jr nc,.below
+    or 1
+    ret
+.below:
+    ld bc,BODY_LEFT
+    add hl,bc
+    call to_screen          ; C = the screen row
+    ld a,(rk_sx)
+    ld hl,first_masks
+    call mask_of
+    ld (rr_mask),a
+    ld a,(rk_sx)
+    add a,BODY_RIGHT - BODY_LEFT
+    ld d,a                  ; the last pixel's x
+    ld hl,last_masks
+    call mask_of
+    ld (rr_last),a
     ld a,(rk_sx)
     rra
     rra
     rra
     and 0x1F
-    ld (rk_col),a
-    sub b
-    cp 3
-    jr nc,.screen
-    ld e,a                  ; the column within the sprite: 0-2
-    ld a,(drawn_y)
-    ld b,a
-    ld a,c
-    sub b
-    cp SPRITE_H
-    jr nc,.screen
-    ld l,a                  ; saved[row * 3 + column]
-    ld h,0
-    ld d,h
-    add hl,hl
-    add a,l
-    ld l,a
-    add hl,de
-    ld de,sprite_saved
-    add hl,de
-    ld a,(hl)
-    jr .test
-.screen:
-    ld a,(rk_col)
-    call screen_address
-    ld a,(de)
-.test:
-    ld b,a
-    ld a,(rk_sx)
-    and 6
+    ld b,a                  ; the first column
+    ld a,d
     rra
-    ld e,a
-    ld d,0
-    ld hl,pair_masks
-    add hl,de
-    ld a,(hl)
-    and b
-    ret
-.above:
-    or 1
-    ret
-
-pair_masks:
-    db 0xC0, 0x30, 0x0C, 0x03
-
-; row_rock: any rock in world row DE across the body, the sprite's left at
-; HL: x from HL + BODY_LEFT to HL + BODY_RIGHT. NZ if any.
-row_rock:
-    ld bc,BODY_LEFT
-    add hl,bc
-    ld b,BODY_RIGHT - BODY_LEFT + 1
-.pixel:
+    rra
+    rra
+    and 0x1F
+    sub b
+    ld (rr_count),a         ; columns after the first: 1 or 2
+.byte:
     push bc
-    push hl
-    push de
-    call rock
-    pop de
-    pop hl
+    call probe_byte
     pop bc
+    ld e,a
+    ld a,(rr_count)
+    or a
+    ld a,(rr_mask)
+    jr nz,.not_last
+    ld d,a
+    ld a,(rr_last)
+    and d
+.not_last:
+    and e
     ret nz
-    inc hl
-    djnz .pixel
-    ret                     ; Z: none
+    ld a,(rr_count)
+    sub 1
+    jr c,.none
+    ld (rr_count),a
+    ld a,0xFF
+    ld (rr_mask),a
+    inc b
+    jr .byte
+.none:
+    xor a                   ; Z: none
+    ret
 
 ; column_rock: any rock in world column HL from row DE + B to DE + C. NZ if
-; any.
+; any. The rows above the sprite's box, in it and below it are each walked
+; in a run.
 column_rock:
     push hl
     ld l,b
@@ -196,18 +252,139 @@ column_rock:
     ld a,c
     sub b
     inc a
+    ld (cr_count),a
+    call above              ; the first row is the highest
+    jr nc,.below
+    or 1
+    ret
+.below:
+    call to_screen          ; C = the first screen row
+    ld a,(rk_sx)
+    ld hl,pair_masks
+    call mask_of
+    ld (cr_mask),a
+    ld a,(rk_sx)
+    rra
+    rra
+    rra
+    and 0x1F
+    ld (rk_col),a
     ld b,a
-.pixel:
-    push bc
-    push hl
-    push de
-    call rock
-    pop de
-    pop hl
-    pop bc
+    ld a,(drawn_x)
+    rra
+    rra
+    rra
+    and 0x1F
+    ld d,a
+    ld a,b
+    sub d
+    cp 3
+    jr nc,.rest             ; outside the box's columns: all from the screen
+    ld (cr_offset),a
+    ld a,(drawn_y)          ; the rows above the box
+    sub c
+    jr c,.box
+    jr z,.box
+    ld b,a
+    ld a,(cr_count)
+    cp b
+    jr nc,.above_box
+    ld b,a
+.above_box:
+    call column_screen
     ret nz
-    inc de
-    djnz .pixel
+    ld a,(cr_count)
+    or a
+    ret z
+.box:
+    ld a,(drawn_y)          ; the rows in the box
+    ld b,a
+    ld a,c
+    sub b
+    cp SPRITE_H
+    jr nc,.rest
+    ld e,a                  ; the row within the box
+    ld a,SPRITE_H
+    sub e
+    ld b,a                  ; its rows from there
+    ld a,(cr_count)
+    cp b
+    jr nc,.in_box
+    ld b,a
+.in_box:
+    sub b
+    ld (cr_count),a
+    ld a,c
+    add a,b
+    ld (cr_row),a           ; the row after them
+    ld a,e                  ; saved[row * 3 + column]
+    add a,a
+    add a,e
+    ld e,a
+    ld a,(cr_offset)
+    add a,e
+    ld e,a
+    ld d,0
+    ld hl,sprite_saved
+    add hl,de
+    ld de,3
+    ld a,(cr_mask)
+    ld c,a
+.saved:
+    ld a,(hl)
+    and c
+    ret nz
+    add hl,de
+    djnz .saved
+    ld a,(cr_count)
+    or a
+    ret z
+    ld a,(cr_row)
+    ld c,a
+.rest:
+    ld a,(cr_count)         ; the rest, from the screen
+    ld b,a
+    ; on into column_screen
+
+; column_screen: B rows down the screen from row C in column rk_col, under
+; cr_mask. NZ at rock; C moves past them and cr_count goes down by B.
+column_screen:
+    ld a,(cr_count)
+    sub b
+    ld (cr_count),a
+    ld a,c
+    add a,b
+    push af                 ; the row after them
+    ld a,(rk_col)
+    call screen_address
+    ex de,hl
+    ld a,(cr_mask)
+    ld c,a
+.row:
+    ld a,(hl)
+    and c
+    jr nz,.rock
+    inc h                   ; next_row's step down a line
+    ld a,h
+    and 7
+    jr nz,.next
+    ld a,l
+    add a,0x20
+    ld l,a
+    jr c,.next
+    ld a,h
+    sub 8
+    ld h,a
+.next:
+    djnz .row
+    pop af
+    ld c,a
+    xor a                   ; Z: none
+    ret
+.rock:
+    pop af
+    ld c,a
+    or 1
     ret
 
 ; ---------------------------------------------------------------------------

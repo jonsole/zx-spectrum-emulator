@@ -21,6 +21,22 @@
 IM2_TABLE   equ 0xFE00
 IM2_JUMP    equ 0xFDFD
 
+; build.py --border-timing: the border shows which stage of a pass is
+; running, so its timing against the beam can be watched.
+BORDER_IDLE      equ 0      ; black: waiting for the frame
+BORDER_RESTORE   equ 1      ; blue: restore_sprite
+BORDER_PLACE     equ 2      ; red: place_sprite
+BORDER_LANDSCAPE equ 4      ; green: landscape_pass, Cyberun's renderer
+BORDER_MEND      equ 3      ; magenta: mend_sprite
+BORDER_MOVE      equ 6      ; yellow: read_controls and move
+
+    MACRO BORDER colour
+    IFDEF BORDER_TIMING
+    ld a,colour
+    out (0xFE),a
+    ENDIF
+    ENDM
+
     ORG 0x8000
 
 start:
@@ -56,6 +72,7 @@ start:
     ei
 
 main_loop:
+    IFNDEF FREE_RUN
 .wait:
     halt                    ; a pass is two frames (ADR 0003)
     ld a,(frames)
@@ -63,9 +80,14 @@ main_loop:
     jr c,.wait
     xor a
     ld (frames),a
+    ELSE
+free_run    equ 1           ; build.py --free-run: each pass as soon as the last
+    ENDIF                   ; is done, however long it took
     call draw_pass
+    BORDER BORDER_MOVE
     call read_controls
     call move
+    BORDER BORDER_IDLE
     jr main_loop
 
 ; isr: count the frame. The interrupt can come while one of Cyberun's
@@ -156,11 +178,18 @@ life_state:
     ld (cyberun.ground_attr_below),a
     ret
 
-; draw_pass: what the last pass worked out, put on the screen.
+; draw_pass: what the last pass worked out, put on the screen. The sprite
+; first, so that it is back on the screen long before the beam reaches it
+; (sprite.s).
 draw_pass:
+    BORDER BORDER_RESTORE
     call restore_sprite
+    BORDER BORDER_PLACE
+    call place_sprite
+    BORDER BORDER_LANDSCAPE
     call landscape_pass
-    jp place_sprite
+    BORDER BORDER_MEND
+    jp mend_sprite
 
     INCLUDE "landscape.s"
     INCLUDE "sprite.s"
@@ -218,6 +247,13 @@ pa_y:           db 0
 rk_sx:          db 0
 rk_sy:          db 0
 rk_col:         db 0
+rr_mask:        db 0        ; row_rock's
+rr_last:        db 0
+rr_count:       db 0
+cr_mask:        db 0        ; column_rock's
+cr_count:       db 0
+cr_offset:      db 0
+cr_row:         db 0
 target:         ds 3
 mv_px:          dw 0
 mv_py:          dw 0
