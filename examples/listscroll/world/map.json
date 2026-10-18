@@ -1,0 +1,13 @@
+{
+  "$schema": "./map.schema.json",
+  "rows": [
+    ["sky", "sky", "sky", "sky", "sky", "sky", "sky", "sky"],
+    ["plain", "hill", "pit", "peak", "ledge", "dip", "hill", "peak"],
+    ["tunnel", "shaft_down", "shaft_in", "stalactites", "tunnel_up", "tunnel_high", "tunnel_down", "cavern"],
+    ["rock", "shaft", "rock", "pocket", "rock", "pocket_wide", "rock", "rock"],
+    ["dead_end_left", "cavern_shaft", "tunnel", "stalagmites", "tunnel_up", "tunnel_down", "shaft_down", "dead_end_right"],
+    ["rock", "rock", "rock", "rock", "rock", "rock", "shaft", "rock"],
+    ["rock", "rock", "rock", "pocket", "dead_end_left", "tunnel", "cavern_shaft", "dead_end_right"],
+    ["rock", "rock", "rock", "rock", "rock", "rock", "rock", "rock"]
+  ]
+}

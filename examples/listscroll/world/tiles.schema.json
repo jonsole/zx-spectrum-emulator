@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "listscroll tiles",
+  "description": "Every tile a page of the world can hold, keyed by the tile's name. A page is 256 pixels across and 256 lines down. A tile is a list of pieces: straight runs of identical steps in one of Cyberun's directions, with its step sizes. Rock is decided down each world column: sky above the world, and every floor or ceiling crossing the column turns sky to rock or rock to open. So sky, solid rock and a shaft through rock are all tiles with no pieces; they get their own names because the pieces that draw a page's edges belong to its tile. See build.py.",
+  "type": "object",
+  "required": ["tiles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "tiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/tile"}
+    }
+  },
+  "$defs": {
+    "tile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["pieces"],
+          "additionalProperties": false,
+          "properties": {"pieces": {"type": "array", "items": {"$ref": "#/$defs/piece"}}}
+        },
+        {
+          "type": "object",
+          "required": ["mirroredFrom"],
+          "additionalProperties": false,
+          "properties": {"mirroredFrom": {"description": "Another tile's pieces, mirrored left to right in the page.", "type": "string"}}
+        },
+        {
+          "type": "object",
+          "required": ["upsideDownFrom"],
+          "additionalProperties": false,
+          "properties": {"upsideDownFrom": {"description": "Another tile's pieces, turned upside down in the page: floors become ceilings.", "type": "string"}}
+        }
+      ]
+    },
+    "piece": {
+      "type": "object",
+      "required": ["x", "y", "direction", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "x": {"description": "The piece's left end, in pixels from the page's left edge.", "type": "integer", "minimum": 0, "maximum": 255},
+        "y": {"description": "The surface's line at the piece's left end: the first line of the side it turns to (rock below a floor, open below a ceiling).", "type": "integer", "minimum": 1, "maximum": 255},
+        "direction": {
+          "description": "Cyberun's directions, without its walls (a wall is where a surface stops). Flat steps are 8 pixels long here (Cyberun's are 24); gentle slopes 16 across and 8 up, plain ones 8 and 8, steep ones 8 and 16. Floors have rock below, ceilings open below; 'up' climbs to the right, 'down' falls to the right.",
+          "enum": [
+            "floor", "floor-up-gentle", "floor-up", "floor-up-steep",
+            "floor-down-gentle", "floor-down", "floor-down-steep",
+            "ceiling", "ceiling-up-gentle", "ceiling-up", "ceiling-up-steep",
+            "ceiling-down-gentle", "ceiling-down", "ceiling-down-steep"
+          ]
+        },
+        "steps": {"type": "integer", "minimum": 1, "maximum": 32}
+      }
+    }
+  }
+}

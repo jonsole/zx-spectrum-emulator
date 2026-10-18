@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "listscroll map",
+  "description": "The world's pages, row by row from the top, each the name of a tile in tiles.json. Exactly 8 pages across (a world column is a byte, and the world wraps round across); up to 32 rows down, not wrapping.",
+  "type": "object",
+  "required": ["rows"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "string"}}
+    }
+  }
+}

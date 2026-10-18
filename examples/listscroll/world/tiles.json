@@ -1,0 +1,124 @@
+{
+  "$schema": "./tiles.schema.json",
+  "tiles": {
+    "sky": {"pieces": []},
+    "rock": {"pieces": []},
+    "shaft": {"pieces": []},
+    "plain": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 32}
+    ]},
+    "hill": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 6},
+      {"x": 48, "y": 160, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 112, "y": 128, "direction": "floor", "steps": 4},
+      {"x": 144, "y": 128, "direction": "floor-down-gentle", "steps": 4},
+      {"x": 208, "y": 160, "direction": "floor", "steps": 6}
+    ]},
+    "peak": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 8},
+      {"x": 64, "y": 160, "direction": "floor-up", "steps": 6},
+      {"x": 112, "y": 112, "direction": "floor-up-steep", "steps": 2},
+      {"x": 128, "y": 80, "direction": "floor-down-steep", "steps": 2},
+      {"x": 144, "y": 112, "direction": "floor-down", "steps": 6},
+      {"x": 192, "y": 160, "direction": "floor", "steps": 8}
+    ]},
+    "dip": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 6},
+      {"x": 48, "y": 160, "direction": "floor-down-gentle", "steps": 4},
+      {"x": 112, "y": 192, "direction": "floor", "steps": 4},
+      {"x": 144, "y": 192, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 208, "y": 160, "direction": "floor", "steps": 6}
+    ]},
+    "ledge": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 12},
+      {"x": 96, "y": 160, "direction": "floor-up-steep", "steps": 4},
+      {"x": 128, "y": 96, "direction": "floor", "steps": 12},
+      {"x": 192, "y": 112, "direction": "ceiling", "steps": 4},
+      {"x": 192, "y": 160, "direction": "floor", "steps": 8}
+    ]},
+    "pit": {"pieces": [
+      {"x": 0, "y": 160, "direction": "floor", "steps": 12},
+      {"x": 160, "y": 160, "direction": "floor", "steps": 12}
+    ]},
+    "tunnel": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 32},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 32}
+    ]},
+    "tunnel_up": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 8},
+      {"x": 64, "y": 96, "direction": "ceiling-up-gentle", "steps": 4},
+      {"x": 128, "y": 64, "direction": "ceiling", "steps": 16},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 8},
+      {"x": 64, "y": 160, "direction": "floor-up-gentle", "steps": 4},
+      {"x": 128, "y": 128, "direction": "floor", "steps": 16}
+    ]},
+    "tunnel_down": {"mirroredFrom": "tunnel_up"},
+    "tunnel_high": {"pieces": [
+      {"x": 0, "y": 64, "direction": "ceiling", "steps": 32},
+      {"x": 0, "y": 128, "direction": "floor", "steps": 32}
+    ]},
+    "shaft_in": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 12},
+      {"x": 160, "y": 96, "direction": "ceiling", "steps": 12},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 32}
+    ]},
+    "shaft_down": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 32},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 12},
+      {"x": 160, "y": 160, "direction": "floor", "steps": 12}
+    ]},
+    "stalactites": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 4},
+      {"x": 32, "y": 96, "direction": "ceiling-down-steep", "steps": 2},
+      {"x": 48, "y": 128, "direction": "ceiling-up-steep", "steps": 2},
+      {"x": 64, "y": 96, "direction": "ceiling", "steps": 8},
+      {"x": 128, "y": 96, "direction": "ceiling-down-steep", "steps": 2},
+      {"x": 144, "y": 128, "direction": "ceiling-up-steep", "steps": 2},
+      {"x": 160, "y": 96, "direction": "ceiling", "steps": 12},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 32}
+    ]},
+    "stalagmites": {"upsideDownFrom": "stalactites"},
+    "cavern": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 4},
+      {"x": 32, "y": 96, "direction": "ceiling-up", "steps": 6},
+      {"x": 80, "y": 48, "direction": "ceiling", "steps": 12},
+      {"x": 176, "y": 48, "direction": "ceiling-down", "steps": 6},
+      {"x": 224, "y": 96, "direction": "ceiling", "steps": 4},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 4},
+      {"x": 32, "y": 160, "direction": "floor-down-steep", "steps": 3},
+      {"x": 56, "y": 208, "direction": "floor", "steps": 18},
+      {"x": 200, "y": 208, "direction": "floor-up-steep", "steps": 3},
+      {"x": 224, "y": 160, "direction": "floor", "steps": 4}
+    ]},
+    "cavern_shaft": {"pieces": [
+      {"x": 0, "y": 96, "direction": "ceiling", "steps": 4},
+      {"x": 32, "y": 96, "direction": "ceiling-up", "steps": 6},
+      {"x": 80, "y": 48, "direction": "ceiling", "steps": 2},
+      {"x": 160, "y": 48, "direction": "ceiling", "steps": 2},
+      {"x": 176, "y": 48, "direction": "ceiling-down", "steps": 6},
+      {"x": 224, "y": 96, "direction": "ceiling", "steps": 4},
+      {"x": 0, "y": 160, "direction": "floor", "steps": 4},
+      {"x": 32, "y": 160, "direction": "floor-down-steep", "steps": 3},
+      {"x": 56, "y": 208, "direction": "floor", "steps": 18},
+      {"x": 200, "y": 208, "direction": "floor-up-steep", "steps": 3},
+      {"x": 224, "y": 160, "direction": "floor", "steps": 4}
+    ]},
+    "dead_end_left": {"pieces": [
+      {"x": 64, "y": 96, "direction": "ceiling", "steps": 24},
+      {"x": 64, "y": 160, "direction": "floor", "steps": 24}
+    ]},
+    "dead_end_right": {"mirroredFrom": "dead_end_left"},
+    "pocket": {"pieces": [
+      {"x": 96, "y": 128, "direction": "ceiling-up", "steps": 4},
+      {"x": 128, "y": 96, "direction": "ceiling-down", "steps": 4},
+      {"x": 96, "y": 128, "direction": "floor-down", "steps": 4},
+      {"x": 128, "y": 160, "direction": "floor-up", "steps": 4}
+    ]},
+    "pocket_wide": {"pieces": [
+      {"x": 64, "y": 128, "direction": "ceiling-up-gentle", "steps": 4},
+      {"x": 128, "y": 96, "direction": "ceiling-down-gentle", "steps": 4},
+      {"x": 64, "y": 128, "direction": "floor-down-gentle", "steps": 4},
+      {"x": 128, "y": 160, "direction": "floor-up-gentle", "steps": 4}
+    ]}
+  }
+}

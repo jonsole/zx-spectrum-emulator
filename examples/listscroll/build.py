@@ -2,14 +2,20 @@
 sky, caverns and tunnels -- a map of pages, each page a tile whose edges are
 pieces drawn by a display list; then assemble listscroll.s with sjasmplus.
 
-The map is MAP, rows of pages, a tile name a page; a page is 256 pixels (32
-byte columns) by 256 lines. A tile is drawn in TILES as 16 rows of 16 cells,
-each cell 16 pixels square: rock, open, or rock in one half of it, cut on the
-diagonal in steps of 2 pixels. Tiles meet where their edges agree: a tunnel
-leaving one page's right side at some rows enters the next page's left side
-at the same rows. A piece in a page's first column also shows the last 6
-pixels of the page to its left (the world moved right), so a tile used in
-more than one place needs the pages to its left to end alike.
+The world is world/map.json, rows of pages, a tile name a page; a page is 256
+pixels (32 byte columns) by 256 lines. The tiles are world/tiles.json, each a
+list of pieces in Cyberun's way: straight runs of identical steps, flat or
+sloping gently, at 45 degrees or steeply, each a floor or a ceiling. As in
+Cyberun, rock is decided down each world column: sky above the world, and
+every surface crossing the column turns sky to rock or rock to open. So a
+tile holds only its surfaces, and sky, solid rock and a shaft are all tiles
+with no pieces. A wall is where a surface stops. Tiles meet where their
+surfaces do: a tunnel leaving one page's right side at some lines enters the
+next page's left side at the same lines. A piece in a page's first column
+also shows the last 6 pixels of the page to its left (the world moved right),
+so a tile used in more than one place needs the pages to its left to end
+alike; and a tile must be the same rock wherever it is, so the pages above
+it must leave the same columns rock.
 
 The screen is drawn once from the world at the start (screen_start). After
 that only the edges are redrawn, because the checker inside the rock and the
@@ -32,13 +38,13 @@ that change in any page holding it, at any fine position and for any move,
 covered from the top down, each by the window (2 columns, 8 lines ending on
 an odd line, inside the page) that covers most of those still uncovered.
 coverage() then checks the whole map, and the build stops if a piece's
-graphic differs between two pages holding its tile (it reaches into a
-neighbour that differs).
+graphic differs between two pages holding its tile.
 
     python examples/listscroll/build.py      # output/listscroll.sna
 """
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -49,94 +55,41 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 OUT = HERE / "output"
+WORLD_DIR = HERE / "world"
 
 PAGE_W = 256            # a page's width in pixels: 32 byte columns
 PAGE_H = 256            # and its height in lines: a line in the page is a byte
 PAGE_COLUMNS = PAGE_W // 8
-CELL = 16               # a tile's cells, in pixels
 PAIRS = 4               # every piece is 8 lines: 4 pairs
 
-# The tiles, 16 cells by 16: '#' rock, '.' open, and rock in half a cell:
-# '/' its lower right, '\' its lower left, 'P' its upper left, 'Q' its upper
-# right.
-OPEN = ["." * 16] * 16
-ROCK = ["#" * 16] * 16
-TILES = {
-    "sky": OPEN,
-    "rock": ROCK,
-    "flat": ["." * 16] * 10 + ["#" * 16] * 6,
-    "hill": ["." * 16] * 6 + [
-        "....../##\\......",
-        "...../####\\.....",
-        "..../######\\....",
-        ".../########\\...",
-    ] + ["#" * 16] * 6,
-    "twin": ["." * 16] * 7 + [
-        "...../\\..../\\...",
-        "..../##\\../##\\..",
-        ".../####\\/####\\.",
-    ] + ["#" * 16] * 6,
-    "pit": ["." * 16] * 10 + ["######....######"] * 6,
-    "tunnel": ["#" * 16] * 6 + ["." * 16] * 4 + ["#" * 16] * 6,
-    "shaft_in": ["######....######"] * 6 + ["." * 16] * 4 + ["#" * 16] * 6,
-    "shaft_out": ["#" * 16] * 6 + ["." * 16] * 4 + ["######....######"] * 6,
-    "cavern": [
-        "################",
-        "################",
-        "######P..Q######",
-        "#####P....Q#####",
-        "####P......Q####",
-        "###P........Q###",
-        "................",
-        "................",
-        "................",
-        "................",
-        "###\\......../###",
-        "####\\....../####",
-        "#####\\..../#####",
-        "######\\../######",
-        "################",
-        "################",
-    ],
-    "chamber": [
-        "######....######",
-        "######....######",
-        "#####P....Q#####",
-        "####P......Q####",
-        "###P........Q###",
-        "##P..........Q##",
-        "#P............Q#",
-        "#..............#",
-        "................",
-        "................",
-        "................",
-        "................",
-        "#..............#",
-        "#\\............/#",
-        "##\\........../##",
-        "################",
-    ],
-    "low_tunnel": ["#" * 16] * 8 + ["." * 16] * 4 + ["#" * 16] * 4,
-    "low_end_left": ["#" * 16] * 8 + ["####............"] * 4 + ["#" * 16] * 4,
-    "low_end_right": ["#" * 16] * 8 + ["............####"] * 4 + ["#" * 16] * 4,
+# Cyberun's directions (examples/jetrun/world.py has its table): a step's run
+# across and its fall, down positive. Flat steps are 8 pixels here, so that a
+# run can be any multiple of 8 long; Cyberun's are 24.
+STEPS = {
+    "": (8, 0),
+    "-up-gentle": (16, -8),
+    "-up": (8, -8),
+    "-up-steep": (8, -16),
+    "-down-gentle": (16, 8),
+    "-down": (8, 8),
+    "-down-steep": (8, 16),
 }
-# The map: rows of pages, a tile a page, round the world across (8 pages: a
-# world column is a byte) and stopping at the top and bottom. The pit drops
-# into the tunnel that runs round the world; a shaft from it drops into the
-# chamber, whose tunnel ends in a wall each way.
-MAP = [
-    ["sky"] * 8,
-    ["flat", "pit", "hill", "twin", "flat", "hill", "flat", "twin"],
-    ["tunnel", "shaft_in", "tunnel", "cavern", "tunnel", "shaft_out", "cavern", "tunnel"],
-    ["rock", "rock", "rock", "low_end_left", "low_tunnel", "chamber", "low_tunnel", "low_end_right"],
-]
+
+TILES = json.loads((WORLD_DIR / "tiles.json").read_text(encoding="utf-8"))["tiles"]
+MAP = json.loads((WORLD_DIR / "map.json").read_text(encoding="utf-8"))["rows"]
+for _r, _row in enumerate(MAP):
+    for _c, _name in enumerate(_row):
+        if _name not in TILES:
+            sys.exit(f"map.json: row {_r}, column {_c}: no tile named {_name!r}")
 MAP_COLUMNS = len(MAP[0])
 MAP_ROWS = len(MAP)
 WORLD_W = PAGE_W * MAP_COLUMNS
 WORLD_H = PAGE_H * MAP_ROWS
 COLUMNS = WORLD_W // 8
-if COLUMNS != 256:
-    sys.exit("the map's columns are counted in a byte, round the world: 8 pages across")
+if COLUMNS != 256 or any(len(row) != MAP_COLUMNS for row in MAP):
+    sys.exit("map.json: the map's columns are counted in a byte, round the world: 8 pages across")
+if MAP_ROWS > 32:
+    sys.exit("map.json: a page's number (row * 8 + column) is a byte: at most 32 rows")
 VIEW_Y_START = PAGE_H                   # the screen's top line as the world starts
 VIEW_Y_MAX = WORLD_H - 192              # the lowest the view goes
 
@@ -147,40 +100,68 @@ def screen_offset(column: int, y: int) -> int:
 
 # ---- the world's pixels ----------------------------------------------------------
 
-def tile_rock(name: str):
-    """A tile's rock, 256 by 256, from its cells."""
-    rows = TILES[name]
-    if len(rows) != PAGE_H // CELL or any(len(r) != PAGE_W // CELL for r in rows):
-        sys.exit(f"tile {name}: not 16 rows of 16 cells")
-    # In a cell, x and y to the 2 pixels (the diagonal's steps).
-    px = (np.arange(CELL) & ~1)[None, :]
-    py = (np.arange(CELL) & ~1)[:, None]
-    shapes = {
-        "#": np.ones((CELL, CELL), dtype=bool),
-        ".": np.zeros((CELL, CELL), dtype=bool),
-        "/": px + py >= CELL - 2,
-        "\\": py >= px,
-        "P": px + py <= CELL - 2,
-        "Q": py <= px,
-    }
-    out = np.zeros((PAGE_H, PAGE_W), dtype=bool)
-    for r, row in enumerate(rows):
-        for c, ch in enumerate(row):
-            if ch not in shapes:
-                sys.exit(f"tile {name}: cell {ch!r}")
-            out[r * CELL:(r + 1) * CELL, c * CELL:(c + 1) * CELL] = shapes[ch]
-    return out
+def tile_surfaces(name: str):
+    """A tile's surfaces in its page: (PAGE_H + 1) x PAGE_W, true where a
+    surface crosses the column at that line (the first line it turns), and
+    each step of each piece as (column, line, floor or not) at its middle,
+    for the check that floors have rock below them."""
+    tile = TILES[name]
+    if "mirroredFrom" in tile or "upsideDownFrom" in tile:
+        source = tile.get("mirroredFrom") or tile.get("upsideDownFrom")
+        if source not in TILES or "pieces" not in TILES[source]:
+            sys.exit(f"tile {name}: {source!r} is not a tile with pieces")
+        cross, starts = tile_surfaces(source)
+        if "mirroredFrom" in tile:
+            return cross[:, ::-1], [(PAGE_W - 1 - c, line, floor) for c, line, floor in starts]
+        return cross[::-1], [(c, PAGE_H - line, not floor) for c, line, floor in starts]
+    cross = np.zeros((PAGE_H + 1, PAGE_W), dtype=bool)
+    starts = []
+    for k, piece in enumerate(tile["pieces"]):
+        direction = piece["direction"]
+        kind = "floor" if direction.startswith("floor") else "ceiling"
+        dx, dy = STEPS[direction[len(kind):]]
+        x, y = piece["x"], piece["y"]
+        for step in range(piece["steps"]):
+            for i in range(dx):
+                column = x + step * dx + i
+                line = y + step * dy + (dy * i) // dx
+                if not 0 <= column < PAGE_W or not 1 <= line < PAGE_H:
+                    sys.exit(f"tile {name}, piece {k}: leaves the page at ({column}, {line})")
+                cross[line, column] ^= True
+            # The step's middle column, for the check: its ends may meet
+            # another surface (a pocket's tips), which cancels them there.
+            i = dx // 2
+            starts.append((x + step * dx + i, y + step * dy + (dy * i) // dx, kind == "floor"))
+    return cross, starts
+
+
+def world_rock():
+    """The world's rock: down each column from sky, turned at each surface;
+    and every piece's step starts in world coordinates, checked against it."""
+    cross = np.zeros((WORLD_H + 1, WORLD_W), dtype=bool)
+    tiles = {name: tile_surfaces(name) for name in TILES}
+    for page_row, names in enumerate(MAP):
+        for page_column, name in enumerate(names):
+            x, y = page_column * PAGE_W, page_row * PAGE_H
+            cross[y:y + PAGE_H + 1, x:x + PAGE_W] ^= tiles[name][0]
+    rock = (np.cumsum(cross, axis=0, dtype=np.int32)[:WORLD_H] % 2) == 1
+    for page_row, names in enumerate(MAP):
+        for page_column, name in enumerate(names):
+            for column, line, floor in tiles[name][1]:
+                x, y = page_column * PAGE_W + column, page_row * PAGE_H + line
+                if bool(rock[y, x]) != floor:
+                    sys.exit(f"tile {name} at map row {page_row}, column {page_column}: the "
+                             f"{'floor' if floor else 'ceiling'} at ({column}, {line}) has "
+                             f"{'open' if floor else 'rock'} below it: the pages above leave "
+                             f"this column the other way")
+    return rock
 
 
 def world_bits():
     """The world's pixels (rock showing the checker, $55 on odd lines and
     $AA on even), with a screen's width more round the world so that any
     window onto it is a slice."""
-    rock = np.zeros((WORLD_H, WORLD_W), dtype=bool)
-    tiles = {name: tile_rock(name) for name in TILES}
-    for page_row, names in enumerate(MAP):
-        for page_column, name in enumerate(names):
-            rock[page_row * PAGE_H:(page_row + 1) * PAGE_H, page_column * PAGE_W:(page_column + 1) * PAGE_W] = tiles[name]
+    rock = world_rock()
     xs = np.arange(WORLD_W)
     ys = np.arange(WORLD_H)
     bits = (rock & ((xs[None, :] + ys[:, None]) % 2 == 0)).astype(np.uint8)
