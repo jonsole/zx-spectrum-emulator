@@ -1,0 +1,41 @@
+{
+  "name": "stepscroll-designer",
+  "displayName": "Stepscroll Designer",
+  "description": "Editors for examples/stepscroll: its own copy of Cyberun's terrain step graphics, and (to come) its map and tiles. Independent of the emulator extension.",
+  "version": "0.0.1",
+  "publisher": "jonsole",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonsole/zx-spectrum-emulator",
+    "directory": "examples/stepscroll/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Visualization", "Other"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCustomEditor:stepscroll.stepGraphics",
+    "onCommand:stepscroll.openStepGraphics"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "stepscroll.stepGraphics",
+        "displayName": "Stepscroll Step Graphics",
+        "selector": [
+          { "filenamePattern": "**/examples/stepscroll/world/steps.json" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "stepscroll.openStepGraphics",
+        "title": "Open Step Graphics",
+        "category": "Stepscroll"
+      }
+    ]
+  }
+}

@@ -1,25 +1,27 @@
-"""Build stepscroll: listscroll's display list drawing a world of Cyberun's own
-terrain steps (world.py, cyberun_steps.py); then assemble stepscroll.s with
+"""Build stepscroll: listscroll's display list drawing a world of Cyberun's
+terrain (world.py, cyberun_steps.py); then assemble stepscroll.s with
 sjasmplus.
 
 The world is drawn as Cyberun draws its screen: rock (the $55/$AA checker)
-and sky by parity, and every step's textured graphic over it. As in
-listscroll, the screen is drawn once at the start (screen_start) and after
-that only what a move changes is redrawn: the steps.
+and sky by parity down each column, from the tiles' pieces -- and over that
+the tiles' entries, each a graphic from world/steps.json drawn exactly as it
+is there. As in listscroll, the screen is drawn once at the start
+(screen_start) and after that only what a move changes is redrawn: the
+entries, by the blitter for their shape (bytes x rows).
 
-An entry of the display list is a step, drawn by the blitter for its shape:
+The entries and their graphics are the whole of what is drawn: a graphic
+holds the step and whatever sky, rock, margin rows and spare bytes it needs
+around it, and is edited in the stepscroll designer (vscode/). Nothing is
+added here. They began as what this build used to make itself from
+Cyberun's step graphics -- the step, the byte its pixels shift into, 2 rows
+of margin above or below where a move up or down needed them, the byte after
+a flat run, and each step's first 2 pixels made the 2 to its left -- so that
+with their speed of 2 pixels a move, they leave nothing behind.
 
-- a flat step: 3 bytes by 4 rows. Its pixels shift on into the next byte at
-  fine positions 2, 4 and 6, where the next step draws them; at the right
-  end of a run nothing does, so the run's last step has a second entry, the
-  byte after it (1 by 4);
-- a 45-degree or steep slope or a wall: its 1-byte graphic and the byte its
-  pixels shift into, 2 bytes by 8 or 16 rows;
-- a gentle slope: 3 bytes (2 and the shift) by 8 rows.
-
-Each entry's graphic is what the world shows in it at each of the four fine
-positions, so overlapping entries write the same bytes and the table needs
-no order. Every bottom line is odd (the blitters go up a row pair at a
+Each entry's 4 versions, one a fine position (0, 2, 4, 6), are its graphic
+shifted 0, 2, 4 and 6 pixels right, its shift-in strip (steps.json) coming
+in on the left: made from the graphic alone. Where entries overlap they
+should agree, as the table has no order. Every bottom line is odd (the blitters go up a row pair at a
 time).
 
 What shows is columns 1 to 30 of rows 0 to 21. Columns 0 and 31 and rows 22
@@ -31,24 +33,10 @@ partly off the top draws into the ROM above the screen, which ignores it;
 partly off the bottom it would reach the attributes, so the bottom two rows
 are hidden instead (a 16-row entry ending on line 191 reaches up to 176).
 
-A step's texture is not the same after a move, so the strip it leaves must
-be repainted. Cyberun fills those strips; here entries carry them:
-
-- moving down or up, the 2 rows above or below a step: the entry gets 2
-  rows of margin there (what the world shows: sky over a floor, checker
-  under it) wherever the move changes a byte no entry covers
-  (with_margins). An entry over 16 rows is cut in two;
-- moving left, the byte an entry leaves is its spare right byte, which at
-  that moment holds only sky or ground;
-- moving right as the fine position comes back to 0, the byte it leaves
-  holds the step's first 2 pixels. For now blank_left_edges makes those the
-  same as the 2 pixels to the step's left, which spoils Cyberun's graphics
-  there; they are to be edited by hand to have 2 plain pixels at each side
-  (issue #25). The left-column fill this needed is still in stepscroll.s
-  (FILLS), off.
-
-coverage() checks it: at every fine position and for every move, every
-world byte that changes is in an entry.
+coverage() checks that at every fine position and for every move, every
+world byte that changes is in an entry: where one is not, a graphic needs
+more room or plainer edges. The left-column fill is still in stepscroll.s
+(FILLS), off.
 
     python examples/stepscroll/build.py      # output/stepscroll.sna
 """
@@ -66,6 +54,7 @@ REPO = HERE.parents[1]
 OUT = HERE / "output"
 sys.path.insert(0, str(HERE))
 import world as WD  # noqa: E402
+import step_graphics as G  # noqa: E402
 
 PAGE_W = WD.PAGE_W
 PAGE_H = WD.PAGE_H
@@ -109,13 +98,18 @@ CUTS = {f: np.packbits(np.roll(BITS, f, axis=1), axis=1) for f in (0, 2, 4, 6)}
 # ---- the entries ----------------------------------------------------------------
 # An entry in its page: (column, bottom line, width, rows).
 
-def step_entries(name: str) -> list[tuple[int, int, int, int]]:
-    out = []
-    for st in WORLD.steps(name):
-        if st.width == 3:
-            out.append((st.column, st.bottom, 3, 4))
-        else:
-            out.append((st.column, st.bottom, st.width + 1, st.rows))
+def tile_entries() -> dict:
+    """Each tile's entries: tiles.json's, each the size of its graphic."""
+    out = {}
+    for name in TILES:
+        entries = set()
+        for e in WORLD.entries(name):
+            width, rows = e.width, e.rows
+            if rows > MAX_ROWS or width > 3:
+                sys.exit(f"tile {name}: graphic {e.graphic} is {width} bytes by {rows} rows; an entry is at most "
+                         f"3 bytes by {MAX_ROWS} rows")
+            entries.add((e.column, e.bottom, width, rows))
+        out[name] = sorted(entries)
     return out
 
 
@@ -137,31 +131,8 @@ def footprint(entries_by_tile) -> np.ndarray:
     return foot
 
 
-def tile_entries() -> dict:
-    """Each tile's entries: its steps', and the byte after a flat run's last
-    step wherever no entry covers it (in any page holding the tile)."""
-    steps = {name: step_entries(name) for name in TILES}
-    foot = footprint(steps)
-    out = {}
-    for name in TILES:
-        entries = set(steps[name])
-        for column, bottom, width, rows in steps[name]:
-            if width != 3 or rows != 4:
-                continue
-            for r, c in instances(name):
-                x = (c * PAGE_COLUMNS + column + 3) % COLUMNS
-                y = r * PAGE_H + bottom
-                if not foot[y - 3:y + 1, x].all():
-                    if column + 3 > PAGE_COLUMNS - 1:
-                        raise WD.WorldError(f"tile {name}: a flat run ends at the page's right edge "
-                                            f"(column {column}); its last byte would be in the next page")
-                    entries.add((column + 3, bottom, 1, 4))
-        out[name] = sorted(entries)
-    return out
-
-
-BASE = tile_entries()
-FOOT = footprint(BASE)
+ENTRIES = tile_entries()
+FOOT = footprint(ENTRIES)
 
 
 def world_entries():
@@ -195,73 +166,7 @@ def changes():
     return out
 
 
-def blank_left_edges() -> int:
-    """Every piece's first 2 pixels the same as the 2 to its left, wherever
-    they would otherwise be left behind: moving right to fine position 0 an
-    entry jumps a byte, and the byte it leaves still shows its first 2
-    pixels. Copying the sky or ground beside it there makes what is left
-    behind what should be there, as the spare byte on its right already does
-    moving left. Pieces whose left is another entry (a flat run's middle)
-    are left alone. Returns the rows changed."""
-    global BYTES, CUTS
-    changed = 0
-    for _ in range(4):
-        now = CUTS[0]
-        before = np.roll(CUTS[6], -1, axis=1)
-        left = (now != before) & ~FOOT
-        if not left.any():
-            break
-        for y, k in zip(*np.nonzero(left)):
-            x = (int(k) + 1) * 8 % WORLD_W
-            BITS[y, x:x + 2] = BITS[y, x - 2:x] if x >= 2 else BITS[y, WORLD_W - 2:WORLD_W]
-            changed += 1
-        BYTES = np.packbits(BITS, axis=1)
-        CUTS = {f: np.packbits(np.roll(BITS, f, axis=1), axis=1) for f in (0, 2, 4, 6)}
-    return changed
-
-
-EDGES = blank_left_edges()
 NEED = changes()
-
-
-def with_margins() -> dict:
-    """Each entry with 2 rows of margin above if moving down changes a byte
-    there that no entry covers, and 2 below if moving up does: what the
-    world shows there (sky over a floor, checker under it), so that drawing
-    the entry where the move takes it paints over the strip it left. Then
-    cut, from the bottom, into entries of at most MAX_ROWS."""
-    left = {}
-    for move in ("down", "up"):
-        left[move] = np.zeros_like(FOOT)
-        for fine in (0, 2, 4, 6):
-            left[move] |= NEED[move, fine] & ~FOOT
-    out = {}
-    for name in TILES:
-        entries = set()
-        for column, bottom, width, rows in BASE[name]:
-            above = below = False
-            for r, c in instances(name):
-                x = c * PAGE_COLUMNS + column
-                y = r * PAGE_H + bottom
-                xs = [(x + j) % COLUMNS for j in range(width)]
-                above |= any(left["down"][yy, cx] for yy in (y - rows, y - rows - 1) if 0 <= yy < WORLD_H
-                             for cx in xs)
-                below |= any(left["up"][yy, cx] for yy in (y + 1, y + 2) if 0 <= yy < WORLD_H for cx in xs)
-            top = bottom - rows + 1 - (2 if above else 0)
-            b = bottom + (2 if below else 0)
-            if b >= PAGE_H:
-                raise WD.WorldError(f"tile {name}: the entry at column {column}, line {bottom} with its margin "
-                                    f"below would end in the next page")
-            while b >= top:
-                h = min(MAX_ROWS, b - top + 1)
-                entries.add((column, b, width, h))
-                b -= h
-        out[name] = sorted(entries)
-    return out
-
-
-ENTRIES = with_margins()
-FOOT = footprint(ENTRIES)
 
 
 def fill_cells(move: str, entry, x: int, y: int):
@@ -318,17 +223,22 @@ def coverage(need, fills) -> None:
                      f"or fill")
 
 
-def graphic(x: int, y: int, width: int, rows: int) -> tuple:
+def graphic(e) -> tuple:
     """An entry's graphic at the four fine positions, as its blitter reads
     it: each pair of rows from the bottom, the lower left to right, the upper
-    right to left."""
+    right to left. At fine position f the graphic is f pixels to the right:
+    its last f pixels go, and the last f of its shift-in strip come in on the
+    left (steps.json) -- made from the graphic alone, nothing from the world."""
     out = []
     for fine in (0, 2, 4, 6):
-        c = CUTS[fine]
+        lines = []
+        for i in range(e.rows):
+            pixels = (e.shift_in[i][G.STRIP - fine:] + e.bits[i])[:8 * e.width]
+            lines.append([int("".join(map(str, pixels[8 * j:8 * j + 8])), 2) for j in range(e.width)])
         data = []
-        for line in range(y, y - rows, -2):
-            data += [int(c[line, (x + j) % COLUMNS]) for j in range(width)]
-            data += [int(c[line - 1, (x + j) % COLUMNS]) for j in reversed(range(width))]
+        for i in range(e.rows - 1, 0, -2):
+            data += lines[i]
+            data += list(reversed(lines[i - 1]))
         out.append(tuple(data))
     return tuple(out)
 
@@ -379,11 +289,10 @@ def data_s() -> str:
         found = []
         for entry in ENTRIES[name]:
             column, bottom, width, rows = entry
-            fours = {graphic(c * PAGE_COLUMNS + column, r * PAGE_H + bottom, width, rows)
-                     for r, c in instances(name)}
+            fours = {graphic(e) for e in WORLD.entries(name)
+                     if (e.column, e.bottom, e.width, e.rows) == entry} if any(instances(name)) else set()
             if len(fours) > 1:
-                sys.exit(f"tile {name}: the entry {entry} looks different in different places: "
-                         f"it reaches into its neighbours")
+                sys.exit(f"tile {name}: two entries at {entry} draw different graphics")
             if not fours:
                 continue
             label = graphics.setdefault(fours.pop(), f"gfx_{len(graphics)}")

@@ -39,8 +39,7 @@
 
     DEVICE ZXSPECTRUM48
 
-IM2_TABLE   equ 0xFE00
-IM2_JUMP    equ 0xFDFD
+RASTER_MARK equ 0x40        ; bright black: the hidden rows' attribute
 MAX_TABLE   equ 110         ; entries the table holds
 ENTRY       equ 10          ; bytes an entry
 FIRST_LINE  equ -1          ; the bottom lines an entry in the table has
@@ -65,20 +64,8 @@ FILLS       equ 0           ; 1: paint the column a move right leaves (fills); 0
     ORG 0x8000
 
 start:
-    di
-    ld sp,0x8000
-    ld hl,IM2_TABLE         ; IM 2, every vector at IM2_JUMP: JP isr
-    ld de,IM2_TABLE + 1
-    ld bc,256
-    ld (hl),high IM2_JUMP
-    ldir
-    ld a,0xC3
-    ld (IM2_JUMP),a
-    ld hl,isr
-    ld (IM2_JUMP + 1),hl
-    ld a,high IM2_TABLE
-    ld i,a
-    im 2
+    di                      ; interrupts off for good: main waits on the
+    ld sp,0x8000            ; floating bus, and draw_list borrows SP
     ld hl,screen_start      ; the world, white ink on black
     ld de,0x4000
     ld bc,6144
@@ -89,8 +76,13 @@ start:
     ld (hl),0x47
     ld bc,768 - 1
     ldir
-    ld hl,0x5800            ; columns 0 and 31 black on black
-    ld de,31
+    ld hl,0x5AC0            ; rows 22 and 23 bright black: still black on
+    ld de,0x5AC1            ; black, but an attribute main can see the ULA
+    ld bc,63                ; fetch on the floating bus
+    ld (hl),RASTER_MARK
+    ldir
+    ld hl,0x5800            ; columns 0 and 31 black on black, rows 22 and 23
+    ld de,31                ; too
     ld b,24
 .hide:
     ld (hl),0
@@ -98,19 +90,21 @@ start:
     ld (hl),0
     inc hl
     djnz .hide
-    ld hl,0x5AC0            ; and rows 22 and 23
-    ld de,0x5AC1
-    ld bc,63
-    ld (hl),0
-    ldir
     call fill_table
     xor a
     out (0xFE),a
-    ei
 ; The border shows each stage of a pass: red the fills, green the list
 ; drawn, blue a move's bookkeeping, magenta the entries arriving, black idle.
 main:
-    halt
+.raster:
+    xor a                   ; port $00FF: a high byte of $40-$7F would be
+    in a,(0xFF)             ; contended, held till the ULA's fetch is over, and
+                            ; read only the idle $FF. The floating bus: the
+                            ; attribute the ULA is fetching
+    cp RASTER_MARK          ; rows 22 and 23's attribute: the beam is past
+    jr nz,.raster           ; what shows, so draw now, all the way round to
+                            ; the top of the next frame (a pixel byte of $40
+                            ; anywhere can start it early)
     ld a,2                  ; red: the fills
     out (0xFE),a
     call fills
@@ -123,10 +117,6 @@ main:
     xor a
     out (0xFE),a
     jr main
-
-isr:
-    ei
-    ret
 
 ; fill_table: the table as the world starts: the entries whose bottom is on
 ; each line from FIRST_LINE to LAST_LINE.
@@ -159,8 +149,7 @@ draw_list:
     or a
     ret z
     ld b,a                  ; B counts the entries down
-    di                      ; SP will be in the graphics
-    ld (saved_sp),sp
+    ld (saved_sp),sp        ; SP will be in the graphics
     exx
     ld hl,table             ; HL': the next entry; BC': an entry's size
     ld bc,ENTRY
@@ -182,7 +171,6 @@ gfx_offset:
     jp (ix)
 draw_done:
     ld sp,(saved_sp)
-    ei
     ret
 
 ; Up a row after a pair, maybe into the character row above: back a
@@ -430,9 +418,8 @@ keys:
     ret c
     ; fall into down
 
-; down: the world 2 lines down (the view 2 lines up the map): those at line
-; 191 off, every entry 2 lines down, those now at FIRST_LINE on; then the
-; rows above each are filled.
+; down: the world 2 lines down (the view 2 lines up the map): every entry 2
+; lines down, those at line 191 off; those now at FIRST_LINE on.
 down:
     ld hl,(view_y)
     ld a,h
@@ -441,15 +428,12 @@ down:
     dec hl
     dec hl
     ld (view_y),hl
-    ld a,LAST_LINE
-    call remove_line
-    ld c,2
-    call move_lines
+    call move_down
     ld de,FIRST_LINE
     jp add_line
 
-; up: the world 2 lines up: those at FIRST_LINE off, every entry 2 lines up,
-; those now at LAST_LINE on; then the rows below each are filled.
+; up: the world 2 lines up: every entry 2 lines up, those at FIRST_LINE off;
+; those now at LAST_LINE on.
 up:
     ld hl,(view_y)
     ld de,VIEW_Y_MAX
@@ -460,36 +444,16 @@ up:
     inc hl
     inc hl
     ld (view_y),hl
-    ld a,FIRST_LINE
-    call remove_line
-    ld c,-2
-    call move_lines
+    call move_up
     ld de,LAST_LINE
     jp add_line
 
-; move_lines: every entry's bottom line C lines on (2 or -2), and its address
-; worked out again: line_table at the line, plus its screen column.
-move_lines:
-    ld a,(count)
-    or a
-    ret z
-    ld b,a
-    ld ix,table
-.entry:
-    ld a,(ix + E_LINE)
-    add a,c
-    ld (ix + E_LINE),a
-    call line_address_x
-    ld (ix + E_ADDRESS),l
-    ld (ix + E_ADDRESS + 1),h
-    ld de,ENTRY
-    add ix,de
-    djnz .entry
-    ret
-
-; remove_line: every entry whose bottom is screen line A off the table.
-remove_line:
-    ld e,a
+; move_down: every entry's address 2 lines down, in place, and those at
+; LAST_LINE off the table. Its bottom line is odd, so the first line down may
+; cross into the next character row (told from L + 1, as in the blitters)
+; and the second never does. An entry coming down from line -1, whose
+; address was in the ROM, is looked up afresh.
+move_down:
     ld a,(count)
     or a
     ret z
@@ -497,26 +461,108 @@ remove_line:
     ld hl,table
 .entry:
     push hl
-    ld a,l
-    add a,E_LINE
-    ld l,a
-    jr nc,.same
-    inc h
-.same:
-    ld a,(hl)
+    ld de,E_LINE
+    add hl,de
+    ld a,(hl)               ; its bottom line
+    cp LAST_LINE
+    jr z,.off
+    inc a
+    inc a
+    ld (hl),a
     pop hl
-    cp e
-    jr nz,.keep
-    call remove_entry       ; the last entry in its place, to look at next
+    cp 1
+    jr z,.fresh
+    inc hl
+    ld d,(hl)               ; H
+    inc d
+    ld a,d
+    and 7
+    jr nz,.second
+    dec hl
+    ld a,(hl)               ; into the next character row; a third's last row
+    inc a                   ; carries into the next third
+    add a,32
+    dec a
+    ld (hl),a
+    inc hl
+    jr c,.second
+    ld a,d
+    sub 8
+    ld d,a
+.second:
+    inc d
+    ld (hl),d
+    dec hl
+.next:
+    ld de,ENTRY
+    add hl,de
     djnz .entry
     ret
-.keep:
-    ld a,l
-    add a,ENTRY
-    ld l,a
-    jr nc,.same2
-    inc h
-.same2:
+.off:
+    pop hl
+    call remove_entry       ; the last entry in its place, to move next
+    djnz .entry
+    ret
+.fresh:
+    push hl
+    pop ix
+    call line_address_x     ; line 1 (A)
+    ld (ix + E_ADDRESS),l
+    ld (ix + E_ADDRESS + 1),h
+    push ix
+    pop hl
+    jr .next
+
+; move_up: every entry's address 2 lines up, in place, and those at
+; FIRST_LINE off the table. The first line up never leaves the character row
+; (the bottom line is odd); the second may. Going up from line 1 to -1 lands
+; in the ROM, where draw_list's writes do nothing.
+move_up:
+    ld a,(count)
+    or a
+    ret z
+    ld b,a
+    ld hl,table
+.entry:
+    push hl
+    ld de,E_LINE
+    add hl,de
+    ld a,(hl)
+    cp FIRST_LINE & 0xFF
+    jr z,.off
+    dec a
+    dec a
+    ld (hl),a
+    pop hl
+    inc hl
+    ld d,(hl)
+    dec d
+    dec d
+    ld a,d
+    inc a
+    and 7
+    jr nz,.done
+    dec hl
+    ld a,(hl)               ; into the character row above; a third's top row
+    inc a                   ; borrows into the third above
+    sub 32
+    dec a
+    ld (hl),a
+    inc hl
+    jr c,.done
+    ld a,d
+    add a,8
+    ld d,a
+.done:
+    ld (hl),d
+    dec hl
+    ld de,ENTRY
+    add hl,de
+    djnz .entry
+    ret
+.off:
+    pop hl
+    call remove_entry
     djnz .entry
     ret
 

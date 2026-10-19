@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step Graphics</title>
+<style>
+  :root {
+    --bg: var(--vscode-editor-background, #1e1e1e);
+    --fg: var(--vscode-foreground, #d4d4d4);
+    --muted: var(--vscode-descriptionForeground, #9a9a9a);
+    --panel: var(--vscode-sideBar-background, #252526);
+    --border: var(--vscode-panel-border, #3c3c3c);
+    --accent: var(--vscode-focusBorder, #3794ff);
+    --button: var(--vscode-button-background, #0e639c);
+    --button-fg: var(--vscode-button-foreground, #ffffff);
+    --button-hover: var(--vscode-button-hoverBackground, #1177bb);
+    --input: var(--vscode-input-background, #3c3c3c);
+    --bad: #f14c4c;
+    --ink: #e8e8e8;
+    --font: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font: 13px var(--font); display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; font-weight: 600; }
+  header .status { color: var(--muted); margin-left: auto; }
+  button { background: transparent; color: var(--fg); border: 1px solid var(--border); padding: 3px 9px; border-radius: 2px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--button); color: var(--button-fg); border-color: transparent; }
+  input, select { background: var(--input); color: var(--fg); border: 1px solid var(--border); font: inherit; padding: 2px 4px; }
+  input[type=number] { width: 4.5em; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #list { width: 340px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--panel); padding: 8px; flex-shrink: 0; }
+  .group { padding: 6px; border-radius: 3px; margin-bottom: 8px; border: 1px dashed transparent; }
+  .group.drop { border-color: var(--accent); }
+  .group h2 { font-size: 12px; font-weight: 600; margin: 0 0 6px; display: flex; gap: 6px; align-items: center; }
+  .group h2 small { color: var(--muted); font-weight: normal; flex: 1; }
+  .group h2 button { padding: 0 6px; font-size: 12px; }
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; min-height: 24px; }
+  .item { cursor: grab; display: flex; flex-direction: column; align-items: center; }
+  .thumb { width: fit-content; }
+  .item.dragging { opacity: .4; }
+  .item.before .thumb { box-shadow: -4px 0 0 var(--accent); }
+  .thumb { border: 2px solid transparent; padding: 1px; background: #000; line-height: 0; }
+  .item.selected .thumb { border-color: var(--accent); }
+  .label { font-size: 10px; color: var(--muted); text-align: center; margin-top: 2px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #work { flex: 1; overflow: auto; padding: 12px 16px; min-width: 0; }
+  #work h2 { font-size: 14px; margin: 0 0 10px; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; align-items: center; }
+  .tools label { color: var(--muted); }
+  .note { color: var(--muted); }
+  canvas { image-rendering: pixelated; display: block; }
+  #editor { cursor: crosshair; touch-action: none; max-width: 100%; height: auto; }
+  #shifts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+  #shifts figure { margin: 0; }
+  #shifts figcaption { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  #empty { padding: 40px; max-width: 46em; line-height: 1.5; }
+  #error { color: var(--bad); padding: 0 16px; white-space: pre-wrap; }
+  #dialog { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  #dialog[hidden] { display: none; }
+  #dialog .box { background: var(--panel); border: 1px solid var(--border); padding: 16px; min-width: 320px; max-width: 90vw; display: flex; flex-direction: column; gap: 10px; }
+  #dialog .box p { margin: 0; }
+  #dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  @media (max-width: 760px) {
+    main { flex-direction: column; }
+    #list { width: auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Step graphics</h1>
+  <button id="open" hidden>Open world folder…</button>
+  <button id="openFiles" hidden>Open files…</button>
+  <button id="save" class="primary" hidden disabled>Save</button>
+  <button id="undo" hidden disabled title="Ctrl+Z">Undo</button>
+  <button id="redo" hidden disabled title="Ctrl+Y">Redo</button>
+  <span class="status" id="status"></span>
+</header>
+<div id="error"></div>
+<div id="empty" hidden>
+  <p>Open <code>examples/stepscroll/world/</code>: the graphics are in <code>steps.json</code>, and
+  <code>tiles.json</code>, whose entries name them, is updated when a graphic is renamed.</p>
+  <p class="note">In Chrome or Edge, <b>Open world folder</b> saves back into the folder. Elsewhere, <b>Open
+  files</b> takes the JSON files and Save downloads what changed.</p>
+</div>
+<main id="main" hidden>
+  <div id="list"></div>
+  <div id="work">
+    <h2 id="title"></h2>
+    <div class="tools">
+      <button id="add" title="A new graphic in this graphic's group">New</button>
+      <button id="duplicate">Duplicate</button>
+      <button id="rename">Rename</button>
+      <button id="delete">Delete</button>
+      <label>Width <input type="number" id="width" min="8" step="8"></label>
+      <label>Height <input type="number" id="height" min="2" step="2"></label>
+      <label>Zoom <select id="zoom"><option>10</option><option>14</option><option selected>18</option><option>24</option><option>32</option></select></label>
+    </div>
+    <canvas id="editor"></canvas>
+    <p class="note">Click a pixel to toggle it; drag to paint more the same. On the left, in amber, is the shift-in strip:
+    the 6 pixels that come in on the left as the graphic is shifted right 2, 4 and 6 pixels for the fine
+    positions. Below, the 4 versions the build makes. Drag graphics in the list to rearrange them or move them to
+    another group.</p>
+    <div id="shifts"></div>
+  </div>
+</main>
+<div id="dialog" hidden>
+  <div class="box">
+    <p id="dialogText"></p>
+    <input id="dialogInput">
+    <select id="dialogSelect" hidden></select>
+    <div class="buttons"><button id="dialogCancel">Cancel</button><button class="primary" id="dialogOk">OK</button></div>
+  </div>
+</div>
+<script>
+/*@world_model.js@*/
+/*@steps_model.js@*/
+window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.steps' };
+/*@host@*/
+(function () {
+  'use strict';
+  const W = window.StepscrollWorld;
+  const M = window.StepscrollSteps;
+  const host = window.designerHost;
+  const $ = (id) => document.getElementById(id);
+
+  const state = Object.assign({ name: null, zoom: 18 }, host.state());
+  let doc = null;           // steps.json
+  let tilesDoc = null;      // tiles.json
+  let eol = { steps: '\n', tiles: '\n' };
+  let undo = [];
+  let redo = [];
+  let saved = { steps: null, tiles: null };
+
+  function keep() {
+    host.keep({ name: state.name, zoom: state.zoom });
+  }
+
+  function eolOf(text) {
+    return text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  }
+
+  function show(message) {
+    $('status').textContent = message;
+  }
+
+  // ---- loading and editing -------------------------------------------------
+
+  function load(boot) {
+    $('error').textContent = '';
+    try {
+      doc = M.parse(boot.steps);
+      tilesDoc = JSON.parse(boot.tiles);
+    } catch (err) {
+      $('error').textContent = String(err && err.message ? err.message : err);
+      return;
+    }
+    eol = { steps: boot.eol || eolOf(boot.steps), tiles: eolOf(boot.tiles) };
+    saved = { steps: boot.steps, tiles: boot.tiles };
+    if (!state.name || !M.find(doc, state.name)) state.name = firstGraphic();
+    $('empty').hidden = true;
+    $('main').hidden = false;
+    draw();
+  }
+
+  function firstGraphic() {
+    for (const group of Object.values(doc.groups)) {
+      const names = Object.keys(group.graphics);
+      if (names.length) return names[0];
+    }
+    return null;
+  }
+
+  // A new steps.json, and tiles.json if the edit reached it.
+  function apply(nextSteps, nextTiles, record) {
+    if (record !== false) {
+      undo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+      if (undo.length > 200) undo.shift();
+      redo = [];
+    }
+    doc = nextSteps;
+    host.edit('steps', M.format(doc, eol.steps));
+    if (nextTiles && nextTiles !== tilesDoc) {
+      tilesDoc = nextTiles;
+      host.edit('tiles', M.formatTiles(tilesDoc, eol.tiles));
+    }
+    if (!state.name || !M.find(doc, state.name)) state.name = firstGraphic();
+    keep();
+    draw();
+  }
+
+  // Runs an edit, showing what it throws instead.
+  function attempt(fn) {
+    try {
+      fn();
+    } catch (err) {
+      show(String(err && err.message ? err.message : err));
+    }
+  }
+
+  // ---- drawing -------------------------------------------------------------
+
+  function draw() {
+    if (!doc) return;
+    drawList();
+    drawWork();
+    if (host.standalone) {
+      const dirty = M.format(doc, eol.steps) !== saved.steps || M.formatTiles(tilesDoc, eol.tiles) !== saved.tiles;
+      $('undo').disabled = !undo.length;
+      $('redo').disabled = !redo.length;
+      $('save').disabled = !host.canSave() || !dirty;
+      show(host.where() + (dirty ? ' — unsaved' : ''));
+    }
+  }
+
+  function thumbnail(rows) {
+    const cv = document.createElement('canvas');
+    const z = 3;
+    cv.width = rows[0].length * z;
+    cv.height = rows.length * z;
+    const ctx = cv.getContext('2d');
+    rows.forEach((row, y) => Array.from(row).forEach((ch, x) => {
+      ctx.fillStyle = ch === '#' ? '#e8e8e8' : ch === '-' ? '#333' : '#000';
+      ctx.fillRect(x * z, y * z, z, z);
+    }));
+    return cv;
+  }
+
+  let dragged = null;       // the name of the graphic being dragged
+
+  function drawList() {
+    const list = $('list');
+    list.textContent = '';
+    const top = document.createElement('div');
+    top.className = 'tools';
+    const addGroup = document.createElement('button');
+    addGroup.textContent = 'New group';
+    addGroup.addEventListener('click', newGroup);
+    top.appendChild(addGroup);
+    list.appendChild(top);
+    for (const [gname, group] of Object.entries(doc.groups)) {
+      const box = document.createElement('div');
+      box.className = 'group';
+      const h = document.createElement('h2');
+      const title = document.createElement('span');
+      title.textContent = gname;
+      const small = document.createElement('small');
+      small.textContent = group.direction || '';
+      h.append(title, small);
+      for (const [label, tip, fn] of [['+', 'New graphic in this group', () => newGraphic(gname)],
+                                       ['Rename', 'Rename this group', () => renameGroup(gname)],
+                                       ['✕', 'Delete this group (only when empty)', () =>
+                                         attempt(() => apply(M.removeGroup(doc, gname)))]]) {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.title = tip;
+        b.addEventListener('click', fn);
+        h.appendChild(b);
+      }
+      box.appendChild(h);
+      const thumbs = document.createElement('div');
+      thumbs.className = 'thumbs';
+      for (const [name, g] of Object.entries(group.graphics)) {
+        const item = document.createElement('div');
+        item.className = 'item' + (name === state.name ? ' selected' : '');
+        item.draggable = true;
+        const t = document.createElement('div');
+        t.className = 'thumb';
+        t.appendChild(thumbnail(g.rows));
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = name;
+        label.title = name;
+        item.append(t, label);
+        item.addEventListener('click', () => select(name));
+        item.addEventListener('dragstart', (e) => {
+          dragged = name;
+          item.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', name);
+        });
+        item.addEventListener('dragend', () => { dragged = null; item.classList.remove('dragging'); });
+        item.addEventListener('dragover', (e) => { if (dragged) { e.preventDefault(); item.classList.add('before'); } });
+        item.addEventListener('dragleave', () => item.classList.remove('before'));
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          item.classList.remove('before');
+          box.classList.remove('drop');
+          if (dragged) attempt(() => apply(M.place(doc, dragged, gname, name)));
+        });
+        thumbs.appendChild(item);
+      }
+      box.appendChild(thumbs);
+      // Dropped on the group but not on a graphic: last in the group.
+      box.addEventListener('dragover', (e) => { if (dragged) { e.preventDefault(); box.classList.add('drop'); } });
+      box.addEventListener('dragleave', (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove('drop'); });
+      box.addEventListener('drop', (e) => {
+        e.preventDefault();
+        box.classList.remove('drop');
+        if (dragged) attempt(() => apply(M.place(doc, dragged, gname, null)));
+      });
+      list.appendChild(box);
+    }
+  }
+
+  // The editor's canvas: the shift-in strip, a gap, then the graphic.
+  const GAP = 0;
+  // Colours: the graphic's pixels, and the strip's, so that what shifting
+  // brings in is told apart wherever it shows.
+  const SET = '#e8e8e8';
+  const CLEAR = '#000';
+  const STRIP_SET = '#f0a830';
+  const STRIP_CLEAR = '#3a2608';
+
+  function drawWork() {
+    const at = state.name ? M.find(doc, state.name) : null;
+    for (const id of ['add', 'duplicate', 'rename', 'delete', 'width', 'height']) $(id).disabled = !at;
+    const editor = $('editor');
+    $('shifts').textContent = '';
+    if (!at) {
+      $('title').textContent = 'No graphic selected: add one to a group with +';
+      editor.width = editor.height = 0;
+      return;
+    }
+    const rows = stroke ? stroke.rows : at.g.rows;
+    const strip = stroke ? stroke.strip : M.shiftInOf(at.g);
+    $('title').textContent = `${state.name} — group ${at.group}, ${rows[0].length} × ${rows.length}`;
+    $('width').value = rows[0].length;
+    $('height').value = rows.length;
+    const z = state.zoom;
+    const s = M.STRIP + GAP;
+    editor.width = (s + rows[0].length) * z + 1;
+    editor.height = rows.length * z + 1;
+    const ctx = editor.getContext('2d');
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(0, 0, editor.width, editor.height);
+    strip.forEach((row, y) => Array.from(row).forEach((ch, x) => {
+      ctx.fillStyle = ch === '#' ? STRIP_SET : STRIP_CLEAR;
+      ctx.fillRect(x * z + 1, y * z + 1, z - 1, z - 1);
+    }));
+    rows.forEach((row, y) => Array.from(row).forEach((ch, x) => {
+      ctx.fillStyle = ch === '#' ? SET : CLEAR;
+      ctx.fillRect((s + x) * z + 1, y * z + 1, z - 1, z - 1);
+    }));
+    ctx.fillStyle = '#555';
+    for (let x = 0; x <= rows[0].length; x += 8) ctx.fillRect((s + x) * z, 0, 1, editor.height);
+    drawShifts({ rows, shiftIn: strip });
+  }
+
+  // The 4 versions the build makes, side by side: the graphic at fine
+  // positions 0, 2, 4 and 6, the pixels the strip brought in in its colour.
+  function drawShifts(g) {
+    const box = $('shifts');
+    const z = Math.max(4, Math.round(state.zoom / 3));
+    for (const fine of [0, 2, 4, 6]) {
+      const rows = M.shifted(g, fine);
+      const fig = document.createElement('figure');
+      const cv = document.createElement('canvas');
+      cv.width = rows[0].length * z;
+      cv.height = rows.length * z;
+      const ctx = cv.getContext('2d');
+      rows.forEach((row, y) => Array.from(row).forEach((ch, x) => {
+        const fromStrip = x < fine;
+        ctx.fillStyle = ch === '#' ? (fromStrip ? STRIP_SET : SET) : (fromStrip ? STRIP_CLEAR : CLEAR);
+        ctx.fillRect(x * z, y * z, z, z);
+      }));
+      const cap = document.createElement('figcaption');
+      cap.textContent = `fine ${fine}`;
+      fig.append(cv, cap);
+      box.appendChild(fig);
+    }
+  }
+
+  function select(name) {
+    state.name = name;
+    keep();
+    draw();
+  }
+
+  // ---- painting ------------------------------------------------------------
+
+  const editor = $('editor');
+  let stroke = null;        // { ch, rows, strip } while painting
+
+  // The cell under the pointer: ['strip' or 'rows', x, y], or null in the gap.
+  function cellAt(e) {
+    const r = editor.getBoundingClientRect();
+    const z = state.zoom * (r.width / editor.width);
+    const x = Math.floor((e.clientX - r.left) / z);
+    const y = Math.floor((e.clientY - r.top) / z);
+    if (x < M.STRIP) return ['strip', x, y];
+    if (x >= M.STRIP + GAP) return ['rows', x - M.STRIP - GAP, y];
+    return null;
+  }
+  function paintAt(e) {
+    const cell = cellAt(e);
+    if (!cell) return;
+    const [which, x, y] = cell;
+    const rows = stroke[which];
+    if (y < 0 || y >= rows.length || x < 0 || x >= rows[0].length || rows[y][x] === stroke.ch) return;
+    rows[y] = rows[y].slice(0, x) + stroke.ch + rows[y].slice(x + 1);
+    drawWork();
+  }
+  editor.addEventListener('contextmenu', (e) => e.preventDefault());
+  editor.addEventListener('pointerdown', (e) => {
+    if (!state.name) return;
+    editor.setPointerCapture(e.pointerId);
+    const g = M.find(doc, state.name).g;
+    stroke = { ch: '#', rows: g.rows.slice(), strip: M.shiftInOf(g).slice() };
+    // A click toggles the pixel; dragging on paints what the first one became.
+    const cell = cellAt(e);
+    if (cell) {
+      const [which, x, y] = cell;
+      const row = stroke[which][y];
+      if (row !== undefined && x < row.length) stroke.ch = row[x] === '#' ? '.' : '#';
+    }
+    paintAt(e);
+  });
+  editor.addEventListener('pointermove', (e) => { if (stroke) paintAt(e); });
+  function endStroke() {
+    if (!stroke) return;
+    const { rows, strip } = stroke;
+    stroke = null;
+    const g = M.find(doc, state.name).g;
+    if (rows.join('\n') !== g.rows.join('\n') || strip.join('\n') !== M.shiftInOf(g).join('\n')) {
+      apply(M.setRows(doc, state.name, rows, strip));
+    } else {
+      drawWork();
+    }
+  }
+  editor.addEventListener('pointerup', endStroke);
+  editor.addEventListener('pointercancel', endStroke);
+
+  // ---- the buttons ---------------------------------------------------------
+
+  // A dialog: a webview has no prompt().
+  function ask(text, value, choices) {
+    return new Promise((resolve) => {
+      $('dialogText').textContent = text;
+      const input = $('dialogInput');
+      const sel = $('dialogSelect');
+      input.hidden = value === null;
+      input.value = value || '';
+      sel.hidden = !choices;
+      sel.textContent = '';
+      for (const c of choices || []) {
+        const o = document.createElement('option');
+        o.value = o.textContent = c;
+        sel.appendChild(o);
+      }
+      $('dialog').hidden = false;
+      (input.hidden ? $('dialogOk') : input).focus();
+      if (!input.hidden) input.select();
+      const done = (ok) => {
+        $('dialog').hidden = true;
+        $('dialogOk').onclick = $('dialogCancel').onclick = input.onkeydown = null;
+        resolve(ok ? { value: input.value.trim(), choice: sel.value } : null);
+      };
+      $('dialogOk').onclick = () => done(true);
+      $('dialogCancel').onclick = () => done(false);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') done(true);
+        if (e.key === 'Escape') done(false);
+      };
+    });
+  }
+
+  function freshName(base) {
+    let n = 1;
+    while (M.find(doc, `${base}-${n}`)) n++;
+    return `${base}-${n}`;
+  }
+
+  async function newGraphic(group) {
+    const a = await ask(`New graphic in ${group}:`, freshName(group));
+    if (a) attempt(() => { apply(M.addGraphic(doc, group, a.value)); select(a.value); });
+  }
+  async function newGroup() {
+    const a = await ask('New group:', '');
+    if (a) attempt(() => apply(M.addGroup(doc, a.value)));
+  }
+  async function renameGroup(gname) {
+    const a = await ask(`Rename group ${gname}:`, gname);
+    if (a) attempt(() => apply(M.renameGroup(doc, gname, a.value)));
+  }
+
+  $('add').addEventListener('click', () => newGraphic(M.find(doc, state.name).group));
+  $('duplicate').addEventListener('click', async () => {
+    const at = M.find(doc, state.name);
+    const a = await ask(`Copy of ${state.name}:`, freshName(at.group));
+    if (a) attempt(() => { apply(M.addGraphic(doc, at.group, a.value, state.name)); select(a.value); });
+  });
+  $('rename').addEventListener('click', async () => {
+    const old = state.name;
+    const a = await ask(`Rename ${old}:`, old);
+    if (a) attempt(() => { const r = M.renameGraphic(doc, tilesDoc, old, a.value); state.name = a.value; apply(r.steps, r.tiles); });
+  });
+  $('delete').addEventListener('click', async () => {
+    const a = await ask(`Delete ${state.name}?`, null);
+    if (a) attempt(() => apply(M.removeGraphic(doc, tilesDoc, state.name)));
+  });
+  for (const id of ['width', 'height']) {
+    $(id).addEventListener('change', () => attempt(() =>
+      apply(M.setSize(doc, state.name, Math.round(Number($('width').value) / 8), Number($('height').value)))));
+  }
+  $('zoom').value = String(state.zoom);
+  $('zoom').addEventListener('change', () => { state.zoom = Number($('zoom').value); keep(); drawWork(); });
+
+  // ---- undo, and the host --------------------------------------------------
+
+  function doUndo() {
+    if (!undo.length) return;
+    const was = undo.pop();
+    redo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+    state.name = was.name;
+    apply(was.steps, was.tiles, false);
+  }
+  function doRedo() {
+    if (!redo.length) return;
+    const was = redo.pop();
+    undo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+    state.name = was.name;
+    apply(was.steps, was.tiles, false);
+  }
+
+  if (host.standalone) {
+    for (const id of ['open', 'openFiles', 'save', 'undo', 'redo']) $(id).hidden = false;
+    if (!host.hasFolderPicker()) $('open').hidden = true;
+    $('undo').addEventListener('click', doUndo);
+    $('redo').addEventListener('click', doRedo);
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.target.tagName === 'INPUT') return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); doRedo(); }
+      else if (k === 's') { e.preventDefault(); $('save').click(); }
+    });
+    $('open').addEventListener('click', () => host.openFolder().then(opened, failed));
+    $('openFiles').addEventListener('click', () => host.openFiles().then(opened, failed));
+    $('save').addEventListener('click', () => {
+      const steps = M.format(doc, eol.steps);
+      const tiles = M.formatTiles(tilesDoc, eol.tiles);
+      const texts = {};
+      if (steps !== saved.steps) texts['steps.json'] = steps;
+      if (tiles !== saved.tiles) texts['tiles.json'] = tiles;
+      host.save(texts).then(() => { saved = { steps, tiles }; draw(); }, failed);
+    });
+  }
+  async function opened(boot) {
+    if (!boot) return;
+    undo = []; redo = [];
+    load(boot);
+    const drafts = host.drafts();
+    const steps = drafts['steps.json'];
+    const tiles = drafts['tiles.json'];
+    if (doc && ((steps && steps !== boot.steps) || (tiles && tiles !== boot.tiles))) {
+      const a = await ask('There are unsaved edits from before. Bring them back?', null);
+      if (a) {
+        try { apply(steps ? M.parse(steps) : doc, tiles ? JSON.parse(tiles) : tilesDoc); } catch (err) { /* dropped */ }
+      } else {
+        host.dropDrafts();
+      }
+    }
+  }
+  function failed(err) {
+    if (err && err.name === 'AbortError') return;
+    $('error').textContent = String(err && err.message ? err.message : err);
+  }
+
+  host.onReload((boot) => load(boot));
+  if (host.boot) load(host.boot);
+  else $('empty').hidden = false;
+})();
+</script>
+</body>
+</html>

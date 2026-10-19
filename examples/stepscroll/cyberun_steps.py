@@ -144,9 +144,9 @@ def _shapes() -> list[Shape]:
 SHAPES = _shapes()
 
 
-def step_graphic(direction: int, offset: int, columns=None) -> list[list]:
+def cyberun_graphic(direction: int, offset: int, columns=None) -> list[list]:
     """A step's rows from the bottom up, each its bytes left to right (None
-    for a column not drawn), as the blitter puts them on the screen."""
+    for a column not drawn), as Cyberun's blitter puts them on the screen."""
     shape = SHAPES[direction]
     p = shape.graphic + offset
     rows = []
@@ -169,8 +169,10 @@ class Step:
     column: int         # byte column of its left byte, in the page
     bottom: int         # its bottom line, in the page
     direction: int
-    offset: int         # into its graphic: the variant's, or an end cap's
+    offset: int         # into its graphic in Cyberun: the variant's, or an end cap's
     columns: tuple | None   # the columns drawn, None for all
+    variant: int = 0    # which of the direction's three variants
+    cap: int | None = None  # or which of a flat direction's four end caps
 
 
 @dataclass(frozen=True)
@@ -221,14 +223,17 @@ def steps_of(d: Drawn) -> list[Step]:
     for k in range(count):
         offset = shape.offsets[VARIETIES[k]]
         columns = None
+        variant, cap = VARIETIES[k], None
         if shape.kind == "flat":
             last = k == count - 1
             code = d.ends[0] if k == 0 else d.ends[1] if last else 0
             if code & 0x10:
                 offset = 0x24 + 12 * (code & 3)
+                cap = code & 3
                 if last and code == FIRST_COLUMN_ONLY:
                     columns = (0,)
-        out.append(Step(d.x // 8 + shape.column_step * k, d.y - rise * k, d.direction, offset, columns))
+        out.append(Step(d.x // 8 + shape.column_step * k, d.y - rise * k, d.direction, offset, columns,
+                        variant, cap))
     return out
 
 
