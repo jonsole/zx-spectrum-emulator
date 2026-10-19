@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "stepscroll tiles",
-  "description": "Every tile a page of the world can hold, keyed by the tile's name. A page is 256 pixels across and 256 lines down. A tile's pieces, in Cyberun's form (examples/jetrun/world/tiles.schema.json), decide where the rock is: rock and sky by parity down each world column, sky above the world, turned by every floor or ceiling crossed. A tile may take another's pieces, mirrored or upside down, Cyberun's way. Its entries are what is drawn over that: graphics from steps.json. See world.py.",
+  "description": "Every tile a page of the world can hold, keyed by the tile's name. A page is 256 pixels across and 256 lines down. A tile is its entries: graphics from steps.json, each at a byte column and a bottom line, drawn exactly as they are. Sky and rock between and under them come from the graphics themselves: down each column, below a graphic, whatever its bottom row shows. See world.py.",
   "type": "object",
   "required": [
     "tiles"
@@ -21,107 +21,18 @@
   },
   "$defs": {
     "tile": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "pieces"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "pieces": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/piece"
-              }
-            },
-            "entries": {
-              "description": "What the display list draws in this page: graphics from steps.json, drawn exactly as they are, over the rock the pieces decide.",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/entry"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "from"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "from": {
-              "description": "The tile whose pieces this one draws.",
-              "type": "string"
-            },
-            "mirrored": {
-              "description": "Its source's pieces drawn mirrored left to right, Cyberun's $FF marker (for the rock; the tile's own entries are drawn as they are).",
-              "type": "boolean"
-            },
-            "upsideDown": {
-              "description": "Its source's pieces drawn upside down, Cyberun's $99 marker (for the rock; the tile's own entries are drawn as they are).",
-              "type": "boolean"
-            },
-            "entries": {
-              "description": "What the display list draws in this page: graphics from steps.json, drawn exactly as they are, over the rock the pieces decide.",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/entry"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "piece": {
       "type": "object",
       "required": [
-        "x",
-        "y",
-        "direction",
-        "steps"
+        "entries"
       ],
       "additionalProperties": false,
       "properties": {
-        "x": {
-          "description": "The left edge of the piece's lowest step, in pixels from the page's left edge (a multiple of 8).",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255,
-          "multipleOf": 8
-        },
-        "y": {
-          "description": "The bottom line of the piece's lowest step in the page: odd, as the blitters go up a row pair at a time.",
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 255
-        },
-        "direction": {
-          "description": "Cyberun's sixteen: flat steps 24 pixels long, gentle slopes 16 across and 8 up, plain ones 8 and 8, steep ones 8 and 16, walls 16 high. Floors have rock below, ceilings rock above; 'up' climbs to the right, 'down' climbs to the left.",
-          "enum": [
-            "floor",
-            "floor-up-gentle",
-            "floor-up",
-            "floor-up-steep",
-            "floor-down-gentle",
-            "floor-down",
-            "floor-down-steep",
-            "ceiling",
-            "ceiling-up-gentle",
-            "ceiling-up",
-            "ceiling-up-steep",
-            "ceiling-down-gentle",
-            "ceiling-down",
-            "ceiling-down-steep",
-            "wall-rock-right",
-            "wall-rock-left"
-          ]
-        },
-        "steps": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 16
+        "entries": {
+          "description": "What the display list draws in this page, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
         }
       }
     },

@@ -3,8 +3,8 @@
 Every graphic is drawn exactly as it is here, by a tile's entry naming it in
 tiles.json (world.py, build.py): the step, and whatever sky, rock, margin
 rows and spare bytes round it a move needs. Nothing is added to them.
-They began as what build.py used to make from Cyberun's step graphics
-(cyberun_steps.py), and are edited, added to and organised in the
+They began as what build.py used to make from Cyberun's step graphics,
+and are edited, added to and organised in the
 stepscroll designer (vscode/, or the standalone page it builds; issue #25).
 
 The graphics are in named groups -- by the direction of the step they draw,
@@ -114,7 +114,7 @@ def format_doc(doc: dict) -> str:
 
 def format_tiles(doc: dict) -> str:
     """tiles.json's layout: a tile's plain fields on its first line, then
-    each list (pieces, entries) an item to a line. vscode/steps_model.js
+    each list (entries) an item to a line. vscode/steps_model.js
     writes the same."""
     flat = dict(separators=(", ", ": "))
     lines = ["{"]

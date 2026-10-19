@@ -2,18 +2,12 @@
   "$schema": "./tiles.schema.json",
   "tiles": {
     "sky": {
-      "pieces": [],
       "entries": []
     },
     "rock": {
-      "pieces": [],
       "entries": []
     },
     "shaft": {
-      "pieces": [
-        {"x": 88, "y": 255, "direction": "wall-rock-left", "steps": 16},
-        {"x": 160, "y": 255, "direction": "wall-rock-right", "steps": 16}
-      ],
       "entries": [
         {"graphic": "wall-rock-left-1", "column": 11, "bottom": 15},
         {"graphic": "wall-rock-left-2", "column": 11, "bottom": 31},
@@ -50,10 +44,6 @@
       ]
     },
     "plain": {
-      "pieces": [
-        {"x": 0, "y": 159, "direction": "floor", "steps": 10},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
         {"graphic": "floor-2-top-bottom", "column": 3, "bottom": 161},
@@ -69,14 +59,6 @@
       ]
     },
     "hill": {
-      "pieces": [
-        {"x": 0, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 48, "y": 159, "direction": "floor-up-gentle", "steps": 4},
-        {"x": 112, "y": 127, "direction": "floor", "steps": 2},
-        {"x": 208, "y": 159, "direction": "floor-down-gentle", "steps": 4},
-        {"x": 224, "y": 159, "direction": "floor", "steps": 1},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
         {"graphic": "floor-2-top-bottom", "column": 3, "bottom": 161},
@@ -96,16 +78,6 @@
       ]
     },
     "peak": {
-      "pieces": [
-        {"x": 0, "y": 159, "direction": "floor", "steps": 3},
-        {"x": 72, "y": 159, "direction": "floor-up", "steps": 4},
-        {"x": 104, "y": 127, "direction": "floor-up-steep", "steps": 2},
-        {"x": 120, "y": 95, "direction": "floor", "steps": 1},
-        {"x": 152, "y": 127, "direction": "floor-down-steep", "steps": 2},
-        {"x": 184, "y": 159, "direction": "floor-down", "steps": 4},
-        {"x": 192, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
         {"graphic": "floor-2-top-bottom", "column": 3, "bottom": 161},
@@ -134,14 +106,6 @@
       ]
     },
     "dip": {
-      "pieces": [
-        {"x": 0, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 96, "y": 191, "direction": "floor-down-gentle", "steps": 4},
-        {"x": 112, "y": 191, "direction": "floor", "steps": 2},
-        {"x": 160, "y": 191, "direction": "floor-up-gentle", "steps": 4},
-        {"x": 224, "y": 159, "direction": "floor", "steps": 1},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
         {"graphic": "floor-2-top-bottom", "column": 3, "bottom": 161},
@@ -161,12 +125,6 @@
       ]
     },
     "pit": {
-      "pieces": [
-        {"x": 0, "y": 159, "direction": "floor", "steps": 4},
-        {"x": 160, "y": 159, "direction": "floor", "steps": 4},
-        {"x": 88, "y": 255, "direction": "wall-rock-left", "steps": 6},
-        {"x": 160, "y": 255, "direction": "wall-rock-right", "steps": 6}
-      ],
       "entries": [
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
         {"graphic": "floor-2-top-bottom", "column": 3, "bottom": 161},
@@ -192,12 +150,6 @@
       ]
     },
     "tunnel": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 10},
-        {"x": 232, "y": 95, "direction": "ceiling", "steps": 1},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 10},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -224,14 +176,6 @@
       ]
     },
     "shaft_in": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 4},
-        {"x": 160, "y": 95, "direction": "ceiling", "steps": 4},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 10},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1},
-        {"x": 88, "y": 95, "direction": "wall-rock-left", "steps": 6},
-        {"x": 160, "y": 95, "direction": "wall-rock-right", "steps": 6}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -269,14 +213,6 @@
       ]
     },
     "shaft_down": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 10},
-        {"x": 232, "y": 95, "direction": "ceiling", "steps": 1},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 4},
-        {"x": 160, "y": 159, "direction": "floor", "steps": 4},
-        {"x": 88, "y": 255, "direction": "wall-rock-left", "steps": 6},
-        {"x": 160, "y": 255, "direction": "wall-rock-right", "steps": 6}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -313,15 +249,6 @@
       ]
     },
     "stalactites": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 3},
-        {"x": 80, "y": 127, "direction": "ceiling-down-steep", "steps": 2},
-        {"x": 88, "y": 127, "direction": "ceiling-up-steep", "steps": 2},
-        {"x": 104, "y": 95, "direction": "ceiling", "steps": 6},
-        {"x": 232, "y": 95, "direction": "ceiling", "steps": 1},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 10},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -356,14 +283,6 @@
       ]
     },
     "tunnel_up": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 3},
-        {"x": 72, "y": 95, "direction": "ceiling-up-gentle", "steps": 4},
-        {"x": 136, "y": 63, "direction": "ceiling", "steps": 5},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 3},
-        {"x": 72, "y": 159, "direction": "floor-up-gentle", "steps": 4},
-        {"x": 136, "y": 127, "direction": "floor", "steps": 5}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -392,7 +311,6 @@
       ]
     },
     "tunnel_down": {
-      "from": "tunnel_up", "mirrored": true,
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 65},
         {"graphic": "floor-1-top", "column": 0, "bottom": 127},
@@ -423,12 +341,6 @@
       ]
     },
     "tunnel_high": {
-      "pieces": [
-        {"x": 0, "y": 63, "direction": "ceiling", "steps": 10},
-        {"x": 232, "y": 63, "direction": "ceiling", "steps": 1},
-        {"x": 0, "y": 127, "direction": "floor", "steps": 10},
-        {"x": 232, "y": 127, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 65},
         {"graphic": "floor-1-top", "column": 0, "bottom": 127},
@@ -455,19 +367,6 @@
       ]
     },
     "cavern": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 2},
-        {"x": 48, "y": 95, "direction": "ceiling-up", "steps": 4},
-        {"x": 80, "y": 63, "direction": "ceiling", "steps": 4},
-        {"x": 200, "y": 95, "direction": "ceiling-down", "steps": 4},
-        {"x": 208, "y": 95, "direction": "ceiling", "steps": 2},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 56, "y": 191, "direction": "floor-down-steep", "steps": 2},
-        {"x": 64, "y": 191, "direction": "floor", "steps": 5},
-        {"x": 184, "y": 191, "direction": "floor-up-steep", "steps": 2},
-        {"x": 200, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -508,20 +407,6 @@
       ]
     },
     "cavern_shaft": {
-      "pieces": [
-        {"x": 0, "y": 95, "direction": "ceiling", "steps": 2},
-        {"x": 48, "y": 95, "direction": "ceiling-up", "steps": 6},
-        {"x": 200, "y": 95, "direction": "ceiling-down", "steps": 6},
-        {"x": 208, "y": 95, "direction": "ceiling", "steps": 2},
-        {"x": 88, "y": 47, "direction": "wall-rock-left", "steps": 3},
-        {"x": 160, "y": 47, "direction": "wall-rock-right", "steps": 3},
-        {"x": 0, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 56, "y": 191, "direction": "floor-down-steep", "steps": 2},
-        {"x": 64, "y": 191, "direction": "floor", "steps": 5},
-        {"x": 184, "y": 191, "direction": "floor-up-steep", "steps": 2},
-        {"x": 200, "y": 159, "direction": "floor", "steps": 2},
-        {"x": 232, "y": 159, "direction": "floor", "steps": 1}
-      ],
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -567,11 +452,6 @@
       ]
     },
     "dead_end_left": {
-      "pieces": [
-        {"x": 64, "y": 95, "direction": "ceiling", "steps": 8},
-        {"x": 64, "y": 159, "direction": "floor", "steps": 8},
-        {"x": 56, "y": 159, "direction": "wall-rock-left", "steps": 4}
-      ],
       "entries": [
         {"graphic": "wall-rock-left-3-top-upper", "column": 7, "bottom": 95},
         {"graphic": "wall-rock-left-3", "column": 7, "bottom": 111},
@@ -598,7 +478,6 @@
       ]
     },
     "dead_end_right": {
-      "from": "dead_end_left", "mirrored": true,
       "entries": [
         {"graphic": "ceiling-1-top-bottom", "column": 0, "bottom": 97},
         {"graphic": "floor-1-top", "column": 0, "bottom": 159},
@@ -625,12 +504,6 @@
       ]
     },
     "pocket": {
-      "pieces": [
-        {"x": 96, "y": 127, "direction": "ceiling-up", "steps": 4},
-        {"x": 152, "y": 127, "direction": "ceiling-down", "steps": 4},
-        {"x": 120, "y": 159, "direction": "floor-down", "steps": 4},
-        {"x": 128, "y": 159, "direction": "floor-up", "steps": 4}
-      ],
       "entries": [
         {"graphic": "ceiling-up-1-top", "column": 12, "bottom": 127},
         {"graphic": "floor-down-3-bottom", "column": 12, "bottom": 137},

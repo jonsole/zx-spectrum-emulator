@@ -1,18 +1,17 @@
 """stepscroll's world: the map, tiles and graphics from world/*.json.
 
 The world is a grid of pages, 8 across (round the world: a world column is a
-byte) and up to 32 down, each 256 x 256 pixels and holding a tile. A tile
-has:
+byte) and up to 32 down, each 256 x 256 pixels and holding a tile. A tile is
+its entries: graphics from steps.json, each at a byte column and a bottom
+line in the page, drawn exactly as they are -- the display list's entries
+(build.py).
 
-- pieces, in Cyberun's form (cyberun_steps.py): x the left edge of the
-  piece's lowest step, y that step's bottom line, a direction and its steps.
-  They decide where the rock is: rock (the $55/$AA checker) and sky by
-  parity down each column, sky above the world, turned at every surface
-  crossed. A tile may take another's pieces, drawn mirrored or upside down,
-  Cyberun's way;
-- entries: graphics from steps.json, each at a byte column and a bottom line
-  in the page, drawn over the rock exactly as they are -- the display list's
-  entries (build.py).
+Between and under the graphics is sky or rock (the $55/$AA checker), worked
+out from the graphics themselves: down each pixel column, sky from the top
+of the world, and below each graphic whatever its bottom row shows there --
+rock if that row is the checker (the pixel of the pair on an even x + y
+set), sky if not. A floor graphic ends in rock, so the rock runs on under
+it; a ceiling ends in sky.
 
     python examples/stepscroll/world.py      # output/world.png
 """
@@ -27,7 +26,6 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import cyberun_steps as S  # noqa: E402
 import step_graphics as G  # noqa: E402
 
 WORLD_DIR = HERE / "world"
@@ -72,12 +70,6 @@ class World:
         self.world_h = PAGE_H * self.map_rows
         self.names = list(tiles)
 
-    def drawn(self, name: str) -> list[S.Drawn]:
-        tile = self.tiles[name]
-        source = tile.get("from", name)
-        pieces = self.tiles[source]["pieces"]
-        return [S.drawn(p, tile.get("upsideDown", False), tile.get("mirrored", False)) for p in pieces]
-
     def entries(self, name: str) -> list[Entry]:
         """A tile's entries, each with its graphic, checked to be in the page
         with an odd bottom line."""
@@ -96,43 +88,33 @@ class World:
             out.append(Entry(g.name, e["column"], e["bottom"], g.width, g.height, g.bits, g.shift_in))
         return out
 
-    def rock(self):
-        """Rock by parity down each world column."""
-        cross = np.zeros((self.world_h + 1, self.world_w), dtype=bool)
-        for r, row in enumerate(self.rows):
-            for c, name in enumerate(row):
-                # Two pieces of the same kind over the same columns (a page's
-                # last flat step laid over the run before it, to fill out 256
-                # pixels with 24-pixel steps) are one surface there; a floor
-                # and a ceiling meeting (a pocket's tip) still cancel.
-                points = set()
-                for d in self.drawn(name):
-                    s = S.surface(d)
-                    if s is None:
-                        continue
-                    kind = S.DIRECTIONS[d.direction].kind
-                    for x, y in S.crossings(s):
-                        if not 0 <= x < PAGE_W or not 0 <= y <= PAGE_H:
-                            raise WorldError(f"tile {name}: a surface leaves the page at ({x}, {y})")
-                        points.add((x, y, kind))
-                for x, y, kind in points:
-                    cross[r * PAGE_H + y, c * PAGE_W + x] ^= True
-        return (np.cumsum(cross, axis=0, dtype=np.int32)[:self.world_h] % 2) == 1
-
     def bytes(self):
-        """The world as screen bytes at fine position 0: (lines, 256). The
-        rock, and every tile's entries over it, in order."""
-        rock = self.rock()
-        xs = np.arange(self.world_w)
-        ys = np.arange(self.world_h)
-        bits = (rock & ((xs[None, :] + ys[:, None]) % 2 == 0)).astype(np.uint8)
+        """The world as screen bytes at fine position 0: (lines, 256). Every
+        tile's entries in order, and sky or rock round them as their bottom
+        rows say."""
+        h, w = self.world_h, self.world_w
+        drawn = np.zeros((h, w), np.uint8)
+        covered = np.zeros((h, w), bool)
         for r, row in enumerate(self.rows):
             for c, name in enumerate(row):
                 for e in self.entries(name):
                     top = r * PAGE_H + e.bottom - e.rows + 1
                     x = (c * PAGE_COLUMNS + e.column) * 8
-                    bits[top:top + e.rows, x:x + 8 * e.width] = np.array(e.bits, dtype=np.uint8)
-        return np.packbits(bits, axis=1)
+                    drawn[top:top + e.rows, x:x + 8 * e.width] = np.array(e.bits, dtype=np.uint8)
+                    covered[top:top + e.rows, x:x + 8 * e.width] = True
+        ys, xs = np.mgrid[0:h, 0:w]
+        even = (xs + ys) % 2 == 0
+        # Whether a drawn pixel is rock: the pixel of its pair that the
+        # checker sets, on an even x + y.
+        partner = drawn.copy()
+        partner[:, 0::2], partner[:, 1::2] = drawn[:, 1::2], drawn[:, 0::2]
+        rock_here = np.where(even, drawn, partner) == 1
+        # Below a graphic, what its last row above says: the last covered row
+        # above each pixel, or none (sky, from the top of the world).
+        last = np.maximum.accumulate(np.where(covered, ys, -1), axis=0)
+        rock = (last >= 0) & rock_here[np.maximum(last, 0), xs]
+        bits = np.where(covered, drawn, (rock & even).astype(np.uint8))
+        return np.packbits(bits.astype(np.uint8), axis=1)
 
 
 def load(directory: Path = WORLD_DIR) -> World:

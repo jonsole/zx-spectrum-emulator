@@ -80,7 +80,7 @@
   }
 
   // tiles.json as step_graphics.py's format_tiles lays it out: a tile's plain
-  // fields on one line, then each list (pieces, entries) an item to a line.
+  // fields on one line, then each list (entries) an item to a line.
   function formatTiles(doc, eol) {
     const lines = ['{'];
     if (doc.$schema !== undefined) {

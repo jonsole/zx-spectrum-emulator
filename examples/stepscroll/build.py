@@ -1,11 +1,9 @@
 """Build stepscroll: listscroll's display list drawing a world of Cyberun's
-terrain (world.py, cyberun_steps.py); then assemble stepscroll.s with
-sjasmplus.
+terrain (world.py); then assemble stepscroll.s with sjasmplus.
 
-The world is drawn as Cyberun draws its screen: rock (the $55/$AA checker)
-and sky by parity down each column, from the tiles' pieces -- and over that
-the tiles' entries, each a graphic from world/steps.json drawn exactly as it
-is there. As in listscroll, the screen is drawn once at the start
+The world is the tiles' entries, each a graphic from world/steps.json drawn
+exactly as it is there, with rock (the $55/$AA checker) and sky round them
+as their bottom rows say (world.py). As in listscroll, the screen is drawn once at the start
 (screen_start) and after that only what a move changes is redrawn: the
 entries, by the blitter for their shape (bytes x rows).
 

@@ -23,8 +23,9 @@ run. So `floor-up-gentle-1-top-bottom` is 24×12: the 16×8 step, the checker by
 rows above and below. To change the movement speed, for instance, give the graphics the margins and spare bytes
 the new speed needs.
 
-A graphic is 1 to 3 bytes wide and an even number of rows from 2 to 16, which is what the blitters draw. The
-rock that no graphic covers is still filled in by parity from the tiles' pieces.
+A graphic is 1 to 3 bytes wide and an even number of rows from 2 to 16, which is what the blitters draw. A
+tile is only its entries. The sky and rock between and under the graphics come from the graphics themselves:
+going down each column, below a graphic is whatever its bottom row shows, rock checker or sky.
 
 Each graphic is pre-shifted at build time to fine positions 0, 2, 4 and 6, moving right by that many pixels.
 What comes in on the left is the graphic's `shiftIn` strip, 6 pixels per row: the last 2, 4 or all 6 of them.
@@ -61,7 +62,7 @@ This writes a single HTML file.
 
 | File | What |
 |---|---|
-| `world_model.js` | world.py and cyberun_steps.py in JavaScript, pixel for pixel |
+| `world_model.js` | world.py in JavaScript, pixel for pixel |
 | `steps_model.js` | steps.json and tiles.json read and written in their own layouts, and the edits |
 | `steps_view.html` | The editor's page, the same in VS Code and standalone |
 | `steps_view.js` | Its VS Code host: a custom text editor on steps.json that also edits tiles.json on a rename |

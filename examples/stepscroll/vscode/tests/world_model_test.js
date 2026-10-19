@@ -64,31 +64,13 @@ test('the world is world.py\'s, pixel for pixel', () => {
   assert.strictEqual(wrong, 0, wrong + ' pixels differ');
 });
 
-test('a mirrored tile\'s rock is its source\'s flipped', () => {
-  const t = { a: tiles.dead_end_left, b: { from: 'a', mirrored: true }, s: { pieces: [] } };
-  const one = W.render(t, [['a', 's', 's', 's', 's', 's', 's', 's']], null);
-  const two = W.render(t, [['b', 's', 's', 's', 's', 's', 's', 's']], null);
-  let wrong = 0;
-  for (let y = 0; y < W.PAGE_H; y++) {
-    for (let x = 0; x < W.PAGE_W; x++) {
-      // The checker is on (x + y) even, which mirroring a 256-pixel page
-      // turns odd; compare rock, not pixels: a pixel and its neighbour.
-      const rockA = one.bits[y * one.width + x] | one.bits[y * one.width + (x ^ 1)];
-      const xb = W.PAGE_W - 1 - x;
-      const rockB = two.bits[y * two.width + xb] | two.bits[y * two.width + (xb ^ 1)];
-      if (rockA !== rockB) wrong++;
-    }
-  }
-  assert.ok(wrong < 64, wrong + ' pixels of rock differ');
-});
-
 test('tileProblems: none in the real tiles; an even line, an unknown graphic and one off the page found', () => {
   for (const name of Object.keys(tiles)) {
     assert.deepStrictEqual(W.tileProblems(tiles, name, graphics), [], name);
   }
-  const t = { a: { pieces: [], entries: [{ graphic: 'floor-1-top', column: 0, bottom: 10 }] },
-              b: { pieces: [], entries: [{ graphic: 'nothing', column: 0, bottom: 11 }] },
-              c: { pieces: [], entries: [{ graphic: 'floor-1-top', column: 31, bottom: 11 }] } };
+  const t = { a: { entries: [{ graphic: 'floor-1-top', column: 0, bottom: 10 }] },
+              b: { entries: [{ graphic: 'nothing', column: 0, bottom: 11 }] },
+              c: { entries: [{ graphic: 'floor-1-top', column: 31, bottom: 11 }] } };
   assert.ok(W.tileProblems(t, 'a', graphics).some((p) => /even/.test(p)));
   assert.ok(W.tileProblems(t, 'b', graphics).some((p) => /no graphic "nothing"/.test(p)));
   assert.ok(W.tileProblems(t, 'c', graphics).some((p) => /leaves the page/.test(p)));
