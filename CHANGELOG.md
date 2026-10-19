@@ -7,6 +7,12 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The floating bus shows attributes only.** Reading an undecoded port during
+  the paper area now returns the attribute the ULA is fetching, held across its
+  bitmap fetch too, as a real 48K does -- never a bitmap byte. A program
+  watching for an attribute value no longer fires early on a pixel byte that
+  happens to match it.
+
 - **Fast 3D routines, `examples/fast3d`.** Z80 routines for 3D graphics:
   `mul8s`, a signed 8 x 8 multiply by quarter squares (154 T-states);
   `make_matrix`, the rotation for three angles, summing sines of sums of

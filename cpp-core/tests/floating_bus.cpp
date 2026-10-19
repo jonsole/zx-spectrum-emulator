@@ -1,8 +1,8 @@
 // The floating bus: what a read of a port nothing decodes actually returns.
 //
 // Nothing drives the data bus for an odd port on a 48K, so the CPU latches
-// whatever the ULA is doing -- a display byte while the beam is over paper,
-// and nothing at all everywhere else. Returning a fixed 0xFF instead is a
+// whatever the ULA is doing -- the attribute it is fetching while the beam is
+// over paper (never a bitmap byte), and nothing at all everywhere else. Returning a fixed 0xFF instead is a
 // silent trap: it looks like a harmless default until a program uses the
 // effect as a raster clock, at which point it hangs. Cobra's loader is one --
 //
@@ -84,13 +84,14 @@ uint8_t bus_at(uint32_t line, uint32_t dot) {
 
 } // namespace
 
-TEST(paper_returns_the_four_bytes_of_the_group_then_idles) {
-    // A 16-pixel group is 8 T-states: bitmap, attribute, bitmap, attribute,
-    // then four T-states with nothing driving. Two half-clocks per T-state,
-    // so each value is held for two dots.
+TEST(paper_returns_the_groups_attributes_then_idles) {
+    // A 16-pixel group is 8 T-states: the ULA fetches bitmap, attribute,
+    // bitmap, attribute, then four T-states with nothing driving. What the
+    // bus shows is each cell's attribute, across its bitmap fetch as well --
+    // never a bitmap byte, as on a real 48K. Two half-clocks per T-state.
     const uint8_t expected[16] = {
-        BITMAP_0, BITMAP_0, ATTR_0, ATTR_0, BITMAP_1, BITMAP_1, ATTR_1, ATTR_1,
-        0xFF,     0xFF,     0xFF,   0xFF,   0xFF,     0xFF,     0xFF,   0xFF,
+        ATTR_0, ATTR_0, ATTR_0, ATTR_0, ATTR_1, ATTR_1, ATTR_1, ATTR_1,
+        0xFF,   0xFF,   0xFF,   0xFF,   0xFF,   0xFF,   0xFF,   0xFF,
     };
     for (uint32_t i = 0; i < 16; i++) {
         CHECK_EQ(int(bus_at(PAPER_LINE_BEGIN, PAPER_DOT_BEGIN + i)), int(expected[i]));
@@ -158,7 +159,8 @@ TEST(in_from_an_odd_port_reads_the_display) {
     uint32_t idle = 0;
     for (uint32_t i = 0; i < 16; i++) {
         const uint8_t value = in_at(PAPER_DOT_BEGIN + i);
-        if (value == BITMAP_0 || value == ATTR_0) {
+        CHECK(value != BITMAP_0); // never a bitmap byte
+        if (value == ATTR_0) {
             display_bytes++;
         } else if (value == FLOATING_BUS_IDLE) {
             idle++;

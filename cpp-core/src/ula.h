@@ -258,9 +258,10 @@ public:
     /// Reading a port nothing decodes does not return a defined value: the
     /// CPU simply latches whatever happens to be on the bus, and on a
     /// Spectrum the other thing using the bus is the ULA fetching the screen.
-    /// So a read of an odd port during the paper area hands back a byte of
-    /// the display, and the same read during the border finds nothing driving
-    /// and reads 0xFF.
+    /// So a read of an odd port during the paper area hands back the
+    /// attribute of the cell being fetched (never a bitmap byte), and the
+    /// same read during the border, or in the idle half of a fetch cycle,
+    /// finds nothing driving and reads 0xFF.
     ///
     /// That is not a curiosity -- it is a raster clock. A program with no
     /// interrupt to hand can sit in `IN A,(0xFF)` until the byte it sees says

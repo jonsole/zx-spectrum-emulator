@@ -166,6 +166,12 @@ uint8_t Ula::floating_bus() const {
     // them at the group's first dot -- so this reports them rather than
     // fetching anything again.
     //
+    // What the CPU sees in the fetching half is the attributes only, each
+    // held across its bitmap fetch too: a real 48K's floating bus never shows
+    // a bitmap byte (the user's own machine), so a program can watch for an
+    // attribute value without a pixel byte that happens to match it firing
+    // early.
+    //
     // Real hardware fetches the group it is ABOUT to display, so its floating
     // bus runs one group (8 T-states, half a character cell) ahead of what
     // this returns. That offset is below the resolution of what the effect is
@@ -174,11 +180,9 @@ uint8_t Ula::floating_bus() const {
     // deliberately does not model.
     switch (((dot_ - PAPER_DOT_BEGIN) & 15) / HC_PER_TSTATE) {
     case 0:
-        return pixel0_;
     case 1:
         return attr0_;
     case 2:
-        return pixel1_;
     case 3:
         return attr1_;
     default:
