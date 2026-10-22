@@ -41,7 +41,10 @@
 
     DEVICE ZXSPECTRUM48
 
+    INCLUDE "output/jetman.inc" ; JETMAN: 1 with Lunar Jetman's frames to hand
+
 RASTER_MARK equ 0x40        ; bright black: the hidden rows' attribute
+PAPER       equ 0x47        ; white on black: the attribute of what shows
 MAX_TABLE   equ 110         ; entries the table holds
 ENTRY       equ 11          ; bytes an entry
 LAST_SHOWN  equ 175         ; the screen's last line that shows (rows 22 and 23 are hidden)
@@ -82,7 +85,7 @@ start:
     ld bc,6144
     ld (hl),0
     ldir
-    ld (hl),0x47
+    ld (hl),PAPER
     ld bc,768 - 1
     ldir
     ld hl,0x5AC0            ; rows 22 and 23 bright black: still black on
@@ -104,28 +107,54 @@ start:
     out (0xFE),a
 ; The border shows each stage of a pass: red the fills, green the list
 ; drawn, blue a move's bookkeeping, magenta the entries arriving, black idle.
+; A pass is a frame, and makes one move of the world at most: the entries
+; redraw what a single move changes, so the list must be drawn after each.
 main:
-.raster:
-    xor a                   ; port $00FF: a high byte of $40-$7F would be
-    in a,(0xFF)             ; contended, held till the ULA's fetch is over, and
-                            ; read only the idle $FF. The floating bus: the
-                            ; attribute the ULA is fetching
-    cp RASTER_MARK          ; rows 22 and 23's attribute: the beam is past
-    jr nz,.raster           ; what shows, so draw now, all the way round to
-                            ; the top of the next frame (a pixel byte of $40
-                            ; anywhere can start it early)
+    call wait_mark          ; the beam is past what shows: draw now, all the
+                            ; way round to the top of the next frame
     ld a,2                  ; red: the fills
     out (0xFE),a
     call fills
+    IF JETMAN
+    call jet_erase          ; Jetman off, so the list never draws over him
+    ENDIF
     ld a,4                  ; green: the list
     out (0xFE),a
     call draw_list
-    ld a,1                  ; blue: the move
+    IF JETMAN
+    call jet_draw           ; and on again where he is now
+    ld a,(jet_on)
+    or a
+    jr z,.keys
+    ld a,1                  ; blue: his move (every other pass) and the view's
     out (0xFE),a
-    call keys
+    call jet_update
     xor a
     out (0xFE),a
     jr main
+.keys:
+    ENDIF
+    ld a,1                  ; blue: the move
+    out (0xFE),a
+    call keys
+    IF JETMAN
+    call jet_update         ; (he starts once the world has scrolled in)
+    ENDIF
+    xor a
+    out (0xFE),a
+    jr main
+
+; wait_mark: until the beam is in rows 22 and 23, past what shows. Port
+; $00FF: a high byte of $40-$7F would be contended, held till the ULA's fetch
+; is over, and read only the idle $FF. The floating bus: the attribute the
+; ULA is fetching, rows 22 and 23's RASTER_MARK (a pixel byte of $40
+; anywhere can start it early).
+wait_mark:
+    xor a
+    in a,(0xFF)
+    cp RASTER_MARK
+    jr nz,wait_mark
+    ret
 
 ; fill_table: the table as the world starts, the screen blank and the world
 ; to scroll in from below it: the entries reaching up onto the screen from
@@ -1479,6 +1508,10 @@ address_line:   db 0xFF     ; the last screen line store_entry looked up
 address_at:     dw 0        ; and its address
 
     INCLUDE "output/data.s"
+    IF JETMAN
+    INCLUDE "jetman.s"
+    INCLUDE "output/jetman_data.s"
+    ENDIF
 
 table:          ds ENTRY * MAX_TABLE
 

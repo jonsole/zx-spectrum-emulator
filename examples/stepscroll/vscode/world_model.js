@@ -146,7 +146,7 @@
   }
 
   // Where scrolling goes wrong (build.py's coverage check): every byte of the
-  // world that some move -- 2 pixels left or right, 2 lines up or down, to
+  // world that some move -- 2 pixels left or right, 2 lines up or down, or one of each, to
   // any fine position -- changes, and that no entry draws, so that it keeps
   // what it showed before. `world` is render's. Returns a Uint8Array of
   // world.height x (world.width / 8), 1 for each such byte. (A left-column
@@ -181,7 +181,7 @@
       }
     }
     const gaps = new Uint8Array(H * W8);
-    for (const [mx, my] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    for (const [mx, my] of [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [2, -2], [-2, 2], [-2, -2]]) {
       for (const fine of [0, 2, 4, 6]) {
         const now = cuts[fine];
         const before = cuts[(((fine - mx) % 8) + 8) % 8];

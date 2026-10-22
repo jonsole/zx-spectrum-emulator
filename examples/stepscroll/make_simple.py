@@ -97,11 +97,12 @@ def picture(line, plain):
 
 def needed(world_bits):
     """Every byte of the world that some move changes (build.py's changes):
-    by move and fine position, what the world shows against what the move
-    brings into its place."""
+    by move -- across, up or down, or diagonally, one of each -- and fine
+    position, what the world shows against what the move brings into its
+    place."""
     cuts = {f: np.packbits(np.roll(world_bits, f, axis=1), axis=1) for f in (0, 2, 4, 6)}
     need = np.zeros(cuts[0].shape, bool)
-    for mx, my in ((2, 0), (-2, 0), (0, 2), (0, -2)):
+    for mx, my in ((2, 0), (-2, 0), (0, 2), (0, -2), (2, 2), (2, -2), (-2, 2), (-2, -2)):
         for fine in (0, 2, 4, 6):
             now = cuts[fine]
             before = cuts[(fine - mx) % 8]
