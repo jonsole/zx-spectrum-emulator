@@ -1,7 +1,7 @@
 {
   "name": "stepscroll-designer",
   "displayName": "Stepscroll Designer",
-  "description": "Editors for examples/stepscroll: its own copy of Cyberun's terrain step graphics, and (to come) its map and tiles. Independent of the emulator extension.",
+  "description": "Editors for examples/stepscroll: its tiles (tiles.json) and its blocks (blocks.json), and (to come) its map. Independent of the emulator extension.",
   "version": "0.0.1",
   "publisher": "jonsole",
   "license": "MIT",
@@ -13,27 +13,49 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Visualization", "Other"],
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
   "main": "./extension.js",
   "activationEvents": [
-    "onCustomEditor:stepscroll.stepGraphics",
-    "onCommand:stepscroll.openStepGraphics"
+    "onCustomEditor:stepscroll.tiles",
+    "onCommand:stepscroll.openTiles",
+    "onCustomEditor:stepscroll.blocks",
+    "onCommand:stepscroll.openBlocks"
   ],
   "contributes": {
     "customEditors": [
       {
-        "viewType": "stepscroll.stepGraphics",
-        "displayName": "Stepscroll Step Graphics",
+        "viewType": "stepscroll.tiles",
+        "displayName": "Stepscroll Tiles",
         "selector": [
-          { "filenamePattern": "**/examples/stepscroll/world/steps.json" }
+          {
+            "filenamePattern": "**/examples/stepscroll/world/tiles.json"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "stepscroll.blocks",
+        "displayName": "Stepscroll Blocks",
+        "selector": [
+          {
+            "filenamePattern": "**/examples/stepscroll/world/blocks.json"
+          }
         ],
         "priority": "default"
       }
     ],
     "commands": [
       {
-        "command": "stepscroll.openStepGraphics",
-        "title": "Open Step Graphics",
+        "command": "stepscroll.openTiles",
+        "title": "Open Tiles",
+        "category": "Stepscroll"
+      },
+      {
+        "command": "stepscroll.openBlocks",
+        "title": "Open Blocks",
         "category": "Stepscroll"
       }
     ]

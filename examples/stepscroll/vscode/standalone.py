@@ -2,7 +2,7 @@
 uses inlined and standalone_host.js as its host, so it opens straight in a
 browser with nothing running behind it (pages.js does the same in VS Code).
 
-    python examples/stepscroll/vscode/standalone.py    # output/steps_editor.html
+    python examples/stepscroll/vscode/standalone.py    # output/tiles_editor.html, blocks_editor.html
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "output"
-PAGES = {"steps_view.html": "steps_editor.html"}
+PAGES = {"tiles_view.html": "tiles_editor.html", "blocks_view.html": "blocks_editor.html"}
 MARKER = re.compile(r"/\*@([\w.]+\.js)@\*/")
 
 

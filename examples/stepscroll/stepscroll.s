@@ -5,26 +5,28 @@
 ;
 ; The world is a map of pages, 8 across (256 columns: a world column is a
 ; byte and wraps by itself) and MAP_ROWS down, each 32 columns by 256 lines.
-; Each page is a tile, and a tile is a list of entries, each part of one of
-; Cyberun's steps drawn by the blitter for its shape (3x4 a flat step, 1x4 the
-; byte after a flat run, 2x8 a 45-degree slope, 3x8 a gentle one, 2x16 a
-; steep slope or a wall: bytes by rows). A tile holds its entries twice,
+; Each page is a block (a "tile" in the data's labels), a list of entries,
+; each a tile of world/tiles.json 1 to 3 bytes wide and up to MAX_ROWS rows,
+; drawn by the blitter for its width. A block holds its entries twice,
 ; sorted by bottom line and by column, with an index of where each character
-; row's or column's run starts.
+; row's or column's run starts, and a list of them by top line with its own
+; index.
 ;
-; The table holds the entries on the screen: columns 1 to 30 of rows 0 to 21
-; show (columns 0 and 31 and rows 22 and 23 are black on black). An entry is
-; in it while its bottom line is -1 to 191 and its first column is 2 - width
-; to 30. One partly off the left or right is drawn from a byte or two before
-; or after: screen memory runs on along a pixel line from one character row
-; to the next, so what falls off one side lands in a hidden column at the
-; other. One partly off the top draws into the ROM, which ignores it. Each
-; entry: the screen address of its bottom line's first byte, its blitter and
-; its graphic at fine position 0 (the others 64, 128 and 192 bytes on), and,
-; for the moves, its world column, its bottom line on the screen, its shape
-; and its fills. The order does not matter (overlapping entries write the
-; same bytes): an entry leaves by the last one being copied over it.
-; draw_list walks the table with SP and jumps to each entry's blitter.
+; The table holds the entries on the screen: columns 1 to 30 of lines 0 to
+; 175 show (columns 0 and 31 and rows 22 and 23 are black on black). An entry
+; is in it while some of its lines are 0 to 175 and its first column is
+; 2 - width to 30. One partly off the left or right is drawn from a byte or
+; two before or after: screen memory runs on along a pixel line from one
+; character row to the next, so what falls off one side lands in a hidden
+; column at the other. One partly off the top or bottom is clipped: it draws
+; only its row pairs in lines 0 to 175 (store_entry, the moves). Each entry: the screen
+; address of the first byte of its lowest line drawn, its blitter's way in
+; for the pairs it draws, and its graphic from that pair at fine position 0
+; (the others GFX_PAGES pages on), and, for the moves, its world column, its
+; bottom line on the screen, its shape, its fills and its way in. The
+; order does not matter (overlapping entries write the same bytes): an entry
+; leaves by the last one being copied over it. draw_list walks the table
+; with SP and jumps to each entry's blitter.
 ;
 ; Moving 2 pixels across changes only the fine position's offset; when it
 ; wraps, every entry moves a byte. Moving 2 lines up or down moves every
@@ -41,21 +43,30 @@
 
 RASTER_MARK equ 0x40        ; bright black: the hidden rows' attribute
 MAX_TABLE   equ 110         ; entries the table holds
-ENTRY       equ 10          ; bytes an entry
-FIRST_LINE  equ -1          ; the bottom lines an entry in the table has
-LAST_LINE   equ 191
+ENTRY       equ 11          ; bytes an entry
+LAST_SHOWN  equ 175         ; the screen's last line that shows (rows 22 and 23 are hidden)
+MAX_ROWS    equ 24          ; an entry's rows at most (build.py's)
+FIRST_LINE  equ 1           ; the bottom lines an entry in the table can have:
+LAST_LINE   equ LAST_SHOWN + MAX_ROWS - 2 ; its top 0 to LAST_SHOWN (odd: 197)
+LAST_TOP    equ LAST_SHOWN - 1 ; the top line of entries arriving at the bottom
 
 ; An entry's bytes.
-E_ADDRESS   equ 0
-E_BLITTER   equ 2
-E_GRAPHIC   equ 4
+E_ADDRESS   equ 0           ; its lowest line drawn
+E_BLITTER   equ 2           ; its blitter, entered for the pairs it draws
+E_GRAPHIC   equ 4           ; its graphic from the lowest pair drawn
 E_COLUMN    equ 6           ; its world column
-E_LINE      equ 7           ; its bottom line on the screen (-1 to 191)
-E_SHAPE     equ 8           ; width * 32 + rows
+E_LINE      equ 7           ; its bottom line on the screen (1 to LAST_LINE)
+E_SHAPE     equ 8           ; width * 32 + rows (E_LINE + 1: the moves read both)
 E_FILLS     equ 9           ; 2 bits each: above (down), below (up), left (right)
+E_WAY       equ 10          ; its blitter's place in blit_entry (the low byte)
 
-; A tile's entry record: column and bottom line in the page, graphic,
-; blitter, shape, fills.
+; A tile's entry record.
+R_COLUMN    equ 0           ; its column in the page
+R_BOTTOM    equ 1           ; its bottom line in the page
+R_GRAPHIC   equ 2
+R_SHAPE     equ 4
+R_FILLS     equ 5
+R_TOP       equ 6           ; its top line in the page
 R_SIZE      equ 8
 
 FILL_RIGHT  equ 1
@@ -66,13 +77,11 @@ FILLS       equ 0           ; 1: paint the column a move right leaves (fills); 0
 start:
     di                      ; interrupts off for good: main waits on the
     ld sp,0x8000            ; floating bus, and draw_list borrows SP
-    ld hl,screen_start      ; the world, white ink on black
-    ld de,0x4000
+    ld hl,0x4000            ; a blank screen, white ink on black: the world
+    ld de,0x4001            ; scrolls in from the bottom (keys)
     ld bc,6144
+    ld (hl),0
     ldir
-    ld h,d
-    ld l,e
-    inc de
     ld (hl),0x47
     ld bc,768 - 1
     ldir
@@ -118,14 +127,15 @@ main:
     out (0xFE),a
     jr main
 
-; fill_table: the table as the world starts: the entries whose bottom is on
-; each line from FIRST_LINE to LAST_LINE.
+; fill_table: the table as the world starts, the screen blank and the world
+; to scroll in from below it: the entries reaching up onto the screen from
+; below, those whose bottom is on each line from LAST_SHOWN + 2 to LAST_LINE.
 fill_table:
     xor a
     ld (count),a
     ld hl,table
     ld (table_end),hl
-    ld de,FIRST_LINE
+    ld de,LAST_SHOWN + 2
 .line:
     push de
     call add_line
@@ -142,7 +152,9 @@ fill_table:
 ; HL' and SP in the table; for each it pops the screen address, the blitter
 ; and the graphic, adds the fine position's offset, points SP at the graphic
 ; and jumps to the blitter, which draws it bottom row first, two rows a pair
-; (the lower left to right, the upper right to left), and jumps back.
+; (the lower left to right, the upper right to left), and jumps back. The
+; fine positions' graphics are GFX_PAGES pages apart, so the offset is added
+; to the high byte: a graphic can be any size and cross a page.
 
 draw_list:
     ld a,(count)
@@ -162,10 +174,10 @@ draw_next:
     pop de                  ; the screen address
     pop ix                  ; the blitter
     pop hl                  ; the graphic, at fine position 0
-    ld a,l                  ; this fine position's version, in the same page:
+    ld a,h                  ; this fine position's version:
 gfx_offset:
-    add a,0                 ; 0, 32, 64 or 96 (set_offset patches it)
-    ld l,a
+    add a,0                 ; fine / 2 * GFX_PAGES pages on (set_offset patches it)
+    ld h,a
     ld sp,hl
     ex de,hl
     jp (ix)
@@ -195,6 +207,28 @@ draw_done:
     inc a
     and 7
     jr z,cross
+    ENDM
+
+; The same where a JR does not reach (build.py works out which): NEXT_PAIR's
+; costs 3 T-states more a pair, CROSS's only when it is taken.
+    MACRO CROSS_FAR back
+    ld a,l
+    inc a
+    sub 32
+    dec a
+    ld l,a
+    jp c,back
+    ld a,h
+    add a,8
+    ld h,a
+    jp back
+    ENDM
+
+    MACRO NEXT_PAIR_FAR cross
+    ld a,h
+    inc a
+    and 7
+    jp z,cross
     ENDM
 
     MACRO PAIR1             ; 1 byte wide
@@ -318,7 +352,9 @@ entry_x:
     pop hl
     ret
 
-; fill_left: the column to the left of the entry at IX, its rows. Nothing
+; fill_left: the column to the left of the entry at IX, its rows. (Not
+; clipped like the entries: with FILLS off it is unused, and would need
+; clipping to lines 0 to 175 before it was used again.) Nothing
 ; for an entry starting at column -1: its column -2 is off the screen, and
 ; along the pixel line it would be the row above's column 30, which shows.
 fill_left:
@@ -402,6 +438,11 @@ line_address_x:
 ; moves it 2 lines up, A 2 lines down. One move a frame.
 
 keys:
+    ld hl,(view_y)          ; scrolling in at the start: up until the view is
+    ld de,VIEW_Y_START      ; where the world starts
+    or a
+    sbc hl,de
+    jr c,up
     ld a,0xDF               ; the half-row Y U I O P
     in a,(0xFE)
     bit 0,a                 ; P
@@ -419,7 +460,8 @@ keys:
     ; fall into down
 
 ; down: the world 2 lines down (the view 2 lines up the map): every entry 2
-; lines down, those at line 191 off; those now at FIRST_LINE on.
+; lines down, those whose top goes below LAST_SHOWN off; those whose bottom
+; is now at FIRST_LINE on.
 down:
     ld hl,(view_y)
     ld a,h
@@ -432,8 +474,8 @@ down:
     ld de,FIRST_LINE
     jp add_line
 
-; up: the world 2 lines up: every entry 2 lines up, those at FIRST_LINE off;
-; those now at LAST_LINE on.
+; up: the world 2 lines up: every entry 2 lines up, those whose bottom goes
+; above the screen off; those whose top is now at LAST_TOP on.
 up:
     ld hl,(view_y)
     ld de,VIEW_Y_MAX
@@ -445,14 +487,16 @@ up:
     inc hl
     ld (view_y),hl
     call move_up
-    ld de,LAST_LINE
-    jp add_line
+    ld de,LAST_TOP
+    jp add_top
 
-; move_down: every entry's address 2 lines down, in place, and those at
-; LAST_LINE off the table. Its bottom line is odd, so the first line down may
-; cross into the next character row (told from L + 1, as in the blitters)
-; and the second never does. An entry coming down from line -1, whose
-; address was in the ROM, is looked up afresh.
+; move_down: every entry 2 lines down, in place: those whose top goes below
+; LAST_SHOWN off the table; the rest's addresses 2 lines down, except where
+; one is clipped. An entry clipped at the top before draws a pair more (its
+; way in a pair earlier); one clipped at the bottom now draws a pair fewer,
+; still from LAST_SHOWN, its graphic a pair on. Its bottom line is odd, so the
+; first line down may cross into the next character row (told from L + 1, as
+; in the blitters) and the second never does.
 move_down:
     ld a,(count)
     or a
@@ -463,15 +507,25 @@ move_down:
     push hl
     ld de,E_LINE
     add hl,de
-    ld a,(hl)               ; its bottom line
-    cp LAST_LINE
-    jr z,.off
-    inc a
-    inc a
+    ld a,(hl)               ; its bottom line, 2 down
+    add a,2
     ld (hl),a
+    ld e,a                  ; E: its bottom line
+    inc hl
+    ld c,(hl)               ; C: its shape (E_SHAPE)
+    ld a,c
+    and 31
+    ld d,a                  ; D: its rows
+    ld a,e
+    sub d                   ; its top line less 1
     pop hl
-    cp 1
-    jr z,.fresh
+    jr c,.top               ; top 0 or above: it was clipped at the top
+    cp LAST_SHOWN
+    jr nc,.off              ; top below LAST_SHOWN
+    ld a,e
+    cp LAST_SHOWN + 1
+    jr nc,.bottom           ; bottom below LAST_SHOWN
+.move:
     inc hl
     ld d,(hl)               ; H
     inc d
@@ -499,24 +553,26 @@ move_down:
     djnz .entry
     ret
 .off:
-    pop hl
     call remove_entry       ; the last entry in its place, to move next
     djnz .entry
     ret
-.fresh:
-    push hl
-    pop ix
-    call line_address_x     ; line 1 (A)
-    ld (ix + E_ADDRESS),l
-    ld (ix + E_ADDRESS + 1),h
-    push ix
-    pop hl
+.top:
+    ld a,2                  ; a pair more, its lowest line moving down with it
+    call way_step
+    jr .move
+.bottom:
+    ld a,c                  ; a pair fewer: still from LAST_SHOWN, a pair on
+    call skip_pair          ; in its graphic
+    ld a,-2
+    call way_step
     jr .next
 
-; move_up: every entry's address 2 lines up, in place, and those at
-; FIRST_LINE off the table. The first line up never leaves the character row
-; (the bottom line is odd); the second may. Going up from line 1 to -1 lands
-; in the ROM, where draw_list's writes do nothing.
+; move_up: every entry 2 lines up, in place: those whose bottom was at
+; FIRST_LINE off the table; the rest's addresses 2 lines up, except where one
+; is clipped. An entry clipped at the bottom before draws a pair more, still
+; from LAST_SHOWN, its graphic a pair back; one clipped at the top now draws a
+; pair fewer (its way in a pair later). The first line up never leaves the
+; character row (the bottom line is odd); the second may.
 move_up:
     ld a,(count)
     or a
@@ -528,12 +584,24 @@ move_up:
     ld de,E_LINE
     add hl,de
     ld a,(hl)
-    cp FIRST_LINE & 0xFF
+    cp FIRST_LINE
     jr z,.off
-    dec a
-    dec a
+    sub 2                   ; its bottom line, 2 up
     ld (hl),a
+    ld e,a                  ; E: its bottom line
+    inc hl
+    ld c,(hl)               ; C: its shape (E_SHAPE)
+    ld a,c
+    and 31
+    ld d,a                  ; D: its rows
     pop hl
+    ld a,e
+    cp LAST_SHOWN
+    jr nc,.bottom           ; bottom LAST_SHOWN or below: it was clipped at the bottom
+    inc a
+    sub d                   ; its top line
+    jr c,.top               ; above the screen
+.move:
     inc hl
     ld d,(hl)
     dec d
@@ -556,6 +624,7 @@ move_up:
 .done:
     ld (hl),d
     dec hl
+.next:
     ld de,ENTRY
     add hl,de
     djnz .entry
@@ -564,6 +633,87 @@ move_up:
     pop hl
     call remove_entry
     djnz .entry
+    ret
+.top:
+    ld a,-2                 ; a pair fewer, its lowest line moving up with it
+    call way_step
+    jr .move
+.bottom:
+    ld a,c                  ; a pair more: still from LAST_SHOWN, a pair back
+    call unskip_pair        ; in its graphic
+    ld a,2
+    call way_step
+    jr .next
+
+; way_step: the entry at HL's way in A bytes on in blit_entry (2 a pair
+; more, -2 a pair fewer), and its blitter from there. All registers but A kept.
+way_step:
+    push de
+    push hl
+    ld de,E_WAY
+    add hl,de
+    add a,(hl)
+    ld (hl),a
+    ld e,a
+    ld d,high blit_entry    ; (blit_entry is in one page)
+    pop hl
+    push hl
+    inc hl
+    inc hl                  ; E_BLITTER
+    ld a,(de)
+    ld (hl),a
+    inc e
+    inc hl
+    ld a,(de)
+    ld (hl),a
+    pop hl
+    pop de
+    ret
+
+; skip_pair: the graphic of the entry at HL, whose shape is A, a pair of rows
+; on (2 * width bytes); unskip_pair: a pair back. All registers but A kept.
+skip_pair:
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0E                ; 2 * width
+    push hl
+    inc hl
+    inc hl
+    inc hl
+    inc hl                  ; E_GRAPHIC
+    add a,(hl)
+    ld (hl),a
+    inc hl
+    jr nc,.done
+    inc (hl)
+.done:
+    pop hl
+    ret
+
+unskip_pair:
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0E                ; 2 * width
+    push bc
+    push hl
+    ld c,a
+    inc hl
+    inc hl
+    inc hl
+    inc hl                  ; E_GRAPHIC
+    ld a,(hl)
+    sub c
+    ld (hl),a
+    inc hl
+    jr nc,.done
+    dec (hl)
+.done:
+    pop hl
+    pop bc
     ret
 
 ; ---------------------------------------------------------------------------
@@ -698,6 +848,8 @@ add_column:
     ld (take_in_column.width + 1),a
     ld hl,take_in_column
     ld (scan_page.take + 1),hl
+    ld hl,scan_page
+    ld (scan_at.go + 1),hl
     ld a,(view_column)
     neg
     add a,e
@@ -777,37 +929,42 @@ column_at:
 ; ---------------------------------------------------------------------------
 ; The entries arriving.
 
-; add_line: the entries whose bottom is on screen line DE (signed) that
-; touch what shows into the table: in that line's page row (inside the
-; map), in the page columns of screen columns -1 and 30 (one or two).
+; add_line: the entries whose bottom is on screen line DE that touch what
+; shows into the table; add_top: those whose top is. Either from that line's
+; page row (inside the map), in the page columns of screen columns -1 and 30
+; (one or two), through the tiles' index by bottom or by top.
 add_line:
+    ld hl,take_on_line
+    ld a,LINE_INDEX
+    jr add_by
+add_top:
+    ld hl,scan_tops         ; (its records through the top list)
+    ld (scan_at.go + 1),hl
+    ld a,TOP_INDEX
+    jr add_by.top
+add_by:
+    ld (scan_page.take + 1),hl
+    ld hl,scan_page
+    ld (scan_at.go + 1),hl
+.top:
+    ld (.index + 1),a
     ld a,3                  ; magenta: entries arriving
     out (0xFE),a
-    ld hl,line_table_m1     ; the line's screen address, for take_on_line
-    inc de
-    add hl,de
-    add hl,de
-    dec de
-    ld a,(hl)
-    inc hl
-    ld h,(hl)
-    ld l,a
-    ld (line_address),hl
     ld a,e
     ld (screen_line),a
-    ld hl,take_on_line
-    ld (scan_page.take + 1),hl
     ld hl,(view_y)
     add hl,de
     ld a,h
     cp MAP_ROWS
-    ret nc                  ; above or below the map
+    ret nc                  ; below the map
     ld a,l
     ld (arriving_line),a
     rrca
     rrca
     rrca
     and 0x1F
+.index:
+    add a,0                 ; LINE_INDEX or TOP_INDEX
     ld e,a                  ; E: its character row's entry in a tile's index
     ld b,h                  ; B: the page row
     ld a,(view_column)
@@ -835,14 +992,81 @@ add_line:
     ld a,b
     ; fall into scan_at
 
-; scan_at: scan_page on the page at row A, column C. C and E kept.
+; scan_at: scan_page (or scan_tops, as add_top sets) on the page at row A,
+; column C. C and E kept.
 scan_at:
     add a,a
     add a,a
     add a,a
     add a,c
     ld b,a
-    ; fall into scan_page
+.go:
+    jp scan_page
+
+; scan_tops: for add_top, the entries of page B whose tops are in the
+; character row that its tile's TOP_INDEX entry E names, by take_on_top: the
+; run of its top list there, each a number of one of its records. B, C and E
+; kept.
+scan_tops:
+    push bc
+    push de
+    ld a,b
+    ld (.page + 1),a
+    call tile_of            ; HL: the tile
+    ld d,0
+    push hl
+    add hl,de               ; at the index entry
+    ld c,(hl)               ; C: the run's first place in the top list
+    inc hl
+    ld a,(hl)               ; A: the next run's
+    sub c
+    pop hl
+    jr z,.done
+    ld d,a                  ; D: how many
+    push hl
+    ld a,l
+    add a,PIECES
+    ld l,a
+    jr nc,.same
+    inc h
+.same:
+    ld (.records + 1),hl    ; its records
+    pop hl
+    ld a,l
+    add a,TOP_LIST
+    ld l,a
+    jr nc,.same2
+    inc h
+.same2:
+    ld a,(hl)               ; HL: its top list, at the run
+    inc hl
+    ld h,(hl)
+    add a,c
+    ld l,a
+    jr nc,.number
+    inc h
+.number:
+    ld a,(hl)               ; a record's number
+    inc hl
+    push hl
+    ld l,a
+    ld h,0
+    add hl,hl               ; 8 bytes a record
+    add hl,hl
+    add hl,hl
+.records:
+    ld bc,0
+    add hl,bc               ; HL: the record
+.page:
+    ld b,0                  ; B: the page
+    call take_on_top
+    pop hl
+    dec d
+    jr nz,.number
+.done:
+    pop de
+    pop bc
+    ret
 
 ; scan_page: the entries of page B that its tile's index entry E names (the
 ; run in a character row, or in a column) into the table if they touch what
@@ -889,14 +1113,57 @@ scan_page:
     ret
 
 ; take_on_line: the record at HL in page B, whose bottom is in the arriving
-; line's character row, into the table if its bottom is on that line and its
-; first column is 2 - width to 30. B, D and HL kept.
+; line's character row, into the table if its bottom is on that line, its
+; top is no lower than LAST_SHOWN and its first column is 2 - width to 30.
+; take_on_top: the same for one whose top is in the row. B, D and HL kept.
 take_on_line:
-    inc hl
+    inc hl                  ; R_BOTTOM
     ld a,(arriving_line)
     cp (hl)                 ; another line of the row?
     dec hl
     ret nz
+    jr take_on
+take_on_top:
+    push hl
+    ld a,l
+    add a,R_TOP
+    ld l,a
+    jr nc,.same
+    inc h
+.same:
+    ld a,(arriving_line)
+    cp (hl)
+    pop hl
+    ret nz
+take_on:
+    inc hl                  ; its bottom on the screen: the arriving line's
+    ld a,(hl)               ; screen line, and as far below it as its bottom
+    dec hl                  ; is in the page
+    ld c,a
+    ld a,(arriving_line)
+    neg
+    add a,c
+    ld c,a
+    ld a,(screen_line)
+    add a,c
+    ld e,a                  ; E: its bottom line on the screen
+    push hl
+    ld a,l
+    add a,R_SHAPE
+    ld l,a
+    jr nc,.same
+    inc h
+.same:
+    ld c,(hl)               ; C: its shape
+    pop hl
+    ld a,c
+    and 31
+    neg
+    add a,e                 ; its top less 1, if it is on the screen
+    jr nc,.top              ; (no carry: the top is above it)
+    cp LAST_SHOWN
+    ret nc                  ; its top below LAST_SHOWN
+.top:
     ld a,b                  ; its world column: page column * 32 + column
     rrca
     rrca
@@ -904,56 +1171,47 @@ take_on_line:
     and 0xE0
     add a,(hl)
     ld (entry_column),a
-    ld c,a
+    push bc
+    ld b,a
     ld a,(view_column)
     neg
-    add a,c                 ; its screen column, round the world
+    add a,b                 ; its screen column, round the world
     inc a                   ; + 1: -1 to 30 are 0 to 31
     cp 32
-    ret nc
-    ld c,a
-    push hl                 ; first column >= 2 - width: + 1 >= 3 - width
-    ld a,l
-    add a,6
-    ld l,a
-    jr nc,.same
-    inc h
-.same:
-    ld a,(hl)
-    pop hl
+    jr nc,.out
+    ld b,a
+    ld a,c                  ; first column >= 2 - width: + 1 >= 3 - width
     rlca
     rlca
     rlca
     and 7
-    add a,c
+    add a,b
     cp 3
+    pop bc
     ret c
-    dec c                   ; C: its screen column
-    push de
-    ld a,(line_address)
-    add a,c
-    ld e,a
-    ld a,(line_address + 1)
-    ld d,a                  ; DE: its screen address
-    ld a,(screen_line)
+    ld a,e
     jr store_entry
+.out:
+    pop bc
+    ret
 
 ; take_in_column: the record at HL, in the arriving column, into the table if
-; it is as wide as add_column asks and its bottom is on the screen's lines
-; FIRST_LINE to LAST_LINE. column_at patches in, for the page being
-; scanned, the first of its lines on the screen, how many are, and that
-; first line's screen line; add_column the width and the screen column.
-; B, D and HL kept.
+; it is as wide as add_column asks, its bottom is on the screen's lines
+; FIRST_LINE to LAST_LINE and its top no lower than LAST_SHOWN. column_at
+; patches in, for the page being scanned, the first of its lines on the
+; screen, how many are, and that first line's screen line; add_column the
+; width and the screen column. B, D and HL kept.
 take_in_column:
     push hl
     ld a,l
-    add a,6
+    add a,R_SHAPE
     ld l,a
     jr nc,.same
     inc h
 .same:
-    ld a,(hl)
+    ld c,(hl)               ; C: its shape
     pop hl
+    ld a,c
     rlca
     rlca
     rlca
@@ -970,11 +1228,110 @@ take_in_column:
     cp 0                    ; past the page's lines on the screen (or before)?
     ret nc
 .base:
-    add a,0                 ; its screen line
+    add a,0                 ; its bottom line on the screen
+    ld e,a
+    ld a,c
+    and 31
+    neg
+    add a,e                 ; its top less 1, if it is on the screen
+    jr nc,.top
+    cp LAST_SHOWN
+    ret nc                  ; its top below LAST_SHOWN
+.top:
+    ld a,(view_column)
     ld c,a
+.column:
+    ld a,0                  ; its screen column (add_column patches it)
+    add a,c
+    ld (entry_column),a     ; its world column
+    ld a,e
+    ; fall into store_entry
+
+; store_entry: the record at HL into the table at table_end, its bottom on
+; screen line A, its world column entry_column, clipped to lines 0 to
+; LAST_SHOWN: its address at the lowest line it draws (LAST_SHOWN or its
+; bottom), its graphic from there (a byte a column for each line below the
+; screen), and its blitter entered for the pairs from there up to line 0 or
+; its top. Its bottom line is odd and its top even, so the pairs split
+; cleanly at both edges. The last line's address is kept (address_line):
+; the entries arriving on a move are all on one line. Nothing if the table is
+; full. All registers but A kept.
+store_entry:
+    ld c,a                  ; C: its bottom line on the screen
+    ld a,(count)
+    cp MAX_TABLE
+    ret z
+    inc a
+    ld (count),a
+    push bc
     push de
     push hl
-    push bc
+    inc hl
+    inc hl                  ; R_GRAPHIC
+    ld e,(hl)
+    inc hl
+    ld d,(hl)               ; DE: its whole graphic
+    inc hl
+    ld b,(hl)               ; B: its shape (R_SHAPE)
+    inc hl
+    ld a,(hl)               ; R_FILLS
+    ld (.fills + 1),a
+    ld a,c
+    cp LAST_SHOWN + 1
+    jr c,.lowest
+    ld a,LAST_SHOWN
+.lowest:
+    ld (.line + 1),a
+    ld h,a                  ; H: the lowest line it draws
+    ld a,c
+    sub h                   ; its lines below the screen: a byte of graphic
+    jr z,.pairs             ; each a column to skip
+    ld l,a
+    ld a,b
+    cp 0x40                 ; (width 1: a shape below 2 * 32)
+    ld a,l
+    jr c,.skip
+    add a,l
+    bit 5,b                 ; width 3?
+    jr z,.skip
+    add a,l
+.skip:
+    add a,e
+    ld e,a
+    jr nc,.pairs
+    inc d
+.pairs:
+    push de                 ; its graphic from the lowest pair it draws
+    ld a,b
+    and 31
+    ld l,a
+    ld a,c
+    sub l
+    inc a                   ; its top line (INC leaves the carry)
+    jr nc,.top
+    xor a                   ; above the screen: from line 0
+.top:
+    neg
+    add a,h
+    inc a                   ; the lines it draws: 2 a pair, a word a pair in
+    ld l,a                  ; blit_entry
+    ld a,b
+    and 0xE0                ; 32 bytes a width
+    add a,l
+    add a,low (blit_entry - 32)
+    ld (.way + 1),a
+    ld l,a
+    ld h,high blit_entry    ; (blit_entry is in one page)
+    ld e,(hl)
+    inc l
+    ld d,(hl)
+    push de                 ; its blitter's way in
+.line:
+    ld a,0                  ; the lowest line it draws
+    ld hl,address_line
+    cp (hl)
+    jr z,.known
+    ld (hl),a
     inc a                   ; line_table_m1 starts at line -1
     ld l,a
     ld h,0
@@ -982,80 +1339,54 @@ take_in_column:
     ld de,line_table_m1
     add hl,de
     ld a,(hl)
+    inc hl
+    ld h,(hl)
+    ld l,a
+    ld (address_at),hl
+    jr .column
+.known:
+    ld hl,(address_at)
 .column:
-    add a,0                 ; its screen column (wrapping along the line)
-    ld e,a
-    inc hl
-    ld d,(hl)               ; DE: its screen address
-    pop bc
-    pop hl
     ld a,(view_column)
-    push bc
-    ld c,a
-    ld a,(take_in_column.column + 1)
-    add a,c
-    ld (entry_column),a     ; its world column
-    pop bc
-    ld a,c                  ; its screen line
-    ; fall into store_entry
-
-; store_entry: the record at HL into the table at table_end: screen address
-; DE, screen line A, world column entry_column; the DE pushed by its caller
-; restored. HL kept. Nothing if the table is full.
-store_entry:
-    ld (.line + 1),a
-    ld a,(count)
-    cp MAX_TABLE
-    jr z,.full
-    push hl
-    push bc
-    inc hl
-    inc hl
-    ld c,(hl)               ; the graphic
-    inc hl
-    ld b,(hl)
-    inc hl
-    push bc
-    ld c,(hl)               ; the blitter
-    inc hl
-    ld b,(hl)
-    inc hl
-    push hl                 ; at its shape
+    neg
+    ld e,a
+    ld a,(entry_column)
+    add a,e                 ; its screen column (wrapping along the line)
+    add a,l
+    ld e,a
+    ld d,h                  ; DE: its screen address
     ld hl,(table_end)
     ld (hl),e               ; E_ADDRESS
     inc hl
     ld (hl),d
     inc hl
-    ld (hl),c               ; E_BLITTER
+    pop de
+    ld (hl),e               ; E_BLITTER
     inc hl
-    ld (hl),b
+    ld (hl),d
     inc hl
-    pop de                  ; DE: at its shape
-    pop bc
-    ld (hl),c               ; E_GRAPHIC
+    pop de
+    ld (hl),e               ; E_GRAPHIC
     inc hl
-    ld (hl),b
+    ld (hl),d
     inc hl
-    ld a,(entry_column)     ; E_COLUMN
-    ld (hl),a
+    ld a,(entry_column)
+    ld (hl),a               ; E_COLUMN
     inc hl
-.line:
-    ld (hl),0               ; E_LINE
+    ld (hl),c               ; E_LINE
     inc hl
-    ld a,(de)               ; E_SHAPE
-    ld (hl),a
+    ld (hl),b               ; E_SHAPE
     inc hl
-    inc de
-    ld a,(de)               ; E_FILLS
-    ld (hl),a
+.fills:
+    ld (hl),0               ; E_FILLS
+    inc hl
+.way:
+    ld (hl),0               ; E_WAY
     inc hl
     ld (table_end),hl
-    ld hl,count
-    inc (hl)
-    pop bc
     pop hl
-.full:
     pop de
+    pop bc
     ret
 
 ; ---------------------------------------------------------------------------
@@ -1106,36 +1437,46 @@ tile_of:
     ld l,a
     ret
 
-; set_offset: the operand of draw_list's ADD at gfx_offset = fine / 2 * 64,
-; where the fine position's version of each graphic is.
+; set_offset: the operand of draw_list's ADD at gfx_offset = fine / 2 *
+; GFX_PAGES, the pages on to the fine position's version of each graphic.
 set_offset:
     ld a,(fine)
-    add a,a
-    add a,a
-    add a,a
-    add a,a
-    add a,a                 ; (fine / 2 * GFX_SLOT: 64 bytes a slot)
+    rrca                    ; fine / 2
+    ld b,a
+    xor a
+    inc b
+.page:
+    dec b
+    jr z,.set
+    add a,GFX_PAGES
+    jr .page
+.set:
     ld (gfx_offset + 1),a
     ret
 
 PAGE_COLUMNS    equ 32
-LINE_INDEX      equ 0       ; a tile: 33 bytes of index by character row,
-COLUMN_INDEX    equ 33      ; 33 by column (each a record's number),
-PIECES          equ 66      ; then its records by line, then by column
+LINE_INDEX      equ 0       ; a tile: 33 bytes of index by bottom's character row,
+COLUMN_INDEX    equ 33      ; 33 by column (each a record's number), 33 by top's
+TOP_INDEX       equ 66      ; character row (each a place in its top list), its
+TOP_LIST        equ 99      ; top list's address, then its records by bottom line
+PIECES          equ 101     ; and by column (and after them its top list: its
+                            ; records' numbers, by top line)
 
 saved_sp:       dw 0
 fine:           db 0        ; the world's fine position: 0, 2, 4, 6
 view_column:    db 0        ; the world column at screen column 0
-view_y:         dw VIEW_Y_START ; the world line at screen line 0
+view_y:         dw VIEW_Y_START - LAST_SHOWN - 1 ; the world line at screen line 0: the start
+                            ; view a screen below, to scroll in
 count:          db 0        ; the entries in the table
 table_end:      dw table    ; and where the next one goes
 fill_pending:   db 0        ; FILL_RIGHT after a move right to fine position 0
 fill_kind:      db 0
-line_address:   dw 0        ; the arriving line's screen address, at column 0
-screen_line:    db 0        ; and its screen line
+screen_line:    db 0        ; the arriving line's screen line
 arriving_line:  db 0        ; and its line in the page
 entry_column:   db 0        ; the world column of the entry being stored
 column_entry:   db 0        ; add_column's index entry
+address_line:   db 0xFF     ; the last screen line store_entry looked up
+address_at:     dw 0        ; and its address
 
     INCLUDE "output/data.s"
 

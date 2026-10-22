@@ -11,49 +11,65 @@ New-Item -ItemType Junction -Path "$env:USERPROFILE\.vscode\extensions\jonsole.s
 
 After that, run **Developer: Reload Window**.
 
-## Graphics (`steps.json`)
+## Tiles (`tiles.json`)
 
-These are the final graphics: exactly what the game draws, byte for byte. Each tile's entries in `tiles.json`
-name a graphic and say where it goes (byte column and bottom line). The build draws each one as it is, adding
+These are the final tiles: exactly what the game draws, byte for byte. Each block's entries in `blocks.json`
+name a tile and say where it goes (byte column and bottom line). The build draws each one as it is, adding
 no margins, spare bytes or patches.
 
-They started as what the build used to make from Cyberun's steps, which is why a step has several graphics. For
-example, `floor-1-top` is a floor step with 2 margin rows above, and `floor-2-side` is the byte after a flat
-run. So `floor-up-gentle-1-top-bottom` is 24×12: the 16×8 step, the checker byte its pixels shift into, and 2
-rows above and below. To change the movement speed, for instance, give the graphics the margins and spare bytes
-the new speed needs.
+The tiles are plain, straight-edged graphics: sky, rock checker, and a 2-pixel solid line where rock meets sky.
+Each block's tiles are cut from its picture wherever a 2-pixel move changes something, and they never overlap.
+A cut includes the margin rows and spare bytes a move needs, so to change the movement speed, for instance,
+you'd give the tiles the margins and spare bytes the new speed needs. Tiles are grouped by the ground they
+come from (`floor`, `floor-up-gentle`, `wall-rock-left`, ...). The `simple-*` groups are cut from the
+`simple_up` and `simple_down` blocks, which run through every gradient: flat, 1:1, 1:2, 2:1, 1:3, 3:1 and
+walls. `../make_simple.py` makes those two blocks from a list of ground segments.
 
-A graphic is 1 to 3 bytes wide and an even number of rows from 2 to 16, which is what the blitters draw. A
-tile is only its entries. The sky and rock between and under the graphics come from the graphics themselves:
-going down each column, below a graphic is whatever its bottom row shows, rock checker or sky.
+A tile is 1 to 3 bytes wide and an even number of rows from 2 to 24, which is what the blitters draw. A
+block is only its entries. The sky and rock between and under the tiles come from the tiles themselves:
+going down each column, below a tile is whatever its bottom row shows, rock checker or sky.
 
-Each graphic is pre-shifted at build time to fine positions 0, 2, 4 and 6, moving right by that many pixels.
-What comes in on the left is the graphic's `shiftIn` strip, 6 pixels per row: the last 2, 4 or all 6 of them.
-The editor shows the strip in amber to the left of the graphic, where it can be painted, and the 4 versions
-below. The strips started as what the world had just left of each graphic. Where a graphic had different strips
-in different places, it was split into numbered copies (for example `floor-1-top-bottom-2`).
+Each tile is pre-shifted at build time to fine positions 0, 2, 4 and 6, moving right by that many pixels.
+What comes in on the left is the tile's `shiftIn` strip, 6 pixels per row: the last 2, 4 or all 6 of them.
+The editor shows the strip in amber to the left of the tile, where it can be painted, and the 4 versions
+below. Each strip starts as what the world has just left of the tile.
 
-The editor opens `steps.json` in VS Code, or use **Stepscroll: Open Step Graphics**.
+The editor opens `tiles.json` in VS Code, or use **Stepscroll: Open Tiles**.
 
 | Task | How |
 |---|---|
 | New group | **New group**, then give it a name. |
-| Rename or delete a group | Its **Rename** or **✕** button. A group can only be deleted once it's empty. Groups only organise: the tiles name graphics. |
-| New graphic | A group's **+**, or **New** to add one to the selected graphic's group. |
-| Copy, rename or delete a graphic | **Duplicate**, **Rename** or **Delete**. |
+| Rename or delete a group | Its **Rename** or **✕** button. A group can only be deleted once it's empty. Groups only organise: the blocks name tiles. |
+| New tile | A group's **+**, or **New** to add one to the selected tile's group. |
+| Copy, rename or delete a tile | **Duplicate**, **Rename** or **Delete**. |
 | Resize | **Width** and **Height** grow or cut the bitmap at the right and the bottom. |
 | Paint | Click a pixel to toggle it; drag to paint more the same. |
-| Rearrange or regroup | Drag a graphic in the list, before another or onto another group. |
+| Rearrange or regroup | Drag a tile in the list, before another or onto another group. |
 
-Renaming a graphic updates the entries in `tiles.json`. Deleting a graphic is refused while an entry uses it.
+Renaming a tile updates the entries in `blocks.json`. Deleting a tile is refused while an entry uses it.
+
+## Blocks (`blocks.json`)
+
+A block is its entries: tiles from `tiles.json`, each at a byte column and a bottom line in the 256 × 256
+page, drawn in order. In VS Code, `blocks.json` opens in the blocks editor, or use **Stepscroll: Open Blocks**.
+
+| Task | How |
+|---|---|
+| New, copy, rename or delete a block | The buttons above the block list. A rename updates `map.json`. A block on the map can't be deleted. |
+| Place a tile | Pick it on the right, then click on the page to put its top left at the pointer. Escape or the right button stops placing. |
+| Move an entry | Drag it, or select it and use the arrow keys (a byte, or 2 lines). Entries snap to byte columns and odd bottom lines. |
+| Delete an entry | Select it, then press Delete. |
+| Drawing order | The ↑ and ↓ buttons in the entry list. A later entry draws over an earlier one. |
+| Edit a tile | Double-click it on the page, in the entry list or among the tiles: the tiles editor opens on it (standalone, in a new tab). |
+| See the joins | Around the page, dimmed, are its neighbours on the map. **On the map at** picks which of the block's places to show. |
 
 ## Standalone
 
 ```powershell
-.venv-win\Scripts\python.exe examples\stepscroll\vscode\standalone.py   # output\steps_editor.html
+.venv-win\Scripts\python.exe examples\stepscroll\vscode\standalone.py   # output\tiles_editor.html, output\blocks_editor.html
 ```
 
-This writes a single HTML file.
+This writes one HTML file for each editor.
 
 - In Chrome or Edge, **Open world folder** on `examples/stepscroll/world/`, and Save writes back into it.
 - In other browsers, **Open files** takes the JSON files, and Save downloads what changed.
@@ -63,13 +79,14 @@ This writes a single HTML file.
 | File | What |
 |---|---|
 | `world_model.js` | world.py in JavaScript, pixel for pixel |
-| `steps_model.js` | steps.json and tiles.json read and written in their own layouts, and the edits |
-| `steps_view.html` | The editor's page, the same in VS Code and standalone |
-| `steps_view.js` | Its VS Code host: a custom text editor on steps.json that also edits tiles.json on a rename |
+| `tiles_model.js` | tiles.json and blocks.json read and written in their own layouts, and the edits |
+| `blocks_model.js` | blocks.json and map.json edits: blocks, and entries placed, moved, reordered and removed |
+| `tiles_view.html`, `blocks_view.html` | The editors' pages, the same in VS Code and standalone |
+| `designer_host.js` | Their VS Code host: a custom text editor on each file, which also edits the file beside it when a rename reaches it |
 | `standalone_host.js` | The host a page has in a plain browser |
 | `pages.js`, `standalone.py` | Put a page together with its scripts inlined |
 
-`tests/` runs from plain Node, for example `node examples\stepscroll\vscode\tests\steps_model_test.js`. Some tests
+`tests/` runs from plain Node, for example `node examples\stepscroll\vscode\tests\tiles_model_test.js`. Some tests
 compare against world.py and build.py through the repo's venv, and they skip when it isn't there.
 
-Still to come: the map and tiles editor.
+Still to come: the map editor.

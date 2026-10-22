@@ -7,12 +7,12 @@
 // standalone.py puts this where the page's host marker is; in VS Code, the
 // extension puts its own host there instead. The page says which files it
 // edits, and what to call its storage, by setting window.designerPage before
-// this runs: { files: ['steps.json', 'tiles.json'], key: 'stepscroll.steps' }.
+// this runs: { files: ['tiles.json', 'blocks.json'], key: 'stepscroll.tiles' }.
 
 (function () {
   'use strict';
   const page = window.designerPage;
-  const READS = ['steps.json', 'tiles.json', 'map.json'];
+  const READS = ['tiles.json', 'blocks.json', 'map.json'];
   let folder = null;                      // a FileSystemDirectoryHandle
   let where = '';
 
@@ -30,7 +30,7 @@
   function bootFrom(texts) {
     const missing = READS.filter((n) => texts[n] === undefined);
     if (missing.length) throw new Error('missing ' + missing.join(', ') + ' -- open examples/stepscroll/world/');
-    return { steps: texts['steps.json'], tiles: texts['tiles.json'], map: texts['map.json'] };
+    return { tiles: texts['tiles.json'], blocks: texts['blocks.json'], map: texts['map.json'] };
   }
 
   async function readFolder(dir) {
@@ -56,7 +56,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  // The page's names for its files ('steps') and the files' own ('steps.json').
+  // The page's names for its files ('tiles') and the files' own ('tiles.json').
   const fileOf = (short) => short + '.json';
 
   window.designerHost = {
@@ -67,7 +67,7 @@
       let dir = await window.showDirectoryPicker({ id: 'stepscroll-world', mode: 'readwrite' });
       let texts = await readFolder(dir);
       // Given examples/stepscroll rather than its world/, look inside.
-      if (texts['steps.json'] === undefined) {
+      if (texts['tiles.json'] === undefined) {
         try {
           dir = await dir.getDirectoryHandle('world');
           texts = await readFolder(dir);
@@ -103,7 +103,7 @@
     },
     canSave: () => where !== '',
     where: () => where,
-    // texts: { 'steps.json': text, ... }, only the files that changed.
+    // texts: { 'tiles.json': text, ... }, only the files that changed.
     async save(texts) {
       for (const [name, text] of Object.entries(texts)) {
         if (folder) {
@@ -134,5 +134,14 @@
     },
     keep(s) { storage('ui', JSON.stringify(s)); },
     onReload() {},
+    // What the address asks to show (tiles_editor.html#floor-1), if anything.
+    onSelect(fn) {
+      const name = decodeURIComponent(location.hash.slice(1));
+      if (name) fn(name);
+    },
+    // The tiles page, beside this one, in a new tab, showing tile `name`.
+    openTile(name) {
+      window.open('tiles_editor.html#' + encodeURIComponent(name), '_blank');
+    },
   };
 })();

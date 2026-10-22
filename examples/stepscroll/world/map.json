@@ -2,7 +2,7 @@
   "$schema": "./map.schema.json",
   "rows": [
     ["sky", "sky", "sky", "sky", "sky", "sky", "sky", "sky"],
-    ["plain", "hill", "pit", "peak", "plain", "dip", "hill", "peak"],
+    ["simple_up", "hill", "pit", "peak", "simple_down", "dip", "hill", "peak"],
     ["tunnel", "shaft_down", "shaft_in", "stalactites", "tunnel_up", "tunnel_high", "tunnel_down", "cavern"],
     ["rock", "shaft", "rock", "pocket", "rock", "pocket", "rock", "rock"],
     ["dead_end_left", "cavern_shaft", "tunnel", "stalactites", "tunnel_up", "tunnel_down", "shaft_down", "dead_end_right"],

@@ -1,65 +1,69 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "stepscroll tiles",
-  "description": "Every tile a page of the world can hold, keyed by the tile's name. A page is 256 pixels across and 256 lines down. A tile is its entries: graphics from steps.json, each at a byte column and a bottom line, drawn exactly as they are. Sky and rock between and under them come from the graphics themselves: down each column, below a graphic, whatever its bottom row shows. See world.py.",
+  "description": "What the display list draws: every tile is drawn exactly as it is here, by a block's entry naming it in blocks.json -- the step, and whatever sky, rock, margin rows and spare bytes round it a move needs; the build adds nothing. In named groups, each tile keyed by a name of its own, unique across all groups. See tileset.py.",
   "type": "object",
   "required": [
-    "tiles"
+    "groups"
   ],
   "additionalProperties": false,
   "properties": {
     "$schema": {
       "type": "string"
     },
-    "tiles": {
+    "groups": {
       "type": "object",
-      "minProperties": 1,
       "additionalProperties": {
-        "$ref": "#/$defs/tile"
+        "$ref": "#/$defs/group"
       }
     }
   },
   "$defs": {
-    "tile": {
+    "group": {
       "type": "object",
       "required": [
-        "entries"
+        "tiles"
       ],
       "additionalProperties": false,
       "properties": {
-        "entries": {
-          "description": "What the display list draws in this page, in order.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/entry"
+        "direction": {
+          "description": "The direction of the steps its tiles were made for, as a reminder; the build doesn't use it.",
+          "type": "string"
+        },
+        "tiles": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/tile"
           }
         }
       }
     },
-    "entry": {
+    "tile": {
       "type": "object",
       "required": [
-        "graphic",
-        "column",
-        "bottom"
+        "rows"
       ],
       "additionalProperties": false,
       "properties": {
-        "graphic": {
-          "description": "A graphic's name in steps.json.",
-          "type": "string"
+        "rows": {
+          "description": "The bitmap, rows from the top: '#' a set pixel, '.' a clear one. 1 to 3 bytes wide (the blitters'), an even number of rows from 2 to 24 (the blitters go up a row pair at a time).",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 24,
+          "items": {
+            "type": "string",
+            "pattern": "^([#.]{8}){1,3}$"
+          }
         },
-        "column": {
-          "description": "The byte column of its left byte in the page, 0 to 31.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 31
-        },
-        "bottom": {
-          "description": "Its bottom line in the page: odd, as the blitters go up a row pair at a time.",
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 255
+        "shiftIn": {
+          "description": "What comes in on the left as the tile is pre-shifted right for fine positions 2, 4 and 6: 6 pixels a row, the last 2, 4 or all 6 of them. A row for each of the tile's rows.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 24,
+          "items": {
+            "type": "string",
+            "pattern": "^[#.]{6}$"
+          }
         }
       }
     }

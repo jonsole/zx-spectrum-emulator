@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "stepscroll map",
-  "description": "The world's pages, row by row from the top, each the name of a tile in tiles.json. Exactly 8 pages across (a world column is a byte, and the world wraps round across); up to 32 rows down, not wrapping.",
+  "description": "The world's pages, row by row from the top, each the name of a block in blocks.json. Exactly 8 pages across (a world column is a byte, and the world wraps round across); up to 32 rows down, not wrapping.",
   "type": "object",
   "required": ["rows"],
   "additionalProperties": false,

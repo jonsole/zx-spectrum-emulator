@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocks</title>
+<style>
+  :root {
+    --bg: var(--vscode-editor-background, #1e1e1e);
+    --fg: var(--vscode-foreground, #d4d4d4);
+    --muted: var(--vscode-descriptionForeground, #9a9a9a);
+    --panel: var(--vscode-sideBar-background, #252526);
+    --border: var(--vscode-panel-border, #3c3c3c);
+    --accent: var(--vscode-focusBorder, #3794ff);
+    --button: var(--vscode-button-background, #0e639c);
+    --button-fg: var(--vscode-button-foreground, #ffffff);
+    --input: var(--vscode-input-background, #3c3c3c);
+    --bad: #f14c4c;
+    --font: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font: 13px var(--font); display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; font-weight: 600; }
+  header .status { color: var(--muted); margin-left: auto; }
+  button { background: transparent; color: var(--fg); border: 1px solid var(--border); padding: 3px 9px; border-radius: 2px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--button); color: var(--button-fg); border-color: transparent; }
+  button.small { padding: 0 6px; font-size: 12px; }
+  input, select { background: var(--input); color: var(--fg); border: 1px solid var(--border); font: inherit; padding: 2px 4px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #blocks { width: 160px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--panel); padding: 8px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
+  .block { padding: 4px 6px; border-radius: 3px; cursor: pointer; display: flex; justify-content: space-between; gap: 6px; }
+  .block:hover { background: rgba(255,255,255,.05); }
+  .block.selected { background: rgba(55,148,255,.25); }
+  .block small { color: var(--muted); }
+  #work { flex: 1; overflow: auto; padding: 10px 14px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  #work h2 { font-size: 14px; margin: 0; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .tools label { color: var(--muted); }
+  .note { color: var(--muted); max-width: 70em; }
+  canvas { image-rendering: pixelated; display: block; }
+  #page { cursor: crosshair; touch-action: none; }
+  #pageWrap { overflow: auto; max-width: 100%; max-height: 75vh; border: 1px solid var(--border); align-self: flex-start; }
+  #side { width: 250px; overflow-y: auto; border-left: 1px solid var(--border); background: var(--panel); padding: 8px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+  #side h3 { font-size: 12px; margin: 4px 0; font-weight: 600; }
+  .group h4 { font-size: 11px; margin: 6px 0 4px; color: var(--muted); font-weight: 600; }
+  .thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .thumb { border: 2px solid transparent; background: #000; line-height: 0; cursor: pointer; }
+  .thumb.selected { border-color: var(--accent); }
+  #entries { display: flex; flex-direction: column; gap: 2px; }
+  .entry { display: flex; gap: 6px; align-items: center; padding: 2px 4px; border-radius: 2px; cursor: pointer; font-size: 12px; }
+  .entry.selected { background: rgba(55,148,255,.25); }
+  .entry span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entry small { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #error { color: var(--bad); white-space: pre-wrap; }
+  #empty { padding: 40px; max-width: 46em; line-height: 1.5; }
+  #dialog { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  #dialog[hidden] { display: none; }
+  #dialog .box { background: var(--panel); border: 1px solid var(--border); padding: 16px; min-width: 320px; max-width: 90vw; display: flex; flex-direction: column; gap: 10px; }
+  #dialog .box p { margin: 0; }
+  #dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  @media (max-width: 720px) {
+    main { flex-direction: column; }
+    #blocks, #side { width: auto; max-height: 30vh; border: 0; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Blocks</h1>
+  <button id="open" hidden>Open world folder…</button>
+  <button id="openFiles" hidden>Open files…</button>
+  <button id="save" class="primary" hidden disabled>Save</button>
+  <button id="undo" hidden disabled title="Ctrl+Z">Undo</button>
+  <button id="redo" hidden disabled title="Ctrl+Y">Redo</button>
+  <span class="status" id="status"></span>
+</header>
+<div id="empty" hidden>
+  <p>Open <code>examples/stepscroll/world/</code>: the blocks are in <code>blocks.json</code>, drawn with the tiles
+  in <code>tiles.json</code>; <code>map.json</code> places them, and is updated when a block is renamed.</p>
+</div>
+<main id="main" hidden>
+  <div id="blocks"></div>
+  <div id="work">
+    <h2 id="title"></h2>
+    <div class="tools">
+      <label>On the map at <select id="place"></select></label>
+      <label title="The fine position: what the game shows with the screen moved this many pixels">Shift <select id="shift"><option>0</option><option>2</option><option>4</option><option>6</option></select></label>
+      <label>Zoom <select id="zoom"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>8</option><option>16</option></select></label>
+      <button id="delEntry" disabled>Delete entry</button>
+    </div>
+    <div id="error"></div>
+    <div id="pageWrap"><canvas id="page"></canvas></div>
+    <p class="note">Pick a tile on the right, then click on the page to place it (its top left at the pointer);
+    Escape or the right button stops placing. Click an entry to select it, drag it to move it, Delete to remove
+    it; the arrow keys move it a byte or 2 lines. Entries snap to byte columns and odd bottom lines. Around the
+    page, dimmed, are its neighbours on the map.</p>
+  </div>
+  <div id="side">
+    <div>
+      <h3>Tiles</h3>
+      <div id="palette"></div>
+    </div>
+    <div>
+      <h3>Entries, in drawing order</h3>
+      <div id="entries"></div>
+    </div>
+  </div>
+</main>
+<div id="dialog" hidden>
+  <div class="box">
+    <p id="dialogText"></p>
+    <input id="dialogInput">
+    <div class="buttons"><button id="dialogCancel">Cancel</button><button class="primary" id="dialogOk">OK</button></div>
+  </div>
+</div>
+<script>
+/*@world_model.js@*/
+/*@tiles_model.js@*/
+/*@blocks_model.js@*/
+window.designerPage = { files: ['blocks.json', 'map.json'], key: 'stepscroll.blocks' };
+/*@host@*/
+(function () {
+  'use strict';
+  const W = window.StepscrollWorld;
+  const T = window.StepscrollBlocks;
+  const host = window.designerHost;
+  const $ = (id) => document.getElementById(id);
+
+  const MARGIN = 48;        // pixels of the neighbours shown round the page
+  const state = Object.assign({ block: null, place: 0, zoom: 2, shift: 0 }, host.state());
+  let blocksDoc = null;
+  let mapDoc = null;
+  let tiles = null;      // world_model.parseTiles(tiles.json)
+  let eol = { blocks: '\n', map: '\n' };
+  let saved = { blocks: null, map: null };
+  let undo = [];
+  let redo = [];
+  let selected = -1;        // the selected entry's index
+  let placing = null;       // a tile's name while placing it
+  let hover = null;         // [x, y] page pixel under the pointer
+  let drag = null;          // { k, dx, dy, column, bottom } while dragging an entry
+  let world = null;         // the rendered world, and where the page is in it
+  let view = null;          // { x0, y0, w, h } world pixels shown
+
+  function keep() {
+    host.keep({ block: state.block, place: state.place, zoom: state.zoom, shift: state.shift });
+  }
+  const eolOf = (text) => (text.indexOf('\r\n') >= 0 ? '\r\n' : '\n');
+  const show = (m) => { $('status').textContent = m; };
+
+  // ---- loading and editing -------------------------------------------------
+
+  function load(boot) {
+    $('error').textContent = '';
+    try {
+      tiles = W.parseTiles(JSON.parse(boot.tiles));
+      blocksDoc = JSON.parse(boot.blocks);
+      mapDoc = JSON.parse(boot.map);
+    } catch (err) {
+      $('error').textContent = String(err && err.message ? err.message : err);
+      return;
+    }
+    eol = { blocks: eolOf(boot.blocks), map: eolOf(boot.map) };
+    saved = { blocks: boot.blocks, map: boot.map };
+    if (!state.block || !blocksDoc.blocks[state.block]) state.block = Object.keys(blocksDoc.blocks)[0];
+    selected = -1;
+    $('empty').hidden = true;
+    $('main').hidden = false;
+    refresh();
+  }
+
+  // New blocks.json, and map.json if the edit reached it.
+  function apply(nextBlocks, nextMap, record) {
+    if (record !== false) {
+      undo.push({ blocks: blocksDoc, map: mapDoc, block: state.block });
+      if (undo.length > 200) undo.shift();
+      redo = [];
+    }
+    blocksDoc = nextBlocks;
+    host.edit('blocks', T.formatBlocks(blocksDoc, eol.blocks));
+    if (nextMap && nextMap !== mapDoc) {
+      mapDoc = nextMap;
+      host.edit('map', T.formatMap(mapDoc, eol.map));
+    }
+    if (!blocksDoc.blocks[state.block]) state.block = Object.keys(blocksDoc.blocks)[0];
+    const n = (blocksDoc.blocks[state.block].entries || []).length;
+    if (selected >= n) selected = -1;
+    keep();
+    refresh();
+  }
+
+  function attempt(fn) {
+    try {
+      fn();
+    } catch (err) {
+      show(String(err && err.message ? err.message : err));
+    }
+  }
+
+  // ---- the world round the page ----------------------------------------------
+
+  // The world rendered with the block where the chosen place on the map puts
+  // it; a block not on the map is drawn alone in a row of empty pages.
+  function refreshWorld() {
+    const where = T.places(mapDoc, state.block);
+    $('error').textContent = W.blockProblems(blocksDoc.blocks, state.block, tiles).join('\n');
+    try {
+      let rows = mapDoc.rows;
+      let blocks = blocksDoc.blocks;
+      let r = 0;
+      let c = 0;
+      if (where.length) {
+        [r, c] = where[Math.min(state.place, where.length - 1)];
+      } else {
+        blocks = Object.assign({}, blocks, { ' empty': { entries: [] } });
+        rows = [[state.block].concat(Array(7).fill(' empty'))];
+      }
+      world = { r, c, w: W.render(blocks, rows, tiles) };
+    } catch (err) {
+      world = null;
+      $('error').textContent = String(err && err.message ? err.message : err);
+    }
+  }
+
+  function refresh() {
+    refreshWorld();
+    gaps = world ? W.coverageGaps(world.w) : null;
+    draw();
+  }
+  let gaps = null;              // world_model.coverageGaps of the world shown
+
+  // ---- drawing -------------------------------------------------------------
+
+  function draw() {
+    drawBlocks();
+    drawPage();
+    drawPalette();
+    drawEntries();
+    if (host.standalone) {
+      const dirty = T.formatBlocks(blocksDoc, eol.blocks) !== saved.blocks || T.formatMap(mapDoc, eol.map) !== saved.map;
+      $('undo').disabled = !undo.length;
+      $('redo').disabled = !redo.length;
+      $('save').disabled = !host.canSave() || !dirty;
+      show(host.where() + (dirty ? ' — unsaved' : ''));
+    }
+  }
+
+  function drawBlocks() {
+    const box = $('blocks');
+    box.textContent = '';
+    const bar = document.createElement('div');
+    bar.className = 'tools';
+    for (const [label, fn] of [['New', newBlock], ['Copy', copyBlock], ['Rename', renameBlock], ['Delete', deleteBlock]]) {
+      const b = document.createElement('button');
+      b.className = 'small';
+      b.textContent = label;
+      b.addEventListener('click', fn);
+      bar.appendChild(b);
+    }
+    box.appendChild(bar);
+    for (const name of Object.keys(blocksDoc.blocks)) {
+      const row = document.createElement('div');
+      row.className = 'block' + (name === state.block ? ' selected' : '');
+      const label = document.createElement('span');
+      label.textContent = name;
+      const n = T.places(mapDoc, name).length;
+      const small = document.createElement('small');
+      small.textContent = n ? `×${n}` : 'unused';
+      row.append(label, small);
+      row.addEventListener('click', () => selectBlock(name));
+      box.appendChild(row);
+    }
+  }
+
+  function selectBlock(name) {
+    state.block = name;
+    state.place = 0;
+    selected = -1;
+    keep();
+    refresh();
+    scrollToWork();
+  }
+
+  function drawPage() {
+    const where = T.places(mapDoc, state.block);
+    const sel = $('place');
+    sel.textContent = '';
+    if (!where.length) {
+      const o = document.createElement('option');
+      o.textContent = 'not on the map';
+      sel.appendChild(o);
+    }
+    where.forEach(([r, c], i) => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = `row ${r}, column ${c}`;
+      sel.appendChild(o);
+    });
+    sel.value = String(Math.min(state.place, Math.max(0, where.length - 1)));
+    const entries = blocksDoc.blocks[state.block].entries || [];
+    $('title').textContent = `${state.block} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`;
+    $('delEntry').disabled = selected < 0;
+    const cv = $('page');
+    if (!world) { cv.width = cv.height = 0; return; }
+    const w = world.w;
+    const z = state.zoom;
+    view = { x0: world.c * W.PAGE_W - MARGIN, y0: world.r * W.PAGE_H - MARGIN,
+             w: W.PAGE_W + 2 * MARGIN, h: W.PAGE_H + 2 * MARGIN };
+    cv.width = view.w * z;
+    cv.height = view.h * z;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(view.w, view.h);
+    const data = new Uint32Array(img.data.buffer);
+    const INK = 0xffe8e8e8, PAPER = 0xff000000, DIM_INK = 0xff555555, DIM_PAPER = 0xff1a1a1a, OUT = 0xff2a2a2a;
+    const shown = shiftedView(w, state.shift);
+    for (let y = 0; y < view.h; y++) {
+      const wy = view.y0 + y;
+      for (let x = 0; x < view.w; x++) {
+        const inPage = x >= MARGIN && x < MARGIN + W.PAGE_W && y >= MARGIN && y < MARGIN + W.PAGE_H;
+        let colour;
+        if (wy < 0 || wy >= w.height) colour = OUT;
+        else {
+          const on = shown[y * view.w + x];
+          colour = inPage ? (on ? INK : PAPER) : (on ? DIM_INK : DIM_PAPER);
+        }
+        data[y * view.w + x] = colour;
+      }
+    }
+    // Draw at 1:1, then scale up crisply.
+    const tmp = document.createElement('canvas');
+    tmp.width = view.w;
+    tmp.height = view.h;
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, view.w * z, view.h * z);
+    // Where scrolling goes wrong: bytes a move changes that no entry draws.
+    if (gaps) {
+      const W8 = w.width / 8;
+      ctx.fillStyle = 'rgba(241, 76, 76, .6)';
+      for (let y = 0; y < view.h; y++) {
+        const wy = view.y0 + y;
+        if (wy < 0 || wy >= w.height) continue;
+        for (let k = Math.floor(view.x0 / 8); k < Math.ceil((view.x0 + view.w) / 8); k++) {
+          if (gaps[wy * W8 + ((k % W8) + W8) % W8]) ctx.fillRect((k * 8 - view.x0) * z, y * z, 8 * z, z);
+        }
+      }
+    }
+    // The page's edge.
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(MARGIN * z - 0.5, MARGIN * z - 0.5, W.PAGE_W * z + 1, W.PAGE_H * z + 1);
+    // The entries.
+    entries.forEach((e, k) => {
+      const g = tiles.tiles[e.tile];
+      if (!g) return;
+      let { column, bottom } = e;
+      if (drag && drag.k === k) ({ column, bottom } = drag);
+      const isSel = k === selected;
+      ctx.strokeStyle = isSel ? '#ffb000' : 'rgba(80,160,255,.8)';
+      ctx.lineWidth = isSel ? 2 : 1;
+      ctx.strokeRect((MARGIN + column * 8) * z + 0.5, (MARGIN + bottom - g.height + 1) * z + 0.5,
+                     g.width * 8 * z - 1, g.height * z - 1);
+      if (drag && drag.k === k) drawTile(ctx, g, column, bottom, z, 0.85);
+    });
+    // The tile being placed, under the pointer.
+    if (placing && hover) {
+      const g = tiles.tiles[placing];
+      const p = T.snap(g, Math.floor(hover[0] / 8), hover[1] + g.height - 1);
+      drawTile(ctx, g, p.column, p.bottom, z, 0.8);
+      ctx.strokeStyle = '#ffb000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect((MARGIN + p.column * 8) * z, (MARGIN + p.bottom - g.height + 1) * z, g.width * 8 * z, g.height * z);
+    }
+  }
+
+  // What the game shows over the view at fine position `fine`: the sky and
+  // rock moved right by `fine` pixels (they look the same after any 2-pixel
+  // move), and every entry drawn from its pre-shifted version -- its tile
+  // moved right inside the entry's bytes, the last `fine` pixels of its
+  // shift-in strip coming in on the left (build.py's tile()).
+  function shiftedView(w, fine) {
+    const out = new Uint8Array(view.w * view.h);
+    for (let y = 0; y < view.h; y++) {
+      const wy = view.y0 + y;
+      if (wy < 0 || wy >= w.height) continue;
+      for (let x = 0; x < view.w; x++) {
+        const wx = (((view.x0 + x - fine) % w.width) + w.width) % w.width;
+        out[y * view.w + x] = w.bits[wy * w.width + wx];
+      }
+    }
+    if (!fine) {
+      return out;
+    }
+    for (const e of w.entries) {
+      const t = tiles.tiles[e.tile];
+      if (!t) continue;
+      const left = (e.mapColumn * W.PAGE_COLUMNS + e.column) * 8;
+      const top = e.mapRow * W.PAGE_H + e.bottom - e.rows + 1;
+      // The entry's left edge in view pixels, round the world if it must.
+      let vx = left - view.x0;
+      if (vx < -8 * e.width) vx += w.width;
+      if (vx >= view.w) vx -= w.width;
+      if (vx + 8 * e.width <= 0 || vx >= view.w) continue;
+      for (let i = 0; i < e.rows; i++) {
+        const vy = top + i - view.y0;
+        if (vy < 0 || vy >= view.h) continue;
+        const row = t.shiftIn[i].slice(6 - fine).concat(t.bits[i]);
+        for (let b = 0; b < 8 * e.width; b++) {
+          const x = vx + b;
+          if (x >= 0 && x < view.w) out[vy * view.w + x] = row[b];
+        }
+      }
+    }
+    return out;
+  }
+
+  function drawTile(ctx, g, column, bottom, z, alpha) {
+    ctx.globalAlpha = alpha;
+    const top = bottom - g.height + 1;
+    g.bits.forEach((row, i) => row.forEach((v, b) => {
+      ctx.fillStyle = v ? '#ffffff' : '#000000';
+      ctx.fillRect((MARGIN + column * 8 + b) * z, (MARGIN + top + i) * z, z, z);
+    }));
+    ctx.globalAlpha = 1;
+  }
+
+  function thumbnail(g) {
+    const cv = document.createElement('canvas');
+    const z = 2;
+    cv.width = g.width * 8 * z;
+    cv.height = g.height * z;
+    const ctx = cv.getContext('2d');
+    g.bits.forEach((row, y) => row.forEach((v, x) => {
+      ctx.fillStyle = v ? '#e8e8e8' : '#000';
+      ctx.fillRect(x * z, y * z, z, z);
+    }));
+    return cv;
+  }
+
+  function drawPalette() {
+    const box = $('palette');
+    box.textContent = '';
+    for (const [gname, names] of Object.entries(tiles.groups)) {
+      const group = document.createElement('div');
+      group.className = 'group';
+      const h = document.createElement('h4');
+      h.textContent = gname;
+      group.appendChild(h);
+      const thumbs = document.createElement('div');
+      thumbs.className = 'thumbs';
+      for (const name of names) {
+        const t = document.createElement('div');
+        t.className = 'thumb' + (name === placing ? ' selected' : '');
+        t.title = name;
+        t.appendChild(thumbnail(tiles.tiles[name]));
+        t.addEventListener('dblclick', () => openTile(name));
+        t.addEventListener('click', () => {
+          placing = placing === name ? null : name;
+          selected = -1;
+          draw();
+        });
+        thumbs.appendChild(t);
+      }
+      group.appendChild(thumbs);
+      box.appendChild(group);
+    }
+  }
+
+  function drawEntries() {
+    const box = $('entries');
+    box.textContent = '';
+    (blocksDoc.blocks[state.block].entries || []).forEach((e, k) => {
+      const row = document.createElement('div');
+      row.className = 'entry' + (k === selected ? ' selected' : '');
+      const name = document.createElement('span');
+      name.textContent = e.tile;
+      name.title = e.tile;
+      const at = document.createElement('small');
+      at.textContent = `${e.column}, ${e.bottom}`;
+      row.append(name, at);
+      for (const [label, by] of [['↑', -1], ['↓', 1]]) {
+        const b = document.createElement('button');
+        b.className = 'small';
+        b.textContent = label;
+        b.title = by < 0 ? 'Draw earlier' : 'Draw later';
+        b.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const r = T.reorderEntry(blocksDoc, state.block, k, by);
+          selected = r.index;
+          apply(r.blocks);
+        });
+        row.appendChild(b);
+      }
+      row.addEventListener('click', () => { selected = k; placing = null; draw(); });
+      row.addEventListener('dblclick', () => openTile(e.tile));
+      box.appendChild(row);
+    });
+  }
+
+  // ---- the page: placing, selecting, dragging --------------------------------
+
+  const page = $('page');
+
+  // The page pixel under the pointer (the page's own 0..255, beyond it in
+  // the margin).
+  function pixelAt(e) {
+    const r = page.getBoundingClientRect();
+    const scale = (r.width / page.width) * state.zoom;
+    return [Math.floor((e.clientX - r.left) / scale) - MARGIN, Math.floor((e.clientY - r.top) / scale) - MARGIN];
+  }
+
+  page.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Double-click an entry: its tile in the tiles editor.
+  page.addEventListener('dblclick', (e) => {
+    const [x, y] = pixelAt(e);
+    const k = T.entryAt(blocksDoc, state.block, tiles, x, y);
+    if (k >= 0) openTile(blocksDoc.blocks[state.block].entries[k].tile);
+  });
+  function openTile(name) {
+    if (host.openTile) host.openTile(name);
+  }
+  page.addEventListener('pointerdown', (e) => {
+    const [x, y] = pixelAt(e);
+    if (e.button === 2) { placing = null; draw(); return; }
+    if (placing) {
+      const g = tiles.tiles[placing];
+      attempt(() => {
+        const next = T.addEntry(blocksDoc, state.block, tiles, placing, Math.floor(x / 8), y + g.height - 1);
+        selected = next.blocks[state.block].entries.length - 1;
+        apply(next);
+      });
+      return;
+    }
+    const k = T.entryAt(blocksDoc, state.block, tiles, x, y);
+    selected = k;
+    if (k >= 0) {
+      const en = blocksDoc.blocks[state.block].entries[k];
+      drag = { k, dx: x - en.column * 8, dy: y - en.bottom, column: en.column, bottom: en.bottom, moved: false };
+      page.setPointerCapture(e.pointerId);
+    }
+    draw();
+  });
+  page.addEventListener('pointermove', (e) => {
+    const [x, y] = pixelAt(e);
+    hover = [x, y];
+    if (drag) {
+      const en = blocksDoc.blocks[state.block].entries[drag.k];
+      const p = T.snap(tiles.tiles[en.tile], Math.floor((x - drag.dx) / 8 + 0.5), y - drag.dy);
+      if (p.column !== drag.column || p.bottom !== drag.bottom) {
+        drag.column = p.column;
+        drag.bottom = p.bottom;
+        drag.moved = true;
+        drawPage();
+      }
+    } else if (placing) {
+      drawPage();
+    }
+  });
+  page.addEventListener('pointerleave', () => { hover = null; if (placing) drawPage(); });
+  function endDrag() {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    const en = blocksDoc.blocks[state.block].entries[d.k];
+    if (d.moved && (d.column !== en.column || d.bottom !== en.bottom)) {
+      apply(T.moveEntry(blocksDoc, state.block, tiles, d.k, d.column, d.bottom));
+    } else {
+      drawPage();
+    }
+  }
+  page.addEventListener('pointerup', endDrag);
+  page.addEventListener('pointercancel', endDrag);
+
+  function deleteSelected() {
+    if (selected < 0) return;
+    const k = selected;
+    selected = -1;
+    apply(T.removeEntry(blocksDoc, state.block, k));
+  }
+  $('delEntry').addEventListener('click', deleteSelected);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || !$('dialog').hidden) return;
+    if (e.key === 'Escape') { placing = null; selected = -1; draw(); return; }
+    if (selected < 0) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
+    const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -2], ArrowDown: [0, 2] }[e.key];
+    if (step) {
+      e.preventDefault();
+      const en = blocksDoc.blocks[state.block].entries[selected];
+      apply(T.moveEntry(blocksDoc, state.block, tiles, selected, en.column + step[0], en.bottom + step[1]));
+    }
+  });
+
+  $('place').addEventListener('change', () => { state.place = Number($('place').value) || 0; keep(); refresh(); });
+  $('zoom').value = String(state.zoom);
+  $('shift').value = String(state.shift);
+  $('shift').addEventListener('change', () => { state.shift = Number($('shift').value); keep(); drawPage(); });
+  $('zoom').addEventListener('change', () => { state.zoom = Number($('zoom').value); keep(); drawPage(); scrollToWork(); });
+
+  // The page scrolled to what is being worked on: the selected entry, or the
+  // block's first, or the page's middle.
+  function scrollToWork() {
+    const entries = blocksDoc.blocks[state.block].entries || [];
+    const e = entries[selected >= 0 ? selected : 0];
+    const g = e && tiles.tiles[e.tile];
+    const x = g ? e.column * 8 + g.width * 4 : W.PAGE_W / 2;
+    const y = g ? e.bottom - g.height / 2 : W.PAGE_H / 2;
+    const wrap = $('pageWrap');
+    wrap.scrollLeft = Math.max(0, (MARGIN + x) * state.zoom - wrap.clientWidth / 2);
+    wrap.scrollTop = Math.max(0, (MARGIN + y) * state.zoom - wrap.clientHeight / 2);
+  }
+
+  // ---- blocks: new, copy, rename, delete ----------------------------------------
+
+  function ask(text, value) {
+    return new Promise((resolve) => {
+      $('dialogText').textContent = text;
+      const input = $('dialogInput');
+      input.hidden = value === null;
+      input.value = value || '';
+      $('dialog').hidden = false;
+      (input.hidden ? $('dialogOk') : input).focus();
+      if (!input.hidden) input.select();
+      const done = (ok) => {
+        $('dialog').hidden = true;
+        $('dialogOk').onclick = $('dialogCancel').onclick = input.onkeydown = null;
+        resolve(ok ? input.value.trim() : null);
+      };
+      $('dialogOk').onclick = () => done(true);
+      $('dialogCancel').onclick = () => done(false);
+      input.onkeydown = (e) => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+    });
+  }
+
+  async function newBlock() {
+    const name = await ask('New block:', '');
+    if (name !== null) attempt(() => { apply(T.addBlock(blocksDoc, name)); selectBlock(name); });
+  }
+  async function copyBlock() {
+    const name = await ask(`Copy of ${state.block}:`, state.block + '-copy');
+    if (name !== null) attempt(() => { apply(T.addBlock(blocksDoc, name, state.block)); selectBlock(name); });
+  }
+  async function renameBlock() {
+    const old = state.block;
+    const name = await ask(`Rename ${old} (the map follows):`, old);
+    if (name !== null) attempt(() => { const r = T.renameBlock(blocksDoc, mapDoc, old, name); state.block = name; apply(r.blocks, r.map); });
+  }
+  async function deleteBlock() {
+    const ok = await ask(`Delete ${state.block}?`, null);
+    if (ok !== null) attempt(() => apply(T.removeBlock(blocksDoc, mapDoc, state.block)));
+  }
+
+  // ---- undo, and the host --------------------------------------------------
+
+  function doUndo() {
+    if (!undo.length) return;
+    const was = undo.pop();
+    redo.push({ blocks: blocksDoc, map: mapDoc, block: state.block });
+    state.block = was.block;
+    apply(was.blocks, was.map, false);
+  }
+  function doRedo() {
+    if (!redo.length) return;
+    const was = redo.pop();
+    undo.push({ blocks: blocksDoc, map: mapDoc, block: state.block });
+    state.block = was.block;
+    apply(was.blocks, was.map, false);
+  }
+
+  if (host.standalone) {
+    for (const id of ['open', 'openFiles', 'save', 'undo', 'redo']) $(id).hidden = false;
+    if (!host.hasFolderPicker()) $('open').hidden = true;
+    $('undo').addEventListener('click', doUndo);
+    $('redo').addEventListener('click', doRedo);
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.target.tagName === 'INPUT') return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); doRedo(); }
+      else if (k === 's') { e.preventDefault(); $('save').click(); }
+    });
+    $('open').addEventListener('click', () => host.openFolder().then(opened, failed));
+    $('openFiles').addEventListener('click', () => host.openFiles().then(opened, failed));
+    $('save').addEventListener('click', () => {
+      const blocks = T.formatBlocks(blocksDoc, eol.blocks);
+      const map = T.formatMap(mapDoc, eol.map);
+      const texts = {};
+      if (blocks !== saved.blocks) texts['blocks.json'] = blocks;
+      if (map !== saved.map) texts['map.json'] = map;
+      host.save(texts).then(() => { saved = { blocks, map }; draw(); }, failed);
+    });
+  }
+  async function opened(boot) {
+    if (!boot) return;
+    undo = []; redo = [];
+    load(boot);
+    const drafts = host.drafts();
+    const blocks = drafts['blocks.json'];
+    const map = drafts['map.json'];
+    if (blocksDoc && ((blocks && blocks !== boot.blocks) || (map && map !== boot.map))) {
+      const a = await ask('There are unsaved edits from before. Bring them back?', null);
+      if (a !== null) {
+        try { apply(blocks ? JSON.parse(blocks) : blocksDoc, map ? JSON.parse(map) : mapDoc); } catch (err) { /* dropped */ }
+      } else {
+        host.dropDrafts();
+      }
+    }
+  }
+  function failed(err) {
+    if (err && err.name === 'AbortError') return;
+    $('error').textContent = String(err && err.message ? err.message : err);
+  }
+
+  host.onReload((boot) => load(boot));
+  if (host.boot) { load(host.boot); scrollToWork(); }
+  else $('empty').hidden = false;
+})();
+</script>
+</body>
+</html>

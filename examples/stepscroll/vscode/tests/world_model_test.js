@@ -40,9 +40,9 @@ function test(name, body) {
 function readJson(name) {
   return JSON.parse(fs.readFileSync(path.join(WORLD, name), 'utf8'));
 }
-const tiles = readJson('tiles.json').tiles;
+const blocks = readJson('blocks.json').blocks;
 const rows = readJson('map.json').rows;
-const graphics = W.parseGraphics(readJson('steps.json'));
+const tiles = W.parseTiles(readJson('tiles.json'));
 
 test('the world is world.py\'s, pixel for pixel', () => {
   if (!fs.existsSync(PYTHON)) {
@@ -53,7 +53,7 @@ test('the world is world.py\'s, pixel for pixel', () => {
   const script = 'import sys, world; sys.stdout.write(world.load().bytes().tobytes().hex())';
   const hex = childProcess.execFileSync(PYTHON, ['-c', script], { cwd: STEPSCROLL, maxBuffer: 1 << 26, encoding: 'utf8' });
   const bytes = Buffer.from(hex, 'hex');
-  const w = W.render(tiles, rows, graphics);
+  const w = W.render(blocks, rows, tiles);
   assert.strictEqual(bytes.length * 8, w.width * w.height);
   let wrong = 0;
   for (let i = 0; i < bytes.length; i++) {
@@ -64,25 +64,49 @@ test('the world is world.py\'s, pixel for pixel', () => {
   assert.strictEqual(wrong, 0, wrong + ' pixels differ');
 });
 
-test('tileProblems: none in the real tiles; an even line, an unknown graphic and one off the page found', () => {
-  for (const name of Object.keys(tiles)) {
-    assert.deepStrictEqual(W.tileProblems(tiles, name, graphics), [], name);
+test('coverageGaps finds the bytes build.py\'s coverage check does', () => {
+  if (!fs.existsSync(PYTHON)) {
+    const err = new Error('no ' + PYTHON);
+    err.skip = true;
+    throw err;
   }
-  const t = { a: { entries: [{ graphic: 'floor-1-top', column: 0, bottom: 10 }] },
-              b: { entries: [{ graphic: 'nothing', column: 0, bottom: 11 }] },
-              c: { entries: [{ graphic: 'floor-1-top', column: 31, bottom: 11 }] } };
-  assert.ok(W.tileProblems(t, 'a', graphics).some((p) => /even/.test(p)));
-  assert.ok(W.tileProblems(t, 'b', graphics).some((p) => /no graphic "nothing"/.test(p)));
-  assert.ok(W.tileProblems(t, 'c', graphics).some((p) => /leaves the page/.test(p)));
+  // build.py's NEED and FOOT: every byte a move changes, less those an entry
+  // draws, as (line, column) pairs.
+  const script = 'import json, numpy as np, build as B\n' +
+    'g = np.zeros_like(B.FOOT)\n' +
+    'for v in B.NEED.values(): g |= v & ~B.FOOT\n' +
+    'print(json.dumps([[int(y), int(x)] for y, x in np.argwhere(g)]))';
+  const out = JSON.parse(childProcess.execFileSync(PYTHON, ['-c', script],
+    { cwd: STEPSCROLL, encoding: 'utf8', maxBuffer: 1 << 26 }));
+  const w = W.render(blocks, rows, tiles);
+  const gaps = W.coverageGaps(w);
+  const got = [];
+  gaps.forEach((v, i) => { if (v) got.push([Math.floor(i / 256), i % 256]); });
+  assert.deepStrictEqual(got, out);
+  console.log('     (' + got.length + ' bytes)');
 });
 
-test('parseGraphics rejects a ragged bitmap and a stray character', () => {
-  const doc = readJson('steps.json');
-  doc.groups.floor.graphics['floor-1-top'].rows[0] += '#';
-  assert.throws(() => W.parseGraphics(doc), /floor-1-top: rows/);
-  const odd = readJson('steps.json');
-  odd.groups.floor.graphics['floor-1-top'].rows[0] = '-' + odd.groups.floor.graphics['floor-1-top'].rows[0].slice(1);
-  assert.throws(() => W.parseGraphics(odd), /floor-1-top: rows/);
+test('blockProblems: none in the real blocks; an even line, an unknown tile and one off the page found', () => {
+  for (const name of Object.keys(blocks)) {
+    assert.deepStrictEqual(W.blockProblems(blocks, name, tiles), [], name);
+  }
+  const own = W.parseTiles({ groups: { g: { tiles: { A: { rows: Array(6).fill('#'.repeat(24)) } } } } });
+  const t = { a: { entries: [{ tile: 'A', column: 0, bottom: 10 }] },
+              b: { entries: [{ tile: 'nothing', column: 0, bottom: 11 }] },
+              c: { entries: [{ tile: 'A', column: 31, bottom: 11 }] } };
+  assert.ok(W.blockProblems(t, 'a', own).some((p) => /even/.test(p)));
+  assert.ok(W.blockProblems(t, 'b', own).some((p) => /no tile "nothing"/.test(p)));
+  assert.ok(W.blockProblems(t, 'c', own).some((p) => /leaves the page/.test(p)));
+});
+
+test('parseTiles rejects a ragged bitmap and a stray character', () => {
+  const doc = () => ({ groups: { g: { tiles: { A: { rows: Array(6).fill('#'.repeat(24)) } } } } });
+  const ragged = doc();
+  ragged.groups.g.tiles.A.rows[0] += '#';
+  assert.throws(() => W.parseTiles(ragged), /A: rows/);
+  const stray = doc();
+  stray.groups.g.tiles.A.rows[0] = '-' + stray.groups.g.tiles.A.rows[0].slice(1);
+  assert.throws(() => W.parseTiles(stray), /A: rows/);
 });
 
 console.log(failures ? failures + ' failed' : 'all passed' + (skipped ? ' (' + skipped + ' skipped)' : ''));

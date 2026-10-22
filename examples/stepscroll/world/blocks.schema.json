@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "stepscroll blocks",
+  "description": "Every block a page of the world can hold, keyed by the block's name. A page is 256 pixels across and 256 lines down. A block is its entries: tiles from tiles.json, each at a byte column and a bottom line, drawn exactly as they are. Sky and rock between and under them come from the tiles themselves: down each column, below a tile, whatever its bottom row shows. See world.py.",
+  "type": "object",
+  "required": [
+    "blocks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "blocks": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/block"
+      }
+    }
+  },
+  "$defs": {
+    "block": {
+      "type": "object",
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "description": "What the display list draws in this page, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "tile",
+        "column",
+        "bottom"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tile": {
+          "description": "A tile's name in tiles.json.",
+          "type": "string"
+        },
+        "column": {
+          "description": "The byte column of its left byte in the page, 0 to 31.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "bottom": {
+          "description": "Its bottom line in the page: odd, as the blitters go up a row pair at a time.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        }
+      }
+    }
+  }
+}

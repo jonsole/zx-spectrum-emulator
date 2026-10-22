@@ -14,7 +14,7 @@ const vm = require('vm');
 const pages = require('../pages');
 
 const HERE = path.join(__dirname, '..');
-const PAGES = ['steps_view.html'];
+const PAGES = ['tiles_view.html', 'blocks_view.html'];
 
 let failures = 0;
 function test(name, body) {
@@ -34,7 +34,7 @@ function scriptOf(html) {
   return scripts[0][1];
 }
 
-// The VS Code host as steps_view.js writes it, without requiring vscode.
+// The VS Code host as tiles_view.js writes it, without requiring vscode.
 const vscodeHost = 'window.designerHost = { standalone: false, boot: null, edit() {}, state() { return {}; }, ' +
                    'keep() {}, onReload() {} };';
 

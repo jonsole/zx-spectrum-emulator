@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step Graphics</title>
+<title>Tiles</title>
 <style>
   :root {
     --bg: var(--vscode-editor-background, #1e1e1e);
@@ -51,6 +51,10 @@
   #work h2 { font-size: 14px; margin: 0 0 10px; }
   .tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; align-items: center; }
   .tools label { color: var(--muted); }
+  .gaps { color: var(--bad); margin: 0 0 8px; }
+  .gaps button { color: var(--bad); border-color: var(--bad); padding: 0 6px; margin: 0 2px; font-size: 12px; }
+  .shift { color: var(--muted); display: inline-flex; gap: 2px; align-items: center; }
+  .shift button { padding: 1px 6px; }
   .note { color: var(--muted); }
   canvas { image-rendering: pixelated; display: block; }
   #editor { cursor: crosshair; touch-action: none; max-width: 100%; height: auto; }
@@ -72,7 +76,7 @@
 </head>
 <body>
 <header>
-  <h1>Step graphics</h1>
+  <h1>Tiles</h1>
   <button id="open" hidden>Open world folder…</button>
   <button id="openFiles" hidden>Open files…</button>
   <button id="save" class="primary" hidden disabled>Save</button>
@@ -82,8 +86,8 @@
 </header>
 <div id="error"></div>
 <div id="empty" hidden>
-  <p>Open <code>examples/stepscroll/world/</code>: the graphics are in <code>steps.json</code>, and
-  <code>tiles.json</code>, whose entries name them, is updated when a graphic is renamed.</p>
+  <p>Open <code>examples/stepscroll/world/</code>: the tiles are in <code>tiles.json</code>, and
+  <code>blocks.json</code>, whose entries name them, is updated when a tile is renamed.</p>
   <p class="note">In Chrome or Edge, <b>Open world folder</b> saves back into the folder. Elsewhere, <b>Open
   files</b> takes the JSON files and Save downloads what changed.</p>
 </div>
@@ -91,19 +95,22 @@
   <div id="list"></div>
   <div id="work">
     <h2 id="title"></h2>
+    <div id="gaps" class="gaps"></div>
     <div class="tools">
-      <button id="add" title="A new graphic in this graphic's group">New</button>
+      <button id="add" title="A new tile in this tile's group">New</button>
       <button id="duplicate">Duplicate</button>
       <button id="rename">Rename</button>
       <button id="delete">Delete</button>
       <label>Width <input type="number" id="width" min="8" step="8"></label>
       <label>Height <input type="number" id="height" min="2" step="2"></label>
+      <span class="shift" title="Move the pixels 1 pixel; what goes off one side comes back on the other">Shift
+        <button id="shiftLeft">◀</button><button id="shiftRight">▶</button><button id="shiftUp">▲</button><button id="shiftDown">▼</button></span>
       <label>Zoom <select id="zoom"><option>10</option><option>14</option><option selected>18</option><option>24</option><option>32</option></select></label>
     </div>
     <canvas id="editor"></canvas>
     <p class="note">Click a pixel to toggle it; drag to paint more the same. On the left, in amber, is the shift-in strip:
-    the 6 pixels that come in on the left as the graphic is shifted right 2, 4 and 6 pixels for the fine
-    positions. Below, the 4 versions the build makes. Drag graphics in the list to rearrange them or move them to
+    the 6 pixels that come in on the left as the tile is shifted right 2, 4 and 6 pixels for the fine
+    positions. Below, the 4 versions the build makes. Drag tiles in the list to rearrange them or move them to
     another group.</p>
     <div id="shifts"></div>
   </div>
@@ -118,23 +125,23 @@
 </div>
 <script>
 /*@world_model.js@*/
-/*@steps_model.js@*/
-window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.steps' };
+/*@tiles_model.js@*/
+window.designerPage = { files: ['tiles.json', 'blocks.json'], key: 'stepscroll.tiles' };
 /*@host@*/
 (function () {
   'use strict';
   const W = window.StepscrollWorld;
-  const M = window.StepscrollSteps;
+  const M = window.StepscrollTiles;
   const host = window.designerHost;
   const $ = (id) => document.getElementById(id);
 
   const state = Object.assign({ name: null, zoom: 18 }, host.state());
-  let doc = null;           // steps.json
-  let tilesDoc = null;      // tiles.json
-  let eol = { steps: '\n', tiles: '\n' };
+  let doc = null;           // tiles.json
+  let blocksDoc = null;      // blocks.json
+  let eol = { tiles: '\n', blocks: '\n' };
   let undo = [];
   let redo = [];
-  let saved = { steps: null, tiles: null };
+  let saved = { tiles: null, blocks: null };
 
   function keep() {
     host.keep({ name: state.name, zoom: state.zoom });
@@ -153,44 +160,113 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
   function load(boot) {
     $('error').textContent = '';
     try {
-      doc = M.parse(boot.steps);
-      tilesDoc = JSON.parse(boot.tiles);
+      doc = M.parse(boot.tiles);
+      blocksDoc = JSON.parse(boot.blocks);
+      mapRows = JSON.parse(boot.map).rows;
     } catch (err) {
       $('error').textContent = String(err && err.message ? err.message : err);
       return;
     }
-    eol = { steps: boot.eol || eolOf(boot.steps), tiles: eolOf(boot.tiles) };
-    saved = { steps: boot.steps, tiles: boot.tiles };
-    if (!state.name || !M.find(doc, state.name)) state.name = firstGraphic();
+    eol = { tiles: boot.eol || eolOf(boot.tiles), blocks: eolOf(boot.blocks) };
+    saved = { tiles: boot.tiles, blocks: boot.blocks };
+    if (wanted && M.find(doc, wanted)) { state.name = wanted; wanted = null; }
+    if (!state.name || !M.find(doc, state.name)) state.name = firstTile();
     $('empty').hidden = true;
     $('main').hidden = false;
+    checkCoverage();
     draw();
   }
 
-  function firstGraphic() {
+  // ---- where scrolling goes wrong --------------------------------------------
+
+  // The world's coverage gaps (world_model.coverageGaps: bytes a move changes
+  // that no entry draws), and for each tile the gaps beside its uses -- within
+  // a byte to the left or right, or NEAR rows above or below -- as offsets from
+  // its top left: { name: [{ dk, dy, block, line, column }] }.
+  const NEAR = 4;
+  let mapRows = null;
+  let gapsByTile = {};
+  let gapCount = 0;
+  let checkTimer = null;
+
+  function checkCoverage() {
+    gapsByTile = {};
+    gapCount = 0;
+    let world;
+    try {
+      world = W.render(blocksDoc.blocks, mapRows, W.parseTiles(doc));
+    } catch (err) {
+      return;                       // a block the tiles no longer fit: shown elsewhere
+    }
+    const gaps = W.coverageGaps(world);
+    const W8 = world.width / 8;
+    const seen = new Set();
+    for (const e of world.entries) {
+      const top = e.mapRow * W.PAGE_H + e.bottom - e.rows + 1;
+      const col = e.mapColumn * W.PAGE_COLUMNS + e.column;
+      for (let dy = -NEAR; dy < e.rows + NEAR; dy++) {
+        const y = top + dy;
+        if (y < 0 || y >= world.height) continue;
+        for (let dk = -1; dk <= e.width; dk++) {
+          const k = (col + dk + W8) % W8;
+          if (!gaps[y * W8 + k]) continue;
+          seen.add(y * W8 + k);
+          const list = gapsByTile[e.tile] || (gapsByTile[e.tile] = []);
+          list.push({ dk, dy, block: e.block, line: y % W.PAGE_H, column: k % W.PAGE_COLUMNS });
+        }
+      }
+    }
+    gaps.forEach((v) => { if (v) gapCount++; });
+  }
+
+  // After an edit, once the edits stop for a moment: the check takes a while.
+  function checkSoon() {
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(() => { checkCoverage(); draw(); }, 250);
+  }
+
+  function drawGaps() {
+    const box = $('gaps');
+    box.textContent = '';
+    if (!gapCount) return;
+    const mine = gapsByTile[state.name] || [];
+    const lines = new Set(mine.map((g) => `${g.block} line ${g.line}`));
+    box.append(`Scrolling leaves ${gapCount} byte${gapCount > 1 ? 's' : ''} undrawn in the world` +
+      (mine.length ? `; next to this tile (red, round it) in ${[...lines].slice(0, 4).join(', ')}` +
+       (lines.size > 4 ? '…' : '') : '') + '. Next to: ');
+    for (const name of Object.keys(gapsByTile)) {
+      const b = document.createElement('button');
+      b.textContent = name;
+      b.addEventListener('click', () => select(name));
+      box.append(b);
+    }
+  }
+
+  function firstTile() {
     for (const group of Object.values(doc.groups)) {
-      const names = Object.keys(group.graphics);
+      const names = Object.keys(group.tiles);
       if (names.length) return names[0];
     }
     return null;
   }
 
-  // A new steps.json, and tiles.json if the edit reached it.
-  function apply(nextSteps, nextTiles, record) {
+  // A new tiles.json, and blocks.json if the edit reached it.
+  function apply(nextTiles, nextBlocks, record) {
     if (record !== false) {
-      undo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+      undo.push({ tiles: doc, blocks: blocksDoc, name: state.name });
       if (undo.length > 200) undo.shift();
       redo = [];
     }
-    doc = nextSteps;
-    host.edit('steps', M.format(doc, eol.steps));
-    if (nextTiles && nextTiles !== tilesDoc) {
-      tilesDoc = nextTiles;
-      host.edit('tiles', M.formatTiles(tilesDoc, eol.tiles));
+    doc = nextTiles;
+    host.edit('tiles', M.format(doc, eol.tiles));
+    if (nextBlocks && nextBlocks !== blocksDoc) {
+      blocksDoc = nextBlocks;
+      host.edit('blocks', M.formatBlocks(blocksDoc, eol.blocks));
     }
-    if (!state.name || !M.find(doc, state.name)) state.name = firstGraphic();
+    if (!state.name || !M.find(doc, state.name)) state.name = firstTile();
     keep();
     draw();
+    checkSoon();
   }
 
   // Runs an edit, showing what it throws instead.
@@ -209,7 +285,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     drawList();
     drawWork();
     if (host.standalone) {
-      const dirty = M.format(doc, eol.steps) !== saved.steps || M.formatTiles(tilesDoc, eol.tiles) !== saved.tiles;
+      const dirty = M.format(doc, eol.tiles) !== saved.tiles || M.formatBlocks(blocksDoc, eol.blocks) !== saved.blocks;
       $('undo').disabled = !undo.length;
       $('redo').disabled = !redo.length;
       $('save').disabled = !host.canSave() || !dirty;
@@ -230,7 +306,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     return cv;
   }
 
-  let dragged = null;       // the name of the graphic being dragged
+  let dragged = null;       // the name of the tile being dragged
 
   function drawList() {
     const list = $('list');
@@ -251,7 +327,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
       const small = document.createElement('small');
       small.textContent = group.direction || '';
       h.append(title, small);
-      for (const [label, tip, fn] of [['+', 'New graphic in this group', () => newGraphic(gname)],
+      for (const [label, tip, fn] of [['+', 'New tile in this group', () => newTile(gname)],
                                        ['Rename', 'Rename this group', () => renameGroup(gname)],
                                        ['✕', 'Delete this group (only when empty)', () =>
                                          attempt(() => apply(M.removeGroup(doc, gname)))]]) {
@@ -264,7 +340,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
       box.appendChild(h);
       const thumbs = document.createElement('div');
       thumbs.className = 'thumbs';
-      for (const [name, g] of Object.entries(group.graphics)) {
+      for (const [name, g] of Object.entries(group.tiles)) {
         const item = document.createElement('div');
         item.className = 'item' + (name === state.name ? ' selected' : '');
         item.draggable = true;
@@ -296,7 +372,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
         thumbs.appendChild(item);
       }
       box.appendChild(thumbs);
-      // Dropped on the group but not on a graphic: last in the group.
+      // Dropped on the group but not on a tile: last in the group.
       box.addEventListener('dragover', (e) => { if (dragged) { e.preventDefault(); box.classList.add('drop'); } });
       box.addEventListener('dragleave', (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove('drop'); });
       box.addEventListener('drop', (e) => {
@@ -308,9 +384,9 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     }
   }
 
-  // The editor's canvas: the shift-in strip, a gap, then the graphic.
+  // The editor's canvas: the shift-in strip, a gap, then the tile.
   const GAP = 0;
-  // Colours: the graphic's pixels, and the strip's, so that what shifting
+  // Colours: the tile's pixels, and the strip's, so that what shifting
   // brings in is told apart wherever it shows.
   const SET = '#e8e8e8';
   const CLEAR = '#000';
@@ -319,11 +395,11 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
 
   function drawWork() {
     const at = state.name ? M.find(doc, state.name) : null;
-    for (const id of ['add', 'duplicate', 'rename', 'delete', 'width', 'height']) $(id).disabled = !at;
+    for (const id of ['add', 'duplicate', 'rename', 'delete', 'width', 'height', 'shiftLeft', 'shiftRight', 'shiftUp', 'shiftDown']) $(id).disabled = !at;
     const editor = $('editor');
     $('shifts').textContent = '';
     if (!at) {
-      $('title').textContent = 'No graphic selected: add one to a group with +';
+      $('title').textContent = 'No tile selected: add one to a group with +';
       editor.width = editor.height = 0;
       return;
     }
@@ -334,25 +410,40 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     $('height').value = rows.length;
     const z = state.zoom;
     const s = M.STRIP + GAP;
-    editor.width = (s + rows[0].length) * z + 1;
-    editor.height = rows.length * z + 1;
+    const top = NEAR * z;               // the margin rows above the tile
+    editor.width = (s + rows[0].length + 8) * z + 1;
+    editor.height = (rows.length + 2 * NEAR) * z + 1;
     const ctx = editor.getContext('2d');
-    ctx.fillStyle = '#2a2a2a';
+    ctx.fillStyle = '#202020';
     ctx.fillRect(0, 0, editor.width, editor.height);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(0, top, (s + rows[0].length) * z + 1, rows.length * z + 1);
     strip.forEach((row, y) => Array.from(row).forEach((ch, x) => {
       ctx.fillStyle = ch === '#' ? STRIP_SET : STRIP_CLEAR;
-      ctx.fillRect(x * z + 1, y * z + 1, z - 1, z - 1);
+      ctx.fillRect(x * z + 1, top + y * z + 1, z - 1, z - 1);
     }));
     rows.forEach((row, y) => Array.from(row).forEach((ch, x) => {
       ctx.fillStyle = ch === '#' ? SET : CLEAR;
-      ctx.fillRect((s + x) * z + 1, y * z + 1, z - 1, z - 1);
+      ctx.fillRect((s + x) * z + 1, top + y * z + 1, z - 1, z - 1);
     }));
     ctx.fillStyle = '#555';
-    for (let x = 0; x <= rows[0].length; x += 8) ctx.fillRect((s + x) * z, 0, 1, editor.height);
+    for (let x = 0; x <= rows[0].length; x += 8) ctx.fillRect((s + x) * z, top, 1, rows.length * z + 1);
+    // The bytes beside it that scrolling leaves undrawn, in red: the byte to
+    // its left drawn over the strip, which is what is there.
+    ctx.fillStyle = 'rgba(241, 76, 76, .55)';
+    ctx.strokeStyle = '#f14c4c';
+    for (const g of gapsByTile[state.name] || []) {
+      const x0 = g.dk < 0 ? 0 : (s + 8 * g.dk) * z;
+      const w = g.dk < 0 ? s * z : 8 * z;
+      const y0 = top + g.dy * z;
+      ctx.fillRect(x0, y0, w, z);
+      ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, z - 1);
+    }
     drawShifts({ rows, shiftIn: strip });
+    drawGaps();
   }
 
-  // The 4 versions the build makes, side by side: the graphic at fine
+  // The 4 versions the build makes, side by side: the tile at fine
   // positions 0, 2, 4 and 6, the pixels the strip brought in in its colour.
   function drawShifts(g) {
     const box = $('shifts');
@@ -392,7 +483,7 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     const r = editor.getBoundingClientRect();
     const z = state.zoom * (r.width / editor.width);
     const x = Math.floor((e.clientX - r.left) / z);
-    const y = Math.floor((e.clientY - r.top) / z);
+    const y = Math.floor((e.clientY - r.top) / z) - NEAR;
     if (x < M.STRIP) return ['strip', x, y];
     if (x >= M.STRIP + GAP) return ['rows', x - M.STRIP - GAP, y];
     return null;
@@ -476,9 +567,9 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     return `${base}-${n}`;
   }
 
-  async function newGraphic(group) {
-    const a = await ask(`New graphic in ${group}:`, freshName(group));
-    if (a) attempt(() => { apply(M.addGraphic(doc, group, a.value)); select(a.value); });
+  async function newTile(group) {
+    const a = await ask(`New tile in ${group}:`, freshName(group));
+    if (a) attempt(() => { apply(M.addTile(doc, group, a.value)); select(a.value); });
   }
   async function newGroup() {
     const a = await ask('New group:', '');
@@ -489,21 +580,24 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     if (a) attempt(() => apply(M.renameGroup(doc, gname, a.value)));
   }
 
-  $('add').addEventListener('click', () => newGraphic(M.find(doc, state.name).group));
+  $('add').addEventListener('click', () => newTile(M.find(doc, state.name).group));
   $('duplicate').addEventListener('click', async () => {
     const at = M.find(doc, state.name);
     const a = await ask(`Copy of ${state.name}:`, freshName(at.group));
-    if (a) attempt(() => { apply(M.addGraphic(doc, at.group, a.value, state.name)); select(a.value); });
+    if (a) attempt(() => { apply(M.addTile(doc, at.group, a.value, state.name)); select(a.value); });
   });
   $('rename').addEventListener('click', async () => {
     const old = state.name;
     const a = await ask(`Rename ${old}:`, old);
-    if (a) attempt(() => { const r = M.renameGraphic(doc, tilesDoc, old, a.value); state.name = a.value; apply(r.steps, r.tiles); });
+    if (a) attempt(() => { const r = M.renameTile(doc, blocksDoc, old, a.value); state.name = a.value; apply(r.tiles, r.blocks); });
   });
   $('delete').addEventListener('click', async () => {
     const a = await ask(`Delete ${state.name}?`, null);
-    if (a) attempt(() => apply(M.removeGraphic(doc, tilesDoc, state.name)));
+    if (a) attempt(() => apply(M.removeTile(doc, blocksDoc, state.name)));
   });
+  for (const [id, dx, dy] of [['shiftLeft', -1, 0], ['shiftRight', 1, 0], ['shiftUp', 0, -1], ['shiftDown', 0, 1]]) {
+    $(id).addEventListener('click', () => apply(M.shiftTile(doc, state.name, dx, dy)));
+  }
   for (const id of ['width', 'height']) {
     $(id).addEventListener('change', () => attempt(() =>
       apply(M.setSize(doc, state.name, Math.round(Number($('width').value) / 8), Number($('height').value)))));
@@ -516,16 +610,16 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
   function doUndo() {
     if (!undo.length) return;
     const was = undo.pop();
-    redo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+    redo.push({ tiles: doc, blocks: blocksDoc, name: state.name });
     state.name = was.name;
-    apply(was.steps, was.tiles, false);
+    apply(was.tiles, was.blocks, false);
   }
   function doRedo() {
     if (!redo.length) return;
     const was = redo.pop();
-    undo.push({ steps: doc, tiles: tilesDoc, name: state.name });
+    undo.push({ tiles: doc, blocks: blocksDoc, name: state.name });
     state.name = was.name;
-    apply(was.steps, was.tiles, false);
+    apply(was.tiles, was.blocks, false);
   }
 
   if (host.standalone) {
@@ -543,12 +637,12 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     $('open').addEventListener('click', () => host.openFolder().then(opened, failed));
     $('openFiles').addEventListener('click', () => host.openFiles().then(opened, failed));
     $('save').addEventListener('click', () => {
-      const steps = M.format(doc, eol.steps);
-      const tiles = M.formatTiles(tilesDoc, eol.tiles);
+      const tiles = M.format(doc, eol.tiles);
+      const blocks = M.formatBlocks(blocksDoc, eol.blocks);
       const texts = {};
-      if (steps !== saved.steps) texts['steps.json'] = steps;
       if (tiles !== saved.tiles) texts['tiles.json'] = tiles;
-      host.save(texts).then(() => { saved = { steps, tiles }; draw(); }, failed);
+      if (blocks !== saved.blocks) texts['blocks.json'] = blocks;
+      host.save(texts).then(() => { saved = { tiles, blocks }; draw(); }, failed);
     });
   }
   async function opened(boot) {
@@ -556,12 +650,12 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     undo = []; redo = [];
     load(boot);
     const drafts = host.drafts();
-    const steps = drafts['steps.json'];
     const tiles = drafts['tiles.json'];
-    if (doc && ((steps && steps !== boot.steps) || (tiles && tiles !== boot.tiles))) {
+    const blocks = drafts['blocks.json'];
+    if (doc && ((tiles && tiles !== boot.tiles) || (blocks && blocks !== boot.blocks))) {
       const a = await ask('There are unsaved edits from before. Bring them back?', null);
       if (a) {
-        try { apply(steps ? M.parse(steps) : doc, tiles ? JSON.parse(tiles) : tilesDoc); } catch (err) { /* dropped */ }
+        try { apply(tiles ? M.parse(tiles) : doc, blocks ? JSON.parse(blocks) : blocksDoc); } catch (err) { /* dropped */ }
       } else {
         host.dropDrafts();
       }
@@ -572,8 +666,21 @@ window.designerPage = { files: ['steps.json', 'tiles.json'], key: 'stepscroll.st
     $('error').textContent = String(err && err.message ? err.message : err);
   }
 
+  // Another editor asking for a tile (the blocks editor's double-click): shown
+  // at once, or when the files are open.
+  let wanted = null;
+  function selectWhenOpen(name) {
+    if (doc && M.find(doc, name)) {
+      select(name);
+      const sel = document.querySelector('.item.selected');
+      if (sel) sel.scrollIntoView({ block: 'nearest' });
+    } else {
+      wanted = name;
+    }
+  }
   host.onReload((boot) => load(boot));
   if (host.boot) load(host.boot);
+  if (host.onSelect) host.onSelect(selectWhenOpen);
   else $('empty').hidden = false;
 })();
 </script>

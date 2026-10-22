@@ -1,22 +1,22 @@
-"""stepscroll's graphics, in world/steps.json: what the display list draws.
+"""stepscroll's tiles, in world/tiles.json: what the display list draws.
 
-Every graphic is drawn exactly as it is here, by a tile's entry naming it in
-tiles.json (world.py, build.py): the step, and whatever sky, rock, margin
+Every tile is drawn exactly as it is here, by a block's entry naming it in
+blocks.json (world.py, build.py): the step, and whatever sky, rock, margin
 rows and spare bytes round it a move needs. Nothing is added to them.
 They began as what build.py used to make from Cyberun's step graphics,
 and are edited, added to and organised in the
 stepscroll designer (vscode/, or the standalone page it builds; issue #25).
 
-The graphics are in named groups -- by the direction of the step they draw,
-to begin with -- and every graphic has a name of its own. A graphic is a
+The tiles are in named groups -- by the direction of the step they draw,
+to begin with -- and every tile has a name of its own. A tile is a
 bitmap, rows from the top, '#' a set pixel and '.' a clear one, a whole
 number of bytes wide (at most 3, the widest blitter) and an even number of
-rows high (at most 16), as the blitters go up a row pair at a time.
+rows high (at most 24), as the blitters go up a row pair at a time.
 
-Every graphic is drawn at four fine positions, shifted 0, 2, 4 and 6 pixels
+Every tile is drawn at four fine positions, shifted 0, 2, 4 and 6 pixels
 right. What comes in on the left is its shiftIn strip: 6 pixels a row, the
-last 2, 4 or all 6 of them (build.py's graphic). They began as what was just
-left of the graphic in the world.
+last 2, 4 or all 6 of them (build.py's tile()). They began as what was just
+left of the tile in the world.
 """
 from __future__ import annotations
 
@@ -25,18 +25,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-STEPS_JSON = HERE / "world" / "steps.json"
 TILES_JSON = HERE / "world" / "tiles.json"
+BLOCKS_JSON = HERE / "world" / "blocks.json"
 PIXELS = {"#": 1, ".": 0}
 STRIP = 6               # pixels the furthest shift brings in
 
 
-class GraphicsError(Exception):
+class TilesError(Exception):
     pass
 
 
 @dataclass(frozen=True)
-class Graphic:
+class Tile:
     name: str
     group: str
     bits: tuple         # rows from the top, each a tuple of 0/1
@@ -46,43 +46,43 @@ class Graphic:
 
 
 @dataclass(frozen=True)
-class Graphics:
-    groups: dict        # group name -> [graphic names in order]
-    graphics: dict      # graphic name -> Graphic
+class Tiles:
+    groups: dict        # group name -> [tile names in order]
+    tiles: dict      # tile name -> Tile
 
 
-def parse(doc: dict) -> Graphics:
+def parse(doc: dict) -> Tiles:
     groups = {}
-    graphics = {}
+    tiles = {}
     for gname, group in doc["groups"].items():
         names = []
-        for name, g in group["graphics"].items():
-            if name in graphics:
-                raise GraphicsError(f"steps.json: graphic {name} is in groups {graphics[name].group} and {gname}")
+        for name, g in group["tiles"].items():
+            if name in tiles:
+                raise TilesError(f"tiles.json: tile {name} is in groups {tiles[name].group} and {gname}")
             rows = g["rows"]
             if (not rows or len(rows) % 2 or len(rows[0]) % 8 or len(rows[0]) == 0
                     or any(len(r) != len(rows[0]) or set(r) - set(PIXELS) for r in rows)):
-                raise GraphicsError(f"steps.json: graphic {name}: rows must be an even number of rows of a "
+                raise TilesError(f"tiles.json: tile {name}: rows must be an even number of rows of a "
                                     f"whole number of bytes of '#' or '.'")
             bits = tuple(tuple(PIXELS[ch] for ch in r) for r in rows)
             strip = g.get("shiftIn", ["." * STRIP] * len(rows))
             if len(strip) != len(rows) or any(len(r) != STRIP or set(r) - set(PIXELS) for r in strip):
-                raise GraphicsError(f"steps.json: graphic {name}: shiftIn must be a row of {STRIP} '#' or '.' "
+                raise TilesError(f"tiles.json: tile {name}: shiftIn must be a row of {STRIP} '#' or '.' "
                                     f"for each of its {len(rows)} rows")
             shift_in = tuple(tuple(PIXELS[ch] for ch in r) for r in strip)
-            graphics[name] = Graphic(name, gname, bits, shift_in, len(rows[0]) // 8, len(rows))
+            tiles[name] = Tile(name, gname, bits, shift_in, len(rows[0]) // 8, len(rows))
             names.append(name)
         groups[gname] = names
-    return Graphics(groups, graphics)
+    return Tiles(groups, tiles)
 
 
-def load(path: Path = STEPS_JSON) -> Graphics:
+def load(path: Path = TILES_JSON) -> Tiles:
     return parse(json.loads(path.read_text(encoding="utf-8")))
 
 
 def format_doc(doc: dict) -> str:
     """The file's layout: a bitmap's rows one to a line, so that a pixel
-    edited is a line changed. vscode/steps_model.js writes the same."""
+    edited is a line changed. vscode/tiles_model.js writes the same."""
     lines = ["{"]
     if "$schema" in doc:
         lines.append(f'  "$schema": {json.dumps(doc["$schema"])},')
@@ -93,10 +93,10 @@ def format_doc(doc: dict) -> str:
         lines.append(f"    {json.dumps(gname)}: {{")
         if "direction" in group:
             lines.append(f'      "direction": {json.dumps(group["direction"])},')
-        lines.append('      "graphics": {')
-        names = list(group["graphics"])
+        lines.append('      "tiles": {')
+        names = list(group["tiles"])
         for j, name in enumerate(names):
-            g = group["graphics"][name]
+            g = group["tiles"][name]
             lines.append(f"        {json.dumps(name)}: {{")
             if "shiftIn" in g:
                 lines.append('          "shiftIn": [')
@@ -112,27 +112,27 @@ def format_doc(doc: dict) -> str:
     return "\n".join(lines)
 
 
-def format_tiles(doc: dict) -> str:
-    """tiles.json's layout: a tile's plain fields on its first line, then
-    each list (entries) an item to a line. vscode/steps_model.js
+def format_blocks(doc: dict) -> str:
+    """blocks.json's layout: a block's plain fields on its first line, then
+    each list (entries) an item to a line. vscode/tiles_model.js
     writes the same."""
     flat = dict(separators=(", ", ": "))
     lines = ["{"]
     if "$schema" in doc:
         lines.append(f'  "$schema": {json.dumps(doc["$schema"])},')
-    lines.append('  "tiles": {')
-    names = list(doc["tiles"])
+    lines.append('  "blocks": {')
+    names = list(doc["blocks"])
     for i, name in enumerate(names):
-        tile = doc["tiles"][name]
+        block = doc["blocks"][name]
         comma = "," if i < len(names) - 1 else ""
-        plain = [k for k in tile if not isinstance(tile[k], list)]
-        lists = [k for k in tile if isinstance(tile[k], list)]
+        plain = [k for k in block if not isinstance(block[k], list)]
+        lists = [k for k in block if isinstance(block[k], list)]
         lines.append(f"    {json.dumps(name)}: {{")
         parts = []
         if plain:
-            parts.append(["      " + ", ".join(f"{json.dumps(k)}: {json.dumps(tile[k])}" for k in plain)])
+            parts.append(["      " + ", ".join(f"{json.dumps(k)}: {json.dumps(block[k])}" for k in plain)])
         for k in lists:
-            items = tile[k]
+            items = block[k]
             if not items:
                 parts.append([f"      {json.dumps(k)}: []"])
                 continue
