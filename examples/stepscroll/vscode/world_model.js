@@ -146,8 +146,9 @@
   }
 
   // Where scrolling goes wrong (build.py's coverage check): every byte of the
-  // world that some move -- 2 pixels left or right, 2 lines up or down, or one of each, to
-  // any fine position -- changes, and that no entry draws, so that it keeps
+  // world that some move -- a pass's, up to 4 pixels left or right and 4 lines
+  // up or down in one go, to any fine position -- changes, and that no entry
+  // draws, so that it keeps
   // what it showed before. `world` is render's. Returns a Uint8Array of
   // world.height x (world.width / 8), 1 for each such byte. (A left-column
   // fill is not counted as drawing it: stepscroll.s has them off.)
@@ -181,13 +182,20 @@
       }
     }
     const gaps = new Uint8Array(H * W8);
-    for (const [mx, my] of [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [2, -2], [-2, 2], [-2, -2]]) {
+    const moves = [];
+    for (const mx of [-4, -2, 0, 2, 4]) {
+      for (const my of [-4, -2, 0, 2, 4]) {
+        if (mx || my) moves.push([mx, my]);
+      }
+    }
+    for (const [mx, my] of moves) {
       for (const fine of [0, 2, 4, 6]) {
         const now = cuts[fine];
-        const before = cuts[(((fine - mx) % 8) + 8) % 8];
-        // Moving right back to fine 0 a byte's picture comes from the byte
-        // to its right; moving left to fine 6, from the one to its left.
-        const dk = mx === 2 && fine === 0 ? 1 : mx === -2 && fine === 6 ? -1 : 0;
+        // Before, the byte showed fine - mx pixels in from the world's byte
+        // grid: past a byte's edge, from the byte beside it.
+        const shift = fine - mx;
+        const before = cuts[((shift % 8) + 8) % 8];
+        const dk = -Math.floor(shift / 8);
         for (let y = 0; y < H; y++) {
           const yb = y + my;
           if (yb < 0 || yb >= H) continue;

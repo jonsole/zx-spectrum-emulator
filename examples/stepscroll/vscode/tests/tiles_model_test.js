@@ -39,7 +39,9 @@ const all = Object.values(data.groups).flatMap((g) => Object.entries(g.tiles));
 const USED_BLOCK = Object.keys(blocksDoc.blocks).find((b) => (blocksDoc.blocks[b].entries || []).length);
 const USED = blocksDoc.blocks[USED_BLOCK].entries[0].tile;
 const OTHER = all.map(([n]) => n).find((n) => n !== USED);
-const T16x8 = all.find(([, g]) => g.rows.length === 8 && g.rows[0].length === 16)[0];
+// A 2-byte tile with room to grow 2 rows (the data's own, whatever its height).
+const T16x8 = all.find(([, g]) => g.rows[0].length === 16 && g.rows.length <= 20)[0];
+const H = M.find(M.parse(tilesText), T16x8).g.rows.length;
 const G3 = Object.keys(data.groups).find((g) => Object.keys(data.groups[g].tiles).length >= 3);
 const G2 = Object.keys(data.groups).find((g) => g !== G3);
 const lf = (s) => s.replace(/\r\n/g, '\n');
@@ -88,12 +90,12 @@ test('a tile in use is not removed; one added, copied and removed again', () => 
 test('setSize cuts and grows at the right and the bottom, within what an entry can draw', () => {
   const doc = M.parse(tilesText);
   const before = M.find(doc, T16x8).g.rows;      
-  const big = M.find(M.setSize(doc, T16x8, 3, 10), T16x8).g.rows;
+  const big = M.find(M.setSize(doc, T16x8, 3, H + 2), T16x8).g.rows;
   assert.deepStrictEqual(big, before.map((r) => r + '........').concat(['.'.repeat(24), '.'.repeat(24)]));
-  assert.deepStrictEqual(M.find(M.setSize(M.setSize(doc, T16x8, 3, 10), T16x8, 2, 8),
+  assert.deepStrictEqual(M.find(M.setSize(M.setSize(doc, T16x8, 3, H + 2), T16x8, 2, H),
                                 T16x8).g.rows, before);
-  assert.throws(() => M.setSize(doc, T16x8, 4, 8), /1 to 3 bytes/);
-  assert.throws(() => M.setSize(doc, T16x8, 2, 9), /even number of rows/);
+  assert.throws(() => M.setSize(doc, T16x8, 4, H), /1 to 3 bytes/);
+  assert.throws(() => M.setSize(doc, T16x8, 2, H + 1), /even number of rows/);
   assert.throws(() => M.setSize(doc, T16x8, 2, 26), /2 to 24/);
 });
 
@@ -104,8 +106,8 @@ test('the shifted versions are the tile moved right, its strip coming in on the 
   assert.deepStrictEqual(M.shifted(g, 6), ['#.#..###', '.......#']);
   // setSize keeps the strip a row for each row.
   const doc = M.parse(tilesText);
-  const g2 = M.find(M.setSize(doc, T16x8, 2, 12), T16x8).g;
-  assert.strictEqual(g2.shiftIn.length, 12);
+  const g2 = M.find(M.setSize(doc, T16x8, 2, H + 2), T16x8).g;
+  assert.strictEqual(g2.shiftIn.length, H + 2);
 });
 
 test('the shifted versions are what build.py draws', () => {

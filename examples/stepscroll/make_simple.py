@@ -97,19 +97,16 @@ def picture(line, plain):
 
 def needed(world_bits):
     """Every byte of the world that some move changes (build.py's changes):
-    by move -- across, up or down, or diagonally, one of each -- and fine
-    position, what the world shows against what the move brings into its
-    place."""
+    by move -- a pass's, up to 4 pixels across and 4 lines up or down in one
+    go -- and fine position, what the world shows against what the move
+    brings into its place."""
     cuts = {f: np.packbits(np.roll(world_bits, f, axis=1), axis=1) for f in (0, 2, 4, 6)}
     need = np.zeros(cuts[0].shape, bool)
-    for mx, my in ((2, 0), (-2, 0), (0, 2), (0, -2), (2, 2), (2, -2), (-2, 2), (-2, -2)):
+    for mx, my in [(mx, my) for mx in (-4, -2, 0, 2, 4) for my in (-4, -2, 0, 2, 4) if (mx, my) != (0, 0)]:
         for fine in (0, 2, 4, 6):
             now = cuts[fine]
-            before = cuts[(fine - mx) % 8]
-            if mx == 2 and fine == 0:
-                before = np.roll(before, -1, axis=1)
-            if mx == -2 and fine == 6:
-                before = np.roll(before, 1, axis=1)
+            shift = fine - mx       # before, the byte showed this many pixels in: maybe a byte along
+            before = np.roll(cuts[shift % 8], shift // 8, axis=1)
             if my > 0:
                 need[:-my] |= now[:-my] != before[my:]
             elif my < 0:

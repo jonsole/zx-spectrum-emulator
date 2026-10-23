@@ -25,20 +25,26 @@ apart, each graphic at the same place in its fine position's run. Where
 entries overlap they should agree, as the table has no order. Every bottom
 line is odd (the blitters go up a row pair at a time).
 
-What shows is columns 1 to 30 of rows 0 to 21. Columns 0 and 31 and rows 22
-and 23 are black on black. An entry partly off the left or right is drawn
-with its address simply a byte or two before or after: screen memory runs on
-from one character row to the next along a pixel line, so what falls off
-one side lands in a hidden column at the other, at most 2 bytes. An entry
-partly off the top or bottom is clipped to lines 0 to 175: there is a
-blitter for each width, MAX_ROWS rows tall, entered as many pairs in as the
-entry does not draw at the top (blit_entry), and its graphic starts as many
-pairs in as it does not draw at the bottom (stepscroll.s's clip_entry).
+The play area is columns 1 to 30 of rows 3 to 21 (lines 24 to 175); rows 0
+to 2 are for the score, and columns 0 and 31 and rows 22 and 23 are black on
+black. An entry partly off the left or right is drawn with its address
+simply a byte or two before or after: screen memory runs on from one
+character row to the next along a pixel line, so what falls off one side
+lands in a hidden column at the other, at most 2 bytes. An entry partly off
+the top or bottom is clipped to lines 24 to 175: there is a blitter for
+each width, MAX_ROWS rows tall, entered as many pairs in as the entry does
+not draw at the top (blit_entry), and its graphic starts as many pairs in as
+it does not draw at the bottom (stepscroll.s's store_entry and reclip).
 
-coverage() checks that at every fine position and for every move, every
-world byte that changes is in an entry: where one is not, a tile needs
-more room or plainer edges. The left-column fill is still in stepscroll.s
-(FILLS), off.
+A pass is two frames, drawn once, and moves the world up to 4 pixels across
+and 4 lines up or down in one go (MOVES). coverage() checks that at every
+fine position and for every such move, every world byte that changes is in
+an entry: where one is not, a tile needs more room or plainer edges. The
+left-column fill is still in stepscroll.s (FILLS), off.
+
+The map and the blocks (output/blocks.s) go below $8000, in contended
+memory: they are read only when entries arrive. The graphics, the code and
+the table are above it.
 
     python examples/stepscroll/build.py      # output/stepscroll.sna
     python examples/stepscroll/build.py --jetman PATH   # Lunar Jetman's .z80, for Jetman
@@ -153,20 +159,21 @@ def world_entries():
 
 
 def changes():
-    """By move (the Z80's names; a diagonal is one of each, made between two
-    drawings) and the fine position after it: the world bytes that differ
-    from what the move brings into their place."""
+    """By move -- MOVES, a pass's: up to 4 pixels across and 4 lines up or
+    down, in one go between two drawings -- and the fine position after it:
+    the world bytes that differ from what the move brings into their place.
+    The Z80's names for the moves: right is the world going right (mx > 0),
+    down the world going down (my > 0)."""
     out = {}
-    for move, (mx, my) in {"right": (2, 0), "left": (-2, 0), "down": (0, 2), "up": (0, -2),
-                           "right and down": (2, 2), "right and up": (2, -2),
-                           "left and down": (-2, 2), "left and up": (-2, -2)}.items():
+    for mx, my in MOVES:
+        move = " and ".join([f"{abs(mx)} {'right' if mx > 0 else 'left'}"] * (mx != 0) +
+                            [f"{abs(my)} {'down' if my > 0 else 'up'}"] * (my != 0))
         for fine in (0, 2, 4, 6):
             now = CUTS[fine]
-            before = CUTS[(fine - mx) % 8]
-            if mx == 2 and fine == 0:
-                before = np.roll(before, -1, axis=1)
-            if mx == -2 and fine == 6:
-                before = np.roll(before, 1, axis=1)
+            # Before, the byte at k showed fine - mx pixels in from the world
+            # byte grid: maybe a byte along.
+            shift = fine - mx
+            before = np.roll(CUTS[shift % 8], shift // 8, axis=1)
             need = np.zeros_like(FOOT)
             if my > 0:
                 need[:-my] = now[:-my] != before[my:]
@@ -178,6 +185,7 @@ def changes():
     return out
 
 
+MOVES = [(mx, my) for mx in (-4, -2, 0, 2, 4) for my in (-4, -2, 0, 2, 4) if (mx, my) != (0, 0)]
 NEED = changes()
 
 
@@ -198,7 +206,7 @@ def entry_fills(need) -> dict:
     left = {}
     for move in FILL_MOVES:
         left[move] = np.zeros_like(FOOT)
-        left[move] |= need[move, 0] & ~FOOT
+        left[move] |= need["2 " + move, 0] & ~FOOT
     fills = {}
     for name, entry, x, y in world_entries():
         for move in FILL_MOVES:
@@ -221,7 +229,7 @@ def coverage(need, fills) -> None:
     position 0) in a left-column fill."""
     for (move, fine), changed in need.items():
         covered = FOOT.copy()
-        if move == "right" and fine == 0:
+        if move == "2 right" and fine == 0:
             for name, entry, x, y in world_entries():
                 if (name, entry, move) in fills:
                     for cy, cx in fill_cells(move, entry, x, y):
@@ -379,46 +387,53 @@ def data_s() -> str:
             lines += ["    db " + ", ".join(f"0x{v:02X}" for v in data[i:i + 32])]
         if len(data) < 256 * pages:
             lines += [f"    ds {256 * pages - len(data)}"]
-    lines += ["", "; The map: a block number a page, row by row (page = row * 8 + column).", "map:"]
+    data = lines
+    lines = ["; Generated by build.py: the map and the blocks, below $8000.", "",
+             "; The map: a block number a page, row by row (page = row * 8 + column).", "map:"]
     lines += ["    db " + ", ".join(str(names.index(name)) for name in row) for row in MAP]
     same: dict[str, str] = {}
     for name in names:
         same[name] = next((n for n in names if n in same.values() and records[n] == records[name]), name)
     lines += ["", "; Each tile's address.", "tile_table:", "    dw " + ", ".join(f"tile_{same[name]}" for name in names),
-              "", "; Each tile: its entries' indexes, its top list's address and its entries",
-              "; twice, sorted by bottom line and by column, numbered on from PIECES",
-              "; through both; then its top list, the numbers of its entries by bottom",
-              "; line sorted by top line. An entry: its column and bottom line in the page, its tile,",
+              "", "; Each tile: its entries' indexes, its column and top lists' addresses and",
+              "; its entries, sorted by bottom line, numbered from 0 at PIECES; then the",
+              "; lists, their numbers sorted by column and by top line. An entry: its",
+              "; column and bottom line in the page, its tile,",
               "; its shape (width * 32 + rows), its fills (2 bits each, 0 none, 1 sky, 2",
               "; checker: bits 0-1 above it, for a move down; 2-3 below it, for a move up;",
               "; 4-5 to its left, for a move right to fine position 0), its top line and",
               "; a spare byte. LINE_INDEX: for each character row the number of the first",
-              "; entry whose bottom is in it, and one more for the end; COLUMN_INDEX: the",
-              "; same for each column; TOP_INDEX: for each character row the place in the",
-              "; top list of the first entry whose top is in it."]
+              "; entry whose bottom is in it, and one more for the end; COLUMN_INDEX: for",
+              "; each column the place in the column list of the first in it; TOP_INDEX:",
+              "; for each character row the place in the top list of the first whose top",
+              "; is in it."]
     biggest = 0
     for name in names:
         if same[name] != name:
             continue
         by_line = sorted(records[name], key=lambda e: (e[1], e[0]))
-        by_column = sorted(records[name], key=lambda e: (e[0], e[1]))
+        by_column = sorted(range(len(by_line)), key=lambda k: (by_line[k][0], by_line[k][1]))
         by_top = sorted(range(len(by_line)), key=lambda k: (by_line[k][5], by_line[k][0]))
         n = len(by_line)
         biggest = max(biggest, n)
-        if 2 * n > 255:
+        if n > 255:
             sys.exit(f"block {name}: {n} entries, more than an index's byte reaches")
         line_index = [sum(1 for e in by_line if e[1] < 8 * k) for k in range(PAGE_H // 8 + 1)]
-        column_index = [n + sum(1 for e in by_column if e[0] < k) for k in range(PAGE_COLUMNS + 1)]
+        column_index = [sum(1 for e in by_line if e[0] < k) for k in range(PAGE_COLUMNS + 1)]
         top_index = [sum(1 for e in by_line if e[5] < 8 * k) for k in range(PAGE_H // 8 + 1)]
         lines += [f"tile_{name}:"]
         lines += ["    db " + ", ".join(str(v) for v in line_index[i:i + 16]) for i in range(0, len(line_index), 16)]
         lines += ["    db " + ", ".join(str(v) for v in column_index[i:i + 16]) for i in range(0, len(column_index), 16)]
         lines += ["    db " + ", ".join(str(v) for v in top_index[i:i + 16]) for i in range(0, len(top_index), 16)]
-        lines += [f"    dw tops_{name}"]
+        lines += [f"    dw columns_{name}, tops_{name}"]
         lines += [f"    db {c}, {b}\n    dw {label}\n    db 0x{shape:02X}, 0x{fill:02X}, {top}, 0"
-                  for c, b, label, shape, fill, top in by_line + by_column]
+                  for c, b, label, shape, fill, top in by_line]
+        lines += [f"columns_{name}:"]
+        lines += ["    db " + ", ".join(str(v) for v in by_column[i:i + 16]) for i in range(0, n, 16)]
         lines += [f"tops_{name}:"]
         lines += ["    db " + ", ".join(str(v) for v in by_top[i:i + 16]) for i in range(0, n, 16)]
+    (OUT / "blocks.s").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    lines = data
     lines += ["", "; The screen address of each line's first byte, from line -1 (in the ROM",
               "; above the screen, where an entry ending there draws harmlessly).", "line_table_m1:",
               "    dw 0x3F00", "line_table:"]

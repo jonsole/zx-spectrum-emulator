@@ -8,16 +8,16 @@
 ; frame shifted to his pixel, three bytes a row, kept with where it went so
 ; the same image takes him off again.
 ;
-; Moving: Lunar Jetman's own rules for his speeds, worked out every other
-; frame (the game ran about 27 to 31 passes a second; here 25), in 16ths of
-; a pixel a pass. He moves every frame, in steps of 2 pixels as the view
-; does, when his speed has added up to one (step_of), so the view moves with
-; him in the same frame and he stays where it keeps him.
-; Walking is a pixel a pass; flying, across, builds up 8 a pass to 64 (4
-; pixels) and drifts to a stop with no key; down, gravity adds 8 a pass to
-; 64, thrust takes off 8 a pass to -72 (here no faster than 2 lines a
-; frame), hover holds still. Thrust while walking takes off (-16, up 2
-; lines, where the original went 3); walking off rock, or landing on it,
+; Moving: Lunar Jetman's own rules for his speeds, a pass at a time (the
+; game ran about 27 to 31 passes a second; here 25), in 16ths of a pixel a
+; pass. He moves in steps of 2 pixels, as the view does: up to 4 pixels
+; across and 4 lines up or down a pass, as his speed adds up (step_of), and
+; the view moves with him in the same pass, so he stays where it keeps him.
+; Walking is a pixel a pass (2 every other pass); flying, across, builds up
+; 8 a pass to 64 (4 pixels) and drifts to a stop with no key; down, gravity
+; adds 8 a pass to 64, thrust takes off 8 a pass to -72 (here no faster than
+; 4 lines a pass), hover holds still. Thrust while walking takes off (-16, up
+; 2 lines, where the original went 3); walking off rock, or landing on it,
 ; changes him over.
 ;
 ; The terrain is stepscroll's own, which Lunar Jetman's flat ground never
@@ -28,13 +28,13 @@
 ; screen count as rock.
 ;
 ; The view follows: it keeps him at screen x JET_SX (as Lunar Jetman does)
-; and his feet near line JET_SY, a move a frame -- 2 pixels across, 2 lines
-; up or down, or one of each, diagonally -- since the display list redraws
-; only what a single move changes (build.py checks the diagonals too).
-; Across, that keeps up with his fastest, 4 pixels every other frame.
+; and his feet at line JET_SY, moving as he does, up to 4 pixels across and
+; 4 lines up or down a pass in one go: the display list redraws what such a
+; move changes (build.py checks every one).
 
 JET_SX      equ 120         ; his screen x, as Lunar Jetman keeps it
-JET_SY      equ 120         ; the screen line the view keeps his feet on
+JET_SY      equ 112         ; the screen line the view keeps his feet on (the
+                            ; play area's middle, FIRST_SHOWN to LAST_SHOWN)
 JET_W       equ 16
 WALK_ROWS   equ 22
 FLY_ROWS    equ 24
@@ -103,6 +103,8 @@ xor_image:
     djnz .below
     ret
 .start:
+    cp FIRST_SHOWN
+    ret c                   ; all above the play area
     push hl
     call line_at
 .col:
@@ -127,8 +129,8 @@ xor_image:
     inc de
     dec l
     dec l
-    ld a,c                  ; line 0 drawn: the rest are above the screen
-    or a
+    ld a,c                  ; FIRST_SHOWN drawn: the rest are above the
+    cp FIRST_SHOWN          ; play area
     ret z
     dec c
     dec h                   ; up a line: within the character row, or into
@@ -302,9 +304,9 @@ jet_frame:
 ; ---------------------------------------------------------------------------
 ; A pass.
 
-; jet_update: once the world has scrolled in, every other frame his
-; controls and his move; every frame a move of the view after him and his
-; image for the next.
+; jet_update: once the world has scrolled in, a pass's: his controls, his
+; speeds and his move, the view's move after him and his image for the
+; next drawing.
 jet_update:
     ld a,(jet_on)
     or a
@@ -320,10 +322,27 @@ jet_update:
     ld de,JET_SX
     add hl,de
     ld (jx),hl
-    ld hl,(view_y)
-    ld de,JET_SY - 40
-    add hl,de
+    ld hl,(view_y)          ; his feet where the view keeps them: he and it
+    ld de,JET_SY            ; move at most 4 a pass, so a gap there at the
+    add hl,de               ; start would stay while he falls
     ld (jy),hl
+    ld a,1 << S_RIGHT       ; (flying: the taller frame)
+    ld (jstate),a
+    call jet_place
+.clear:
+    call box_rock           ; no rock in his box there? (up 2 lines at a
+    jr z,.placed            ; time until there is none: then he falls onto it,
+    ld a,(jsy)              ; and lands before the view has far to catch up)
+    cp FIRST_SHOWN + FLY_ROWS + 2
+    jr c,.placed            ; (the top of the play area: no further)
+    sub 2
+    ld (jsy),a
+    ld hl,(jy)
+    dec hl
+    dec hl
+    ld (jy),hl
+    jr .clear
+.placed:
     ld a,1 << S_RIGHT
     ld (jstate),a
     xor a
@@ -331,11 +350,6 @@ jet_update:
     ld (jvy),a
     jp jet_prepare
 .on:
-    ld hl,jhalf             ; his keys and speeds every other frame
-    ld a,(hl)
-    xor 1
-    ld (hl),a
-    jr z,.move
     ld hl,jpass
     inc (hl)
     call read_controls
@@ -348,7 +362,7 @@ jet_update:
 .fly_speeds:
     call fly_speeds
 .move:
-    call jet_place          ; his move every frame
+    call jet_place
     ld a,(jstate)
     bit S_WALK,a
     jr z,.flying
@@ -439,39 +453,44 @@ read_controls:
     ld (jcontrols),a
     ret
 
-; step_of: the 2-pixel step his speed A (16ths of a pixel a pass) owes this
-; frame, from the fraction at HL (32nds of a pixel, -63 to 63 between
-; frames): the speed added (half a pass's worth, as the pass is two frames),
-; and C = 1 or -1 when it reaches 2 pixels (64), the fraction then 2
-; pixels less (and held within a step: 2 pixels a frame is the most), else
-; C = 0.
+; step_of: his move this pass from his speed A (16ths of a pixel a pass) and
+; what is owed at HL (16ths, -31 to 31 between passes): the speed added, and
+; whole 2-pixel steps (32 each) taken off it, up to two: C = 1 or -1, the
+; way, and B = the pixels, 0, 2 or 4. (No faster up than 4 lines a pass,
+; which also keeps the sum in a byte.)
 step_of:
-    bit 7,a                 ; no faster up than 2 lines a frame (which also
-    jr z,.add               ; keeps the sum in a byte)
+    bit 7,a
+    jr z,.add
     cp -64 & 0xFF
     jr nc,.add
     ld a,-64
 .add:
     add a,(hl)
-    ld c,0
-    cp 64
-    jr c,.store             ; 0 to 63
+    ld bc,0
     bit 7,a
     jr nz,.minus
-    ld c,1                  ; 64 and up: a step on
-    sub 64
-    cp 64
+    cp 32
+    jr c,.store             ; 0 to 31: no step yet
+    ld c,1
+    ld b,2
+    sub 32
+    cp 32
     jr c,.store
-    ld a,63
+    ld b,4
+    sub 32
     jr .store
 .minus:
-    cp -63 & 0xFF
-    jr nc,.store            ; -63 to -1
-    ld c,-1                 ; -64 and below: a step back
-    add a,64
-    cp -63 & 0xFF
+    cp -31 & 0xFF
+    jr nc,.store            ; -31 to -1
+    ld c,-1
+    ld b,2
+    add a,32
+    bit 7,a                 ; 0 or more left: done (as a byte, 0 compares
+    jr z,.store             ; above -31)
+    cp -31 & 0xFF
     jr nc,.store
-    ld a,-63
+    ld b,4
+    add a,32
 .store:
     ld (hl),a
     ret
@@ -479,7 +498,7 @@ step_of:
 ; ---------------------------------------------------------------------------
 ; Walking.
 
-; walk_keys: on the frames his keys are read: thrust takes off (flying, up
+; walk_keys: thrust takes off (flying, up
 ; 2 lines, -16); else left, right or neither is his speed, -16, 16 or 0 --
 ; Lunar Jetman's pixel a pass -- and his stride goes on while he walks.
 walk_keys:
@@ -524,17 +543,16 @@ walk_keys:
     inc (hl)
     ret
 
-; walk_move: every frame: his speed's 2-pixel step when it is due, a pixel
-; at a time, each up a slope (walk_step) or down onto what is under him
+; walk_move: his speed's 2-pixel step when it is due, a pixel at a time,
+; each up a slope (walk_step) or down onto what is under him
 ; (walk_support); a wall stops him there.
 walk_move:
     ld a,(jvx)
     ld hl,jfx
     call step_of
-    ld a,c
+    ld a,b
     or a
     jp z,walk_support
-    ld b,2
 .pixel:
     push bc
     call walk_step
@@ -634,7 +652,7 @@ walk_step:
 ; ---------------------------------------------------------------------------
 ; Flying.
 
-; fly_speeds: on the frames his keys are read, his speeds from them, as
+; fly_speeds: his speeds from his keys, as
 ; Lunar Jetman's: across, built up 8 a pass to 64 or braked, drifting to 0
 ; with no key; down, gravity 8 a pass to 64, thrust -8 to -72, hover 0.
 fly_speeds:
@@ -733,17 +751,16 @@ fly_speeds:
     ld (jvy),a
     ret
 
-; fly_move: every frame: his speeds' 2-pixel steps when they are due, a
-; pixel at a time: across, stopped by rock (speed 0); then up, stopped by
-; rock above, or down, onto rock below, which lands him (walking).
+; fly_move: his speeds' steps, up to 4 pixels each way, a pixel at a time:
+; across, stopped by rock (speed 0); then up, stopped by rock above, or
+; down, onto rock below, which lands him (walking).
 fly_move:
     ld a,(jvx)
     ld hl,jfx
     call step_of
-    ld a,c
+    ld a,b
     or a
     jr z,.vertical
-    ld b,2
 .across:
     push bc
     call side_rock
@@ -762,10 +779,9 @@ fly_move:
     ld a,(jvy)
     ld hl,jfy
     call step_of
-    ld a,c
+    ld a,b
     or a
     ret z
-    ld b,2
     bit 7,c
     jr z,.down
 .up:
@@ -861,6 +877,26 @@ side_rock:
     pop bc
     ret
 
+; box_rock: NZ if any pixel of his box on the screen is set (or off the play
+; area): the JET_W pixels from jsx on each of his frame's lines up from jsy.
+box_rock:
+    ld a,(jrows)
+    ld b,a
+    ld a,(jsy)
+    sub b
+    inc a
+    ld c,a                  ; C: his top line
+.line:
+    push bc
+    ld a,c
+    call rock_across
+    pop bc
+    ret nz
+    inc c
+    djnz .line
+    xor a                   ; Z: clear
+    ret
+
 ; rock_below: NZ if there is rock on the line under his feet, across him.
 rock_below:
     ld a,(jsy)
@@ -876,11 +912,13 @@ rock_above:
     ; fall into rock_across
 
 ; rock_across: NZ if any of the JET_W (16) pixels from jsx on screen line A
-; are set, or the line is off what shows (rock): the three bytes they fall
+; are set, or the line is off the play area (rock): the three bytes they fall
 ; in, masked. C kept.
 rock_across:
     cp LAST_SHOWN + 1
     jr nc,.rock
+    cp FIRST_SHOWN
+    jr c,.rock
     push bc
     call line_at
     ld a,(jsx)
@@ -928,6 +966,8 @@ rock_column:
     ld a,e
     cp LAST_SHOWN + 1
     jr nc,.rock             ; (a line above the screen is too)
+    cp FIRST_SHOWN
+    jr c,.rock              ; above the play area
     add a,d
     dec a
     cp LAST_SHOWN + 1
@@ -995,10 +1035,9 @@ line_at:
 ; ---------------------------------------------------------------------------
 ; The view.
 
-; follow: a move of the view after him: across, to keep him at screen x
-; JET_SX (to the even pixel), and up or down, his feet to line JET_SY as
-; far as the map goes -- both in a frame (a diagonal) when he is out both
-; ways.
+; follow: the view's move after him, up to 4 pixels across and 4 lines up
+; or down: across, to keep him at screen x JET_SX (to the even pixel); up or
+; down, his feet at line JET_SY, as far as the map goes.
 follow:
     ld hl,(jx)              ; across: where the view should be less where it
     ld de,JET_SX            ; is, round the world, -1024 to 1023
@@ -1043,17 +1082,35 @@ follow:
     jr z,.updown            ; nothing across
     bit 7,h
     jr nz,.go_right
-    call left               ; the world 2 pixels left: the view 2 right
-    ld hl,(view_x)
-    inc hl
-    inc hl
+    ld a,h                  ; the world left, the view right: 2 or 4 pixels
+    or a
+    jr nz,.left4
+    ld a,l
+    cp 4
+    jr nc,.left4
+    call left
+    ld de,2
+    jr .moved
+.left4:
+    call left2
+    ld de,4
     jr .moved
 .go_right:
+    ld a,h                  ; the world right, the view left
+    inc a
+    jr nz,.right4
+    ld a,l
+    cp -2 & 0xFF
+    jr c,.right4
     call right
-    ld hl,(view_x)
-    dec hl
-    dec hl
+    ld de,-2
+    jr .moved
+.right4:
+    call right2
+    ld de,-4
 .moved:
+    ld hl,(view_x)
+    add hl,de
     ld a,h
     and 7
     ld h,a
@@ -1065,7 +1122,27 @@ follow:
     or l
     ret z
     bit 7,h
-    jp z,up                 ; the view down the map: the world up
+    jr nz,.view_up
+    ld a,h                  ; the view down the map, the world up: 2 or 4
+    or a
+    ld a,4
+    jp nz,up
+    ld a,l
+    cp 4
+    ld a,4
+    jp nc,up
+    ld a,2
+    jp up
+.view_up:
+    ld a,h                  ; the view up the map, the world down
+    inc a
+    ld a,4
+    jp nz,down
+    ld a,l
+    cp -2 & 0xFF
+    ld a,4
+    jp c,down
+    ld a,2
     jp down
 
 ; ---------------------------------------------------------------------------
@@ -1077,14 +1154,13 @@ jvx:        db 0            ; his speed across, 16ths of a pixel a pass
 jvy:        db 0            ; and down
 jstate:     db 0            ; S_WALK, S_RIGHT
 jpass:      db 0            ; his moves, for the exhaust
-jhalf:      db 0            ; 1 on the frames he moves
 jwalk:      db 0            ; steps walked, for the stride
 jcontrols:  db 0
 jsx:        db 0            ; his place on the screen in a pass
 jsy:        db 0
 jrows:      db 0            ; his frame's rows
 jstep_up:   db 0
-jfx:        db 0            ; his move across owed, 32nds of a pixel (step_of)
+jfx:        db 0            ; his move across owed, 16ths of a pixel (step_of)
 jfy:        db 0            ; and down
 view_x:     dw 0            ; the world x at the screen's left (fine and view_column)
 jdrawn:     db 0            ; 1 while jold is on the screen

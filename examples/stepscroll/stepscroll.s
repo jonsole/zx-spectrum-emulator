@@ -12,14 +12,15 @@
 ; row's or column's run starts, and a list of them by top line with its own
 ; index.
 ;
-; The table holds the entries on the screen: columns 1 to 30 of lines 0 to
-; 175 show (columns 0 and 31 and rows 22 and 23 are black on black). An entry
-; is in it while some of its lines are 0 to 175 and its first column is
+; The table holds the entries on the screen: columns 1 to 30 of lines 24 to
+; 175 show the world (rows 0 to 2 are for the score; columns 0 and 31 and rows
+; 22 and 23 are black on black). An entry is in it while some of its lines are
+; 24 to 175 and its first column is
 ; 2 - width to 30. One partly off the left or right is drawn from a byte or
 ; two before or after: screen memory runs on along a pixel line from one
 ; character row to the next, so what falls off one side lands in a hidden
 ; column at the other. One partly off the top or bottom is clipped: it draws
-; only its row pairs in lines 0 to 175 (store_entry, the moves). Each entry: the screen
+; only its row pairs in lines 24 to 175 (store_entry, the moves). Each entry: the screen
 ; address of the first byte of its lowest line drawn, its blitter's way in
 ; for the pairs it draws, and its graphic from that pair at fine position 0
 ; (the others GFX_PAGES pages on), and, for the moves, its world column, its
@@ -28,9 +29,12 @@
 ; leaves by the last one being copied over it. draw_list walks the table
 ; with SP and jumps to each entry's blitter.
 ;
-; Moving 2 pixels across changes only the fine position's offset; when it
-; wraps, every entry moves a byte. Moving 2 lines up or down moves every
-; entry 2 lines. Entries come and go at the edges, found through the tiles'
+; A pass is two frames (25 a second) and draws the list once; between
+; drawings the world moves up to 4 pixels across and up to 4 lines up or
+; down, in one go -- the tiles cover every byte such a move changes
+; (build.py). Moving across changes the fine position's offset; when it
+; wraps, every entry moves a byte. Moving up or down moves every entry 2 or 4
+; lines. Entries come and go at the edges, found through the tiles'
 ; indexes. What a move uncovers the entries redraw themselves: build.py gives
 ; them margins above and below, and their spare byte on the right holds only
 ; sky or ground. The left-column fill for a move right (FILLS) is off: the
@@ -47,11 +51,13 @@ RASTER_MARK equ 0x40        ; bright black: the hidden rows' attribute
 PAPER       equ 0x47        ; white on black: the attribute of what shows
 MAX_TABLE   equ 110         ; entries the table holds
 ENTRY       equ 11          ; bytes an entry
-LAST_SHOWN  equ 175         ; the screen's last line that shows (rows 22 and 23 are hidden)
+FIRST_SHOWN equ 24          ; the play area's first line: rows 0 to 2 are the score's
+LAST_SHOWN  equ 175         ; and its last (rows 22 and 23 are hidden)
 MAX_ROWS    equ 24          ; an entry's rows at most (build.py's)
-FIRST_LINE  equ 1           ; the bottom lines an entry in the table can have:
-LAST_LINE   equ LAST_SHOWN + MAX_ROWS - 2 ; its top 0 to LAST_SHOWN (odd: 197)
+FIRST_LINE  equ FIRST_SHOWN + 1 ; the bottom lines an entry in the table can have:
+LAST_LINE   equ LAST_SHOWN + MAX_ROWS - 2 ; its top FIRST_SHOWN to LAST_SHOWN (odd: 197)
 LAST_TOP    equ LAST_SHOWN - 1 ; the top line of entries arriving at the bottom
+STEP        equ 4           ; a pass's move, up or down: 4 lines (2 across, twice)
 
 ; An entry's bytes.
 E_ADDRESS   equ 0           ; its lowest line drawn
@@ -74,6 +80,11 @@ R_SIZE      equ 8
 
 FILL_RIGHT  equ 1
 FILLS       equ 0           ; 1: paint the column a move right leaves (fills); 0: don't, to see it
+DRAW_UP     equ 1           ; the order the list is drawn in (build_order): 1 bottom to
+                            ; top, against the beam, so that unsynced it crosses the
+                            ; drawing once and quickly; 0 top to bottom, with it, for
+                            ; drawing synced to the frame
+ORDER_ROWS  equ 32          ; build_order's buckets: character rows of a line
 
     ORG 0x8000
 
@@ -103,15 +114,19 @@ start:
     inc hl
     djnz .hide
     call fill_table
+    call build_order
     xor a
     out (0xFE),a
 ; The border shows each stage of a pass: red the fills, green the list
-; drawn, blue a move's bookkeeping, magenta the entries arriving, black idle.
-; A pass is a frame, and makes one move of the world at most: the entries
-; redraw what a single move changes, so the list must be drawn after each.
+; drawn, blue the moves' bookkeeping, magenta the entries arriving, black
+; idle. A pass is two frames: the list is drawn once, after the mark, while
+; the beam is out of the play area (the score's rows give it until line 24);
+; the move is made in the rest of the next frame, then the order to draw the
+; next pass in, and pace holds the next pass to the mark two frames after
+; this one's.
 main:
     call wait_mark          ; the beam is past what shows: draw now, all the
-                            ; way round to the top of the next frame
+                            ; way round to the play area of the next frame
     ld a,2                  ; red: the fills
     out (0xFE),a
     call fills
@@ -123,37 +138,99 @@ main:
     call draw_list
     IF JETMAN
     call jet_draw           ; and on again where he is now
+    ENDIF
+    xor a
+    out (0xFE),a
+    call wait_paper         ; into the next frame
+    ld a,1                  ; blue: the move
+    out (0xFE),a
+    IF JETMAN
     ld a,(jet_on)
     or a
     jr z,.keys
-    ld a,1                  ; blue: his move (every other pass) and the view's
-    out (0xFE),a
-    call jet_update
-    xor a
-    out (0xFE),a
-    jr main
+    call jet_update         ; his move and the view's
+    jr .moved
 .keys:
-    ENDIF
-    ld a,1                  ; blue: the move
-    out (0xFE),a
     call keys
-    IF JETMAN
     call jet_update         ; (he starts once the world has scrolled in)
+.moved:
+    ELSE
+    call keys
     ENDIF
+    call build_order        ; the order to draw the next in
     xor a
     out (0xFE),a
+    call pace
     jr main
 
 ; wait_mark: until the beam is in rows 22 and 23, past what shows. Port
 ; $00FF: a high byte of $40-$7F would be contended, held till the ULA's fetch
 ; is over, and read only the idle $FF. The floating bus: the attribute the
 ; ULA is fetching, rows 22 and 23's RASTER_MARK (a pixel byte of $40
-; anywhere can start it early).
+; anywhere can start it early). The loop is 41 T-states, odd, so that its
+; reads fall at every point of the ULA's 8 T-state fetch in turn: at 34 they
+; fell at only every other point, and started on the wrong ones they never
+; saw an attribute at all.
 wait_mark:
     xor a
     in a,(0xFF)
     cp RASTER_MARK
+    ld c,0                  ; (7 T-states: the loop's length, odd)
     jr nz,wait_mark
+    ret
+
+; wait_paper: until the beam is in rows 0 to 21 (their attribute, PAPER).
+; 41 T-states a read, as wait_mark.
+wait_paper:
+    xor a
+    in a,(0xFF)
+    cp PAPER
+    ld c,0
+    jr nz,wait_paper
+    ret
+
+; beam_where: A = 1 if the beam is in rows 0 to 21, 2 if in rows 22 and 23,
+; 0 if in the border, from the floating bus over about two lines. The loop
+; is 63 T-states, so that its reads fall at every point of the ULA's 8
+; T-state fetch: at 56 they all fell at one, between attributes, and saw
+; only the border.
+beam_where:
+    ld b,32
+.look:
+    xor a
+    in a,(0xFF)
+    cp PAPER
+    jr z,.paper
+    cp RASTER_MARK
+    jr z,.mark
+    ld c,0                  ; (7 T-states: the loop's length, odd)
+    djnz .look
+    xor a
+    ret
+.paper:
+    ld a,1
+    ret
+.mark:
+    ld a,2
+    ret
+
+; pace: after a pass's move, begun in the frame after its drawing
+; (wait_paper), so that the next pass starts at the mark two frames after
+; this one's: still in that frame's rows 0 to 21, its mark is let go by; in
+; its mark, that too; in the border, the next mark is the one. (A move that
+; ran on into the frame after is taken for the first case, and that pass is
+; three frames.)
+pace:
+    call beam_where
+    or a
+    ret z
+    dec a
+    jr nz,.mark
+    call wait_mark
+.mark:
+    call beam_where
+    cp 2
+    jr z,.mark
     ret
 
 ; fill_table: the table as the world starts, the screen blank and the world
@@ -177,8 +254,9 @@ fill_table:
     ret
 
 ; ---------------------------------------------------------------------------
-; draw_list: every entry, by its blitter. The walker keeps the next entry in
-; HL' and SP in the table; for each it pops the screen address, the blitter
+; draw_list: every entry, by its blitter, in build_order's order. The walker
+; keeps its place in the order in HL' and SP in the table; for each entry it
+; pops the screen address, the blitter
 ; and the graphic, adds the fine position's offset, points SP at the graphic
 ; and jumps to the blitter, which draws it bottom row first, two rows a pair
 ; (the lower left to right, the upper right to left), and jumps back. The
@@ -192,13 +270,17 @@ draw_list:
     ld b,a                  ; B counts the entries down
     ld (saved_sp),sp        ; SP will be in the graphics
     exx
-    ld hl,table             ; HL': the next entry; BC': an entry's size
-    ld bc,ENTRY
+    ld hl,order             ; HL': the next entry's place in the order
     exx
 draw_next:
     exx
-    ld sp,hl                ; SP at this entry, HL' at the next
-    add hl,bc
+    ld e,(hl)               ; SP at this entry, HL' at the next one's place
+    inc hl
+    ld d,(hl)
+    inc hl
+    ex de,hl
+    ld sp,hl
+    ex de,hl
     exx
     pop de                  ; the screen address
     pop ix                  ; the blitter
@@ -212,6 +294,110 @@ gfx_offset:
     jp (ix)
 draw_done:
     ld sp,(saved_sp)
+    ret
+
+; build_order: order, the table's entries' addresses in the order to draw
+; them: by the character row of the bottom line, the lowest first (DRAW_UP),
+; or of the top line, the highest first -- a counting sort, every pass, as
+; the moves and arrivals leave the table in no order. Within a row any order.
+build_order:
+    ld a,(count)
+    or a
+    ret z
+    ld hl,order_count       ; the buckets' counts, to 0
+    ld b,ORDER_ROWS
+.clear:
+    ld (hl),0
+    inc hl
+    djnz .clear
+    ld a,(count)            ; each entry's bucket into order_row, counted
+    ld b,a
+    ld hl,table + E_LINE
+    ld de,order_row
+.count:
+    ld a,(hl)               ; its bottom line
+    IF DRAW_UP
+    cpl                     ; the lowest first: 255 less it
+    ELSE
+    inc hl
+    ld c,(hl)               ; less its rows: its top line, less 1
+    dec hl
+    push af
+    ld a,c
+    and 31
+    ld c,a
+    pop af
+    sub c
+    ENDIF
+    rrca                    ; its character row
+    rrca
+    rrca
+    and ORDER_ROWS - 1
+    ld (de),a
+    inc de
+    push hl
+    ld hl,order_count
+    add a,l
+    ld l,a
+    jr nc,.same
+    inc h
+.same:
+    inc (hl)
+    pop hl
+    ld a,l
+    add a,ENTRY
+    ld l,a
+    jr nc,.next
+    inc h
+.next:
+    djnz .count
+    ld hl,order_count       ; each bucket's first place: the counts before it
+    ld b,ORDER_ROWS
+    ld c,0
+.sum:
+    ld a,(hl)
+    ld (hl),c
+    add a,c
+    ld c,a
+    inc hl
+    djnz .sum
+    ld a,(count)            ; each entry's address into its bucket's next place
+    ld b,a
+    ld hl,table
+    ld de,order_row
+.place:
+    push bc
+    ld a,(de)
+    inc de
+    push de
+    ld de,order_count
+    add a,e
+    ld e,a
+    jr nc,.same2
+    inc d
+.same2:
+    ld a,(de)               ; its place, and the bucket's next on
+    inc a
+    ld (de),a
+    dec a
+    push hl
+    ld l,a
+    ld h,0
+    add hl,hl
+    ld de,order
+    add hl,de
+    ex de,hl                ; DE: the place
+    pop hl
+    ld a,l
+    ld (de),a
+    inc de
+    ld a,h
+    ld (de),a
+    ld de,ENTRY
+    add hl,de
+    pop de
+    pop bc
+    djnz .place
     ret
 
 ; Up a row after a pair, maybe into the character row above: back a
@@ -463,70 +649,114 @@ line_address_x:
     ret
 
 ; ---------------------------------------------------------------------------
-; keys: P moves the world 2 pixels right, O 2 pixels left; if neither, Q
-; moves it 2 lines up, A 2 lines down. One move a frame.
+; keys: P moves the world 4 pixels right, O 4 pixels left; if neither, Q 4
+; lines up, A 4 lines down. Until the world has scrolled in, up by itself.
 
 keys:
     ld hl,(view_y)          ; scrolling in at the start: up until the view is
     ld de,VIEW_Y_START      ; where the world starts
     or a
     sbc hl,de
+    ld a,STEP
     jr c,up
     ld a,0xDF               ; the half-row Y U I O P
     in a,(0xFE)
     bit 0,a                 ; P
-    jp z,right
+    jp z,right2
     bit 1,a                 ; O
-    jp z,left
+    jp z,left2
     ld a,0xFB               ; Q
     in a,(0xFE)
     rra
+    ld a,STEP
     jr nc,up
     ld a,0xFD               ; A
     in a,(0xFE)
     rra
     ret c
+    ld a,STEP
     ; fall into down
 
-; down: the world 2 lines down (the view 2 lines up the map): every entry 2
-; lines down, those whose top goes below LAST_SHOWN off; those whose bottom
-; is now at FIRST_LINE on.
+; down: the view A lines (2 or 4) up the map, as far as its top: the world
+; down -- every entry, those whose top goes below LAST_SHOWN off; then those
+; whose bottom is now on the first line or two on.
 down:
+    ld c,a
     ld hl,(view_y)
     ld a,h
-    or l
-    ret z                   ; the map's top
-    dec hl
-    dec hl
-    ld (view_y),hl
-    call move_down
-    ld de,FIRST_LINE
-    jp add_line
-
-; up: the world 2 lines up: every entry 2 lines up, those whose bottom goes
-; above the screen off; those whose top is now at LAST_TOP on.
-up:
-    ld hl,(view_y)
-    ld de,VIEW_Y_MAX
+    or a
+    jr nz,.room
+    ld a,l
+    cp c
+    jr nc,.room
+    ld c,l                  ; only as far as the map's top
+    ld a,c
+    or a
+    ret z
+.room:
+    ld e,c
+    ld d,0
     or a
     sbc hl,de
-    ret z                   ; the map's bottom
-    add hl,de
-    inc hl
-    inc hl
     ld (view_y),hl
-    call move_up
+    push bc
+    ld a,c
+    call move_lines
+    ld de,FIRST_LINE
+    call add_line
+    pop bc
+    ld a,c
+    cp 4
+    ret nz
+    ld de,FIRST_LINE + 2
+    jp add_line
+
+; up: the view A lines (2 or 4) down the map, as far as its bottom: the
+; world up -- every entry, those whose bottom goes above the play area off;
+; then those whose top is now on the last line or two on.
+up:
+    ld c,a
+    ld hl,VIEW_Y_MAX
+    ld de,(view_y)
+    or a
+    sbc hl,de               ; how far there is to go
+    ld a,h
+    or a
+    jr nz,.room
+    ld a,l
+    cp c
+    jr nc,.room
+    ld c,l                  ; only as far as the map's bottom
+    ld a,c
+    or a
+    ret z
+.room:
+    ld hl,(view_y)
+    ld e,c
+    ld d,0
+    add hl,de
+    ld (view_y),hl
+    push bc
+    ld a,c
+    neg
+    call move_lines
     ld de,LAST_TOP
+    call add_top
+    pop bc
+    ld a,c
+    cp 4
+    ret nz
+    ld de,LAST_TOP - 2
     jp add_top
 
-; move_down: every entry 2 lines down, in place: those whose top goes below
-; LAST_SHOWN off the table; the rest's addresses 2 lines down, except where
-; one is clipped. An entry clipped at the top before draws a pair more (its
-; way in a pair earlier); one clipped at the bottom now draws a pair fewer,
-; still from LAST_SHOWN, its graphic a pair on. Its bottom line is odd, so the
-; first line down may cross into the next character row (told from L + 1, as
-; in the blitters) and the second never does.
-move_down:
+; move_lines: every entry A lines down the screen (2 or 4; -2 or -4 up), in
+; place. Those gone off -- the top below LAST_SHOWN, or the bottom above
+; FIRST_LINE -- leave the table. An entry wholly in the play area before and
+; after only has its address moved, 2 lines at a time; one clipped before or
+; after is clipped again (reclip).
+move_lines:
+    ld (.step + 1),a
+    ld (move_step),a
     ld a,(count)
     or a
     ret z
@@ -536,25 +766,74 @@ move_down:
     push hl
     ld de,E_LINE
     add hl,de
-    ld a,(hl)               ; its bottom line, 2 down
-    add a,2
-    ld (hl),a
+    ld a,(hl)
+    ld (move_old),a         ; its bottom line before
+.step:
+    add a,0
+    ld (hl),a               ; and after
     ld e,a                  ; E: its bottom line
     inc hl
     ld c,(hl)               ; C: its shape (E_SHAPE)
     ld a,c
     and 31
     ld d,a                  ; D: its rows
-    ld a,e
-    sub d                   ; its top line less 1
     pop hl
-    jr c,.top               ; top 0 or above: it was clipped at the top
+    ld a,e
+    cp FIRST_LINE
+    jr c,.off               ; above the play area
+    sub d                   ; its top line less 1
+    jr c,.clip              ; (top 0 or above)
     cp LAST_SHOWN
     jr nc,.off              ; top below LAST_SHOWN
+    cp FIRST_SHOWN - 1
+    jr c,.clip              ; top above the play area
     ld a,e
     cp LAST_SHOWN + 1
-    jr nc,.bottom           ; bottom below LAST_SHOWN
-.move:
+    jr nc,.clip             ; bottom below it
+    ld a,(move_old)         ; and before?
+    cp LAST_SHOWN + 1
+    jr nc,.clip
+    sub d
+    jr c,.clip
+    cp FIRST_SHOWN - 1
+    jr c,.clip
+    ld a,(move_step)        ; in the play area, before and after
+    call move_address
+.next:
+    ld de,ENTRY
+    add hl,de
+    djnz .entry
+    ret
+.off:
+    call remove_entry       ; the last entry in its place, to move next
+    djnz .entry
+    ret
+.clip:
+    call reclip
+    jr .next
+
+; move_address: the entry at HL's address A lines down the screen (2 or 4;
+; -2 or -4 up), 2 at a time. All registers but A kept.
+move_address:
+    or a
+    ret z
+    bit 7,a
+    jr nz,.up
+    call address_down2
+    sub 2
+    jr move_address
+.up:
+    call address_up2
+    add a,2
+    jr move_address
+
+; address_down2: the entry at HL's address (an odd line's) 2 lines down: the
+; first may cross into the next character row (told from L + 1, as in the
+; blitters), and a third's last row carries into the next third; the second
+; never crosses. All registers kept.
+address_down2:
+    push af
+    push de
     inc hl
     ld d,(hl)               ; H
     inc d
@@ -562,8 +841,8 @@ move_down:
     and 7
     jr nz,.second
     dec hl
-    ld a,(hl)               ; into the next character row; a third's last row
-    inc a                   ; carries into the next third
+    ld a,(hl)
+    inc a
     add a,32
     dec a
     ld (hl),a
@@ -576,61 +855,16 @@ move_down:
     inc d
     ld (hl),d
     dec hl
-.next:
-    ld de,ENTRY
-    add hl,de
-    djnz .entry
+    pop de
+    pop af
     ret
-.off:
-    call remove_entry       ; the last entry in its place, to move next
-    djnz .entry
-    ret
-.top:
-    ld a,2                  ; a pair more, its lowest line moving down with it
-    call way_step
-    jr .move
-.bottom:
-    ld a,c                  ; a pair fewer: still from LAST_SHOWN, a pair on
-    call skip_pair          ; in its graphic
-    ld a,-2
-    call way_step
-    jr .next
 
-; move_up: every entry 2 lines up, in place: those whose bottom was at
-; FIRST_LINE off the table; the rest's addresses 2 lines up, except where one
-; is clipped. An entry clipped at the bottom before draws a pair more, still
-; from LAST_SHOWN, its graphic a pair back; one clipped at the top now draws a
-; pair fewer (its way in a pair later). The first line up never leaves the
-; character row (the bottom line is odd); the second may.
-move_up:
-    ld a,(count)
-    or a
-    ret z
-    ld b,a
-    ld hl,table
-.entry:
-    push hl
-    ld de,E_LINE
-    add hl,de
-    ld a,(hl)
-    cp FIRST_LINE
-    jr z,.off
-    sub 2                   ; its bottom line, 2 up
-    ld (hl),a
-    ld e,a                  ; E: its bottom line
-    inc hl
-    ld c,(hl)               ; C: its shape (E_SHAPE)
-    ld a,c
-    and 31
-    ld d,a                  ; D: its rows
-    pop hl
-    ld a,e
-    cp LAST_SHOWN
-    jr nc,.bottom           ; bottom LAST_SHOWN or below: it was clipped at the bottom
-    inc a
-    sub d                   ; its top line
-    jr c,.top               ; above the screen
-.move:
+; address_up2: the entry at HL's address 2 lines up: the first never leaves
+; the character row (the line is odd); the second may, and a third's top row
+; borrows into the third above. All registers kept.
+address_up2:
+    push af
+    push de
     inc hl
     ld d,(hl)
     dec d
@@ -640,8 +874,8 @@ move_up:
     and 7
     jr nz,.done
     dec hl
-    ld a,(hl)               ; into the character row above; a third's top row
-    inc a                   ; borrows into the third above
+    ld a,(hl)
+    inc a
     sub 32
     dec a
     ld (hl),a
@@ -653,40 +887,103 @@ move_up:
 .done:
     ld (hl),d
     dec hl
-.next:
-    ld de,ENTRY
-    add hl,de
-    djnz .entry
+    pop de
+    pop af
     ret
-.off:
-    pop hl
-    call remove_entry
-    djnz .entry
-    ret
-.top:
-    ld a,-2                 ; a pair fewer, its lowest line moving up with it
-    call way_step
-    jr .move
-.bottom:
-    ld a,c                  ; a pair more: still from LAST_SHOWN, a pair back
-    call unskip_pair        ; in its graphic
-    ld a,2
-    call way_step
-    jr .next
 
-; way_step: the entry at HL's way in A bytes on in blit_entry (2 a pair
-; more, -2 a pair fewer), and its blitter from there. All registers but A kept.
-way_step:
+; reclip: the entry at HL, whose bottom line has moved from move_old to E
+; (its shape C, its rows D), clipped to lines FIRST_SHOWN to LAST_SHOWN
+; again: its address moves with its lowest line drawn (LAST_SHOWN or its
+; bottom), its graphic by a row's bytes for each line more or less below the
+; play area, and its way in is for the pairs from there up to FIRST_SHOWN or
+; its top. All registers kept.
+reclip:
+    push bc
     push de
     push hl
-    ld de,E_WAY
-    add hl,de
+    ld a,c
+    ld (reclip_shape),a
+    ld a,e
+    cp LAST_SHOWN + 1
+    jr c,.new
+    ld a,LAST_SHOWN
+.new:
+    ld (reclip_lowest),a    ; the lowest line it draws now
+    ld b,a
+    ld a,(move_old)
+    cp LAST_SHOWN + 1
+    jr c,.old
+    ld a,LAST_SHOWN
+.old:
+    ld c,a                  ; C: the lowest it drew
+    ld a,b
+    sub c
+    call move_address       ; its address with it
+    ld a,(move_old)         ; the lines below the play area, before less after:
+    sub c                   ; the graphic a row's bytes on for each line more
+    ld c,a
+    ld a,e
+    sub b
+    sub c                   ; (lines more below, -4 to 4)
+    jr z,.way
+    ld c,a
+    ld a,(reclip_shape)
+    rlca
+    rlca
+    rlca
+    and 7
+    ld b,a                  ; B: its width
+    xor a
+.bytes:
+    add a,c
+    djnz .bytes
+    ld c,a                  ; C: the bytes, -12 to 12
+    rlca
+    sbc a,a
+    ld b,a                  ; B: their sign, for the high byte
+    push hl
+    inc hl
+    inc hl
+    inc hl
+    inc hl                  ; E_GRAPHIC
+    ld a,c
     add a,(hl)
     ld (hl),a
+    inc hl
+    ld a,b
+    adc a,(hl)
+    ld (hl),a
+    pop hl
+.way:
+    ld a,(reclip_shape)     ; its top line, or FIRST_SHOWN if above it
+    and 31
+    ld b,a
+    ld a,e
+    sub b
+    inc a                   ; (INC leaves the carry)
+    jr c,.first
+    cp FIRST_SHOWN
+    jr nc,.top
+.first:
+    ld a,FIRST_SHOWN
+.top:
+    neg
+    ld b,a
+    ld a,(reclip_lowest)
+    add a,b
+    inc a                   ; the lines it draws: 2 a pair, a word a pair in
+    ld b,a                  ; blit_entry
+    ld a,(reclip_shape)
+    and 0xE0                ; 32 bytes a width
+    add a,b
+    add a,low (blit_entry - 32)
+    ld de,E_WAY
+    push hl
+    add hl,de
+    ld (hl),a
+    pop hl
     ld e,a
     ld d,high blit_entry    ; (blit_entry is in one page)
-    pop hl
-    push hl
     inc hl
     inc hl                  ; E_BLITTER
     ld a,(de)
@@ -697,56 +994,21 @@ way_step:
     ld (hl),a
     pop hl
     pop de
-    ret
-
-; skip_pair: the graphic of the entry at HL, whose shape is A, a pair of rows
-; on (2 * width bytes); unskip_pair: a pair back. All registers but A kept.
-skip_pair:
-    rrca
-    rrca
-    rrca
-    rrca
-    and 0x0E                ; 2 * width
-    push hl
-    inc hl
-    inc hl
-    inc hl
-    inc hl                  ; E_GRAPHIC
-    add a,(hl)
-    ld (hl),a
-    inc hl
-    jr nc,.done
-    inc (hl)
-.done:
-    pop hl
-    ret
-
-unskip_pair:
-    rrca
-    rrca
-    rrca
-    rrca
-    and 0x0E                ; 2 * width
-    push bc
-    push hl
-    ld c,a
-    inc hl
-    inc hl
-    inc hl
-    inc hl                  ; E_GRAPHIC
-    ld a,(hl)
-    sub c
-    ld (hl),a
-    inc hl
-    jr nc,.done
-    dec (hl)
-.done:
-    pop hl
     pop bc
     ret
 
 ; ---------------------------------------------------------------------------
 ; Across.
+
+; right2: the world 4 pixels right, as two of right's 2 (no drawing between:
+; the tiles cover the 4-pixel move, and the byte moves at most once).
+; left2: 4 pixels left.
+right2:
+    call right
+    jp right
+left2:
+    call left
+    jp left
 
 ; right: the world 2 pixels right. From fine position 6 to 0 the screen's
 ; first column is a world column further left: every entry a byte right;
@@ -876,8 +1138,10 @@ add_column:
     ld a,b
     ld (take_in_column.width + 1),a
     ld hl,take_in_column
-    ld (scan_page.take + 1),hl
-    ld hl,scan_page
+    ld (scan_listed.take + 1),hl
+    ld a,COLUMN_LIST
+    ld (scan_listed.list + 1),a
+    ld hl,scan_listed
     ld (scan_at.go + 1),hl
     ld a,(view_column)
     neg
@@ -967,7 +1231,11 @@ add_line:
     ld a,LINE_INDEX
     jr add_by
 add_top:
-    ld hl,scan_tops         ; (its records through the top list)
+    ld hl,take_on_top       ; (its records through the top list)
+    ld (scan_listed.take + 1),hl
+    ld a,TOP_LIST
+    ld (scan_listed.list + 1),a
+    ld hl,scan_listed
     ld (scan_at.go + 1),hl
     ld a,TOP_INDEX
     jr add_by.top
@@ -1021,8 +1289,8 @@ add_by:
     ld a,b
     ; fall into scan_at
 
-; scan_at: scan_page (or scan_tops, as add_top sets) on the page at row A,
-; column C. C and E kept.
+; scan_at: scan_page (or scan_listed, as add_top and add_column set) on the
+; page at row A, column C. C and E kept.
 scan_at:
     add a,a
     add a,a
@@ -1032,11 +1300,11 @@ scan_at:
 .go:
     jp scan_page
 
-; scan_tops: for add_top, the entries of page B whose tops are in the
-; character row that its tile's TOP_INDEX entry E names, by take_on_top: the
-; run of its top list there, each a number of one of its records. B, C and E
-; kept.
-scan_tops:
+; scan_listed: the entries of page B that its tile's index entry E names
+; through one of its lists of record numbers (the top list for add_top, by
+; take_on_top; the column list for add_column, by take_in_column): the run of
+; the list there, each the number of one of its records. B, C and E kept.
+scan_listed:
     push bc
     push de
     ld a,b
@@ -1062,12 +1330,13 @@ scan_tops:
     ld (.records + 1),hl    ; its records
     pop hl
     ld a,l
-    add a,TOP_LIST
+.list:
+    add a,TOP_LIST          ; (or COLUMN_LIST)
     ld l,a
     jr nc,.same2
     inc h
 .same2:
-    ld a,(hl)               ; HL: its top list, at the run
+    ld a,(hl)               ; HL: the list, at the run
     inc hl
     ld h,(hl)
     add a,c
@@ -1088,7 +1357,8 @@ scan_tops:
     add hl,bc               ; HL: the record
 .page:
     ld b,0                  ; B: the page
-    call take_on_top
+.take:
+    call take_on_top        ; (or take_in_column)
     pop hl
     dec d
     jr nz,.number
@@ -1098,8 +1368,8 @@ scan_tops:
     ret
 
 ; scan_page: the entries of page B that its tile's index entry E names (the
-; run in a character row, or in a column) into the table if they touch what
-; shows, by take_in_column or take_on_line. B, C and E kept.
+; run of its records whose bottom is in a character row) into the table if
+; they touch what shows, by take_on_line. B, C and E kept.
 scan_page:
     push bc
     push de
@@ -1127,7 +1397,7 @@ scan_page:
     ld d,a                  ; D: how many
 .piece:
 .take:
-    call take_in_column     ; or take_on_line (add_column, add_line set it)
+    call take_on_line       ; (add_line sets it)
     ld a,l
     add a,R_SIZE
     ld l,a
@@ -1337,8 +1607,11 @@ store_entry:
     ld a,c
     sub l
     inc a                   ; its top line (INC leaves the carry)
+    jr c,.first
+    cp FIRST_SHOWN
     jr nc,.top
-    xor a                   ; above the screen: from line 0
+.first:
+    ld a,FIRST_SHOWN        ; above the play area: from its first line
 .top:
     neg
     add a,h
@@ -1484,12 +1757,12 @@ set_offset:
     ret
 
 PAGE_COLUMNS    equ 32
-LINE_INDEX      equ 0       ; a tile: 33 bytes of index by bottom's character row,
-COLUMN_INDEX    equ 33      ; 33 by column (each a record's number), 33 by top's
-TOP_INDEX       equ 66      ; character row (each a place in its top list), its
-TOP_LIST        equ 99      ; top list's address, then its records by bottom line
-PIECES          equ 101     ; and by column (and after them its top list: its
-                            ; records' numbers, by top line)
+LINE_INDEX      equ 0       ; a tile: 33 bytes of index by bottom's character row
+COLUMN_INDEX    equ 33      ; (each a record's number), 33 by column and 33 by
+TOP_INDEX       equ 66      ; top's character row (each a place in its column or
+COLUMN_LIST     equ 99      ; top list), the two lists' addresses, then its
+TOP_LIST        equ 101     ; records by bottom line, and after them the lists:
+PIECES          equ 103     ; its records' numbers by column and by top line
 
 saved_sp:       dw 0
 fine:           db 0        ; the world's fine position: 0, 2, 4, 6
@@ -1504,6 +1777,10 @@ screen_line:    db 0        ; the arriving line's screen line
 arriving_line:  db 0        ; and its line in the page
 entry_column:   db 0        ; the world column of the entry being stored
 column_entry:   db 0        ; add_column's index entry
+move_step:      db 0        ; move_lines' lines
+move_old:       db 0        ; an entry's bottom line before the move
+reclip_shape:   db 0
+reclip_lowest:  db 0
 address_line:   db 0xFF     ; the last screen line store_entry looked up
 address_at:     dw 0        ; and its address
 
@@ -1514,5 +1791,15 @@ address_at:     dw 0        ; and its address
     ENDIF
 
 table:          ds ENTRY * MAX_TABLE
+order:          ds 2 * MAX_TABLE ; build_order's: the entries' addresses in drawing order
+order_row:      ds MAX_TABLE    ; each entry's bucket
+order_count:    ds ORDER_ROWS   ; each bucket's count, then its next place
+
+; The map and the blocks' records, indexes and lists, below $8000: read only
+; when entries arrive, where the contention costs little, and room above for
+; the graphics. (The stack runs down from $8000.)
+    ORG 0x5B00
+    INCLUDE "output/blocks.s"
+    ASSERT $ <= 0x7E00
 
     SAVESNA "output/stepscroll.sna", start
