@@ -203,7 +203,8 @@ Two consequences for the model:
   ([tracing.md](tracing.md#what-the-comparison-found)). That shortens the window
   in which snow can happen, so #27 fixes it first.
 - On the 128K, I in `0x40`–`0x7F` is known to crash the machine, not only to
-  snow. Version 1 models the 128K's snow on the display only (open point P4).
+  snow. That crash is **not modelled** (decided 31 October 2026); the 128K's
+  snow is modelled on the display only.
 
 ## 9. Test plan
 
@@ -228,7 +229,7 @@ implementation.
 | P1 | ~~The floating bus~~ | Ramsoft's account (section 7); the floating bus suites in #30 check it |
 | P2 | Snow's exact address: which bits come from R and which from the ULA's address, and which of the four reads can be hit | Smith, *The ZX Spectrum ULA*, the chapter on the DRAM interface; the snow tests in #30 |
 | P3 | Whether the 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | Fuse does; the 128K timing tests in #30 |
-| P4 | The 128K's crash with I = `0x40`–`0x7F`: model it or not | After version 1 |
+| P4 | ~~The 128K's crash with I = `0x40`–`0x7F`~~ | Not modelled (31 October 2026) |
 | P5 | Where in the held T-state the check is made, to the half-clock: the clock held high before T1L, as section 4 says | Smith, the chapters on the clock generator and contention |
 | P6 | The ULA port rule (4.2): confirm it checks T2 only, and not by address after T1 | Smith; the I/O rows of the 48K timing tests |
 
