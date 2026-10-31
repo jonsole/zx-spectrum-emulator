@@ -81,8 +81,9 @@ which is what having the machine on the end of an API is for.*
 **How accurate is it?** The Z80 is diffed instruction for instruction against
 the vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` and passes
 ZEXALL and ZEXDOC in full; tape loading works at pulse level through the EAR
-line, `.wav` and `.csw` recordings included. Memory contention and the +2A/+3
-are not emulated — see [Status & roadmap](docs/status.md).
+line, `.wav` and `.csw` recordings included. Memory and I/O contention are
+emulated for the 48K and the 128K; snow and the +2A/+3 are not — see
+[Status & roadmap](docs/status.md).
 
 ## What's actually emulated
 
@@ -111,8 +112,7 @@ are not emulated — see [Status & roadmap](docs/status.md).
   `ED`, `DD`, `FD`, and `DD CB d`/`FD CB d`), including the well-known
   undocumented `IXH`/`IXL`/`IYH`/`IYL` register forms.
 
-**Not emulated (yet):** the +2A/+3, memory contention / cycle-exact ULA timing,
-and tape *saving*. See [Status & roadmap](docs/status.md).
+**Not emulated (yet):** the +2A/+3, the ULA's snow, and tape *saving*. See [Status & roadmap](docs/status.md).
 
 Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
 [Audio](docs/audio.md).
@@ -283,6 +283,7 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Aviator for the 48K](examples/aviator/README.md) | `examples/aviator`: Geoff Crammond's BBC Micro flight simulator *Aviator*, ported from its documented disassembly in three layers -- the original running in a Python 6502, a Python port that matches it byte for byte, and the Z80 version, the whole game, checked against that -- with the keys, the Spectrum's screen layout, memory map, sound and speed, and notes on the original |
 | [Fast 3D](examples/fast3d/README.md) | `examples/fast3d`: fast Z80 routines for 3D -- signed multiplication by quarter squares, a rotation matrix from three angles with no multiplications, rotating and projecting vertices, unrolled line drawing -- objects seen from a camera and culled when out of view -- each checked against a Python model and timed, and a 128K demo of a flight through them |
 | [Designing a tape](docs/tape-designer.md) | `*.tape.json` and `*.screen.json`: a tape for the standard ROM loader or the fast one in `examples/zx-tape-loader` -- its blocks, entry and loading screen, the order the screen appears in, the checks, and building it into the emulator |
+| [Memory contention, the floating bus and snow](docs/contention.md) | When the ULA holds the CPU's clock on the 48K and the 128K, the rule and its worked examples, what the floating bus returns, snow, and what is still open |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |

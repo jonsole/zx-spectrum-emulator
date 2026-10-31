@@ -1438,6 +1438,13 @@ json tools_list() {
                                            "each period -- a game loop that takes more than a "
                                            "frame a turn. Changing it restarts the periods.")}},
                {"action"}));
+    add("set_contention",
+        "Turn the ULA's memory and I/O contention on or off, or with no argument report whether it "
+        "is on. On by default: an access to 0x4000-0x7FFF (and on a 128K, an odd bank at "
+        "0xC000), and I/O to the ULA's ports, while the ULA reads the screen holds the CPU for up "
+        "to 6 T-states, as a real 48K and 128K do (docs/contention.md). Off gives every "
+        "instruction its uncontended timing. Changing it restarts the rewind history.",
+        schema(json{{"on", bool_prop("true for contention, false for none.")}}, {}));
     add("set_speed",
         "Set emulation speed. \"realtime\" paces to a real 48K's 50Hz, \"uncapped\" runs as fast "
         "as the host allows (what the ZEXALL-style exercisers want), and a `multiplier` scales "
@@ -2534,6 +2541,17 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         json out = profile_report_json(report, lines, routines, false);
         out["call_tree"] = profile_call_tree_json(report, min_percent / 100.0, 12);
         return json_result(out);
+    }
+
+    if (name == "set_contention") {
+        const json& on = arg(args, "on");
+        if (!on.is_null()) {
+            if (!on.is_boolean()) {
+                return error_result("'on' must be true or false");
+            }
+            engine.set_contention(on.get<bool>());
+        }
+        return text_result(std::string("contention ") + (engine.contention() ? "on" : "off"));
     }
 
     if (name == "set_speed") {

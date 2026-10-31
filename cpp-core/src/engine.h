@@ -434,6 +434,12 @@ public:
     /// Makes the machine a 48K or a 128K, resetting it. RAM and ROMs stay.
     void set_model(Model m);
     Model model();
+    /// Turns the ULA's memory and I/O contention on or off
+    /// (docs/contention.md). On by default. Every instruction's timing changes
+    /// from that point, so the rewind history restarts there, as on a model
+    /// change.
+    void set_contention(bool on);
+    bool contention();
     /// Loads a .sna or .z80, told apart by the .sna's fixed sizes, and makes
     /// the machine whichever model the file was taken on.
     std::string load_snapshot(std::vector<uint8_t> data);

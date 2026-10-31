@@ -62,6 +62,7 @@ struct Args {
     std::string ffmpeg;
     bool tape_autostart = true;
     bool tape_fast_load = true;
+    bool contention = true;
     /// Type LOAD "" at startup even with no tape, so the machine sits in
     /// the ROM loader ready for one to be inserted later.
     bool wait_for_tape = false;
@@ -170,6 +171,8 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.wait_for_tape = true;
         } else if (flag == "--trace-log") {
             if (!next(args.trace_log)) return false;
+        } else if (flag == "--no-contention") {
+            args.contention = false;
         } else if (flag == "--trace-limit") {
             if (!next(value)) return false;
             args.trace_limit = std::strtoull(value.c_str(), nullptr, 10);
@@ -329,6 +332,10 @@ int main(int argc, char** argv) {
     if (!args.tape.empty()) {
         std::vector<uint8_t> data;
         if (!zx::read_file(args.tape, data)) {
+    if (!args.contention) {
+        engine.set_contention(false);
+        std::printf("Contention: off (--no-contention)\n");
+    }
             std::fprintf(stderr, "couldn't read tape %s\n", args.tape.c_str());
             return 1;
         }

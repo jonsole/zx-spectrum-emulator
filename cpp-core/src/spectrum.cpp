@@ -66,30 +66,44 @@ StepKind classify_step(SpectrumMemory& mem, uint16_t addr) {
 } // namespace
 
 Spectrum::Spectrum() {
+    build_contention();
     reset();
 }
 
 // Z80::set_registers() performs one priming half-clock -- T1H of the next
 // opcode fetch, the overlapped half the pipeline needs in hand before machine
 // clocking can begin. That is a real half-clock of machine time, so the ULA is
-// given it too.
+// given it too -- but only when the ULA is at the start of a T-state.
 //
-// Without this the CPU stays one half-clock ahead of the ULA for the rest of
-// the machine's life: the start of every T-state would land on the CPU's L
-// phase, and every contended access would be placed half a T-state from where
-// the hardware puts it. Worse, it is not even a constant -- each re-prime
-// (a snapshot load, a debugger register write, a fast-loaded tape block) shifts
-// it again, so the error drifts rather than staying somewhere it could be
-// corrected for.
+// The CPU's high half has to land on the ULA's even half-clocks and its low
+// half on the odd ones, because that is where the ULA's T-states begin and
+// where contention checks the bus (docs/contention.md): a CPU half a T-state
+// out would have every contended access placed half a T-state from where the
+// hardware puts it. From a reset the ULA is at half-clock 0, so the priming
+// half is T1H at an even half-clock and the ULA is given it. At an
+// instruction boundary -- where a snapshot load, a debugger register write or
+// a fast-loaded tape block re-primes -- the previous instruction's last
+// half-state has ALREADY been T1H of a fetch, at an even half-clock, and the
+// ULA is at the odd one after it. The new T1H replaces that one rather than
+// following it, so the ULA is not given another: giving it one, as this did
+// before contention, put the CPU's high halves on odd half-clocks from the
+// first re-prime on.
 void Spectrum::prime_cpu(const Registers& r) {
+    const bool at_tstate_start = (ula.frame_hc() & 1) == 0;
     cpu.set_registers(r, memory);
     pins_ = cpu.pins();
-    // The ULA's own half-clock for the same instant. Given after the CPU's
-    // rather than before it only because the priming clock starts from
-    // PINS_IDLE and would discard anything the ULA drove -- and T1H samples
-    // neither INT nor WAIT, so nothing observable turns on the order.
-    ula.clock(pins_, memory.screen_bytes());
-    ula.advance();
+    // A hold belongs to the instruction it stalled, which is gone.
+    contention_hold_ = 0;
+    ula_port_checked_ = false;
+    if (at_tstate_start) {
+        // The ULA's own half-clock for the same instant. Given after the
+        // CPU's rather than before it only because the priming clock starts
+        // from PINS_IDLE and would discard anything the ULA drove -- and T1H
+        // samples neither INT nor WAIT, so nothing observable turns on the
+        // order.
+        ula.clock(pins_, memory.screen_bytes());
+        ula.advance();
+    }
 }
 
 void Spectrum::set_model(Model m) {
@@ -99,7 +113,70 @@ void Spectrum::set_model(Model m) {
     beeper.set_clock(ula.timing().hc_per_sec);
     // A 48K has no AY: nothing answers its ports and nothing is mixed in.
     beeper.attach_ay(is128 ? &ay : nullptr);
+    build_contention();
     reset();
+}
+
+void Spectrum::set_contention(bool on) {
+    contention_on_ = on;
+    build_contention();
+}
+
+void Spectrum::build_contention() {
+    const UlaTiming& t = ula.timing();
+    const uint32_t tstates_per_line = t.hc_per_line / HC_PER_TSTATE;
+    contention_table_.assign(t.tstates_per_frame(), 0);
+    for (uint32_t line = 0; line < CONTENTION_LINES; line++) {
+        const uint32_t line_start = t.contention_start + line * tstates_per_line;
+        for (uint32_t i = 0; i < CONTENTION_GROUPS_PER_LINE * CONTENTION_GROUP_TSTATES; i++) {
+            contention_table_[line_start + i] = CONTENTION_PATTERN[i % CONTENTION_GROUP_TSTATES];
+        }
+    }
+    contention_ = contention_on_ ? contention_table_.data() : nullptr;
+    contention_hold_ = 0;
+    ula_port_checked_ = false;
+}
+
+bool Spectrum::contended(uint16_t addr) const {
+    // 0x4000-0x7FFF on both models: the 48K's lower RAM, the 128K's bank 5.
+    const uint16_t quarter = uint16_t(addr & 0xC000);
+    if (quarter == 0x4000) {
+        return true;
+    }
+    // The 128K's odd banks share the ULA's RAM chips, so whichever of them is
+    // paged at 0xC000 is contended there too.
+    return quarter == 0xC000 && model() == Model::Spectrum128 && (memory.bank_at_c000() & 1) != 0;
+}
+
+uint32_t Spectrum::contention_check() {
+    const uint16_t addr = get_addr(pins_);
+
+    // Rule 4.2: an I/O cycle to the ULA's own port (A0 low) is checked once,
+    // at T2 -- the first T-state with IORQ down -- whatever the address, and
+    // its TW and T3 are not checked at all. An interrupt acknowledge also
+    // asserts IORQ, with M1, but is no port.
+    const bool ula_port = asserted(pins_, IORQ) && !asserted(pins_, M1) && (addr & 1) == 0;
+    if (!ula_port) {
+        ula_port_checked_ = false;
+    } else if (ula_port_checked_) {
+        return 0;
+    } else {
+        ula_port_checked_ = true;
+        return contention_[ula.tstate()] * HC_PER_TSTATE;
+    }
+
+    // Rule 4.1: any T-state without MREQ checks the address. MREQ is down
+    // from T1L to the end of every memory cycle, so a memory cycle is
+    // checked at its T1 alone. The refresh half of an opcode fetch -- T3H,
+    // RFSH down and MREQ not yet -- is not checked either: the published
+    // tables give an opcode fetch one check, `pc:4`, whatever I holds.
+    if (asserted(pins_, MREQ) || asserted(pins_, RFSH)) {
+        return 0;
+    }
+    if (!contended(addr)) {
+        return 0;
+    }
+    return contention_[ula.tstate()] * HC_PER_TSTATE;
 }
 
 void Spectrum::write_paging(uint8_t value) {
@@ -226,6 +303,39 @@ void Spectrum::clock() {
     // ula.advance() at the bottom does, once everything below has had this
     // half-clock with the counters still describing it.
     ula.clock(pins_, memory.screen_bytes());
+
+    // Contention. The ULA checks at the start of each T-state, with the
+    // CPU's high half done -- the address out, MREQ not yet down -- and its
+    // low half to come: the odd half-clocks. A held T-state is stretched
+    // there, between the halves, by whole T-states, so the CPU stays on the
+    // ULA's even/odd beat. After a hold the check runs again at the T-state
+    // it was released to, which the pattern always holds for 0.
+    if (contention_ != nullptr) {
+        if (contention_hold_ == 0 && (ula.frame_hc() & 1) != 0) {
+            // Most of the frame -- the borders, retrace and the last two
+            // T-states of every group -- holds nothing whatever is on the
+            // bus, so the bus is only decoded where the table says a hold is
+            // possible. The ULA port's once-per-cycle mark is kept up to date
+            // either way: any T-state with IORQ down has been T2 or come after
+            // it, and one without IORQ is outside an I/O cycle.
+            if (contention_[ula.tstate()] == 0) {
+                ula_port_checked_ = asserted(pins_, IORQ);
+            } else {
+                contention_hold_ = contention_check();
+            }
+        }
+        if (contention_hold_ > 0) {
+            // The CPU's clock stays where it is: no half-state runs and the
+            // bus does not change, so nothing is serviced again. The trace
+            // still gets the half-clock, which is how a hold shows in it.
+            contention_hold_--;
+            if (trace != nullptr) {
+                trace->record(*this, pins_);
+            }
+            ula.advance();
+            return;
+        }
+    }
 
     pins_ = cpu.clock(pins_);
 
@@ -467,12 +577,10 @@ bool Spectrum::fast_load_block() {
     // NOT set_registers(): that clears the whole call stack, and this is an
     // ordinary RET -- one frame, not all of them.
     //
-    // prime_cpu() costs the machine ONE half-clock, where re-priming the CPU
-    // alone would cost none. That is still the entire point of a fast load --
-    // a block that takes five seconds of tape lands in 0.14 microseconds
-    // instead -- and the half-clock buys something worth more than it costs:
-    // the CPU and the ULA stay in step. Priming without it would slide the
-    // two apart by half a T-state per block loaded.
+    // prime_cpu() costs the machine no time here: this is an instruction
+    // boundary, so the fetch it replaces has had its T1H already and the new
+    // one takes its place. The CPU and the ULA stay in step however many
+    // blocks are loaded -- which contention depends on.
     prime_cpu(r);
     if (!call_stack.empty()) {
         call_stack.pop_back();
@@ -634,6 +742,8 @@ void Spectrum::save_state(State& s) {
     s.ay = ay;
     tape.save_state(s.tape);
     s.pins = pins_;
+    s.contention_hold = contention_hold_;
+    s.ula_port_checked = ula_port_checked_;
     s.call_stack = call_stack;
     s.call_stack_sp = call_stack_sp_;
 }
@@ -646,6 +756,8 @@ void Spectrum::restore_state(const State& s) {
     ay = s.ay;
     tape.restore_state(s.tape);
     pins_ = s.pins;
+    contention_hold_ = s.contention_hold;
+    ula_port_checked_ = s.ula_port_checked;
     call_stack = s.call_stack;
     call_stack_sp_ = s.call_stack_sp;
     beeper.restart_at(global_hc());
@@ -748,6 +860,8 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.u64(s.tape.total_hc);
 
     h.u64(s.pins);
+    h.u64(s.contention_hold);
+    h.byte(s.ula_port_checked ? 1 : 0);
     for (uint16_t v : s.call_stack) {
         h.u64(v);
     }

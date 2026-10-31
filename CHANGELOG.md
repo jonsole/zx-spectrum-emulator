@@ -7,6 +7,16 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Memory and I/O contention.** The ULA now holds the CPU's clock while it
+  reads the screen, on the 48K and the 128K: an access to `0x4000`-`0x7FFF`
+  (and on a 128K an odd bank at `0xC000`), an internal T-state with such an
+  address on the bus, or I/O to the ULA's ports can wait up to 6 T-states, by
+  the published 6, 5, 4, 3, 2, 1, 0, 0 pattern. On by default, so every timing
+  measured before -- profiles, frame costs, T-state counts -- changes for code
+  that touches contended memory. `--no-contention` and the MCP tool
+  `set_contention` turn it off. The rule and its worked examples are in
+  `docs/contention.md`. Snow is not emulated yet.
+
 - **The floating bus shows attributes only.** Reading an undecoded port during
   the paper area now returns the attribute the ULA is fetching, held across its
   bitmap fetch too, as a real 48K does -- never a bitmap byte. A program

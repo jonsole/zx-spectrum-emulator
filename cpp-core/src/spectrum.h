@@ -159,6 +159,13 @@ public:
     /// Advances one half-T-state.
     void clock();
 
+    /// Turns the ULA's memory and I/O contention on or off
+    /// (docs/contention.md). On by default. Changes how long the program's
+    /// instructions take from here on, so whoever calls it mid-run treats it
+    /// like a model change: the Engine restarts the rewind history.
+    void set_contention(bool on);
+    bool contention() const { return contention_on_; }
+
     /// Advances one whole T-state (two half-clocks). Convenience for callers
     /// that think in T-states, e.g. a debugger's "step N T-states".
     void tick() { clock(); clock(); }
@@ -238,6 +245,8 @@ public:
         Ay ay;
         Tape::State tape;
         uint64_t pins = 0;
+        uint32_t contention_hold = 0;
+        bool ula_port_checked = false;
         std::vector<uint16_t> call_stack;
         std::vector<uint16_t> call_stack_sp;
     };
@@ -257,6 +266,29 @@ public:
 
 private:
     uint64_t pins_ = PINS_IDLE;
+
+    /// Contention (docs/contention.md). The table holds, for every T-state of
+    /// the frame, how many T-states a T-state checked there is held; the
+    /// pointer the clock tests is null while contention is off, which is the
+    /// whole of its cost to a machine not using it. Rebuilt with the model.
+    bool contention_on_ = true;
+    std::vector<uint8_t> contention_table_;
+    const uint8_t* contention_ = nullptr;
+    /// Half-clocks the CPU still has to wait before its clock runs again.
+    uint32_t contention_hold_ = 0;
+    /// Set at the ULA's port check in an I/O cycle's T2, so its TW and T3 are
+    /// not checked again (docs/contention.md, rule 4.2); cleared once IORQ
+    /// lets go.
+    bool ula_port_checked_ = false;
+
+    /// Fills contention_table_ for the model's timing, and points contention_
+    /// at it if contention is on.
+    void build_contention();
+    /// Whether `addr` is in contended memory with the paging as it is now.
+    bool contended(uint16_t addr) const;
+    /// The ULA's check at the start of a T-state, made between the CPU's high
+    /// and low halves: how many half-clocks to hold the CPU, 0 for none.
+    uint32_t contention_check();
 
     /// Watch flags, and the pointer the bus decode actually tests -- null
     /// while nothing is watched, which is the whole cost of this feature to a

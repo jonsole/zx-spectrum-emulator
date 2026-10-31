@@ -108,6 +108,13 @@ struct UlaTiming {
     uint32_t int_pulse_hc;
     /// Half-clocks per second of real time: twice the CPU clock.
     uint64_t hc_per_sec;
+    /// The first T-state of the frame at which the ULA holds the CPU's clock:
+    /// the start of the first contention group (docs/contention.md, section
+    /// 2). Fuse's numbers, which the public timing tests pass with. They are
+    /// not derived from the paper's position above: the 48K's sits one
+    /// T-state before its first paper T-state and the 128K's three, and only
+    /// the tests, not the display, pin them down.
+    uint32_t contention_start;
 
     constexpr uint32_t hc_per_frame() const { return hc_per_line * lines_per_frame; }
     constexpr uint32_t tstates_per_frame() const { return hc_per_frame() / HC_PER_TSTATE; }
@@ -115,11 +122,23 @@ struct UlaTiming {
 };
 
 constexpr UlaTiming TIMING_48K{HC_PER_LINE, LINES_PER_FRAME, BORDER_TOP_LINES, INT_PULSE_HC,
-                               7'000'000};
-constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800};
+                               7'000'000, 14335};
+constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800, 14361};
 static_assert(TIMING_48K.tstates_per_frame() == TSTATES_PER_FRAME, "48K frame");
 static_assert(TIMING_128K.tstates_per_frame() == MAX_TSTATES_PER_FRAME, "128K frame");
 static_assert(TIMING_128K.lines_per_frame <= FULL_HEIGHT, "the canvas must hold a frame");
+
+// ---- contention (docs/contention.md) ---------------------------------------
+/// The ULA reads the screen in groups of 8 T-states, one per 16 pixels.
+constexpr uint32_t CONTENTION_GROUP_TSTATES = 8;
+/// 16 groups a line: the 128 T-states of paper.
+constexpr uint32_t CONTENTION_GROUPS_PER_LINE = SCREEN_WIDTH / 16;
+/// One contended line per line of paper.
+constexpr uint32_t CONTENTION_LINES = SCREEN_HEIGHT;
+/// How long a T-state checked at each position of a group is held: the
+/// published 6, 5, 4, 3, 2, 1, 0, 0. Every held T-state is released at the
+/// group's seventh T-state, so the entry is simply 6 minus the position.
+constexpr uint8_t CONTENTION_PATTERN[CONTENTION_GROUP_TSTATES] = {6, 5, 4, 3, 2, 1, 0, 0};
 
 /// The ULA latches the border colour every 8 pixels; a write part-way through
 /// a group does not take visual effect until the next one.

@@ -54,9 +54,15 @@ apart and the worst frames in detail; `profile_report.cpp` folds that through
 the SLD data for the DAP `profile` request and the MCP `profile` tool, and the
 extension paints it as a heat map and a call tree. Verified live against
 filmation, Manic Miner and the ROM's idle loop. Known limits: code reached by
-`JP` counts as the routine that jumped to it; a 128K's paged code is counted by
-16-bit address; and with contention not yet emulated, contended code is
-measured at its uncontended cost.
+`JP` counts as the routine that jumped to it; and a 128K's paged code is
+counted by 16-bit address.
+
+Memory and I/O contention are emulated for the 48K and the 128K (2026-10-31),
+on by default: the ULA holds the CPU's clock by the 6, 5, 4, 3, 2, 1, 0, 0
+pattern, checked between the CPU's high and low halves of a T-state, as
+[contention.md](contention.md) sets out with worked examples that
+`contention_tests` checks. Not yet: the ULA's snow, and the floating bus's
+bitmap bytes and one-group lead (#28).
 
 Native audio recovers from its device changing (2026-09-16): a shared-mode
 WASAPI stream does not survive headphones being plugged in, a Bluetooth

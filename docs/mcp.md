@@ -82,6 +82,7 @@ is in one of those two regions. A 48K's `0xC000` is bank 0 and its ROM is ROM0.
 | `clear_logpoint(id=None)` / `list_logpoints()` / `get_log(since, max)` | Remove one or all of MCP's; every logpoint set, with hit counts; what MCP's have reported since a given line |
 | `read_memory(address, length, bank=None)` / `write_memory(address, data, bank=None)` | Memory access, as the CPU sees it -- or with `bank`, straight into one of a 128K's eight RAM banks whether or not it is paged in, `address` then an offset within it. `data` is hex (`"3E 41 C9"`) or an array of numbers |
 | `set_paging(bank, rom, screen, lock, port_7ffd, force)` | Change a 128K's paging: the RAM bank at `$C000`, the ROM (0, the 128 editor; 1, 48K BASIC), the screen shown (bank 5 or 7), the lock -- naming only what changes, or the whole port `0x7FFD` byte. A program's lock holds unless `force`. `get_state` and `get_registers` report the paging. Undone by stepping back past it, like any input |
+| `set_contention(on)` | Turn the ULA's memory and I/O contention on or off, or with no argument report it. On by default; off gives every instruction its uncontended timing. Restarts the rewind history (see [contention.md](contention.md)) |
 | `get_registers(raw=false)` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. `get_registers` gives hex, PC with its symbol (`"$8003 (loop)"`), the flags spelled out (`SZ5H3PNC`, `-` for clear), the instruction at PC and the frame and T-state counters; `raw: true` gives every register as a number, as it used to. `set_registers` takes every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
 | `get_screen()` | Render the display as a PNG screenshot |
@@ -278,8 +279,9 @@ run
 profile {action: "get", lines: 10}         # compare
 ```
 
-Costs are timed off the emulated clock. ULA memory contention is not emulated
-yet, so code in contended memory costs what it would uncontended.
+Costs are timed off the emulated clock, ULA memory contention included, so code
+in contended memory costs what it does on the machine
+([contention.md](contention.md)).
 
 For a game that paces itself rather than waiting for the frame, measure per
 turn instead: a breakpoint at the top of its loop makes each `run` one turn.

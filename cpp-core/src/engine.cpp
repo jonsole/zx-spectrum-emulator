@@ -762,6 +762,28 @@ Model Engine::model() {
     return submit<Model>([](Spectrum& m) { return m.model(); });
 }
 
+void Engine::set_contention(bool on) {
+    submit_void([this, on](Spectrum& m) {
+        if (m.contention() == on) {
+            return;
+        }
+        m.set_contention(on);
+#if ZX_REWIND
+        // Not a rewind input: a replay from a checkpoint before this would run
+        // the old timing up to it and the new after, which nothing records the
+        // instant of. Restarting is what a model change does, for the same
+        // reason.
+        restart_history(m);
+#else
+        (void)this;
+#endif
+    });
+}
+
+bool Engine::contention() {
+    return submit<bool>([](Spectrum& m) { return m.contention(); });
+}
+
 std::string Engine::load_snapshot(std::vector<uint8_t> data) {
     std::string err = submit<std::string>([this, data = std::move(data)](Spectrum& m) {
         std::string error = zx::load_snapshot(m, data.data(), data.size());

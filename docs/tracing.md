@@ -167,12 +167,12 @@ Two things to know before reading one closely:
   `TState` is the ULA's position in the frame. They step together because the
   CPU's priming half-clock — T1H of the first fetch, performed by
   `Z80::set_registers()` before machine clocking begins — is charged to the ULA
-  as well (`Spectrum::prime_cpu`). Without that the CPU would run half a
-  T-state ahead of the ULA for the machine's whole life, and drift another half
-  with every re-prime: a snapshot load, a debugger register write, or a
-  fast-loaded tape block. A contended access placed half a T-state from where
-  the hardware puts it is simply the wrong answer, so the two are kept in
-  step.
+  as well when the ULA is at the start of a T-state, and replaces the pending
+  fetch's T1H when it is not (`Spectrum::prime_cpu`). So the CPU's high halves
+  always fall on the ULA's even half-clocks, through every re-prime: a
+  snapshot load, a debugger register write, or a fast-loaded tape block. A
+  contended access placed half a T-state from where the hardware puts it is
+  simply the wrong answer, so the two are kept in step.
 
 ## Viewing a trace
 

@@ -1043,8 +1043,8 @@ a `HALT`) before reading the worst frames.
 
 - **Clock time, not nominal time.** Each instruction is timed off the machine's
   own clock, so a `DJNZ` taken (13T) and not (8T) average out to what this run
-  actually did. ULA memory contention is not emulated yet, so contended code
-  costs what it would uncontended -- its real cost on hardware can be higher.
+  actually did. ULA memory contention is included, so contended code costs
+  what it does on the machine ([contention.md](contention.md)).
 - **Interrupts separately.** An acknowledge sequence runs straight after
   whatever instruction INT happened to interrupt; it is counted in a bucket of
   its own (shown in the status bar tooltip), not charged to that line.

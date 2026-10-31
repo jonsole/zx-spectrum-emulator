@@ -1021,9 +1021,8 @@ TEST(fast_load_satisfies_a_standard_block) {
         return;
     }
     arm_ld_bytes(m, 0xFF, 0x8000, uint16_t(code.size()), true, 0x9000);
-    // Sampled AFTER arming: set_registers() primes the CPU (and so costs its
-    // half-clock) too, and what is being measured here is the cost of the
-    // LOAD, not the cost of setting the test up.
+    // Sampled AFTER arming: set_registers() primes the CPU too, and what is
+    // being measured here is the cost of the LOAD, not of setting it up.
     const uint64_t hc_before = m.global_hc();
     m.step_instruction();
 
@@ -1033,13 +1032,12 @@ TEST(fast_load_satisfies_a_standard_block) {
     CHECK((r.f & 0x01) != 0);                    // carry set: loaded cleanly
     CHECK_EQ(r.de(), uint16_t(0));                 // all bytes consumed
     CHECK_EQ(r.ix, uint16_t(0x8000 + code.size()));
-    // One half-clock, not zero: the RET out of LD-BYTES re-primes the CPU, and
-    // that priming clock is charged to the ULA as well so the two stay in step
-    // (see Spectrum::prime_cpu). Set against the ~5 seconds of tape a real
-    // load of this block would take, 0.14 microseconds leaves the point of
-    // fast loading entirely intact -- and buys a machine whose CPU phase does
-    // not slide half a T-state further from its ULA with every block loaded.
-    CHECK_EQ(m.global_hc(), hc_before + 1);
+    // No time at all. The RET out of LD-BYTES re-primes the CPU at an
+    // instruction boundary, where the fetch it replaces had already had its
+    // T1H: the new T1H takes that half-clock's place rather than following it
+    // (see Spectrum::prime_cpu). So the CPU stays on the ULA's even/odd beat,
+    // which contention depends on, however many blocks are loaded.
+    CHECK_EQ(m.global_hc(), hc_before);
 
     const std::vector<uint8_t> got = m.read_memory(0x8000, code.size());
     CHECK(got == code);
