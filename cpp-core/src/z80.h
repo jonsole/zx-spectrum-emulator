@@ -222,6 +222,7 @@ public:
         bool nmi_level = false;
         bool nmi_pending = false;
         bool nmi_ack = false;
+        bool im0_pc_hold = false;
     };
     void save_state(State& s) const;
     void restore_state(const State& s);
@@ -274,6 +275,10 @@ private:
     bool nmi_pending_ = false;
     /// The acknowledge's pushes are an NMI's: PC goes to 0x0066.
     bool nmi_ack_ = false;
+    /// An IM 0 instruction is running: its further bytes are read at PC,
+    /// which does not move, as Zilog's interrupt application note has it.
+    /// Cleared when the next instruction's fetch begins.
+    bool im0_pc_hold_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
     /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean
@@ -314,7 +319,10 @@ private:
 
     // Post-increment / pre-decrement address helpers. All return the
     // pre-modification value except sp_pre_dec, which returns the new SP.
-    uint16_t pc_post_inc() { return regs.pc++; }
+    /// The address of the next instruction byte, and PC moved past it --
+    /// except through an IM 0 instruction, whose bytes come from the
+    /// interrupting device while PC stays where the interrupt found it.
+    uint16_t pc_post_inc() { return im0_pc_hold_ ? regs.pc : regs.pc++; }
     uint16_t sp_post_inc() { return regs.sp++; }
     uint16_t sp_pre_dec() { return --regs.sp; }
     uint16_t wz_post_inc() { return regs.wz++; }

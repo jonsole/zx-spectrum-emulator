@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 using namespace zx;
 
@@ -36,6 +37,17 @@ struct Bench {
     bool int_line = false;
     bool nmi_line = false;
     uint8_t ack = 0xFF;
+    /// IM 0's further bytes, which the device answers memory reads at PC
+    /// with while there are any; memory answers once they run out.
+    std::vector<uint8_t> device;
+    size_t device_next = 0;
+    /// The addresses those reads were made at, and whether each was an M1.
+    std::vector<uint16_t> device_addr;
+    std::vector<bool> device_m1;
+    uint8_t device_byte = 0;
+    bool device_reading = false;
+    /// The device answers only once it has been acknowledged.
+    bool acked = false;
 
     explicit Bench(const Registers& r) {
         cpu.set_registers(r, mem);
@@ -44,6 +56,7 @@ struct Bench {
 
     /// One half-clock: the CPU's, then the bus's answer to it.
     void half() {
+        const uint64_t previous = pins;
         uint64_t in = release_pins(pins, INT | NMI);
         if (int_line) {
             in = assert_pins(in, INT);
@@ -53,11 +66,24 @@ struct Bench {
         }
         pins = cpu.clock(in);
         if (asserted(pins, MREQ) && asserted(pins, RD)) {
-            pins = set_data(pins, mem.read(get_addr(pins)));
+            // A read lasts several half-clocks. While the device has bytes
+            // left it answers every read, taking its next byte at each read's
+            // first half-clock -- when MREQ and RD come down together.
+            const bool first = !(asserted(previous, MREQ) && asserted(previous, RD));
+            if (first && acked && device_next < device.size()) {
+                device_addr.push_back(get_addr(pins));
+                device_m1.push_back(asserted(pins, M1));
+                device_byte = device[device_next++];
+                device_reading = true;
+            } else if (first) {
+                device_reading = false;
+            }
+            pins = set_data(pins, device_reading ? device_byte : mem.read(get_addr(pins)));
         } else if (asserted(pins, MREQ) && asserted(pins, WR)) {
             mem.write(get_addr(pins), get_data(pins));
         } else if (asserted(pins, IORQ) && asserted(pins, M1)) {
             pins = set_data(pins, ack);
+            acked = true;
         }
     }
 
@@ -245,6 +271,50 @@ TEST(nmi_leaves_halt_with_the_address_after_it) {
     CHECK_EQ(b->instruction(), 4u + 11u); // a halted NOP, then the NMI
     CHECK(!b->cpu.halted);
     CHECK_EQ(b->stacked(), uint16_t(0x8001));
+}
+
+TEST(im0_call_reads_its_operand_at_the_unchanged_pc) {
+    // CALL 1234h from the device: the acknowledge (6) is its fetch; the two
+    // operand bytes come by ordinary memory reads at PC, which stays at
+    // 0x8001, then CALL's internal T-state and two pushes: 6 + 3 + 3 + 1 +
+    // 3 + 3 = 19. The interrupted PC is what is pushed.
+    auto b = std::make_unique<Bench>(start(0));
+    b->ack = 0xCD;
+    b->device = {0x34, 0x12};
+    b->int_line = true;
+    CHECK_EQ(b->instruction(), 4u + 19u);
+    CHECK_EQ(get_addr(b->pins), uint16_t(0x1234));
+    CHECK_EQ(b->stacked(), uint16_t(0x8001));
+    CHECK(b->device_addr == std::vector<uint16_t>({0x8001, 0x8001}));
+    CHECK(b->device_m1 == std::vector<bool>({false, false}));
+}
+
+TEST(im0_ld_hl_nn_carries_on_where_it_was_interrupted) {
+    // LD HL,nn: 6 + 3 + 3 = 12. Afterwards PC moves again, from 0x8001.
+    auto b = std::make_unique<Bench>(start(0));
+    b->ack = 0x21;
+    b->device = {0xCD, 0xAB};
+    b->int_line = true;
+    CHECK_EQ(b->instruction(), 4u + 12u);
+    CHECK_EQ(int(b->cpu.regs.hl()), 0xABCD);
+    CHECK_EQ(get_addr(b->pins), uint16_t(0x8001));
+}
+
+TEST(im0_prefix_fetches_its_next_opcode_at_the_unchanged_pc) {
+    // CB C7, SET 0,A: the acknowledge brings CB, and the CPU fetches the
+    // next opcode as it always does, an M1 cycle with refresh -- at 0x8001,
+    // PC not moving. 6 + 4 = 10. R counts the NOP, the acknowledge and that
+    // fetch.
+    auto b = std::make_unique<Bench>(start(0));
+    b->ack = 0xCB;
+    b->device = {0xC7};
+    b->int_line = true;
+    CHECK_EQ(b->instruction(), 4u + 10u);
+    CHECK_EQ(int(b->cpu.regs.a), 1);
+    CHECK(b->device_addr == std::vector<uint16_t>({0x8001}));
+    CHECK(b->device_m1 == std::vector<bool>({true}));
+    CHECK_EQ(int(b->cpu.regs.r & 0x7F), 3);
+    CHECK_EQ(get_addr(b->pins), uint16_t(0x8001));
 }
 
 RUN_TESTS()

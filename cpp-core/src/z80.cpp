@@ -48,6 +48,8 @@ constexpr bool DDFD_INDIRECT_TABLE[256] = {
 uint64_t Z80::begin_fetch(uint64_t pins) {
     hlx_idx_ = 0;
     prefix_active_ = false;
+    // An IM 0 instruction ends here: PC moves again from this fetch on.
+    im0_pc_hold_ = false;
 
     // NMI and INT are sampled here, before any bus activity, so an accepted
     // interrupt replaces this fetch's T1 rather than racing it. An NMI edge
@@ -313,6 +315,7 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     rfsh_release_ = false;
     nmi_pending_ = false;
     nmi_ack_ = false;
+    im0_pc_hold_ = false;
     // One priming half-clock, whose memory request MUST be serviced -- step 0
     // is NOP, whose generated body is begin_fetch(), so this leaves the
     // pipeline at STEP_M1_T1L with a real opcode read in flight. Skipping the
@@ -746,13 +749,21 @@ uint64_t Z80::clock(uint64_t pins) {
             if (regs.im == 0) {
                 // The acknowledged byte is the instruction: from here on it is
                 // what an opcode fetch of it would have left -- the opcode
-                // latched, PC not moved past it, and the opcode's own steps
-                // next. Single-byte instructions only: a prefix byte would go
-                // on to fetch its second byte from memory at PC, which is not
-                // what a device supplying a multi-byte instruction does.
+                // latched and the opcode's own steps next. Any further bytes
+                // (operands, and a prefixed instruction's next opcode byte)
+                // are read by the instruction's own cycles with PC held where
+                // the interrupt found it: Zilog's interrupt application note
+                // has them "read in by a normal memory read sequence (The PC,
+                // however, remains at its pre-interrupt state ...)", the
+                // device answering at that address. So CALL nn takes 6 + 13 =
+                // 19 T-states and pushes the interrupted PC. A prefix's next
+                // opcode byte comes by the CPU's opcode fetch, M1 and refresh
+                // included, as it always does -- the note does not say, and
+                // that is the CPU's one way of reading an opcode.
                 opcode_ = dlatch_;
                 addr_ = regs.hl();
                 prefix_active_ = false;
+                im0_pc_hold_ = true;
                 step_ = opcode_;
             } else {
                 step_ = STEP_INT_T6L;
@@ -937,6 +948,7 @@ void Z80::save_state(State& s) const {
     s.nmi_level = nmi_level_;
     s.nmi_pending = nmi_pending_;
     s.nmi_ack = nmi_ack_;
+    s.im0_pc_hold = im0_pc_hold_;
 }
 
 void Z80::restore_state(const State& s) {
@@ -954,6 +966,7 @@ void Z80::restore_state(const State& s) {
     nmi_level_ = s.nmi_level;
     nmi_pending_ = s.nmi_pending;
     nmi_ack_ = s.nmi_ack;
+    im0_pc_hold_ = s.im0_pc_hold;
 }
 #endif
 
