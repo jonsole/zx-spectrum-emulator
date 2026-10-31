@@ -281,10 +281,10 @@ implementation.
 |---|---|---|
 | P1 | ~~The floating bus~~ | Ramsoft's account (section 7); the floating bus suites in #30 check it |
 | P2 | ~~Snow's address and which reads it hits~~ | Weiv's account (section 8); assumption S1, his group numbering against ours, checked by his snow tests in #30 |
-| P3 | Whether the 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | Fuse does; the 128K timing tests in #30 |
+| P3 | The 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | **Best guess, and what the code does: yes**, as Fuse, which passes the 128K timing tests. Checked by them in #30 |
 | P4 | ~~The 128K's crash with I = `0x40`–`0x7F`~~ | Not modelled (31 October 2026) |
-| P5 | Where in the held T-state the check is made, to the half-clock: the clock held high before T1L, as section 4 says | Smith, the chapters on the clock generator and contention |
-| P6 | The ULA port rule (4.2): confirm it checks T2 only, and not by address after T1 | Smith; the I/O rows of the 48K timing tests |
+| P5 | Where in the held T-state the check is made | **Best guess, and what the code does:** the ULA holds the CPU's clock high, so the hold stretches the first half of the T-state, after the address is out and before MREQ falls. Confirm in Smith |
+| P6 | The ULA port rule (4.2): checks T2 only | **Best guess, and what the code does: yes.** It is the only rule that gives the published `C:1, C:3`. Confirm in Smith and the I/O rows of the 48K timing tests |
 
 Smith's book covers the 48K's ULA only; the 128K's numbers come from Fuse, the
 suites and the published tables.
