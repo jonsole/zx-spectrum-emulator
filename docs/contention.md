@@ -189,22 +189,75 @@ checked again once #28 lands.
 
 ## 8. Snow
 
-The Z80 puts the refresh address IR on the bus in T3 and T4 of every opcode
-fetch, with MREQ low and RFSH low. When I is `0x40`–`0x7F`, the lower RAM sees
-a row access from the CPU in the middle of the ULA's own reads. The ULA's read
-in progress then takes its row from the refresh: the byte it fetches comes
-from an address that keeps the ULA's own high part and takes its low part from
-R. The wrong byte reaches the screen, as "snow". The CPU is not held for it:
-MREQ is low, so rule 4.1 does not check (open point P2 for the details).
+Snow is the ULA reading the wrong screen bytes because the CPU's memory
+refresh lands in the middle of its read. It needs **I to point at contended
+memory**: I = `0x40`–`0x7F` on both models, and on the 128K also I =
+`0xC0`–`0xFF` while bank 1, 3, 5 or 7 is paged at `0xC000`. With I anywhere
+else nothing happens.
 
-Two consequences for the model:
+This section follows Weiv's account (the author of the Spectramine emulator,
+19 October 2022, checked on real 48K and 128K machines with his snow tests
+and the ULA128 test), with TheMartian's explanation of the DRAM signals.
 
-- The tracer's refresh ends half a T-state early, at T4H rather than T4L
-  ([tracing.md](tracing.md#what-the-comparison-found)). That shortens the window
-  in which snow can happen, so #27 fixes it first.
-- On the 128K, I in `0x40`–`0x7F` is known to crash the machine, not only to
-  snow. That crash is **not modelled** (decided 31 October 2026); the 128K's
-  snow is modelled on the display only.
+### 8.1 Why
+
+The ULA reads in two bursts a group: the first cell's bitmap and attribute,
+then the second's. For each burst it sets the column address once, bits 6–0
+of the screen address, then gives two row strobes for bits 13–7, one for the
+bitmap byte and one for the attribute. Bits 6–0 are therefore shared by a
+burst's two bytes.
+
+The CPU's refresh in T3 and T4 of an opcode fetch puts IR on the bus with MREQ
+low, and on the Spectrum MREQ drives the lower RAM's column strobe. So a
+refresh that coincides with the moment the ULA sets its column replaces that
+column with R; and a refresh that coincides with the gap between the bursts
+holds the column strobe low through it, so the second burst never sets its
+own. MREQ is down, so the CPU is not held for any of this (rule 4.1).
+
+### 8.2 The two effects
+
+Weiv numbers the T-states of the ULA's 8 T-state group 1 to 8. What matters
+is which of them the **T4** of an opcode fetch falls on:
+
+| Fetch's T4 on | Effect |
+|---|---|
+| T-state 3 of the group | **Snow.** The first burst's two addresses, bitmap and attribute, keep their bits 13–7 and take bits 6–0 from R: R's value after this fetch's increment. The first cell shows the bytes at those addresses |
+| T-state 5 of the group | **Double.** The second burst is not read. The second cell shows the first cell's bitmap and attribute again |
+| any other | Nothing |
+
+**Assumption S1:** Weiv's T-state n of the group is G + n − 1 in section 3's
+numbering, so snow is a T4 at G + 2 and the double a T4 at G + 4. That puts
+the first burst's column just before Ramsoft's first read at G + 3 and the gap
+between the bursts at G + 4 to G + 5, which fits both accounts; it is checked
+by Weiv's snow tests in #30.
+
+### 8.3 Which bank the snow bytes come from (128K)
+
+On the 128K the snow bytes are not always read from the screen bank shown.
+Weiv's table (April 2023), by the bank I points at and the screen shown:
+
+| I points at bank | Screen in bank 5 | Screen in bank 7 |
+|---|---|---|
+| 1 | 1 | 3 |
+| 3 | 1 | 3 |
+| 5 | 5 | 7 |
+| 7 | 5 | 7 |
+
+On the 48K the bytes come from the screen as usual.
+
+### 8.4 For the model
+
+- The fetch's T4 is what matters, not the RFSH pin as the tracer shows it
+  (it releases RFSH half a T-state early, at T4H; see
+  [tracing.md](tracing.md#what-the-comparison-found)). The model takes the T4
+  from the CPU's step, so that difference does not move snow.
+- The ULA fetches a whole group at its first dot today (`ula.cpp`), before the
+  CPU has run that group's T-states. Snow needs the first burst's bytes chosen
+  at G + 2 and the second's at G + 4, so the fetch is split into its two
+  bursts first.
+- On some 128K machines snow hangs or resets the computer. That is **not
+  modelled** (decided 31 October 2026); the 128K snows on the display only.
+- The +2A/+3 have no snow, and are out of scope anyway.
 
 ## 9. Test plan
 
@@ -227,7 +280,7 @@ implementation.
 | # | Question | How to settle |
 |---|---|---|
 | P1 | ~~The floating bus~~ | Ramsoft's account (section 7); the floating bus suites in #30 check it |
-| P2 | Snow's exact address: which bits come from R and which from the ULA's address, and which of the four reads can be hit | Smith, *The ZX Spectrum ULA*, the chapter on the DRAM interface; the snow tests in #30 |
+| P2 | ~~Snow's address and which reads it hits~~ | Weiv's account (section 8); assumption S1, his group numbering against ours, checked by his snow tests in #30 |
 | P3 | Whether the 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | Fuse does; the 128K timing tests in #30 |
 | P4 | ~~The 128K's crash with I = `0x40`–`0x7F`~~ | Not modelled (31 October 2026) |
 | P5 | Where in the held T-state the check is made, to the half-clock: the clock held high before T1L, as section 4 says | Smith, the chapters on the clock generator and contention |
@@ -239,10 +292,13 @@ suites and the published tables.
 ## 11. Sources
 
 - Chris Smith, *The ZX Spectrum ULA: How to Design a Microcomputer* (2010):
-  the 48K ULA's schematic-level account. Read for P2, P5 and P6.
+  the 48K ULA's schematic-level account. Read for P5 and P6.
 - The comp.sys.sinclair FAQ's contended memory and I/O tables, and Fuse's
   `z80_ops` contention annotations: the per-instruction tables of section 5.
 - Ramsoft, *The floating bus technical guide*: section 7.
+- Weiv, *Exact emulation of the Snow effect* (forum post, 19 October 2022,
+  updated April 2023), with TheMartian's addition, and his snow tests and the
+  ULA128 test by azesmbog: section 8.
 - The ZX Spectrum Next's FPGA source (`zxula`), read for facts only.
 - The ZX Spectrum test collection on
   [redcode/ZXSpectrum's wiki](https://github.com/redcode/ZXSpectrum/wiki/Tests):
