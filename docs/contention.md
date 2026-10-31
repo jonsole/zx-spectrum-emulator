@@ -40,7 +40,7 @@ checked at T" means the ULA looks at the bus at the start of T-state T.
 |---|---|---|---|
 | T-states a line | 224 | 228 | `ula.h` |
 | Lines a frame | 312 | 311 | `ula.h` |
-| First contended T-state, **C₀** | **14335** | **14361** | Fuse; the timing suites pass with these |
+| First contended T-state, **C₀** | **14335** | **14362** | The Butlers' timing tests: all pass with these, and not with a T-state either side |
 | Contended lines | 192 | 192 | the paper |
 | Contended T-states a line | 128 | 128 | 16 groups of 8 |
 
@@ -148,11 +148,11 @@ runs at 14341, TW at 14342, T3 at 14343. 16 T-states instead of 11.
 14327–14334. The internal T-state at 14335 has IR on the bus, contended, at
 G + 0: held 6. 15 T-states instead of 9.
 
-**128K: OUT (C),A** (`ED 79`), BC = `0x7FFD`, fetch at 14353. The two fetches
-take 14353–14360. Port `0x7FFD`'s high byte is contended and A0 = 1, so each
-I/O T-state is address-checked. T1 at 14361 is G + 0 (C₀ = 14361): held 6,
-runs at 14367. T2 at 14368 is G + 7: not held. TW at 14369 is the next
-group's G + 0: held 6, runs at 14375. T3 at 14376 is G + 7: not held. The I/O
+**128K: OUT (C),A** (`ED 79`), BC = `0x7FFD`, fetch at 14354. The two fetches
+take 14354–14361. Port `0x7FFD`'s high byte is contended and A0 = 1, so each
+I/O T-state is address-checked. T1 at 14362 is G + 0 (C₀ = 14362): held 6,
+runs at 14368. T2 at 14369 is G + 7: not held. TW at 14370 is the next
+group's G + 0: held 6, runs at 14376. T3 at 14377 is G + 7: not held. The I/O
 cycle takes 16 T-states instead of 4, the instruction 24 instead of 12.
 
 ## 7. The floating bus

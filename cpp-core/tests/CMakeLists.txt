@@ -181,6 +181,16 @@ add_dependencies(zx_tools screenshot)
 target_compile_definitions(screenshot
   PRIVATE ${ZX_ROOT_DEFINE})
 
+# Diagnostic, and the runner behind the timing suite tests (#30): loads one
+# program from the public suites, runs it headless, saves the screen as PNG.
+add_executable(suite_shot suite_shot.cpp)
+target_link_libraries(suite_shot PRIVATE zx_core)
+target_compile_options(suite_shot PRIVATE ${ZX_WARNINGS})
+target_include_directories(suite_shot SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party)
+add_dependencies(zx_tests suite_shot)
+target_compile_definitions(suite_shot
+  PRIVATE ${ZX_ROOT_DEFINE})
+
 # Not a test on its own: runs a Z80 .com, exiting with A, for the unit tests
 # the examples write in Z80 -- see examples/filmation/engine/tests/run_tests.py.
 add_executable(z80_com_runner z80_com_runner.cpp)
@@ -224,3 +234,56 @@ foreach(suite zexdoc zexall)
   add_test(NAME ${suite} COMMAND zexall_runner ${suite} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
   set_tests_properties(${suite} PROPERTIES LABELS "slow" TIMEOUT 7200)
 endforeach()
+
+# ---- the public timing suites (issue #30, docs/timing-suites.md) -----------
+# Programs from the collection scripts/fetch_timing_suites.py fetches into
+# .timing-suites/, run by suite_shot, each passing when its own verdict is on
+# the screen. Labelled "slow", like ZEXALL, and "suites" to run them alone
+# (ctest -L suites). Without the fetch, or without the ROMs, they skip.
+set(ZX_SUITES "${PROJECT_SOURCE_DIR}/../.timing-suites")
+
+# Richard and Tim Butler's 48K timing tests: test n is chosen by typing n and
+# ENTER at its prompt; it runs uncontended and contended and ends with this
+# line when both passed.
+foreach(n RANGE 1 35)
+  if(n LESS 10)
+    set(keys "${n}@100" "ENTER@110")
+  else()
+    string(SUBSTRING "${n}" 0 1 tens)
+    string(SUBSTRING "${n}" 1 1 units)
+    set(keys "${tens}@100" "${units}@110" "ENTER@120")
+  endif()
+  add_test(NAME suite_butler48_${n}
+    COMMAND suite_shot "${ZX_SUITES}/butler48.sna" 1500 suite_butler48_${n}.png ${keys}
+            "expect=All Tests Complete 100% Pass"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  set_tests_properties(suite_butler48_${n} PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)
+endforeach()
+
+# The same tests for the 128K, as a tape recording that loads at real speed:
+# from the 128's own 48 BASIC, as the program asks, choosing test n once it is
+# in. It reports each run as Pass or Fail and stops without a summary line.
+# Its test 35 stops at once with a STOP report and runs nothing, so it is left
+# out; why is not known (docs/timing-suites.md).
+foreach(n RANGE 1 34)
+  if(n LESS 10)
+    set(keys "${n}@11500" "ENTER@11530")
+  else()
+    string(SUBSTRING "${n}" 0 1 tens)
+    string(SUBSTRING "${n}" 1 1 units)
+    set(keys "${tens}@11500" "${units}@11515" "ENTER@11540")
+  endif()
+  add_test(NAME suite_butler128_${n}
+    COMMAND suite_shot "${ZX_SUITES}/butler128.wav" 13500 suite_butler128_${n}.png 128in48
+            ${keys} "expect=Pass" "reject=Fail"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+  set_tests_properties(suite_butler128_${n} PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)
+endforeach()
+
+# Mark Woodmass's 48K NEC suite: its R register test prints its verdict. The
+# other five draw patterns, compared by eye for now (docs/timing-suites.md).
+add_test(NAME suite_nec48_r_register
+  COMMAND suite_shot "${ZX_SUITES}/nec48.tap" 4500 suite_nec48_r_register.png 0@3000
+          "expect=passed"
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(suite_nec48_r_register PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)

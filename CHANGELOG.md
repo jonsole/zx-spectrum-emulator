@@ -7,6 +7,15 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The public timing suites run as tests.** `scripts/fetch_timing_suites.py`
+  fetches the published timing tests, and `ctest -L suites` runs the ones that
+  print a verdict: all 35 of the Butlers' 48K timing tests and 34 of their
+  128K ones, and the NEC suite's R register test, all passing
+  (`docs/timing-suites.md`). They found two things, both fixed: the
+  `(IX+d)` and `DD CB` instructions put the wrong address on the bus in their
+  internal T-states, so contention held them wrongly; and the 128K's
+  contention starts at 14362, not 14361.
+
 - **Memory and I/O contention.** The ULA now holds the CPU's clock while it
   reads the screen, on the 48K and the 128K: an access to `0x4000`-`0x7FFF`
   (and on a 128K an odd bank at `0xC000`), an internal T-state with such an

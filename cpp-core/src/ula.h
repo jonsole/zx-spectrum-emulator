@@ -110,10 +110,12 @@ struct UlaTiming {
     uint64_t hc_per_sec;
     /// The first T-state of the frame at which the ULA holds the CPU's clock:
     /// the start of the first contention group (docs/contention.md, section
-    /// 2). Fuse's numbers, which the public timing tests pass with. They are
-    /// not derived from the paper's position above: the 48K's sits one
-    /// T-state before its first paper T-state and the 128K's three, and only
-    /// the tests, not the display, pin them down.
+    /// 2). Pinned down by the Butlers' timing tests, every one of which passes
+    /// with these and not with a T-state either side: 14335 on the 48K, as
+    /// Fuse has it, and 14362 on the 128K, one later than Fuse's 14361 -- in
+    /// this machine's frame, counted from the start of its interrupt. They
+    /// are not derived from the paper's position above: the 48K's sits one
+    /// T-state before its first paper T-state and the 128K's two.
     uint32_t contention_start;
 
     constexpr uint32_t hc_per_frame() const { return hc_per_line * lines_per_frame; }
@@ -123,7 +125,7 @@ struct UlaTiming {
 
 constexpr UlaTiming TIMING_48K{HC_PER_LINE, LINES_PER_FRAME, BORDER_TOP_LINES, INT_PULSE_HC,
                                7'000'000, 14335};
-constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800, 14361};
+constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800, 14362};
 static_assert(TIMING_48K.tstates_per_frame() == TSTATES_PER_FRAME, "48K frame");
 static_assert(TIMING_128K.tstates_per_frame() == MAX_TSTATES_PER_FRAME, "128K frame");
 static_assert(TIMING_128K.lines_per_frame <= FULL_HEIGHT, "the canvas must hold a frame");

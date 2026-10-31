@@ -30,19 +30,20 @@ constexpr uint16_t CODE = 0x8000;
 constexpr uint32_t C48 = 14335;
 constexpr uint32_t LINE48 = 224;
 /// 128K: the same.
-constexpr uint32_t C128 = 14361;
+constexpr uint32_t C128 = 14362;
 
-/// Runs `code` at CODE as one instruction whose opcode fetch begins its T1 at
-/// frame T-state `m1`, with registers `r` (PC is set here), and returns the
-/// T-states it took.
-uint32_t tstates_at(Spectrum& m, uint32_t m1, Registers r, const std::vector<uint8_t>& code) {
+/// Runs `code` at `at` (CODE unless given) as one instruction whose opcode
+/// fetch begins its T1 at frame T-state `m1`, with registers `r` (PC is set
+/// here), and returns the T-states it took.
+uint32_t tstates_at(Spectrum& m, uint32_t m1, Registers r, const std::vector<uint8_t>& code,
+                    uint16_t at = CODE) {
     // The CPU primes T1H of its fetch on the half-clock the ULA is at, so
     // the ULA is brought to the even half-clock that starts T-state m1.
     while (m.ula.frame_hc() != m1 * HC_PER_TSTATE) {
         m.clock();
     }
-    m.write_memory(CODE, code.data(), code.size());
-    r.pc = CODE;
+    m.write_memory(at, code.data(), code.size());
+    r.pc = at;
     m.set_registers(r);
     const uint64_t before = m.global_hc();
     m.step_instruction();
@@ -204,13 +205,58 @@ TEST(io_odd_port_contended_high_byte) {
     CHECK_EQ(tstates_at(*m, C48 - 7, r, {0xDB, 0xFF}), 23u);
 }
 
+// ---- indexed instructions: the internal T-states after d --------------------
+
+/// Contended code, for the tests that need the instruction's own bytes, and so
+/// the addresses left on the bus between its cycles, in contended memory.
+constexpr uint16_t CONTENDED_CODE = 0x6000;
+
+TEST(ld_a_ix_d_internal_tstates_hold_ds_address) {
+    // LD A,(IX+0) is pc:4, pc+1:4, pc+2:3, pc+2:1 x 5, ii+n:3 = 19, with the
+    // code at 0x6000 and IX at 0x8000 so only the code's own addresses are
+    // contended. From 14341 (G + 6 of the first group):
+    //   DD fetch    T1 at 14341, G + 6: not held               14341-14344
+    //   7E fetch    T1 at 14345, G + 2: held 4                 14349-14352
+    //   d read      T1 at 14353, G + 2: held 4                 14357-14359
+    //   internal    14360 G + 1: 5 -> 14365; 14366 G + 7: 0;
+    //               14367 G + 0: 6 -> 14373; 14374 G + 7: 0;
+    //               14375 G + 0: 6 -> 14381
+    //   (IX+0) read T1 at 14382, 0x8000: not contended         14382-14384
+    // 19 + 4 + 4 + 5 + 6 + 6 = 44. I points at contended memory, which must
+    // change nothing: IR is on the bus only during the fetches' refresh,
+    // which is never checked. A core that read d a T-state late, as this one
+    // once did, left IR on the bus for d's T1 instead and took 45.
+    auto m = machine();
+    Registers r;
+    r.ix = 0x8000;
+    r.i = 0x40;
+    CHECK_EQ(tstates_at(*m, C48 + 6, r, {0xDD, 0x7E, 0x00}, CONTENDED_CODE), 44u);
+}
+
+TEST(bit_ix_d_internal_tstates_hold_the_opcodes_address) {
+    // BIT 0,(IX+0) is pc:4, pc+1:4, pc+2:3, pc+3:3, pc+3:1 x 2, ii+n:3, ii+n:1
+    // = 20, placed as above:
+    //   DD fetch    T1 at 14341, G + 6: not held               14341-14344
+    //   CB fetch    T1 at 14345, G + 2: held 4                 14349-14352
+    //   d read      T1 at 14353, G + 2: held 4                 14357-14359
+    //   op read     T1 at 14360, G + 1: held 5                 14365-14367
+    //   internal    14368 G + 1: 5 -> 14373; 14374 G + 7: 0
+    //   (IX+0) read T1 at 14375, 0x8000: not contended         14375-14377
+    //   internal    14378, 0x8000 on the bus: not contended
+    // 20 + 4 + 4 + 5 + 5 = 38.
+    auto m = machine();
+    Registers r;
+    r.ix = 0x8000;
+    CHECK_EQ(tstates_at(*m, C48 + 6, r, {0xDD, 0xCB, 0x00, 0x46}, CONTENDED_CODE), 38u);
+}
+
 // ---- the 128K --------------------------------------------------------------
 
 TEST(spectrum128_paging_port) {
     // OUT (C),A with BC = 0x7FFD: pc:4, pc+1:4, then port 0x7FFD, C:1 x 4.
-    // Fetches 14353-14360. T1 at 14361 = G + 0: held 6, to 14367. T2 at
-    // 14368, G + 7: not held. TW at 14369, the next group's G + 0: held 6, to
-    // 14375. T3 at 14376, G + 7: not held. 12 + 12 = 24.
+    // Fetches 14354-14361. T1 at 14362 = G + 0: held 6, to 14368. T2 at
+    // 14369, G + 7: not held. TW at 14370, the next group's G + 0: held 6, to
+    // 14376. T3 at 14377, G + 7: not held. 12 + 12 = 24.
     auto m = machine(Model::Spectrum128);
     Registers r;
     r.set_bc(0x7FFD);
@@ -232,7 +278,7 @@ TEST(spectrum128_contended_banks) {
     c->write_paging(2);
     CHECK_EQ(tstates_at(*c, C128 - 4, with_hl(0xC000), {0x7E}), 7u);
     // The 48K's contention start is not the 128K's: a read at 14335 on the
-    // 128K falls on 14361 - 26, three groups and two T-states before its
+    // 128K falls on 14362 - 27, three groups and three T-states before its
     // first group -- the top border. 7.
     auto d = machine(Model::Spectrum128);
     CHECK_EQ(tstates_at(*d, C48 - 4, with_hl(0x4000), {0x7E}), 7u);

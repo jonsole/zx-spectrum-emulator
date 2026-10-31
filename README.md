@@ -284,6 +284,7 @@ The detail lives in [docs/](docs/), one file per topic:
 | [Fast 3D](examples/fast3d/README.md) | `examples/fast3d`: fast Z80 routines for 3D -- signed multiplication by quarter squares, a rotation matrix from three angles with no multiplications, rotating and projecting vertices, unrolled line drawing -- objects seen from a camera and culled when out of view -- each checked against a Python model and timed, and a 128K demo of a flight through them |
 | [Designing a tape](docs/tape-designer.md) | `*.tape.json` and `*.screen.json`: a tape for the standard ROM loader or the fast one in `examples/zx-tape-loader` -- its blocks, entry and loading screen, the order the screen appears in, the checks, and building it into the emulator |
 | [Memory contention, the floating bus and snow](docs/contention.md) | When the ULA holds the CPU's clock on the 48K and the 128K, the rule and its worked examples, what the floating bus returns, snow, and what is still open |
+| [The public timing test suites](docs/timing-suites.md) | Fetching and running the published 48K and 128K timing, contention, floating bus and snow tests as slow tests, and where each stands |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |

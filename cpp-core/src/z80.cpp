@@ -84,9 +84,11 @@ uint64_t Z80::begin_fetch_cb(uint64_t pins) {
     prefix_active_ = true;
     if (hlx_idx_ > 0) {
         // A DD/FD has already been seen, so this is DD CB d / FD CB d. This
-        // half-state is idle -- no PC increment, no bus activity -- and acts
-        // as the free T1H of the displacement read. prefix_active_ stays set
-        // for the whole chain; only the terminal begin_fetch clears it.
+        // half-state is T1H of the read of d: d's address goes out now, as
+        // any read's does, so the ULA sees it at the T-state's check.
+        // prefix_active_ stays set for the whole chain; only the terminal
+        // begin_fetch clears it.
+        pins = set_addr(pins, pc_post_inc());
         step_ = STEP_DDFDCB_T1H;
         return pins;
     }
@@ -453,48 +455,60 @@ uint64_t Z80::clock(uint64_t pins) {
             break;
 
         // ---- DD/FD displacement sequence, 8 T-states ---------------------------
-        case STEP_DDFD_D_T1H: step_ = STEP_DDFD_D_T1L; break;
-        case STEP_DDFD_D_T1L: step_ = STEP_DDFD_D_T2H; break;
-        case STEP_DDFD_D_T2H:
+        // The published timing is pc+2:3, pc+2:1 x 5 -- a plain memory read of
+        // d in T1-T3, then five internal T-states with d's address still on
+        // the bus -- or, for LD (IX/IY+d),n, pc+2:3, pc+3:3, pc+3:1 x 2: d,
+        // then n, then two internal T-states holding n's address. The internal
+        // T-states are where a 48K's ULA contends these instructions, by the
+        // address left on the bus, so the reads have the same shape as every
+        // other read and the address is not moved until the next cycle needs
+        // the bus.
+        case STEP_DDFD_D_T1H:
             pins = set_addr(pins, pc_post_inc());
-            step_ = STEP_DDFD_D_T2L;
+            step_ = STEP_DDFD_D_T1L;
             break;
-        case STEP_DDFD_D_T2L:
+        case STEP_DDFD_D_T1L:
             pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
+            step_ = STEP_DDFD_D_T2H;
+            break;
+        case STEP_DDFD_D_T2H: step_ = STEP_DDFD_D_T2L; break;
+        case STEP_DDFD_D_T2L:
+            if (asserted(pins, WAIT)) { break; }
             step_ = STEP_DDFD_D_T3H;
             break;
-        case STEP_DDFD_D_T3H:
-            if (asserted(pins, WAIT)) { break; }
+        case STEP_DDFD_D_T3H: step_ = STEP_DDFD_D_T3L; break;
+        case STEP_DDFD_D_T3L:
             addr_ = uint16_t(addr_ + int8_t(get_data(pins)));
             regs.wz = addr_;
             pins = release_pins(pins, MREQ | RD);
-            step_ = STEP_DDFD_D_T3L;
+            step_ = STEP_DDFD_D_T4H;
             break;
-        case STEP_DDFD_D_T3L: step_ = STEP_DDFD_D_T4H; break;
-        case STEP_DDFD_D_T4H: step_ = STEP_DDFD_D_T4L; break;
-        case STEP_DDFD_D_T4L: step_ = STEP_DDFD_D_T5H; break;
-        case STEP_DDFD_D_T5H:
+        case STEP_DDFD_D_T4H:
             // Only LD (IX/IY+d),n has an immediate byte to read here.
             if (opcode_ == 0x36) {
                 pins = set_addr(pins, pc_post_inc());
             }
-            step_ = STEP_DDFD_D_T5L;
+            step_ = STEP_DDFD_D_T4L;
             break;
-        case STEP_DDFD_D_T5L:
+        case STEP_DDFD_D_T4L:
             if (opcode_ == 0x36) {
                 pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             }
+            step_ = STEP_DDFD_D_T5H;
+            break;
+        case STEP_DDFD_D_T5H: step_ = STEP_DDFD_D_T5L; break;
+        case STEP_DDFD_D_T5L:
+            if (opcode_ == 0x36 && asserted(pins, WAIT)) { break; }
             step_ = STEP_DDFD_D_T6H;
             break;
-        case STEP_DDFD_D_T6H:
+        case STEP_DDFD_D_T6H: step_ = STEP_DDFD_D_T6L; break;
+        case STEP_DDFD_D_T6L:
             if (opcode_ == 0x36) {
-                if (asserted(pins, WAIT)) { break; }
                 dlatch_ = get_data(pins);
                 pins = release_pins(pins, MREQ | RD);
             }
-            step_ = STEP_DDFD_D_T6L;
+            step_ = STEP_DDFD_D_T7H;
             break;
-        case STEP_DDFD_D_T6L: step_ = STEP_DDFD_D_T7H; break;
         case STEP_DDFD_D_T7H: step_ = STEP_DDFD_D_T7L; break;
         case STEP_DDFD_D_T7L: step_ = STEP_DDFD_D_T8H; break;
         case STEP_DDFD_D_T8H: step_ = STEP_DDFD_D_T8L; break;
@@ -531,57 +545,70 @@ uint64_t Z80::clock(uint64_t pins) {
             break;
 
         // ---- DD CB d / FD CB d, 15 T-states --------------------------------------
-        case STEP_DDFDCB_T1H:
-            pins = set_addr(pins, pc_post_inc());
+        // The published timing after the two M1s is pc+2:3, pc+3:3, pc+3:1 x 2,
+        // ii+n:3, ii+n:1, ii+n(write):3 -- 15 T-states, or 12 for BIT, which
+        // writes nothing. begin_fetch_cb() has already been T1H of the read of
+        // d, putting its address out, so each step below runs half a T-state
+        // later than its name says: STEP_DDFDCB_T1H is T1L, and so on, and
+        // STEP_DDFDCB_T15L is the next instruction's T1H. The comments give the
+        // real half-clock.
+        case STEP_DDFDCB_T1H: // d: T1L
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = STEP_DDFDCB_T1L;
             break;
-        case STEP_DDFDCB_T1L:
-            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
-            step_ = STEP_DDFDCB_T2H;
-            break;
-        case STEP_DDFDCB_T2H:
+        case STEP_DDFDCB_T1L: step_ = STEP_DDFDCB_T2H; break; // T2H
+        case STEP_DDFDCB_T2H: // T2L
             if (asserted(pins, WAIT)) { break; }
+            step_ = STEP_DDFDCB_T2L;
+            break;
+        case STEP_DDFDCB_T2L: step_ = STEP_DDFDCB_T3H; break; // T3H
+        case STEP_DDFDCB_T3H: // T3L
             addr_ = uint16_t(hlx() + int8_t(get_data(pins)));
             regs.wz = addr_;
             pins = release_pins(pins, MREQ | RD);
-            step_ = STEP_DDFDCB_T2L;
+            step_ = STEP_DDFDCB_T3L;
             break;
-        case STEP_DDFDCB_T2L: step_ = STEP_DDFDCB_T3H; break;
-        case STEP_DDFDCB_T3H: step_ = STEP_DDFDCB_T3L; break;
-        case STEP_DDFDCB_T3L: step_ = STEP_DDFDCB_T4H; break;
-        case STEP_DDFDCB_T4H:
-            // The CB-suffix opcode byte is read as an ORDINARY memory read,
-            // NOT an M1 cycle: no M1, no RFSH, and R is NOT incremented.
+        case STEP_DDFDCB_T3L: // the CB-suffix opcode: T4H
+            // An ORDINARY memory read, NOT an M1 cycle: no M1, no RFSH, and R
+            // is NOT incremented.
             pins = set_addr(pins, pc_post_inc());
+            step_ = STEP_DDFDCB_T4H;
+            break;
+        case STEP_DDFDCB_T4H: // T4L
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = STEP_DDFDCB_T4L;
             break;
-        case STEP_DDFDCB_T4L:
-            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
-            step_ = STEP_DDFDCB_T5H;
-            break;
-        case STEP_DDFDCB_T5H:
+        case STEP_DDFDCB_T4L: step_ = STEP_DDFDCB_T5H; break; // T5H
+        case STEP_DDFDCB_T5H: // T5L
             if (asserted(pins, WAIT)) { break; }
-            opcode_ = get_data(pins);
-            pins = release_pins(pins, MREQ | RD);
             step_ = STEP_DDFDCB_T5L;
             break;
-        case STEP_DDFDCB_T5L: step_ = STEP_DDFDCB_T6H; break;
-        case STEP_DDFDCB_T6H: step_ = STEP_DDFDCB_T6L; break;
+        case STEP_DDFDCB_T5L: step_ = STEP_DDFDCB_T6H; break; // T6H
+        case STEP_DDFDCB_T6H: // T6L
+            opcode_ = get_data(pins);
+            pins = release_pins(pins, MREQ | RD);
+            step_ = STEP_DDFDCB_T6L;
+            break;
+        // T7 and T8: internal, the opcode's address still on the bus.
         case STEP_DDFDCB_T6L: step_ = STEP_DDFDCB_T7H; break;
         case STEP_DDFDCB_T7H: step_ = STEP_DDFDCB_T7L; break;
         case STEP_DDFDCB_T7L: step_ = STEP_DDFDCB_T8H; break;
         case STEP_DDFDCB_T8H: step_ = STEP_DDFDCB_T8L; break;
-        case STEP_DDFDCB_T8L: step_ = STEP_DDFDCB_T9H; break;
-        case STEP_DDFDCB_T9H:
+        case STEP_DDFDCB_T8L: // the operand at IX/IY+d: T9H
             pins = set_addr(pins, addr_);
+            step_ = STEP_DDFDCB_T9H;
+            break;
+        case STEP_DDFDCB_T9H: // T9L
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
             step_ = STEP_DDFDCB_T9L;
             break;
-        case STEP_DDFDCB_T9L:
-            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
-            step_ = STEP_DDFDCB_T10H;
-            break;
-        case STEP_DDFDCB_T10H: {
+        case STEP_DDFDCB_T9L: step_ = STEP_DDFDCB_T10H; break; // T10H
+        case STEP_DDFDCB_T10H: // T10L
             if (asserted(pins, WAIT)) { break; }
+            step_ = STEP_DDFDCB_T10L;
+            break;
+        case STEP_DDFDCB_T10L: step_ = STEP_DDFDCB_T11H; break; // T11H
+        case STEP_DDFDCB_T11H: { // T11L
             dlatch_ = get_data(pins);
             pins = release_pins(pins, MREQ | RD);
             uint8_t out = 0;
@@ -594,30 +621,40 @@ uint64_t Z80::clock(uint64_t pins) {
                 if (z1 != 6) {
                     set_reg8_plain(z1, out);
                 }
-                step_ = STEP_DDFDCB_T10L;
-            } else {
-                // BIT: nothing to write back, so skip the write cycle.
-                step_ = STEP_DDFDCB_T13L;
             }
+            step_ = STEP_DDFDCB_T11L;
             break;
         }
-        case STEP_DDFDCB_T10L: step_ = STEP_DDFDCB_T11H; break;
-        case STEP_DDFDCB_T11H: step_ = STEP_DDFDCB_T11L; break;
+        // T12: internal, the operand's address still on the bus.
         case STEP_DDFDCB_T11L: step_ = STEP_DDFDCB_T12H; break;
         case STEP_DDFDCB_T12H: step_ = STEP_DDFDCB_T12L; break;
-        case STEP_DDFDCB_T12L: step_ = STEP_DDFDCB_T13H; break;
-        case STEP_DDFDCB_T13H:
-            pins = set_addr_data_assert(pins, addr_, dlatch_, MREQ | WR);
+        case STEP_DDFDCB_T12L: // T13H: the write -- or, for BIT, the next fetch
+            if ((opcode_ & 0xC0) == 0x40) {
+                pins = begin_fetch(pins);
+                break;
+            }
+            pins = set_addr(pins, addr_);
+            step_ = STEP_DDFDCB_T13H;
+            break;
+        case STEP_DDFDCB_T13H: // T13L
+            pins = set_addr_assert(pins, get_addr(pins), MREQ);
             step_ = STEP_DDFDCB_T13L;
             break;
-        case STEP_DDFDCB_T13L:
-            pins = release_pins(pins, MREQ | WR);
+        case STEP_DDFDCB_T13L: // T14H
+            pins = set_data(pins, dlatch_);
             step_ = STEP_DDFDCB_T14H;
             break;
-        case STEP_DDFDCB_T14H: step_ = STEP_DDFDCB_T14L; break;
-        case STEP_DDFDCB_T14L: step_ = STEP_DDFDCB_T15H; break;
-        case STEP_DDFDCB_T15H: step_ = STEP_DDFDCB_T15L; break;
-        case STEP_DDFDCB_T15L:
+        case STEP_DDFDCB_T14H: // T14L
+            if (asserted(pins, WAIT)) { break; }
+            pins = assert_pins(pins, WR);
+            step_ = STEP_DDFDCB_T14L;
+            break;
+        case STEP_DDFDCB_T14L: step_ = STEP_DDFDCB_T15H; break; // T15H
+        case STEP_DDFDCB_T15H: // T15L
+            pins = release_pins(pins, MREQ | WR);
+            step_ = STEP_DDFDCB_T15L;
+            break;
+        case STEP_DDFDCB_T15L: // the next instruction's T1H
             pins = begin_fetch(pins);
             break;
 
