@@ -289,6 +289,7 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     regs = r;
     step_ = 0;
     prefix_active_ = false;
+    rfsh_release_ = false;
     // One priming half-clock, whose memory request MUST be serviced -- step 0
     // is NOP, whose generated body is begin_fetch(), so this leaves the
     // pipeline at STEP_M1_T1L with a real opcode read in flight. Skipping the
@@ -325,6 +326,13 @@ uint16_t Z80::step_instruction(Memory& mem) {
 // ============================================================================
 
 uint64_t Z80::clock(uint64_t pins) {
+    // RFSH outlives the refresh's MREQ by half a T-state: the real chip lets
+    // it go at the start of the next half-clock, whatever that half is, and
+    // so does this.
+    if (rfsh_release_) {
+        pins = release_pins(pins, RFSH);
+        rfsh_release_ = false;
+    }
     switch (step_) {
         // ---- prefix / HALT opcode entries the generator deliberately skips
         // (see SKIP_NAMES). 0xED is NOT here: the generator emits it itself,
@@ -364,7 +372,8 @@ uint64_t Z80::clock(uint64_t pins) {
             step_ = STEP_M1_T4L;
             break;
         case STEP_M1_T4L:
-            pins = release_pins(pins, MREQ | RFSH);
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
             addr_ = regs.hl();
             prefix_active_ = false;
             step_ = opcode_;
@@ -389,7 +398,8 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_ED_M1_T3L: pins = assert_pins(pins, MREQ); step_ = STEP_ED_M1_T4H; break;
         case STEP_ED_M1_T4H: step_ = STEP_ED_M1_T4L; break;
         case STEP_ED_M1_T4L:
-            pins = release_pins(pins, MREQ | RFSH);
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
             addr_ = regs.hl();
             prefix_active_ = false;
             step_ = uint16_t(ED_STEP_BASE + opcode_);
@@ -414,7 +424,8 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_CB_M1_T3L: pins = assert_pins(pins, MREQ); step_ = STEP_CB_M1_T4H; break;
         case STEP_CB_M1_T4H: step_ = STEP_CB_M1_T4L; break;
         case STEP_CB_M1_T4L:
-            pins = release_pins(pins, MREQ | RFSH);
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
             // Load-bearing: without clearing this, step_instruction() would
             // run two instructions per call.
             prefix_active_ = false;
@@ -445,7 +456,8 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_DDFD_M1_T3L: pins = assert_pins(pins, MREQ); step_ = STEP_DDFD_M1_T4H; break;
         case STEP_DDFD_M1_T4H: step_ = STEP_DDFD_M1_T4L; break;
         case STEP_DDFD_M1_T4L:
-            pins = release_pins(pins, MREQ | RFSH);
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
             addr_ = hlx();
             prefix_active_ = false;
             // Non-indirect DD/FD ops dispatch into the SAME 0..256 table as
@@ -688,7 +700,8 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_INT_T4L: pins = assert_pins(pins, MREQ); step_ = STEP_INT_T5H; break;
         case STEP_INT_T5H: step_ = STEP_INT_T5L; break;
         case STEP_INT_T5L:
-            pins = release_pins(pins, MREQ | RFSH);
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
             step_ = STEP_INT_T6H;
             break;
         case STEP_INT_T6H: step_ = STEP_INT_T6L; break;
@@ -831,6 +844,7 @@ void Z80::save_state(State& s) const {
     s.prefix_active = prefix_active_;
     s.hlx_idx = hlx_idx_;
     s.pins = pins_;
+    s.rfsh_release = rfsh_release_;
 }
 
 void Z80::restore_state(const State& s) {
@@ -844,6 +858,7 @@ void Z80::restore_state(const State& s) {
     prefix_active_ = s.prefix_active;
     hlx_idx_ = s.hlx_idx;
     pins_ = s.pins;
+    rfsh_release_ = s.rfsh_release;
 }
 #endif
 

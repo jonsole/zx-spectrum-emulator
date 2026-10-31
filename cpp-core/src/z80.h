@@ -201,6 +201,7 @@ public:
         bool prefix_active = false;
         uint8_t hlx_idx = 0;
         uint64_t pins = 0;
+        bool rfsh_release = false;
     };
     void save_state(State& s) const;
     void restore_state(const State& s);
@@ -242,6 +243,9 @@ private:
     uint16_t addr_ = 0;
     /// Suppresses is_instruction_boundary() between a prefix and its suffix.
     bool prefix_active_ = false;
+    /// Set where a refresh lets go of MREQ: RFSH goes at the start of the
+    /// next half-clock, as on the chip, half a T-state after MREQ.
+    bool rfsh_release_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
     /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean

@@ -64,6 +64,21 @@ from "nothing happening". Both addresses are matched against the address bus at
 each opcode fetch, which is where an instruction's own address genuinely
 appears — by the time PC is readable it has moved on.
 
+### Without a server
+
+`bus_trace`, one of the tools `cpp-core/tests/` builds, writes the same table
+from a machine run headless -- for CI, and for comparing against another
+implementation of the machine with `diff` (retro-spectrum's FPGA simulation
+writes the same table):
+
+```
+bus_trace <out.zxtrace> <half-clocks> [program.sna|.z80] [128] [tstate=N] [ula]
+```
+
+It always has the 48K columns, since the T-state column is what two traces
+line up on. With no program it traces from power-on; `tstate=N` waits for that
+T-state of the frame first, as `start_trace`'s does.
+
 ### Starting at a point in the frame
 
 Frame position is counted the way the `Frame` and `TState` columns print it:
@@ -237,17 +252,14 @@ made with or without `--trace-extra`, and visualz80remix's own exports too.
 ## What the comparison found
 
 `cpp-core/tests/tracelog_tests.cpp` replays visualz80remix's own demo program
-and diffs the two tables cell by cell. **M1, MREQ, IORQ, RD, WR, the address
-bus and the T-state numbering agree everywhere** — the machine-cycle structure
-is identical. Three sub-T-state differences remain, none of them observable to
-a running program, all recorded in that test's `KNOWN_DIFFERENCES` so a new
-one cannot creep in unnoticed:
+and diffs the two tables cell by cell. **M1, MREQ, IORQ, RFSH, RD, WR, the
+address bus and the T-state numbering agree everywhere** — the machine-cycle
+structure is identical. Two sub-T-state differences remain, neither of them
+observable to a running program, both recorded in that test's
+`KNOWN_DIFFERENCES` so a new one cannot creep in unnoticed. (RFSH was a third:
+the core let it go half a T-state before the chip does, at T4L rather than
+the next half-clock, until it was fixed to match.)
 
-* **RFSH** — the real chip holds refresh asserted through T4L; this core
-  releases it half a T-state early, at T4H. The one that is a genuine
-  inaccuracy: it shortens the window a refresh address is live on the bus,
-  which is exactly where 48K "snow" comes from, so it will matter once
-  contention lands.
 * **Data bus on a write** — the die drives the byte at T1L, this core at T2H.
   Zilog's own timing diagram says the start of T2, so the datasheet agrees
   with us here and the die with neither.

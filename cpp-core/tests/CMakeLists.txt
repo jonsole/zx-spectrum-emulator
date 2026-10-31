@@ -181,6 +181,19 @@ add_dependencies(zx_tools screenshot)
 target_compile_definitions(screenshot
   PRIVATE ${ZX_ROOT_DEFINE})
 
+# A half-clock bus trace without a server (docs/tracing.md), for CI and for
+# retro-spectrum's simulation to diff against. The test traces the ROM's first
+# 2,000 half-clocks, skipping without roms/.
+add_executable(bus_trace bus_trace.cpp)
+target_link_libraries(bus_trace PRIVATE zx_core)
+target_compile_options(bus_trace PRIVATE ${ZX_WARNINGS})
+add_dependencies(zx_tests bus_trace)
+target_compile_definitions(bus_trace
+  PRIVATE ${ZX_ROOT_DEFINE})
+add_test(NAME bus_trace_boot COMMAND bus_trace bus_trace_boot.zxtrace 2000 ula
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(bus_trace_boot PROPERTIES SKIP_RETURN_CODE 77)
+
 # Diagnostic, and the runner behind the timing suite tests (#30): loads one
 # program from the public suites, runs it headless, saves the screen as PNG.
 add_executable(suite_shot suite_shot.cpp)

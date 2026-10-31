@@ -171,18 +171,13 @@ std::string normalise_asm(const std::string& text) {
 /// A cell this core is KNOWN to print differently from visualz80remix, keyed
 /// by the reference's own cycle label and by column title.
 ///
-/// Three things diverge, all of them sub-T-state and none observable to a
-/// running program. Every one of M1, MREQ, IORQ, RD, WR, AB and the T-state
+/// Two things diverge, both sub-T-state and neither observable to a running
+/// program. Every one of M1, MREQ, IORQ, RFSH, RD, WR, AB and the T-state
 /// numbering itself agrees cell for cell across the whole capture, so the
 /// machine-cycle structure is identical; what is left is WHEN, within a
-/// T-state, three internal events happen:
+/// T-state, two internal events happen. (RFSH was a third until the core held
+/// it through T4L, as the chip does.)
 ///
-///   RFSH  the real chip holds refresh asserted through T4L, this core
-///         releases it half a T-state earlier at T4H. The one of the three
-///         that is a genuine (if harmless today) inaccuracy: it shortens the
-///         window in which a refresh address is live on the bus, which is
-///         exactly the window 48K "snow" comes out of, so it will start to
-///         matter once contention lands.
 ///   DB    on a memory WRITE the real chip drives the byte at T1L, this core
 ///         at T2H. Zilog's own timing diagram puts the data at the start of
 ///         T2, so the datasheet agrees with us and the die with neither.
@@ -200,9 +195,6 @@ struct KnownDifference {
 };
 
 constexpr KnownDifference KNOWN_DIFFERENCES[] = {
-    {"4/1", "RFSH"},  {"14/1", "RFSH"}, {"31/1", "RFSH"}, {"41/1", "RFSH"},
-    {"52/1", "RFSH"}, {"62/1", "RFSH"},
-
     {"25/1", "DB"},   {"28/0", "DB"},   {"28/1", "DB"},   {"46/1", "DB"},
     {"49/0", "DB"},   {"49/1", "DB"},
 

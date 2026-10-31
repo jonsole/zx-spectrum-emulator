@@ -105,9 +105,13 @@ TEST(opcode_fetch_drives_the_datasheet_m1_sequence) {
     CHECK(asserted(t[4], RFSH));
     CHECK(asserted(t[5], MREQ | RFSH));
 
-    // T4L: refresh over, everything released.
+    // T4L: the refresh's MREQ released; RFSH lasts to the end of T4, as the
+    // datasheet draws it and the transistor-level chip (visualz80remix, see
+    // tracelog_tests) has it.
     CHECK(!asserted(t[6], MREQ));
-    CHECK(!asserted(t[6], RFSH));
+    CHECK(asserted(t[6], RFSH));
+    // The next T1H: RFSH gone too.
+    CHECK(!asserted(t[7], RFSH));
 }
 
 TEST(memory_read_exposes_the_address_before_mreq_asserts) {
