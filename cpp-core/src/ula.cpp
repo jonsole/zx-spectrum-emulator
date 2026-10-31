@@ -153,40 +153,46 @@ void Ula::clock(uint64_t& pins, const uint8_t* screen) {
     // half-clock at the counters describing it.
 }
 
-uint8_t Ula::floating_bus() const {
-    // Outside paper -- both borders, retrace, and the whole of the top and
-    // bottom borders -- the ULA has nothing to fetch, so nothing drives the
-    // bus.
-    if (!in_paper_area()) {
+uint8_t Ula::floating_bus(const uint8_t* screen) const {
+    // Read off the ULA's own timetable, the one contention uses
+    // (docs/contention.md, sections 3 and 7): groups of 8 T-states from the
+    // contention start, 16 a line, 192 lines. An IN whose T3 -- where the
+    // CPU takes the byte -- falls in T-states 3 to 6 of a group gets the
+    // first cell's bitmap and attribute, then the second's; anywhere else in
+    // the group, or outside the paper's lines, nothing drives the bus. That is
+    // Ramsoft's account, and Floating Spy's self-test puts the bytes there to
+    // the T-state; it is one T-state after Weiv's table has the ULA reading
+    // them (G + 2 to G + 5), the CPU latching what the ULA's read left on the
+    // bus rather than catching it in the act. The bytes are
+    // read from the display file as it is now rather than from what clock()
+    // latched for the picture: the CPU sees the ULA's read at the moment it
+    // happens, and the picture's own timing is a separate matter.
+    const uint32_t tstate = frame_hc_ / HC_PER_TSTATE;
+    if (tstate < t_.contention_start) {
         return FLOATING_BUS_IDLE;
     }
-    // A 16-pixel group is 8 T-states, and that is exactly the ULA's fetch
-    // cycle: four bytes read in the first four T-states, then four T-states
-    // with the bus idle. Those four bytes are already latched -- clock() reads
-    // them at the group's first dot -- so this reports them rather than
-    // fetching anything again.
-    //
-    // What the CPU sees in the fetching half is the attributes only, each
-    // held across its bitmap fetch too: a real 48K's floating bus never shows
-    // a bitmap byte (the user's own machine), so a program can watch for an
-    // attribute value without a pixel byte that happens to match it firing
-    // early.
-    //
-    // Real hardware fetches the group it is ABOUT to display, so its floating
-    // bus runs one group (8 T-states, half a character cell) ahead of what
-    // this returns. That offset is below the resolution of what the effect is
-    // used for -- a program waiting for the beam to reach a region of the
-    // screen -- and closing it would mean the display pipeline that clock()
-    // deliberately does not model.
-    switch (((dot_ - PAPER_DOT_BEGIN) & 15) / HC_PER_TSTATE) {
-    case 0:
-    case 1:
-        return attr0_;
-    case 2:
+    const uint32_t tstates_per_line = t_.hc_per_line / HC_PER_TSTATE;
+    const uint32_t since = tstate - t_.contention_start;
+    const uint32_t line = since / tstates_per_line;
+    const uint32_t along = since % tstates_per_line;
+    if (line >= CONTENTION_LINES
+        || along >= CONTENTION_GROUPS_PER_LINE * CONTENTION_GROUP_TSTATES) {
+        return FLOATING_BUS_IDLE;
+    }
+    const uint32_t group = along / CONTENTION_GROUP_TSTATES;
+    // Each group covers two character cells, 16 pixels across.
+    const uint16_t x = uint16_t(group * 16);
+    const uint16_t y = uint16_t(line);
+    switch (along % CONTENTION_GROUP_TSTATES) {
     case 3:
-        return attr1_;
+        return screen[pixel_addr(x, y) - BITMAP_BASE];
+    case 4:
+        return screen[attr_addr(x, y) - BITMAP_BASE];
+    case 5:
+        return screen[pixel_addr(uint16_t(x + 8), y) - BITMAP_BASE];
+    case 6:
+        return screen[attr_addr(uint16_t(x + 8), y) - BITMAP_BASE];
     default:
-        // The idle half of the group: fetched, not fetching.
         return FLOATING_BUS_IDLE;
     }
 }

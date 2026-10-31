@@ -432,7 +432,7 @@ void Spectrum::service_bus() {
         // the floating bus. Returning a fixed 0xFF instead looks harmless and
         // is not: a program using it as a raster clock waits for a value that
         // then never comes. See Ula::floating_bus.
-        uint8_t value = ula.floating_bus();
+        uint8_t value = ula.floating_bus(memory.screen_bytes());
         if ((addr & 1) == 0) {
             value = keyboard.read_port(uint8_t(addr >> 8));
             // Bit 6 is the EAR input. Resolved here rather than inside

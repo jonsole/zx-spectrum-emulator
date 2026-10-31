@@ -289,7 +289,12 @@ public:
     /// the beam has reached a particular part of the screen, which is how
     /// several games synchronise to the display. Cobra's loader does exactly
     /// this, and without it the wait never ends.
-    uint8_t floating_bus() const;
+    ///
+    /// `screen` is the display file shown, as clock() takes it. What is on
+    /// the bus follows docs/contention.md: an IN whose T3 falls in T-states 3
+    /// to 6 of a group gets bitmap, attribute, bitmap, attribute, and 0xFF the
+    /// rest of the time.
+    uint8_t floating_bus(const uint8_t* screen) const;
 
     /// Half-clocks since the interrupt, 0..HC_PER_FRAME-1. This is the
     /// "T-states since interrupt" programs reason about, times two.

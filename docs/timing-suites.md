@@ -51,8 +51,8 @@ before it can be a test; their state here is what they show today.
 | ZX Spectrum Timing Tests 128K (Butler) | 128K, from 48 BASIC | the same | **Checked: tests 1-34 pass.** Test 35 stops at once with a STOP report and runs nothing; not understood |
 | 48K NEC Contention Test Suite (Woodmass): R register | 48K | "passed" | **Checked: passes** |
 | 48K NEC suite: IR contention, LDIR/LDDR, CPIR/CPDR, INIR/INDR, OTIR/OTDR | 48K | a pattern | Not checked |
-| Floating Spy (Ramsoft), self-test (T) | 48K | each read against the expected byte | **Wrong today.** At 14347 it expects 0 (a bitmap byte) and reads 65 (the attribute); at 14349 it expects 1 and reads 255. That is #28. The self-test takes tens of thousands of frames |
-| Float48K (Woodmass) | 48K | the byte read at each T-state | Shows the attribute at 14336-14339 and 255 at 14340-14343: the attribute-only floating bus #28 replaces |
+| Floating Spy (Ramsoft), self-test (T) | 48K | each read against the expected byte, lingering on a wrong one | **Checked: passes**, ending "Floating bus OK for ULA 48K" after some 15,000 frames. With the reads one T-state earlier it lingers on the first burst read |
+| Float48K (Woodmass) | 48K | the byte read at each T-state | **Checked:** 0xFF to 14337, bitmap, attribute, bitmap, attribute at 14338-14341, 0xFF again, as [contention.md](contention.md) section 4 gives it |
 | HALT Contention Test (Woodmass) | 48K | values and "0 OK" | Ends "0 OK, 40:1"; what it checks is not yet read |
 | Contention (Woodmass, 2005) | 48K | contended or not, T-state by T-state | Not compared |
 | Timing Test (Rak) | 48K, 128K | a menu of nine tests, each a picture | Not compared; its frame length reads 69888 |
@@ -70,3 +70,6 @@ before it can be a test; their state here is what they show today.
 - **The 128K's contention start** is 14362 in this machine's frame, one later
   than Fuse's 14361: the 128K's tests 4, 17, 18, 26 and 33 fail with 14361 and
   pass with 14362, and 14360 or 14363 fails at least one.
+- **The floating bus** returned the attribute over both of a cell's reads,
+  two T-states early. It now returns bitmap and attribute in turn at G + 3 to
+  G + 6, which Floating Spy and Float48K both check.

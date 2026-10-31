@@ -287,3 +287,22 @@ add_test(NAME suite_nec48_r_register
           "expect=passed"
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_tests_properties(suite_nec48_r_register PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)
+
+# The floating bus (docs/contention.md, section 7). Mark Woodmass's Float48K
+# prints the byte an IN reads at each T-state from 14332: by the rule, 0xFF
+# until 14338, then its bitmap and attribute bytes in turn (128, 56, 129, 56
+# are what it put on the screen), then 0xFF again. Ramsoft's Floating Spy,
+# self-test on T: it steps an IN across the ULA's reads, lingering on each one
+# that comes back wrong, and ends with its verdict -- some 15,000 frames in
+# when every read is right.
+add_test(NAME suite_float48k
+  COMMAND suite_shot "${ZX_SUITES}/float48k.tap" 3000 suite_float48k.png
+          "expect=14337  255" "expect=14338  128" "expect=14339  56"
+          "expect=14340  129" "expect=14341  56" "expect=14342  255"
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(suite_float48k PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)
+add_test(NAME suite_floatspy_self_test
+  COMMAND suite_shot "${ZX_SUITES}/floatspy.tap" 22000 suite_floatspy_self_test.png T@3000
+          "expect=Floating bus  OK  for ULA 48K"
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(suite_floatspy_self_test PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)

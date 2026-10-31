@@ -1,331 +1,277 @@
-# Memory contention, the floating bus and snow
+# Contention and the floating bus
 
 Part of the [zx-spectrum-emulator README](../README.md).
 
-Status: **contention implemented** in the C++ core (#27, 31 October 2026),
-on by default; `--no-contention` and the MCP tool `set_contention` turn it off.
-`cpp-core/tests/contention_tests.cpp` checks section 6's examples and the
-window's edges. The floating bus follows section 7 in #28; snow (section 8)
-is not implemented yet. [retro-spectrum](https://github.com/jonsole/retro-spectrum)
-writes its Verilog ULA to the same text, so the two can be compared trace
-against trace.
+On a 48K or 128K Spectrum the CPU and the ULA share some of the RAM. While
+the ULA reads the screen out of it, two things happen that a program can
+notice:
 
-This covers the 48K (issue 3B, the 6C001E-7 ULA) and the 128K (toastrack; the
-+2 times the same). It does not cover the +2A/+3, whose gate array contends
-differently and has no floating bus, nor the issue 2 48K's later timing.
+- **Contention.** A CPU access to that RAM, or to the ULA's port, has to wait:
+  the ULA stops the CPU's clock for up to 6 T-states.
+- **The floating bus.** A read from a port nothing answers returns whatever
+  the ULA's screen read has left on the data bus: a byte of the screen, or
+  `0xFF` when the ULA is not reading.
 
-## 1. What contention is
+Both follow from one timetable, the ULA's, which this page describes first.
+It covers the 48K (issue 3, the 6C001E-7 ULA) and the 128K (the toastrack and
+the grey +2, which time alike). The +2A and +3 work differently and are not
+emulated.
 
-The ULA and the CPU share the lower 16K of RAM (`0x4000`–`0x7FFF`). While the
-ULA reads the screen it cannot let the CPU at that RAM, so it stops the CPU's
-clock. The CPU is not told; it simply finds that some of its T-states lasted
-longer. Nothing about the Z80 changes: a Z80 run with no contention and the
-same Z80 run on a Spectrum differ only in when their clock edges fall.
+| | Emulated |
+|---|---|
+| Memory and I/O contention, 48K and 128K | Yes, on by default |
+| The floating bus, 48K and 128K | Yes |
+| Snow | Not yet; [section 5](#5-snow) describes it |
 
-So contention is modelled as **a held clock, not as WAIT**. WAIT is a CPU pin
-sampled in T2; the ULA never drives it. In the emulator, the Spectrum stops
-handing the Z80 half-clocks while the ULA keeps running; in the FPGA, the ULA
-holds the CPU's clock enable. The Z80 core in both knows nothing of it.
+## 1. Time
 
-## 2. Time
+Times are **frame T-states**: T-states since the interrupt began, 0 to 69,887
+on the 48K and 0 to 70,907 on the 128K. They are what the debugger's trace
+shows in its `TState` column and what timing tests quote.
 
-All times are **frame T-states**: T-states since the start of the interrupt
-pulse, as `Ula::frame_hc_ / 2` counts them and as the tracer's `TState` column
-shows. One frame is 69,888 T-states on the 48K and 70,908 on the 128K.
+Within an instruction, each machine cycle is named by its T-states: T1, T2,
+T3 (and TW, the wait state in an I/O cycle). Every T-state has two halves,
+the clock high then low. In T1 of a memory access the address goes out in the
+high half, and the memory request (MREQ) goes down in the low half. That gap
+is where the ULA decides whether to hold the CPU.
 
-"An access at T" means the T-state in which its **T1** begins. "A T-state is
-checked at T" means the ULA looks at the bus at the start of T-state T.
+## 2. The ULA's timetable
 
-| | 48K | 128K | Source |
-|---|---|---|---|
-| T-states a line | 224 | 228 | `ula.h` |
-| Lines a frame | 312 | 311 | `ula.h` |
-| First contended T-state, **C₀** | **14335** | **14362** | The Butlers' timing tests: all pass with these, and not with a T-state either side |
-| Contended lines | 192 | 192 | the paper |
-| Contended T-states a line | 128 | 128 | 16 groups of 8 |
+The ULA draws 2 pixels a T-state. To draw 16 pixels -- two character cells --
+it needs four bytes from RAM: the first cell's bitmap and attribute, then the
+second's. It reads them in groups of 8 T-states, one group for each 16 pixels,
+16 groups across the 256 pixels of a line, on each of the 192 lines that have
+paper.
 
-## 3. The contention window
+The first group of the frame starts at **C₀**:
 
-The ULA works in **groups** of 8 T-states, 16 a line, one group for each 16
-pixels (two character cells). In each group it reads four bytes and leaves
-four T-states free.
+| | 48K | 128K |
+|---|---|---|
+| T-states a line | 224 | 228 |
+| C₀, the first group of line 0 | **14335** | **14362** |
 
-Group g (0–15) of paper line l (0–191) starts at
+and group g (0 to 15) of paper line l (0 to 191) starts at
 
-    G(l, g) = C₀ + l × line + 8 × g
+    G = C₀ + l × (T-states a line) + 8 × g
 
-A checked T-state at G + k, for k = 0…7, is held for
+Every T-state of a group plays the same part, whatever the group:
 
-| k | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| T-state | G | G+1 | G+2 | G+3 | G+4 | G+5 | G+6 | G+7 |
 |---|---|---|---|---|---|---|---|---|
-| T-states held | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 0 |
+| The ULA reads | | | bitmap 1 | attribute 1 | bitmap 2 | attribute 2 | | |
+| An `IN` from a free port sees | `FF` | `FF` | `FF` | bitmap 1 | attribute 1 | bitmap 2 | attribute 2 | `FF` |
+| A contended T-state starting here waits | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 0 |
 
-That is the published 6, 5, 4, 3, 2, 1, 0, 0 pattern, and it says one simple
-thing: **a checked T-state that falls in the first six of a group waits until
-G + 6.** Outside the 192 × 128 windows nothing is ever held.
+Outside the groups -- the borders above, below and to each side, and the
+retrace -- the ULA reads nothing: nothing waits, and a free port reads `0xFF`.
 
-## 4. The rule: when the ULA checks
+The bottom row is the 6, 5, 4, 3, 2, 1, 0, 0 pattern quoted for the Spectrum
+everywhere. It says one thing: a CPU T-state that the ULA holds is let go at
+G + 6, once the ULA has its four bytes.
 
-The ULA checks a T-state in two cases.
+## 3. Contention
 
-**4.1 Address checks.** At the start of every T-state in which **MREQ is
-inactive** and the **address bus holds a contended address**, the ULA checks.
-A held T-state is stretched in its first half: the address is valid and MREQ
-has not yet fallen, the T1H..T1L gap the Z80 core is clocked in half-states to
-show (`z80.h`).
+### 3.1 Which T-states the ULA holds
 
-**4.2 ULA port checks.** In an I/O cycle to the ULA's own port (A0 = 0), the
-ULA checks once, at the start of **T2**, whatever the address. It does not
-check that cycle's TW or T3 again, nor by address.
+The ULA looks at the CPU's bus at the start of every T-state and holds it
+when either is true:
 
-Why MREQ matters: in a memory read or write MREQ is low from T1L to the end of
-T3, and in an opcode fetch through T2 and, for the refresh, T3 and T4. So a
-memory cycle is checked only at its T1, and an opcode fetch only at its T1. An
-internal T-state has no MREQ, so it is checked whenever the address left on the
-bus is contended. An I/O cycle has no MREQ, so all four of its T-states are
-address-checked unless the ULA's own port rule replaces them.
+1. **The address on the bus is contended and MREQ is not down.** MREQ is down
+   from the low half of T1 to the end of every memory read and write, and
+   through the refresh at the end of an opcode fetch. So:
+   - a memory read, write or opcode fetch is checked once, at its T1;
+   - an internal T-state -- one where the CPU works without using the bus --
+     is checked every time, by whatever address the CPU left on the bus;
+   - an I/O cycle has no MREQ, so all four of its T-states are checked, by
+     the port number as an address.
+2. **An I/O cycle to the ULA's own port** -- any even port -- is checked once,
+   at its T2, whatever its address. After that the ULA lets the cycle finish:
+   its TW and T3 are not checked again.
 
-### 4.3 What is left on the bus
+A held T-state stretches in its first half, the clock held high with the
+address out and MREQ not yet down, until the ULA lets go. The CPU knows
+nothing about it: it simply finds that T-state took longer.
 
-Internal T-states check whatever address the Z80 leaves on the bus. On a real
-Z80 that is:
+### 3.2 Contended addresses
 
-- after an opcode fetch, **IR** (the refresh address, I in the high byte),
-- after a memory read or write, that cycle's address.
-
-So `LD A,I`, `INC SP` and the like are contended when I is `0x40`–`0x7F`, and
-`INC (HL)` is contended on its internal T-state when HL is. Whether `z80.cpp`
-leaves these addresses on the bus in every internal T-state is checked as part
-of #27, against the tables below.
-
-### 4.4 Contended addresses
-
-| Machine | Contended |
+| | Contended |
 |---|---|
 | 48K | `0x4000`–`0x7FFF` |
-| 128K | `0x4000`–`0x7FFF` (always bank 5), and `0xC000`–`0xFFFF` while bank 1, 3, 5 or 7 is paged there |
+| 128K | `0x4000`–`0x7FFF` (bank 5, always), and `0xC000`–`0xFFFF` while bank 1, 3, 5 or 7 is paged there |
 
-For an I/O cycle the "address" is the port, so the high byte decides: on the
-48K a port is address-checked when A15–A14 are `01`; on the 128K also when
-they are `11` and a contended bank is at `0xC000` (open point P3).
+For an I/O cycle the port's high byte decides, as if it were an address.
 
-## 5. The rule against the published tables
+### 3.3 What the CPU leaves on the bus
 
-The per-instruction tables in the comp.sys.sinclair FAQ and in Fuse's sources
-list each instruction's accesses as `address:T-states`. The rule above gives
-every one of them.
+Internal T-states are checked by the address still on the bus from the cycle
+before:
 
-| Cycle | Checked T-states | Table |
+- after an opcode fetch, **IR** -- the refresh address, with I in the high
+  byte. So instructions such as `LD A,I`, `INC SP` or `LD SP,HL` are held when
+  I is `0x40`–`0x7F`.
+- after a memory read or write, that cycle's address. So `INC (HL)` is held
+  on its internal T-state when HL is contended, and `LD A,(IX+d)` on the five
+  T-states after it reads d when the code is in contended memory.
+
+### 3.4 The rule against the published tables
+
+The per-instruction contention tables (the comp.sys.sinclair FAQ, Fuse's
+sources) write each instruction as a list of `address:T-states`. The rule
+gives every entry:
+
+| Cycle | Checked | Published as |
 |---|---|---|
 | Opcode fetch | T1 | `pc:4` |
 | Memory read or write | T1 | `hl:3` |
-| One internal T-state, after a read of HL | itself | `hl:1` |
-| One internal T-state, after a fetch | itself, address IR | `ir:1` |
-| I/O, high byte not contended, A0 = 1 | none | `N:4` |
-| I/O, high byte not contended, A0 = 0 | T2 (ULA port) | `N:1, C:3` |
-| I/O, high byte contended, A0 = 1 | T1, T2, TW, T3 | `C:1, C:1, C:1, C:1` |
-| I/O, high byte contended, A0 = 0 | T1 (address), T2 (ULA port) | `C:1, C:3` |
+| Internal T-state after a read of HL | itself | `hl:1` |
+| Internal T-state after a fetch | itself, by IR | `ir:1` |
+| I/O, high byte not contended, odd port | none | `N:4` |
+| I/O, high byte not contended, even port | T2 | `N:1, C:3` |
+| I/O, high byte contended, odd port | T1, T2, TW, T3 | `C:1, C:1, C:1, C:1` |
+| I/O, high byte contended, even port | T1, then T2 | `C:1, C:3` |
 
-## 6. Worked examples
+### 3.5 Worked examples
 
-All on the 48K (C₀ = 14335) unless they say otherwise. Code at `0x8000` is
-never contended.
+On the 48K, with the code at `0x8000`, which is never contended.
 
-**LD A,(HL)** (`7E`), HL = `0x4000`, fetch at 14331. The fetch takes
-14331–14334. The read's T1 at 14335 is G + 0, held 6, so T1 runs at 14341,
-T2 at 14342, T3 at 14343. 13 T-states instead of 7; the next fetch is at
-14344.
+**`LD A,(HL)`, HL = `0x4000`, fetch at 14331.** 7 T-states uncontended:
+fetch 4, read 3. The fetch takes 14331–14334. The read's T1 at 14335 is the
+first group's G, held 6, so it runs at 14341. **13 T-states.**
 
-**The same, fetch at 14333.** The read's T1 at 14337 is G + 2, held 4, so
-the instruction takes 11.
+**The same, fetch at 14333.** The read's T1 at 14337 is G + 2, held 4.
+**11 T-states.**
 
-**OUT (0xFE),A** (`D3 FE`), A = `0x07`, fetch at 14328. The fetch and the
-operand read take 14328–14334. The I/O cycle's T1 at 14335 has port `0x07FE`,
-not contended. Its T2 at 14336 is a ULA port check at G + 1, held 5, so T2
-runs at 14341, TW at 14342, T3 at 14343. 16 T-states instead of 11.
+**`OUT (0xFE),A`, A = `0x07`, fetch at 14328.** 11 T-states uncontended. The
+I/O cycle starts at 14335 with port `0x07FE`: its T1 is not checked, since
+`0x07` is not a contended high byte. Its T2 at 14336 is the ULA's port check,
+at G + 1, held 5. **16 T-states.**
 
-**LD A,I** (`ED 57`), I = `0x40`, fetch at 14327. The two fetches take
-14327–14334. The internal T-state at 14335 has IR on the bus, contended, at
-G + 0: held 6. 15 T-states instead of 9.
+**`LD A,I`, I = `0x40`, fetch at 14327.** 9 T-states uncontended. Its
+internal T-state at 14335 has IR on the bus, contended, at G: held 6.
+**15 T-states.**
 
-**128K: OUT (C),A** (`ED 79`), BC = `0x7FFD`, fetch at 14354. The two fetches
-take 14354–14361. Port `0x7FFD`'s high byte is contended and A0 = 1, so each
-I/O T-state is address-checked. T1 at 14362 is G + 0 (C₀ = 14362): held 6,
-runs at 14368. T2 at 14369 is G + 7: not held. TW at 14370 is the next
-group's G + 0: held 6, runs at 14376. T3 at 14377 is G + 7: not held. The I/O
-cycle takes 16 T-states instead of 4, the instruction 24 instead of 12.
+**128K: `OUT (C),A`, BC = `0x7FFD`, fetch at 14354.** 12 T-states
+uncontended. Port `0x7FFD`'s high byte is contended and the port is odd, so
+every T-state of the I/O cycle is checked. T1 at 14362 is G, held 6. T2 at
+14369 is G + 7, not held. TW at 14370 is the next group's G, held 6. T3 at
+14377 is G + 7, not held. **24 T-states.**
 
-## 7. The floating bus
+## 4. The floating bus
 
-When the CPU reads a port nothing answers, nothing drives the data bus and the
-CPU reads whatever the ULA's side of it holds.
+A port nothing answers -- on the 48K, any odd port; on the 128K, any odd port
+the AY does not decode -- leaves the data bus undriven. An `IN` takes its byte
+in its T3, and what it finds there is what the ULA's screen read has left:
 
-The ULA's four reads are visible in turn, as **Ramsoft's floating bus
-guide** gives them and its test program checks:
-
-| T-state | The CPU reads |
+| T3 of the `IN` at | Value |
 |---|---|
-| G + 3 | the bitmap byte of the group's first cell |
-| G + 4 | its attribute |
-| G + 5 | the bitmap byte of the second cell |
-| G + 6 | its attribute |
-| G + 7 to the next group's G + 2 | `0xFF` |
-| outside the 192 × 128 windows | `0xFF` |
+| G + 3 | the group's first bitmap byte |
+| G + 4 | the first cell's attribute |
+| G + 5 | the second bitmap byte |
+| G + 6 | the second cell's attribute |
+| anywhere else | `0xFF` |
 
-An `IN` latches the bus in the middle of its T3, so the T-state that counts is
-the one holding the I/O cycle's T3.
+That is one T-state after the ULA reads each byte (section 2): the CPU picks
+up what the read left on the bus. The bytes come from the screen as it is at
+that moment, in the screen bank shown.
 
-The emulator differs today, and #28 brings it to this table:
+`IN A,(n)` takes its byte 10 T-states after its fetch starts (fetch 4, operand
+3, then T1, T2 and TW of the I/O cycle), so an `IN A,(0xFF)` fetched at 14328
+reads the first bitmap byte of the screen.
 
-- it returns the attribute over both of a cell's reads and never a bitmap
-  byte (commit 58d3495). That was based on a measurement this project no
-  longer relies on;
-- its reads are two T-states earlier than Ramsoft's, and it fetches the
-  group it is displaying rather than the one ahead (`Ula::floating_bus`).
+**Using it.** A program with no interrupt to hand can poll the floating bus to
+find where the beam is: put a recognisable attribute where it wants to wait,
+and loop on `IN A,(0xFF)` until it comes back. Some commercial games do this
+(Arkanoid, Cobra, Sidewize). Two things to know:
 
-Programs that poll the bus for an attribute value and could be fooled by an
-equal bitmap byte (stepscroll's raster sync was the reason for 58d3495) are
-checked again once #28 lands.
+- **Bitmap bytes come back too.** A loop waiting for an attribute value can
+  stop early on a bitmap byte that happens to equal it; choose a value the
+  bitmap there cannot hold.
+- **Make the loop an odd number of T-states long.** A loop of a multiple of
+  8 T-states samples the same T-state of every group, and one of an even
+  length samples only every other one: started on the wrong ones it never
+  sees the attribute at all.
 
-## 8. Snow
+## 5. Snow
 
 Snow is the ULA reading the wrong screen bytes because the CPU's memory
 refresh lands in the middle of its read. It needs **I to point at contended
-memory**: I = `0x40`–`0x7F` on both models, and on the 128K also I =
-`0xC0`–`0xFF` while bank 1, 3, 5 or 7 is paged at `0xC000`. With I anywhere
-else nothing happens.
+memory** -- I = `0x40`–`0x7F`, or on the 128K I = `0xC0`–`0xFF` with an odd
+bank paged at `0xC000` -- and code running from uncontended memory: a fetch
+from contended memory is always held until G + 6, clear of the ULA's reads.
+**It is not emulated yet.**
 
-This section follows Weiv's account (the author of the Spectramine emulator,
-19 October 2022, checked on real 48K and 128K machines with his snow tests
-and the ULA128 test), with TheMartian's explanation of the DRAM signals.
+Why it happens: the ULA reads in two bursts, one per cell. For each it sets
+the RAM's column address (screen address bits 6–0) once, then gives two row
+strobes (bits 13–7), one for the bitmap and one for the attribute. The CPU's
+refresh drives the same RAM's column strobe. So:
 
-### 8.1 Why
+| The opcode fetch | Its refresh lands on | Effect |
+|---|---|---|
+| starts at G | the first burst | **Snow.** The first cell's bitmap and attribute are read with bits 6–0 of their addresses taken from R (as R is after the fetch). The cell shows those bytes |
+| starts at G + 2 | the gap and the second burst | **Double.** The second burst is not read; the second cell shows the first cell's bitmap and attribute again |
+| starts anywhere else | nothing | Nothing |
 
-The ULA reads in two bursts a group: the first cell's bitmap and attribute,
-then the second's. For each burst it sets the column address once, bits 6–0
-of the screen address, then gives two row strobes for bits 13–7, one for the
-bitmap byte and one for the attribute. Bits 6–0 are therefore shared by a
-burst's two bytes.
-
-The CPU's refresh in T3 and T4 of an opcode fetch puts IR on the bus with MREQ
-low, and on the Spectrum MREQ drives the lower RAM's column strobe. So a
-refresh that coincides with the moment the ULA sets its column replaces that
-column with R; and a refresh that coincides with the gap between the bursts
-holds the column strobe low through it, so the second burst never sets its
-own. MREQ is down, so the CPU is not held for any of this (rule 4.1).
-
-### 8.2 The two effects
-
-Weiv's table of the snow and double phases, in section 3's numbering (his
-ULA T-state n is G + n − 1: his delay column is 6, 5, 4, 3, 2, 1, 0, 0 from
-T-state 1):
-
-| T-state | Held | The ULA reads | Snowing fetch | Doubling fetch |
-|---|---|---|---|---|
-| G + 0 | 6 | | T1 | |
-| G + 1 | 5 | | T2 | |
-| G + 2 | 4 | first bitmap | T3 (refresh) | T1 |
-| G + 3 | 3 | first attribute | T4 (refresh) | T2 |
-| G + 4 | 2 | second bitmap | | T3 (refresh) |
-| G + 5 | 1 | second attribute | | T4 (refresh) |
-| G + 6 | 0 | | | |
-| G + 7 | 0 | | | |
-
-| Opcode fetch | Effect |
-|---|---|
-| T1 at G + 0, so its refresh lands on the first burst | **Snow.** The first burst's two addresses, bitmap and attribute, keep their bits 13–7 and take bits 6–0 from R: R's value after this fetch's increment. The first cell shows the bytes at those addresses |
-| T1 at G + 2, so its refresh lands on the gap and the second burst | **Double.** The second burst is not read. The second cell shows the first cell's bitmap and attribute again |
-| T1 anywhere else | Nothing |
-
-A fetch from contended memory can never start at G + 0 or G + 2: its T1 is
-held to G + 6. So only code running from uncontended memory, with I pointing
-at contended memory, snows.
-
-**Assumption S1, revised.** Weiv's text puts the snowing fetch's T4 on his
-T-state 3 (G + 2), one earlier than his table, which has its T3 there. The
-table is followed here, as the more exact of the two; his snow tests in #30
-decide.
-
-**The address bits.** The lower RAM is 4116 chips, which take a 7-bit row and
-a 7-bit column, so the column is bits 6–0 and the row bits 13–7, as Weiv
-says, and R's 7-bit counter fills the column exactly. One later repost of
-TheMartian's explanation says bits 7–0 and 13–8; that does not fit the chips.
-
-**The reads against the floating bus.** This table has the ULA's reads at
-G + 2 to G + 5; section 7, from Ramsoft, has an `IN` seeing them at G + 3 to
-G + 6. The two count different things -- when the ULA reads, and the T-state
-an `IN`'s timing is quoted by -- and #28 works out the one-T-state relation
-from the I/O cycle's own timing before relying on either.
-
-### 8.3 Which bank the snow bytes come from (128K)
-
-On the 128K the snow bytes are not always read from the screen bank shown.
-Weiv's table (April 2023), by the bank I points at and the screen shown:
+On the 128K the snow bytes come from a bank set by the bank I points at and
+the screen shown:
 
 | I points at bank | Screen in bank 5 | Screen in bank 7 |
 |---|---|---|
-| 1 | 1 | 3 |
-| 3 | 1 | 3 |
-| 5 | 5 | 7 |
-| 7 | 5 | 7 |
+| 1 or 3 | bank 1 | bank 3 |
+| 5 or 7 | bank 5 | bank 7 |
 
-On the 48K the bytes come from the screen as usual.
+Some 128Ks hang or reset when I points at contended memory. That is not to be
+modelled.
 
-### 8.4 For the model
+## 6. In the emulator
 
-- The fetch's T4 is what matters, not the RFSH pin as the tracer shows it
-  (it releases RFSH half a T-state early, at T4H; see
-  [tracing.md](tracing.md#what-the-comparison-found)). The model takes the T4
-  from the CPU's step, so that difference does not move snow.
-- The ULA fetches a whole group at its first dot today (`ula.cpp`), before the
-  CPU has run that group's T-states. Snow needs the first burst's bytes chosen
-  at G + 2 and the second's at G + 4, so the fetch is split into its two
-  bursts first.
-- On some 128K machines snow hangs or resets the computer. That is **not
-  modelled** (decided 31 October 2026); the 128K snows on the display only.
-- The +2A/+3 have no snow, and are out of scope anyway.
+- **On by default.** `zx_server --no-contention`, or the MCP tool
+  `set_contention`, turns contention off; every instruction then takes its
+  uncontended time. Changing it restarts the rewind history. The floating bus
+  is always on.
+- **Seeing it.** A bus trace (`--trace-log` with `--trace-extra`, or
+  `start_trace`, [tracing.md](tracing.md)) shows a held T-state as repeated
+  rows with the address out and MREQ not yet down, while the `TState` column
+  moves on. The profiler's costs include the waits.
+- **Where it lives.** `Spectrum::clock` decides the holds between the CPU's
+  two halves of a T-state, from a table of hold lengths for the frame;
+  `Ula::floating_bus` answers free ports. The Z80 core knows about neither.
+- **Tests.** `contention_tests` and `floating_bus` check every worked number
+  on this page, each worked out from the rules here, not taken from the code.
+  The public timing tests ([timing-suites.md](timing-suites.md)) check the
+  whole against programs written on real machines.
 
-## 9. Test plan
+## 7. How we know, and what is still assumed
 
-Expected values are worked out from this text, not captured from either
-implementation.
+**Settled by the public tests.**
 
-| Test | What it checks |
-|---|---|
-| Every row of section 5's table, for every k = 0…7 of a group, at G and outside the windows | The rule and the pattern |
-| Section 6's examples, each a unit test with its T-state count | Worked numbers |
-| One instruction from each line of the FAQ's contention table at each k, against the table | `z80.cpp`'s bus addresses in internal T-states |
-| The last group of line 191, and the first T-state after it | The window's edges |
-| The 128K with each bank at `0xC000`, memory and I/O | Section 4.4 |
-| A trace (`--trace-extra --trace-ula`) around each example | The held half-clocks are visible, between T1H and T1L |
-| The rewind determinism test with contention on | Replays still match |
-| The public suites (#30): the 48K timing tests, IR contention, snow, floating bus | The whole, against hardware-derived expectations |
+- C₀: the Butlers' 48K and 128K timing tests all pass with 14335 and 14362,
+  and each fails something one T-state either side. Fuse gives 14361 for the
+  128K, one earlier, in its own count of the frame.
+- The floating bus's four T-states: Ramsoft's Floating Spy self-test ends
+  "Floating bus OK" with the table in section 4, and with it one T-state
+  earlier reports its first reads wrong -- 64 where it expects 0, 1 where it
+  expects 64 -- and lingers on them. Mark
+  Woodmass's Float48K, which prints the byte read at each T-state, shows the
+  same table.
+- The internal T-states of the indexed instructions: the 48K's tests 23 and
+  24 failed until the core left the right addresses on the bus there.
 
-## 10. Open points
+**Assumed, and what would settle it.**
 
-| # | Question | How to settle |
+| | Assumed | Settled by |
 |---|---|---|
-| P1 | ~~The floating bus~~ | Ramsoft's account (section 7); the floating bus suites in #30 check it |
-| P2 | ~~Snow's address and which reads it hits~~ | Weiv's account and table (section 8). Assumption S1, the table against his text by one T-state, checked by his snow tests in #30 |
-| P3 | The 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | **Best guess, and what the code does: yes**, as Fuse, which passes the 128K timing tests. Checked by them in #30 |
-| P4 | ~~The 128K's crash with I = `0x40`–`0x7F`~~ | Not modelled (31 October 2026) |
-| P5 | Where in the held T-state the check is made | **Best guess, and what the code does:** the ULA holds the CPU's clock high, so the hold stretches the first half of the T-state, after the address is out and before MREQ falls. Confirm in Smith |
-| P6 | The ULA port rule (4.2): checks T2 only | **Best guess, and what the code does: yes.** It is the only rule that gives the published `C:1, C:3`. Confirm in Smith and the I/O rows of the 48K timing tests |
+| The 128K and I/O at `0xC000` | A port with high byte `0xC0`–`0xFF` is contended while an odd bank is paged at `0xC000`, as Fuse does | The 128K timing tests that exercise it |
+| Where a hold sits | In the first half of the T-state, the clock held high | Chris Smith's *The ZX Spectrum ULA* |
+| The ULA's own port | Checked once, at T2 | Smith; the only rule that gives `C:1, C:3` |
+| Snow's phase | Weiv's table, which puts the snowing fetch one T-state later than his text | His snow tests, once snow is emulated |
 
-Smith's book covers the 48K's ULA only; the 128K's numbers come from Fuse, the
-suites and the published tables.
+## 8. Sources
 
-## 11. Sources
-
-- Chris Smith, *The ZX Spectrum ULA: How to Design a Microcomputer* (2010):
-  the 48K ULA's schematic-level account. Read for P5 and P6.
+- Chris Smith, *The ZX Spectrum ULA: How to Design a Microcomputer* (2010).
 - The comp.sys.sinclair FAQ's contended memory and I/O tables, and Fuse's
-  `z80_ops` contention annotations: the per-instruction tables of section 5.
-- Ramsoft, *The floating bus technical guide*: section 7.
+  contention annotations.
+- Ramsoft, *The floating bus technical guide*, and its Floating Spy program.
 - Weiv, *Exact emulation of the Snow effect* (forum post, 19 October 2022,
-  updated April 2023), with TheMartian's addition, and his snow tests and the
-  ULA128 test by azesmbog: section 8.
-- The ZX Spectrum Next's FPGA source (`zxula`), read for facts only.
-- The ZX Spectrum test collection on
-  [redcode/ZXSpectrum's wiki](https://github.com/redcode/ZXSpectrum/wiki/Tests):
-  the suites #30 runs.
+  updated April 2023), with TheMartian's explanation of the DRAM signals.
+- The test collection on
+  [redcode/ZXSpectrum's wiki](https://github.com/redcode/ZXSpectrum/wiki/Tests).
