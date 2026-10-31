@@ -204,7 +204,11 @@ does not blank it.
 menu) lists every emulator running on this machine -- debugged or not,
 started by this window, a task, a terminal, an MCP client or another window
 -- with what each has loaded and its ports, and opens a second panel on the
-one you pick, to watch two machines side by side. That panel stays on its
+one you pick, to watch two machines side by side. A server started with
+`--label <text>` is listed by that first (`claude-code via MCP in
+zx-spectrum-emulator — cub.z80 on :8000`), and so is its panel's title; the
+MCP launcher gives every server it starts one, naming the MCP client and
+its project folder ([tools/zxserver/README.md](../tools/zxserver/README.md)). That panel stays on its
 server until closed. Keys typed into it go to that machine: through a debug
 session on it when there is one, and otherwise straight to its MCP port.
 
@@ -214,7 +218,8 @@ Each `zx_server` says which ports it is on in two ways:
 
 - **`serverInfo`** -- a DAP request (and the `server_info` MCP tool) that
   answers with its pid, its build version, its four ports, when it started,
-  its ROMs and the program it last loaded by path. That is how the panel learns a session's
+  its ROMs, its `--label` (null without one) and the program it last loaded
+  by path. That is how the panel learns a session's
   server.
 - **An advert** -- `<pid>.json` in `%LOCALAPPDATA%\zx-spectrum\servers`
   (`$XDG_RUNTIME_DIR` or `~/.cache` elsewhere; `ZX_SERVER_ADVERT_DIR`

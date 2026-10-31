@@ -21,7 +21,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "zxserver"))
 
-from mcp_server import LauncherError, Upstream  # noqa: E402
+from mcp_server import LauncherError, Upstream, default_label  # noqa: E402
 
 # Opens the port after a beat, then sits there. The delay is the point: it
 # makes ensure() actually wait rather than happening to find the port open.
@@ -229,3 +229,35 @@ def test_the_real_command_line_carries_the_port_and_extra_args(tmp_path):
     assert upstream.command() == [
         "zx_server.exe", "--mcp-port", "8123", "--rom", "roms/48.rom", "--no-audio",
     ]
+
+
+def test_a_label_goes_on_the_command_line_before_the_extra_args(tmp_path):
+    upstream = Upstream(exe=Path("zx_server.exe"), host="127.0.0.1", port=8123,
+                        extra_args=["--no-audio"], log_path=tmp_path / "log",
+                        label="Cub flight tests")
+    assert upstream.command() == [
+        "zx_server.exe", "--mcp-port", "8123", "--label", "Cub flight tests", "--no-audio",
+    ]
+
+
+def test_with_no_label_given_the_server_is_named_after_the_client(tmp_path, monkeypatch):
+    project = tmp_path / "zx-spectrum-emulator"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    upstream = Upstream(exe=Path("zx_server.exe"), host="127.0.0.1", port=8123,
+                        extra_args=[], log_path=tmp_path / "log")
+    upstream.note_client("claude-code")
+    assert upstream.label == "claude-code via MCP in zx-spectrum-emulator"
+    assert upstream.command()[-2:] == ["--label", "claude-code via MCP in zx-spectrum-emulator"]
+
+
+def test_a_label_given_is_kept_whoever_the_client_is(tmp_path):
+    upstream = Upstream(exe=Path("zx_server.exe"), host="127.0.0.1", port=8123,
+                        extra_args=[], log_path=tmp_path / "log", label="mine")
+    upstream.note_client("claude-code")
+    assert upstream.label == "mine"
+
+
+def test_a_client_with_no_name_is_still_an_mcp_client():
+    assert default_label(None, "cub") == "MCP in cub"
+    assert default_label("cursor", "") == "cursor via MCP"

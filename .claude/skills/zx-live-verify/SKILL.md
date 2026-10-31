@@ -49,8 +49,11 @@ the checked-in library rather than re-deriving it.
    ```
    C:/Users/jonso/AppData/Local/Temp/zx_verify_build/zx_server.exe `
      --dap-port 14711 --mcp-port 18000 --screen-port 18500 `
-     --no-audio --rom roms/48.rom > /tmp/zx_verify_server.log 2>&1 &
+     --no-audio --rom roms/48.rom --label "zx-live-verify: <what is being checked>" `
+     > /tmp/zx_verify_server.log 2>&1 &
    ```
+   `--label` is what the user sees for it in VS Code's **Show Screen of...**:
+   say what the check is, so a stray instance is recognisable as yours.
    Pass `--no-audio` unless the audio path is the thing being verified: it
    stops the audio stream server binding, and never open `--audio-device` on a
    throwaway instance -- that grabs the host's sound card out from under

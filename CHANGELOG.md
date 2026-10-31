@@ -33,6 +33,13 @@ GitHub takes its notes from that section.
   polling for an attribute value should choose one the bitmap there cannot
   equal (`docs/contention.md`).
 
+- **Emulators have labels.** `zx_server --label <text>` names a server, and
+  **Show Screen of...** and the screen panel's title list it by that first;
+  `server_info` and the advert carry it. The MCP launcher labels every server
+  it starts with the MCP client's name and its project folder
+  (`claude-code via MCP in zx-spectrum-emulator`), or with its own
+  `--label` / `ZX_SERVER_LABEL`.
+
 - **Fast 3D routines, `examples/fast3d`.** Z80 routines for 3D graphics:
   `mul8s`, a signed 8 x 8 multiply by quarter squares (154 T-states);
   `make_matrix`, the rotation for three angles, summing sines of sums of

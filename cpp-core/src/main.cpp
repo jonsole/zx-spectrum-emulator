@@ -111,6 +111,10 @@ struct Args {
     /// Leaves out the advert (server_registry.h) that lets the VS Code
     /// extension find this server without being told its ports.
     bool no_advertise = false;
+    /// A name for this server in a list of them (server_registry.h) -- what
+    /// VS Code's Show Screen of... shows first. Whoever starts it says who
+    /// they are; the MCP launcher names its MCP client.
+    std::string label;
 };
 
 bool parse_args(int argc, char** argv, Args& args) {
@@ -167,12 +171,12 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.tape_autostart = false;
         } else if (flag == "--no-tape-fast-load") {
             args.tape_fast_load = false;
+        } else if (flag == "--no-contention") {
+            args.contention = false;
         } else if (flag == "--wait-for-tape") {
             args.wait_for_tape = true;
         } else if (flag == "--trace-log") {
             if (!next(args.trace_log)) return false;
-        } else if (flag == "--no-contention") {
-            args.contention = false;
         } else if (flag == "--trace-limit") {
             if (!next(value)) return false;
             args.trace_limit = std::strtoull(value.c_str(), nullptr, 10);
@@ -195,6 +199,8 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.exit_on_disconnect = true;
         } else if (flag == "--no-advertise") {
             args.no_advertise = true;
+        } else if (flag == "--label") {
+            if (!next(args.label)) return false;
         } else {
             std::fprintf(stderr, "unknown argument: %s\n", flag.c_str());
             return false;
@@ -326,16 +332,16 @@ int main(int argc, char** argv) {
         engine.set_model(model);
         std::printf("Machine: Spectrum %s\n", zx::model_name(model));
     }
+    if (!args.contention) {
+        engine.set_contention(false);
+        std::printf("Contention: off (--no-contention)\n");
+    }
 
     // After the ROM on purpose: auto-start types LOAD "" through the ROM's own
     // keyboard scan, so there has to be a ROM there to type into.
     if (!args.tape.empty()) {
         std::vector<uint8_t> data;
         if (!zx::read_file(args.tape, data)) {
-    if (!args.contention) {
-        engine.set_contention(false);
-        std::printf("Contention: off (--no-contention)\n");
-    }
             std::fprintf(stderr, "couldn't read tape %s\n", args.tape.c_str());
             return 1;
         }
@@ -448,6 +454,7 @@ int main(int argc, char** argv) {
     }
     identity.roms = args.roms;
     identity.audio_device = args.audio_device;
+    identity.label = args.label;
     zx::set_server_identity(identity);
     if (!args.tape.empty()) {
         zx::note_program(args.tape);

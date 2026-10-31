@@ -63,12 +63,22 @@ class LauncherError(Exception):
     """The emulator could not be reached, and could not be started either."""
 
 
+def default_label(client_name: str | None, folder: str) -> str:
+    """The label for a server started for an MCP client that named none.
+
+    "claude-code via MCP in zx-spectrum-emulator": who asked for it, how, and
+    for which project. A client that gave no name is still an MCP client.
+    """
+    who = f"{client_name} via MCP" if client_name else "MCP"
+    return f"{who} in {folder}" if folder else who
+
+
 class Upstream:
     """The one zx_server this proxy talks to, started if it has to be."""
 
     def __init__(self, exe: Path, host: str, port: int, extra_args: list[str],
                  log_path: Path, allow_spawn: bool = True,
-                 startup_timeout: float = STARTUP_TIMEOUT_S):
+                 startup_timeout: float = STARTUP_TIMEOUT_S, label: str = ""):
         self.exe = exe
         self.host = host
         self.port = port
@@ -76,7 +86,24 @@ class Upstream:
         self.log_path = log_path
         self.allow_spawn = allow_spawn
         self.startup_timeout = startup_timeout
+        # What a server of ours is called in VS Code's Show Screen of...
+        # Given on the command line, or left empty and filled in by
+        # note_client once the MCP client has said who it is.
+        self.label = label
+        self.label_given = bool(label)
         self.process: subprocess.Popen | None = None
+
+    def note_client(self, client_name: str | None) -> None:
+        """Names a server we start after the MCP client that asked for it.
+
+        The client introduces itself in `initialize`, which comes before the
+        first `tools/list` -- and so before anything here starts a server.
+        The folder is the client's project (it launches this process there),
+        which is what tells two sessions' emulators apart.
+        """
+        if self.label_given:
+            return
+        self.label = default_label(client_name, Path.cwd().name)
 
     def command(self) -> list[str]:
         """The command line for a server of our own.
@@ -85,7 +112,10 @@ class Upstream:
         intercept subprocess itself -- what the tests are about is the waiting
         and the ownership, not which executable gets run.
         """
-        return [str(self.exe), "--mcp-port", str(self.port), *self.extra_args]
+        command = [str(self.exe), "--mcp-port", str(self.port)]
+        if self.label:
+            command += ["--label", self.label]
+        return [*command, *self.extra_args]
 
     @property
     def url(self) -> str:
@@ -172,6 +202,7 @@ class Upstream:
             "executable": str(self.exe),
             "executable_exists": self.exe.is_file(),
             "extra_args": self.extra_args,
+            "label": self.label or None,
             "server_log": str(self.log_path) if self.we_spawned_it() else None,
             "note": (
                 "adopted: started by a debug session or by hand, and not mine to stop"
@@ -261,7 +292,13 @@ def build_server(upstream: Upstream) -> Server:
         return types.CallToolResult(
             content=[types.TextContent(type="text", text=message)], is_error=True)
 
+    def note_client(ctx) -> None:
+        params = ctx.session.client_params
+        info = params.client_info if params is not None else None
+        upstream.note_client(info.name if info is not None else None)
+
     async def on_list_tools(ctx, params) -> types.ListToolsResult:
+        note_client(ctx)
         # The emulator's own list, plus this layer's two. Fetched rather than
         # copied, so a tool added to mcp_server.cpp shows up here with no
         # change to this file.
@@ -276,6 +313,7 @@ def build_server(upstream: Upstream) -> Server:
             return types.ListToolsResult(tools=LAUNCHER_TOOLS)
 
     async def on_call_tool(ctx, params) -> types.CallToolResult:
+        note_client(ctx)
         if params.name == "server_status":
             status = upstream.status()
             lines = [f"{key}: {value}" for key, value in status.items()]
@@ -315,6 +353,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="extra arguments for zx_server, as one shell-quoted string")
     parser.add_argument("--no-spawn", action="store_true",
                         help="only ever adopt a running server, never start one")
+    parser.add_argument("--label", default=os.environ.get("ZX_SERVER_LABEL", ""),
+                        help="what a server this starts is called in VS Code's Show Screen "
+                             "of...; by default the MCP client's name and its project folder")
     return parser.parse_args(argv[1:])
 
 
@@ -343,6 +384,7 @@ def main(argv: list[str]) -> int:
         extra_args=extra,
         log_path=Path(tempfile.gettempdir()) / "zxserver" / "zx_server.log",
         allow_spawn=not args.no_spawn,
+        label=args.label,
     )
     try:
         asyncio.run(serve(upstream))

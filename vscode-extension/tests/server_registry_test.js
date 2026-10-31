@@ -122,6 +122,18 @@ test('a server is named by its program and its DAP port', () => {
   assert.ok(r.detailServer(server).includes('no audio stream'));
 });
 
+test('a labelled server is named by its label first', () => {
+  const server = r.parseAdvert(advert(7, {
+    label: 'claude-code via MCP in zx-spectrum-emulator', program: 'C:\\games\\cub.z80'
+  }));
+  assert.strictEqual(server.label, 'claude-code via MCP in zx-spectrum-emulator');
+  assert.strictEqual(r.describeServer(server),
+    'claude-code via MCP in zx-spectrum-emulator — cub.z80 on :4711');
+  // An empty label, or one from a server that writes null, is no label.
+  assert.strictEqual(r.parseAdvert(advert(7, { label: '' })).label, null);
+  assert.strictEqual(r.parseAdvert(advert(7, { label: null })).label, null);
+});
+
 test('the same server is the same process, or the same DAP port without one', () => {
   const a = { pid: 5, ports: { dap: 4711 } };
   assert.ok(r.sameServer(a, { pid: 5, ports: { dap: 4711 } }));

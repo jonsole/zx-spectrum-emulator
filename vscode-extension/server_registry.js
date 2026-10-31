@@ -67,6 +67,9 @@ function parseAdvert(text) {
     exe: typeof info.exe === 'string' ? info.exe : '',
     cwd: typeof info.cwd === 'string' ? info.cwd : '',
     audioDevice: info.audioDevice === true,
+    // What whoever started it called it (--label); absent from servers that
+    // predate labels and null when none was given.
+    label: typeof info.label === 'string' && info.label ? info.label : null,
     // The build's version; absent from servers that predate it.
     version: typeof info.serverVersion === 'string' && info.serverVersion ? info.serverVersion : null
   };
@@ -131,11 +134,13 @@ function liveServers(dir, io) {
   return servers;
 }
 
-// A short name for a server: what it is running and where. The program's
-// file name when it has one, else the ROM it booted.
+// A short name for a server: its label when it was given one, then what it
+// is running and where. The program's file name when it has one, else the
+// ROM it booted.
 function describeServer(server) {
   const program = server.program ? path.basename(server.program.replace(/\\/g, '/')) : 'ROM';
-  return `${program} on :${server.ports.dap}`;
+  const running = `${program} on :${server.ports.dap}`;
+  return server.label ? `${server.label} — ${running}` : running;
 }
 
 // The longer line under it in a list.

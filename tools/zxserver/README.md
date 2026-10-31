@@ -55,6 +55,13 @@ in Claude Code picks it up. Everything has a flag and an environment variable:
 | `--host` | `ZX_SERVER_HOST` | 127.0.0.1 |
 | `--server-args` | `ZX_SERVER_ARGS` | — extra `zx_server` arguments, one shell-quoted string |
 | `--no-spawn` | — | off; when set, only ever adopts |
+| `--label` | `ZX_SERVER_LABEL` | the MCP client's name and the folder it started this in: `claude-code via MCP in zx-spectrum-emulator` |
+
+A server the launcher starts is given that label (`zx_server --label`), which
+is what VS Code's **Show Screen of...** lists it by and what `server_info`
+reports. The client's name comes from its MCP `initialize`, which arrives
+before anything here starts a server. An adopted server keeps whatever label
+it was started with, or none.
 
 `.mcp.json` passes `ZX_SERVER_ARGS="--audio-device --no-audio"`, matching the
 server `.vscode/tasks.json` starts: sound out of the host's speakers rather
@@ -93,8 +100,8 @@ through; anything else queues behind the run until it returns.
 the decision and — the part that matters — the ownership rules, driving the
 real `Upstream` against a fake server that is a few lines of Python holding a
 socket. Adopting, spawning, waiting for the port, timing out, a server that
-dies on startup with its log preserved, `--no-spawn`, a missing executable, and
-both directions of restart.
+dies on startup with its log preserved, `--no-spawn`, a missing executable,
+both directions of restart, and the label a spawned server is given.
 
 ```powershell
 .venv-win\Scripts\python.exe -m pytest tests\test_zxserver_launcher.py

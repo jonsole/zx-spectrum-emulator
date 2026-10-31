@@ -69,6 +69,8 @@ TEST(advert_names_the_server_and_its_ports) {
     CHECK(advert["audioDevice"].get<bool>());
     CHECK(!advert["started"].get<std::string>().empty());
     CHECK_EQ(advert["serverVersion"].get<std::string>(), std::string("0.3.0-dev"));
+    // No --label is null, so a list knows to name it by its program instead.
+    CHECK(advert["label"].is_null());
 
     // Nothing left behind by the write-then-rename.
     size_t files = 0;
@@ -78,6 +80,20 @@ TEST(advert_names_the_server_and_its_ports) {
     }
     CHECK_EQ(files, size_t(1));
 
+    withdraw();
+}
+
+TEST(a_label_is_in_the_advert) {
+    fs::remove_all(ADVERT_DIR);
+    ServerIdentity id = sample_identity();
+    id.label = "claude-code via MCP in zx-spectrum-emulator";
+    set_server_identity(id);
+    std::string error;
+    CHECK(advertise(ADVERT_DIR, error));
+    const fs::path file =
+        fs::path(ADVERT_DIR) / (std::to_string(server_info()["pid"].get<uint32_t>()) + ".json");
+    CHECK_EQ(read_json(file)["label"].get<std::string>(),
+             std::string("claude-code via MCP in zx-spectrum-emulator"));
     withdraw();
 }
 

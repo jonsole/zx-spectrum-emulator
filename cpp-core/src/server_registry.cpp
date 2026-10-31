@@ -89,6 +89,10 @@ nlohmann::json info_locked() {
         {"cwd", g_identity.cwd},
         {"roms", g_identity.roms},
         {"audioDevice", g_identity.audio_device},
+        // Added after version 1 was out without bumping it: a reader that
+        // does not know the field loses nothing by ignoring it.
+        {"label", g_identity.label.empty() ? nlohmann::json(nullptr)
+                                           : nlohmann::json(g_identity.label)},
         {"program", g_program.empty() ? nlohmann::json(nullptr) : nlohmann::json(g_program)},
     };
 }

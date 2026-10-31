@@ -50,6 +50,10 @@ struct ServerIdentity {
     std::vector<std::string> roms;
     /// Whether it plays sound out of the host's own sound card.
     bool audio_device = false;
+    /// A name for people to tell it by, from --label: who started it, or
+    /// what for ("claude-code via MCP in zx-spectrum-emulator"). Empty when
+    /// none was given, and a list then falls back on the program and ports.
+    std::string label;
 };
 
 /// Where adverts go: $ZX_SERVER_ADVERT_DIR when set, else
