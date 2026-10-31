@@ -211,13 +211,50 @@ void Ula::advance() {
 }
 
 void Ula::emit_pixel() {
-    if (dot_ >= VISIBLE_DOTS) {
+    emit_pixel_at(dot_);
+}
+
+void Ula::snow(uint8_t r, const uint8_t* bytes) {
+    if (!in_paper_area()) {
+        return;
+    }
+    // The group being drawn, which is the one whose reads the refresh hit:
+    // a group is drawn from the T-state after its G, so at G + 1 the beam is
+    // at its first pixel.
+    const uint32_t start = (dot_ - PAPER_DOT_BEGIN) & ~uint32_t(15);
+    const uint16_t y = uint16_t(line_ - t_.paper_line_begin);
+    const uint16_t bitmap = uint16_t(pixel_addr(uint16_t(start), y) - BITMAP_BASE);
+    const uint16_t attr = uint16_t(attr_addr(uint16_t(start), y) - BITMAP_BASE);
+    // The RAM's column address is bits 6-0; the row, bits 13-7, is the
+    // ULA's own. R's 7-bit counter takes the column's place.
+    constexpr uint16_t ROW = uint16_t(~0x7F);
+    const uint16_t column = uint16_t(r & 0x7F);
+    pixel0_ = bytes[(bitmap & ROW) | column];
+    attr0_ = bytes[(attr & ROW) | column];
+    for (uint32_t dot = PAPER_DOT_BEGIN + start; dot <= dot_; dot++) {
+        emit_pixel_at(dot);
+    }
+}
+
+void Ula::double_read() {
+    if (!in_paper_area()) {
+        return;
+    }
+    // The second cell is not drawn until G + 5, so nothing is redrawn.
+    pixel1_ = pixel0_;
+    attr1_ = attr0_;
+}
+
+void Ula::emit_pixel_at(uint32_t dot) {
+    if (dot >= VISIBLE_DOTS) {
         return; // horizontal retrace -- nothing rendered
     }
 
     Rgb rgb;
-    if (in_paper_area()) {
-        uint32_t px = dot_ - PAPER_DOT_BEGIN;
+    const bool over_paper = line_ >= t_.paper_line_begin && line_ < t_.paper_line_end()
+                            && dot >= PAPER_DOT_BEGIN && dot < PAPER_DOT_END;
+    if (over_paper) {
+        uint32_t px = dot - PAPER_DOT_BEGIN;
         // Which of the group's two cells, and which bit within it.
         bool second_cell = (px & 15) >= 8;
         uint8_t bits = second_cell ? pixel1_ : pixel0_;
@@ -238,7 +275,7 @@ void Ula::emit_pixel() {
         rgb = colour(uint8_t(border_latch_ & 0x07), false);
     }
 
-    size_t idx = (size_t(line_) * FULL_WIDTH + dot_) * 3;
+    size_t idx = (size_t(line_) * FULL_WIDTH + dot) * 3;
     framebuffer_[idx] = rgb.r;
     framebuffer_[idx + 1] = rgb.g;
     framebuffer_[idx + 2] = rgb.b;

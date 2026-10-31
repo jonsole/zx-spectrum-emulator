@@ -62,8 +62,9 @@ on by default: the ULA holds the CPU's clock by the 6, 5, 4, 3, 2, 1, 0, 0
 pattern, checked between the CPU's high and low halves of a T-state, as
 [contention.md](contention.md) sets out with worked examples that
 `contention_tests` checks. The floating bus returns the ULA's bitmap and
-attribute bytes in turn, as Floating Spy's self-test requires. Not yet: the
-ULA's snow.
+attribute bytes in turn, as Floating Spy's self-test requires, and snow and
+its double are emulated from Weiv's account, at the phase a real 48K's video
+of the Snow48 test supports.
 
 Native audio recovers from its device changing (2026-09-16): a shared-mode
 WASAPI stream does not survive headphones being plugged in, a Bluetooth

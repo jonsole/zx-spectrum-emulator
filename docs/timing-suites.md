@@ -58,7 +58,8 @@ before it can be a test; their state here is what they show today.
 | Timing Test (Rak) | 48K, 128K | a menu of nine tests, each a picture | Not compared; its frame length reads 69888 |
 | ULA 48 Simple Test, ULA 128 Timing Test (azesmbog) | 48K, 128K | a picture | Not compared |
 | IR Contention, IR Contention 128 (Woodmass) | 48K, 128K | a picture | Not compared |
-| Snow tests (Weiv), Snow48, ULA Snow Crash | 48K, 128K | a picture | Snow is not emulated yet |
+| Snow48 (azesmbog), variant b6 | 48K | a test card under snow | Compared by eye with a real 48K's video (Jari Komppa's, on the wiki): both buried in snow columns. Not automated |
+| Snow tests (Weiv), ULA128, other Snow48 variants, ULA Snow Crash | 48K, 128K | a picture | Not compared |
 
 ## What they have found
 

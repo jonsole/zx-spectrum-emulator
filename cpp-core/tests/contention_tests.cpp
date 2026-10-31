@@ -250,6 +250,116 @@ TEST(bit_ix_d_internal_tstates_hold_the_opcodes_address) {
     CHECK_EQ(tstates_at(*m, C48 + 6, r, {0xDD, 0xCB, 0x00, 0x46}, CONTENDED_CODE), 38u);
 }
 
+// ---- snow (docs/contention.md, section 5) ----------------------------------
+
+namespace {
+
+/// Canvas line and dots of the paper's first line, cells 0 to 2.
+constexpr uint32_t PAPER_LINE = 64;
+constexpr uint32_t CELL_DOT0 = 48;
+
+/// The colours of cell `cell` of the paper's first line, as last drawn.
+std::vector<uint8_t> cell_pixels(const Spectrum& m, uint32_t cell) {
+    const std::vector<uint8_t>& screen = m.screen();
+    const size_t first = (size_t(PAPER_LINE) * FULL_WIDTH + CELL_DOT0 + cell * 8) * 3;
+    return std::vector<uint8_t>(screen.begin() + long(first), screen.begin() + long(first + 8 * 3));
+}
+
+/// Runs NOP; LD A,0; LD I,A; JR $ with the NOP's fetch at frame T-state
+/// `fetch`, I and R as given, to the end of the frame, so the picture of the
+/// first paper line is the one this frame drew. LD I,A takes I out of
+/// contended memory again, so only the first four fetches -- NOP, LD A,n, and
+/// LD I,A's two -- can snow; their refreshes start at fetch + 2, + 6, + 13 and
+/// + 17 (48K, code at 0x8000, nothing held before LD I,A's last T-state).
+/// Snow needs a refresh starting at a group's G + 1, the double at G + 3.
+void run_snow(Spectrum& m, uint32_t fetch, uint8_t i, uint8_t r) {
+    while (m.ula.frame_hc() != fetch * HC_PER_TSTATE) {
+        m.clock();
+    }
+    const std::vector<uint8_t> code = {0x00, 0x3E, 0x00, 0xED, 0x47, 0x18, 0xFE};
+    m.write_memory(CODE, code.data(), code.size());
+    Registers regs;
+    regs.pc = CODE;
+    regs.i = i;
+    regs.r = r;
+    m.set_registers(regs);
+    const uint64_t frame = m.ula.frame_count();
+    while (m.ula.frame_count() == frame) {
+        m.clock();
+    }
+}
+
+/// White paper in every cell of the first line, so a cell that shows anything
+/// else was given other bytes.
+void blank_first_line(Spectrum& m) {
+    for (uint16_t x = 0; x < 256; x += 8) {
+        const uint8_t blank = 0x00;
+        const uint8_t white = 0x38;
+        m.write_memory(pixel_addr(x, 0), &blank, 1);
+        m.write_memory(attr_addr(x, 0), &white, 1);
+    }
+}
+
+/// A red-and-black cell: four pixels of red ink, four of black paper.
+constexpr uint8_t STRIPE = 0xF0;
+constexpr uint8_t RED_ON_BLACK = 0x02;
+
+} // namespace
+
+TEST(snow_reads_the_first_cell_with_rs_column) {
+    // The NOP's fetch at 14334 = G - 1: its refresh starts at 14336 = G + 1,
+    // across the first read. I = 0x40 is contended; R is 0x10 on the bus and
+    // 0x11 after the increment, so cell 0 is read from bitmap offset
+    // (0x0000 & ~0x7F) | 0x11 = 0x0011 and attribute offset
+    // (0x1800 & ~0x7F) | 0x11 = 0x1811. The stripe goes there, and in cell 2
+    // the ordinary way to compare against: cell 2 is group 1 (G = 14343), and
+    // the later refreshes start at 14340 (group 0's G + 5), 14347 (G + 4) and
+    // 14351 (group 2's G), none of them a G + 1 or a G + 3.
+    auto m = machine();
+    blank_first_line(*m);
+    const uint8_t stripe = STRIPE;
+    const uint8_t red = RED_ON_BLACK;
+    m->write_memory(0x4011, &stripe, 1);
+    m->write_memory(0x5811, &red, 1);
+    m->write_memory(pixel_addr(16, 0), &stripe, 1);
+    m->write_memory(attr_addr(16, 0), &red, 1);
+    run_snow(*m, C48 - 1, 0x40, 0x10);
+    CHECK(cell_pixels(*m, 0) == cell_pixels(*m, 2));
+    CHECK(cell_pixels(*m, 1) != cell_pixels(*m, 2)); // cell 1 is not snowed
+}
+
+TEST(the_double_shows_the_first_cell_twice) {
+    // The NOP's fetch at 14336 = G + 1: its refresh starts at G + 3, across
+    // the gap before the second read, so cell 1 shows cell 0's stripe. The
+    // later refreshes start at 14342 (G + 7), 14349 (group 1's G + 6) and
+    // 14353 (group 2's G + 2): none a G + 1 or a G + 3.
+    auto m = machine();
+    blank_first_line(*m);
+    const uint8_t stripe = STRIPE;
+    const uint8_t red = RED_ON_BLACK;
+    m->write_memory(pixel_addr(0, 0), &stripe, 1);
+    m->write_memory(attr_addr(0, 0), &red, 1);
+    run_snow(*m, C48 + 1, 0x40, 0x10);
+    CHECK(cell_pixels(*m, 1) == cell_pixels(*m, 0));
+    CHECK(cell_pixels(*m, 2) != cell_pixels(*m, 0)); // a white cell, unchanged
+}
+
+TEST(no_snow_with_i_outside_contended_memory) {
+    // As the snow test, with I = 0x3F: the refresh goes to the other RAM and
+    // cell 0 stays white paper.
+    auto m = machine();
+    blank_first_line(*m);
+    const uint8_t stripe = STRIPE;
+    const uint8_t red = RED_ON_BLACK;
+    m->write_memory(0x4011, &stripe, 1);
+    m->write_memory(0x5811, &red, 1);
+    m->write_memory(pixel_addr(16, 0), &stripe, 1);
+    m->write_memory(attr_addr(16, 0), &red, 1);
+    run_snow(*m, C48 - 1, 0x3F, 0x10);
+    CHECK(cell_pixels(*m, 0) != cell_pixels(*m, 2));
+    CHECK(cell_pixels(*m, 0) == cell_pixels(*m, 1)); // both white
+}
+
 // ---- the 128K --------------------------------------------------------------
 
 TEST(spectrum128_paging_port) {

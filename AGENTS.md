@@ -173,8 +173,8 @@ examples that need one skip or say so. `sjasmplus` is at
   machine part needs adding to that part's `State` too. Check changes build with
   `build.ps1 -NoRewind -Target zx_server` as well.
 - **Contention is on by default** (docs/contention.md): a T-state count measured
-  before it, or with `--no-contention`, is not what the machine takes. **Not
-  emulated yet:** the ULA's snow, the +2A/+3, tape saving.
+  before it, or with `--no-contention`, is not what the machine takes. Snow
+  comes with it. **Not emulated yet:** the +2A/+3, tape saving.
 
 ## Style
 

@@ -7,6 +7,14 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Snow.** With I pointing at contended memory, an opcode fetch whose
+  refresh crosses the ULA's first screen read makes it read that cell from an
+  address with R in its low seven bits, and one crossing the gap before the
+  second read makes the next cell repeat the first -- as on a real 48K or
+  128K, including the 128K's choice of bank. The phase follows Weiv's account
+  where a real 48K's video of the Snow48 test bears it out
+  (`docs/contention.md`).
+
 - **The public timing suites run as tests.** `scripts/fetch_timing_suites.py`
   fetches the published timing tests, and `ctest -L suites` runs the ones that
   print a verdict: all 35 of the Butlers' 48K timing tests and 34 of their

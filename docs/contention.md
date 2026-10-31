@@ -21,7 +21,7 @@ emulated.
 |---|---|
 | Memory and I/O contention, 48K and 128K | Yes, on by default |
 | The floating bus, 48K and 128K | Yes |
-| Snow | Not yet; [section 5](#5-snow) describes it |
+| Snow, and its double, 48K and 128K | Yes, with contention |
 
 ## 1. Time
 
@@ -198,18 +198,21 @@ refresh lands in the middle of its read. It needs **I to point at contended
 memory** -- I = `0x40`–`0x7F`, or on the 128K I = `0xC0`–`0xFF` with an odd
 bank paged at `0xC000` -- and code running from uncontended memory: a fetch
 from contended memory is always held until G + 6, clear of the ULA's reads.
-**It is not emulated yet.**
 
 Why it happens: the ULA reads in two bursts, one per cell. For each it sets
 the RAM's column address (screen address bits 6–0) once, then gives two row
 strobes (bits 13–7), one for the bitmap and one for the attribute. The CPU's
-refresh drives the same RAM's column strobe. So:
+refresh drives the same RAM's column strobe, from the middle of the fetch's
+T3 to the middle of its T4. So it matters where that refresh falls:
 
-| The opcode fetch | Its refresh lands on | Effect |
+| The opcode fetch | Its refresh (T3 and T4) | Effect |
 |---|---|---|
-| starts at G | the first burst | **Snow.** The first cell's bitmap and attribute are read with bits 6–0 of their addresses taken from R (as R is after the fetch). The cell shows those bytes |
-| starts at G + 2 | the gap and the second burst | **Double.** The second burst is not read; the second cell shows the first cell's bitmap and attribute again |
-| starts anywhere else | nothing | Nothing |
+| starts at G − 1 | G + 1 and G + 2, across the first read | **Snow.** The first cell's bitmap and attribute are read with bits 6–0 of their addresses taken from R (as R is after the fetch). The cell shows those bytes |
+| starts at G + 1 | G + 3 and G + 4, across the gap before the second read | **Double.** The second read does not happen; the second cell shows the first cell's bitmap and attribute again |
+| starts anywhere else | elsewhere | Nothing |
+
+In Weiv's words, snow is the fetch's fourth T-state on the ULA's third, and
+the double on its fifth, counting the ULA's T-states from 1 at G.
 
 On the 128K the snow bytes come from a bank set by the bank I points at and
 the screen shown:
@@ -233,8 +236,10 @@ modelled.
   rows with the address out and MREQ not yet down, while the `TState` column
   moves on. The profiler's costs include the waits.
 - **Where it lives.** `Spectrum::clock` decides the holds between the CPU's
-  two halves of a T-state, from a table of hold lengths for the frame;
-  `Ula::floating_bus` answers free ports. The Z80 core knows about neither.
+  two halves of a T-state, from a table of hold lengths for the frame, and
+  spots each refresh for snow; `Ula::floating_bus` answers free ports and
+  `Ula::snow` and `Ula::double_read` change the bytes of the group being
+  drawn. The Z80 core knows about none of it.
 - **Tests.** `contention_tests` and `floating_bus` check every worked number
   on this page, each worked out from the rules here, not taken from the code.
   The public timing tests ([timing-suites.md](timing-suites.md)) check the
@@ -256,6 +261,16 @@ modelled.
 - The internal T-states of the indexed instructions: the 48K's tests 23 and
   24 failed until the core left the right addresses on the bus there.
 
+**Settled by a real machine.**
+
+- Snow's phase. Weiv's account disagrees with itself by a T-state: his text
+  puts the snowing fetch's T4 on the ULA's third T-state, his phase table its
+  T3. azesmbog's Snow48 test (variant b6) on a real 48K -- issue 3, NEC
+  D780C-1, ULA 6C001E-6, filmed by Jari Komppa -- shows its test card buried
+  in snow columns. With the text's phase the emulator draws much the same;
+  with the table's the card comes out almost clean. The text's is the one
+  here.
+
 **Assumed, and what would settle it.**
 
 | | Assumed | Settled by |
@@ -263,7 +278,7 @@ modelled.
 | The 128K and I/O at `0xC000` | A port with high byte `0xC0`–`0xFF` is contended while an odd bank is paged at `0xC000`, as Fuse does | The 128K timing tests that exercise it |
 | Where a hold sits | In the first half of the T-state, the clock held high | Chris Smith's *The ZX Spectrum ULA* |
 | The ULA's own port | Checked once, at T2 | Smith; the only rule that gives `C:1, C:3` |
-| Snow's phase | Weiv's table, which puts the snowing fetch one T-state later than his text | His snow tests, once snow is emulated |
+| Snow's detail | The bits from R, the double, and the 128K's bank table, from Weiv | His snow tests and the ULA128 test, compared with videos of real machines |
 
 ## 8. Sources
 

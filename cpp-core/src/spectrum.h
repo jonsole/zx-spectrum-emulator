@@ -289,6 +289,10 @@ private:
     /// The ULA's check at the start of a T-state, made between the CPU's high
     /// and low halves: how many half-clocks to hold the CPU, 0 for none.
     uint32_t contention_check();
+    /// Snow and the double (docs/contention.md, section 5), at the first
+    /// T-state of an opcode fetch's refresh: tells the ULA if that refresh has
+    /// landed on its reads.
+    void snow_check();
 
     /// Watch flags, and the pointer the bus decode actually tests -- null
     /// while nothing is watched, which is the whole cost of this feature to a

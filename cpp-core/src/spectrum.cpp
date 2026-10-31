@@ -337,7 +337,15 @@ void Spectrum::clock() {
         }
     }
 
+    const uint64_t pins_before = pins_;
     pins_ = cpu.clock(pins_);
+
+    // An opcode fetch's refresh begins: the one moment snow can start. Behind
+    // the same pointer as contention -- snow is the same shared RAM, and a
+    // machine with contention off has none of it.
+    if (contention_ != nullptr && asserted(pins_, RFSH) && !asserted(pins_before, RFSH)) {
+        snow_check();
+    }
 
     // Sampled HERE, between the CPU's clock and the bus service, and not
     // after: our memory answers a read in the same half-clock the request is
@@ -353,6 +361,48 @@ void Spectrum::clock() {
     // everything above -- the trace especially -- sees frame_hc/tstate/frame
     // for the half-clock it was actually working on.
     ula.advance();
+}
+
+void Spectrum::snow_check() {
+    // The refresh puts IR on the bus. Snow needs that address in contended
+    // memory -- the RAM the ULA is reading -- or the refresh goes to other
+    // chips and the ULA never sees it.
+    const uint16_t ir = get_addr(pins_);
+    if (!contended(ir)) {
+        return;
+    }
+    // Where the refresh's first T-state (T3 of the fetch) falls in the ULA's
+    // group, read off the hold table. Held 5 is G + 1: the refresh holds the
+    // RAM's column strobe from the middle of T3 to the middle of T4, across
+    // the first read at G + 2 -- snow. Held 3 is G + 3: across the gap before
+    // the second read at G + 4 -- the double. That is Weiv's text, his fetch's
+    // T4 on the ULA's third T-state, and the real 48K in Jari Komppa's video
+    // of the Snow48 test agrees with it; his phase table, a T-state later,
+    // leaves that test almost clean. Outside the paper the table holds
+    // nothing, and neither happens.
+    const uint8_t position = contention_[ula.tstate()];
+    if (position == 5) {
+        // The bank the snow bytes come from. On the 48K, the screen's. On the
+        // 128K Weiv's table: banks 1 and 3 give bank 1 with the normal screen
+        // and 3 with the shadow one, banks 5 and 7 give 5 or 7 the same way.
+        const uint8_t* bytes = memory.screen_bytes();
+        if (model() == Model::Spectrum128) {
+            const uint8_t i_bank = (ir & 0xC000) == 0x4000 ? uint8_t(5) : memory.bank_at_c000();
+            const bool shadow = memory.screen_bank() == 7;
+            uint8_t from = 0;
+            if (i_bank == 1 || i_bank == 3) {
+                from = shadow ? 3 : 1;
+            } else {
+                from = shadow ? 7 : 5;
+            }
+            bytes = memory.bank[from].data();
+        }
+        // R as it is after this fetch's increment, which the refresh made a
+        // moment ago: what Weiv's tests on real machines show.
+        ula.snow(cpu.regs.r, bytes);
+    } else if (position == 3) {
+        ula.double_read();
+    }
 }
 
 void Spectrum::set_watch_flags(std::vector<uint8_t> flags) {

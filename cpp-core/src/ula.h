@@ -296,6 +296,18 @@ public:
     /// rest of the time.
     uint8_t floating_bus(const uint8_t* screen) const;
 
+    /// Snow (docs/contention.md, section 5): the CPU's refresh has landed on
+    /// the ULA's first read of the group being drawn, so that cell's bitmap
+    /// and attribute are read again with bits 6-0 of their addresses taken
+    /// from `r` -- from `bytes`, the bank the snow comes from -- and what of
+    /// the group is already drawn is drawn again. Called by the machine at the
+    /// refresh's first T-state, G + 1; nothing outside the paper.
+    void snow(uint8_t r, const uint8_t* bytes);
+    /// The double (section 5): the refresh has landed on the gap before the
+    /// second read, which does not happen, so the second cell shows the first
+    /// cell's bitmap and attribute. Called at G + 3.
+    void double_read();
+
     /// Half-clocks since the interrupt, 0..HC_PER_FRAME-1. This is the
     /// "T-states since interrupt" programs reason about, times two.
     ///
@@ -538,6 +550,9 @@ private:
     }
 
     void emit_pixel();
+    /// emit_pixel() for any dot of the current line: what snow uses to redraw
+    /// the part of a group already drawn when its bytes change under it.
+    void emit_pixel_at(uint32_t dot);
     void on_frame_boundary();
     /// Paints the overlay onto the just-completed frame -- everything dimmed,
     /// each written byte lifted back by its heat -- and fades the heat map on

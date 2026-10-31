@@ -40,6 +40,7 @@ PROGRAMS = {
     "floatspy.tap": ("Floating Spy v0.33 (2002-04)", "floatspy.tap"),
     "timingtest.tap": ("Timing Test v0.3 (2013-12-09)", "timingtest-0.3/timing.tap"),
     "snow48.tap": ("Snow48 (2021-09-13)", None),
+    "snow48_b6.tap": ("Snow48 (var b6) (2021-09-15)", None),
     "snow_crash.tap": ("ULA Snow Crash (2018-02-06)", None),
     "weiv_snow.tap": ("Snow Tests (2022-10-19)", "SnowTests/snow.tap"),
     "weiv_snow48plus.tap": ("Snow Tests (2022-10-19)", "SnowTests/snow48+.tap"),

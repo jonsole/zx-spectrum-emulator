@@ -6,7 +6,8 @@
 //              [expect=TEXT ...]
 //
 // 128in48 is a 128K whose tape is loaded from the 128's own 48 BASIC, for
-// the tests that say they must run in 48K mode.
+// the tests that say they must run in 48K mode. nocontention runs it with
+// contention off, to compare.
 //
 // Each KEY@frame presses a key (a keyboard name: ENTER, SPACE, 1, A, ...) at
 // that frame and lets it go KEY_HOLD_FRAMES later, for the tests that ask
@@ -159,6 +160,7 @@ int main(int argc, char** argv) {
     const std::string out_path = argv[3];
     bool is128 = false;
     bool in48 = false;
+    bool no_contention = false;
     std::vector<KeyPress> presses;
     std::vector<std::string> expects;
     std::vector<std::string> rejects;
@@ -170,6 +172,8 @@ int main(int argc, char** argv) {
         } else if (a == "128in48") {
             is128 = true;
             in48 = true;
+        } else if (a == "nocontention") {
+            no_contention = true;
         } else if (a.compare(0, 7, "expect=") == 0) {
             expects.push_back(a.substr(7));
         } else if (a.compare(0, 7, "reject=") == 0) {
@@ -210,6 +214,9 @@ int main(int argc, char** argv) {
     }
     engine.set_model(model);
     engine.set_speed(Speed::Uncapped);
+    if (no_contention) {
+        engine.set_contention(false);
+    }
 
     if (!read_file(program, data)) {
         std::printf("skipped: %s is not there -- run scripts/fetch_timing_suites.py\n",

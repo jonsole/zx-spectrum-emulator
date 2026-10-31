@@ -81,8 +81,9 @@ which is what having the machine on the end of an API is for.*
 **How accurate is it?** The Z80 is diffed instruction for instruction against
 the vendored [floooh/chips](https://github.com/floooh/chips) `z80.h` and passes
 ZEXALL and ZEXDOC in full; tape loading works at pulse level through the EAR
-line, `.wav` and `.csw` recordings included. Memory and I/O contention are
-emulated for the 48K and the 128K; snow and the +2A/+3 are not — see
+line, `.wav` and `.csw` recordings included. Memory and I/O contention, the
+floating bus and snow are emulated for the 48K and the 128K; the +2A/+3 is
+not — see
 [Status & roadmap](docs/status.md).
 
 ## What's actually emulated
@@ -112,7 +113,7 @@ emulated for the 48K and the 128K; snow and the +2A/+3 are not — see
   `ED`, `DD`, `FD`, and `DD CB d`/`FD CB d`), including the well-known
   undocumented `IXH`/`IXL`/`IYH`/`IYL` register forms.
 
-**Not emulated (yet):** the +2A/+3, the ULA's snow, and tape *saving*. See [Status & roadmap](docs/status.md).
+**Not emulated (yet):** the +2A/+3, and tape *saving*. See [Status & roadmap](docs/status.md).
 
 Beeper audio (port `0xFE` bits 4 and 3) *is* emulated by the C++ core — see
 [Audio](docs/audio.md).
