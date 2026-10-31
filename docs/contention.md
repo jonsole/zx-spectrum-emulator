@@ -216,20 +216,46 @@ own. MREQ is down, so the CPU is not held for any of this (rule 4.1).
 
 ### 8.2 The two effects
 
-Weiv numbers the T-states of the ULA's 8 T-state group 1 to 8. What matters
-is which of them the **T4** of an opcode fetch falls on:
+Weiv's table of the snow and double phases, in section 3's numbering (his
+ULA T-state n is G + n − 1: his delay column is 6, 5, 4, 3, 2, 1, 0, 0 from
+T-state 1):
 
-| Fetch's T4 on | Effect |
+| T-state | Held | The ULA reads | Snowing fetch | Doubling fetch |
+|---|---|---|---|---|
+| G + 0 | 6 | | T1 | |
+| G + 1 | 5 | | T2 | |
+| G + 2 | 4 | first bitmap | T3 (refresh) | T1 |
+| G + 3 | 3 | first attribute | T4 (refresh) | T2 |
+| G + 4 | 2 | second bitmap | | T3 (refresh) |
+| G + 5 | 1 | second attribute | | T4 (refresh) |
+| G + 6 | 0 | | | |
+| G + 7 | 0 | | | |
+
+| Opcode fetch | Effect |
 |---|---|
-| T-state 3 of the group | **Snow.** The first burst's two addresses, bitmap and attribute, keep their bits 13–7 and take bits 6–0 from R: R's value after this fetch's increment. The first cell shows the bytes at those addresses |
-| T-state 5 of the group | **Double.** The second burst is not read. The second cell shows the first cell's bitmap and attribute again |
-| any other | Nothing |
+| T1 at G + 0, so its refresh lands on the first burst | **Snow.** The first burst's two addresses, bitmap and attribute, keep their bits 13–7 and take bits 6–0 from R: R's value after this fetch's increment. The first cell shows the bytes at those addresses |
+| T1 at G + 2, so its refresh lands on the gap and the second burst | **Double.** The second burst is not read. The second cell shows the first cell's bitmap and attribute again |
+| T1 anywhere else | Nothing |
 
-**Assumption S1:** Weiv's T-state n of the group is G + n − 1 in section 3's
-numbering, so snow is a T4 at G + 2 and the double a T4 at G + 4. That puts
-the first burst's column just before Ramsoft's first read at G + 3 and the gap
-between the bursts at G + 4 to G + 5, which fits both accounts; it is checked
-by Weiv's snow tests in #30.
+A fetch from contended memory can never start at G + 0 or G + 2: its T1 is
+held to G + 6. So only code running from uncontended memory, with I pointing
+at contended memory, snows.
+
+**Assumption S1, revised.** Weiv's text puts the snowing fetch's T4 on his
+T-state 3 (G + 2), one earlier than his table, which has its T3 there. The
+table is followed here, as the more exact of the two; his snow tests in #30
+decide.
+
+**The address bits.** The lower RAM is 4116 chips, which take a 7-bit row and
+a 7-bit column, so the column is bits 6–0 and the row bits 13–7, as Weiv
+says, and R's 7-bit counter fills the column exactly. One later repost of
+TheMartian's explanation says bits 7–0 and 13–8; that does not fit the chips.
+
+**The reads against the floating bus.** This table has the ULA's reads at
+G + 2 to G + 5; section 7, from Ramsoft, has an `IN` seeing them at G + 3 to
+G + 6. The two count different things -- when the ULA reads, and the T-state
+an `IN`'s timing is quoted by -- and #28 works out the one-T-state relation
+from the I/O cycle's own timing before relying on either.
 
 ### 8.3 Which bank the snow bytes come from (128K)
 
@@ -280,7 +306,7 @@ implementation.
 | # | Question | How to settle |
 |---|---|---|
 | P1 | ~~The floating bus~~ | Ramsoft's account (section 7); the floating bus suites in #30 check it |
-| P2 | ~~Snow's address and which reads it hits~~ | Weiv's account (section 8); assumption S1, his group numbering against ours, checked by his snow tests in #30 |
+| P2 | ~~Snow's address and which reads it hits~~ | Weiv's account and table (section 8). Assumption S1, the table against his text by one T-state, checked by his snow tests in #30 |
 | P3 | The 128K address-checks I/O whose high byte is `0xC0`–`0xFF` while a contended bank is paged | **Best guess, and what the code does: yes**, as Fuse, which passes the 128K timing tests. Checked by them in #30 |
 | P4 | ~~The 128K's crash with I = `0x40`–`0x7F`~~ | Not modelled (31 October 2026) |
 | P5 | Where in the held T-state the check is made | **Best guess, and what the code does:** the ULA holds the CPU's clock high, so the hold stretches the first half of the T-state, after the address is out and before MREQ falls. Confirm in Smith |
