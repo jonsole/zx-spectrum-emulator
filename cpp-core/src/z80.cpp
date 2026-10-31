@@ -49,8 +49,26 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
     hlx_idx_ = 0;
     prefix_active_ = false;
 
-    // INT is sampled here, before any bus activity, so an accepted interrupt
-    // replaces this fetch's T1 rather than racing it.
+    // NMI and INT are sampled here, before any bus activity, so an accepted
+    // interrupt replaces this fetch's T1 rather than racing it. An NMI edge
+    // comes first: it cannot be masked and outranks INT.
+    if (nmi_pending_) {
+        nmi_pending_ = false;
+        // Undoes op_halt()'s per-refetch PC decrement, as for INT below.
+        if (halted) {
+            regs.pc = uint16_t(regs.pc + 1);
+        }
+        halted = false;
+        interrupt_count++;
+        nmi_ack_ = true;
+        // IFF2 keeps IFF1, so RETN can put it back; IFF1 masks INT.
+        regs.iff2 = regs.iff1;
+        regs.iff1 = false;
+        // T1H of the dummy opcode fetch: PC out, M1 down, PC not moved.
+        pins = set_addr_assert(pins, regs.pc, M1);
+        step_ = STEP_NMI_T1L;
+        return pins;
+    }
     if (asserted(pins, INT) && regs.iff1) {
         // Undoes op_halt()'s per-refetch PC decrement. Without this the
         // interrupt would push HALT's own address as the return address and
@@ -60,6 +78,9 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
             regs.pc = uint16_t(regs.pc + 1);
         }
         interrupt_count++;
+        // T1H of the acknowledge: PC on the address bus and M1 down, as for
+        // an opcode fetch, but no MREQ and PC not moved.
+        pins = set_addr_assert(pins, regs.pc, M1);
         step_ = STEP_INT_T1H;
         return pins;
     }
@@ -290,6 +311,8 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     step_ = 0;
     prefix_active_ = false;
     rfsh_release_ = false;
+    nmi_pending_ = false;
+    nmi_ack_ = false;
     // One priming half-clock, whose memory request MUST be serviced -- step 0
     // is NOP, whose generated body is begin_fetch(), so this leaves the
     // pipeline at STEP_M1_T1L with a real opcode read in flight. Skipping the
@@ -326,6 +349,14 @@ uint16_t Z80::step_instruction(Memory& mem) {
 // ============================================================================
 
 uint64_t Z80::clock(uint64_t pins) {
+    // NMI is edge-triggered: a falling edge (asserted, in pins.h's terms) is
+    // latched whenever it comes, and taken at the next instruction boundary.
+    const bool nmi = asserted(pins, NMI);
+    if (nmi && !nmi_level_) {
+        nmi_pending_ = true;
+    }
+    nmi_level_ = nmi;
+
     // RFSH outlives the refresh's MREQ by half a T-state: the real chip lets
     // it go at the start of the next half-clock, whatever that half is, and
     // so does this.
@@ -671,41 +702,90 @@ uint64_t Z80::clock(uint64_t pins) {
             break;
 
         // ---- Interrupt acknowledge -----------------------------------------------
-        case STEP_INT_T1H:
+        // As the datasheet draws it: an M1 cycle with two wait states -- T1,
+        // T2, TW, TW, T3, T4 -- with PC on the bus and M1 down from T1, no MREQ
+        // until the refresh, IORQ down from the first wait state, and the
+        // device's byte taken at the start of T3. Then:
+        //   IM 0  the byte is the opcode, and runs from here as if fetched
+        //         (RST p: one internal T-state and two pushes, 13 in all);
+        //   IM 1  a seventh T-state, the two pushes, PC = 0x0038 (13);
+        //   IM 2  the same, then the vector read from (I << 8) | byte (19).
+        // begin_fetch() was T1H, so each step below runs half a T-state after
+        // its name: STEP_INT_T1H is T1L, and so on. The comments give the real
+        // half-clock.
+        case STEP_INT_T1H: // T1L
             regs.iff1 = false;
             regs.iff2 = false;
             halted = false;
             step_ = STEP_INT_T1L;
             break;
-        case STEP_INT_T1L: step_ = STEP_INT_T2H; break;
-        case STEP_INT_T2H:
-            // The ack cycle asserts M1|IORQ but deliberately does NOT drive
-            // the address bus -- the acknowledging device supplies the byte.
-            pins = assert_pins(pins, M1 | IORQ);
-            step_ = STEP_INT_T2L;
-            break;
-        case STEP_INT_T2L: step_ = STEP_INT_T3H; break;
-        case STEP_INT_T3H:
-            if (asserted(pins, WAIT)) { break; }
-            dlatch_ = get_data(pins);
-            pins = release_pins(pins, M1 | IORQ);
+        case STEP_INT_T1L: step_ = STEP_INT_T2H; break; // T2H
+        case STEP_INT_T2H: step_ = STEP_INT_T2L; break; // T2L
+        case STEP_INT_T2L: step_ = STEP_INT_T3H; break; // TW1H
+        case STEP_INT_T3H: // TW1L
+            pins = assert_pins(pins, IORQ);
             step_ = STEP_INT_T3L;
             break;
-        case STEP_INT_T3L: step_ = STEP_INT_T4H; break;
-        case STEP_INT_T4H:
-            // R increments on int-ack exactly as it does on any M1.
-            pins = refresh(pins);
+        case STEP_INT_T3L: step_ = STEP_INT_T4H; break; // TW2H
+        case STEP_INT_T4H: // TW2L
+            if (asserted(pins, WAIT)) { break; }
             step_ = STEP_INT_T4L;
             break;
-        case STEP_INT_T4L: pins = assert_pins(pins, MREQ); step_ = STEP_INT_T5H; break;
-        case STEP_INT_T5H: step_ = STEP_INT_T5L; break;
-        case STEP_INT_T5L:
+        case STEP_INT_T4L: // T3H
+            dlatch_ = get_data(pins);
+            pins = release_pins(pins, M1 | IORQ);
+            // R increments on the acknowledge as on any M1.
+            pins = refresh(pins);
+            step_ = STEP_INT_T5H;
+            break;
+        case STEP_INT_T5H: pins = assert_pins(pins, MREQ); step_ = STEP_INT_T5L; break; // T3L
+        case STEP_INT_T5L: step_ = STEP_INT_T6H; break; // T4H
+        case STEP_INT_T6H: // T4L
             pins = release_pins(pins, MREQ);
             rfsh_release_ = true;
-            step_ = STEP_INT_T6H;
+            if (regs.im == 0) {
+                // The acknowledged byte is the instruction: from here on it is
+                // what an opcode fetch of it would have left -- the opcode
+                // latched, PC not moved past it, and the opcode's own steps
+                // next. Single-byte instructions only: a prefix byte would go
+                // on to fetch its second byte from memory at PC, which is not
+                // what a device supplying a multi-byte instruction does.
+                opcode_ = dlatch_;
+                addr_ = regs.hl();
+                prefix_active_ = false;
+                step_ = opcode_;
+            } else {
+                step_ = STEP_INT_T6L;
+            }
             break;
-        case STEP_INT_T6H: step_ = STEP_INT_T6L; break;
-        case STEP_INT_T6L: step_ = STEP_INT_PUSH_HI_T1H; break;
+        case STEP_INT_T6L: step_ = STEP_INT_T7L; break; // T5H: internal
+        case STEP_INT_T7L: step_ = STEP_INT_PUSH_HI_T1H; break; // T5L
+
+        // ---- NMI: a dummy opcode fetch, 5 T-states -------------------------------
+        // begin_fetch() was T1H. The byte read at PC is not used.
+        case STEP_NMI_T1L:
+            pins = set_addr_assert(pins, get_addr(pins), MREQ | RD);
+            step_ = STEP_NMI_T2H;
+            break;
+        case STEP_NMI_T2H: step_ = STEP_NMI_T2L; break;
+        case STEP_NMI_T2L:
+            if (asserted(pins, WAIT)) { break; }
+            step_ = STEP_NMI_T3H;
+            break;
+        case STEP_NMI_T3H:
+            pins = release_pins(pins, M1 | MREQ | RD);
+            pins = refresh(pins);
+            step_ = STEP_NMI_T3L;
+            break;
+        case STEP_NMI_T3L: pins = assert_pins(pins, MREQ); step_ = STEP_NMI_T4H; break;
+        case STEP_NMI_T4H: step_ = STEP_NMI_T4L; break;
+        case STEP_NMI_T4L:
+            pins = release_pins(pins, MREQ);
+            rfsh_release_ = true;
+            step_ = STEP_NMI_T5H;
+            break;
+        case STEP_NMI_T5H: step_ = STEP_NMI_T5L; break; // internal
+        case STEP_NMI_T5L: step_ = STEP_INT_PUSH_HI_T1H; break;
 
         case STEP_INT_PUSH_HI_T1H:
             pins = set_addr(pins, sp_pre_dec());
@@ -745,13 +825,15 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_INT_PUSH_LO_T2L:
             if (asserted(pins, WAIT)) { break; }
             pins = assert_pins(pins, WR);
-            if (regs.im == 2) {
-                // IM2: the pushed byte and I form the vector table address.
+            if (nmi_ack_) {
+                regs.wz = 0x0066;
+                regs.pc = 0x0066;
+            } else if (regs.im == 2) {
+                // IM2: the acknowledged byte and I form the vector table address.
                 regs.set_wzl(dlatch_);
                 regs.set_wzh(regs.i);
             } else {
-                // IM0/IM1 collapse: the Spectrum's floating bus returns 0xFF
-                // on int-ack, which decodes as RST 38h either way.
+                // IM 1. (IM 0 never comes here: it runs the acknowledged byte.)
                 regs.wz = 0x0038;
                 regs.pc = 0x0038;
             }
@@ -760,12 +842,20 @@ uint64_t Z80::clock(uint64_t pins) {
         case STEP_INT_PUSH_LO_T3H: step_ = STEP_INT_PUSH_LO_T3L; break;
         case STEP_INT_PUSH_LO_T3L:
             pins = release_pins(pins, MREQ | WR);
-            step_ = (regs.im == 2) ? uint16_t(STEP_INT_VEC_LO_T1H)
-                                   : uint16_t(STEP_INT_DONE_IM1_H);
+            step_ = (regs.im == 2 && !nmi_ack_) ? uint16_t(STEP_INT_VEC_LO_T1H)
+                                                : uint16_t(STEP_INT_DONE_IM1_H);
             break;
 
-        case STEP_INT_DONE_IM1_H: step_ = STEP_INT_DONE_IM1_L; break;
+        // IM 1 and the NMI: the half-clock after the last push is the next
+        // fetch's T1H, as after any instruction's last cycle.
+        case STEP_INT_DONE_IM1_H:
+            nmi_ack_ = false;
+            pins = begin_fetch(pins);
+            break;
+        // No longer reached since the acknowledge took its seventh T-state;
+        // kept so that the step numbers after it do not move.
         case STEP_INT_DONE_IM1_L:
+        case STEP_INT_VEC_HI_T4L:
             pins = begin_fetch(pins);
             break;
 
@@ -811,8 +901,7 @@ uint64_t Z80::clock(uint64_t pins) {
             step_ = STEP_INT_VEC_HI_T3L;
             break;
         case STEP_INT_VEC_HI_T3L: step_ = STEP_INT_VEC_HI_T4H; break;
-        case STEP_INT_VEC_HI_T4H: step_ = STEP_INT_VEC_HI_T4L; break;
-        case STEP_INT_VEC_HI_T4L:
+        case STEP_INT_VEC_HI_T4H: // the next fetch's T1H
             pins = begin_fetch(pins);
             break;
 
@@ -845,6 +934,9 @@ void Z80::save_state(State& s) const {
     s.hlx_idx = hlx_idx_;
     s.pins = pins_;
     s.rfsh_release = rfsh_release_;
+    s.nmi_level = nmi_level_;
+    s.nmi_pending = nmi_pending_;
+    s.nmi_ack = nmi_ack_;
 }
 
 void Z80::restore_state(const State& s) {
@@ -859,6 +951,9 @@ void Z80::restore_state(const State& s) {
     hlx_idx_ = s.hlx_idx;
     pins_ = s.pins;
     rfsh_release_ = s.rfsh_release;
+    nmi_level_ = s.nmi_level;
+    nmi_pending_ = s.nmi_pending;
+    nmi_ack_ = s.nmi_ack;
 }
 #endif
 

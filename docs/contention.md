@@ -129,6 +129,7 @@ gives every entry:
 | I/O, high byte not contended, even port | T2 | `N:1, C:3` |
 | I/O, high byte contended, odd port | T1, T2, TW, T3 | `C:1, C:1, C:1, C:1` |
 | I/O, high byte contended, even port | T1, then T2 | `C:1, C:3` |
+| Interrupt acknowledge (M1 with IORQ, PC on the bus) | T1, T2, TW, TW, by PC | not in the tables |
 
 ### 3.5 Worked examples
 
@@ -277,6 +278,7 @@ modelled.
 |---|---|---|
 | The 128K and I/O at `0xC000` | A port with high byte `0xC0`–`0xFF` is contended while an odd bank is paged at `0xC000`, as Fuse does | The 128K timing tests that exercise it |
 | Where a hold sits | In the first half of the T-state, the clock held high | Chris Smith's *The ZX Spectrum ULA* |
+| The interrupt acknowledge | Held by the rule, like any T-state without MREQ, when the interrupted code is in contended memory: PC is on the bus through T1, T2 and both wait states | A test that times an interrupt taken in contended code; none of the suites run here does |
 | The ULA's own port | Checked once, at T2 | Smith; the only rule that gives `C:1, C:3` |
 | Snow's detail | The bits from R, the double, and the 128K's bank table, from Weiv | His snow tests and the ULA128 test, compared with videos of real machines |
 

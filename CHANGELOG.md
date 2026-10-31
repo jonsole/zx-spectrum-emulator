@@ -7,6 +7,15 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The interrupt acknowledge as the datasheet draws it.** The Z80's
+  acknowledge is now an M1 cycle with PC on the bus and M1 down from T1, IORQ
+  from the first wait state, and the refresh in T3 and T4. Interrupts still
+  take 13 T-states in IM 1 and 19 in IM 2, but code interrupted in contended
+  memory can now be held during the acknowledge, by the same rule as any
+  other T-state. IM 0 runs the byte on the bus as an instruction (on a
+  Spectrum, 0xFF: RST 38h, as before), and the core takes an NMI, though no
+  Spectrum part drives one yet.
+
 - **Snow.** With I pointing at contended memory, an opcode fetch whose
   refresh crosses the ULA's first screen read makes it read that cell from an
   address with R in its low seven bits, and one crossing the gap before the

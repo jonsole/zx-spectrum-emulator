@@ -126,9 +126,12 @@ enum HandStep : uint16_t {
     STEP_DDFDCB_T15H, STEP_DDFDCB_T15L,
 
     // ---- Interrupt acknowledge -------------------------------------------
-    // IM0 and IM1 are deliberately collapsed: the Spectrum's floating bus
-    // returns 0xFF during int-ack, which decodes as RST 38h either way.
-    // IM0/IM1 = 13 T-states, IM2 = 19.
+    // An M1 cycle with two wait states, then IM 0 runs the acknowledged byte
+    // as an instruction (RST p: 13 T-states), IM 1 pushes PC and goes to
+    // 0x0038 (13), IM 2 reads its vector (19). The names run half a T-state
+    // ahead of the half-clocks they are: z80.cpp's acknowledge has the
+    // layout. STEP_INT_DONE_IM1_L and STEP_INT_VEC_HI_T4L are no longer
+    // reached, and kept so the numbers after them stay put.
     STEP_INT_T1H, STEP_INT_T1L,
     STEP_INT_T2H, STEP_INT_T2L,
     STEP_INT_T3H, STEP_INT_T3L,
@@ -151,6 +154,20 @@ enum HandStep : uint16_t {
     STEP_INT_VEC_HI_T2H, STEP_INT_VEC_HI_T2L,
     STEP_INT_VEC_HI_T3H, STEP_INT_VEC_HI_T3L,
     STEP_INT_VEC_HI_T4H, STEP_INT_VEC_HI_T4L,
+
+    // ---- added later: kept at the end so every step above keeps its
+    // number, which retro-spectrum's lockstep bench compares --------------
+    /// The acknowledge's seventh T-state's low half, before IM 1 and IM 2
+    /// push PC (see the acknowledge in z80.cpp for the whole layout).
+    STEP_INT_T7L,
+    /// NMI: a dummy opcode fetch of 5 T-states -- address PC, M1, MREQ, RD,
+    /// the byte ignored, refresh -- then the acknowledge's pushes to 0x0066.
+    /// begin_fetch() is its T1H.
+    STEP_NMI_T1L,
+    STEP_NMI_T2H, STEP_NMI_T2L,
+    STEP_NMI_T3H, STEP_NMI_T3L,
+    STEP_NMI_T4H, STEP_NMI_T4L,
+    STEP_NMI_T5H, STEP_NMI_T5L,
 };
 
 class Z80 {
@@ -202,6 +219,9 @@ public:
         uint8_t hlx_idx = 0;
         uint64_t pins = 0;
         bool rfsh_release = false;
+        bool nmi_level = false;
+        bool nmi_pending = false;
+        bool nmi_ack = false;
     };
     void save_state(State& s) const;
     void restore_state(const State& s);
@@ -246,6 +266,14 @@ private:
     /// Set where a refresh lets go of MREQ: RFSH goes at the start of the
     /// next half-clock, as on the chip, half a T-state after MREQ.
     bool rfsh_release_ = false;
+    /// The NMI pin's level as last seen, for its falling edge (asserted, in
+    /// this core's terms): NMI is edge-triggered.
+    bool nmi_level_ = false;
+    /// An NMI edge seen and not yet taken; taken at the next begin_fetch,
+    /// ahead of INT.
+    bool nmi_pending_ = false;
+    /// The acknowledge's pushes are an NMI's: PC goes to 0x0066.
+    bool nmi_ack_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
     /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean
