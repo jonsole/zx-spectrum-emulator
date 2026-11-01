@@ -179,6 +179,13 @@ that moment, in the screen bank shown.
 3, then T1, T2 and TW of the I/O cycle), so an `IN A,(0xFF)` fetched at 14328
 reads the first bitmap byte of the screen.
 
+**A held T3.** A port whose high byte is contended (`IN A,(0xFF)` with A =
+`0x40`, say) has its T3 checked too, and can be held there. The hold stretches
+T3's first half, and the CPU takes the byte on T3's falling edge, after it --
+so what counts is the T-state T3 ends in, not the one it began in. A T3 that
+begins at G + 0 is held 6 and ends at G + 6: it reads the second cell's
+attribute, not the `0xFF` of G + 0.
+
 **Using it.** A program with no interrupt to hand can poll the floating bus to
 find where the beam is: put a recognisable attribute where it wants to wait,
 and loop on `IN A,(0xFF)` until it comes back. Some commercial games do this

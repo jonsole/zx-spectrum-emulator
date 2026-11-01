@@ -7,6 +7,12 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **A held floating-bus read takes the byte after the hold.** An `IN` from a
+  free port with a contended high byte, whose T3 contention holds, now reads
+  what is on the bus when T3 ends, as the Z80 latches it, rather than what
+  was there before the hold: a T3 held from G + 0 reads the group's second
+  attribute instead of `0xFF`.
+
 - **A probe for hardware benches.** `Spectrum::probe` reports each
   half-clock as a lockstep bench needs it: the bus after the service, whether
   contention held the CPU, the ULA's counters, the dot as a colour index,

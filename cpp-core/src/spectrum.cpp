@@ -326,9 +326,19 @@ void Spectrum::clock() {
         }
         if (contention_hold_ > 0) {
             // The CPU's clock stays where it is: no half-state runs and the
-            // bus does not change, so nothing is serviced again. The trace
-            // still gets the half-clock, which is how a hold shows in it.
+            // CPU's pins do not change. The trace still gets the half-clock,
+            // which is how a hold shows in it.
             contention_hold_--;
+            if (contention_hold_ == 0 && asserted(pins_, IORQ) && asserted(pins_, RD)
+                && !asserted(pins_, M1)) {
+                // An I/O read held at T3 (or before it) has its first half
+                // stretched, and the CPU latches the byte on T3's falling
+                // edge -- after the hold, on the half-clock about to run. What
+                // is on the bus then is what a free port floats then, not what
+                // it floated before the hold, so the bus is answered again on
+                // the hold's last half-clock: T3L takes it from here.
+                service_bus(pins_);
+            }
             if (trace != nullptr) {
                 trace->record(*this, pins_);
             }

@@ -236,6 +236,23 @@ TEST(io_odd_port_contended_high_byte) {
     CHECK_EQ(tstates_at(*m, C48 - 7, r, {0xDB, 0xFF}), 23u);
 }
 
+TEST(a_held_t3_floats_what_is_on_the_bus_after_the_hold) {
+    // IN A,(0xFF) with A = 0x40: port 0x40FF, C:1 x 4. Fetched at 14335:
+    // fetch 14335-14338, operand 14339-14341. T1 at 14342 is group 0's G + 7,
+    // not held. T2 at 14343 is group 1's G + 0, held 6, to 14349; TW at
+    // 14350, G + 7. T3 at 14351 is group 2's G + 0, held 6: T3 runs at 14357,
+    // G + 6, where the CPU latches the byte. The bus floats group 2's second
+    // attribute there -- line 0, x = 40, 0x5805 -- and not the 0xFF of G + 0,
+    // where T3 began. 11 + 12 = 23.
+    auto m = machine();
+    const uint8_t attr = 0xAB;
+    m->write_memory(0x5805, &attr, 1);
+    Registers r;
+    r.a = 0x40;
+    CHECK_EQ(tstates_at(*m, C48, r, {0xDB, 0xFF}), 23u);
+    CHECK_EQ(m->registers().a, uint8_t(0xAB));
+}
+
 // ---- indexed instructions: the internal T-states after d --------------------
 
 /// Contended code, for the tests that need the instruction's own bytes, and so
