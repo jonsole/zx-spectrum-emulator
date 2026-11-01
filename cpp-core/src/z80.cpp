@@ -316,6 +316,13 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     nmi_pending_ = false;
     nmi_ack_ = false;
     im0_pc_hold_ = false;
+    // The priming fetch below is at the new PC, so the CPU runs from there
+    // whatever it was doing: a HALT it sat in is over. Left set, the latch
+    // made registers() report PC one too high and an interrupt's undoing of
+    // op_halt's decrement return one byte past the new PC -- or, with
+    // interrupts off, the snapshot never ran. Rewind's load_state keeps the
+    // saved latch on purpose; that is a different path.
+    halted = false;
     // One priming half-clock, whose memory request MUST be serviced -- step 0
     // is NOP, whose generated body is begin_fetch(), so this leaves the
     // pipeline at STEP_M1_T1L with a real opcode read in flight. Skipping the

@@ -273,6 +273,27 @@ TEST(nmi_leaves_halt_with_the_address_after_it) {
     CHECK_EQ(b->stacked(), uint16_t(0x8001));
 }
 
+TEST(registers_set_over_a_halt_run_from_their_pc) {
+    // A snapshot loaded, or registers written, while the CPU sits in a HALT:
+    // the new PC is fetched from, so the CPU is not halted any more. Left
+    // halted, it reported a PC one too high and the interrupt's undoing of
+    // HALT's decrement returned one byte past the new PC -- 0x8102 here.
+    auto b = std::make_unique<Bench>(start(1));
+    b->mem.bytes[CODE] = 0x76;
+    b->instruction(); // HALT
+    b->instruction(); // a halted NOP
+    CHECK(b->cpu.halted);
+    Registers r = start(1);
+    r.pc = CODE + 0x100; // NOPs
+    b->cpu.set_registers(r, b->mem);
+    b->pins = b->cpu.pins();
+    CHECK(!b->cpu.halted);
+    CHECK_EQ(b->cpu.registers().pc, uint16_t(CODE + 0x100));
+    b->int_line = true;
+    CHECK_EQ(b->instruction(), 4u + 13u); // the NOP at 0x8100, then IM 1
+    CHECK_EQ(b->stacked(), uint16_t(CODE + 0x101));
+}
+
 TEST(im0_call_reads_its_operand_at_the_unchanged_pc) {
     // CALL 1234h from the device: the acknowledge (6) is its fetch; the two
     // operand bytes come by ordinary memory reads at PC, which stays at

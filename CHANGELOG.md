@@ -7,6 +7,13 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **A snapshot loaded over a HALT runs from its own PC.** Setting the
+  registers -- a snapshot load, a register write from the debugger, the fast
+  tape loader -- left the CPU's halted latch as it was. A machine sitting in
+  a `HALT` then reported a PC one too high, and its next interrupt returned
+  one byte past the snapshot's PC; with interrupts off the snapshot never
+  ran. Setting the registers now ends the halt.
+
 - **A held floating-bus read takes the byte after the hold.** An `IN` from a
   free port with a contended high byte, whose T3 contention holds, now reads
   what is on the bus when T3 ends, as the Z80 latches it, rather than what
