@@ -159,6 +159,12 @@ room_data_end:
                     ; in templates.json's meta.movers.
                     DEFINE  LOOSE_WEIGHT
 
+                    ; ...and they are pushed Fairlight's way: something light
+                    ; takes the whole step and coasts on, something heavier
+                    ; needs leaning on for a few turns before it gives a little
+                    ; -- see object_shove and push.s.
+                    DEFINE  PUSH_COAST
+
 					INCLUDE "../engine/sprite.s"
 					INCLUDE "../engine/object.s"
 					INCLUDE "../engine/depth.s"
@@ -259,7 +265,7 @@ sprite_end:
 ; ...and carrying, which pages nothing in: bank 0 is in for the whole of play.
                     INCLUDE "carry.s"
                     IFDEF   PUSH_COAST
-                    INCLUDE "push.s"            ; Fairlight's push, on trial
+                    INCLUDE "push.s"            ; Fairlight's push
                     ENDIF
                     ALIGN   4
 room_page:

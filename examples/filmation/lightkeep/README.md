@@ -441,13 +441,18 @@ behaviour they mark by name, which is how the editor tells the two apart. The
 Checked in a 128K emulator, pushing room 10's table: at weight 1 it moved 2
 every turn, at 3 not at all; at what was weight 0, 3, 0, 3, 0.
 
-**Fairlight's push, on trial.** `python build.py --push-coast` builds with
-`PUSH_COAST` instead (`push.s`, and a branch of the engine's `object_shove`):
-a thing pushed takes the pusher's whole step and coasts on for 6 turns plus
-the pusher's weight less its own -- the knight weighs 2, so he moves anything
-up to 7, and something too heavy does not move at all. A thing pushed into
-another pushes that one the same way. The ordinary build is unchanged, and so
-are the other three games.
+**Fairlight's push, now the rule.** `lightkeep.s` defines `PUSH_COAST` as
+well (`push.s`, and a branch of the engine's `object_shove`), and it replaces
+the rule above. The knight weighs 2. Something no heavier takes his whole step
+and coasts on for 6 turns plus his weight less its own, whether he follows it
+or not. Something heavier does not coast: it gives only after a push for each
+unit it weighs over him, and one more, on turns one after another, and then
+goes his step less the difference, at least a unit -- weight 3 goes 2 every
+second turn, 4 one every third, 7 one every sixth. Anything over 7 does not
+move. A thing pushed into another pushes that one the same way. The other
+three games are unchanged.
+
+Checked in a 128K emulator by leaning on room 10's table at weights 1 to 7.
 
 Not done: ledge and stair artwork, a wireframe for invisible pieces in the room
 designer (the templates editor has one), and steps for anything but the knight's own walk. The movers still

@@ -273,12 +273,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Assemble the Filmation engine.")
     parser.add_argument("--debug-room", action="store_true",
                         help="print the room number in the top-left corner (DEBUG_ROOM)")
-    parser.add_argument("--push-coast", action="store_true",
-                        help="push Fairlight's way: things coast on by weight (PUSH_COAST, push.s)")
     args = parser.parse_args()
     defines = ["DEBUG_ROOM"] if args.debug_room else []
-    if args.push_coast:
-        defines.append("PUSH_COAST")
 
     sjasmplus = find_sjasmplus()
     generate_sprite_data()

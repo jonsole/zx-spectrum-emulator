@@ -674,6 +674,13 @@ collide_gather:		ld		a,TURN_PER_GATHER
 ; and adds 6, so he pushes anything up to 7, and that coasts a turn. A
 ; character run into is shoved as before.
 ;
+; And heavier than its pusher by C, it does not coast: it moves only on the
+; turn it gives, and it gives only after C + 1 pushes on turns one after
+; another, going the pusher's step less C, never less than a unit. The knight
+; walks 3: weight 3 goes 2 every second turn, 4 goes 1 every third, and so on
+; to 7, 1 every sixth. The pushes so far and whether one came this turn share
+; MOVE_STATE with the coast: see push.s.
+;
 ; In:  IX -> us
 ;      IY -> what we ran into
 ;      collide_mask = which axis
@@ -720,9 +727,15 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 				ENDIF
 
 				IFDEF	PUSH_COAST
+					; BC is object_clamp's, and kept.
+.coasts:			push	bc
+					call	.coast
+					pop		bc
+					ret
+
 					; How long it coasts: our weight and PUSH_COAST_TURNS, less
 					; its. Nothing, or less, and it is too heavy for us.
-.coasts:			ld		a,PUSH_WEIGHT		; a character or a monster
+.coast:				ld		a,PUSH_WEIGHT		; a character or a monster
 					bit		7,(ix+OBJ.FLAGS)
 					jr		nz,.weight
 					ld		a,(ix+OBJ.BEHAVIOUR)
@@ -730,29 +743,90 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 					ld		a,PUSH_WEIGHT
 					jr		c,.weight
 					ld		a,(ix+OBJ.DATA_1)	; loose: what it weighs
-.weight:			add		a,PUSH_COAST_TURNS
+.weight:			ld		c,a			; C = our weight
+					add		a,PUSH_COAST_TURNS
 					sub		(iy+OBJ.DATA_1)
 					ret		c			; too heavy
 					ret		z
-					ld		(iy+OBJ.MOVE_STATE),a
+					cp		PUSH_COASTING + 1
+					jr		c,.long
+					ld		a,PUSH_COASTING		; as long as the count holds
+.long:				ld		b,a			; B = how long it coasts
 
-					; Our whole step along the axis we met it on, and none along
+					; How much heavier than us it is, or nothing: C.
+					ld		a,(iy+OBJ.DATA_1)
+					sub		c
+					jr		nc,.heavier
+					xor		a
+.heavier:			ld		c,a
+					or		a
+					jr		z,.light
+					ld		b,1			; heavier: it goes as far as it is shoved
+.light:
+
+					; Lying still, something heavier takes leaning on before it
+					; gives: C + 1 pushes, a turn apiece and none missed --
+					; mover_coast starts the count again on a turn nobody
+					; pushed. Already coasting, a push keeps it going.
+					ld		a,(iy+OBJ.MOVE_STATE)
+					and		PUSH_COASTING
+					jr		nz,.goes
+					; One push a turn: object_clamp gives our step back a unit
+					; at a time and tries it again here each time, which would
+					; count two or three.
+					bit		7,(iy+OBJ.MOVE_STATE)		; PUSH_PUSHED
+					ret		nz
+					ld		a,(iy+OBJ.MOVE_STATE)
+					add		a,PUSH_EFFORT		; one more push
+					or		PUSH_PUSHED		; ...and this turn
+					ld		(iy+OBJ.MOVE_STATE),a
+					rrca
+					rrca
+					rrca
+					rrca
+					and		PUSH_EFFORT_MASK >> 4	; the pushes so far
+					cp		c
+					ret		c			; not yet: pushes > C
+					ret		z
+
+					; It goes, and coasts.
+.goes:				ld		(iy+OBJ.MOVE_STATE),b
+
+					; Our step along the axis we met it on, less how much
+					; heavier it is -- but always a unit -- and none along
 					; the other: a push sends it the way we were going, not on
-					; whatever way it was coasting before.
-					; DATA_2 keeps the whole step for the mover to give back each
-					; turn, whatever the clamp cuts it to.
+					; whatever way it was coasting before. DATA_2 keeps the step
+					; for the mover to give back each turn, whatever the clamp
+					; cuts it to.
 					ld		a,(collide_mask)
 					cp		COLLIDE_U
 					jr		nz,.coast_v
 					ld		a,(ix+OBJ.DU)
+					call	.drag
 					ld		(iy+OBJ.DU),a
 					ld		(iy+OBJ.DATA_2),a
 					ld		(iy+OBJ.DV),0
 					ret
 .coast_v:			ld		a,(ix+OBJ.DV)
+					call	.drag
 					ld		(iy+OBJ.DV),a
 					ld		(iy+OBJ.DATA_2),a
 					ld		(iy+OBJ.DU),0
+					ret
+
+					; The step in A, signed, C nearer nothing, but at least a unit.
+.drag:				or		a
+					ret		z
+					jp		m,.drag_back
+					sub		c
+					jr		z,.drag_one
+					ret		p
+.drag_one:			ld		a,1
+					ret
+.drag_back:			add		a,c
+					jr		z,.drag_minus
+					ret		m
+.drag_minus:		ld		a,-1
 					ret
 				ENDIF
 

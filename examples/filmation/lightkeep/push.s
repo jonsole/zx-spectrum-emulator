@@ -1,8 +1,7 @@
 ; ---------------------------------------------------------------------------
-; Pushing, Fairlight's way -- built only with PUSH_COAST (build.py
-; --push-coast), to try against Lightkeep's own rule, which is LOOSE_WEIGHT's
-; alone: a push moves a thing the pusher's step less its weight, and only while
-; the knight leans on it.
+; Pushing, Fairlight's way: PUSH_COAST, which lightkeep.s defines. Without it
+; the rule is LOOSE_WEIGHT's alone: a push moves a thing the pusher's step less
+; its weight, and only while the knight leans on it.
 ;
 ; Fairlight's knight weighs 2. He pushes anything no more than 5 heavier, and
 ; it goes his whole step a turn, coasting on for 6 turns plus his weight less
@@ -10,6 +9,12 @@
 ; not. engine/object.s's object_shove does the pushing and leaves the count in
 ; MOVE_STATE; this spends it. A thing pushed into another pushes that one the
 ; same way, by its own weight.
+;
+; Something heavier than its pusher is ours, not Fairlight's: it does not
+; coast, and gives only after a push for each unit of weight it has over the
+; pusher's, and one more, on turns one after another -- then goes the pusher's
+; step less that difference, at least a unit. To the knight, weight 3 goes 2
+; every second turn, 4 one every third, and 7 one every sixth.
 ;
 ; Every loose thing -- the block, the table and the chest -- is pushed alike,
 ; where Knight Lore's three let go of a shove each its own way (movers.s).
@@ -20,6 +25,15 @@
 
 PUSH_WEIGHT         EQU     2           ; the knight's, and a monster's: Fairlight's +16 of 18
 PUSH_COAST_TURNS    EQU     6           ; a thing as heavy as its pusher coasts this long
+
+; MOVE_STATE, shared: the turns left to coast in its low four bits, the pushes
+; leant on it so far, lying still, in the next three, and whether one came this
+; turn in the top. object_shove counts the pushes; mover_coast forgets them the
+; first turn nobody pushes.
+PUSH_COASTING       EQU     $0F
+PUSH_EFFORT         EQU     $10
+PUSH_EFFORT_MASK    EQU     $70
+PUSH_PUSHED         EQU     $80
 
 
 ; A loose thing's turn. Coasting, it keeps the step it was pushed with and
@@ -43,7 +57,7 @@ PUSH_COAST_TURNS    EQU     6           ; a thing as heavy as its pusher coasts 
 ; Out: nothing
 ; Corrupts: everything but IX
 mover_coast:        ld      a,(ix+OBJ.MOVE_STATE)
-                    or      a
+                    and     PUSH_COASTING
                     jr      z,.lying
                     dec     (ix+OBJ.MOVE_STATE)
                     ld      b,(ix+OBJ.DATA_2)   ; the whole step
@@ -64,5 +78,11 @@ mover_coast:        ld      a,(ix+OBJ.MOVE_STATE)
                     ret
 
 .over:              ld      (ix+OBJ.MOVE_STATE),a   ; A is 0: lying, from now on
-.lying:             call    mover_halt
+                    ; Lying still. Leant on this turn, the pushes so far count
+                    ; on; not, and they are forgotten.
+.lying:             bit     7,(ix+OBJ.MOVE_STATE)       ; PUSH_PUSHED
+                    res     7,(ix+OBJ.MOVE_STATE)
+                    jr      nz,.leant
+                    ld      (ix+OBJ.MOVE_STATE),0
+.leant:             call    mover_halt
                     jp      mover_move          ; DZ is left to gravity
