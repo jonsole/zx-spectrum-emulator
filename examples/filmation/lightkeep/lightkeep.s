@@ -258,6 +258,9 @@ sprite_end:
                     INCLUDE "../engine/tune.s"  ; what plays them
 ; ...and carrying, which pages nothing in: bank 0 is in for the whole of play.
                     INCLUDE "carry.s"
+                    IFDEF   PUSH_COAST
+                    INCLUDE "push.s"            ; Fairlight's push, on trial
+                    ENDIF
                     ALIGN   4
 room_page:
                     ASSERT  room_page + ROOM_PAGE_MOST <= $10000

@@ -127,9 +127,15 @@ mover_tbl:			DW		mover_hopper_claim	; MOVE_BALL: engine/movers.s
 					DW		mover_flame		; MOVE_FLAME
 					DW		mover_sinks		; MOVE_DROPPING: engine/movers.s
 					DW		mover_collapsing	; MOVE_COLLAPSING
+				IFDEF	PUSH_COAST
+					DW		mover_coast		; MOVE_CARRIED: all three pushed alike -- push.s
+					DW		mover_coast		; MOVE_PUSHED
+					DW		mover_coast		; MOVE_SLIDING
+				ELSE
 					DW		mover_falls_noisy	; MOVE_CARRIED: engine/movers.s
 					DW		mover_shoved		; MOVE_PUSHED: engine/movers.s
 					DW		mover_move		; MOVE_SLIDING: it never clears its step -- see MOVE_LOOSE
+				ENDIF
 					ASSERT	($ - mover_tbl) / 2 == MOVE_SLIDING - MOVE_BALL + 1
 
 

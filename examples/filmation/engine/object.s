@@ -663,6 +663,17 @@ collide_gather:		ld		a,TURN_PER_GATHER
 ; read here: only a loose object or a character is shoved, and a character's
 ; is nothing.
 ;
+; A game built with PUSH_COAST as well pushes a loose object Fairlight's way
+; instead, BLOCKED_MOVE at $FA9C: whatever is pushed takes the pusher's whole
+; step, along the one axis, and coasts on with it for PUSH_COAST_TURNS plus
+; the pusher's weight less its own, in its MOVE_STATE, and the step in its
+; DATA_2 -- the game's own mover spends the count, and gives the step back each
+; turn. Heavier than that allows, it is not pushed at all. The
+; pusher's weight is its DATA_1 when it is loose itself, and PUSH_WEIGHT when
+; it is anything else: the knight, or a monster. Fairlight's knight weighs 2
+; and adds 6, so he pushes anything up to 7, and that coasts a turn. A
+; character run into is shoved as before.
+;
 ; In:  IX -> us
 ;      IY -> what we ran into
 ;      collide_mask = which axis
@@ -673,6 +684,9 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 					ld		a,(iy+OBJ.BEHAVIOUR)	; means both carried and pushed, and it
 					cp		BEHAVIOUR_LOOSE	; is on the block, the chest, the table
 					ret		c			; and the knight alike
+				IFDEF	PUSH_COAST
+					jr		.coasts
+				ENDIF
 .shoveable:			ld		a,(collide_mask)
 					cp		COLLIDE_U
 					jr		nz,.along_v
@@ -702,6 +716,43 @@ object_shove:		bit		7,(iy+OBJ.FLAGS)	; the same test object_carry makes, the
 .backwards:			add		a,(iy+OBJ.DATA_1)
 					ret		m
 					xor		a
+					ret
+				ENDIF
+
+				IFDEF	PUSH_COAST
+					; How long it coasts: our weight and PUSH_COAST_TURNS, less
+					; its. Nothing, or less, and it is too heavy for us.
+.coasts:			ld		a,PUSH_WEIGHT		; a character or a monster
+					bit		7,(ix+OBJ.FLAGS)
+					jr		nz,.weight
+					ld		a,(ix+OBJ.BEHAVIOUR)
+					cp		BEHAVIOUR_LOOSE
+					ld		a,PUSH_WEIGHT
+					jr		c,.weight
+					ld		a,(ix+OBJ.DATA_1)	; loose: what it weighs
+.weight:			add		a,PUSH_COAST_TURNS
+					sub		(iy+OBJ.DATA_1)
+					ret		c			; too heavy
+					ret		z
+					ld		(iy+OBJ.MOVE_STATE),a
+
+					; Our whole step along the axis we met it on, and none along
+					; the other: a push sends it the way we were going, not on
+					; whatever way it was coasting before.
+					; DATA_2 keeps the whole step for the mover to give back each
+					; turn, whatever the clamp cuts it to.
+					ld		a,(collide_mask)
+					cp		COLLIDE_U
+					jr		nz,.coast_v
+					ld		a,(ix+OBJ.DU)
+					ld		(iy+OBJ.DU),a
+					ld		(iy+OBJ.DATA_2),a
+					ld		(iy+OBJ.DV),0
+					ret
+.coast_v:			ld		a,(ix+OBJ.DV)
+					ld		(iy+OBJ.DV),a
+					ld		(iy+OBJ.DATA_2),a
+					ld		(iy+OBJ.DU),0
 					ret
 				ENDIF
 
