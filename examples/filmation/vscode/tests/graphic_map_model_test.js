@@ -592,8 +592,8 @@ test('every graphic the original games came with is fixed', () => {
     .filter((r) => r.name !== null && !r.fixed).map((r) => r.name);
   assert.deepStrictEqual(loose.sort(), ['castle.barrel.1', 'castle.bed.1', 'castle.bench.1',
     'castle.bridge.deck', 'castle.bridge.rail', 'castle.chair.1', 'castle.parapet.1',
-    'castle.shelf.1', 'doors.DoorSide1.0', 'doors.DoorSide1.1', 'doors.DoorTop1.0', 'solid',
-    'stair.tread']);
+    'castle.shelf.1', 'doors.DoorSide1.0', 'doors.DoorSide1.1', 'doors.DoorTop1.0',
+    'furniture.Table1.0', 'furniture.Table1.0_2', 'solid', 'stair.tread']);
 });
 
 // --- the real files -------------------------------------------------------

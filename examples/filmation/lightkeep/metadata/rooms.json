@@ -229,6 +229,9 @@
      ] },
      { "template": "object_table", "positions": [
       { "u": 6, "v": 1, "z": 0 }
+     ] },
+     { "template": "object_table_big", "positions": [
+      { "u": 5, "v": 6, "z": 0 }
      ] }
     ]
   },

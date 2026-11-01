@@ -49,7 +49,8 @@
    "object_gate_ud_2": { "behaviour": "MOVE_GATE" },
    "object_ball_ud_x": { "behaviour": "MOVE_BALL" },
    "object_castle_torch": { "behaviour": "MOVE_FLAME" },
-   "object_castle_torch_m": { "behaviour": "MOVE_FLAME" }
+   "object_castle_torch_m": { "behaviour": "MOVE_FLAME" },
+   "object_table_big": { "behaviour": "MOVE_PUSHED", "weight": 7 }
   }
  },
 
@@ -631,6 +632,14 @@
    { "graphic": "castle.bridge.rail",
      "flags": { "mirrored": true, "passable": false, "rest": 16 },
      "offsets": { "halfU": false, "halfV": false, "raiseZ": 4 } }
+  ],
+  "object_table_big": [
+   { "graphic": "furniture.Table1.0",
+     "flags": { "mirrored": false, "passable": false, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } },
+   { "graphic": "furniture.Table1.0_2",
+     "flags": { "mirrored": false, "passable": true, "rest": 16 },
+     "offsets": { "halfU": false, "halfV": false, "raiseZ": 0 } }
   ]
  }
 }
