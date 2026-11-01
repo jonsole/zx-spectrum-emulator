@@ -183,6 +183,37 @@ TEST(io_ula_port_uncontended_high_byte) {
     CHECK_EQ(tstates_at(*m, C48 - 7, r, {0xD3, 0xFE}), 16u);
 }
 
+TEST(a_held_border_write_lands_after_the_hold) {
+    // OUT (0xFE),A with A = 0x02, fetched at 14327: fetch 14327-14330,
+    // operand 14331-14333, I/O T1 at 14334, T2 at 14335 -- the ULA port's
+    // check at G + 0, held 6. T2H runs at half-clock 2 x 14335 with WR
+    // already down, but the ULA's bus is carrying the screen fetch, so the
+    // border must not change there. The check on the next (odd) half-clock
+    // holds 6 T-states, 12 half-clocks; T2L runs on the 13th, and that is
+    // where the port takes the value: half-clock 2 x 14335 + 13.
+    auto m = machine();
+    const uint32_t m1 = C48 - 8;
+    while (m->ula.frame_hc() != m1 * HC_PER_TSTATE) {
+        m->clock();
+    }
+    const uint8_t code[2] = {0xD3, 0xFE};
+    m->write_memory(CODE, code, 2);
+    Registers r;
+    r.a = 0x02;
+    r.pc = CODE;
+    m->set_registers(r);
+    CHECK_EQ(m->ula.border, uint8_t(0));
+    uint32_t changed_at = 0;
+    for (int i = 0; i < 64 && changed_at == 0; i++) {
+        const uint32_t hc = m->ula.frame_hc();
+        m->clock();
+        if (m->ula.border == 2) {
+            changed_at = hc;
+        }
+    }
+    CHECK_EQ(changed_at, C48 * HC_PER_TSTATE + 13);
+}
+
 TEST(io_ula_port_contended_high_byte) {
     // IN A,(0xFE) with A = 0x40: port 0x40FE, C:1, C:3. T1 at 14335 is an
     // address check at G + 0, held 6, to 14341. T2 at 14342 is the ULA's

@@ -355,7 +355,7 @@ void Spectrum::clock() {
         trace->record(*this, pins_);
     }
 
-    service_bus();
+    service_bus(pins_before);
 
     // The half-clock is over: the ULA moves to the next one. Last, so that
     // everything above -- the trace especially -- sees frame_hc/tstate/frame
@@ -426,7 +426,7 @@ void Spectrum::note_watch(uint16_t addr, uint8_t old_value, uint8_t new_value, b
     watch_hit.bank = memory.bank_at(addr);
 }
 
-void Spectrum::service_bus() {
+void Spectrum::service_bus(uint64_t pins_before) {
     uint16_t addr = get_addr(pins_);
 
     if (asserted(pins_, MREQ)) {
@@ -514,7 +514,16 @@ void Spectrum::service_bus() {
         pins_ = set_data(pins_, value);
     } else if (asserted(pins_, WR)) {
         const uint8_t value = get_data(pins_);
-        if ((addr & 1) == 0) {
+        // The ULA takes the write from its own data bus, which the lower
+        // RAM shares and which reaches the CPU's only through the isolating
+        // resistors. While the ULA fetches the screen that bus carries screen
+        // bytes, not the CPU's -- which is why an I/O cycle to it is held at
+        // all, until the fetch is over. So the port latches nothing at T2H,
+        // the first half-clock with WR down, which comes before the T2 check
+        // and any hold; it latches from T2L, after them. Fuse and the ZX-Uno
+        // core latch at T2H, the Next's core after the hold, as here.
+        const bool ula_write = (addr & 1) == 0 && asserted(pins_before, WR);
+        if (ula_write) {
             ula.border = uint8_t(value & 0x07);
             // Bits 3 (MIC) and 4 (speaker) drive the beeper. See
             // Beeper::write_port_fe for why this is a latch and not an edge.

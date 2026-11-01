@@ -328,8 +328,10 @@ private:
     /// Kept out of line so the unprofiled loop stays exactly what it was.
     void clock_profiled(uint16_t pc_before, uint16_t sp_before, bool is_call);
 
-    /// Decodes MREQ/IORQ and services memory or I/O.
-    void service_bus();
+    /// Decodes MREQ/IORQ and services memory or I/O. pins_before is the bus
+    /// as it was before this half-clock's CPU half, which tells the first
+    /// half-clock of a cycle from the ones after it.
+    void service_bus(uint64_t pins_before);
 
     /// True when the bytes at LD_BYTES really are the stock ROM's loader.
     /// Without this check any program that happened to execute at 0x0556 --

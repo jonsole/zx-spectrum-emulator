@@ -7,6 +7,12 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **A held border write lands after the hold.** An `OUT` to the ULA's port
+  now changes the border, MIC and speaker in the second half of T2, after any
+  contention hold, rather than as WR goes down before it: until the hold
+  ends the ULA's data bus carries screen bytes, not the CPU's. Every border
+  change moves half a T-state later, and a held one up to six T-states.
+
 - **The interrupt acknowledge as the datasheet draws it.** The Z80's
   acknowledge is now an M1 cycle with PC on the bus and M1 down from T1, IORQ
   from the first wait state, and the refresh in T3 and T4. Interrupts still

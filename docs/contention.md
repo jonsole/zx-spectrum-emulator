@@ -241,6 +241,10 @@ modelled.
   spots each refresh for snow; `Ula::floating_bus` answers free ports and
   `Ula::snow` and `Ula::double_read` change the bytes of the group being
   drawn. The Z80 core knows about none of it.
+- **Port writes to the ULA** -- the border, MIC and speaker -- take effect
+  in the second half of T2, after the check and any hold, half a T-state
+  after WR goes down: until the hold ends, the ULA's data bus carries the
+  screen and not the CPU's byte.
 - **Tests.** `contention_tests` and `floating_bus` check every worked number
   on this page, each worked out from the rules here, not taken from the code.
   The public timing tests ([timing-suites.md](timing-suites.md)) check the
@@ -280,6 +284,7 @@ modelled.
 | Where a hold sits | In the first half of the T-state, the clock held high | Chris Smith's *The ZX Spectrum ULA* |
 | The interrupt acknowledge | Held by the rule, like any T-state without MREQ, when the interrupted code is in contended memory: PC is on the bus through T1, T2 and both wait states | A test that times an interrupt taken in contended code; none of the suites run here does |
 | The ULA's own port | Checked once, at T2 | Smith; the only rule that gives `C:1, C:3` |
+| A held border `OUT` | The port takes the value at T2's second half, after the check and any hold, not at its first half with WR already down. The ULA reads the write from its own data bus, which carries screen bytes until the hold ends -- the reason the cycle is held at all. The Next's core does the same; Fuse and the ZX-Uno's ULA latch at the start of the hold | How the ULA latches port `0xFE` in Smith; or a border-timing test on a real 48K |
 | Snow's detail | The bits from R, the double, and the 128K's bank table, from Weiv | His snow tests and the ULA128 test, compared with videos of real machines |
 
 ## 8. Sources
