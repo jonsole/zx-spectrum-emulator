@@ -19,6 +19,9 @@
 ; Every loose thing -- the block, the table and the chest -- is pushed alike,
 ; where Knight Lore's three let go of a shove each its own way (movers.s).
 ;
+; And a thing drawn with more than one sprite moves as one: every record its
+; template made goes by the step the first was given -- see mover_move_all.
+;
 ; This is in bank 0 with carrying: it pages nothing in, and bank 2 is kept for
 ; code that has to.
 ; ---------------------------------------------------------------------------
@@ -70,7 +73,7 @@ mover_coast:        ld      a,(ix+OBJ.MOVE_STATE)
                     or      a
                     jr      z,.over
                     ld      (ix+OBJ.DV),b
-.move:              call    mover_move
+.move:              call    mover_move_all
                     ld      a,(ix+OBJ.DU)       ; what the clamp left of the step
                     or      (ix+OBJ.DV)
                     jp      nz,shoved_sound
@@ -84,5 +87,91 @@ mover_coast:        ld      a,(ix+OBJ.MOVE_STATE)
                     res     7,(ix+OBJ.MOVE_STATE)
                     jr      nz,.leant
                     ld      (ix+OBJ.MOVE_STATE),0
-.leant:             call    mover_halt
-                    jp      mover_move          ; DZ is left to gravity
+.leant:             call    mover_halt          ; DZ is left to gravity
+                    ; NB: falls through
+
+
+; Move a loose thing by the step the clamp leaves its record -- and, when its
+; template drew it with more than one sprite, every other record of it by the
+; same step, so that a table too wide for one sprite goes as one table. Only
+; the first record is ever pushed, clamped or given a turn: the others come
+; straight after it in the pool, as a soldier's legs do, and are made passable
+; in the template so that nothing stops on them.
+;
+; How many records it has is its things_here entry's: every loose template is
+; a thing (rooms_source.py's kept_templates), and room_things_place counted
+; them when it placed it. That is asked only when there is a step to take, so
+; a thing lying still costs what it did.
+;
+; In:  IX -> the record, with DU, DV and DZ set; mover_ix names it too
+; Out: nothing
+; Corrupts: everything but IX
+mover_move_all:     call    mover_clamp
+                    ld      a,(ix+OBJ.DU)
+                    or      (ix+OBJ.DV)
+                    or      (ix+OBJ.DZ)
+                    ret     z                   ; the room took the whole step away
+                    call    thing_records
+                    djnz    .several
+                    jp      mover_paint         ; one sprite: as any mover
+
+.several:           inc     b                   ; B = all of them again
+                    call    region_reset
+                    push    bc
+.was:               push    bc                  ; where each one was
+                    call    region_add
+                    ld      bc,ROOM_STRIDE
+                    add     ix,bc
+                    pop     bc
+                    djnz    .was
+                    pop     bc
+                    ld      ix,(mover_ix)
+
+                    ld      d,(ix+OBJ.DU)       ; the first's step, for all
+                    ld      e,(ix+OBJ.DV)
+                    ld      a,(ix+OBJ.DZ)
+.each:              push    bc
+                    push    de
+                    push    af
+                    call    depth_step          ; each re-sorted against the run
+                    call    room_adjust
+                    call    object_place
+                    call    region_add          ; and where it is now
+                    pop     af
+                    pop     de
+                    ld      bc,ROOM_STRIDE
+                    add     ix,bc
+                    pop     bc
+                    djnz    .each
+                    call    redraw_defer
+                    ld      ix,(mover_ix)       ; the draw is free to corrupt it
+                    ret
+
+
+; How many records the thing whose first record is IX has: its things_here
+; entry's count, or one if it has none.
+;
+; In:  IX -> the record
+; Out: B = how many
+; Corrupts: AF, C, DE, HL, IY
+thing_records:      ld      b,1
+                    ld      a,(things_here_count)
+                    or      a
+                    ret     z
+                    ld      c,a
+                    push    ix
+                    pop     hl
+                    ld      iy,things_here
+                    ld      de,HERE_STRIDE
+.look:              ld      a,(iy+HERE_RECORD)
+                    cp      l
+                    jr      nz,.next
+                    ld      a,(iy+HERE_RECORD+1)
+                    cp      h
+                    jr      nz,.next
+                    ld      b,(iy+HERE_COUNT)
+                    ret
+.next:              add     iy,de
+                    dec     c
+                    jr      nz,.look
+                    ret
