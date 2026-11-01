@@ -132,6 +132,10 @@ void Ula::clock(uint64_t& pins, const uint8_t* screen) {
             // separate half-clocks of one byte each and only the count
             // changes.
             fetch_count_ = 4;
+            fetch_addrs_[0] = first;
+            fetch_addrs_[1] = first_attr;
+            fetch_addrs_[2] = second;
+            fetch_addrs_[3] = second_attr;
             fetch_addr_ = first;
             fetch_data_ = pixel0_;
         }
@@ -247,6 +251,8 @@ void Ula::double_read() {
 
 void Ula::emit_pixel_at(uint32_t dot) {
     if (dot >= VISIBLE_DOTS) {
+        dot_kind_ = DotKind::Retrace;
+        dot_colour_ = 0;
         return; // horizontal retrace -- nothing rendered
     }
 
@@ -271,8 +277,12 @@ void Ula::emit_pixel_at(uint32_t dot) {
         }
         bool lit = (bits & (0x80 >> bit)) != 0;
         rgb = colour(lit ? ink : paper, bright);
+        dot_kind_ = DotKind::Paper;
+        dot_colour_ = uint8_t((lit ? ink : paper) | (bright ? 0x08 : 0));
     } else {
         rgb = colour(uint8_t(border_latch_ & 0x07), false);
+        dot_kind_ = DotKind::Border;
+        dot_colour_ = uint8_t(border_latch_ & 0x07);
     }
 
     size_t idx = (size_t(line_) * FULL_WIDTH + dot) * 3;

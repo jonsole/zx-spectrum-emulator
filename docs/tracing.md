@@ -189,6 +189,30 @@ Two things to know before reading one closely:
   contended access placed half a T-state from where the hardware puts it is
   simply the wrong answer, so the two are kept in step.
 
+## A probe for hardware benches
+
+A trace is text, written to a file. A program that runs the machine itself --
+retro-spectrum's lockstep bench, which runs the FPGA's RTL beside it half-clock
+by half-clock -- can instead set `Spectrum::probe` to a `BusProbe`
+([spectrum.h](../cpp-core/src/spectrum.h)) and read it after every `clock()`:
+
+* the bus as it is after the half-clock's service, a read's data included,
+  and INT as the ULA drove it;
+* whether the CPU's clock ran, or contention held it;
+* the ULA's counters for the half-clock just run (the frame's half-clock, and
+  the canvas's line and dot, which lead it by 48 dots);
+* the dot drawn, as a colour index (bits 0-2 the colour, bit 3 bright, flash
+  applied) and whether it was paper, border or retrace;
+* the border latch, and the last byte written to the ULA's port (MIC and
+  speaker are its bits 3 and 4);
+* a group fetch's four bytes and their addresses, on the half-clock it happens;
+* a snow or double read, and the R it used.
+
+It costs one pointer test a half-clock while unset, the way the trace does. The
+half-clock a reset or snapshot load gives the ULA while priming the CPU is not
+reported -- it runs outside `clock()` -- so a bench copies the starting phase
+from `Ula::frame_hc()` after the load. No server or MCP tool exposes it.
+
 ## Viewing a trace
 
 `tools/trace_viewer.html` is a self-contained page — no build step, no

@@ -211,6 +211,9 @@ constexpr uint16_t attr_addr(uint16_t x, uint16_t y) {
     return uint16_t(ATTR_BASE + (y >> 3) * 32 + (x >> 3));
 }
 
+/// What one half-clock's dot was: off the picture, border or paper.
+enum class DotKind : uint8_t { Retrace = 0, Border = 1, Paper = 2 };
+
 class Ula {
 public:
     /// Border colour as last written to port 0xFE (bits 0-2).
@@ -272,6 +275,23 @@ public:
     uint32_t fetch_count() const { return fetch_count_; }
     uint16_t fetch_addr() const { return fetch_addr_; }
     uint8_t fetch_data() const { return fetch_data_; }
+    /// All four bytes of the last group fetch, in the order the hardware
+    /// reads them -- bitmap, attribute, bitmap, attribute -- with their CPU
+    /// addresses. Only this half-clock's while fetch_count() is 4.
+    uint16_t fetch_addr_at(uint32_t i) const { return fetch_addrs_[i]; }
+    uint8_t fetch_data_at(uint32_t i) const {
+        const uint8_t bytes[4] = {pixel0_, attr0_, pixel1_, attr1_};
+        return bytes[i];
+    }
+
+    /// The dot drawn this half-clock: a colour index, bits 0-2 the colour and
+    /// bit 3 bright, with flash already applied, and whether it was border,
+    /// paper or retrace (no dot, index 0). Kept because the RGB picture cannot
+    /// tell black from bright black. A snow redraw leaves the current dot's.
+    uint8_t dot_colour() const { return dot_colour_; }
+    DotKind dot_kind() const { return dot_kind_; }
+    /// The border colour the 8-dot latch holds, which is what the border shows.
+    uint8_t border_latch() const { return border_latch_; }
 
     /// What the ULA is putting on the data bus THIS half-clock -- the
     /// "floating bus".
@@ -515,6 +535,11 @@ private:
     // Bytes for the 16-pixel group currently being emitted.
     uint8_t pixel0_ = 0, attr0_ = 0, pixel1_ = 0, attr1_ = 0;
     uint8_t border_latch_ = 0;
+    /// The group fetch's four addresses; see fetch_addr_at. Like the dot
+    /// below, an output of the half-clock rather than state, so not in State.
+    uint16_t fetch_addrs_[4] = {};
+    uint8_t dot_colour_ = 0;
+    DotKind dot_kind_ = DotKind::Retrace;
 
     std::vector<uint8_t> framebuffer_;
     std::vector<uint8_t> last_frame_;

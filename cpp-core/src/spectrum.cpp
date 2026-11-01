@@ -332,6 +332,10 @@ void Spectrum::clock() {
             if (trace != nullptr) {
                 trace->record(*this, pins_);
             }
+            if (probe != nullptr) {
+                probe->snow = 0;
+                fill_probe(false);
+            }
             ula.advance();
             return;
         }
@@ -339,6 +343,9 @@ void Spectrum::clock() {
 
     const uint64_t pins_before = pins_;
     pins_ = cpu.clock(pins_);
+    if (probe != nullptr) {
+        probe->snow = 0;
+    }
 
     // An opcode fetch's refresh begins: the one moment snow can start. Behind
     // the same pointer as contention -- snow is the same shared RAM, and a
@@ -356,11 +363,35 @@ void Spectrum::clock() {
     }
 
     service_bus(pins_before);
+    if (probe != nullptr) {
+        fill_probe(true);
+    }
 
     // The half-clock is over: the ULA moves to the next one. Last, so that
     // everything above -- the trace especially -- sees frame_hc/tstate/frame
     // for the half-clock it was actually working on.
     ula.advance();
+}
+
+void Spectrum::fill_probe(bool cpu_clocked) {
+    // Before ula.advance(), so the counters are this half-clock's. Snow is
+    // set by snow_check() as it happens, and cleared by clock() before it.
+    BusProbe& p = *probe;
+    p.pins = pins_;
+    p.cpu_clocked = cpu_clocked;
+    p.frame_hc = ula.frame_hc();
+    p.line = ula.raster_line();
+    p.dot = ula.raster_dot();
+    p.int_asserted = asserted(pins_, INT);
+    p.dot_colour = ula.dot_colour();
+    p.dot_kind = ula.dot_kind();
+    p.border_latch = ula.border_latch();
+    p.ula_port = ula_port_;
+    p.fetch_count = ula.fetch_count();
+    for (uint32_t i = 0; i < 4; i++) {
+        p.fetch_addr[i] = p.fetch_count != 0 ? ula.fetch_addr_at(i) : uint16_t(0);
+        p.fetch_data[i] = p.fetch_count != 0 ? ula.fetch_data_at(i) : uint8_t(0);
+    }
 }
 
 void Spectrum::snow_check() {
@@ -400,8 +431,16 @@ void Spectrum::snow_check() {
         // R as it is after this fetch's increment, which the refresh made a
         // moment ago: what Weiv's tests on real machines show.
         ula.snow(cpu.regs.r, bytes);
+        if (probe != nullptr) {
+            probe->snow = 1;
+            probe->snow_r = cpu.regs.r;
+        }
     } else if (position == 3) {
         ula.double_read();
+        if (probe != nullptr) {
+            probe->snow = 2;
+            probe->snow_r = cpu.regs.r;
+        }
     }
 }
 
@@ -524,6 +563,7 @@ void Spectrum::service_bus(uint64_t pins_before) {
         // core latch at T2H, the Next's core after the hold, as here.
         const bool ula_write = (addr & 1) == 0 && asserted(pins_before, WR);
         if (ula_write) {
+            ula_port_ = value;
             ula.border = uint8_t(value & 0x07);
             // Bits 3 (MIC) and 4 (speaker) drive the beeper. See
             // Beeper::write_port_fe for why this is a latch and not an edge.
@@ -803,6 +843,7 @@ void Spectrum::save_state(State& s) {
     s.pins = pins_;
     s.contention_hold = contention_hold_;
     s.ula_port_checked = ula_port_checked_;
+    s.ula_port = ula_port_;
     s.call_stack = call_stack;
     s.call_stack_sp = call_stack_sp_;
 }
@@ -817,6 +858,7 @@ void Spectrum::restore_state(const State& s) {
     pins_ = s.pins;
     contention_hold_ = s.contention_hold;
     ula_port_checked_ = s.ula_port_checked;
+    ula_port_ = s.ula_port;
     call_stack = s.call_stack;
     call_stack_sp_ = s.call_stack_sp;
     beeper.restart_at(global_hc());
@@ -926,6 +968,7 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.u64(s.pins);
     h.u64(s.contention_hold);
     h.byte(s.ula_port_checked ? 1 : 0);
+    h.byte(s.ula_port);
     for (uint16_t v : s.call_stack) {
         h.u64(v);
     }

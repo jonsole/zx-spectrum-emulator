@@ -101,6 +101,52 @@ private:
     std::map<uint16_t, std::vector<uint8_t>> at_;
 };
 
+/// One half-clock of the machine as a hardware bench sees it: what
+/// Spectrum::clock() did, filled at its end while a probe is attached.
+/// Written for retro-spectrum's lockstep bench, which runs this machine beside
+/// the FPGA's RTL half-clock by half-clock and compares the two.
+///
+/// The starting phase, for a bench copying it: a reset, a register load or a
+/// snapshot load primes the CPU's T1H (prime_cpu), and if the ULA was at the
+/// start of a T-state (an even half-clock) the ULA is given that same
+/// half-clock outside clock(), so no probe sees it -- the next clock() is the
+/// low half. A 48K .sna loaded into a 48K leaves the ULA's counters where they
+/// were; only a model change resets them.
+struct BusProbe {
+    /// The bus at the end of the half-clock, after the bus service: a read's
+    /// data is on it. Includes INT as the ULA drove it.
+    uint64_t pins = 0;
+    /// Whether the CPU's clock ran this half-clock; false while contention
+    /// holds it (WAIT is never driven -- a hold stops the clock instead).
+    bool cpu_clocked = false;
+    /// The ULA's counters for the half-clock just processed, not the next.
+    /// line and dot are the canvas's, which leads the frame by CANVAS_LEAD_HC
+    /// (48) dots: frame half-clock 0 is line 0, dot 48.
+    uint32_t frame_hc = 0;
+    uint32_t line = 0;
+    uint32_t dot = 0;
+    /// INT (low on the pin) as true while the ULA asserts it.
+    bool int_asserted = false;
+    /// The dot drawn: bits 0-2 colour, bit 3 bright, flash applied.
+    uint8_t dot_colour = 0;
+    DotKind dot_kind = DotKind::Retrace;
+    /// What the border's 8-dot latch holds, and the last byte written to the
+    /// ULA's port -- bit 3 MIC, bit 4 speaker -- as latched at T2L.
+    uint8_t border_latch = 0;
+    uint8_t ula_port = 0;
+    /// A group fetch this half-clock: 4, with the bytes and their addresses in
+    /// read order (bitmap, attribute, bitmap, attribute); 0 otherwise. The
+    /// four are read at the group's first dot here, where the hardware reads
+    /// them at T-states 2-5; nothing the CPU can see tells the two apart.
+    uint32_t fetch_count = 0;
+    uint16_t fetch_addr[4] = {};
+    uint8_t fetch_data[4] = {};
+    /// A refresh this half-clock that snowed (1) or doubled (2), 0 for none,
+    /// and R as the snow used it (bits 6-0 are the column read).
+    uint8_t snow = 0;
+    uint8_t snow_r = 0;
+};
+
 class Spectrum {
 public:
     Z80 cpu;
@@ -130,6 +176,13 @@ public:
     /// whoever turned tracing on (the Engine), not by the machine -- a trace
     /// outlives individual run/step commands and has a file handle to close.
     TraceLog* trace = nullptr;
+
+    /// Filled by every clock() while set, null otherwise -- one pointer test a
+    /// half-clock. Owned by whoever attached it (a hardware bench).
+    BusProbe* probe = nullptr;
+
+    /// The last byte written to the ULA's port, 0xFE or any even port.
+    uint8_t ula_port() const { return ula_port_; }
 
     /// Where each instruction's time goes, null when not profiling -- see
     /// profile.h. Owned by the Engine, for the same reason the trace is: it
@@ -247,6 +300,7 @@ public:
         uint64_t pins = 0;
         uint32_t contention_hold = 0;
         bool ula_port_checked = false;
+        uint8_t ula_port = 0;
         std::vector<uint16_t> call_stack;
         std::vector<uint16_t> call_stack_sp;
     };
@@ -280,6 +334,11 @@ private:
     /// not checked again (docs/contention.md, rule 4.2); cleared once IORQ
     /// lets go.
     bool ula_port_checked_ = false;
+    /// The last byte the ULA's port latched; see ula_port().
+    uint8_t ula_port_ = 0;
+
+    /// Fills *probe for the half-clock just run.
+    void fill_probe(bool cpu_clocked);
 
     /// Fills contention_table_ for the model's timing, and points contention_
     /// at it if contention is on.

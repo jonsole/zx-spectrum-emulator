@@ -7,6 +7,12 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **A probe for hardware benches.** `Spectrum::probe` reports each
+  half-clock as a lockstep bench needs it: the bus after the service, whether
+  contention held the CPU, the ULA's counters, the dot as a colour index,
+  the border latch, the ULA port's last byte, the screen fetch's four bytes
+  and addresses, and snow. See docs/tracing.md.
+
 - **A held border write lands after the hold.** An `OUT` to the ULA's port
   now changes the border, MIC and speaker in the second half of T2, after any
   contention hold, rather than as WR goes down before it: until the hold
