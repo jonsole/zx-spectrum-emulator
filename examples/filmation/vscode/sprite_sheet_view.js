@@ -9,6 +9,8 @@
 // Ctrl+Y -- and Save writes the picture. A change to the layout -- a sprite
 // resized, which can move it, or the whole sheet tidied -- changes the
 // description as well, and is one edit across the two; Save writes both.
+// Splitting a sprite too wide for the engine changes graphics.json as well,
+// as an edit of that file's own: see split.
 //
 // The page is sprite_sheet_view.html, with sprite_sheet_model.js inlined, and it holds a copy of the pixels to draw
 // from. What it paints comes back here as a list of pixels; what is undone
@@ -24,6 +26,8 @@ const { SheetFile, graphicsFor } = require('./sprite_sheet_document');
 const layout = require('./game_layout');
 
 const model = require('./sprite_sheet_model');
+const graphicMap = require('./graphic_map_model');
+const sheetFiles = require('./sheet_files');
 
 const VIEW_TYPE = 'filmation.spriteSheet';
 const INLINED = ['sprite_sheet_model.js'];
@@ -66,6 +70,7 @@ function pageHtml(document) {
     '    paint: function (changes) { vscode.postMessage({ type: "paint", changes: changes }); },\n' +
     '    resize: function (path, edges) { vscode.postMessage({ type: "resize", path: path, edges: edges }); },\n' +
     '    tidy: function () { vscode.postMessage({ type: "tidy" }); },\n' +
+    '    split: function (path) { vscode.postMessage({ type: "split", path: path }); },\n' +
     // The page's own settings -- zoom, tool, which sprite -- kept by the
     // webview while it is hidden and brought back.
     '    state: function () { return vscode.getState() || {}; },\n' +
@@ -201,6 +206,12 @@ class SpriteSheetProvider {
         document.file.picture, document.file.colours, document.file.sheet));
       return;
     }
+    if (message.type === 'split') {
+      this.split(document, message.path).catch((err) => {
+        document.post({ type: 'refused', why: err.message || String(err) });
+      });
+      return;
+    }
     if (message.type !== 'paint' || !Array.isArray(message.changes)) return;
     const done = document.file.paint(message.changes);
     if (!done.length) return;
@@ -223,10 +234,55 @@ class SpriteSheetProvider {
     });
   }
 
+  // A sprite too wide for the engine cut into pieces it can draw, and every
+  // graphic that drew it made to draw them. Two edits, one to each file: the
+  // sheet's, which this editor's undo takes back, and graphics.json's -- that
+  // file is a text document of its own, open in the graphic map editor or
+  // not, so its change is a WorkspaceEdit, with its own undo and Save. Both
+  // are worked out before either is made, so a refusal changes neither.
+  async split(document, spritePath) {
+    const file = document.file;
+    const result = model.splitSprite(file.picture, file.colours, file.sheet, spritePath);
+    const drawn = graphicsFor(document.uri.fsPath);
+    let graphicsEdit = null;
+    let said = 'Split into ' + result.pieces.map((p) => p.path + ' (' + p.w + ' wide, at ' +
+      p.rect.x + ', ' + p.rect.y + ')').join(', ') + '.';
+    // Where each piece went is in that already; the general "it moved" is
+    // about one sprite, and would name only the first.
+    result.moved = false;
+    if (drawn) {
+      // The file as VS Code has it, which may be edited and not saved.
+      const text = (await vscode.workspace.openTextDocument(drawn.file)).getText();
+      const width = result.pieces.reduce((n, p) => n + p.w, 0);
+      const pieces = result.pieces.map((p) => ({ sprite: drawn.prefix + p.path, dx: p.dx, w: p.w }));
+      const count = sheetFiles.graphicCountOf(layout.gameDirOf(path.dirname(drawn.file)));
+      const split = graphicMap.splitGraphic(JSON.parse(text), drawn.prefix + spritePath, pieces,
+                                            width, count);
+      const eol = text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+      graphicsEdit = { uri: vscode.Uri.file(drawn.file), text: text,
+                       next: graphicMap.serializeMap(split.graphics, eol) };
+      said += split.made.length
+        ? ' In graphics.json, ' + split.made.map((m) => m.number + ' (' + m.name + ')').join(', ') +
+          ' now draw' + (split.made.length === 1 ? 's' : '') + ' the other piece' +
+          (split.made.length === 1 ? '' : 's') + ' beside the graphic that drew the whole, which ' +
+          'keeps its number and draws the first. A template placing it needs a piece for each. ' +
+          'Save graphics.json to keep it.'
+        : ' No graphic drew it, so graphics.json is unchanged.';
+    }
+    this.layout(document, 'Split ' + spritePath, () => result, said);
+    if (graphicsEdit && graphicsEdit.next !== graphicsEdit.text) {
+      const edit = new vscode.WorkspaceEdit();
+      const lines = graphicsEdit.text.split('\n').length;
+      edit.replace(graphicsEdit.uri, new vscode.Range(0, 0, lines, 0), graphicsEdit.next);
+      await vscode.workspace.applyEdit(edit);
+    }
+  }
+
   // A change to the layout: worked out by the model on this side's pixels,
   // made one edit of VS Code's, and sent to the page. A change the model
   // refuses -- a sprite shrunk to nothing, say -- goes back with the reason.
-  layout(document, label, work) {
+  // `said` is anything more the page should show about it.
+  layout(document, label, work, said) {
     let result;
     try {
       result = work();
@@ -235,11 +291,11 @@ class SpriteSheetProvider {
       return;
     }
     const record = document.file.layout(result.picture, result.sheet);
-    const note = result.moved
+    const note = (result.moved
       ? 'There was no room for it where it was, so it moved to ' + result.rect.x + ', ' +
         result.rect.y + (record.diff.toHeight > record.diff.fromHeight
-          ? ', and the picture grew to ' + record.diff.toHeight + ' rows' : '') + '.'
-      : '';
+          ? ', and the picture grew to ' + record.diff.toHeight + ' rows' : '') + '. '
+      : '') + (said || '');
     this.sendLayout(document, record, false, note);
     this.changed.fire({
       document: document,

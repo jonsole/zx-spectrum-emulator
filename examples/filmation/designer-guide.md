@@ -460,6 +460,30 @@ column. So:
 A sprite that no longer fits where it is moves to the first free space on the
 sheet, or the sheet grows at the bottom, and the card says where it went.
 
+### Splitting a wide sprite
+
+The engine draws a sprite at most 40 pixels wide. A wider one has a **Split
+into 2** (or 3...) button on its **Size** card. It cuts the sprite into the
+fewest pieces the engine can draw, as even as whole bytes allow: 56 pixels
+become 32 and 24. The pieces are named after the sprite, `_1`, `_2` and so
+on from the left, and take its place in the tree. The first stays where the
+sprite was on the sheet, and the rest go beside it if there is room.
+
+Every graphic in `graphics.json` that drew the sprite follows. It keeps its
+number and name and draws the first piece. Each other piece gets a new
+graphic at the lowest free number, named after the graphic with `_2` and so
+on, with its nudge moved right so the pieces line up where the whole was, and
+the same box. Mirrored nudges are worked out for each piece too, since a
+mirrored sprite's pieces swap ends. A template that places the graphic needs
+a piece for each of the new ones.
+
+The sheet's change is one undo in the sprite sheet editor. The change to
+`graphics.json` is an unsaved edit to that file, with its own undo, so save
+both.
+
+Only too-wide sprites can be split. A sprite taller than 64 rows has to be
+brought down first.
+
 ### Tidying a sheet
 
 **Tidy sheet...**, at the top of the tree, lays every sprite out again in the

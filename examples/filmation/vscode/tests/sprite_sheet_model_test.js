@@ -289,6 +289,84 @@ test('a sprite with no room where it is goes to the first place that has some', 
   }
 });
 
+// --- splitting a sprite too wide ---------------------------------------------------
+
+test('a wide sprite comes apart into the fewest pieces the engine draws, wider first', () => {
+  // 40 is the widest: 48 is two of 24, 56 a 32 and a 24, 88 three -- 32, 32, 24.
+  assert.deepStrictEqual(m.splitWidths(48), [{ dx: 0, w: 24 }, { dx: 24, w: 24 }]);
+  assert.deepStrictEqual(m.splitWidths(56), [{ dx: 0, w: 32 }, { dx: 32, w: 24 }]);
+  assert.deepStrictEqual(m.splitWidths(88), [{ dx: 0, w: 32 }, { dx: 32, w: 32 }, { dx: 64, w: 24 }]);
+});
+
+// A 56 by 3 sprite w.1 at (1, 1) on an 80 by 16 picture, paper with ink in its
+// columns 0 and 35, and w.2, 8 by 2, at (1, 10).
+function wideSheet() {
+  return m.parseSheet('{ "sheet": { "file": "x.png" }, "group": { "w": { "sprites": {' +
+    ' "1": { "x": 1, "y": 1, "w": 56, "h": 3 }, "2": { "x": 1, "y": 10, "w": 8, "h": 2 } } } } }');
+}
+
+function widePicture() {
+  const picture = { width: 80, height: 16, rgba: new Uint8Array(80 * 16 * 4) };
+  for (const s of m.allSpritesOf(m.sheetTree(wideSheet()))) {
+    for (const p of m.frameOf(s.rect)) m.setColour(picture, COLOURS, p.x, p.y, 'border');
+    for (let y = s.rect.y; y < s.rect.y + s.rect.h; y++) {
+      for (let x = s.rect.x; x < s.rect.x + s.rect.w; x++) m.setColour(picture, COLOURS, x, y, 'paper');
+    }
+  }
+  for (let y = 1; y < 4; y++) {
+    m.setColour(picture, COLOURS, 1, y, 'ink');
+    m.setColour(picture, COLOURS, 36, y, 'ink');
+  }
+  return picture;
+}
+
+test('a split puts the pieces side by side, framed, in the sprite\'s place in the tree', () => {
+  const out = m.splitSprite(widePicture(), COLOURS, wideSheet(), 'w.1');
+  // The first piece where the sprite was; the second GAP past its frame:
+  // 1 + 32 + 3 = 36.
+  assert.deepStrictEqual(out.pieces.map((p) => [p.path, p.dx, p.w, p.rect.x, p.rect.y]),
+                         [['w.1_1', 0, 32, 1, 1], ['w.1_2', 32, 24, 36, 1]]);
+  assert.strictEqual(out.moved, false);
+  assert.deepStrictEqual(m.allSpritesOf(m.sheetTree(out.sheet)).map((s) => s.path),
+                         ['w.1_1', 'w.1_2', 'w.2']);
+  // The whole's column 35 is the second piece's column 3: x 36 + 3.
+  assert.strictEqual(m.colourAt(out.picture, COLOURS, 1, 2), 'ink');
+  assert.strictEqual(m.colourAt(out.picture, COLOURS, 39, 2), 'ink');
+  assert.strictEqual(m.colourAt(out.picture, COLOURS, 36, 2), 'paper');
+  // The pieces as the engine's limits judge them; w.2, 8 wide, by its frame.
+  for (const s of m.allSpritesOf(m.sheetTree(out.sheet))) {
+    assert.deepStrictEqual(m.spriteProblems(out.picture, COLOURS, s.rect, s.path !== 'w.2'), [], s.path);
+  }
+  // And written out, the pieces are lines of the description like any other.
+  // (The columns are padded to the widest: y 10 is w.2's.)
+  assert.ok(/"1_2":\s+\{ "x":\s+36, "y":\s+1, "w":\s+24, "h":\s+3 \}/.test(m.formatSheet(out.sheet, '\n')));
+});
+
+test('a piece with no room beside the one before goes where there is some', () => {
+  // On a picture 60 wide the second piece, at 36, would put its frame on
+  // x 60, off the edge. The first place clear, reading down the picture, is
+  // beside w.2: x 12 is two past its frame, and y 7 two below the first
+  // piece's.
+  const picture = widePicture();
+  const narrow = { width: 60, height: 16, rgba: new Uint8Array(60 * 16 * 4) };
+  for (let y = 0; y < 16; y++) {
+    narrow.rgba.set(picture.rgba.subarray(y * 80 * 4, (y * 80 + 60) * 4), y * 60 * 4);
+  }
+  const out = m.splitSprite(narrow, COLOURS, wideSheet(), 'w.1');
+  assert.strictEqual(out.moved, true);
+  const second = out.pieces[1].rect;
+  assert.deepStrictEqual([second.x, second.y], [12, 7]);
+  assert.strictEqual(m.colourAt(out.picture, COLOURS, second.x + 3, second.y + 1), 'ink');
+  for (const s of m.allSpritesOf(m.sheetTree(out.sheet))) {
+    assert.deepStrictEqual(m.spriteProblems(out.picture, COLOURS, s.rect, false), [], s.path);
+  }
+});
+
+test('a split the engine does not need, or cannot take, is refused', () => {
+  assert.throws(() => m.splitSprite(widePicture(), COLOURS, wideSheet(), 'w.2'), /draws whole/);
+  assert.throws(() => m.splitSprite(widePicture(), COLOURS, wideSheet(), 'w.9'), /no sprite/);
+});
+
 test('a resize the build could not read is refused, with the reason', () => {
   assert.throws(() => m.resizeSprite(roomyPicture(), COLOURS, roomySheet(), 'knight.1', { right: 4 }),
                 /whole bytes/);

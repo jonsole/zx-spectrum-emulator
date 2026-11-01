@@ -382,6 +382,45 @@ test('nudging or boxing a number the table has not got changes nothing', () => {
   assert.deepStrictEqual(m.setBox(TOY, 2, { u: 1, v: 1, z: 1 }), TOY);
 });
 
+test('a split sprite: the graphic draws the first piece, new numbers the rest, side by side', () => {
+  // A 56 wide table cut 32 + 24, drawn by graphic 48 at nudge (-27, -15) with
+  // no mirrored nudge. Numbers 2 and 3 are free, 0 and 1 never are.
+  const said = { sprites: 'sprites.json', graphics: {
+    'table': { number: 48, sprite: 'f:t', size: { u: 9, v: 18, z: 19 }, x: -27, y: -15 },
+    'other': { number: 4, sprite: 'f:o' } } };
+  const out = m.splitGraphic(said, 'f:t', [{ sprite: 'f:t_1', dx: 0, w: 32 },
+                                            { sprite: 'f:t_2', dx: 32, w: 24 }], 56);
+  assert.deepStrictEqual(out.made, [{ number: 2, name: 'table_2', from: 48 }]);
+  const table = tableOf(out.graphics);
+  // Plain: the second piece 32 to the right. Mirrored, the whole is drawn
+  // from -27 too, flipped, so the first piece's columns 0-31 land on its right
+  // end: -27 + 56 - 32 = -3; the second's on its left: -27 + 56 - 56 = -27,
+  // the plain nudge's, so it needs none written.
+  assert.deepStrictEqual(table.table, { number: 48, sprite: 'f:t_1', size: { u: 9, v: 18, z: 19 },
+                                        x: -27, y: -15, mirrored: { x: -3, y: -15 } });
+  assert.deepStrictEqual(table.table_2, { number: 2, sprite: 'f:t_2', size: { u: 9, v: 18, z: 19 },
+                                          x: 5, y: -15, mirrored: { x: -27, y: -15 } });
+  assert.strictEqual(tableOf(said).table.sprite, 'f:t', 'the table it was given changed');
+});
+
+test('a split keeps a mirrored nudge of the graphic\'s own, moved for each piece', () => {
+  const said = { graphics: { 'arch': { number: 10, sprite: 'a', x: 0, y: 0,
+                                       mirrored: { x: -48, y: 1 } } } };
+  const out = m.splitGraphic(said, 'a', [{ sprite: 'a_1', dx: 0, w: 24 },
+                                         { sprite: 'a_2', dx: 24, w: 24 }], 48);
+  const table = tableOf(out.graphics);
+  assert.deepStrictEqual(table.arch.mirrored, { x: -24, y: 1 });
+  assert.deepStrictEqual(table.arch_2.mirrored, { x: -48, y: 1 });
+  assert.strictEqual(table.arch_2.x, 24);
+});
+
+test('a split with no number free for a piece is refused', () => {
+  const graphics = {};
+  for (let n = 2; n < 256; n++) graphics['g' + n] = { number: n, sprite: n === 2 ? 'w' : 's' + n };
+  assert.throws(() => m.splitGraphic({ graphics: graphics }, 'w',
+    [{ sprite: 'w_1', dx: 0, w: 24 }, { sprite: 'w_2', dx: 24, w: 24 }], 48), /no graphic numbers/);
+});
+
 test('a box is set and taken away, unmirrored', () => {
   const given = m.setBox(TOY, 4, { u: 2, v: 7, z: 12 });
   assert.deepStrictEqual(tableOf(given)['c.1.g4'].size, { u: 2, v: 7, z: 12 });

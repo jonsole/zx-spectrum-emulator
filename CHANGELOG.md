@@ -7,6 +7,13 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Split a sprite too wide to draw, in the sprite sheet editor.** A sprite
+  wider than the engine's 40 pixels has **Split into N** on its Size card:
+  it is cut into the fewest pieces the engine can draw, side by side on the
+  sheet, and every graphic in `graphics.json` that drew it is made to draw
+  the pieces, with nudges -- plain and mirrored -- that line them up where
+  the whole was. See `examples/filmation/designer-guide.md`.
+
 - **A snapshot loaded over a HALT runs from its own PC.** Setting the
   registers -- a snapshot load, a register write from the debugger, the fast
   tape loader -- left the CPU's halted latch as it was. A machine sitting in

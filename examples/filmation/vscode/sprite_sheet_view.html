@@ -81,6 +81,7 @@
              align-items: center; margin-bottom: 6px; }
     .edges button { padding: 1px 10px; font-variant-numeric: tabular-nums; }
     .tidy { margin-bottom: 8px; }
+    .size .split { margin: 6px 0; }
     .tidy button { margin-right: 6px; }
     .tidy .hint { margin: 0 0 6px; }
   </style>
@@ -986,6 +987,29 @@
       }
     }
     card.appendChild(grid);
+    // Too wide for the engine to draw as one: cut it into pieces it can, and
+    // let graphics.json follow -- the host does both, and says what it did.
+    if (sprite.rect.w > WIDEST && sprite.rect.w % 8 === 0) {
+      const pieces = splitWidths(sprite.rect.w);
+      const split = document.createElement('div');
+      split.className = 'split';
+      const b = document.createElement('button');
+      b.textContent = 'Split into ' + pieces.length;
+      b.title = 'Cut it into ' + pieces.map((p) => p.w).join(' + ') + ' pixels across, ' +
+        sprite.name + '_1 to _' + pieces.length + ' from the left, and make every graphic ' +
+        'that draws it draw them side by side';
+      b.addEventListener('click', () => {
+        note = null;
+        host.split(sprite.path);
+      });
+      split.appendChild(b);
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = ' The engine draws ' + NARROWEST + ' to ' + WIDEST + ' across: ' +
+        pieces.map((p) => p.w).join(' + ') + '.';
+      split.appendChild(hint);
+      card.appendChild(split);
+    }
     const why = document.createElement('div');
     why.className = 'hint';
     why.textContent = 'The game stands a sprite on its bottom row and lines it up by its ' +
@@ -1067,6 +1091,16 @@
     sheet = message.sheet;
     tree = sheetTree(sheet);
     sprites = allSpritesOf(tree);
+    // A split takes the picked sprite away and its undo the pieces: pick the
+    // first piece, or the whole again.
+    if (!sprites.some((s) => s.path === chosen)) {
+      const piece = chosen + '_1';
+      const whole = chosen.replace(/_\d+$/, '');
+      chosen = sprites.some((s) => s.path === piece) ? piece
+        : sprites.some((s) => s.path === whole) ? whole
+          : sprites.length ? sprites[0].path : null;
+      keep();
+    }
     note = message.note ? { text: message.note } : null;
     drawAll();
   }

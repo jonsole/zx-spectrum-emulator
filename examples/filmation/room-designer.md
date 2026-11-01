@@ -870,6 +870,25 @@ is, clear of the others' frames by the gap the build lays them out with,
 moves to the first place on the picture it does, and the picture grows at
 the bottom if there is none; the card says where it went.
 
+A sprite wider than the engine's 40 has **Split into N** on the same card
+(`splitSprite` in `sprite_sheet_model.js`). It cuts the sprite into the
+fewest pieces of at most 40, as even as whole bytes allow and the wider
+first, named `<name>_1`, `<name>_2`... from the left in its place in the
+tree; the first keeps its place on the picture, and each other goes the
+build's gap to the right of the one before, or wherever there is room.
+`graphics.json` follows (`splitGraphic` in `graphic_map_model.js`): each
+graphic that drew the sprite keeps its number, name and box and draws the
+first piece, and each other piece is a new graphic at the lowest number
+free, named after it with `_2` and on, its nudge moved right by where the
+piece sat, its box the whole's. A mirrored drawing swaps the pieces' ends,
+so a piece gets a mirrored nudge -- the whole's, or its plain one, moved by
+what lies to the piece's right -- wherever that differs from its plain one.
+The sheet's change is one edit of this editor's; `graphics.json`'s is a
+`WorkspaceEdit` on that file, with its own undo and Save. Templates are not
+changed: one that placed the graphic needs a piece for each new one. Only
+across -- a tall sprite cut in two would move the top half's nudge, and is
+refused.
+
 **Tidy sheet...** lays every sprite out afresh: in the tree's order, each
 group from a new row, left to right with that gap between. It asks first,
 because anything else painted on the picture goes -- the group names

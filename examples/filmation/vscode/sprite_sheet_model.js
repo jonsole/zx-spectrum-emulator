@@ -635,6 +635,127 @@ function resizeSprite(picture, colours, sheet, path, edges) {
   return { picture: out, sheet: next, rect: at, moved: moved };
 }
 
+// How a sprite too wide for the engine comes apart: the fewest pieces of at
+// most WIDEST, as even as whole bytes allow, the wider ones first. Each is
+// { dx, w } in pixels from the sprite's left. Never narrower than NARROWEST:
+// six bytes or more make at least two pieces of three.
+function splitWidths(w) {
+  const bytes = w / 8;
+  const most = WIDEST / 8;
+  const count = Math.ceil(bytes / most);
+  const base = Math.floor(bytes / count);
+  const extra = bytes % count;
+  const out = [];
+  let dx = 0;
+  for (let i = 0; i < count; i++) {
+    const width = (base + (i < extra ? 1 : 0)) * 8;
+    out.push({ dx: dx, w: width });
+    dx += width;
+  }
+  return out;
+}
+
+// A sprite too wide for the engine cut into pieces it can draw, side by side
+// as they were: `name_1`, `name_2` and so on from the left, in the sprite's
+// place in the tree. The first keeps the sprite's place on the picture; the
+// rest go GAP to the right of the one before if there is room, and otherwise
+// wherever there is, the picture growing at the bottom if it must. Returns
+// { picture, sheet, rect, moved, pieces }, with each piece's { path, dx, w }
+// so that graphics.json can follow, or throws with the reason.
+//
+// Only across: the engine's tallest is 64 rows, and the game stands a sprite
+// on its bottom row, so cutting a tall one would move its top half's nudge --
+// a different edit, not made here.
+function splitSprite(picture, colours, sheet, path) {
+  const found = spriteNode(sheet, path);
+  if (!found) throw new Error('there is no sprite ' + path);
+  const box = found.sprites[found.key];
+  const was = { x: box.x, y: box.y, w: box.w, h: box.h };
+  if (was.w % 8) throw new Error('it is not a whole number of bytes wide');
+  if (was.w <= WIDEST) throw new Error('it is ' + was.w + ' wide, which the engine draws whole');
+  if (was.h > TALLEST) {
+    throw new Error('it is ' + was.h + ' high as well; split only cuts across, so bring it ' +
+                    'down to ' + TALLEST + ' first');
+  }
+  const widths = splitWidths(was.w);
+  const keys = widths.map((piece, i) => found.key + '_' + (i + 1));
+  for (const key of keys) {
+    if (found.sprites[key]) throw new Error('there is a sprite ' + key + ' already');
+  }
+
+  // Each piece's pixels, cut before anything moves.
+  const contents = widths.map((piece) => {
+    const content = new Uint8Array(piece.w * was.h * 4);
+    for (let y = 0; y < was.h; y++) {
+      const from = ((was.y + y) * picture.width + was.x + piece.dx) * 4;
+      content.set(picture.rgba.subarray(from, from + piece.w * 4), y * piece.w * 4);
+    }
+    return content;
+  });
+
+  // The sprite off the picture, frame and all; the pieces into the tree in
+  // its place, so that every sprite but these is where it was.
+  let out = clonePicture(picture);
+  clearArea(out, was.x - 1, was.y - 1, was.x + was.w + 1, was.y + was.h + 1);
+  const next = cloneSheet(sheet);
+  const into = spriteNode(next, path);
+  const order = keysOf(into.sprites);
+  const rebuilt = {};
+  const newOrder = [];
+  for (const key of order) {
+    if (key !== into.key) {
+      rebuilt[key] = into.sprites[key];
+      newOrder.push(key);
+      continue;
+    }
+    keys.forEach((k, i) => {
+      rebuilt[k] = { x: 0, y: 0, w: widths[i].w, h: was.h };
+      newOrder.push(k);
+    });
+  }
+  rebuilt[KEYS] = newOrder;
+  const parentPath = path.split('.').slice(0, -1);
+  let parent = next;
+  for (const part of parentPath) parent = parent.group[part];
+  parent.sprites = rebuilt;
+
+  // Placed one at a time, each against everything placed so far.
+  // A piece not placed yet is not on the picture, whatever its rectangle says.
+  const piecePaths = keys.map((k) => parentPath.concat([k]).join('.'));
+  const placed = [];
+  let moved = false;
+  let want = { x: was.x, y: was.y };
+  widths.forEach((piece, i) => {
+    const pathOf = piecePaths[i];
+    const others = allSpritesOf(sheetTree(next)).filter((s) => piecePaths.indexOf(s.path) < 0 ||
+      placed.some((p) => p.path === s.path));
+    const taken = occupancy(out, others, pathOf);
+    const rect = { x: want.x, y: want.y, w: piece.w, h: was.h };
+    let at = rect;
+    if (!fitsAt(areaTable(taken, out.width, out.height), out, rect)) {
+      const free = findSpace(out, taken, rect.w, rect.h);
+      if (free) {
+        at = { x: free.x, y: free.y, w: rect.w, h: rect.h };
+      } else {
+        at = { x: 1, y: out.height + GAP - 1, w: rect.w, h: rect.h };
+        out = growPicture(out, at.y + at.h + 1);
+      }
+      moved = true;
+    }
+    for (let y = 0; y < at.h; y++) {
+      out.rgba.set(contents[i].subarray(y * at.w * 4, (y + 1) * at.w * 4),
+                   ((at.y + y) * out.width + at.x) * 4);
+    }
+    drawFrame(out, colours, at);
+    Object.assign(rebuilt[keys[i]], { x: at.x, y: at.y });
+    placed.push({ path: pathOf, dx: piece.dx, w: piece.w, rect: at });
+    want = { x: at.x + at.w + GAP, y: at.y };
+  });
+
+  return { picture: out, sheet: next, rect: placed[0].rect, moved: moved,
+           pieces: placed.map((p) => ({ path: p.path, dx: p.dx, w: p.w, rect: p.rect })) };
+}
+
 // Every sprite laid out afresh, as sprite_sheet.py lays a new sheet: in the
 // tree's order, each group from the start of a row, left to right with GAP
 // between and a new row when the next would run off the edge. Only the
@@ -733,6 +854,7 @@ if (typeof module !== 'undefined') {
     coloursOf, sheetTree, allSpritesOf, colourAt, setColour, inside,
     paint, fill, strokeColour, applyChanges, frameOf, spriteProblems, graphicsDrawing,
     KEYS, keysOf, parseSheet, formatSheet, spriteNode, occupancy, findSpace, resizeSprite, tidySheet,
+    splitWidths, splitSprite,
     diffPictures, applyDiff
   };
 }

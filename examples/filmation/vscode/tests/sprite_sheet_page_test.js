@@ -133,6 +133,7 @@ function fakePage(boot) {
         paint: (changes) => sent.push(JSON.parse(JSON.stringify(changes))),
         resize: (path, edges) => asked.push({ resize: path, edges: JSON.parse(JSON.stringify(edges)) }),
         tidy: () => asked.push({ tidy: true }),
+        split: (path) => asked.push({ split: path }),
         state: () => ({}),
         keep: () => {},
         onMessage: (fn) => { heard = fn; }
@@ -440,6 +441,20 @@ test('the Size card asks the host to grow or shrink the sprite at one edge', () 
   buttons[0]._on.click();
   assert.deepStrictEqual(page.asked, [{ resize: sprite.path, edges: { left: 8 } },
                                       { resize: sprite.path, edges: { top: -1 } }]);
+});
+
+test('a sprite too wide to draw has a Split in the Size card, and one that fits has none', () => {
+  const boot = bootFor();
+  // Sprite 5 made 56 wide in the description: the button goes by the size.
+  const sprite = m.allSpritesOf(m.sheetTree(boot.sheet))[5];
+  const narrow = fakePage(bootFor());
+  rows(narrow)[5]._on.click();
+  assert.ok(!walk(narrow.byId.side).some((n) => n.tagName === 'BUTTON' && /^Split/.test(n.textContent)));
+  m.spriteNode(boot.sheet, sprite.path).sprites[sprite.name].w = 56;
+  const page = fakePage(boot);
+  rows(page)[5]._on.click();
+  buttonIn(page.byId.side, 'Split into 2')._on.click();
+  assert.deepStrictEqual(page.asked, [{ split: sprite.path }]);
 });
 
 test('a layout change from the host reshapes the page\'s copy: the tree, the pixels, the height', () => {

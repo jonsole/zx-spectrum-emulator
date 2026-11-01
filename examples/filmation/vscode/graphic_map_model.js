@@ -409,6 +409,74 @@ function setBox(graphics, graphic, box) {
   return next;
 }
 
+// A sprite cut into pieces on its sheet -- sprite_sheet_model.js's
+// splitSprite -- and every graphic that drew it made to draw the pieces
+// instead, side by side where the whole was. `pieces` is each piece's
+// { sprite, dx, w }: the name graphics.json knows it by, and where it sat in
+// the whole, `width` pixels wide.
+//
+// The graphic keeps its number, its name and everything else, and draws the
+// first piece. Each further piece is a new graphic at the lowest number free,
+// named after it with _2, _3 and so on, its nudge moved right by where the
+// piece sat and its box the whole's. Drawn mirrored, the pieces swap ends: a
+// piece's mirrored nudge is the whole's -- or its plain one, which is what a
+// graphic with none is drawn mirrored with -- moved by what lies to the right
+// of it, and written whenever that is not the plain one.
+//
+// Returns { graphics, made }: a copy, and each new graphic's { number, name,
+// from }. Throws if there are not numbers enough.
+function splitGraphic(graphics, sprite, pieces, width, count) {
+  const next = JSON.parse(JSON.stringify(graphics));
+  const table = next.graphics || {};
+  const limit = numberLimit(graphics, count);
+  const used = new Set();
+  for (const key of Object.keys(table)) {
+    if (Number.isInteger((table[key] || {}).number)) used.add(table[key].number);
+  }
+  const freeNumber = function () {
+    for (let n = 0; n < limit; n++) {
+      if (!used.has(n) && NEVER_NUMBERS.indexOf(n) < 0) {
+        used.add(n);
+        return n;
+      }
+    }
+    throw new Error('there are no graphic numbers left for the pieces');
+  };
+  const drawing = Object.keys(table)
+    .filter(function (key) { return (table[key] || {}).sprite === sprite; })
+    .sort(function (a, b) { return table[a].number - table[b].number; });
+
+  const made = [];
+  for (const key of drawing) {
+    const whole = table[key];
+    const x = whole.x || 0;
+    const y = whole.y || 0;
+    const mirroredFrom = whole.mirrored ? whole.mirrored : { x: x, y: y };
+    pieces.forEach(function (piece, i) {
+      let entry = whole;
+      if (i > 0) {
+        const number = freeNumber();
+        let name = key + '_' + (i + 1);
+        if (Object.prototype.hasOwnProperty.call(table, name)) name += '.g' + number;
+        entry = { number: number };
+        if (whole.size) entry.size = boxCopy(whole.size);
+        table[name] = entry;
+        made.push({ number: number, name: name, from: whole.number });
+      }
+      entry.sprite = piece.sprite;
+      const px = x + piece.dx;
+      if (px) entry.x = px;
+      else delete entry.x;
+      if (y) entry.y = y;
+      else delete entry.y;
+      const mirrored = { x: mirroredFrom.x + width - piece.dx - piece.w, y: mirroredFrom.y };
+      if (mirrored.x !== px || mirrored.y !== y) entry.mirrored = mirrored;
+      else delete entry.mirrored;
+    });
+  }
+  return { graphics: next, made: made };
+}
+
 // --- the box and the nudge, for drawing -----------------------------------
 //
 // The nudge editor's picture: one graphic stood on the floor, its box drawn
@@ -620,7 +688,7 @@ if (typeof module !== 'undefined') {
     NO_SPRITE,
     parseMap, serializeMap, gameOf, countOf,
     spriteOf, nudgeOf, sharedBy, sheetSprites, fitsOneSprite, rows,
-    setSprite, setNudge, setBox, checkMap, summary,
+    setSprite, setNudge, setBox, splitGraphic, checkMap, summary,
     NEVER_NUMBERS, numberLimit, isFixed, whyNotMove, moveGraphic,
     boxFor, editLimits, guessBox, reflectedNudge, boxView, FAR_CORNER
   };

@@ -150,7 +150,8 @@ class SheetFile {
 }
 
 // How graphics.json names this sheet's sprites, and which graphics draw each:
-// { graphics, prefix }, or null if there is no graphics.json that lists it.
+// { graphics, prefix, file }, or null if there is no graphics.json that lists
+// it. `file` is graphics.json's path, for an edit that has to change it too.
 // The game's own sheet is graphics.json's "sprites"; one of the others is
 // under "sheets", and its sprites are named with that key and a colon.
 function graphicsFor(jsonPath) {
@@ -166,10 +167,12 @@ function graphicsFor(jsonPath) {
   }
   const same = (named) => typeof named === 'string' &&
     path.resolve(meta, named).toLowerCase() === path.resolve(jsonPath).toLowerCase();
-  if (same(graphics.sprites || 'sprites.json')) return { graphics: graphics, prefix: '' };
+  if (same(graphics.sprites || 'sprites.json')) return { graphics: graphics, prefix: '', file: file };
   const sheets = sheetModel.sheetsOf(graphics);
   for (const name of Object.keys(sheets)) {
-    if (same(sheets[name])) return { graphics: graphics, prefix: name + sheetModel.SHEET_SEPARATOR };
+    if (same(sheets[name])) {
+      return { graphics: graphics, prefix: name + sheetModel.SHEET_SEPARATOR, file: file };
+    }
   }
   return null;
 }
