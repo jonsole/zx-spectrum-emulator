@@ -11,6 +11,7 @@ PLAYER_U            EQU     128         ; the middle of the room, where the game
 PLAYER_V            EQU     128         ; starts him (plyr_spr_init_data)
 PLAYER_FACING       EQU     0           ; -U, up and left
 
+                    ALIGN   32                  ; a slot, as the pool's are: see character_record
 player:             walking_character PLAYER_LEGS_GFX, PLAYER_BODY_GFX, PLAYER_FACING
 walker_player       EQU     player              ; the character movers collide with
 

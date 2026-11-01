@@ -108,6 +108,14 @@ CHARACTER_DOOR		EQU		ROOM_STRIDE * 2 + 6
 ; unit inside it for that turn, all three axes overlapped, the sort had nothing
 ; to go on, and his head came out in front of the block.
 				MACRO	character_record legs_base, body_base, facing
+					; No link may end a page: depth.s steps through NEXT and
+					; PREV with INC L, so one at $xxFF has its high byte written
+					; a page back. Lightkeep's knight drifted to $B3D3 as its
+					; code grew, his body's PREV landed on $B3FF, and the list
+					; that broke froze the game in its next redraw. A record
+					; aligned to its slot, as the pool's are, is always safe.
+					ASSERT	(($ + OBJ.NEXT) & $FF) != $FF && (($ + OBJ.PREV) & $FF) != $FF
+					ASSERT	(($ + ROOM_STRIDE + OBJ.NEXT) & $FF) != $FF && (($ + ROOM_STRIDE + OBJ.PREV) & $FF) != $FF
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, CHARACTER_BODY_UP
 					DS		ROOM_STRIDE - OBJ_RECORD_LAID, 0		; the rest of the legs' slot
 					object_record	OBJ_MOVABLE, 0, CHARACTER_HALF_U, CHARACTER_HALF_V, COLLIDE_HEIGHT - CHARACTER_BODY_UP
