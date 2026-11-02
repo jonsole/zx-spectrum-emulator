@@ -50,16 +50,15 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
     prefix_active_ = false;
     // An IM 0 instruction ends here: PC moves again from this fetch on.
     im0_pc_hold_ = false;
+    const bool after_ld_a_ir = ld_a_ir_;
+    ld_a_ir_ = false;
 
     // NMI and INT are sampled here, before any bus activity, so an accepted
     // interrupt replaces this fetch's T1 rather than racing it. An NMI edge
     // comes first: it cannot be masked and outranks INT.
     if (nmi_pending_) {
         nmi_pending_ = false;
-        // Undoes op_halt()'s per-refetch PC decrement, as for INT below.
-        if (halted) {
-            regs.pc = uint16_t(regs.pc + 1);
-        }
+        // PC is the byte after the HALT, if halted: the return address.
         halted = false;
         interrupt_count++;
         nmi_ack_ = true;
@@ -72,14 +71,18 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
         return pins;
     }
     if (asserted(pins, INT) && regs.iff1) {
-        // Undoes op_halt()'s per-refetch PC decrement. Without this the
-        // interrupt would push HALT's own address as the return address and
-        // a `HALT; <body>; JP` loop would re-halt forever instead of running
-        // <body> -- a real, reproducible hang, not a hypothetical.
-        if (halted) {
-            regs.pc = uint16_t(regs.pc + 1);
-        }
+        // If halted, PC is the byte after the HALT, which is the return
+        // address: a `HALT; <body>; JP` loop runs <body> after each
+        // interrupt. The halt itself ends at the acknowledge's T1L, below.
         interrupt_count++;
+        // The NMOS Z80's LD A,I / LD A,R bug: accepted straight after one,
+        // the interrupt leaves P/V reset whatever IFF2 was. Woodmass's IFF2
+        // Bug test shows it on a real 48K: PV 0 for the instructions that
+        // end at the last T-states of the frame, where the interrupt is
+        // taken at once.
+        if (after_ld_a_ir) {
+            regs.f = uint8_t(regs.f & ~FLAG_PV);
+        }
         // T1H of the acknowledge: PC on the address bus and M1 down, as for
         // an opcode fetch, but no MREQ and PC not moved.
         pins = set_addr_assert(pins, regs.pc, M1);
@@ -147,12 +150,14 @@ uint64_t Z80::refresh(uint64_t pins) {
 }
 
 uint64_t Z80::op_halt(uint64_t pins) {
+    // PC is already past the HALT, and stays there: each fetch while halted
+    // puts that address on the bus (pc_post_inc holds PC), reads the byte
+    // and ignores it (STEP_M1_T3H), and refreshes, so R keeps counting one a
+    // fetch. Fetching from the HALT's own address instead, as this once did
+    // by stepping PC back, is wrong where it shows: Woodmass's HALT2INT puts a
+    // HALT at 0x7FFF, whose own address is contended and whose next, 0x8000,
+    // is not, and a real 48K's timings there are the uncontended ones.
     halted = true;
-    // Rewinds onto HALT's own address so the next fetch re-reads the same
-    // 0x76 byte. begin_fetch's own pc++ undoes this each pass, so PC nets
-    // back to the HALT address at rest while R keeps incrementing at the
-    // correct 1-per-4-T-states rate.
-    regs.pc = uint16_t(regs.pc - 1);
     return begin_fetch(pins);
 }
 
@@ -316,12 +321,12 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     nmi_pending_ = false;
     nmi_ack_ = false;
     im0_pc_hold_ = false;
+    ld_a_ir_ = false;
     // The priming fetch below is at the new PC, so the CPU runs from there
     // whatever it was doing: a HALT it sat in is over. Left set, the latch
-    // made registers() report PC one too high and an interrupt's undoing of
-    // op_halt's decrement return one byte past the new PC -- or, with
-    // interrupts off, the snapshot never ran. Rewind's load_state keeps the
-    // saved latch on purpose; that is a different path.
+    // made registers() report PC one too high and held PC where it was, so
+    // with interrupts off the snapshot never ran. Rewind's load_state keeps
+    // the saved latch on purpose; that is a different path.
     halted = false;
     // One priming half-clock, whose memory request MUST be serviced -- step 0
     // is NOP, whose generated body is begin_fetch(), so this leaves the
@@ -396,7 +401,9 @@ uint64_t Z80::clock(uint64_t pins) {
             step_ = STEP_M1_T3H;
             break;
         case STEP_M1_T3H:
-            opcode_ = get_data(pins);
+            // A halted CPU reads the byte after the HALT and ignores it,
+            // running the HALT again: whatever is there, it stays halted.
+            opcode_ = halted ? uint8_t(0x76) : get_data(pins);
             pins = release_pins(pins, M1 | MREQ | RD);
             pins = refresh(pins);
             step_ = STEP_M1_T3L;
@@ -956,6 +963,7 @@ void Z80::save_state(State& s) const {
     s.nmi_pending = nmi_pending_;
     s.nmi_ack = nmi_ack_;
     s.im0_pc_hold = im0_pc_hold_;
+    s.ld_a_ir = ld_a_ir_;
 }
 
 void Z80::restore_state(const State& s) {
@@ -974,6 +982,7 @@ void Z80::restore_state(const State& s) {
     nmi_pending_ = s.nmi_pending;
     nmi_ack_ = s.nmi_ack;
     im0_pc_hold_ = s.im0_pc_hold;
+    ld_a_ir_ = s.ld_a_ir;
 }
 #endif
 

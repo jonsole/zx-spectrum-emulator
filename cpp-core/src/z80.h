@@ -223,6 +223,7 @@ public:
         bool nmi_pending = false;
         bool nmi_ack = false;
         bool im0_pc_hold = false;
+        bool ld_a_ir = false;
     };
     void save_state(State& s) const;
     void restore_state(const State& s);
@@ -279,6 +280,11 @@ private:
     /// which does not move, as Zilog's interrupt application note has it.
     /// Cleared when the next instruction's fetch begins.
     bool im0_pc_hold_ = false;
+    /// The instruction just finished is LD A,I or LD A,R, which copied IFF2
+    /// into P/V. On the NMOS Z80 an interrupt accepted at the very next fetch
+    /// leaves P/V reset, as if IFF2 had been read after the acceptance cleared
+    /// it -- the bug the CMOS part fixed. Cleared as the next fetch begins.
+    bool ld_a_ir_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
     /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean
@@ -321,8 +327,10 @@ private:
     // pre-modification value except sp_pre_dec, which returns the new SP.
     /// The address of the next instruction byte, and PC moved past it --
     /// except through an IM 0 instruction, whose bytes come from the
-    /// interrupting device while PC stays where the interrupt found it.
-    uint16_t pc_post_inc() { return im0_pc_hold_ ? regs.pc : regs.pc++; }
+    /// interrupting device while PC stays where the interrupt found it, and
+    /// while halted, when the CPU fetches from the byte after the HALT over
+    /// and over without moving on.
+    uint16_t pc_post_inc() { return (im0_pc_hold_ || halted) ? regs.pc : regs.pc++; }
     uint16_t sp_post_inc() { return regs.sp++; }
     uint16_t sp_pre_dec() { return --regs.sp; }
     uint16_t wz_post_inc() { return regs.wz++; }

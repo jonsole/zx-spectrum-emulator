@@ -462,10 +462,12 @@ ACTIONS: dict[str, "callable"] = {
     "LD I,A": lambda y, z, p, q, i: "regs.i = regs.a;",
     "LD R,A": lambda y, z, p, q, i: "regs.r = regs.a;",
     "LD A,I": lambda y, z, p, q, i: (
-        "regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2);"
+        "regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2); "
+        "ld_a_ir_ = true;"
     ),
     "LD A,R": lambda y, z, p, q, i: (
-        "regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2);"
+        "regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2); "
+        "ld_a_ir_ = true;"
     ),
     "RRD": {
         1: lambda y, z, p, q, i: (

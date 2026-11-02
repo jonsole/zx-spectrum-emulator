@@ -8954,7 +8954,7 @@
             return true;
         }
         case 2062: {
-            regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2);
+            regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2); ld_a_ir_ = true;
             step_ = 2063;
             return true;
         }
@@ -9306,7 +9306,7 @@
             return true;
         }
         case 2130: {
-            regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2);
+            regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2); ld_a_ir_ = true;
             step_ = 2131;
             return true;
         }
