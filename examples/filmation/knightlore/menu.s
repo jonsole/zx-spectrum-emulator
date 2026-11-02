@@ -2,7 +2,7 @@
 ; The menu -- do_menu_selection at $BD0C, and the tune it plays.
 ;
 ; Eight lines: the title, four input methods, the directional-control toggle,
-; "0 START GAME", and a line of our own where the game puts its copyright.
+; "0 START GAME", and the game's copyright line.
 ; The chosen method flashes, and so does the toggle while it is on; 1 to 5
 ; change them and 0 starts.
 ;
@@ -74,9 +74,9 @@ menu_line_5:        DB      $45, 14, 6
 menu_line_6:        DB      $47, 16, 6
                     DB      $00,$26,$1C,$1D,$0A,$1B,$1D,$26,$10,$0A,$16,$8E
                                                                          ; 0 START GAME
-menu_line_7:        DB      $47, 19, 8
-                    DB      $0F,$12,$15,$16,$0A,$1D,$12,$18,$17,$26,$1B,$0E,$16,$0A
-                    DB      $14,$8E                                      ; FILMATION REMAKE
+menu_line_7:        DB      $47, 19, 10
+                    DB      $25,$26,$01,$09,$08,$04,$26,$0A,$24,$0C,$24,$10
+                    DB      $A4                                          ; (c) 1984 A.C.G.
 
 
 ; The menu tune -- menu_tune at $B253, the same note bytes the end screens'
