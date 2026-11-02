@@ -1,5 +1,8 @@
 #include "spectrum.h"
 
+#include "alu.h"
+#include "flags.h"
+
 namespace zx {
 namespace {
 
@@ -636,38 +639,73 @@ bool Spectrum::fast_load_block() {
     // each one in, then reads ONE more byte -- the checksum -- and folds that
     // in too, leaving H zero on a clean block. So a good load consumes DE + 2
     // bytes, which is why the parity starts at the flag and ends on d[len+1].
-    bool ok = !d.empty() && d[0] == want_flag;
-    uint8_t parity = 0;
-    if (ok) {
-        parity = d[0];
+    //
+    // Each way out returns what the ROM's own exit leaves in A and F, because
+    // a loader that looks past the carry sees it: Woodmass's Tape Test prints
+    // AF for blocks that fail each way, and a real 48K's values are what its
+    // expected pictures show. The exits, in the ROM's LD-BYTES:
+    //   - the end of the block, LD A,H : CP $01 -- A is the parity, and the
+    //     carry is set only when it is 0, so that is where a bad checksum
+    //     fails (a parity of D9 returns AF = D982) and a good one succeeds
+    //     (0093);
+    //   - a wrong flag byte, LD-FLAG's XOR L : RET NZ -- A is the flag read
+    //     XOR the flag wanted, F that XOR's flags (FE for FF returns 0100);
+    //   - a byte that does not verify, LD-VERIFY's XOR L : RET NZ -- the
+    //     same, with the byte in memory in place of the flag wanted, and IX
+    //     left on the byte.
+    // DE = 0 on entry reads the flag byte and goes straight to the end-of-
+    // block test, before LD-FLAG ever compares it: nothing is loaded, and the
+    // parity is the flag itself, so only a flag of 0 succeeds (FF returns
+    // FF82).
+    uint8_t a = 0;
+    uint8_t f = 0;
+    if (d.empty()) {
+        // Nothing to read: the ROM would time out on the edges, carry clear.
+        f = uint8_t(r.f & ~0x01);
+    } else if (len == 0) {
+        a = d[0];
+        f = alu::cp8(a, 0x01);
+    } else if (d[0] != want_flag) {
+        const alu::Alu8 x = alu::xor8(d[0], want_flag);
+        a = x.value;
+        f = x.flags;
+    } else {
+        uint8_t parity = d[0];
         size_t i = 1;
+        bool verified = true;
         for (; i < d.size() && len > 0; i++, len--, dst++) {
-            parity = uint8_t(parity ^ d[i]);
             if (loading) {
                 memory.write(dst, d[i]);
             } else if (memory.read(dst) != d[i]) {
-                ok = false;
+                verified = false;
                 break;
             }
-        }
-        if (!ok) {
-            // A verify mismatch: the ROM bails out of its loop the same way.
-        } else if (len != 0 || i >= d.size()) {
-            ok = false; // the block ran out before DE bytes had been read
-        } else {
             parity = uint8_t(parity ^ d[i]);
-            ok = parity == 0;
+        }
+        if (!verified) {
+            const alu::Alu8 x = alu::xor8(memory.read(dst), d[i]);
+            a = x.value;
+            f = x.flags;
+        } else if (len != 0 || i >= d.size()) {
+            // The block ran out before DE bytes and the checksum had been
+            // read -- its own checksum went in as data -- and the ROM waits
+            // for the next byte's edges in the silence after it. LD-SAMPLE
+            // gives up when its INC B wraps to 0, straight after LD-DELAY's
+            // loop has run A down to 0 and AND A has cleared the carry: A = 0,
+            // and F is INC's Z and H with the carry still clear (Tape Test's
+            // block 2 expects 0050).
+            a = 0;
+            f = uint8_t(FLAG_Z | FLAG_H);
+        } else {
+            a = uint8_t(parity ^ d[i]);
+            f = alu::cp8(a, 0x01);
         }
     }
 
     r.ix = dst;
     r.set_de(len);
-    // The ROM leaves the routine through CP $01 with A holding the running
-    // parity, so on success A is 0 and 0 - 1 sets S, H, N and C together.
-    // Nothing in the ROM reads more than the carry, but a truthful return
-    // costs one constant and will not surprise a loader that does.
-    r.a = parity;
-    r.f = ok ? uint8_t(0x93) : uint8_t(r.f & ~0x01);
+    r.a = a;
+    r.f = f;
 
     // Interrupts are deliberately left exactly as the caller had them. The
     // real routine does DI on the way in and SA-LD-RET does EI on the way out,
@@ -927,6 +965,7 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.byte(s.cpu.nmi_pending ? 1 : 0);
     h.byte(s.cpu.nmi_ack ? 1 : 0);
     h.byte(s.cpu.im0_pc_hold ? 1 : 0);
+    h.byte(s.cpu.ld_a_ir ? 1 : 0);
     h.byte(s.cpu.hlx_idx);
     h.u64(s.cpu.pins);
 
