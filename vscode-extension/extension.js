@@ -38,7 +38,10 @@ const {
   sameServer,
   fromServerInfo,
   serverIsOlder,
+  serverCan,
+  CAPABILITIES,
 } = require('./server_registry');
+const board = require('./board_view');
 // This extension's version, which is the version of the zx_server it was
 // released with (cpp-core/CMakeLists.txt reads the same package.json).
 const EXTENSION_VERSION = require('./package.json').version;
@@ -140,7 +143,11 @@ function activate(context) {
   audioVolume = clampPercent(volumeState.get(VOLUME_KEY, 100), 100);
   audioVolumeBeforeMute = clampPercent(volumeState.get(VOLUME_BEFORE_MUTE_KEY, 100), 100) || 100;
   activateServer(context);
+  board.activateBoard(context);
   activatePrograms(context);
+  // Every capability true until a session says otherwise: a when-clause key
+  // nobody has set reads as false.
+  publishCapabilities();
   activateTapeDesigner(context);
   activateAsmLanguage(context);
   activateProfile(context, zxDebugSession);
@@ -314,6 +321,7 @@ function activate(context) {
       refreshTape(undefined);
       refreshSpeedStatus();
       publishLiveState();
+      publishCapabilities();
     })
   );
   // The only way out here to hear that the machine has stopped. VS Code
@@ -338,6 +346,11 @@ function activate(context) {
             if (message && message.type === 'event' && message.event === 'stopped') {
               postGraphics({ type: 'refresh' });
             }
+            // The first moment a session can answer serverInfo, and so say
+            // what its machine can do.
+            if (message && message.type === 'event' && message.event === 'initialized') {
+              publishCapabilities();
+            }
           },
         };
       },
@@ -351,6 +364,7 @@ function activate(context) {
       refreshSpeedStatus();
       publishUiContext();
       publishLiveState();
+      publishCapabilities();
       // A server that has just started is at full volume, whatever the
       // panel says.
       sendVolume();
@@ -425,7 +439,7 @@ function refreshSpeedStatus() {
   if (!speedStatus) {
     return;
   }
-  if (!zxDebugSession()) {
+  if (!zxDebugSession() || !serverCan(activeServer, 'speed')) {
     speedStatus.hide();
     return;
   }
@@ -1314,6 +1328,34 @@ function publishUiContext() {
   setUiContext('zxspectrum.tapePlaying', tapeStatus ? tapeStatus.playing === true : false);
 }
 
+// ---- what the machine can do --------------------------------------------------
+//
+// A session can be on the emulator or on retro-spectrum's SpecNext board, whose
+// bridge serves the same protocols and lists what it can do: no rewind, no
+// profiler, no trace and so on (server_registry.js's CAPABILITIES). Each
+// capability is a when-clause key, zxspectrum.can.<name>, which the commands,
+// views and menus in package.json are shown by; with no session, or a server
+// that lists nothing -- zx_server -- every one is true.
+
+let activeServer = null; // the active session's server, once it has said
+
+async function publishCapabilities() {
+  const session = zxDebugSession();
+  let server = null;
+  if (session) {
+    server = await serverOfSession(session);
+    if (session !== zxDebugSession()) {
+      return; // another took its place while it answered
+    }
+  }
+  activeServer = server;
+  for (const capability of CAPABILITIES) {
+    setUiContext('zxspectrum.can.' + capability, serverCan(server, capability));
+  }
+  setUiContext('zxspectrum.onBoard', board.isBoard(server));
+  refreshSpeedStatus();
+}
+
 /// Pushes a when-clause context key, but only when it has actually changed.
 /// The tape poll runs four times a second and every one of these is a round
 /// trip into the workbench.
@@ -2093,7 +2135,14 @@ function stopGraphicsPolling() {
 function setGraphicsLive(on) {
   stopGraphicsPolling();
   if (on) {
-    graphicsPoll = setInterval(() => postGraphics({ type: 'refresh' }), GRAPHICS_POLL_MS);
+    graphicsPoll = setInterval(() => {
+      // Not on the SpecNext board: a read while it runs pauses it for a
+      // moment, and its display flickers each time. It still refreshes on
+      // every stop, from the stopped event.
+      if (!board.isBoard(activeServer)) {
+        postGraphics({ type: 'refresh' });
+      }
+    }, GRAPHICS_POLL_MS);
   }
 }
 

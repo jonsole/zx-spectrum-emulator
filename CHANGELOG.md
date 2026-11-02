@@ -7,6 +7,16 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Run and debug on the SpecNext board, from VS Code.** A status-bar
+  switch, **Emulator** or **SpecNext**, says where programs run; a launch for
+  the board starts or joins retro-spectrum's `zx_bridge.py` and debugs the
+  FPGA 48K through it like any session. The bridge says which CPU and machine
+  the board is, shown on the switch, and a program the board can't run (128K
+  on a 48K, anything on a core that isn't a Z80) is refused with the reason.
+  Views and commands the board can't serve -- rewind, the profiler, tracing,
+  speed -- are hidden while on it. See "Running on the SpecNext board" in
+  docs/vscode-debugging.md.
+
 - **Split a sprite too wide to draw, in the sprite sheet editor.** A sprite
   wider than the engine's 40 pixels has **Split into N** on its Size card:
   it is cut into the fewest pieces the engine can draw, side by side on the

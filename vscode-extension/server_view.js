@@ -13,6 +13,9 @@
 // when VS Code closes (zxspectrum.server.stopOnExit). A server something else
 // started is only ever joined, and only stopped when asked, after a question.
 //
+// A launch for the SpecNext board -- "target": "specnext", or none while the status bar
+// switch says SpecNext -- goes to the board's bridge instead (board_view.js).
+//
 // A configuration's `ports` points it at another server instead: named ports,
 // joined or started like the settings' server, or "auto" -- a server of the
 // session's own on free ports, stopped with it (see "other servers" below).
@@ -472,6 +475,27 @@ function activateServer(context) {
         // A failure is thrown rather than shown: VS Code reports a launch
         // that could not start itself, and a second notice would repeat it.
         try {
+          // The SpecNext board, by the launch's own "target" or the status bar's
+          // switch: its bridge, joined or started (board_view.js), and the
+          // rest of this -- ports, ROMs, zx_server -- is not for it. Required
+          // here, not at the top, because board_view.js requires this file.
+          const board = require('./board_view');
+          const boardTarget = require('./board_target');
+          const where = boardTarget.targetOf(session.configuration, board.chosenTarget());
+          if (where.error) {
+            throw new StartError(where.error);
+          }
+          if (where.target === boardTarget.BOARD_TARGET) {
+            // Started first, so that its advert can say what is on the
+            // board's port before the launch is weighed against it.
+            const found = await board.ensureBridge();
+            const refusal = boardTarget.boardRefusal(session.configuration, found.server);
+            if (refusal) {
+              throw new StartError(refusal);
+            }
+            sessionPorts.set(session.id, found.ports);
+            return new vscode.DebugAdapterServer(found.ports.dap, HOST);
+          }
           const asked = registry.launchPorts(session.configuration.ports, ports());
           if (asked.error) {
             throw new StartError(asked.error);
@@ -502,10 +526,18 @@ function activateServer(context) {
     // started with, which is also what the generated launch.json does.
     vscode.debug.registerDebugConfigurationProvider('zxspectrum', {
       resolveDebugConfiguration(folder, config) {
+        let out = config;
         if (!config.type && !config.request && !config.name) {
-          return { type: 'zxspectrum', request: 'launch', name: 'ZX Spectrum' };
+          out = { type: 'zxspectrum', request: 'launch', name: 'ZX Spectrum' };
         }
-        return config;
+        // Which machine, said in the configuration itself when the switch
+        // decided it: the session keeps it, so whatever asks a session later
+        // -- rewind's view, say -- knows a board session from the emulator's
+        // without a round trip to ask.
+        if (out.target === undefined && out.debugServer === undefined) {
+          out.target = require('./board_view').chosenTarget();
+        }
+        return out;
       }
     }),
     vscode.debug.onDidTerminateDebugSession((session) => {

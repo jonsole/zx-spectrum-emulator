@@ -245,6 +245,65 @@ leaves the previous name showing. A panel on a server with no debug session
 cannot set its sound device's volume, which only DAP reaches. The status bar's
 **Spectrum** item is still about the server in the settings alone.
 
+## Running on the SpecNext board
+
+retro-spectrum's SpecNext board -- an FPGA 48K, clock-exact against this emulator
+-- is a second target beside it. The board is driven through its bridge,
+`tools/zx_bridge.py` in the retro-spectrum repository. The bridge owns the
+board's USB link and serves this emulator's own DAP, MCP and screen stream,
+so a debug session on the board looks like any other.
+
+**Setting it up.** Point `zxspectrum.board.bridge` at `zx_bridge.py` in your
+retro-spectrum checkout. `zxspectrum.board.python` is the Python that runs
+it. `zxspectrum.board.port` is the board's serial port, or `auto` (the
+default) to have the bridge find the board's FT232H. `zxspectrum.board.capture`
+is the capture device for the board's picture, a DirectShow name or `auto`;
+leave it empty for no picture. `zxspectrum.board.ports` holds the bridge's
+ports, DAP 4712, MCP 8001 and screen 8502 by default.
+
+**Choosing the board.** The status bar's switch, **Emulator** or **SpecNext**, says
+where programs run (`zxspectrum.target`). A snapshot or tape's **Run** and
+**Debug** go there, and the page offers **Run on SpecNext** and **Debug on SpecNext** (or
+**on Emulator**) for the other machine. A program the board can't run --
+128K on a 48K board, anything on a core that isn't a Z80 -- has its board
+buttons disabled, with the reason. In `launch.json`, `"target": "specnext"` sends one
+configuration to the board whatever the switch says, and `"target": "emulator"`
+keeps one on the emulator. With no `target`, a launch follows the switch.
+
+**The bridge is started for you.** A launch for the board joins a bridge that
+is already running -- one advertised on this machine, or anything answering on
+the board's DAP port -- and starts one if there is none. A bridge this window
+started stops when the window closes. **ZX Spectrum: Start the SpecNext Bridge** and
+**Stop the SpecNext Bridge** do it by hand, and the switch's menu has Stop and the
+bridge's output. If the bridge fails to start, its own reason is shown. For
+example, "Access is denied" on the port means another bridge, such as
+retro-z80's, holds the FT232H.
+
+**What is on the port.** The bridge asks the board which CPU core and which
+machine its bitstream is, and says so in its advert and `serverInfo` as
+`cpu` (`z80`, `68000`, `6502`, ...) and `machine` (`48k`, `128k`, `+2a`,
+`timex2068`, `next`, ...). The switch's tooltip shows it -- "ZX Spectrum 48K,
+Z80" -- and launches are weighed against it: a 128K program goes to a
+machine with the paging (`128k`, `+2a`, `next`), and nothing for the
+Spectrum goes to a core that isn't a Z80. A bridge that hasn't said, or isn't
+running yet, is taken to be a 48K Z80, and the tooltip says "(assumed)".
+
+**What the board can't do is hidden.** The bridge lists what it can do in its
+advert and its `serverInfo` (debug, breakpoints, watchpoints, memory,
+snapshots, tape, keys, screen). Anything missing from the list is hidden while
+a session is on the board: stepping backwards, the profiler, trace, emulation
+speed, the graphics viewer, the display-write overlay and raster markers,
+logpoints and the fast-load switch. A server that lists nothing -- `zx_server`
+-- can do it all.
+
+**The board's limits.** It has 8 hardware breakpoints and 4 watchpoints. Tapes load through the ROM's LD-BYTES trap, so only standard blocks
+load. `step` takes no `ticks`.
+
+Not done: MCP doesn't follow the switch. Claude's MCP launcher adopts
+whatever answers on port 8000, so an MCP client reaches the board by being
+pointed at the bridge's MCP port, 8001. `zx_server` doesn't send its own
+capability list yet; it doesn't need to, since none means all.
+
 ## Opening snapshots and tapes
 
 `.sna`, `.z80`, `.tap` and `.tzx` files open -- from File > Open, the

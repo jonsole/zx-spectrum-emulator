@@ -71,8 +71,40 @@ function parseAdvert(text) {
     // predate labels and null when none was given.
     label: typeof info.label === 'string' && info.label ? info.label : null,
     // The build's version; absent from servers that predate it.
-    version: typeof info.serverVersion === 'string' && info.serverVersion ? info.serverVersion : null
+    version: typeof info.serverVersion === 'string' && info.serverVersion ? info.serverVersion : null,
+    // What machine it drives: "emulator" for zx_server, which says nothing,
+    // and "specnext" for retro-spectrum's bridge to the FPGA board, which serves
+    // the same protocols on ports of its own.
+    target: typeof info.target === 'string' && info.target ? info.target : 'emulator',
+    // What CPU core and what machine it is: "z80" and "48k", say. The SpecNext
+    // bridge asks its board; null when it has not said.
+    cpu: typeof info.cpu === 'string' && info.cpu ? info.cpu : null,
+    machine: typeof info.machine === 'string' && info.machine ? info.machine : null,
+    // ...and the bitstream's own four-character tag, which the bridge sends
+    // whether or not it has a name for it.
+    machineTag: typeof info.machine_tag === 'string' && info.machine_tag ? info.machine_tag : null,
+    // What it can do, by name (CAPABILITIES), or null for everything -- a
+    // server that does not say is zx_server, which does it all.
+    capabilities: Array.isArray(info.capabilities)
+      ? info.capabilities.filter((c) => typeof c === 'string') : null
   };
+}
+
+// Everything the extension offers that a server might not. A server lists
+// what it can do in its advert and serverInfo; the eight a SpecNext bridge lists
+// are the first eight. One that lists nothing can do them all.
+const CAPABILITIES = [
+  'debug', 'breakpoints', 'watchpoints', 'memory', 'snapshots', 'tape', 'keys', 'screen',
+  'rewind', 'profile', 'trace', 'audio', 'speed', 'graphics', 'logpoints', 'paging', 'overlay'
+];
+
+// Whether a server -- an advert or serverInfo as parseAdvert reads it, or
+// null for one not known yet -- can do something.
+function serverCan(server, capability) {
+  if (!server || !server.capabilities) {
+    return true;
+  }
+  return server.capabilities.indexOf(capability) >= 0;
 }
 
 // Whether a process is still there. Signal 0 checks without sending
@@ -241,6 +273,6 @@ function serverIsOlder(serverVersion, extensionVersion) {
 }
 
 module.exports = {
-  ADVERT_VERSION, advertDirectory, parseAdvert, processAlive, liveServers, describeServer,
+  ADVERT_VERSION, CAPABILITIES, serverCan, advertDirectory, parseAdvert, processAlive, liveServers, describeServer,
   detailServer, sameServer, fromServerInfo, launchPorts, versionNumbers, serverIsOlder
 };

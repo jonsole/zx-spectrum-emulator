@@ -4,7 +4,10 @@
 // what the program is -- which Spectrum it needs, what a tape holds -- with a
 // Run button and a Debug button. Run starts a debug session on it that goes
 // straight on running; Debug stops at the first instruction. Either way the
-// emulator is started if nothing is running (server_view.js). A .z80 that is
+// emulator is started if nothing is running (server_view.js). Both go to
+// whichever machine the status bar's switch points at -- the emulator, or the
+// SpecNext board through its bridge (board_view.js) -- and a second pair goes to
+// the other one. A .z80 that is
 // really assembly source is handed back to the text editor.
 //
 // Also here: the `stopOnEntry` launch attribute. The server always stops a
@@ -20,6 +23,8 @@ const path = require('path');
 const crypto = require('crypto');
 const info = require('./program_info');
 const launch = require('./server_launch');
+const boardTarget = require('./board_target');
+const board = require('./board_view');
 
 const VIEW_TYPE = 'zxspectrum.program';
 
@@ -81,7 +86,9 @@ function debugInfoFor(filePath) {
   return asm ? { sld: candidates.sld, asm } : null;
 }
 
-async function runProgram(uri, stopOnEntry) {
+// Runs or debugs a program on `where` -- "emulator" or "specnext" -- or, with none
+// given, on whichever the status bar's switch points at.
+async function runProgram(uri, stopOnEntry, where) {
   const filePath = uri.fsPath;
   const fileName = path.basename(filePath);
   let bytes;
@@ -96,13 +103,28 @@ async function runProgram(uri, stopOnEntry) {
     vscode.window.showErrorMessage(`${fileName}: ${described.problem}`);
     return;
   }
-  const rom = info.pickRom(romCandidates(), described.needs128, fileSize);
-  if (!rom) {
-    vscode.window.showErrorMessage(`${fileName} needs a ${described.needs128 ? '128K (32K)' : '48K (16K)'} ROM, ` +
-      'and none was found. Put it in roms/ or list it in zxspectrum.server.roms.');
-    return;
+  const on = where || board.chosenTarget();
+  let config;
+  if (on === boardTarget.BOARD_TARGET) {
+    // The board has its own ROM, and is what its bridge says it is.
+    const can = boardTarget.boardCanRun(described, board.currentBoard());
+    if (!can.ok) {
+      vscode.window.showErrorMessage(`${fileName} cannot run on the SpecNext: ${can.why}.`);
+      return;
+    }
+    config = boardTarget.boardLaunchConfig(
+      info.launchConfigFor(filePath, fileName, described, null, debugInfoFor(filePath), stopOnEntry));
+  } else {
+    const rom = info.pickRom(romCandidates(), described.needs128, fileSize);
+    if (!rom) {
+      vscode.window.showErrorMessage(`${fileName} needs a ${described.needs128 ? '128K (32K)' : '48K (16K)'} ROM, ` +
+        'and none was found. Put it in roms/ or list it in zxspectrum.server.roms.');
+      return;
+    }
+    config = info.launchConfigFor(filePath, fileName, described, rom, debugInfoFor(filePath), stopOnEntry);
+    // Said outright, so the switch pointing at the board does not take it there.
+    config.target = 'emulator';
   }
-  const config = info.launchConfigFor(filePath, fileName, described, rom, debugInfoFor(filePath), stopOnEntry);
   // One machine, so one session: a program opened while another runs takes
   // its place rather than sharing the emulator with it.
   const current = vscode.debug.activeDebugSession;
@@ -123,12 +145,22 @@ function escapeHtml(text) {
 // below): the picture beside the details or above them, whichever lets it be
 // larger with everything still in view, and sized to that -- so nothing needs
 // scrolling to reach unless the editor is too small for the details alone.
-function pageHtml(fileName, described, runOnOpen, picture) {
+// `on` is where Run and Debug go, the switch's target; the second pair goes to
+// the other machine -- the board's disabled, with why, for a program it
+// cannot run.
+function pageHtml(fileName, described, runOnOpen, picture, on, boardServer) {
   const nonce = crypto.randomBytes(16).toString('hex');
   const unknown = described.kind === 'unknown';
   const title = unknown ? 'Not something the emulator can load'
     : (described.kind === 'tape' ? 'Tape' : 'Snapshot') + ' for the ' +
       (described.needs128 ? 'ZX Spectrum 128' : 'ZX Spectrum 48K');
+  const onBoard = on === boardTarget.BOARD_TARGET;
+  const here = onBoard ? 'the SpecNext board' : 'the emulator';
+  const otherName = onBoard ? 'Emulator' : 'SpecNext';
+  const otherCan = onBoard ? { ok: true, why: null } : boardTarget.boardCanRun(described, boardServer);
+  const otherTitle = (what) => otherCan.ok
+    ? `Load this on ${onBoard ? 'the emulator' : 'the SpecNext board'} and ${what}`
+    : `Not on the SpecNext: ${otherCan.why}`;
   const rows = unknown ? [escapeHtml(described.problem)]
     : [escapeHtml(described.format + (described.kind === 'snapshot' ? ', ' + described.model : ''))]
       .concat(described.details.map(escapeHtml));
@@ -145,7 +177,10 @@ function pageHtml(fileName, described, runOnOpen, picture) {
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
   h2 { font-size: 13px; font-weight: normal; opacity: .75; margin: 0 0 18px; }
   ul { margin: 0 0 22px; padding-left: 18px; line-height: 1.7; }
-  .buttons { display: flex; gap: 10px; margin-bottom: 18px; }
+  .buttons { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .buttons .gap { width: 14px; }
+  button:disabled { opacity: .45; cursor: default; }
+  p.where { opacity: .7; margin: 0 0 18px; }
   button { font: inherit; padding: 5px 16px; border: 0; border-radius: 2px; cursor: pointer;
            color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
   button:hover { background: var(--vscode-button-secondaryHoverBackground); }
@@ -173,12 +208,16 @@ function pageHtml(fileName, described, runOnOpen, picture) {
   <ul>${rows.map((row) => `<li>${row}</li>`).join('')}</ul>
   ${unknown ? '' : `
   <div class="buttons">
-    <button class="primary" id="run" title="Reset the emulator, load this and run it">Run</button>
-    <button id="debug" title="Reset the emulator, load this and stop at its first instruction">Debug</button>
+    <button class="primary" id="run" title="Load this on ${here} and run it">Run</button>
+    <button id="debug" title="Load this on ${here} and stop at its first instruction">Debug</button>
+    <span class="gap"></span>
+    <button id="runOther" ${otherCan.ok ? '' : 'disabled'} title="${escapeHtml(otherTitle('run'))}">Run on ${otherName}</button>
+    <button id="debugOther" ${otherCan.ok ? '' : 'disabled'} title="${escapeHtml(otherTitle('stop at its first instruction'))}">Debug on ${otherName}</button>
   </div>
+  <p class="where">Run and Debug use ${here} -- the switch in the status bar says which.</p>
   <label><input type="checkbox" id="auto" ${runOnOpen ? 'checked' : ''}> Run programs as soon as they are opened</label>
-  <p class="note">Running a program resets the emulator, and takes the place of any debug session already
-  running. The emulator is started if it is not running. A <code>.sld</code> and a source file of the same
+  <p class="note">Running a program resets the machine, and takes the place of any debug session already
+  running. The emulator, or the board's bridge, is started if it is not running. A <code>.sld</code> and a source file of the same
   name beside this one (the source may be a folder up) are loaded with it, for stepping through its source.</p>`}
   </div>
 </div>
@@ -270,7 +309,7 @@ function pageHtml(fileName, described, runOnOpen, picture) {
   new ResizeObserver(fit).observe(document.body);
 
   const vscode = acquireVsCodeApi();
-  for (const id of ['run', 'debug']) {
+  for (const id of ['run', 'debug', 'runOther', 'debugOther']) {
     const button = document.getElementById(id);
     if (button) button.addEventListener('click', () => vscode.postMessage({ type: id }));
   }
@@ -306,12 +345,29 @@ class ProgramEditorProvider {
     const config = vscode.workspace.getConfiguration('zxspectrum');
     panel.webview.options = { enableScripts: true };
     const picture = described.kind === 'unknown' ? null : info.programScreen(fileName, bytes);
-    panel.webview.html = pageHtml(fileName, described, config.get('program.runOnOpen', false), picture);
+    const draw = () => {
+      panel.webview.html = pageHtml(fileName, described,
+        vscode.workspace.getConfiguration('zxspectrum').get('program.runOnOpen', false), picture,
+        board.chosenTarget(), board.currentBoard());
+    };
+    draw();
+    // The switch flipped: the buttons say where they go, so they change too.
+    const watching = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('zxspectrum.target')) {
+        draw();
+      }
+    });
+    panel.onDidDispose(() => watching.dispose());
+    const other = () => (board.chosenTarget() === boardTarget.BOARD_TARGET ? 'emulator' : boardTarget.BOARD_TARGET);
     panel.webview.onDidReceiveMessage((message) => {
       if (message.type === 'run') {
         runProgram(uri, false);
       } else if (message.type === 'debug') {
         runProgram(uri, true);
+      } else if (message.type === 'runOther') {
+        runProgram(uri, false, other());
+      } else if (message.type === 'debugOther') {
+        runProgram(uri, true, other());
       } else if (message.type === 'auto') {
         config.update('program.runOnOpen', message.on === true, vscode.ConfigurationTarget.Global);
       }

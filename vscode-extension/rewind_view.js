@@ -137,7 +137,9 @@ function scheduleRefresh() {
   refreshTimer = setTimeout(async () => {
     refreshTimer = undefined;
     const session = getSession();
-    if (!session) {
+    // The SpecNext board cannot step backwards: asking it would only cost a
+    // trip over its link on every stop.
+    if (!session || session.configuration.target === 'specnext') {
       show(undefined);
       return;
     }

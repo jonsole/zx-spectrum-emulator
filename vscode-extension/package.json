@@ -22,6 +22,7 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:zxspectrum.showScreen",
     "onCommand:zxspectrum.showServerScreen",
     "onCommand:zxspectrum.showTrace",
@@ -42,7 +43,10 @@
     "onCustomEditor:zxspectrum.program",
     "onCustomEditor:zxspectrum.tapeDesign",
     "onCustomEditor:zxspectrum.screenDesign",
-    "onCommand:zxspectrum.designTape"
+    "onCommand:zxspectrum.designTape",
+    "onCommand:zxspectrum.selectTarget",
+    "onCommand:zxspectrum.boardStart",
+    "onCommand:zxspectrum.boardStop"
   ],
   "contributes": {
     "customEditors": [
@@ -222,6 +226,47 @@
           "maximum": 65535,
           "default": 8501,
           "markdownDescription": "The emulator's audio stream port (`--audio-port`), which the screen panel plays when `#zxspectrum.server.sound#` is `panel`."
+        },
+        "zxspectrum.target": {
+          "type": "string",
+          "enum": ["emulator", "specnext"],
+          "enumDescriptions": [
+            "zx_server, the emulator.",
+            "retro-spectrum's SpecNext board, an FPGA 48K, through its bridge."
+          ],
+          "default": "emulator",
+          "markdownDescription": "Where programs run: the status bar's switch. A snapshot or tape's Run and Debug, and every launch configuration without a `target` of its own, go here."
+        },
+        "zxspectrum.board.bridge": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The SpecNext board's bridge: `tools/zx_bridge.py` in a retro-spectrum checkout, run with `#zxspectrum.board.python#`, or any other command to run as it is. `${workspaceFolder}` and `~` are expanded. A bridge already running -- advertised, or answering on the board's DAP port -- is joined instead."
+        },
+        "zxspectrum.board.python": {
+          "type": "string",
+          "default": "python",
+          "markdownDescription": "The Python that runs `#zxspectrum.board.bridge#` when it is a `.py`."
+        },
+        "zxspectrum.board.port": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "The board's serial port (`--port`): `COM3`, say, or `auto` for the bridge to find the board's FT232H by its USB ID."
+        },
+        "zxspectrum.board.capture": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The capture device the bridge takes the board's picture from (`--capture`): a DirectShow device name, or `auto`. Empty means no picture -- the screen panel stays dark."
+        },
+        "zxspectrum.board.ports": {
+          "type": "object",
+          "properties": {
+            "dap": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "mcp": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "screen": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          },
+          "additionalProperties": false,
+          "default": { "dap": 4712, "mcp": 8001, "screen": 8502 },
+          "markdownDescription": "The ports the board's bridge serves DAP, MCP and the screen on (`--dap-port`, `--mcp-port`, `--screen-port`)."
         }
       }
     },
@@ -238,6 +283,18 @@
       }
     ],
     "commands": [
+      {
+        "command": "zxspectrum.selectTarget",
+        "title": "ZX Spectrum: Run Programs On... (Emulator or SpecNext)"
+      },
+      {
+        "command": "zxspectrum.boardStart",
+        "title": "ZX Spectrum: Start the SpecNext Bridge"
+      },
+      {
+        "command": "zxspectrum.boardStop",
+        "title": "ZX Spectrum: Stop the SpecNext Bridge"
+      },
       {
         "command": "zxspectrum.designTape",
         "title": "ZX Spectrum: Design Tape..."
@@ -555,7 +612,7 @@
         {
           "id": "zxspectrumProfile",
           "name": "ZX Spectrum Profile",
-          "when": "debugType == 'zxspectrum' || zxspectrum.hasProfile"
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.profile || zxspectrum.hasProfile"
         },
         {
           "id": "zxspectrumWatchpoints",
@@ -597,7 +654,7 @@
         },
         {
           "command": "zxspectrum.showSelectionAsGraphics",
-          "when": "editorHasSelection && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/",
+          "when": "editorHasSelection && resourceExtname =~ /^\\.(s|asm|a80|z80|inc|def|sym)$/ && zxspectrum.can.graphics",
           "group": "zxspectrum@1"
         }
       ],
@@ -609,12 +666,12 @@
         },
         {
           "command": "zxspectrum.writeOverlayOn",
-          "when": "activeWebviewPanelId == 'zxspectrumScreen' && !zxspectrum.writeOverlay",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen' && !zxspectrum.writeOverlay && zxspectrum.can.overlay",
           "group": "navigation@1"
         },
         {
           "command": "zxspectrum.writeOverlayOff",
-          "when": "activeWebviewPanelId == 'zxspectrumScreen' && zxspectrum.writeOverlay",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen' && zxspectrum.writeOverlay && zxspectrum.can.overlay",
           "group": "navigation@1"
         }
       ],
@@ -698,59 +755,59 @@
         },
         {
           "command": "zxspectrum.writeOverlayFade",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.writeOverlayOpacity",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterMarkerOn",
-          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterMarker"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterMarker && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterMarkerOff",
-          "when": "debugType == 'zxspectrum' && zxspectrum.rasterMarker"
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterMarker && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterInProgressOn",
-          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterInProgress"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterInProgress && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterInProgressOff",
-          "when": "debugType == 'zxspectrum' && zxspectrum.rasterInProgress"
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterInProgress && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterPendingOn",
-          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterPending"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.rasterPending && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.rasterPendingOff",
-          "when": "debugType == 'zxspectrum' && zxspectrum.rasterPending"
+          "when": "debugType == 'zxspectrum' && zxspectrum.rasterPending && zxspectrum.can.overlay"
         },
         {
           "command": "zxspectrum.tapeFastLoadOn",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.onBoard"
         },
         {
           "command": "zxspectrum.tapeFastLoadOff",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.onBoard"
         },
         {
           "command": "zxspectrum.setSpeed",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.speed"
         },
         {
           "command": "zxspectrum.profileStart",
-          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling"
+          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling && zxspectrum.can.profile"
         },
         {
           "command": "zxspectrum.profileStop",
-          "when": "debugType == 'zxspectrum' && zxspectrum.profiling"
+          "when": "debugType == 'zxspectrum' && zxspectrum.profiling && zxspectrum.can.profile"
         },
         {
           "command": "zxspectrum.profileRefresh",
-          "when": "debugType == 'zxspectrum'"
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.profile"
         },
         {
           "command": "zxspectrum.profileMarkIdle",
@@ -767,6 +824,14 @@
         {
           "command": "zxspectrum.profileShowAll",
           "when": "zxspectrum.profileShowingPeriod"
+        },
+        {
+          "command": "zxspectrum.showTrace",
+          "when": "zxspectrum.can.trace"
+        },
+        {
+          "command": "zxspectrum.showGraphics",
+          "when": "zxspectrum.can.graphics"
         }
       ],
       "view/item/context": [
@@ -819,12 +884,12 @@
         },
         {
           "command": "zxspectrum.profileStart",
-          "when": "view == zxspectrumProfile && !zxspectrum.profiling",
+          "when": "view == zxspectrumProfile && !zxspectrum.profiling && zxspectrum.can.profile",
           "group": "navigation@1"
         },
         {
           "command": "zxspectrum.profileStop",
-          "when": "view == zxspectrumProfile && zxspectrum.profiling",
+          "when": "view == zxspectrumProfile && zxspectrum.profiling && zxspectrum.can.profile",
           "group": "navigation@1"
         },
         {
@@ -864,12 +929,12 @@
         },
         {
           "command": "zxspectrum.tapeFastLoadOff",
-          "when": "view == zxspectrumTape && zxspectrum.tapeFastLoad",
+          "when": "view == zxspectrumTape && zxspectrum.tapeFastLoad && !zxspectrum.onBoard",
           "group": "navigation@4"
         },
         {
           "command": "zxspectrum.tapeFastLoadOn",
-          "when": "view == zxspectrumTape && !zxspectrum.tapeFastLoad",
+          "when": "view == zxspectrumTape && !zxspectrum.tapeFastLoad && !zxspectrum.onBoard",
           "group": "navigation@4"
         },
         {
@@ -926,17 +991,17 @@
         },
         {
           "command": "zxspectrum.setSpeed",
-          "when": "debugType == 'zxspectrum'",
+          "when": "debugType == 'zxspectrum' && zxspectrum.can.speed",
           "group": "navigation@1"
         },
         {
           "command": "zxspectrum.profileStart",
-          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.profiling && zxspectrum.can.profile",
           "group": "navigation@2"
         },
         {
           "command": "zxspectrum.profileStop",
-          "when": "debugType == 'zxspectrum' && zxspectrum.profiling",
+          "when": "debugType == 'zxspectrum' && zxspectrum.profiling && zxspectrum.can.profile",
           "group": "navigation@2"
         }
       ]
@@ -963,6 +1028,15 @@
                     "additionalProperties": false
                   }
                 ]
+              },
+              "target": {
+                "type": "string",
+                "enum": ["emulator", "specnext"],
+                "enumDescriptions": [
+                  "zx_server, the emulator.",
+                  "retro-spectrum's SpecNext board, through its bridge (zxspectrum.board.*): started if it is not running. The machine its bitstream is -- 48K, 128K, ... -- is what the bridge reports. No rewind, profiler or trace; 8 breakpoints and 4 watchpoints; standard tapes only."
+                ],
+                "markdownDescription": "Which machine this runs on. Left out, the status bar's switch (`#zxspectrum.target#`) decides. On `specnext`, `rom` and `ports` are not used."
               },
               "rom": {
                 "type": "string",
