@@ -49,7 +49,9 @@ function boardSettings(get) {
     bridge: text('bridge', ''),
     python: text('python', '') || 'python',
     port: text('port', '') || DEFAULT_SERIAL_PORT,
-    capture: text('capture', ''),
+    // Unset is "auto", the bridge's own search for a capture device; set
+    // empty, no picture.
+    capture: text('capture', 'auto'),
     ports: {
       dap: clampPort(ports.dap, DEFAULT_BOARD_PORTS.dap),
       mcp: clampPort(ports.mcp, DEFAULT_BOARD_PORTS.mcp),

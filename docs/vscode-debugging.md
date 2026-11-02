@@ -257,8 +257,11 @@ so a debug session on the board looks like any other.
 retro-spectrum checkout. `zxspectrum.board.python` is the Python that runs
 it. `zxspectrum.board.port` is the board's serial port, or `auto` (the
 default) to have the bridge find the board's FT232H. `zxspectrum.board.capture`
-is the capture device for the board's picture, a DirectShow name or `auto`;
-leave it empty for no picture. `zxspectrum.board.ports` holds the bridge's
+is the capture device for the board's HDMI picture: `auto` (the default) has
+the bridge pick the device whose name says it captures video, and a DirectShow
+name picks one; empty means no picture. Only one program can hold the capture
+device, as with the serial port, so a bridge started from retro-spectrum's own
+task must not run beside one started here. `zxspectrum.board.ports` holds the bridge's
 ports, DAP 4712, MCP 8001 and screen 8502 by default.
 
 **Choosing the board.** The status bar's switch, **Emulator** or **SpecNext**, says

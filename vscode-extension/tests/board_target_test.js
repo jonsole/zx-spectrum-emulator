@@ -52,7 +52,7 @@ test('a server that lists nothing is the emulator, and can do everything', () =>
 
 test('the settings fall back to finding the board, and the bridge\'s own ports', () => {
   const s = b.boardSettings(() => undefined);
-  assert.deepStrictEqual(s, { bridge: '', python: 'python', port: 'auto', capture: '',
+  assert.deepStrictEqual(s, { bridge: '', python: 'python', port: 'auto', capture: 'auto',
                               ports: { dap: 4712, mcp: 8001, screen: 8502 } });
   const t = b.boardSettings((k) => ({ port: ' COM7 ', ports: { dap: 5000, mcp: 'x' } })[k]);
   assert.strictEqual(t.port, 'COM7');
@@ -69,7 +69,7 @@ test('zx_bridge.py runs with python, and the arguments are the bridge\'s', () =>
 });
 
 test('no capture device is no --capture; anything not .py runs as it is', () => {
-  const s = b.boardSettings((k) => ({ bridge: '~/bin/specnext-bridge.cmd' })[k]);
+  const s = b.boardSettings((k) => ({ bridge: '~/bin/specnext-bridge.cmd', capture: '' })[k]);
   const c = b.bridgeCommand(s, null, 'C:/Users/me');
   assert.strictEqual(c.command, 'C:/Users/me/bin/specnext-bridge.cmd');
   assert.ok(c.args.indexOf('--capture') < 0);

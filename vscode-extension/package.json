@@ -254,8 +254,8 @@
         },
         "zxspectrum.board.capture": {
           "type": "string",
-          "default": "",
-          "markdownDescription": "The capture device the bridge takes the board's picture from (`--capture`): a DirectShow device name, or `auto`. Empty means no picture -- the screen panel stays dark."
+          "default": "auto",
+          "markdownDescription": "The capture device the bridge takes the board's HDMI picture from (`--capture`): `auto` (the default) for the bridge to pick the device whose name says it captures video, or a DirectShow device name. Empty means no picture -- the screen panel stays dark. Only one program can hold the device, so a bridge started elsewhere must not be running."
         },
         "zxspectrum.board.ports": {
           "type": "object",
