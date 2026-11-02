@@ -12,6 +12,7 @@
 // The core is retro-spectrum's oracle: its Verilog Z80 is run against this
 // one in lockstep, so these pins matter as much as the totals.
 
+#include "flags.h"
 #include "memory.h"
 #include "pins.h"
 #include "test_main.h"
@@ -336,6 +337,82 @@ TEST(im0_prefix_fetches_its_next_opcode_at_the_unchanged_pc) {
     CHECK(b->device_m1 == std::vector<bool>({true}));
     CHECK_EQ(int(b->cpu.regs.r & 0x7F), 3);
     CHECK_EQ(get_addr(b->pins), uint16_t(0x8001));
+}
+
+TEST(a_halted_cpu_fetches_from_the_byte_after_the_halt) {
+    // HALT at 0x8000 and INC A after it, interrupts off. Once halted, every
+    // M1 puts 0x8001 on the bus -- not the HALT's own 0x8000 -- reads the
+    // byte there and ignores it: A stays put, PC stays at 0x8001, and R
+    // counts one a fetch, 4 T-states each. Woodmass's HALT2INT shows it on a
+    // real 48K: a HALT at 0x7FFF is timed by the uncontended 0x8000.
+    Registers r = start(1);
+    r.iff1 = false;
+    r.iff2 = false;
+    r.a = 5;
+    r.r = 0;
+    auto b = std::make_unique<Bench>(r);
+    b->mem.bytes[CODE] = 0x76;     // HALT
+    b->mem.bytes[CODE + 1] = 0x3C; // INC A, never to run
+    CHECK_EQ(b->instruction(), 4u); // the HALT itself
+    for (int fetch = 0; fetch < 3; fetch++) {
+        for (int half = 0; half < 8; half++) {
+            b->half();
+            if (asserted(b->pins, M1)) {
+                CHECK_EQ(get_addr(b->pins), uint16_t(CODE + 1));
+            }
+        }
+    }
+    CHECK(b->cpu.halted);
+    CHECK_EQ(int(b->cpu.regs.a), 5);
+    CHECK_EQ(b->cpu.registers().pc, uint16_t(CODE + 1));
+    CHECK_EQ(int(b->cpu.regs.r & 0x7F), 4); // the HALT's fetch and three more
+    // An interrupt then returns to the byte after the HALT.
+    b->cpu.regs.iff1 = true;
+    b->int_line = true;
+    b->instruction();
+    CHECK_EQ(b->stacked(), uint16_t(CODE + 1));
+}
+
+namespace {
+
+/// EI, then LD A,I or LD A,R (ED 57 / ED 5F) with IFF2 set by the EI, with
+/// INT held from the start: the EI keeps it off for one instruction, so it
+/// is taken straight after the load. Returns F as the acknowledge leaves it,
+/// and where the load said it should return.
+uint8_t f_after_ld_a_ir(uint8_t second_byte, bool interrupt, uint16_t& returns_to) {
+    Registers r = start(1);
+    r.iff1 = false;
+    r.iff2 = false;
+    r.i = 0x80; // S set, Z clear, whichever register is read
+    r.r = 0x80;
+    auto b = std::make_unique<Bench>(r);
+    b->mem.bytes[CODE] = 0xFB; // EI
+    b->mem.bytes[CODE + 1] = 0xED;
+    b->mem.bytes[CODE + 2] = second_byte;
+    b->int_line = interrupt;
+    b->instruction(); // EI
+    b->instruction(); // the load, and the acknowledge if INT is down
+    returns_to = b->stacked();
+    return b->cpu.regs.f;
+}
+
+} // namespace
+
+TEST(nmos_ld_a_i_and_ld_a_r_lose_pv_to_an_interrupt_taken_at_once) {
+    // P/V is IFF2, 1 after the EI -- unless the interrupt is accepted at the
+    // very next fetch, when the NMOS Z80 leaves it 0 (the CMOS part fixed
+    // it). Woodmass's IFF2 Bug test shows the 0 on a real 48K for the loads
+    // that end at the last T-states of a frame. The interrupt itself clears
+    // IFF2 too, so what tells the two apart is the flag the load left.
+    for (uint8_t op : {uint8_t(0x57), uint8_t(0x5F)}) {
+        uint16_t returns_to = 0;
+        const uint8_t quiet = f_after_ld_a_ir(op, false, returns_to);
+        CHECK((quiet & FLAG_PV) != 0);
+        const uint8_t taken = f_after_ld_a_ir(op, true, returns_to);
+        CHECK_EQ(returns_to, uint16_t(CODE + 3)); // taken after the load
+        CHECK((taken & FLAG_PV) == 0);
+        CHECK((taken & FLAG_S) != 0); // the rest of the load's flags stand
+    }
 }
 
 RUN_TESTS()
