@@ -7,6 +7,16 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The RF look.** An optional filter shows the picture as a TV did through
+  the Spectrum's RF lead: a full PAL encode and decode with the 48K's real
+  dot crawl (the 128K's stands still), cross-colour, colour bleed, a ghost,
+  noise, scanlines and jail bars, each with its own strength. The 48K's dots
+  move as its crystal offset says, a setting in ppm. **ZX Spectrum: Toggle RF
+  Look** (a button on the screen panel) and **ZX Spectrum: RF Look...** set
+  it, and MCP's `rf_filter` tool does too. It is bit-exact with the same
+  filter on retro-spectrum's SpecNext board, which takes the same settings.
+  See docs/rf-look.md.
+
 - **Border effects line up with the paper.** The ULA shows a group of paper
   4 T-states after it fetches it, and the emulator drew it at the fetch, so
   every border colour change landed 8 pixels late against the picture:

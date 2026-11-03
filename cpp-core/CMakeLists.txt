@@ -55,6 +55,7 @@ add_library(zx_core STATIC
   src/memory.cpp
   src/profile.cpp
   src/register_names.cpp
+  src/rf_filter.cpp
   src/snapshot.cpp
   src/spectrum.cpp
   src/tape.cpp

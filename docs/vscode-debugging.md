@@ -474,6 +474,16 @@ never stretched by the browser behind the filter's back. At a whole-multiple
 size, sharp bilinear and nearest neighbour are the same picture; the
 difference shows at **Fit**. The panel used to be a fixed 2x whatever its size.
 
+### The RF look
+
+**ZX Spectrum: Toggle RF Look**, the colour-mode button on the panel's title
+bar, shows the picture as a TV did through the RF lead: a PAL encode and
+decode with dot crawl, colour bleed, a ghost, noise, scanlines and jail
+bars. **ZX Spectrum: RF Look...** sets each effect and its strength, and they are
+`zxspectrum.rf.*` in the Settings editor. Unlike the scaling above, it is
+drawn by the server, or by the board through its bridge, so the panel sends
+the settings to whichever server it shows. See [rf-look.md](rf-look.md).
+
 Frames are read via `engine.machine.render_screen()` directly rather than
 through the engine's normal command queue — a `run()` in progress occupies
 the actor loop for its entire duration, so a queued read would sit unserved

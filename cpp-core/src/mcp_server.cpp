@@ -32,6 +32,7 @@
 
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <deque>
 #include <functional>
@@ -1191,6 +1192,53 @@ json tools_list() {
                                "screen with nothing at full brightness means the beam has "
                                "displayed everything written so far. Off by default")}},
                {}));
+    // The same name and arguments as retro-spectrum's bridge, which sets the
+    // board's filter: one tool for either machine (docs/rf-look.md).
+    add("rf_filter",
+        "Read or change the RF look: a filter on the displayed picture that makes it look as it "
+        "did on a TV through the Spectrum's RF lead -- a full PAL encode and decode with the "
+        "subcarrier's real phase, so dot crawl along colour edges, cross-colour on fine "
+        "patterns, colour bleed and soft luma, plus an optional ghost, noise, scanlines and "
+        "jail bars. A "
+        "display setting only: the machine runs the same either way, and a reset or a "
+        "snapshot keeps it. While on, get_screen and the screen panel give a 704x624 picture "
+        "(two samples a Spectrum pixel, each line twice) instead of 352x312. Only the "
+        "arguments given change; with none it just reports. Replies with all fourteen "
+        "settings. Turn it off to read the screen exactly",
+        schema(json{{"on", bool_prop("The master switch. Off is the plain picture, to the pixel.")},
+                    {"composite", bool_prop("The PAL encode and decode: dot crawl, cross-colour, "
+                                            "colour bleed, soft luma. Off leaves the RGB picture "
+                                            "with scanlines only (the ghost and the noise need "
+                                            "it).")},
+                    {"ghost", bool_prop("A delayed echo of the picture, as a mismatched cable gives.")},
+                    {"noise", bool_prop("RF noise.")},
+                    {"scanlines", bool_prop("Darken every second line of the 624.")},
+                    {"jail", integer_prop("Jail bars on the paper, the 48K's thin lines from its "
+                                          "supply noise: 0 off, 1-3 about 1, 2 and 4 % of white.")},
+                    {"jail_rgb", bool_prop("The jail bars sharp on the RGB, as on a 128K's RGB "
+                                           "output, rather than on the composite, where the TV "
+                                           "softens them.")},
+                    {"crystal_ppm", number_prop("The 48K's crystal offset in ppm, -12.8 to 12.7 in "
+                                                "0.1 steps: how the dots move from frame to frame. "
+                                                "0 is nominal crystals (the dots nearly invert "
+                                                "every frame), -5.6 the default, a trimmed "
+                                                "machine's slow creep. A 128K's dots stand still "
+                                                "whatever it says.")},
+                    {"luma", integer_prop("0-3: 0 no trap (strongest dots), 1 the subcarrier "
+                                          "trap, 2-3 softer still.")},
+                    {"chroma", integer_prop("0-3: colour bandwidth, 0 sharpest to 3 most bleed "
+                                            "(a 2, 4, 8 or 16-sample average).")},
+                    {"ghost_d", integer_prop("The ghost's delay, 0-63 samples of 71 ns; 0 is "
+                                             "no ghost.")},
+                    {"ghost_g", integer_prop("The ghost's strength, 0-15 (sixteenths of half "
+                                             "the picture).")},
+                    {"noise_n", integer_prop("The noise level, 0-15.")},
+                    {"scan_d", integer_prop("The scanlines' depth, 0-15 (sixteenths darker).")},
+                    {"defaults", bool_prop("Put back the power-on settings first, then apply "
+                                           "any others given: off, every effect ready, the "
+                                           "trap, 8-sample chroma, no jail bars, a -5.6 ppm "
+                                           "crystal.")}},
+               {}));
     add("set_graphics_view",
         "Point VS Code's ZX Spectrum Graphics panel at some bytes and say how to draw them: a "
         "sprite sheet, a character set, or a screen dump. This is the one tool that moves "
@@ -2285,6 +2333,91 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         message += ", pending writes ";
         message += view.pending ? "on" : "off";
         return text_result(message);
+    }
+
+    if (name == "rf_filter") {
+        RfSettings rf = engine.rf_settings();
+        const json& defaults = arg(args, "defaults");
+        if (defaults.is_boolean() && defaults.get<bool>()) {
+            rf = RfSettings{};
+        }
+        const struct {
+            const char* name;
+            uint8_t bit;
+        } switches[] = {{"on", RfSettings::ON},
+                        {"composite", RfSettings::COMPOSITE},
+                        {"ghost", RfSettings::GHOST},
+                        {"noise", RfSettings::NOISE},
+                        {"scanlines", RfSettings::SCANLINES}};
+        for (const auto& s : switches) {
+            const json& v = arg(args, s.name);
+            if (v.is_boolean()) {
+                rf.flags = uint8_t(v.get<bool>() ? (rf.flags | s.bit) : (rf.flags & ~s.bit));
+            }
+        }
+        // Each level: where it lives in the seven bytes, and its range. All
+        // are checked before any is applied, so a bad one changes nothing.
+        const struct {
+            const char* name;
+            uint8_t* byte;
+            uint32_t shift;
+            uint32_t max;
+        } levels[] = {{"jail", &rf.flags, RfSettings::JAIL_SHIFT, 3},
+                      {"luma", &rf.band, 0, 3},
+                      {"chroma", &rf.band, 4, 3},
+                      {"ghost_d", &rf.ghost_d, 0, 63},
+                      {"ghost_g", &rf.ghost_g, 0, 15},
+                      {"noise_n", &rf.noise, 0, 15},
+                      {"scan_d", &rf.scan, 0, 15}};
+        for (const auto& l : levels) {
+            const json& v = arg(args, l.name);
+            if (v.is_null()) {
+                continue;
+            }
+            if (!v.is_number_integer() || v.get<int64_t>() < 0 || v.get<int64_t>() > int64_t(l.max)) {
+                return error_result(std::string("'") + l.name + "' must be a whole number from 0 to "
+                                    + std::to_string(l.max));
+            }
+        }
+        // The crystal offset is a signed byte of tenths of a ppm, given in
+        // ppm and rounded to the nearest tenth, as the bridge does.
+        const json& crystal = arg(args, "crystal_ppm");
+        int crystal_tenths = rf.crystal;
+        if (!crystal.is_null()) {
+            const double tenths = crystal.is_number() ? std::round(crystal.get<double>() * 10) : 1e9;
+            if (tenths < -128 || tenths > 127) {
+                return error_result("'crystal_ppm' must be a number from -12.8 to 12.7");
+            }
+            crystal_tenths = int(tenths);
+        }
+        rf.crystal = int8_t(crystal_tenths);
+        const json& jail_rgb = arg(args, "jail_rgb");
+        if (jail_rgb.is_boolean()) {
+            rf.flags = uint8_t(jail_rgb.get<bool>() ? (rf.flags | RfSettings::JAIL_RGB)
+                                                     : (rf.flags & ~RfSettings::JAIL_RGB));
+        }
+        for (const auto& l : levels) {
+            const json& v = arg(args, l.name);
+            if (v.is_number_integer()) {
+                const uint32_t mask = l.max << l.shift;
+                *l.byte = uint8_t((*l.byte & ~mask) | (uint32_t(v.get<int64_t>()) << l.shift));
+            }
+        }
+        engine.set_rf_settings(rf);
+        return json_result(json{{"on", rf.on()},
+                                {"composite", (rf.flags & RfSettings::COMPOSITE) != 0},
+                                {"ghost", (rf.flags & RfSettings::GHOST) != 0},
+                                {"noise", (rf.flags & RfSettings::NOISE) != 0},
+                                {"scanlines", (rf.flags & RfSettings::SCANLINES) != 0},
+                                {"jail", rf.jail()},
+                                {"jail_rgb", (rf.flags & RfSettings::JAIL_RGB) != 0},
+                                {"crystal_ppm", rf.crystal / 10.0},
+                                {"luma", rf.luma()},
+                                {"chroma", rf.chroma()},
+                                {"ghost_d", rf.ghost_d},
+                                {"ghost_g", rf.ghost_g},
+                                {"noise_n", rf.noise},
+                                {"scan_d", rf.scan}});
     }
 
     if (name == "set_graphics_view") {

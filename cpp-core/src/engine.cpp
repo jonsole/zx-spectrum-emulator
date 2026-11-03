@@ -241,6 +241,21 @@ void Engine::set_raster_view(const RasterView& v) {
     submit_void([this](Spectrum&) { publish_screen(); }, /*during_run=*/true);
 }
 
+void Engine::set_rf_settings(const RfSettings& s) {
+    {
+        std::lock_guard<std::mutex> lock(rf_mutex_);
+        rf_settings_ = s;
+    }
+    // Republished inside the job, for the same reasons as set_raster_view.
+    screen_dirty_.store(true);
+    submit_void([this](Spectrum&) { publish_screen(); }, /*during_run=*/true);
+}
+
+RfSettings Engine::rf_settings() const {
+    std::lock_guard<std::mutex> lock(rf_mutex_);
+    return rf_settings_;
+}
+
 RasterView Engine::raster_view() const {
     RasterView v;
     v.marker = raster_marker_.load();
@@ -310,6 +325,17 @@ void Engine::publish_screen() {
     }
     if (marker) {
         machine_.ula.draw_raster_marker(rgb);
+    }
+    // Last, over the annotations too, as a TV would show whatever it was
+    // given. Here rather than in screen() so that it is worked out once a
+    // publish however many panels are watching, and only for the frames that
+    // are published at all. The frame shown is the last completed one, which
+    // is one before the counter.
+    const RfSettings rf = rf_settings();
+    if (rf.on()) {
+        const uint64_t shown = frame > 0 ? frame - 1 : 0;
+        const bool locked_subcarrier = machine_.ula.timing().hc_per_line != HC_PER_LINE;
+        rgb = rf_filter_frame(rgb, rf, shown, locked_subcarrier);
     }
     std::lock_guard<std::mutex> lock(screen_mutex_);
     screen_snapshot_ = std::move(rgb);

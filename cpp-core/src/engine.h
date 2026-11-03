@@ -30,6 +30,7 @@
 
 #include "logpoint.h"
 #include "rewind.h"
+#include "rf_filter.h"
 #include "snapshot.h"
 #include "spectrum.h"
 #include "video_recorder.h"
@@ -712,7 +713,15 @@ public:
     /// neither the queue nor a yield.
     void set_raster_view(const RasterView& v);
     RasterView raster_view() const;
+    /// The RF look's settings (rf_filter.h): a display setting, not machine
+    /// state, so neither the queue, the rewind history nor a snapshot sees
+    /// it. Applies from the next publish; a stopped machine republishes at
+    /// once, as for set_raster_view.
+    void set_rf_settings(const RfSettings& s);
+    RfSettings rf_settings() const;
     /// Latest rendered frame (RGB, border included). Never blocks on the CPU.
+    /// FULL_WIDTH x FULL_HEIGHT, or RF_WIDTH x RF_HEIGHT while the RF look is
+    /// on -- tell them apart by the size.
     std::vector<uint8_t> screen();
 
     // ---- frames: one completed picture per frame boundary ------------------
@@ -868,6 +877,10 @@ private:
     std::atomic<bool> raster_marker_{true};
     std::atomic<bool> raster_in_progress_{true};
     std::atomic<bool> raster_pending_{false};
+    /// The RF look's settings. Read once a publish by the emulator thread and
+    /// written from the protocol threads, so a lock rather than an atomic.
+    mutable std::mutex rf_mutex_;
+    RfSettings rf_settings_;
     /// Where the raster marker in screen_snapshot_ was drawn, or ~0 for a
     /// snapshot published without one. Paired with published_frame_ below:
     /// between them they say whether what a re-publish would produce differs

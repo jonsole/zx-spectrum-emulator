@@ -60,6 +60,8 @@ const {
   scanlineBand,
   normaliseView,
 } = require('./screen_scaling');
+const { RF_SETTINGS, normaliseSetting, rfArguments, describeValue } = require('./rf_look');
+const { FrameReader } = require('./frame_reader');
 
 // Each screen panel's ports are those of the server it shows -- asked of the
 // session, or read from the server's advert -- and zxspectrum.server.*Port
@@ -187,7 +189,16 @@ function activate(context) {
           screen.post({ view: screenView() });
         }
       }
+      if (event.affectsConfiguration('zxspectrum.rf')) {
+        for (const screen of screenPanels()) {
+          screen.sendRfLook();
+        }
+      }
     })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('zxspectrum.rfToggle', toggleRfLook),
+    vscode.commands.registerCommand('zxspectrum.rfLook', pickRfLook)
   );
   context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.setSpeed', pickSpeed));
   speedStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -594,7 +605,7 @@ class ScreenPanel {
     this.follows = follows;
     this.screenSocket = undefined;
     this.screenTimer = undefined;
-    this.screenBuffer = Buffer.alloc(0);
+    this.screenFrames = new FrameReader();
     this.audioSocket = undefined;
     this.audioTimer = undefined;
     this.audioBuffer = Buffer.alloc(0);
@@ -697,23 +708,29 @@ class ScreenPanel {
     }, RECONNECT_DELAY_MS);
   }
 
+  // The RF look is drawn by the server, so the settings go to it: on every
+  // connection, which covers a server started or restarted after they were
+  // set, and whenever they change. Over MCP, which the board's bridge
+  // answers too, rather than DAP, which only a debug session has.
+  sendRfLook() {
+    if (this.server.ports.mcp) {
+      callMcpTool(this.server, this.mcpAgent, 'rf_filter', rfArguments(rfSetting));
+    }
+  }
+
   connectScreen() {
-    this.screenBuffer = Buffer.alloc(0);
+    this.screenFrames = new FrameReader();
     const socket = net.connect(this.server.ports.screen, this.server.host || SCREEN_HOST);
     this.screenSocket = socket;
+    socket.on('connect', () => this.sendRfLook());
     socket.on('data', (chunk) => {
-      this.screenBuffer = Buffer.concat([this.screenBuffer, chunk]);
       // A frame is a 4-byte big-endian length prefix + that many PNG bytes
-      // (see cpp-core/src/screen_stream.cpp) -- loop in case several frames
-      // arrived in one chunk, and leave a partial frame buffered for the
-      // next 'data' event rather than assuming chunk boundaries line up with
-      // frame boundaries (they generally won't).
-      while (this.screenBuffer.length >= 4) {
-        const length = this.screenBuffer.readUInt32BE(0);
-        if (this.screenBuffer.length < 4 + length) break;
-        const frame = this.screenBuffer.subarray(4, 4 + length);
-        this.screenBuffer = this.screenBuffer.subarray(4 + length);
-        this.post({ image: frame.toString('base64') });
+      // (see cpp-core/src/screen_stream.cpp and frame_reader.js). Sent to
+      // the webview as bytes rather than base64: the RF look's frames are
+      // 1.3 MB, and the text would be a third bigger and need decoding
+      // there byte by byte.
+      for (const frame of this.screenFrames.push(chunk)) {
+        this.post({ image: new Uint8Array(frame.buffer, frame.byteOffset, frame.length) });
       }
     });
     socket.on('error', () => this.reconnectLater('screen'));
@@ -968,6 +985,99 @@ async function pickScreenScaling() {
   await vscode.workspace
     .getConfiguration('zxspectrum.screen')
     .update(pick.setting, value, vscode.ConfigurationTarget.Global);
+}
+
+/// One zxspectrum.rf setting, by its key in rf_look.js.
+function rfSetting(key) {
+  return vscode.workspace.getConfiguration('zxspectrum.rf').get(key);
+}
+
+/// Flips the RF look's master switch. A user setting, like the panel's
+/// scaling, so it holds everywhere; the change reaches every server a panel
+/// shows through onDidChangeConfiguration.
+async function toggleRfLook() {
+  const on = normaliseSetting(RF_SETTINGS[0], rfSetting('on'));
+  await vscode.workspace
+    .getConfiguration('zxspectrum.rf')
+    .update('on', !on, vscode.ConfigurationTarget.Global);
+  if (screenPanels().length === 0) {
+    vscode.window.showInformationMessage(
+      `RF look ${on ? 'off' : 'on'} -- it shows in the screen panel (ZX Spectrum: Show Screen).`);
+  }
+}
+
+/// Every RF setting with its value: a switch flips when picked, a level
+/// offers its values (or, for the long ranges, asks for one). Reopens after
+/// each change, so several can be set in a row and each seen as it lands.
+async function pickRfLook() {
+  for (;;) {
+    const items = [];
+    for (const s of RF_SETTINGS) {
+      const value = normaliseSetting(s, rfSetting(s.key));
+      items.push({ label: s.label, description: describeValue(s, value), detail: s.detail,
+        setting: s, value });
+      if (s.key === 'on') {
+        items.push({ label: 'Settings', kind: vscode.QuickPickItemKind.Separator });
+      }
+    }
+    items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+    items.push({ label: 'Put back the defaults', reset: true });
+    const pick = await vscode.window.showQuickPick(items, {
+      title: 'ZX Spectrum RF Look',
+      placeHolder: 'Pick a switch to flip it, or a level to change it',
+    });
+    if (!pick) {
+      return;
+    }
+    const config = vscode.workspace.getConfiguration('zxspectrum.rf');
+    if (pick.reset) {
+      // Back to the power-on values, but the switch stays where it is: the
+      // defaults are about how it looks, not whether it is on.
+      for (const s of RF_SETTINGS) {
+        if (s.key !== 'on') {
+          await config.update(s.key, undefined, vscode.ConfigurationTarget.Global);
+        }
+      }
+      continue;
+    }
+    const s = pick.setting;
+    let value;
+    if (s.max === undefined) {
+      value = !pick.value;
+    } else if (s.step === undefined && s.max <= 15) {
+      const levels = [];
+      for (let v = 0; v <= s.max; v++) {
+        levels.push({ label: `${v === pick.value ? '$(check)' : '$(blank)'} ${describeValue(s, v)}`,
+          value: v });
+      }
+      const level = await vscode.window.showQuickPick(levels, { title: s.label, placeHolder: s.detail });
+      if (!level) {
+        continue;
+      }
+      value = level.value;
+    } else {
+      // A long range, or one in fractional steps: typed in.
+      const min = s.min || 0;
+      const range = s.step === undefined ? `a whole number from ${min} to ${s.max}`
+        : `a number from ${min} to ${s.max} in steps of ${s.step}`;
+      const typed = await vscode.window.showInputBox({
+        title: s.label,
+        prompt: `${s.detail} ${range[0].toUpperCase()}${range.slice(1)}.`,
+        value: String(pick.value),
+        validateInput: (text) => {
+          const n = Number(text.trim());
+          const whole = s.step === undefined ? Number.isInteger(n) : true;
+          return text.trim() !== '' && Number.isFinite(n) && whole && n >= min && n <= s.max
+            ? undefined : `Must be ${range}`;
+        },
+      });
+      if (typed === undefined) {
+        continue;
+      }
+      value = Number(typed.trim());
+    }
+    await config.update(s.key, value, vscode.ConfigurationTarget.Global);
+  }
 }
 
 /// A percentage setting's presets, then a Custom entry that shows the current
@@ -2737,32 +2847,38 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
       if (!frame) return;
       const w = canvas.width;
       const h = canvas.height;
+      // The crop is in Spectrum pixels; the frame may be bigger than one a
+      // pixel -- the RF look sends 704x624, two samples a pixel and each
+      // line twice -- so it is scaled to the frame's own.
+      const sx = frame.width / 352;
+      const sy = frame.height / 312;
+      const src = { x: crop.x * sx, y: crop.y * sy, w: crop.w * sx, h: crop.h * sy };
       // Set on every draw: resizing a canvas resets its context, smoothing
       // included. 'low' is Chromium's bilinear -- 'medium' adds mipmaps,
       // which only matter going down, and 'high' is bicubic.
       if (view.filter === 'bilinear') {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'low';
-        ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
+        ctx.drawImage(frame, src.x, src.y, src.w, src.h, 0, 0, w, h);
       } else if (view.filter === 'sharp-bilinear') {
         // Nearest neighbour to the largest whole multiple that fits, then
         // bilinear for what is left: every pixel stays square and the same
         // size, and only its edges are blended. At a whole-multiple size
         // there is nothing left over, and this is nearest neighbour exactly.
-        const k = prescaleFactor(w, h, crop.w, crop.h);
-        if (prescaled.width !== crop.w * k || prescaled.height !== crop.h * k) {
-          prescaled.width = crop.w * k;
-          prescaled.height = crop.h * k;
+        const k = prescaleFactor(w, h, src.w, src.h);
+        if (prescaled.width !== src.w * k || prescaled.height !== src.h * k) {
+          prescaled.width = src.w * k;
+          prescaled.height = src.h * k;
         }
         prescaledCtx.imageSmoothingEnabled = false;
-        prescaledCtx.drawImage(frame, crop.x, crop.y, crop.w, crop.h,
+        prescaledCtx.drawImage(frame, src.x, src.y, src.w, src.h,
                                0, 0, prescaled.width, prescaled.height);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'low';
         ctx.drawImage(prescaled, 0, 0, w, h);
       } else {
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
+        ctx.drawImage(frame, src.x, src.y, src.w, src.h, 0, 0, w, h);
       }
       // After the filter, as a CRT's gaps would be: the dark band is in the
       // glass, not in the picture being scaled.
@@ -2775,11 +2891,15 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
     // decode can take longer than the gap, so a frame that finishes after a
     // newer one has been sent for decoding is thrown away rather than drawn
     // over it.
-    async function showFrame(base64) {
+    async function showFrame(image) {
       const seq = ++decoding;
-      const bin = atob(base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      // Bytes from the screen stream; base64 text from anything older.
+      let bytes = image;
+      if (typeof image === 'string') {
+        const bin = atob(image);
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      }
       let bitmap;
       try {
         bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));

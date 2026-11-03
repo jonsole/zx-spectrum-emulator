@@ -156,6 +156,92 @@
           "default": 0,
           "markdownDescription": "How dark the gaps between the screen panel's scanlines are, as a percentage: `0` is off, `100` black. Drawn over the lower half of each Spectrum line, after the filter. Needs at least two device pixels to a line, so it shows nothing at `1x` on an unscaled display."
         },
+        "zxspectrum.rf.on": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "The RF look: the picture as a TV showed it through the Spectrum's RF lead -- a full PAL encode and decode, with dot crawl, cross-colour, colour bleed, a ghost, noise, scanlines and jail bars. Done by the emulator (or the board), so every screen panel on that server shows it. See `docs/rf-look.md`. **ZX Spectrum: Toggle RF Look** flips this, and **ZX Spectrum: RF Look...** sets the rest."
+        },
+        "zxspectrum.rf.composite": {
+          "type": "boolean",
+          "default": true,
+          "description": "RF look: the PAL encode and decode -- dot crawl, cross-colour, colour bleed, soft luma. Off leaves the plain picture with scanlines, and the ghost and the noise need it on."
+        },
+        "zxspectrum.rf.ghost": {
+          "type": "boolean",
+          "default": true,
+          "description": "RF look: a delayed echo of the picture."
+        },
+        "zxspectrum.rf.noise": {
+          "type": "boolean",
+          "default": true,
+          "description": "RF look: RF noise."
+        },
+        "zxspectrum.rf.scanlines": {
+          "type": "boolean",
+          "default": true,
+          "description": "RF look: every second line darker."
+        },
+        "zxspectrum.rf.jail": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 0,
+          "markdownDescription": "RF look: jail bars, still vertical bars on the paper as the 48K's supply noise gave. `0` off, `1` to `3` about 1, 2 and 4 % of white."
+        },
+        "zxspectrum.rf.jailRgb": {
+          "type": "boolean",
+          "default": false,
+          "description": "RF look: the jail bars sharp on the RGB, as on a 128K's RGB output, rather than on the composite, where the TV softens them."
+        },
+        "zxspectrum.rf.crystalPpm": {
+          "type": "number",
+          "minimum": -12.8,
+          "maximum": 12.7,
+          "default": -5.6,
+          "markdownDescription": "RF look: the 48K's crystal offset in ppm, in steps of 0.1, which sets how its dots move from frame to frame. `0` is nominal crystals (they nearly invert every frame), `-5.6` a trimmed machine whose dots creep a cycle in about 6 s. 1 ppm is 0.0885 of a turn a frame. A 128K's dots stand still whatever it says."
+        },
+        "zxspectrum.rf.luma": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "markdownDescription": "RF look: `0` no subcarrier trap (the strongest dots), `1` the trap, `2` and `3` softer still."
+        },
+        "zxspectrum.rf.chroma": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 2,
+          "markdownDescription": "RF look: colour bandwidth, `0` sharpest to `3` most bleed."
+        },
+        "zxspectrum.rf.ghostDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63,
+          "default": 24,
+          "markdownDescription": "RF look: the ghost's delay, in samples of 71 ns. `0` is no ghost."
+        },
+        "zxspectrum.rf.ghostStrength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "default": 3,
+          "description": "RF look: the ghost's strength, 0 to 15."
+        },
+        "zxspectrum.rf.noiseLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "default": 3,
+          "description": "RF look: the noise level, 0 to 15."
+        },
+        "zxspectrum.rf.scanlineDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "default": 6,
+          "description": "RF look: how much darker the scanlines are, in sixteenths, 0 to 15."
+        },
         "zxspectrum.program.runOnOpen": {
           "type": "boolean",
           "default": false,
@@ -333,6 +419,15 @@
         "command": "zxspectrum.screenScaling",
         "title": "ZX Spectrum: Screen Scaling...",
         "icon": "$(zoom-in)"
+      },
+      {
+        "command": "zxspectrum.rfToggle",
+        "title": "ZX Spectrum: Toggle RF Look",
+        "icon": "$(color-mode)"
+      },
+      {
+        "command": "zxspectrum.rfLook",
+        "title": "ZX Spectrum: RF Look..."
       },
       {
         "command": "zxspectrum.watchAddress",
@@ -663,6 +758,11 @@
           "command": "zxspectrum.screenScaling",
           "when": "activeWebviewPanelId == 'zxspectrumScreen'",
           "group": "navigation@2"
+        },
+        {
+          "command": "zxspectrum.rfToggle",
+          "when": "activeWebviewPanelId == 'zxspectrumScreen'",
+          "group": "navigation@3"
         },
         {
           "command": "zxspectrum.writeOverlayOn",

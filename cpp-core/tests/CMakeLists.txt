@@ -74,6 +74,16 @@ zx_add_test(frame_capture_tests)
 zx_add_test(profile_tests)
 zx_add_test(watchpoint_tests)
 zx_add_test(logpoint_tests)
+zx_add_test(rf_filter_tests)
+target_include_directories(rf_filter_tests PRIVATE ${ZX_SRC})
+# retro-spectrum's model of the RF look, when that repository is checked out
+# beside this one: the test then diffs the filter against it sample for sample.
+set(ZX_RETRO_SPECTRUM ${PROJECT_SOURCE_DIR}/../../retro-spectrum)
+if(EXISTS ${ZX_RETRO_SPECTRUM}/sim/rf/rf_model.h)
+  target_compile_definitions(rf_filter_tests PRIVATE
+    ZX_RF_MODEL="${ZX_RETRO_SPECTRUM}/sim/rf/rf_model.h"
+    ZX_RF_TABLES="${ZX_RETRO_SPECTRUM}/fpga/rtl/video")
+endif()
 if(ZX_REWIND)
   zx_add_test(rewind_tests)
   target_compile_definitions(rewind_tests PRIVATE ${ZX_ROOT_DEFINE})
@@ -113,6 +123,18 @@ endif()
 add_test(NAME server_registry_tests COMMAND server_registry_tests
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 add_dependencies(zx_tests server_registry_tests)
+# And for the screen stream's stored PNG, which is zx_server's too.
+add_executable(screen_png_tests screen_png_tests.cpp ${ZX_SRC}/screen_stream.cpp ${ZX_SRC}/net.cpp)
+target_link_libraries(screen_png_tests PRIVATE zx_core)
+target_include_directories(screen_png_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(screen_png_tests SYSTEM PRIVATE ${ZX_THIRD_PARTY})
+target_compile_options(screen_png_tests PRIVATE ${ZX_WARNINGS})
+if(WIN32)
+  target_link_libraries(screen_png_tests PRIVATE ws2_32)
+endif()
+add_test(NAME screen_png_tests COMMAND screen_png_tests
+         WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+add_dependencies(zx_tests screen_png_tests)
 # Diffs against tests/data/visualz80_reference.txt, found relative to the
 # project root rather than the build tree.
 target_compile_definitions(tracelog_tests
