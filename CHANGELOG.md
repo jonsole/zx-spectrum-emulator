@@ -130,7 +130,7 @@ GitHub takes its notes from that section.
   measured before -- profiles, frame costs, T-state counts -- changes for code
   that touches contended memory. `--no-contention` and the MCP tool
   `set_contention` turn it off. The rule and its worked examples are in
-  `docs/contention.md`. Snow is not emulated yet.
+  `docs/contention.md`.
 
 - **The floating bus returns bitmap and attribute bytes.** Reading a port
   nothing answers during the paper area returns the ULA's screen reads in
