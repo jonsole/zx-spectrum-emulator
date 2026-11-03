@@ -56,6 +56,8 @@ EXTENSION = os.path.join(ROOT, "vscode-extension")
 DESIGNER = "examples/filmation/vscode"
 WORKSPACES = os.path.join(ROOT, "release", "workspaces")
 REPO_URL = "https://github.com/jonsole/zx-spectrum-emulator"
+# examples/ is a submodule of this repository, kept in its own.
+EXAMPLES_URL = "https://github.com/jonsole/zx-spectrum-examples"
 # The one platform a release is built for so far.
 TARGET = "win32-x64"
 # Pinned to a major version: a vsce that changed what it accepts should not
@@ -103,8 +105,10 @@ def package_version():
 
 
 def tracked_files(folder, cwd=ROOT):
-    """The files git tracks under `folder`, relative to `cwd`."""
-    out = subprocess.run(["git", "ls-files", "-z", "--", folder], cwd=cwd, check=True,
+    """The files git tracks under `folder`, relative to `cwd` -- inside the
+    examples submodule too, which a plain ls-files would show as one entry."""
+    out = subprocess.run(["git", "ls-files", "--recurse-submodules", "-z", "--", folder],
+                         cwd=cwd, check=True,
                          capture_output=True).stdout.decode("utf-8")
     return [path for path in out.split("\0") if path]
 
@@ -170,7 +174,14 @@ def stage_designer(stage, version):
         f.write("tests/**\n.vscodeignore\n")
 
 
-def run_vsce(stage, out, content_url, target=None):
+def examples_commit():
+    """The examples submodule's checked-out commit: what the designer and the
+    Filmation workspaces are packaged from, and so what their links name."""
+    return subprocess.run(["git", "-C", os.path.join(ROOT, "examples"), "rev-parse", "HEAD"],
+                          check=True, capture_output=True).stdout.decode("ascii").strip()
+
+
+def run_vsce(stage, out, content_url, target=None, repo=REPO_URL):
     npx = shutil.which("npx")
     if not npx:
         raise SystemExit("npx not found: vsce needs Node (or pass --no-vsix)")
@@ -180,8 +191,8 @@ def run_vsce(stage, out, content_url, target=None):
     command += [
         # Nothing to bundle: neither extension has npm dependencies.
         "--no-dependencies",
-        "--baseContentUrl", f"{REPO_URL}/blob/{content_url}",
-        "--baseImagesUrl", f"{REPO_URL}/raw/{content_url}",
+        "--baseContentUrl", f"{repo}/blob/{content_url}",
+        "--baseImagesUrl", f"{repo}/raw/{content_url}",
         "--out", out,
     ]
     subprocess.run(command, cwd=stage, check=True)
@@ -262,7 +273,10 @@ def build_filmation_example(path, top, game, ref):
             if rel == "examples/filmation/README.md":
                 with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
                     text = f.read()
-                text = text.replace("](media/", f"]({REPO_URL}/raw/{ref}/{FILMATION_MEDIA}")
+                # media/ is in the examples repository, at the commit the
+                # submodule holds, with the examples/ prefix off its path.
+                media = FILMATION_MEDIA[len("examples/"):]
+                text = text.replace("](media/", f"]({EXAMPLES_URL}/raw/{examples_commit()}/{media}")
                 z.writestr(f"{top}/{rel}", text)
                 continue
             z.write(os.path.join(ROOT, rel), f"{top}/{rel}")
@@ -314,7 +328,10 @@ def main():
         run_vsce(stage, vsix, f"{args.ref}/docs", TARGET)
         written.append(vsix)
         vsix = os.path.join(args.out, f"filmation-designer-{version}.vsix")
-        run_vsce(designer, vsix, f"{args.ref}/{DESIGNER}")
+        # The designer's README is in the examples repository, at the commit
+        # the submodule holds, with the examples/ prefix off its path.
+        run_vsce(designer, vsix, f"{examples_commit()}/{DESIGNER[len('examples/'):]}",
+                 repo=EXAMPLES_URL)
         written.append(vsix)
     for path in written:
         print(f"wrote {path}")
