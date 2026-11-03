@@ -7,6 +7,13 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **The examples have a repository of their own.** `examples/` is now the
+  [zx-spectrum-examples](https://github.com/jonsole/zx-spectrum-examples)
+  submodule, its history carried across: clone with `--recurse-submodules`, or
+  run `git submodule update --init --recursive examples` in a checkout. The
+  three tiny test programs (`border_rainbow`, `hello_rom_call`,
+  `ldir_contention`) stayed behind, in `cpp-core/tests/programs/`.
+
 - **The RF look.** An optional filter shows the picture as a TV did through
   the Spectrum's RF lead: a full PAL encode and decode with the 48K's real
   dot crawl (the 128K's stands still), cross-colour, colour bleed, a ghost,

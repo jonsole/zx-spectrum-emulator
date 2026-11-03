@@ -145,7 +145,7 @@ def stage_extension(stage, server, roms):
     for name in FAST_LOADER:
         source = os.path.join(loader, name)
         if not os.path.isfile(source):
-            raise SystemExit(f"{source} missing: git submodule update --init examples/zx-tape-loader")
+            raise SystemExit(f"{source} missing: git submodule update --init --recursive examples")
         copy(source, os.path.join(stage, "builder", "zx-tape-loader", name))
 
 

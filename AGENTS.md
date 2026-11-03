@@ -122,11 +122,12 @@ changes touch:
 | `cpp-core/src/profile.cpp`, `profile_report.cpp` | The execution profiler and its report |
 | `cpp-core/src/rewind.cpp` | Stepping backwards: checkpoints, the input log, replay |
 | `vscode-extension/` | Debugger registration, panels, profiler view, Z80 language support |
+| `examples/` | Submodule (`jonsole/zx-spectrum-examples`): every example program. Commit changes to them there, then the new gitlink here |
 | `examples/filmation/` | A real multi-file sjasmplus program, built by its `knightlore/build.py` |
 | `examples/filmation/vscode/` | The Filmation designer: a second VS Code extension, independent of the emulator's -- room, templates and graphic-map editors |
 | `game-disassemblies/` | Submodule: the game disassemblies (The Hobbit, Atic Atac, Ant Attack, Knight Lore, ...) and their notes; reverse engineering follows the `zx-reverse-engineer` skill |
-| `examples/zx-tape-loader/` | Submodule: a fast custom tape loader and the Python that renders its tapes to WAV |
-| `examples/cub/` | Submodule (`jonsole/zx-cub`): Cub, a Piper Cub flight simulator on fast3d. Its issues live in that repository, not this one: `gh ... -R jonsole/zx-cub`. Changes it needs in fast3d or `examples/scripts` are made here |
+| `examples/zx-tape-loader/` | Submodule of the examples: a fast custom tape loader and the Python that renders its tapes to WAV |
+| `examples/cub/` | Submodule of the examples (`jonsole/zx-cub`): Cub, a Piper Cub flight simulator on fast3d. Its issues live in that repository, not this one: `gh ... -R jonsole/zx-cub`. Changes it needs in fast3d or `examples/scripts` are made here |
 | `vscode-extension/tape_*`, `screen_*` | The tape designer: editors for `*.tape.json` and `*.screen.json`, built by `scripts/build_tape.py` (docs/tape-designer.md) |
 
 ROM images are not in the repository (`roms/` is gitignored); tests and

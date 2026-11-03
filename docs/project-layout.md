@@ -36,12 +36,13 @@ zx-spectrum-emulator/
       main.cpp                        # entrypoint: engine + every server
     tests/                    # CTest executables, benchmarks, diagnostics --
                               #   their own CMakeLists.txt, behind ZX_BUILD_TESTS
+      programs/                 # border_rainbow, hello_rom_call, ldir_contention:
+                                #   tiny demos, committed assembled
   scripts/                    # Python helpers -- still current
     build_rom_source.py         # builds rom_disassembly/ (see vscode-debugging.md)
     make_test_tape.py             # generates tapes/
     make_toolbar_icons.py          # the extension's coloured debug-toolbar icons
-  examples/
-    hello_rom_call/              # tiny original demo, committed
+  examples/                   # submodule: github.com/jonsole/zx-spectrum-examples
     scripts/                      # Python more than one example uses: z80file.py,
                                   #   the .z80 writer for what sjasmplus assembles;
                                   #   probe.py, which drives a program's snapshot in

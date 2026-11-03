@@ -83,68 +83,6 @@ zx_test_*.sld
 # (tools/rigol/) -- bench captures, not project source.
 captures/
 
-# examples/filmation: every game folder has the same shape (scripts/layout.py
-# says it), and three of its folders are never carried:
-#
-#   output/      what build.py makes on every launch: the snapshot, its SLD,
-#                the listing
-#   generated/   the .s build.py writes from the carried JSON and art: the
-#                sprites, the graphic table, the rooms, the font, the charms
-#   extracted/   what an extractor (kl_extract.py, pg_extract.py) pulls out of
-#                your own copy of the original: the packed sprites, rooms,
-#                font, quest and sound, and the font sheet unpacked from them
-#
-# The flow this repository follows:
-#
-#   your game --(extract, ONCE)--> extracted/ --> metadata/*.json, art/*.png
-#                                                     |
-#                                                     v  (build.py, every time)
-#                                                generated/*.s --> output/
-#
-# metadata/ and art/ are CARRIED and are what you edit, by hand or in the
-# designers. Nothing regenerates them -- that is the whole point, and it is why
-# build.py stops rather than re-running an extractor. What is in extracted/ is
-# Ultimate's, in the games' own packed shapes: it is yours alone, and once the
-# JSON exists nothing needs it again except remaking a sheet. The pixel nudges
-# in graphics.json cannot be re-made from any of it -- adj.py harvests them from
-# a RUNNING game -- which is why that file is carried and every tool that
-# writes it merges rather than replacing.
-#
-# examples/filmation/output/ is the engine's unit tests' assembled programs,
-# from engine/tests/run_tests.py.
-examples/filmation/*/output/
-examples/filmation/*/generated/
-examples/filmation/*/extracted/
-examples/filmation/output/
-# Lightkeep's Melkhior's Mansion sheets: converted once from your own copy by
-# scripts/melkhior_sheets.py, and retouched by hand after that, so they are
-# yours to back up. Their rectangles, in metadata/melkhior/, are carried.
-examples/filmation/lightkeep/art/melkhior/
-
-# isoblocks: everything painter/build.py and rays/build.py generate -- the
-# tables, the drawers and compiled tiles, the maps' bytes, the assembled demos
-# -- is rebuilt from shared/ and the Python models.
-examples/isoblocks/painter/output/
-examples/isoblocks/rays/output/
-
-# hullscroll: build.py's generated data and the assembled demo, rebuilt from
-# art/, levels/ and hull.py.
-examples/hullscroll/output/
-
-# charscroll: build.py's generated level (from the user's own Uridium tape)
-# and the assembled demo.
-examples/charscroll/output/
-
-# scramble: build.py's generated code and data and the assembled game,
-# rebuilt from levels/, art/ and terrain.py.
-examples/scramble/output/
-
-# chopper: the same, from levels/, art/, scenery.py and sounds.py.
-examples/chopper/output/
-
-# fast3d: the tables and the assembled checks and demo, from build.py.
-examples/fast3d/output/
-
 # Vendored reference copy of github.com/simon-frankau/head-over-heels -- a
 # reverse-engineered disassembly of Head Over Heels, kept to hand while its
 # Filmation engine design is ported into examples/filmation. Never committed:

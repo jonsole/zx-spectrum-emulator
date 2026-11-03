@@ -291,7 +291,7 @@ function real(rel, check) {
   test('reads ' + rel, () => check(p.describeProgram(path.basename(file), fs.readFileSync(file))));
 }
 
-real('examples/border_rainbow/test.sna', (d) => assert.deepStrictEqual([d.kind, d.model], ['snapshot', '48K']));
+real('cpp-core/tests/programs/border_rainbow/test.sna', (d) => assert.deepStrictEqual([d.kind, d.model], ['snapshot', '48K']));
 real('examples/filmation/knightlore/output/knightlore.z80', (d) => assert.strictEqual(d.kind, 'snapshot'));
 real('tapes/loading-test.tap', (d) => {
   assert.strictEqual(d.kind, 'tape');
@@ -301,8 +301,8 @@ real('tapes/loading-test.tzx', (d) => {
   assert.strictEqual(d.kind, 'tape');
   assert.strictEqual(d.details[d.details.length - 1], 'Loader: standard (every block at the ROM\'s timings)');
 });
-real('examples/hello_rom_call/test.asm', () => {
-  assert.strictEqual(p.looksLikeText(fs.readFileSync(path.join(REPO, 'examples/hello_rom_call/test.asm'))), true);
+real('cpp-core/tests/programs/hello_rom_call/test.asm', () => {
+  assert.strictEqual(p.looksLikeText(fs.readFileSync(path.join(REPO, 'cpp-core/tests/programs/hello_rom_call/test.asm'))), true);
 });
 
 if (failures) {

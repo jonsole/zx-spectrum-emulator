@@ -98,7 +98,8 @@ pushed `v*` tag, on `windows-latest`:
 2. `scripts/fetch_roms.py` -- the ROMs, from the Fuse emulator's source,
    checked against pinned SHA-256 hashes. Fetched before the build, so the
    tests that need a real ROM run rather than skip.
-3. The `examples/zx-tape-loader` submodule, for the tape builder;
+3. The `examples` submodule, and `examples/zx-tape-loader` inside it
+   for the tape builder;
    `scripts/fetch_sjasmplus.py` and SkoolKit, and with them
    `scripts/build_rom_source.py` -- the ROM disassembly for the ROM example,
    which it refuses to write unless it reassembles the ROM byte for byte.

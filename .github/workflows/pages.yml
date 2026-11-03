@@ -17,7 +17,7 @@ on:
       - 'cpp-core/src/**'
       - 'cpp-core/third_party/miniz/**'
       - 'scripts/fetch_roms.py'
-      - 'examples/filmation/**'
+      - 'examples'
       - '.github/workflows/pages.yml'
   # Built and tested on a pull request too, so a change that breaks the site
   # is seen before it is merged; only master deploys.
@@ -27,7 +27,7 @@ on:
       - 'cpp-core/src/**'
       - 'cpp-core/third_party/miniz/**'
       - 'scripts/fetch_roms.py'
-      - 'examples/filmation/**'
+      - 'examples'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -55,6 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The Filmation games are in the examples submodule.
+      - name: Fetch the examples
+        run: git submodule update --init examples
 
       - uses: actions/setup-python@v5
         with:

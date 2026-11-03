@@ -239,12 +239,14 @@ These configurations work from a clean checkout, no extra assets needed:
 
 Programs themselves no longer have launch configurations: open a `.sna`,
 `.z80`, `.tap` or `.tzx` from the Explorer and press Run or Debug on the page
-that opens. The committed examples in `examples/` (`hello_rom_call`,
-`border_rainbow`, `ldir_contention`) work that way from a clean checkout, and
+that opens. The tiny test programs in `cpp-core/tests/programs/`
+(`hello_rom_call`, `border_rainbow`, `ldir_contention`) work that way from a
+clean checkout, and
 the `.sld` beside each one is picked up for source-level stepping.
 
 The Filmation, Fairlight and Knight Lore configurations assemble their source
-on every launch, and point into `examples/filmation/` and the
+on every launch, and point into `examples/filmation/` (the `examples/`
+submodule) and the
 `game-disassemblies/` submodule — they fail until those are built (step 7).
 
 ## Step 7 — Optional extras
@@ -280,13 +282,20 @@ scripts are `game-disassemblies/scripts/build_*.py`; they need the same venv
 and `sjasmplus`, plus a game image and a `roms/48.rom` of their own. They write
 into `game-disassemblies/game_disassembly/`. Copyrighted; never committed.
 
+**The examples.** Everything under `examples/` -- the Filmation engine and
+its games, fast3d, the scrolling experiments -- is its own repository,
+[zx-spectrum-examples](https://github.com/jonsole/zx-spectrum-examples),
+checked out as the `examples/` submodule by the same `--recurse-submodules`
+clone, or `git submodule update --init --recursive examples`. Changes to
+them are committed there.
+
 **The fast tape loader.** [zx-tape-loader](https://github.com/jonsole/zx-tape-loader)
-is a second submodule, checked out as `examples/zx-tape-loader/` — a custom
+is a submodule of the examples, checked out as `examples/zx-tape-loader/` — a custom
 high-speed loader for the 48K that draws an animated countdown from inside its
 own bit-reading loop, plus `loader.py`/`convert_tape.py`, which re-encode a
 standard-speed `.tap`/`.tzx` through it and render the result to a WAV you can
-play into real hardware. The same `--recurse-submodules` clone (or `git
-submodule update --init`) brings it down. It assembles with `sjasmplus` and its
+play into real hardware. The same `--recurse-submodules` clone brings it
+down. It assembles with `sjasmplus` and its
 Python needs `numpy`; its own `.vscode/` targets DeZog rather than
 this emulator, so drive it from the emulator's launch configurations instead.
 Its Lunar Jetman payload is copyrighted and stays in that repository.
