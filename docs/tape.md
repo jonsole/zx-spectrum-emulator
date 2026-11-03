@@ -101,6 +101,17 @@ already making — thousands a second, far finer than the tone being reproduced.
 A pilot pulse is 2168 T-states, so the leader comes out at 3.5e6/4336 ≈ 807 Hz,
 which is what `get_audio` reports while one is playing.
 
+## Bit 6 with no signal
+
+With no tape playing, or through a silence on one -- the pause after a block,
+or the one a fast load leaves -- bit 6 is what an issue 3 board, and the 128K,
+read with nothing on the EAR socket: bit 4 of the last `OUT` to the ULA's port,
+the speaker. So it reads `0xBF` after the ROM's border writes, which keep that
+bit clear, and the ROM's loader sees the same low level a silence gives. Rak's
+z80test checks for `0xBF` before its IN tests, and Woodmass's Issue 2-3 test
+tells the boards apart by it, running straight after it loads. Issue 2 boards,
+which read MIC (bit 3) as well, are not emulated.
+
 Resetting the machine stops the motor but leaves the tape in the deck at the
 block it had reached — a reset zeroes the frame counter, and with it the clock
 every pulse timestamp is measured against.

@@ -185,10 +185,16 @@ TEST(tap_rejects_a_truncated_block) {
     CHECK(!t.inserted());
 }
 
-TEST(tap_rejects_a_block_too_short_to_be_one) {
-    std::vector<uint8_t> image = {1, 0, 0xFF}; // one byte: no room for a checksum
+TEST(tap_takes_a_flag_byte_alone_and_rejects_an_empty_block) {
+    // One byte is a SAVE broken off after its flag: a block, which the ROM
+    // loads as far as the flag. Nothing at all is not one.
+    std::vector<uint8_t> flag_only = {1, 0, 0xFF};
     Tape t;
-    CHECK(!t.insert(image.data(), image.size(), "bad.tap").empty());
+    CHECK_EQ(t.insert(flag_only.data(), flag_only.size(), "flag.tap"), std::string());
+    CHECK_EQ(t.status(0).blocks, size_t(1));
+    std::vector<uint8_t> empty = {0, 0};
+    Tape e;
+    CHECK(!e.insert(empty.data(), empty.size(), "bad.tap").empty());
 }
 
 TEST(tap_accepts_trailing_padding) {

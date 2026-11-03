@@ -50,11 +50,9 @@ constexpr uint16_t LD_BYTES = 0x0556;
 
 /// The EAR level with no tape playing.
 ///
-/// HIGH, matching what Keyboard::read_port returned before tape existed. That
-/// makes "no tape inserted" bit-for-bit identical to the behaviour this file
-/// replaced. A real machine's idle EAR is issue-dependent and partly a
-/// function of the last port write; modelling that is a separate question and
-/// nothing needs it.
+/// HIGH. Only the tape's own answer: what port 0xFE reads with no tape
+/// playing is the last OUT's speaker bit, which Spectrum::service_bus puts in
+/// its place.
 constexpr bool TAPE_IDLE_EAR = true;
 
 /// Where playback is within a block.
@@ -167,6 +165,15 @@ public:
     void seek(size_t index);
     bool playing() const { return playing_; }
     bool at_end() const { return at_end_; }
+    /// Whether the tape is putting a signal on the EAR line: playing, and not
+    /// in the silence after a block or the pause a fast load leaves. Through
+    /// a silence the port reads the ULA's own output instead, as it does with
+    /// no tape at all -- Woodmass's Issue 2-3 test runs straight after it
+    /// loads, inside its last block's pause, and tells the board apart there.
+    /// Call after ear_at(), which moves the cursor to now.
+    bool driving() const {
+        return playing_ && phase_ != TapePhase::End && phase_ != TapePhase::Idle;
+    }
 
     /// The EAR level (port 0xFE bit 6) at half-clock `hc`.
     ///

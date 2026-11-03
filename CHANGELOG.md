@@ -32,6 +32,17 @@ GitHub takes its notes from that section.
   all of z80full, z80doc, z80flags and z80ccf, and Helcmanovsky's Block Flags
   and Test CCF and the XCF Flavor test match a Zilog Z80.
 
+- **A .tap block of one byte loads.** A flag byte alone -- a SAVE broken off
+  after it -- was dropped as too short, so a loader waiting for it waited
+  for ever. The ROM reads the flag and times out, and so does the emulator,
+  fast-loaded or not; Woodmass's Tape Test's last block now matches its
+  expected picture.
+
+- **Port 0xFE's EAR bit reads back the speaker bit with no tape signal**, as
+  an issue 3 48K and the 128K do: 0xBF after the ROM's border writes, where
+  it read 0xFF. Through a tape's silences too. Woodmass's Issue 2-3 test says
+  "Issue 3" where it said "Emulator".
+
 - **Run and debug on the SpecNext board, from VS Code.** A status-bar
   switch, **Emulator** or **SpecNext**, says where programs run; a launch for
   the board starts or joins retro-spectrum's `zx_bridge.py` and debugs the

@@ -544,7 +544,17 @@ void Spectrum::service_bus(uint64_t pins_before) {
             // this single IN asserts IORQ and RD on five consecutive
             // half-clocks, so it runs five times with the same global_hc()
             // and must answer identically each time.
-            const bool ear = tape.ear_at(global_hc());
+            bool ear = tape.ear_at(global_hc());
+            if (!tape.driving()) {
+                // With no signal on the EAR socket the input reads back the
+                // ULA's own output: on an issue 3 board, and the 128K, bit 4
+                // of the last OUT, the speaker, so 0xBF after an OUT with it
+                // clear. (Issue 2 boards read MIC too, bit 3; that is not
+                // emulated.) Rak's z80test checks IN A,(N), IN r,(C) and the
+                // block inputs for 0xBF, and Woodmass's Issue 2-3 test tells
+                // the boards apart by it.
+                ear = (ula_port_ & 0x10) != 0;
+            }
             if (!ear) {
                 value = uint8_t(value & ~0x40);
             }
@@ -555,7 +565,7 @@ void Spectrum::service_bus(uint64_t pins_before) {
             // from here rather than from the tape itself because this is where
             // the level is already being resolved, and because a loader polls
             // this port far more finely than the tone it is listening to.
-            beeper.set_ear(tape.playing() && ear, global_hc());
+            beeper.set_ear(tape.driving() && ear, global_hc());
         } else if (model() == Model::Spectrum128 && (addr & AY_PORT_MASK) == AY_SELECT_PORT) {
             // The AY answers reads of its select port with the selected
             // register. Like everything else on this bus it is decoded by

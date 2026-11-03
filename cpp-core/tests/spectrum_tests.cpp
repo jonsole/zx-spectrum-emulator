@@ -203,6 +203,24 @@ TEST(keyboard_is_readable_through_a_real_in_instruction) {
     CHECK_EQ(uint8_t(m.registers().a & 0x01), uint8_t(0)); // pressed == 0
 }
 
+TEST(ear_reads_the_last_outs_speaker_bit_with_no_tape) {
+    // An issue 3 board: no keys, so bits 0-4 high, bits 5 and 7 high, and
+    // bit 6 the speaker bit, bit 4, of the last OUT.
+    //   LD A,0x07 ; OUT (0xFE),A ; IN A,(0xFE)  -> 0xBF
+    //   LD A,0x10 ; OUT (0xFE),A ; IN A,(0xFE)  -> 0xFF
+    //   LD A,0x08 ; OUT (0xFE),A ; IN A,(0xFE)  -> 0xBF (MIC alone: issue 3)
+    Spectrum m;
+    poke(m, 0x8000, {0x3E, 0x07, 0xD3, 0xFE, 0xDB, 0xFE});
+    run_at(m, 0x8000, 3);
+    CHECK_EQ(m.registers().a, uint8_t(0xBF));
+    poke(m, 0x8000, {0x3E, 0x10, 0xD3, 0xFE, 0xDB, 0xFE});
+    run_at(m, 0x8000, 3);
+    CHECK_EQ(m.registers().a, uint8_t(0xFF));
+    poke(m, 0x8000, {0x3E, 0x08, 0xD3, 0xFE, 0xDB, 0xFE});
+    run_at(m, 0x8000, 3);
+    CHECK_EQ(m.registers().a, uint8_t(0xBF));
+}
+
 TEST(rom_is_write_protected_on_the_real_bus) {
     Spectrum m;
     std::vector<uint8_t> rom(ROM_SIZE, 0xAA);

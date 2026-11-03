@@ -88,3 +88,10 @@ before it can be a test; their state here is what they show today.
   over the rest of its write cycle and released WR in the half-clock that
   asserted it, so memory never saw the write. ZEXALL has no I/O block
   instructions; z80test's INIR and INDR checksums found it.
+- **Port 0xFE's bit 6 with no tape signal** read 1. On an issue 3 board, and
+  the 128K, it is bit 4 of the last OUT, so 0xBF after the ROM's border
+  writes; z80test's IN tests want that, and Woodmass's Issue 2-3 tests now
+  say "Issue 3". A playing tape's silences count as no signal (see
+  [tape.md](tape.md)).
+- With those, all of Rak's z80test 1.2a passes: z80full, z80doc, z80flags,
+  z80docflags, z80memptr and z80ccf.

@@ -450,15 +450,16 @@ std::string Tape::parse_tap(const uint8_t* data, size_t len) {
                    + std::to_string(block_len) + " bytes but only " + std::to_string(r.left())
                    + " remain";
         }
-        if (block_len < 2) {
+        // A block of one byte is a flag alone -- a SAVE broken off after it --
+        // and plays and loads like any other: the ROM reads the flag and times
+        // out waiting for more. Woodmass's Tape Test ends on one. Only an
+        // empty block has nothing to play.
+        if (block_len < 1) {
             if (!blocks_.empty()) {
-                warn("the block at offset " + std::to_string(at) + " is too short to load and "
-                     + "was dropped");
-                r.skip(block_len);
+                warn("the block at offset " + std::to_string(at) + " is empty and was dropped");
                 continue;
             }
-            return "the .tap block at offset " + std::to_string(at)
-                   + " is too short to hold a flag byte and a checksum";
+            return "the .tap block at offset " + std::to_string(at) + " is empty";
         }
         TapeBlock b;
         if (!r.bytes(block_len, b.data)) {
@@ -1240,7 +1241,10 @@ const TapeBlock* Tape::peek_standard_block() const {
         return nullptr;
     }
     const TapeBlock& b = blocks_[block_];
-    if (!b.standard_speed || b.data.size() < 2) {
+    // A block of a flag byte alone is taken too: the ROM reads the flag and
+    // times out waiting for the next byte, and the trap gives that same exit
+    // (Woodmass's Tape Test ends on one, expecting AF = 0050 from a real 48K).
+    if (!b.standard_speed || b.data.empty()) {
         return nullptr;
     }
     return &b;
