@@ -74,3 +74,17 @@ before it can be a test; their state here is what they show today.
 - **The floating bus** returned the attribute over both of a cell's reads,
   two T-states early. It now returns bitmap and attribute in turn at G + 3 to
   G + 6, which Floating Spy and Float48K both check.
+- **SCF and CCF's flags 5 and 3** came from A alone, as an NEC Z80's do. A
+  Zilog's are bits 5 and 3 of (Q ^ F) | A, where Q is the F the previous
+  instruction left if it computed flags and 0 if it did not; the core keeps Q
+  now. Rak's z80full, z80ccf and SCF Tests, Helcmanovsky's Test CCF and
+  Sainz de Baranda's XCF Flavor (which said "NEC NMOS") all pass.
+- **The block instructions going round again** -- LDIR, CPIR, INIR, OTIR and
+  their decrementing forms -- set flags 5 and 3 from bits 13 and 11 of their
+  own address, and the I/O ones H and P/V too (David Banks, 2018).
+  Helcmanovsky's Z80 Block Flags Test is all green; its two INIR/INDR lines
+  read port 0x1F and want a Kempston interface, which is not emulated.
+- **INIR and INDR lost their last byte.** The pass that took B to 0 jumped
+  over the rest of its write cycle and released WR in the half-clock that
+  asserted it, so memory never saw the write. ZEXALL has no I/O block
+  instructions; z80test's INIR and INDR checksums found it.

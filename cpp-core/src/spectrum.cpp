@@ -966,6 +966,8 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.byte(s.cpu.nmi_ack ? 1 : 0);
     h.byte(s.cpu.im0_pc_hold ? 1 : 0);
     h.byte(s.cpu.ld_a_ir ? 1 : 0);
+    h.byte(s.cpu.q);
+    h.byte(s.cpu.flags_written ? 1 : 0);
     h.byte(s.cpu.hlx_idx);
     h.u64(s.cpu.pins);
 

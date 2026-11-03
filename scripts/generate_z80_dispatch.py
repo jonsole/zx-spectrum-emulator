@@ -288,6 +288,27 @@ BLOCK_REPEAT_REWIND = (
 )
 
 
+# A repeating block instruction's flags when it goes round again: the extra
+# 5 T-states put bits 13 and 11 of its own address in flags 5 and 3, and the
+# I/O forms change H and P/V too (alu::block_repeat_flags). They are set in
+# the pass's last action, where it is known whether it repeats, rather than
+# in the rewind's, so that they are what the instruction leaves either way.
+# PC is the instruction's address plus its two bytes there.
+BLOCK_REPEAT_FLAGS_LD = (
+    " if (bc_after != 0) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); }"
+)
+BLOCK_REPEAT_FLAGS_CP = (
+    " if (r.repeat) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); }"
+)
+
+
+def block_io_repeat_flags(operand: str) -> str:
+    return (
+        "if (regs.b != 0) { regs.f = alu::block_io_repeat_flags("
+        f"regs.f, regs.b, dlatch_, {operand}, uint16_t(regs.pc - 2)); }} "
+    )
+
+
 def _ldi_ldd_body() -> str:
     return (
         "uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); "
@@ -404,8 +425,8 @@ ACTIONS: dict[str, "callable"] = {
     "RRA": lambda y, z, p, q, i: "auto r = alu::rra(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;",
     "DAA": lambda y, z, p, q, i: "auto r = alu::daa(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;",
     "CPL": lambda y, z, p, q, i: "auto r = alu::cpl(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;",
-    "SCF": lambda y, z, p, q, i: "regs.f = alu::scf(regs.a, regs.f);",
-    "CCF": lambda y, z, p, q, i: "regs.f = alu::ccf(regs.a, regs.f);",
+    "SCF": lambda y, z, p, q, i: "regs.f = alu::scf(regs.a, regs.f, q_);",
+    "CCF": lambda y, z, p, q, i: "regs.f = alu::ccf(regs.a, regs.f, q_);",
     "RET $CC": {
         0: lambda y, z, p, q, i, skip: (
             f"if (!({CC_EXPR[y]})) {{ {skip(6)} }}"
@@ -487,14 +508,14 @@ ACTIONS: dict[str, "callable"] = {
     "LDD": {2: lambda y, z, p, q, i: _ldi_ldd_body()},
     "LDIR": {
         2: lambda y, z, p, q, i, skip: (
-            _ldi_ldd_body()
+            _ldi_ldd_body() + BLOCK_REPEAT_FLAGS_LD
             + f" if (bc_after == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
     "LDDR": {
         2: lambda y, z, p, q, i, skip: (
-            _ldi_ldd_body()
+            _ldi_ldd_body() + BLOCK_REPEAT_FLAGS_LD
             + f" if (bc_after == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
@@ -504,14 +525,14 @@ ACTIONS: dict[str, "callable"] = {
     "CPIR": {
         1: lambda y, z, p, q, i, skip: (
             _cpi_cpd_body("+")
-            + f" if (!r.repeat) {{ {skip(5)} }}"
+            + BLOCK_REPEAT_FLAGS_CP + f" if (!r.repeat) {{ {skip(5)} }}"
         ),
         2: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
     "CPDR": {
         1: lambda y, z, p, q, i, skip: (
             _cpi_cpd_body("-")
-            + f" if (!r.repeat) {{ {skip(5)} }}"
+            + BLOCK_REPEAT_FLAGS_CP + f" if (!r.repeat) {{ {skip(5)} }}"
         ),
         2: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
     },
@@ -545,6 +566,7 @@ ACTIONS: dict[str, "callable"] = {
         ),
         2: lambda y, z, p, q, i, skip: (
             "regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); "
+            + block_io_repeat_flags("uint8_t(regs.c + 1)") +
             f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
@@ -555,6 +577,7 @@ ACTIONS: dict[str, "callable"] = {
         ),
         2: lambda y, z, p, q, i, skip: (
             "regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); "
+            + block_io_repeat_flags("uint8_t(regs.c - 1)") +
             f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
@@ -578,6 +601,7 @@ ACTIONS: dict[str, "callable"] = {
         2: lambda y, z, p, q, i, skip: (
             "regs.wz = uint16_t(regs.bc() + 1); "
             "regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); "
+            + block_io_repeat_flags("regs.l") +
             f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
@@ -587,6 +611,7 @@ ACTIONS: dict[str, "callable"] = {
         2: lambda y, z, p, q, i, skip: (
             "regs.wz = uint16_t(regs.bc() - 1); "
             "regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); "
+            + block_io_repeat_flags("regs.l") +
             f"if (regs.b == 0) {{ {skip(5)} }}"
         ),
         3: lambda y, z, p, q, i: BLOCK_REPEAT_REWIND,
@@ -636,6 +661,25 @@ ACTIONS: dict[str, "callable"] = {
 
 def get_action(name: str, mcycle_index: int, y: int, z: int, p: int, q: int,
                skip, is_post: bool = False) -> str | None:
+    return mark_flag_write(_get_action(name, mcycle_index, y, z, p, q, skip, is_post))
+
+
+def mark_flag_write(action: str | None) -> str | None:
+    """Notes an action that writes F, for Q (z80.h's flags_written_).
+
+    It goes first, not last, because the repeating and conditional forms
+    leave their action early through a skip. POP AF and EX AF,AF' write F
+    through set_af, and rightly are not marked: on a Zilog Z80 they leave Q
+    at 0, as an instruction that computes no flags does. alu_op and
+    cb_action write F themselves and mark it there.
+    """
+    if action is not None and re.search(r"\bregs\.f\s*=[^=]", action):
+        return "flags_written_ = true; " + action
+    return action
+
+
+def _get_action(name: str, mcycle_index: int, y: int, z: int, p: int, q: int,
+                skip, is_post: bool = False) -> str | None:
     entry = ACTIONS.get(name)
     if entry is None:
         return None
@@ -890,7 +934,7 @@ def build_tstates(op: Op) -> list[TState]:
             emit("mwrite_t2l_wait", mci=mci)
             t_ord += 1
             emit("idle")
-            emit("mwrite_t3l_end")
+            emit("mwrite_t3l_end", mci=mci)
             t_ord += 1
             for _ in range(3, tcycles):
                 emit_idle_tstate()
@@ -1018,7 +1062,18 @@ class Generator:
         "ioread_t3l_latch": "IORQ | RD",
         "iowrite_t3l_end": "IORQ | WR",
         "mwrite_t2l_wait": "MREQ | WR",
+        "mwrite_t3l_end": "MREQ | WR",
     }
+
+    # Instructions whose write cycle's action goes on its last half-state,
+    # T3L, not on T2L where WR comes down. INIR and INDR decide there whether
+    # to go round again, and the way out jumps over the rest of the cycle:
+    # from T2L that released WR in the same half-clock that asserted it, so
+    # the bus never saw the write and the last pass's byte was lost. From T3L
+    # the write's T3 runs and the jump skips exactly the 5 T-states that wind
+    # PC back; from T2L it had skipped T3 and four of them. skip(5) either
+    # way, and the last pass is 16 T-states as before.
+    WRITE_END_ACTIONS = {"INIR", "INDR"}
 
     def skip_branch(self, tstates: list[TState], i: int, k: int) -> str:
         """The complete early-out for an action: release whatever this machine
@@ -1105,14 +1160,22 @@ class Generator:
         if ts.kind == "mwrite_t2l_wait":
             # WR trails MREQ by a half-cycle, as on the real chip: the data
             # bus has to settle before the write strobe.
-            action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
+            action = None
+            if op.name not in self.WRITE_END_ACTIONS:
+                action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
             body = "            if (asserted(pins, WAIT)) { return true; }\n"
             body += "            pins = assert_pins(pins, WR);\n"
             if action:
                 body += f"            {action}\n"
             return body + goto
         if ts.kind == "mwrite_t3l_end":
-            return f"            pins = release_pins(pins, MREQ | WR);\n{goto}"
+            body = ""
+            if op.name in self.WRITE_END_ACTIONS:
+                action = get_action(op.name, ts.kw["mci"], y, z, p, q, skip)
+                if action:
+                    body += f"            {action}\n"
+            body += "            pins = release_pins(pins, MREQ | WR);\n"
+            return body + goto
 
         # ---- I/O read ------------------------------------------------------
         if ts.kind == "ioread_t1h":

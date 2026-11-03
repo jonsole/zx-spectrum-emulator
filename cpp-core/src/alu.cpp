@@ -204,13 +204,14 @@ Alu8 cpl(uint8_t a, uint8_t f) {
     return {value, flags};
 }
 
-uint8_t scf(uint8_t a, uint8_t f) {
-    return u8((f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | FLAG_C | (a & (FLAG_5 | FLAG_3)));
+uint8_t scf(uint8_t a, uint8_t f, uint8_t q) {
+    return u8((f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | FLAG_C
+              | (((q ^ f) | a) & (FLAG_5 | FLAG_3)));
 }
 
-uint8_t ccf(uint8_t a, uint8_t f) {
+uint8_t ccf(uint8_t a, uint8_t f, uint8_t q) {
     return u8(((f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | ((f & FLAG_C) << 4)
-               | (a & (FLAG_5 | FLAG_3)))
+               | (((q ^ f) | a) & (FLAG_5 | FLAG_3)))
               ^ FLAG_C);
 }
 
@@ -292,6 +293,37 @@ uint8_t ini_ind_flags(uint8_t b, uint8_t val, uint8_t c_for_flags) {
 
 uint8_t outi_outd_flags(uint8_t b, uint8_t val, uint8_t l) {
     return block_io_flags(b, val, l);
+}
+
+uint8_t block_repeat_flags(uint8_t f, uint16_t pc) {
+    return u8((f & ~(FLAG_5 | FLAG_3)) | ((pc >> 8) & (FLAG_5 | FLAG_3)));
+}
+
+uint8_t block_io_repeat_flags(uint8_t f, uint8_t b, uint8_t val, uint8_t operand, uint16_t pc) {
+    // S, N and C stand as the pass set them; Z is clear, since B is not 0.
+    uint8_t out = u8((f & (FLAG_S | FLAG_N | FLAG_C)) | ((pc >> 8) & (FLAG_5 | FLAG_3)));
+    // The pass's P/V is the parity of p; the repeat's is of p with B's low
+    // bits, B + 1's or B - 1's mixed in, chosen by the carry and the
+    // direction of the transfer (N is bit 7 of the byte moved).
+    uint8_t p = u8((u8(operand + val) & 7) ^ b);
+    uint8_t mix;
+    if (f & FLAG_C) {
+        if (f & FLAG_N) {
+            if ((b & 0x0F) == 0) {
+                out |= FLAG_H;
+            }
+            mix = u8((b - 1) & 7);
+        } else {
+            if ((b & 0x0F) == 0x0F) {
+                out |= FLAG_H;
+            }
+            mix = u8((b + 1) & 7);
+        }
+    } else {
+        mix = u8(b & 7);
+    }
+    out |= szp_flags(u8(p ^ mix)) & FLAG_PV;
+    return out;
 }
 
 // ---- nibble rotates ---------------------------------------------------------

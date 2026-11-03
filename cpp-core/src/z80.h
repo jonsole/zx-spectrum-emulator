@@ -224,6 +224,8 @@ public:
         bool nmi_ack = false;
         bool im0_pc_hold = false;
         bool ld_a_ir = false;
+        uint8_t q = 0;
+        bool flags_written = false;
     };
     void save_state(State& s) const;
     void restore_state(const State& s);
@@ -285,6 +287,14 @@ private:
     /// leaves P/V reset, as if IFF2 had been read after the acceptance cleared
     /// it -- the bug the CMOS part fixed. Cleared as the next fetch begins.
     bool ld_a_ir_ = false;
+    /// Q: the F the last instruction left if it computed flags, 0 if it did
+    /// not. Only SCF and CCF read it, for flags 5 and 3 (alu::scf). Latched
+    /// as each fetch begins, from flags_written_, which every action that
+    /// writes F sets -- not from F changing, since an instruction that writes
+    /// the flags it found still sets Q. POP AF and EX AF,AF' load F but are
+    /// not flag instructions, and leave Q 0.
+    uint8_t q_ = 0;
+    bool flags_written_ = false;
     /// 0 = HL, 1 = IX, 2 = IY. z80.h's cpu->hlx[cpu->hlx_idx], as accessors.
     uint8_t hlx_idx_ = 0;
     /// PINS_IDLE, not 0: signals are active low, so a zeroed bus would mean

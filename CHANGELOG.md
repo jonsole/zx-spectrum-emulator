@@ -20,6 +20,18 @@ GitHub takes its notes from that section.
   128K, not 48, which moves the hardware probe's line and dot for a given
   half-clock.
 
+- **INIR and INDR write their last byte.** The pass that took B to 0 never
+  wrote the byte it had read, so every INIR or INDR left the last byte of its
+  buffer as it was. Found by Rak's z80test.
+
+- **SCF, CCF and the repeating block instructions set the undocumented flags
+  a Zilog Z80 does.** SCF and CCF take flags 5 and 3 from Q, the flags the
+  instruction before them left, as well as from A; LDIR, CPIR, INIR, OTIR and
+  their decrementing forms, going round again, take them from their own
+  address, and the I/O ones change H and P/V too. Rak's z80test now passes
+  all of z80full, z80doc, z80flags and z80ccf, and Helcmanovsky's Block Flags
+  and Test CCF and the XCF Flavor test match a Zilog Z80.
+
 - **Run and debug on the SpecNext board, from VS Code.** A status-bar
   switch, **Emulator** or **SpecNext**, says where programs run; a launch for
   the board starts or joins retro-spectrum's `zx_bridge.py` and debugs the

@@ -53,9 +53,13 @@ Alu8 rra(uint8_t a, uint8_t f);
 
 Alu8 daa(uint8_t a, uint8_t f);
 Alu8 cpl(uint8_t a, uint8_t f);
-/// SCF/CCF leave A alone but its bit5/bit3 still feed the undocumented flags.
-uint8_t scf(uint8_t a, uint8_t f);
-uint8_t ccf(uint8_t a, uint8_t f);
+/// SCF/CCF leave A alone, but on a Zilog Z80 their flags 5 and 3 are bits 5
+/// and 3 of (Q ^ F) | A, where Q is the F the previous instruction left if it
+/// wrote the flags and 0 if it did not (Patrik Rak, 2012). After a flag
+/// setting instruction Q == F, so they are A's bits; after one that leaves
+/// the flags alone, A's bits ORed with F's. `q` is that Q.
+uint8_t scf(uint8_t a, uint8_t f, uint8_t q);
+uint8_t ccf(uint8_t a, uint8_t f, uint8_t q);
 
 // ---- 16-bit arithmetic ------------------------------------------------------
 /// `ADD HL,ss` (and IX/IY): unlike 8-bit ADD, S/Z/PV are UNAFFECTED, and the
@@ -86,6 +90,16 @@ CpiCpdResult cpi_cpd(uint8_t a, uint8_t val, uint16_t bc_after, uint8_t f);
 uint8_t ini_ind_flags(uint8_t b, uint8_t val, uint8_t c_for_flags);
 /// OUTI/OUTD/OTIR/OTDR. `l` is L after HL++/HL--. `b` is B after decrement.
 uint8_t outi_outd_flags(uint8_t b, uint8_t val, uint8_t l);
+/// What LDIR/LDDR/CPIR/CPDR's flags become when they repeat: the 5 T-states
+/// that wind PC back put bits 13 and 11 of the instruction's own address in
+/// flags 5 and 3 (David Banks, 2018). `f` is the flags the pass set, `pc` the
+/// instruction's address.
+uint8_t block_repeat_flags(uint8_t f, uint16_t pc);
+/// The same for INIR/INDR/OTIR/OTDR, which also change H and P/V in those 5
+/// T-states (Banks again; the rule is redcode's Z80 library's). `f` is the
+/// pass's flags from ini_ind_flags/outi_outd_flags, `b`, `val` and `operand`
+/// what it was given, and `pc` the instruction's address.
+uint8_t block_io_repeat_flags(uint8_t f, uint8_t b, uint8_t val, uint8_t operand, uint16_t pc);
 
 // ---- nibble rotates ---------------------------------------------------------
 /// RRD/RLD rotate a nibble between A and (HL). The memory write is the

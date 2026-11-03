@@ -134,6 +134,26 @@ uint16_t ref_step(z80_t& cpu, uint64_t& pins, FlatMemory& mem) {
     return tstates;
 }
 
+/// The flags of F the reference cannot be compared on after the instruction
+/// at `at`, given where it left PC: 5 and 3 after SCF or CCF (by Q), and after
+/// a repeating block instruction that goes round, H and P/V too for the I/O
+/// ones.
+uint8_t known_flag_gaps(const FlatMemory& mem, uint16_t at, uint16_t pc_after) {
+    uint16_t p = at;
+    while (mem.bytes[p] == 0xDD || mem.bytes[p] == 0xFD) {
+        p = uint16_t(p + 1);
+    }
+    const uint8_t op = mem.bytes[p];
+    if (op == 0x37 || op == 0x3F) {
+        return 0x28;
+    }
+    const uint8_t ed = mem.bytes[uint16_t(p + 1)];
+    if (op == 0xED && (ed & 0xF4) == 0xB0 && pc_after == at) {
+        return (ed & 2) ? uint8_t(0x3C) : uint8_t(0x28);
+    }
+    return 0;
+}
+
 /// Drives both cores through `count` instructions from identical memory and
 /// registers, comparing after each. Returns "" on success, or a report.
 std::string run_lockstep(const std::array<uint8_t, 0x10000>& image,
@@ -168,8 +188,17 @@ std::string run_lockstep(const std::array<uint8_t, 0x10000>& image,
     ref_pins = ref_service(ref_pins, ref_mem, z80_tick(&ref, ref_pins));
 
     for (int i = 0; i < count; i++) {
+        const uint16_t at = ours.registers().pc;
         uint16_t our_halves = ours.step_instruction(our_mem);
         uint16_t ref_tstates = ref_step(ref, ref_pins, ref_mem);
+        // Two things the reference does not have, and the core does: Q, which
+        // SCF and CCF read for flags 5 and 3, and the flags a block
+        // instruction changes when it goes round (5 and 3, and H and P/V for
+        // the I/O ones). Where those differ ours is the one taken on into the
+        // next comparison; undocumented_flags_tests checks them against the
+        // published rules instead.
+        const uint8_t gaps = known_flag_gaps(our_mem, at, ours.registers().pc);
+        ref.af = uint16_t((ref.af & ~gaps) | (ours.regs.f & gaps));
 
         std::string d = diff_registers(ours.regs, ref);
         if (!d.empty()) {

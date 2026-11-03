@@ -52,6 +52,11 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
     im0_pc_hold_ = false;
     const bool after_ld_a_ir = ld_a_ir_;
     ld_a_ir_ = false;
+    // The instruction before this fetch is over: latch its Q. An interrupt's
+    // acknowledge is an instruction of its own here, which leaves Q 0 unless
+    // it clears P/V below.
+    q_ = flags_written_ ? regs.f : uint8_t(0);
+    flags_written_ = false;
 
     // NMI and INT are sampled here, before any bus activity, so an accepted
     // interrupt replaces this fetch's T1 rather than racing it. An NMI edge
@@ -82,6 +87,7 @@ uint64_t Z80::begin_fetch(uint64_t pins) {
         // taken at once.
         if (after_ld_a_ir) {
             regs.f = uint8_t(regs.f & ~FLAG_PV);
+            flags_written_ = true;
         }
         // T1H of the acknowledge: PC on the address bus and M1 down, as for
         // an opcode fetch, but no MREQ and PC not moved.
@@ -166,6 +172,7 @@ uint64_t Z80::op_halt(uint64_t pins) {
 // ============================================================================
 
 void Z80::alu_op(uint8_t op, uint8_t val) {
+    flags_written_ = true;
     uint8_t carry = uint8_t(regs.f & FLAG_C);
     switch (op) {
         case 0: { auto r = alu::add8(regs.a, val); regs.a = r.value; regs.f = r.flags; break; }
@@ -197,11 +204,13 @@ bool Z80::cb_action(uint8_t val, bool is_indirect, uint8_t* out) {
                 default: r = alu::srl(val); break;
             }
             regs.f = r.flags;
+            flags_written_ = true;
             *out = r.value;
             return true;
         }
         case 1:
             // BIT writes nothing back -- that is what `false` signals here.
+            flags_written_ = true;
             regs.f = alu::bit(val, y, is_indirect, regs.wz, uint8_t(regs.f & FLAG_C));
             return false;
         case 2:
@@ -322,6 +331,9 @@ void Z80::set_registers(const Registers& r, Memory& mem) {
     nmi_ack_ = false;
     im0_pc_hold_ = false;
     ld_a_ir_ = false;
+    // Registers carry no Q, so a loaded machine starts with Q 0, as at power
+    // on. The priming fetch latches it from this.
+    flags_written_ = false;
     // The priming fetch below is at the new PC, so the CPU runs from there
     // whatever it was doing: a HALT it sat in is over. Left set, the latch
     // made registers() report PC one too high and held PC where it was, so
@@ -964,6 +976,8 @@ void Z80::save_state(State& s) const {
     s.nmi_ack = nmi_ack_;
     s.im0_pc_hold = im0_pc_hold_;
     s.ld_a_ir = ld_a_ir_;
+    s.q = q_;
+    s.flags_written = flags_written_;
 }
 
 void Z80::restore_state(const State& s) {
@@ -983,6 +997,8 @@ void Z80::restore_state(const State& s) {
     nmi_ack_ = s.nmi_ack;
     im0_pc_hold_ = s.im0_pc_hold;
     ld_a_ir_ = s.ld_a_ir;
+    q_ = s.q;
+    flags_written_ = s.flags_written;
 }
 #endif
 

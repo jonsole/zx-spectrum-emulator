@@ -248,13 +248,14 @@ TEST(accumulator_rotates_daa_and_flag_ops_match_reference_exhaustively) {
             {
                 z80_t cpu = ref_cpu(uint8_t(a), uint8_t(f));
                 _z80_scf(&cpu);
-                uint8_t got = alu::scf(uint8_t(a), uint8_t(f));
+                // The reference has no Q; it is what Q == F gives.
+                uint8_t got = alu::scf(uint8_t(a), uint8_t(f), uint8_t(f));
                 mscf.check(got == cpu.f, FMT, a, f, got, cpu.f);
             }
             {
                 z80_t cpu = ref_cpu(uint8_t(a), uint8_t(f));
                 _z80_ccf(&cpu);
-                uint8_t got = alu::ccf(uint8_t(a), uint8_t(f));
+                uint8_t got = alu::ccf(uint8_t(a), uint8_t(f), uint8_t(f));
                 mccf.check(got == cpu.f, FMT, a, f, got, cpu.f);
             }
         }

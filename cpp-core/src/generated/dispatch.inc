@@ -140,12 +140,12 @@
             return true;
         }
         case 4: {
-            auto r = alu::inc8(regs.b, regs.f); regs.b = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(regs.b, regs.f); regs.b = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 5: {
-            auto r = alu::dec8(regs.b, regs.f); regs.b = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(regs.b, regs.f); regs.b = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -183,7 +183,7 @@
             return true;
         }
         case 7: {
-            auto r = alu::rlca(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rlca(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -197,7 +197,7 @@
             return true;
         }
         case 540: {
-            regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.bc(), regs.f); set_hlx(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.bc(), regs.f); set_hlx(r.value); regs.f = r.flags;
             step_ = 541;
             return true;
         }
@@ -309,12 +309,12 @@
             return true;
         }
         case 12: {
-            auto r = alu::inc8(regs.c, regs.f); regs.c = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(regs.c, regs.f); regs.c = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 13: {
-            auto r = alu::dec8(regs.c, regs.f); regs.c = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(regs.c, regs.f); regs.c = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -352,7 +352,7 @@
             return true;
         }
         case 15: {
-            auto r = alu::rrca(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rrca(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -558,12 +558,12 @@
             return true;
         }
         case 20: {
-            auto r = alu::inc8(regs.d, regs.f); regs.d = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(regs.d, regs.f); regs.d = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 21: {
-            auto r = alu::dec8(regs.d, regs.f); regs.d = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(regs.d, regs.f); regs.d = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -601,7 +601,7 @@
             return true;
         }
         case 23: {
-            auto r = alu::rla(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rla(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -684,7 +684,7 @@
             return true;
         }
         case 632: {
-            regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.de(), regs.f); set_hlx(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.de(), regs.f); set_hlx(r.value); regs.f = r.flags;
             step_ = 633;
             return true;
         }
@@ -796,12 +796,12 @@
             return true;
         }
         case 28: {
-            auto r = alu::inc8(regs.e, regs.f); regs.e = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(regs.e, regs.f); regs.e = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 29: {
-            auto r = alu::dec8(regs.e, regs.f); regs.e = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(regs.e, regs.f); regs.e = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -839,7 +839,7 @@
             return true;
         }
         case 31: {
-            auto r = alu::rra(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rra(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -1124,12 +1124,12 @@
             return true;
         }
         case 36: {
-            auto r = alu::inc8(hlx_h(), regs.f); set_hlx_h(r.value); regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(hlx_h(), regs.f); set_hlx_h(r.value); regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 37: {
-            auto r = alu::dec8(hlx_h(), regs.f); set_hlx_h(r.value); regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(hlx_h(), regs.f); set_hlx_h(r.value); regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -1167,7 +1167,7 @@
             return true;
         }
         case 39: {
-            auto r = alu::daa(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::daa(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -1251,7 +1251,7 @@
             return true;
         }
         case 740: {
-            regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), hlx(), regs.f); set_hlx(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), hlx(), regs.f); set_hlx(r.value); regs.f = r.flags;
             step_ = 741;
             return true;
         }
@@ -1449,12 +1449,12 @@
             return true;
         }
         case 44: {
-            auto r = alu::inc8(hlx_l(), regs.f); set_hlx_l(r.value); regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(hlx_l(), regs.f); set_hlx_l(r.value); regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 45: {
-            auto r = alu::dec8(hlx_l(), regs.f); set_hlx_l(r.value); regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(hlx_l(), regs.f); set_hlx_l(r.value); regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -1492,7 +1492,7 @@
             return true;
         }
         case 47: {
-            auto r = alu::cpl(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::cpl(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -1772,7 +1772,7 @@
         }
         case 842: {
             dlatch_ = get_data(pins);
-            auto r = alu::inc8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
             pins = release_pins(pins, MREQ | RD);
             step_ = 843;
             return true;
@@ -1844,7 +1844,7 @@
         }
         case 856: {
             dlatch_ = get_data(pins);
-            auto r = alu::dec8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(dlatch_, regs.f); dlatch_ = r.value; regs.f = r.flags;
             pins = release_pins(pins, MREQ | RD);
             step_ = 857;
             return true;
@@ -1955,7 +1955,7 @@
             return true;
         }
         case 55: {
-            regs.f = alu::scf(regs.a, regs.f);
+            flags_written_ = true; regs.f = alu::scf(regs.a, regs.f, q_);
             pins = begin_fetch(pins);
             return true;
         }
@@ -2039,7 +2039,7 @@
             return true;
         }
         case 894: {
-            regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.sp, regs.f); set_hlx(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(hlx() + 1); auto r = alu::add16(hlx(), regs.sp, regs.f); set_hlx(r.value); regs.f = r.flags;
             step_ = 895;
             return true;
         }
@@ -2208,12 +2208,12 @@
             return true;
         }
         case 60: {
-            auto r = alu::inc8(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::inc8(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
         case 61: {
-            auto r = alu::dec8(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::dec8(regs.a, regs.f); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -2251,7 +2251,7 @@
             return true;
         }
         case 63: {
-            regs.f = alu::ccf(regs.a, regs.f);
+            flags_written_ = true; regs.f = alu::ccf(regs.a, regs.f, q_);
             pins = begin_fetch(pins);
             return true;
         }
@@ -7941,7 +7941,7 @@
             return true;
         }
         case 1867: {
-            regs.b = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.b = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -7991,7 +7991,7 @@
             return true;
         }
         case 1876: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.bc(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.bc(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 1877;
             return true;
         }
@@ -8170,7 +8170,7 @@
             return true;
         }
         case 324: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -8295,7 +8295,7 @@
             return true;
         }
         case 1935: {
-            regs.c = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.c = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -8345,7 +8345,7 @@
             return true;
         }
         case 1944: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.bc(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.bc(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 1945;
             return true;
         }
@@ -8522,7 +8522,7 @@
             return true;
         }
         case 332: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -8647,7 +8647,7 @@
             return true;
         }
         case 2003: {
-            regs.d = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.d = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -8697,7 +8697,7 @@
             return true;
         }
         case 2012: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.de(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.de(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2013;
             return true;
         }
@@ -8876,7 +8876,7 @@
             return true;
         }
         case 340: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -8954,7 +8954,7 @@
             return true;
         }
         case 2062: {
-            regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2); ld_a_ir_ = true;
+            flags_written_ = true; regs.a = regs.i; regs.f = alu::sziff2_flags(regs.i, regs.f, regs.iff2); ld_a_ir_ = true;
             step_ = 2063;
             return true;
         }
@@ -9001,7 +9001,7 @@
             return true;
         }
         case 2071: {
-            regs.e = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.e = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -9051,7 +9051,7 @@
             return true;
         }
         case 2080: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.de(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.de(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2081;
             return true;
         }
@@ -9228,7 +9228,7 @@
             return true;
         }
         case 348: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -9306,7 +9306,7 @@
             return true;
         }
         case 2130: {
-            regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2); ld_a_ir_ = true;
+            flags_written_ = true; regs.a = regs.r; regs.f = alu::sziff2_flags(regs.r, regs.f, regs.iff2); ld_a_ir_ = true;
             step_ = 2131;
             return true;
         }
@@ -9353,7 +9353,7 @@
             return true;
         }
         case 2139: {
-            regs.h = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.h = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -9403,7 +9403,7 @@
             return true;
         }
         case 2148: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.hl(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.hl(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2149;
             return true;
         }
@@ -9582,7 +9582,7 @@
             return true;
         }
         case 356: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -9689,7 +9689,7 @@
             return true;
         }
         case 2204: {
-            auto r = alu::rrd(regs.a, dlatch_, regs.f); regs.a = r.new_a; dlatch_ = r.new_mem; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rrd(regs.a, dlatch_, regs.f); regs.a = r.new_a; dlatch_ = r.new_mem; regs.f = r.flags;
             step_ = 2205;
             return true;
         }
@@ -9791,7 +9791,7 @@
             return true;
         }
         case 2225: {
-            regs.l = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.l = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -9841,7 +9841,7 @@
             return true;
         }
         case 2234: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.hl(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.hl(), uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2235;
             return true;
         }
@@ -10018,7 +10018,7 @@
             return true;
         }
         case 364: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -10125,7 +10125,7 @@
             return true;
         }
         case 2290: {
-            auto r = alu::rld(regs.a, dlatch_, regs.f); regs.a = r.new_a; dlatch_ = r.new_mem; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::rld(regs.a, dlatch_, regs.f); regs.a = r.new_a; dlatch_ = r.new_mem; regs.f = r.flags;
             step_ = 2291;
             return true;
         }
@@ -10227,7 +10227,7 @@
             return true;
         }
         case 2311: {
-            regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -10277,7 +10277,7 @@
             return true;
         }
         case 2320: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.sp, uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::sbc16(regs.hl(), regs.sp, uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2321;
             return true;
         }
@@ -10456,7 +10456,7 @@
             return true;
         }
         case 372: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -10572,7 +10572,7 @@
             return true;
         }
         case 2377: {
-            regs.a = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
+            flags_written_ = true; regs.a = dlatch_; regs.f = alu::in_flags(dlatch_, regs.f);
             pins = begin_fetch(pins);
             return true;
         }
@@ -10622,7 +10622,7 @@
             return true;
         }
         case 2386: {
-            regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.sp, uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.hl() + 1); auto r = alu::adc16(regs.hl(), regs.sp, uint8_t(regs.f & FLAG_C)); regs.set_hl(r.value); regs.f = r.flags;
             step_ = 2387;
             return true;
         }
@@ -10799,7 +10799,7 @@
             return true;
         }
         case 380: {
-            auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
+            flags_written_ = true; auto r = alu::sub8(0, regs.a); regs.a = r.value; regs.f = r.flags;
             pins = begin_fetch(pins);
             return true;
         }
@@ -11068,7 +11068,7 @@
             return true;
         }
         case 2448: {
-            uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f);
+            flags_written_ = true; uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f);
             step_ = 2449;
             return true;
         }
@@ -11118,7 +11118,7 @@
             return true;
         }
         case 2458: {
-            regs.wz = uint16_t(regs.wz + 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.wz + 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags;
             step_ = 2459;
             return true;
         }
@@ -11222,7 +11222,7 @@
         case 2480: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1));
+            flags_written_ = true; regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1));
             step_ = 2481;
             return true;
         }
@@ -11309,7 +11309,7 @@
             return true;
         }
         case 2498: {
-            regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
+            flags_written_ = true; regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
             pins = release_pins(pins, IORQ | WR);
             step_ = 2499;
             return true;
@@ -11398,7 +11398,7 @@
             return true;
         }
         case 2512: {
-            uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f);
+            flags_written_ = true; uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f);
             step_ = 2513;
             return true;
         }
@@ -11448,7 +11448,7 @@
             return true;
         }
         case 2522: {
-            regs.wz = uint16_t(regs.wz - 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags;
+            flags_written_ = true; regs.wz = uint16_t(regs.wz - 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags;
             step_ = 2523;
             return true;
         }
@@ -11552,7 +11552,7 @@
         case 2544: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1));
+            flags_written_ = true; regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1));
             step_ = 2545;
             return true;
         }
@@ -11639,7 +11639,7 @@
             return true;
         }
         case 2562: {
-            regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
+            flags_written_ = true; regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l);
             pins = release_pins(pins, IORQ | WR);
             step_ = 2563;
             return true;
@@ -11728,7 +11728,7 @@
             return true;
         }
         case 2576: {
-            uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f); if (bc_after == 0) { step_ = 2587; return true; }
+            flags_written_ = true; uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f); if (bc_after != 0) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); } if (bc_after == 0) { step_ = 2587; return true; }
             step_ = 2577;
             return true;
         }
@@ -11819,7 +11819,7 @@
             return true;
         }
         case 2596: {
-            regs.wz = uint16_t(regs.wz + 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags; if (!r.repeat) { step_ = 2607; return true; }
+            flags_written_ = true; regs.wz = uint16_t(regs.wz + 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags; if (r.repeat) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); } if (!r.repeat) { step_ = 2607; return true; }
             step_ = 2597;
             return true;
         }
@@ -11964,7 +11964,6 @@
         case 2628: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2639; return true; }
             step_ = 2629;
             return true;
         }
@@ -11973,6 +11972,7 @@
             return true;
         }
         case 2630: {
+            flags_written_ = true; regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c + 1)); if (regs.b != 0) { regs.f = alu::block_io_repeat_flags(regs.f, regs.b, dlatch_, uint8_t(regs.c + 1), uint16_t(regs.pc - 2)); } if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2641; return true; }
             pins = release_pins(pins, MREQ | WR);
             step_ = 2631;
             return true;
@@ -12092,7 +12092,7 @@
             return true;
         }
         case 2656: {
-            regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2667; return true; }
+            flags_written_ = true; regs.wz = uint16_t(regs.bc() + 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b != 0) { regs.f = alu::block_io_repeat_flags(regs.f, regs.b, dlatch_, regs.l, uint16_t(regs.pc - 2)); } if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2667; return true; }
             pins = release_pins(pins, IORQ | WR);
             step_ = 2657;
             return true;
@@ -12222,7 +12222,7 @@
             return true;
         }
         case 2680: {
-            uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f); if (bc_after == 0) { step_ = 2691; return true; }
+            flags_written_ = true; uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); regs.f = alu::ldi_ldd_flags(regs.a, dlatch_, bc_after, regs.f); if (bc_after != 0) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); } if (bc_after == 0) { step_ = 2691; return true; }
             step_ = 2681;
             return true;
         }
@@ -12313,7 +12313,7 @@
             return true;
         }
         case 2700: {
-            regs.wz = uint16_t(regs.wz - 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags; if (!r.repeat) { step_ = 2711; return true; }
+            flags_written_ = true; regs.wz = uint16_t(regs.wz - 1); uint16_t bc_after = uint16_t(regs.bc() - 1); regs.set_bc(bc_after); auto r = alu::cpi_cpd(regs.a, dlatch_, bc_after, regs.f); regs.f = r.flags; if (r.repeat) { regs.f = alu::block_repeat_flags(regs.f, uint16_t(regs.pc - 2)); } if (!r.repeat) { step_ = 2711; return true; }
             step_ = 2701;
             return true;
         }
@@ -12458,7 +12458,6 @@
         case 2732: {
             if (asserted(pins, WAIT)) { return true; }
             pins = assert_pins(pins, WR);
-            regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2743; return true; }
             step_ = 2733;
             return true;
         }
@@ -12467,6 +12466,7 @@
             return true;
         }
         case 2734: {
+            flags_written_ = true; regs.f = alu::ini_ind_flags(regs.b, dlatch_, uint8_t(regs.c - 1)); if (regs.b != 0) { regs.f = alu::block_io_repeat_flags(regs.f, regs.b, dlatch_, uint8_t(regs.c - 1), uint16_t(regs.pc - 2)); } if (regs.b == 0) { pins = release_pins(pins, MREQ | WR); step_ = 2745; return true; }
             pins = release_pins(pins, MREQ | WR);
             step_ = 2735;
             return true;
@@ -12586,7 +12586,7 @@
             return true;
         }
         case 2760: {
-            regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2771; return true; }
+            flags_written_ = true; regs.wz = uint16_t(regs.bc() - 1); regs.f = alu::outi_outd_flags(regs.b, dlatch_, regs.l); if (regs.b != 0) { regs.f = alu::block_io_repeat_flags(regs.f, regs.b, dlatch_, regs.l, uint16_t(regs.pc - 2)); } if (regs.b == 0) { pins = release_pins(pins, IORQ | WR); step_ = 2771; return true; }
             pins = release_pins(pins, IORQ | WR);
             step_ = 2761;
             return true;
