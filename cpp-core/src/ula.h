@@ -23,7 +23,8 @@
 //   canvas       counts from the TOP-LEFT of the visible picture.
 //
 // They are not the same instant: the interrupt fires partway through the top
-// border, not at the corner. CANVAS_LEAD_HC below is the offset between them.
+// border, not at the corner. UlaTiming::canvas_lead_hc is the offset between
+// them.
 
 #include <array>
 #include <atomic>
@@ -75,16 +76,6 @@ constexpr uint32_t PAPER_DOT_END = PAPER_DOT_BEGIN + SCREEN_WIDTH; // 304
 constexpr uint32_t PAPER_LINE_BEGIN = BORDER_TOP_LINES;              // 64
 constexpr uint32_t PAPER_LINE_END = PAPER_LINE_BEGIN + SCREEN_HEIGHT; // 256
 
-/// How far the canvas origin leads the interrupt.
-///
-/// The first paper pixel sits 14336 T-states after the interrupt (64 whole
-/// lines of 224). In canvas terms that same pixel is at line 64, dot 48. So
-/// the canvas top-left corner happens 48 half-clocks BEFORE the interrupt,
-/// i.e. right at the end of the previous frame -- which is why "T-states since
-/// interrupt" and "raster position" need converting between rather than being
-/// treated as the same number.
-constexpr uint32_t CANVAS_LEAD_HC = BORDER_LEFT_PX; // 48
-
 /// What differs between the 48K's ULA and the 128K's, in the terms above.
 ///
 /// The 128K's line is 228 T-states rather than 224 (four more of retrace: the
@@ -117,15 +108,48 @@ struct UlaTiming {
     /// are not derived from the paper's position above: the 48K's sits one
     /// T-state before its first paper T-state and the 128K's two.
     uint32_t contention_start;
+    /// How long the ULA takes to show a group of paper after fetching it, in
+    /// dots. The canvas is what the video output shows, so its dot for a
+    /// moment is where the beam is then, and the paper's first dot, 48, is
+    /// drawn this long after the fetch that read it.
+    ///
+    /// On the 48K, 8: 4 T-states. The bytes go through the ULA's shift
+    /// registers and come out of the video pin a step later, while the
+    /// border colour goes out from its own 8-dot latch with no such wait.
+    /// azesmbog's ULA 48 Simple Test pins it down: drawn with no delay, every
+    /// border change lands 8 dots late against the paper in its expected
+    /// picture, and with this one the two match pixel for pixel. It is Fuse's
+    /// rule seen from the other side -- Fuse draws a border change from the
+    /// 4-T-state step the write falls in. The first fetch, at T-state 14336,
+    /// is then at dot 40, and the canvas leads the interrupt by 40 dots.
+    ///
+    /// On the 128K, 6: 3 T-states. Its first fetch is at T-state 14364, so
+    /// at dot 42, and on both machines the paper's first pixel goes out 5
+    /// T-states after the contention starts -- 14340 on the 48K, 14367 here.
+    /// Swept against every 128K test with border effects and an expected
+    /// picture: with 6, Woodmass's Pattern, Putnik's BBG and Frame Test match
+    /// exactly and IR Contention 128 is a few snow specks out; with 0, BBG
+    /// is 6,000 pixels out, and with 8, Pattern 13,000.
+    uint32_t paper_delay_dots;
 
     constexpr uint32_t hc_per_frame() const { return hc_per_line * lines_per_frame; }
+    /// How far the canvas origin leads the interrupt: the canvas's top-left
+    /// corner is this many half-clocks before it, at the end of the previous
+    /// frame -- which is why "T-states since interrupt" and "raster
+    /// position" need converting between rather than being treated as the
+    /// same number.
+    constexpr uint32_t canvas_lead_hc() const { return BORDER_LEFT_PX - paper_delay_dots; }
+    /// The dot of a line at which the ULA fetches its first paper group, and
+    /// one past the dot of the last group's fetch: the paper's, a delay early.
+    constexpr uint32_t fetch_dot_begin() const { return PAPER_DOT_BEGIN - paper_delay_dots; }
+    constexpr uint32_t fetch_dot_end() const { return PAPER_DOT_END - paper_delay_dots; }
     constexpr uint32_t tstates_per_frame() const { return hc_per_frame() / HC_PER_TSTATE; }
     constexpr uint32_t paper_line_end() const { return paper_line_begin + SCREEN_HEIGHT; }
 };
 
 constexpr UlaTiming TIMING_48K{HC_PER_LINE, LINES_PER_FRAME, BORDER_TOP_LINES, INT_PULSE_HC,
-                               7'000'000, 14335};
-constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800, 14362};
+                               7'000'000, 14335, 8};
+constexpr UlaTiming TIMING_128K{228 * HC_PER_TSTATE, 311, 63, 36 * HC_PER_TSTATE, 7'093'800, 14362, 6};
 static_assert(TIMING_48K.tstates_per_frame() == TSTATES_PER_FRAME, "48K frame");
 static_assert(TIMING_128K.tstates_per_frame() == MAX_TSTATES_PER_FRAME, "128K frame");
 static_assert(TIMING_128K.lines_per_frame <= FULL_HEIGHT, "the canvas must hold a frame");
@@ -225,9 +249,9 @@ public:
 
     /// The frame geometry in force. TIMING_48K unless set otherwise.
     const UlaTiming& timing() const { return t_; }
-    /// Switches geometry. Only sensible alongside a reset: the counters are
-    /// left where they are, and a mid-frame switch would put the beam
-    /// somewhere the new frame does not have.
+    /// Switches geometry. Only sensible alongside a reset, which puts the
+    /// beam where the new frame has it at the interrupt: a mid-frame switch
+    /// would put it somewhere the new frame does not have.
     void set_timing(const UlaTiming& t) { t_ = t; }
 
     /// One half-clock. Drives INT on `pins`, performs whatever screen fetch
@@ -317,11 +341,14 @@ public:
     uint8_t floating_bus(const uint8_t* screen) const;
 
     /// Snow (docs/contention.md, section 5): the CPU's refresh has landed on
-    /// the ULA's first read of the group being drawn, so that cell's bitmap
-    /// and attribute are read again with bits 6-0 of their addresses taken
-    /// from `r` -- from `bytes`, the bank the snow comes from -- and what of
-    /// the group is already drawn is drawn again. Called by the machine at the
-    /// refresh's first T-state, G + 1; nothing outside the paper.
+    /// the ULA's first read of group G, so that cell's bitmap and attribute
+    /// are read with bits 6-0 of their addresses taken from `r` -- from
+    /// `bytes`, the bank the snow comes from -- and the group shows those.
+    /// Called by the machine at the refresh's first T-state, G + 1; nothing
+    /// outside the paper. The group is found from the T-state, as contention
+    /// finds it, and the bytes go to the display with the rest of the group's,
+    /// a delay after the fetch, so the call can come before or after the
+    /// ULA's own fetch of the group.
     void snow(uint8_t r, const uint8_t* bytes);
     /// The double (section 5): the refresh has landed on the gap before the
     /// second read, which does not happen, so the second cell shows the first
@@ -511,6 +538,10 @@ public:
         uint32_t dot = 0;
         uint64_t frame_count = 0;
         uint8_t pixel0 = 0, attr0 = 0, pixel1 = 0, attr1 = 0;
+        uint8_t shown_pixel0 = 0, shown_attr0 = 0, shown_pixel1 = 0, shown_attr1 = 0;
+        uint32_t shown_group = ~uint32_t(0);
+        bool snow_pending = false, double_pending = false;
+        uint8_t snow_pixel = 0, snow_attr = 0;
         uint8_t border_latch = 0;
     };
     void save_state(State& s) const;
@@ -532,8 +563,19 @@ private:
     uint32_t dot_ = 0;
     uint64_t frame_count_ = 0;
 
-    // Bytes for the 16-pixel group currently being emitted.
+    // Bytes of the 16-pixel group last fetched.
     uint8_t pixel0_ = 0, attr0_ = 0, pixel1_ = 0, attr1_ = 0;
+    // Bytes of the group being shown: the fetched ones, paper_delay_dots on,
+    // with any snow or double that landed on the group in between.
+    uint8_t shown_pixel0_ = 0, shown_attr0_ = 0, shown_pixel1_ = 0, shown_attr1_ = 0;
+    // Which group that is, as line << 4 | group, or ~0 for none yet.
+    uint32_t shown_group_ = ~uint32_t(0);
+    // Snow and the double on a group not yet shown, waiting for it. One of
+    // each is enough: a group is shown before the next one's reads can be
+    // hit.
+    bool snow_pending_ = false;
+    bool double_pending_ = false;
+    uint8_t snow_pixel_ = 0, snow_attr_ = 0;
     uint8_t border_latch_ = 0;
     /// The group fetch's four addresses; see fetch_addr_at. Like the dot
     /// below, an output of the half-clock rather than state, so not in State.
@@ -567,17 +609,24 @@ private:
     /// (ZEXALL and friends) crosses thousands of frame boundaries a second.
     bool heat_active_ = false;
 
-    /// Whether the beam is over paper right now -- the only time the ULA
-    /// fetches, and so the only time it drives the bus.
+    /// Whether the ULA is fetching paper now: over the paper's lines, a
+    /// delay before the beam reaches the paper's dots.
+    bool in_fetch_area() const {
+        return line_ >= t_.paper_line_begin && line_ < t_.paper_line_end()
+               && dot_ >= t_.fetch_dot_begin() && dot_ < t_.fetch_dot_end();
+    }
+    /// Whether the beam is over paper now.
     bool in_paper_area() const {
         return line_ >= t_.paper_line_begin && line_ < t_.paper_line_end()
                && dot_ >= PAPER_DOT_BEGIN && dot_ < PAPER_DOT_END;
     }
+    /// The paper row and pixel column of the group whose contention group
+    /// this T-state is in, as floating_bus finds it; false outside the paper.
+    bool group_at_tstate(uint16_t& x, uint16_t& y) const;
+    /// That group as line << 4 | group, shown_group_'s terms.
+    static uint32_t group_key(uint16_t x, uint16_t y) { return (uint32_t(y) << 4) | (uint32_t(x) >> 4); }
 
     void emit_pixel();
-    /// emit_pixel() for any dot of the current line: what snow uses to redraw
-    /// the part of a group already drawn when its bytes change under it.
-    void emit_pixel_at(uint32_t dot);
     void on_frame_boundary();
     /// Paints the overlay onto the just-completed frame -- everything dimmed,
     /// each written byte lifted back by its heat -- and fades the heat map on

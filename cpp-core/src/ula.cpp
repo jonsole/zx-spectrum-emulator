@@ -47,9 +47,9 @@ Ula::Ula()
     : framebuffer_(size_t(FULL_WIDTH) * FULL_HEIGHT * 3, 0),
       last_frame_(size_t(FULL_WIDTH) * FULL_HEIGHT * 3, 0) {
     // Start at the canvas position corresponding to frame_hc_ == 0 (the
-    // interrupt), which is CANVAS_LEAD_HC dots into line 0 -- see ula.h.
+    // interrupt), which is canvas_lead_hc() dots into line 0 -- see ula.h.
     line_ = 0;
-    dot_ = CANVAS_LEAD_HC;
+    dot_ = t_.canvas_lead_hc();
 }
 
 void Ula::reset() {
@@ -58,8 +58,12 @@ void Ula::reset() {
     frame_hc_ = 0;
     frame_count_ = 0;
     line_ = 0;
-    dot_ = CANVAS_LEAD_HC;
+    dot_ = t_.canvas_lead_hc();
     pixel0_ = attr0_ = pixel1_ = attr1_ = 0;
+    shown_pixel0_ = shown_attr0_ = shown_pixel1_ = shown_attr1_ = 0;
+    shown_group_ = ~uint32_t(0);
+    snow_pending_ = double_pending_ = false;
+    snow_pixel_ = snow_attr_ = 0;
     border_latch_ = 0;
     write_heat_.fill(0);
     heat_active_ = false;
@@ -91,16 +95,15 @@ void Ula::clock(uint64_t& pins, const uint8_t* screen) {
     }
 
     // ---- screen fetch ------------------------------------------------------
-    if (in_paper_area()) {
-        uint32_t px = dot_ - PAPER_DOT_BEGIN; // 0..255 across the paper
+    if (in_fetch_area()) {
+        uint32_t px = dot_ - t_.fetch_dot_begin(); // 0..255 across the paper
         if ((px & 15) == 0) {
             // Start of a 16-pixel group: fetch the two cells' bitmap and
             // attribute bytes. Real hardware staggers these across four
-            // T-states and displays them a group late through a shift
-            // register; fetching them together at the group's first dot is
+            // T-states; fetching them together at the group's first dot is
             // equivalent for what is observable here (which byte value a
-            // mid-frame write lands on) and avoids a pipeline whose only
-            // visible effect would be a one-group display lag.
+            // mid-frame write lands on). They are shown paper_delay_dots
+            // later, below.
             uint16_t y = uint16_t(line_ - t_.paper_line_begin);
             uint16_t x = uint16_t(px);
             const uint16_t first = pixel_addr(x, y);
@@ -139,6 +142,28 @@ void Ula::clock(uint64_t& pins, const uint8_t* screen) {
             fetch_addr_ = first;
             fetch_data_ = pixel0_;
         }
+    }
+
+    // ---- the fetched group goes to the display ------------------------------
+    // A delay after its fetch, with whatever snow or double landed on it in
+    // between: the bytes the shift registers put out from here.
+    if (in_paper_area() && ((dot_ - PAPER_DOT_BEGIN) & 15) == 0) {
+        shown_group_ = group_key(uint16_t(dot_ - PAPER_DOT_BEGIN),
+                                 uint16_t(line_ - t_.paper_line_begin));
+        shown_pixel0_ = pixel0_;
+        shown_attr0_ = attr0_;
+        shown_pixel1_ = pixel1_;
+        shown_attr1_ = attr1_;
+        if (snow_pending_) {
+            shown_pixel0_ = snow_pixel_;
+            shown_attr0_ = snow_attr_;
+        }
+        if (double_pending_) {
+            shown_pixel1_ = shown_pixel0_;
+            shown_attr1_ = shown_attr0_;
+        }
+        snow_pending_ = false;
+        double_pending_ = false;
     }
 
     // ---- border latch ------------------------------------------------------
@@ -214,42 +239,73 @@ void Ula::advance() {
     }
 }
 
-void Ula::emit_pixel() {
-    emit_pixel_at(dot_);
+bool Ula::group_at_tstate(uint16_t& x, uint16_t& y) const {
+    const uint32_t tstate = frame_hc_ / HC_PER_TSTATE;
+    if (tstate < t_.contention_start) {
+        return false;
+    }
+    const uint32_t tstates_per_line = t_.hc_per_line / HC_PER_TSTATE;
+    const uint32_t since = tstate - t_.contention_start;
+    const uint32_t line = since / tstates_per_line;
+    const uint32_t along = since % tstates_per_line;
+    if (line >= CONTENTION_LINES
+        || along >= CONTENTION_GROUPS_PER_LINE * CONTENTION_GROUP_TSTATES) {
+        return false;
+    }
+    x = uint16_t((along / CONTENTION_GROUP_TSTATES) * 16);
+    y = uint16_t(line);
+    return true;
 }
 
 void Ula::snow(uint8_t r, const uint8_t* bytes) {
-    if (!in_paper_area()) {
+    // The group whose reads the refresh hit, by the T-state, as contention
+    // counts groups. Not by the beam: the group is shown a delay after it is
+    // read, and on the 128K the refresh at G + 1 comes before the ULA's own
+    // fetch of it here.
+    uint16_t x = 0;
+    uint16_t y = 0;
+    if (!group_at_tstate(x, y)) {
         return;
     }
-    // The group being drawn, which is the one whose reads the refresh hit:
-    // a group is drawn from the T-state after its G, so at G + 1 the beam is
-    // at its first pixel.
-    const uint32_t start = (dot_ - PAPER_DOT_BEGIN) & ~uint32_t(15);
-    const uint16_t y = uint16_t(line_ - t_.paper_line_begin);
-    const uint16_t bitmap = uint16_t(pixel_addr(uint16_t(start), y) - BITMAP_BASE);
-    const uint16_t attr = uint16_t(attr_addr(uint16_t(start), y) - BITMAP_BASE);
+    const uint16_t bitmap = uint16_t(pixel_addr(x, y) - BITMAP_BASE);
+    const uint16_t attr = uint16_t(attr_addr(x, y) - BITMAP_BASE);
     // The RAM's column address is bits 6-0; the row, bits 13-7, is the
     // ULA's own. R's 7-bit counter takes the column's place.
     constexpr uint16_t ROW = uint16_t(~0x7F);
     const uint16_t column = uint16_t(r & 0x7F);
-    pixel0_ = bytes[(bitmap & ROW) | column];
-    attr0_ = bytes[(attr & ROW) | column];
-    for (uint32_t dot = PAPER_DOT_BEGIN + start; dot <= dot_; dot++) {
-        emit_pixel_at(dot);
+    const uint8_t pixel = bytes[(bitmap & ROW) | column];
+    const uint8_t attr_byte = bytes[(attr & ROW) | column];
+    if (group_key(x, y) == shown_group_) {
+        // Already on show -- which a paper delay shorter than 4 T-states
+        // would make it: its first cell is drawn from these bytes from here.
+        // Both machines show a group at G + 5, so neither comes here.
+        shown_pixel0_ = pixel;
+        shown_attr0_ = attr_byte;
+        return;
     }
+    snow_pixel_ = pixel;
+    snow_attr_ = attr_byte;
+    snow_pending_ = true;
 }
 
 void Ula::double_read() {
-    if (!in_paper_area()) {
+    uint16_t x = 0;
+    uint16_t y = 0;
+    if (!group_at_tstate(x, y)) {
         return;
     }
-    // The second cell is not drawn until G + 5, so nothing is redrawn.
-    pixel1_ = pixel0_;
-    attr1_ = attr0_;
+    if (group_key(x, y) == shown_group_) {
+        // Already on show, as for snow above: the second cell is not drawn
+        // until G + 4 of the display, so it takes the first cell's bytes.
+        shown_pixel1_ = shown_pixel0_;
+        shown_attr1_ = shown_attr0_;
+        return;
+    }
+    double_pending_ = true;
 }
 
-void Ula::emit_pixel_at(uint32_t dot) {
+void Ula::emit_pixel() {
+    const uint32_t dot = dot_;
     if (dot >= VISIBLE_DOTS) {
         dot_kind_ = DotKind::Retrace;
         dot_colour_ = 0;
@@ -263,8 +319,8 @@ void Ula::emit_pixel_at(uint32_t dot) {
         uint32_t px = dot - PAPER_DOT_BEGIN;
         // Which of the group's two cells, and which bit within it.
         bool second_cell = (px & 15) >= 8;
-        uint8_t bits = second_cell ? pixel1_ : pixel0_;
-        uint8_t attr = second_cell ? attr1_ : attr0_;
+        uint8_t bits = second_cell ? shown_pixel1_ : shown_pixel0_;
+        uint8_t attr = second_cell ? shown_attr1_ : shown_attr0_;
         uint8_t bit = uint8_t(px & 7);
 
         uint8_t ink = uint8_t(attr & 0x07);
@@ -488,6 +544,15 @@ void Ula::save_state(State& s) const {
     s.attr0 = attr0_;
     s.pixel1 = pixel1_;
     s.attr1 = attr1_;
+    s.shown_pixel0 = shown_pixel0_;
+    s.shown_attr0 = shown_attr0_;
+    s.shown_pixel1 = shown_pixel1_;
+    s.shown_attr1 = shown_attr1_;
+    s.shown_group = shown_group_;
+    s.snow_pending = snow_pending_;
+    s.double_pending = double_pending_;
+    s.snow_pixel = snow_pixel_;
+    s.snow_attr = snow_attr_;
     s.border_latch = border_latch_;
 }
 
@@ -507,6 +572,15 @@ void Ula::restore_state(const State& s) {
     attr0_ = s.attr0;
     pixel1_ = s.pixel1;
     attr1_ = s.attr1;
+    shown_pixel0_ = s.shown_pixel0;
+    shown_attr0_ = s.shown_attr0;
+    shown_pixel1_ = s.shown_pixel1;
+    shown_attr1_ = s.shown_attr1;
+    shown_group_ = s.shown_group;
+    snow_pending_ = s.snow_pending;
+    double_pending_ = s.double_pending;
+    snow_pixel_ = s.snow_pixel;
+    snow_attr_ = s.snow_attr;
     border_latch_ = s.border_latch;
 }
 #endif

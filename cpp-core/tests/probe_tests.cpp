@@ -39,8 +39,8 @@ TEST(counters_are_the_half_clock_just_run) {
     // Clocking frame half-clock 1000 reports 1000, though the ULA has moved
     // to 1001 by the time clock() returns. On the 48K a line is 448
     // half-clocks, and the canvas's dots lead the frame's half-clocks by
-    // CANVAS_LEAD_HC, 48: half-clock 1000 is dot 1048 of the canvas, line 2,
-    // dot 152.
+    // CANVAS_LEAD_HC, 40: half-clock 1000 is dot 1040 of the canvas, line 2,
+    // dot 144.
     auto m = machine();
     BusProbe p;
     m->probe = &p;
@@ -48,7 +48,7 @@ TEST(counters_are_the_half_clock_just_run) {
     m->clock();
     CHECK_EQ(p.frame_hc, 1000u);
     CHECK_EQ(p.line, 2u);
-    CHECK_EQ(p.dot, 152u);
+    CHECK_EQ(p.dot, 144u);
     CHECK_EQ(m->ula.frame_hc(), 1001u);
 }
 
@@ -67,12 +67,14 @@ TEST(int_for_the_first_32_tstates) {
 }
 
 TEST(a_paper_dot_as_a_colour_index_and_its_group_fetch) {
-    // The paper's first dot: line 64, dot 48, which with the canvas's lead of
-    // 48 dots is frame half-clock 64 x 448 -- T-state 14336. Its group fetches 0x4000,
-    // 0x5800, 0x4001, 0x5801. 0x4000 = 0xFF (all ink), 0x5800 = 0x47 (bright,
-    // white ink): the dot is colour 7 with bright, 0x0F. 0x4001 = 0x00 with
+    // The paper's first group is fetched at T-state 14336, frame half-clock
+    // 64 x 448: with the canvas's lead of 40 dots, line 64, dot 40, still the
+    // left border. It reads 0x4000, 0x5800, 0x4001, 0x5801. The paper's first
+    // dot, line 64, dot 48, is shown PAPER_DELAY_DOTS (8) later, at half-clock
+    // 64 x 448 + 8. 0x4000 = 0xFF (all ink), 0x5800 = 0x47 (bright, white
+    // ink): the dot is colour 7 with bright, 0x0F. 0x4001 = 0x00 with
     // 0x5801 = 0x08 (blue paper, not bright): the second cell's first dot,
-    // 8 on, is colour 1.
+    // 8 on, at 64 x 448 + 16, is colour 1.
     auto m = machine();
     const uint8_t bitmap[2] = {0xFF, 0x00};
     const uint8_t attrs[2] = {0x47, 0x08};
@@ -82,8 +84,8 @@ TEST(a_paper_dot_as_a_colour_index_and_its_group_fetch) {
     m->probe = &p;
     run_to(*m, 64 * 448);
     m->clock();
-    CHECK(p.dot_kind == DotKind::Paper);
-    CHECK_EQ(p.dot_colour, uint8_t(0x0F));
+    CHECK(p.dot_kind == DotKind::Border);
+    CHECK_EQ(p.dot, 40u);
     CHECK_EQ(p.fetch_count, 4u);
     CHECK_EQ(p.fetch_addr[0], uint16_t(0x4000));
     CHECK_EQ(p.fetch_addr[1], uint16_t(0x5800));
@@ -99,24 +101,29 @@ TEST(a_paper_dot_as_a_colour_index_and_its_group_fetch) {
     run_to(*m, 64 * 448 + 8);
     m->clock();
     CHECK(p.dot_kind == DotKind::Paper);
+    CHECK_EQ(p.dot, 48u);
+    CHECK_EQ(p.dot_colour, uint8_t(0x0F));
+    run_to(*m, 64 * 448 + 16);
+    m->clock();
+    CHECK(p.dot_kind == DotKind::Paper);
     CHECK_EQ(p.dot_colour, uint8_t(0x01));
 }
 
 TEST(border_and_retrace_dots) {
     // Line 10 is top border: dot 0 shows the latch, which takes the border
-    // at every 8th dot, so at dot 0 itself; with the canvas's lead of 48 that
-    // is frame half-clock 10 x 448 - 48. Dot 352 on, 352 half-clocks later, is
+    // at every 8th dot, so at dot 0 itself; with the canvas's lead of 40 that
+    // is frame half-clock 10 x 448 - 40. Dot 352 on, 352 half-clocks later, is
     // the retrace.
     auto m = machine();
     m->ula.border = 5;
     BusProbe p;
     m->probe = &p;
-    run_to(*m, 10 * 448 - 48);
+    run_to(*m, 10 * 448 - 40);
     m->clock();
     CHECK(p.dot_kind == DotKind::Border);
     CHECK_EQ(p.dot_colour, uint8_t(5));
     CHECK_EQ(p.border_latch, uint8_t(5));
-    run_to(*m, 10 * 448 - 48 + 352);
+    run_to(*m, 10 * 448 - 40 + 352);
     m->clock();
     CHECK(p.dot_kind == DotKind::Retrace);
     CHECK_EQ(p.dot_colour, uint8_t(0));

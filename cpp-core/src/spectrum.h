@@ -120,8 +120,9 @@ struct BusProbe {
     /// holds it (WAIT is never driven -- a hold stops the clock instead).
     bool cpu_clocked = false;
     /// The ULA's counters for the half-clock just processed, not the next.
-    /// line and dot are the canvas's, which leads the frame by CANVAS_LEAD_HC
-    /// (48) dots: frame half-clock 0 is line 0, dot 48.
+    /// line and dot are the canvas's, which leads the frame by canvas_lead_hc()
+    /// dots, 40 on the 48K and 42 on the 128K: frame half-clock 0 is line 0,
+    /// dot 40 on the 48K.
     uint32_t frame_hc = 0;
     uint32_t line = 0;
     uint32_t dot = 0;

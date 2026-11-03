@@ -987,6 +987,15 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.byte(s.ula.attr0);
     h.byte(s.ula.pixel1);
     h.byte(s.ula.attr1);
+    h.byte(s.ula.shown_pixel0);
+    h.byte(s.ula.shown_attr0);
+    h.byte(s.ula.shown_pixel1);
+    h.byte(s.ula.shown_attr1);
+    h.u64(s.ula.shown_group);
+    h.byte(s.ula.snow_pending ? 1 : 0);
+    h.byte(s.ula.double_pending ? 1 : 0);
+    h.byte(s.ula.snow_pixel);
+    h.byte(s.ula.snow_attr);
     h.byte(s.ula.border_latch);
 
     h.bytes(s.keys, sizeof s.keys);

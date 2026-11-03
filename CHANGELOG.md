@@ -7,6 +7,19 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Border effects line up with the paper.** The ULA shows a group of paper
+  4 T-states after it fetches it, and the emulator drew it at the fetch, so
+  every border colour change landed 8 pixels late against the picture:
+  rainbow borders, loading stripes and border-drawn graphics sat one step
+  to the right of where a real 48K puts them. The paper is now drawn the 4
+  T-states late the hardware draws it (3 on the 128K), and azesmbog's ULA 48
+  Simple Test, Woodmass's Pattern, Putnik's BBG 128 and Frame Test match
+  their expected pictures pixel for pixel. Nothing a program can time or
+  read moves -- contention, the floating bus and snow are where they were --
+  but the canvas now leads the interrupt by 40 dots on the 48K and 42 on the
+  128K, not 48, which moves the hardware probe's line and dot for a given
+  half-clock.
+
 - **Run and debug on the SpecNext board, from VS Code.** A status-bar
   switch, **Emulator** or **SpecNext**, says where programs run; a launch for
   the board starts or joins retro-spectrum's `zx_bridge.py` and debugs the

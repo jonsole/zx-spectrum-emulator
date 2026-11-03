@@ -114,6 +114,35 @@ TEST(border_writes_show_up_in_the_rendered_border) {
     CHECK_EQ(p.b, uint8_t(0x00));
 }
 
+TEST(a_border_write_shows_from_the_4_tstate_step_it_lands_in) {
+    // Counted from the paper, as azesmbog's ULA 48 Simple Test shows it and
+    // Fuse draws it: paper row r's first pixel is T-state 14336 + 224r, so its
+    // left border's is 24 T-states earlier, 14312 + 224r, and the line is 4
+    // T-state steps of 8 pixels from there. A border write landing anywhere
+    // in step k shows from pixel 8k of the canvas row. Row 5 (canvas line 69),
+    // step 40 -- pixel 320, 16 into the right border -- is T-states 15592 to
+    // 15595. An OUT's write lands at T2's second half, half-clock 2t + 1.
+    // Both the step's first T-state and its last show from pixel 320.
+    const uint32_t line = PAPER_LINE_BEGIN + 5;
+    const uint32_t first_tstate = 14312 + 224 * 5 + 4 * 40;
+    for (uint32_t j = 0; j < 4; j += 3) {
+        Spectrum m;
+        poke(m, 0x0000, {0x76}); // HALT: nothing of the CPU's on the port
+        const uint32_t write_hc = 2 * (first_tstate + j) + 1;
+        while (m.ula.frame_hc() != write_hc) {
+            m.clock();
+        }
+        m.ula.border = 2;
+        while (m.ula.frame_hc() != 0) {
+            m.clock();
+        }
+        const Px red{0xCD, 0x00, 0x00};
+        const Px black{0x00, 0x00, 0x00};
+        CHECK(pixel_at(m.screen(), 319, line) == black);
+        CHECK(pixel_at(m.screen(), 320, line) == red);
+    }
+}
+
 TEST(screen_memory_is_rendered_with_the_right_layout) {
     Spectrum m;
     // Fill the bitmap with all-ink and set every attribute to bright white

@@ -200,7 +200,9 @@ by half-clock -- can instead set `Spectrum::probe` to a `BusProbe`
   and INT as the ULA drove it;
 * whether the CPU's clock ran, or contention held it;
 * the ULA's counters for the half-clock just run (the frame's half-clock, and
-  the canvas's line and dot, which lead it by 48 dots);
+  the canvas's line and dot, which lead it by 40 dots: the paper is shown
+  8 dots, 4 T-states, after the ULA fetches it, so a group is fetched at
+  dot 40 + 16n and shown from dot 48 + 16n);
 * the dot drawn, as a colour index (bits 0-2 the colour, bit 3 bright, flash
   applied) and whether it was paper, border or retrace;
 * the border latch, and the last byte written to the ULA's port (MIC and

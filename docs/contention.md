@@ -69,6 +69,26 @@ The bottom row is the 6, 5, 4, 3, 2, 1, 0, 0 pattern quoted for the Spectrum
 everywhere. It says one thing: a CPU T-state that the ULA holds is let go at
 G + 6, once the ULA has its four bytes.
 
+**What the picture shows, and when.** The bytes go out of the video pin
+4 T-states after the group's fetch: the 48K's first paper pixel is fetched at
+T-state 14336 and shown at 14340. The border colour goes out from a latch that
+takes port `0xFE`'s colour every 4 T-states, with no such wait. So, counted
+from the paper, a border write shows from the 4-T-state step it lands in --
+row r's left border begins at 14312 + 224r in the paper's terms, and a write
+anywhere in step k of it shows from pixel 8k -- which is how Fuse draws it, and
+what azesmbog's ULA 48 Simple Test's expected picture shows pixel for pixel.
+Drawing the paper the moment it is fetched put every border change 8 pixels
+late against it. The canvas is the video output: its dot for a half-clock is
+where the beam is then, so the group fetched at dot 40 + 16n of a line is
+drawn from dot 48 + 16n.
+
+The 128K's ULA waits 3 T-states, not 4: its first paper group is fetched at
+14364 and shown at 14367. On both machines the first paper pixel goes out 5
+T-states after contention starts (14335 and 14362). Woodmass's Pattern,
+Putnik's BBG 128 and Frame Test's 128K picture match their expected pictures
+with 3; with 4 or none they are thousands of pixels out. The 128K's canvas
+leads its interrupt by 42 dots.
+
 ## 3. Contention
 
 ### 3.1 Which T-states the ULA holds
