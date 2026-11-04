@@ -7,6 +7,13 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **A tape whose last block has no pause loads.** A `.tzx` block with a pause
+  of 0 relies on the next block to end its last pulse. When it was the last
+  block on the tape, nothing did, and the loader timed out on the final bit:
+  Ocean's *Cobra* showed "TAPE ERROR. REWIND & RELOAD." at the end of its
+  turbo block. Such a block now gets the 1 ms lead-out edge the TZX spec asks
+  for, as does one followed by a block that stops the tape.
+
 - **The examples have a repository of their own.** `examples/` is now the
   [zx-spectrum-examples](https://github.com/jonsole/zx-spectrum-examples)
   submodule, its history carried across: clone with `--recurse-submodules`, or

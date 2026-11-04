@@ -122,6 +122,10 @@ void append_tzx_turbo(std::vector<uint8_t>& tzx, const std::vector<uint8_t>& blo
     }
 }
 
+/// The 1ms lead-out edge, in T-states: the pulse that ends a tape's last
+/// pulse when nothing follows it (see Tape::insert).
+constexpr uint64_t LEAD_OUT_T = HC_PER_SEC / 1000 / HC_PER_TSTATE;
+
 /// Half-clocks at which EAR changed, walking `hc` one at a time.
 ///
 /// One half-clock at a time on purpose: the pulse lengths ARE the thing under
@@ -398,6 +402,36 @@ TEST(the_pause_emits_a_trailing_edge_then_holds_low) {
     CHECK(t.at_end());
 }
 
+TEST(a_last_block_with_no_pause_still_ends_its_last_pulse) {
+    // A turbo block with a pause of 0 at the very end of the tape, as Ocean's
+    // Cobra has. The last bit's second pulse is ended by an edge only if the
+    // player makes one: nothing follows to do it. Data 0x00 at 400T a pulse:
+    // the last pulse starts when the data's last-but-one edge is made, and
+    // the edge that ends it must come 400T later.
+    std::vector<uint8_t> tzx = tzx_header();
+    append_tzx_turbo(tzx, {0x00}, 1000, 10, 400, 800);
+    // append_tzx_turbo writes a 100ms pause; make it 0, as Cobra's is. The
+    // pause is the three bytes before the 24-bit length and the one data byte.
+    const size_t pause_at = tzx.size() - 1 - 3 - 2;
+    tzx[pause_at] = 0;
+    tzx[pause_at + 1] = 0;
+
+    Tape t;
+    CHECK_EQ(t.insert(tzx.data(), tzx.size(), "last.tzx"), std::string());
+    t.play(0);
+    // 10 pilot pulses, two syncs, 8 bits of two pulses: 28 pulses, the first
+    // starting low as the walk begins. The ends of all 28 are edges -- the
+    // last one high to low into the lead-out -- and the lead-out's own end,
+    // 1ms on, is the 29th, back to the idle level. Without the lead-out the
+    // last pulse is high, the idle level is high, and it never ends at all.
+    const std::vector<uint64_t> e = edges(t, 0, HC_PER_SEC);
+    CHECK_EQ(e.size(), size_t(29));
+    if (e.size() == 29) {
+        CHECK_EQ((e[27] - e[26]) / HC_PER_TSTATE, uint64_t(400));
+        CHECK_EQ((e[28] - e[27]) / HC_PER_TSTATE, LEAD_OUT_T);
+    }
+}
+
 // ---- .tzx ------------------------------------------------------------------
 
 TEST(tzx_standard_block_matches_the_same_tap) {
@@ -463,12 +497,13 @@ TEST(tzx_pure_tone_and_pulse_sequence) {
 
     const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 20000 * HC_PER_TSTATE));
     // A gap is only observable between two edges, so the first pulse's leading
-    // edge and the last one's trailing edge are both invisible: five tone
-    // pulses and three sequence pulses give six measurable gaps. Note there is
-    // no pause between the two blocks -- neither carries one, so the sequence
-    // runs straight on out of the tone.
-    CHECK_EQ(ts.size(), size_t(6));
-    if (ts.size() != 6) {
+    // edge is invisible: five tone pulses and three sequence pulses give seven
+    // measurable gaps, and the last pulse is ended by the tape's 1ms lead-out,
+    // whose own end is the eighth. Note there is no pause between the two
+    // blocks -- neither carries one, so the sequence runs straight on out of
+    // the tone.
+    CHECK_EQ(ts.size(), size_t(8));
+    if (ts.size() != 8) {
         return;
     }
     for (size_t i = 0; i < 4; i++) {
@@ -476,6 +511,8 @@ TEST(tzx_pure_tone_and_pulse_sequence) {
     }
     CHECK_EQ(ts[4], uint64_t(200));
     CHECK_EQ(ts[5], uint64_t(300));
+    CHECK_EQ(ts[6], uint64_t(400));
+    CHECK_EQ(ts[7], LEAD_OUT_T);
 }
 
 TEST(tzx_loop_repeats_its_body) {
@@ -499,9 +536,9 @@ TEST(tzx_loop_repeats_its_body) {
     t.play(0);
 
     // Four repetitions of (1000, 1000, 1000, 500) is sixteen pulses. As in
-    // tzx_pure_tone_and_pulse_sequence, the very first leading edge and the
-    // very last trailing edge are not observable, so what comes back is
-    // fourteen gaps starting from the SECOND pulse.
+    // tzx_pure_tone_and_pulse_sequence, the very first leading edge is not
+    // observable, so what comes back starts from the SECOND pulse, and ends
+    // with the tape's lead-out.
     std::vector<uint64_t> want;
     for (size_t rep = 0; rep < 4; rep++) {
         want.push_back(1000);
@@ -510,7 +547,7 @@ TEST(tzx_loop_repeats_its_body) {
         want.push_back(500);
     }
     want.erase(want.begin());
-    want.pop_back();
+    want.push_back(LEAD_OUT_T);
 
     const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 60000 * HC_PER_TSTATE));
     CHECK_EQ(ts.size(), want.size());
@@ -695,10 +732,11 @@ TEST(tzx_generalized_block_plays_its_own_symbols) {
     t.play(0);
 
     // Three leader pulses, two sync, then 672 / 336 336 / 672 / 672 / 336 336.
-    // As ever the first pulse's leading edge and the last one's trailing edge
-    // are invisible, so those twelve pulses show as the ten in between.
+    // As ever the first pulse's leading edge is invisible, so those twelve
+    // pulses show as eleven, then the tape's lead-out.
     const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 20000 * HC_PER_TSTATE));
-    const std::vector<uint64_t> want = {2168, 2168, 600, 600, 672, 336, 336, 672, 672, 336};
+    const std::vector<uint64_t> want = {2168, 2168, 600, 600, 672, 336, 336, 672, 672, 336, 336,
+                                        LEAD_OUT_T};
     CHECK_EQ(ts.size(), want.size());
     if (ts.size() != want.size()) {
         return;
@@ -722,9 +760,9 @@ TEST(tzx_generalized_symbol_without_an_edge_lengthens_the_pulse_before_it) {
 
     // Two leader pulses of 1000, then 500, then a 700 with no edge in front of
     // it -- so the 500 and the 700 are one 1200T pulse -- then a last 500,
-    // whose trailing edge is not there to measure.
+    // ended by the tape's lead-out.
     const std::vector<uint64_t> ts = pulse_tstates(edges(t, 0, 20000 * HC_PER_TSTATE));
-    const std::vector<uint64_t> want = {1000, 1200};
+    const std::vector<uint64_t> want = {1000, 1200, 500, LEAD_OUT_T};
     CHECK_EQ(ts.size(), want.size());
     if (ts.size() != want.size()) {
         return;

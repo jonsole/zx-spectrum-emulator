@@ -71,6 +71,14 @@ all — turbo, custom `.tzx` block timings, whatever the publisher wrote. It is
 also as slow as a real cassette, which for a whole game is minutes. `set_speed
 uncapped` (MCP) or `"uncapped": true` (launch.json) is the way to hurry it up.
 
+Every block's last pulse is ended by an edge: a 1 ms lead-out at the opposite
+level before its pause. Without it a loader timing the last bit would never see
+that bit finish. A `.tzx` block with no pause has no lead-out of its own, since
+the next block's first pulse ends it, except when nothing follows: at the end of
+the tape, or before a block that stops it. There it gets the 1 ms anyway, as
+the TZX spec asks. Ocean's *Cobra*, whose last block has no pause, failed with
+"TAPE ERROR" without it.
+
 On top of that sits a **fast-load trap**. When the CPU reaches the ROM's
 `LD-BYTES` at `0x0556` — and the bytes there really are the stock ROM's, which
 is checked — a standard-speed block is copied straight into memory, the flags

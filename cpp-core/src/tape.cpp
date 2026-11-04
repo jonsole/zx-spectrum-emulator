@@ -298,6 +298,22 @@ std::string Tape::insert(const uint8_t* data, size_t len, const std::string& nam
     }
 
     name_ = name;
+    // A block with no pause relies on the next block's first pulse to end its
+    // own last one. When nothing follows -- the end of the tape, or a marker
+    // that stops it -- that edge never comes, and the loader times out on the
+    // last bit: Ocean's Cobra ends on a turbo block with no pause and showed
+    // "TAPE ERROR" here and on hardware fed the same edges. The TZX spec says
+    // the last edge is to be finished with at least 1ms of the opposite
+    // level, which is exactly the lead-out a pause gets, so the block is
+    // given the shortest pause there is.
+    for (size_t i = 0; i < blocks_.size(); i++) {
+        TapeBlock& b = blocks_[i];
+        const bool has_signal = !b.pulses.empty() || b.pilot_pulses > 0 || !b.data.empty();
+        const bool nothing_follows = i + 1 == blocks_.size() || blocks_[i + 1].stop_tape;
+        if (b.pause_ms == 0 && has_signal && nothing_follows) {
+            b.pause_ms = TAPE_EDGE_PAUSE_MS;
+        }
+    }
     total_hc_ = 0;
     for (TapeBlock& b : blocks_) {
         b.duration_hc = block_duration_hc(b);
