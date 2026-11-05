@@ -68,6 +68,8 @@ enum class RewindInputKind : uint8_t {
     // A debugger's write straight into a RAM bank, whatever is paged:
     // `value` is the bank, `addr` the offset within it, `bytes` the data.
     BankMemory,
+    // The joysticks, modes and sticks together: `value` is Joystick::packed.
+    Joysticks,
 };
 
 struct RewindInput {

@@ -131,6 +131,9 @@ void History::apply(Spectrum& m, const RewindInput& input) {
         case RewindInputKind::BankMemory:
             m.write_bank(uint8_t(input.value), input.addr, input.bytes.data(), input.bytes.size());
             break;
+        case RewindInputKind::Joysticks:
+            m.joystick.set_packed(uint32_t(input.value));
+            break;
         case RewindInputKind::RawClocks:
             break; // run by apply_due, not here
     }

@@ -50,6 +50,7 @@ add_library(zx_core STATIC
   src/beeper.cpp
   src/disassembler.cpp
   src/engine.cpp
+  src/joystick.cpp
   src/keyboard.cpp
   src/logpoint.cpp
   src/memory.cpp

@@ -63,6 +63,10 @@ struct Args {
     bool tape_autostart = true;
     bool tape_fast_load = true;
     bool contention = true;
+    /// What the joystick ports are plugged into, as the MCP joystick tool
+    /// names them; empty leaves the power-on setting.
+    std::string joystick_left;
+    std::string joystick_right;
     /// Type LOAD "" at startup even with no tape, so the machine sits in
     /// the ROM loader ready for one to be inserted later.
     bool wait_for_tape = false;
@@ -173,6 +177,10 @@ bool parse_args(int argc, char** argv, Args& args) {
             args.tape_fast_load = false;
         } else if (flag == "--no-contention") {
             args.contention = false;
+        } else if (flag == "--joystick-left") {
+            if (!next(args.joystick_left)) return false;
+        } else if (flag == "--joystick-right") {
+            if (!next(args.joystick_right)) return false;
         } else if (flag == "--wait-for-tape") {
             args.wait_for_tape = true;
         } else if (flag == "--trace-log") {
@@ -331,6 +339,22 @@ int main(int argc, char** argv) {
         }
         engine.set_model(model);
         std::printf("Machine: Spectrum %s\n", zx::model_name(model));
+    }
+    {
+        const std::string* texts[zx::JOY_PORTS] = {&args.joystick_left, &args.joystick_right};
+        const char* flags[zx::JOY_PORTS] = {"--joystick-left", "--joystick-right"};
+        for (int p = 0; p < zx::JOY_PORTS; p++) {
+            if (texts[p]->empty()) {
+                continue;
+            }
+            zx::JoystickMode mode;
+            if (!zx::Joystick::parse_mode(*texts[p], mode)) {
+                std::fprintf(stderr, "%s %s: not none, kempston, sinclair1, sinclair2 or cursor\n",
+                             flags[p], texts[p]->c_str());
+                return 1;
+            }
+            engine.set_joystick_mode(p, mode);
+        }
     }
     if (!args.contention) {
         engine.set_contention(false);

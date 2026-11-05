@@ -686,6 +686,7 @@ void Engine::publish_progress() {
 
 void Engine::sync_keys() {
     std::lock_guard<std::mutex> lock(key_mutex_);
+    sync_joystick();
 #if ZX_REWIND
     const uint8_t* rows = keys_.rows();
     if (history_.live()) {
@@ -710,6 +711,31 @@ void Engine::sync_keys() {
 #endif
 }
 
+void Engine::sync_joystick() {
+    // Called with key_mutex_ held, from sync_keys: the same rules as the
+    // keys', for the same reasons.
+    const uint32_t live = joy_.packed();
+#if ZX_REWIND
+    if (history_.live()) {
+        synced_joy_ = joy_;
+        if (live == machine_.joystick.packed()) {
+            return;
+        }
+    } else {
+        if (live == synced_joy_.packed()) {
+            return;
+        }
+        synced_joy_ = joy_;
+    }
+    RewindInput input;
+    input.kind = RewindInputKind::Joysticks;
+    input.value = live;
+    history_.record(machine_, std::move(input));
+#else
+    machine_.joystick.set_packed(live);
+#endif
+}
+
 std::vector<uint8_t> Engine::screen() {
     std::lock_guard<std::mutex> lock(screen_mutex_);
     return screen_snapshot_;
@@ -723,6 +749,27 @@ void Engine::key_down(const std::string& key) {
 void Engine::key_up(const std::string& key) {
     std::lock_guard<std::mutex> lock(key_mutex_);
     keys_.key_up(key);
+}
+
+Joystick Engine::joystick() const {
+    std::lock_guard<std::mutex> lock(key_mutex_);
+    return joy_;
+}
+
+void Engine::set_joystick_mode(int port, JoystickMode mode) {
+    if (port < 0 || port >= JOY_PORTS) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(key_mutex_);
+    joy_.mode[port] = mode;
+}
+
+void Engine::set_joystick_stick(int port, uint8_t stick) {
+    if (port < 0 || port >= JOY_PORTS) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(key_mutex_);
+    joy_.stick[port] = uint8_t(stick & JOY_ALL);
 }
 
 MachineState Engine::snapshot(bool running) const {
@@ -1464,6 +1511,7 @@ MachineState Engine::state() {
 void Engine::restart_history(Spectrum& m) {
     history_.start(m);
     std::memcpy(synced_keys_, m.keyboard.rows(), sizeof synced_keys_);
+    synced_joy_ = m.joystick;
     synced_fast_load_ = m.tape.fast_load();
 }
 

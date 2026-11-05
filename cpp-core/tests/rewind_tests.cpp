@@ -615,6 +615,47 @@ TEST(running_forward_from_the_past_replays_the_keys_and_reaches_the_head) {
     CHECK_EQ(hash_of(*m), head);
 }
 
+// The joysticks are an input like the keys: a stick pushed and a port
+// replugged are undone by going back past them and done again, at the same
+// moment, by running forward.
+TEST(running_forward_from_the_past_replays_the_joysticks) {
+    // DI / XOR A / IN A,(0x1F) / LD (0x9000),A / JR 0x8001 -- reads the
+    // Kempston port for ever.
+    const std::vector<uint8_t> read_kempston = {0xF3, 0xAF, 0xDB, 0x1F, 0x32, 0x00, 0x90, 0x18, 0xF7};
+    auto m = machine_running(read_kempston);
+    History h(small_history());
+    h.start(*m);
+    run(*m, h, 20000);
+    Joystick joy = m->joystick;
+    joy.stick[JOY_LEFT_PORT] = JOY_UP | JOY_FIRE;
+    RewindInput push;
+    push.kind = RewindInputKind::Joysticks;
+    push.value = joy.packed();
+    h.record(*m, push);
+    run(*m, h, 20000);
+    CHECK_EQ(m->read_memory(0x9000, 1)[0], uint8_t(0x18));
+    // Unplugged, the port is the floating bus, whatever the stick does.
+    joy.mode[JOY_LEFT_PORT] = JoystickMode::None;
+    RewindInput unplug;
+    unplug.kind = RewindInputKind::Joysticks;
+    unplug.value = joy.packed();
+    h.record(*m, unplug);
+    run(*m, h, 20000);
+    const uint64_t head = hash_of(*m);
+    const uint64_t head_hc = m->global_hc();
+
+    h.go_back(*m, RewindOp::ReverseContinue, 0, never); // to the start
+    CHECK(m->joystick.mode[JOY_LEFT_PORT] == JoystickMode::Kempston);
+    CHECK_EQ(m->joystick.stick[JOY_LEFT_PORT], uint8_t(0));
+    while (m->global_hc() < head_hc) {
+        m->step_instruction();
+        h.on_instruction(*m);
+    }
+    CHECK_EQ(m->global_hc(), head_hc);
+    CHECK_EQ(hash_of(*m), head);
+    CHECK(m->joystick.mode[JOY_LEFT_PORT] == JoystickMode::None);
+}
+
 TEST(a_key_pressed_in_the_past_starts_a_new_timeline) {
     auto m = machine_running(READ_KEYS);
     History h(small_history());

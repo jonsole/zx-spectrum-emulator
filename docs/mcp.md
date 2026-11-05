@@ -85,6 +85,8 @@ is in one of those two regions. A 48K's `0xC000` is bank 0 and its ROM is ROM0.
 | `set_contention(on)` | Turn the ULA's memory and I/O contention on or off, or with no argument report it. On by default; off gives every instruction its uncontended timing. Restarts the rewind history (see [contention.md](contention.md)) |
 | `get_registers(raw=false)` / `set_registers(pc=…, hl=…, l=…, af_=…, …)` | CPU register access. `get_registers` gives hex, PC with its symbol (`"$8003 (loop)"`), the flags spelled out (`SZ5H3PNC`, `-` for clear), the instruction at PC and the frame and T-state counters; `raw: true` gives every register as a number, as it used to. `set_registers` takes every register by name, the shadow set as `af_`/`a_`…, index halves as `ixh`/`ixl`; a 16-bit value can be a symbol expression like `"MAIN_LOOP"` |
 | `key_down(key)` / `key_up(key)` | Keyboard input (e.g. `"A"`, `"ENTER"`, `"CAPS SHIFT"`) |
+| `joystick(left, right)` | What each joystick port is plugged into: `none`, `kempston`, `sinclair1`, `sinclair2` or `cursor`. Only what is given changes; replies with both. The same as retro-spectrum's bridge (see [joystick.md](joystick.md)) |
+| `joystick_press(port, directions)` | Holds a port's stick: `port` is `left` or `right`, `directions` the letters U D L R F (`""` lets go) |
 | `get_screen()` | Render the display as a PNG screenshot |
 | `get_screen_sequence(frames, every)` | Several consecutive frames as separate images, each tagged with its frame number: motion, flicker and animation as still pictures (see [video](#video)) |
 | `start_video(path, seconds, frames, scale)` / `stop_video()` / `video_status()` | Record every completed frame to a video file through ffmpeg, until stopped or for a set span (see [video](#video)) |
@@ -208,7 +210,8 @@ matches, the machine stays where it was, `moved` is false and `note` says why.
   `frames_available`, `checkpoints` and `bytes`.
 
 Forward from the past, `step` and `run` replay what happened. A `key_down`,
-`write_memory`, `set_registers`, `tape_control` or a `step` by `ticks` there
+`joystick_press`, `joystick`, `write_memory`, `set_registers`, `tape_control`
+or a `step` by `ticks` there
 starts a new timeline, discarding what came after.
 
 A question this answers well: *who wrote that?* Stop where a value is wrong,

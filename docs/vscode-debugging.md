@@ -474,6 +474,15 @@ never stretched by the browser behind the filter's back. At a whole-multiple
 size, sharp bilinear and nearest neighbour are the same picture; the
 difference shows at **Fit**. The panel used to be a fixed 2x whatever its size.
 
+### Joysticks
+
+The numeric keypad is the left joystick port's stick while the panel has the
+focus: 8 4 6 2, the diagonals on 7 9 1 3, and 0 or 5 to fire. Game
+controllers work too, the first on the left port and the second on the right.
+**ZX Spectrum: Joystick Ports...** sets what each port is plugged into:
+Kempston, Interface II's first or second port, cursor keys, or nothing. See
+[joystick.md](joystick.md).
+
 ### The RF look
 
 **ZX Spectrum: Toggle RF Look**, the colour-mode button on the panel's title

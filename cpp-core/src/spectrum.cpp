@@ -19,6 +19,9 @@ constexpr uint16_t PAGING_PORT_MASK = 0x8002;
 constexpr uint16_t AY_PORT_MASK = 0xC002;
 constexpr uint16_t AY_SELECT_PORT = 0xC000;
 constexpr uint16_t AY_DATA_PORT = 0x8000;
+/// The original Kempston interface decodes A5 alone: low is its port, 0x1F
+/// being the usual one.
+constexpr uint16_t KEMPSTON_DECODE = 0x0020;
 
 // Opcodes that push a return address: CALL nn, CALL cc,nn, and every RST.
 constexpr uint8_t CALL_OPCODES[] = {0xCD, 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC};
@@ -537,6 +540,9 @@ void Spectrum::service_bus(uint64_t pins_before) {
         uint8_t value = ula.floating_bus(memory.screen_bytes());
         if ((addr & 1) == 0) {
             value = keyboard.read_port(uint8_t(addr >> 8));
+            // An Interface II or cursor joystick is keys held down, on the
+            // same matrix, so it reads exactly as the keys would.
+            value = uint8_t(value & ~joystick.keys_held(uint8_t(addr >> 8)));
             // Bit 6 is the EAR input. Resolved here rather than inside
             // Keyboard because it is the tape's line, not a key's -- the same
             // division that keeps the beeper's bits 3 and 4 in the write
@@ -572,6 +578,26 @@ void Spectrum::service_bus(uint64_t pins_before) {
             // address line, not by the full port number: A15 and A14 high,
             // A1 low.
             value = ay.read();
+        }
+        // The Kempston interface answers every port with A5 low, as the
+        // original did, and drives all eight bits: 000FUDLR through a
+        // 74LS366, D5 through its sixth driver and D6 and D7 held low by
+        // diodes (Kio's notes on his issue 4 board, zxsp's KempstonJoy.cpp).
+        // Bits 7-5 reading 0 is what the interface's own manual relies on,
+        // with its `IF IN 31 = 2`.
+        //
+        // An even port with A5 low (0x1E, ...) is read by the ULA as well,
+        // and then the Kempston's byte is all the CPU sees. Not measured --
+        // nothing published tests it -- but the two are not equals on the
+        // bus: the interface drives the CPU's data bus directly from the edge
+        // connector, while the ULA reaches it only through the 470 ohm
+        // resistors that isolate its own bus (the floating bus is the same
+        // resistors seen from the other side), and a 74LS output overpowers
+        // that in either direction. Fuse has no rule here: whichever device
+        // its port list holds first wins. Docs/joystick.md has the reasoning
+        // and the test that would settle it.
+        if ((addr & KEMPSTON_DECODE) == 0 && joystick.kempston_present()) {
+            value = joystick.kempston();
         }
         pins_ = set_data(pins_, value);
     } else if (asserted(pins_, WR)) {
@@ -896,6 +922,7 @@ void Spectrum::save_state(State& s) {
     for (int i = 0; i < 8; i++) {
         s.keys[i] = rows[i];
     }
+    s.joystick = joystick;
     s.ay = ay;
     tape.save_state(s.tape);
     s.pins = pins_;
@@ -911,6 +938,7 @@ void Spectrum::restore_state(const State& s) {
     memory.restore_state(s.memory);
     ula.restore_state(s.ula);
     keyboard.set_rows(s.keys);
+    joystick = s.joystick;
     ay = s.ay;
     tape.restore_state(s.tape);
     pins_ = s.pins;
@@ -1011,6 +1039,7 @@ uint64_t Spectrum::state_hash(const State& s) {
     h.byte(s.ula.border_latch);
 
     h.bytes(s.keys, sizeof s.keys);
+    h.u64(s.joystick.packed());
 
     // The AY's registers and selection, which the CPU can read back -- not its
     // tone and envelope counters, which move only as audio is generated and

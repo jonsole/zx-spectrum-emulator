@@ -614,6 +614,10 @@
         "icon": "$(target)"
       },
       {
+        "command": "zxspectrum.joystickPorts",
+        "title": "ZX Spectrum: Joystick Ports..."
+      },
+      {
         "command": "zxspectrum.setSpeed",
         "title": "ZX Spectrum: Set Emulation Speed...",
         "icon": {
@@ -896,6 +900,10 @@
         {
           "command": "zxspectrum.setSpeed",
           "when": "debugType == 'zxspectrum' && zxspectrum.can.speed"
+        },
+        {
+          "command": "zxspectrum.joystickPorts",
+          "when": "debugType == 'zxspectrum' && !zxspectrum.onBoard"
         },
         {
           "command": "zxspectrum.profileStart",

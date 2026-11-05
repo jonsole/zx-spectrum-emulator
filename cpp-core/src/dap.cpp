@@ -1976,6 +1976,34 @@ json handle_request(const json& req, Engine& engine, Sources& sources, Connectio
         engine.key_up(key);
         body = json{{"key", key}};
 
+    } else if (command == "joystick") {
+        // Not standard DAP -- the MCP joystick tool's twin: what the ports
+        // are plugged into, `left` and `right` each optional, both replied.
+        const char* port_names[JOY_PORTS] = {"left", "right"};
+        for (int p = 0; p < JOY_PORTS; p++) {
+            const std::string text = arg_str(arguments, port_names[p]);
+            JoystickMode mode;
+            if (!text.empty() && Joystick::parse_mode(text, mode)) {
+                engine.set_joystick_mode(p, mode);
+            }
+        }
+        const Joystick joy = engine.joystick();
+        body = json{{"left", Joystick::mode_name(joy.mode[JOY_LEFT_PORT])},
+                    {"right", Joystick::mode_name(joy.mode[JOY_RIGHT_PORT])}};
+
+    } else if (command == "joystickPress") {
+        // Not standard DAP -- sent by the screen panel for the numeric keypad
+        // and a game controller, as keyDown is for the keys. `directions` is
+        // the whole position, "UDLRF" letters, so a lost message is mended by
+        // the next rather than leaving a direction stuck.
+        int port = 0;
+        uint8_t stick = 0;
+        if (Joystick::parse_port(arg_str(arguments, "port"), port)
+            && Joystick::parse_directions(arg_str(arguments, "directions"), stick)) {
+            engine.set_joystick_stick(port, stick);
+        }
+        body = json{{"directions", Joystick::directions_text(stick)}};
+
     } else if (command == "setWriteOverlay") {
         // Not standard DAP -- the screen panel's own toggle. Dims the frame
         // and shows every bitmap byte written during it at full brightness,

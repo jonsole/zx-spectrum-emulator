@@ -17,6 +17,7 @@
 
 #include "ay.h"
 #include "beeper.h"
+#include "joystick.h"
 #include "keyboard.h"
 #include "memory.h"
 #include "profile.h"
@@ -159,6 +160,9 @@ public:
     /// need not allocate anything.
     Ay ay;
     Keyboard keyboard;
+    /// The two joystick ports. Plugged-in hardware rather than machine state:
+    /// reset() leaves it alone.
+    Joystick joystick;
     Tape tape;
 
     Breakpoints breakpoints;
@@ -296,6 +300,7 @@ public:
         SpectrumMemory::State memory;
         Ula::State ula;
         uint8_t keys[8] = {};
+        Joystick joystick;
         Ay ay;
         Tape::State tape;
         uint64_t pins = 0;

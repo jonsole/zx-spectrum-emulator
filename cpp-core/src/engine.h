@@ -677,6 +677,14 @@ public:
     std::vector<TapeBlockInfo> tape_blocks() const;
     void key_down(const std::string& key);
     void key_up(const std::string& key);
+    /// The joysticks (docs/joystick.md). Like the keys they bypass the queue,
+    /// so a stick moved mid-run reaches the game at the run's next yield;
+    /// the machine takes them with the keys, in sync_keys.
+    Joystick joystick() const;
+    /// What a port is plugged into.
+    void set_joystick_mode(int port, JoystickMode mode);
+    /// A stick's position: JOY_* bits, 1 = pushed or pressed.
+    void set_joystick_stick(int port, uint8_t stick);
     /// Dims the frame and lights each bitmap byte as it is written -- see
     /// Ula::set_write_overlay.
     /// Takes effect on the next completed frame, mid-run included; the flag is
@@ -818,6 +826,8 @@ private:
     /// and differ from the live ones without anyone having pressed anything.
     uint8_t synced_keys_[8] = {0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F};
     bool synced_fast_load_ = true;
+    /// The joysticks last taken from outside, as synced_keys_.
+    Joystick synced_joy_;
     /// Starts a fresh history at the machine's present.
     void restart_history(Spectrum& m);
     /// After the machine has jumped through its history: the screen, progress
@@ -864,8 +874,12 @@ private:
 
     /// Live key state, owned outside the machine so a keypress reaches a
     /// running game rather than waiting for it to stop.
-    std::mutex key_mutex_;
+    mutable std::mutex key_mutex_;
     Keyboard keys_;
+    /// The joysticks, taken with the keys and under the same lock. Kept here
+    /// rather than read back off the machine so that what is plugged in
+    /// outlives a load or a model switch, which build the machine afresh.
+    Joystick joy_;
 
     std::mutex screen_mutex_;
     std::vector<uint8_t> screen_snapshot_;
@@ -1062,6 +1076,8 @@ private:
     /// Brings the machine's keys into line with the live ones. With rewind,
     /// only a change is applied, and it is logged -- see synced_keys_.
     void sync_keys();
+    /// The joysticks' part of sync_keys, called with key_mutex_ held.
+    void sync_joystick();
     /// What every run and step does after each instruction: the frame tap,
     /// and with rewind the history's checkpointing and replay of logged inputs.
     void after_instruction(Spectrum& m) {

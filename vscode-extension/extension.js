@@ -201,6 +201,8 @@ function activate(context) {
     vscode.commands.registerCommand('zxspectrum.rfLook', pickRfLook)
   );
   context.subscriptions.push(vscode.commands.registerCommand('zxspectrum.setSpeed', pickSpeed));
+  context.subscriptions.push(
+    vscode.commands.registerCommand('zxspectrum.joystickPorts', pickJoystickPorts));
   speedStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   speedStatus.command = 'zxspectrum.setSpeed';
   context.subscriptions.push(speedStatus);
@@ -491,6 +493,46 @@ async function pickSpeed() {
     return;
   }
   await applySpeed(choice.uncapped ? { uncapped: true } : { multiplier: choice.multiplier });
+}
+
+// What the two joystick ports are plugged into (dap.cpp's joystick request,
+// docs/joystick.md). One pick per port, each starting on what is there now.
+const JOYSTICK_MODES = [
+  { mode: 'kempston', label: 'Kempston', detail: 'Its own port, read with A5 low' },
+  { mode: 'sinclair1', label: 'Sinclair 1', detail: 'Interface II, keys 6 7 8 9 0' },
+  { mode: 'sinclair2', label: 'Sinclair 2', detail: 'Interface II, keys 1 2 3 4 5' },
+  { mode: 'cursor', label: 'Cursor', detail: 'Keys 5 6 7 8, 0 to fire' },
+  { mode: 'none', label: 'None', detail: 'Nothing plugged in' },
+];
+
+async function pickJoystickPorts() {
+  const session = zxDebugSession();
+  if (!session) {
+    vscode.window.showErrorMessage('Start a ZX Spectrum debug session first.');
+    return;
+  }
+  try {
+    let now = await session.customRequest('joystick', {});
+    for (const port of ['left', 'right']) {
+      const choice = await vscode.window.showQuickPick(
+        JOYSTICK_MODES.map((entry) => Object.assign({}, entry, {
+          label: now[port] === entry.mode ? `$(check) ${entry.label}` : entry.label,
+        })),
+        {
+          title: `ZX Spectrum: the ${port} joystick port`,
+          placeHolder: port === 'left'
+            ? 'Port 1: the numeric keypad and the first game controller'
+            : 'Port 2: the second game controller',
+        }
+      );
+      if (!choice) {
+        return;
+      }
+      now = await session.customRequest('joystick', { [port]: choice.mode });
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Could not set the joysticks: ${err.message}`);
+  }
 }
 
 // ---- screen panels -----------------------------------------------------------
@@ -797,6 +839,22 @@ class ScreenPanel {
         volumeState.update(VOLUME_BEFORE_MUTE_KEY, audioVolumeBeforeMute);
       }
       sendVolume(sessionOnServer(this.server));
+      return;
+    }
+    if (message.type === 'joystick') {
+      // A stick's whole position, from the numeric keypad or a game
+      // controller (see the script's joystick part). Routed as keys are.
+      const args = { port: message.port, directions: message.directions };
+      const session = sessionOnServer(this.server);
+      if (session) {
+        try {
+          await session.customRequest('joystickPress', args);
+        } catch (err) {
+          // A server too old to have joysticks.
+        }
+      } else if (this.server.ports.mcp) {
+        callMcpTool(this.server, this.mcpAgent, 'joystick_press', args);
+      }
       return;
     }
     if (message.type !== 'keyDown' && message.type !== 'keyUp') return;
@@ -3128,8 +3186,82 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
     // keydown pressed -- and an auto-repeat keydown presses nothing twice.
     const down = new Set();
 
+    // The joysticks. The numeric keypad is the left port's stick -- 8 4 6 2
+    // and the diagonals 7 9 1 3, with 0 or 5 to fire -- and game controllers
+    // are the sticks themselves, the first on the left port and the second
+    // on the right. What a port is plugged into is set on the server (ZX
+    // Spectrum: Joystick Ports...); this only says where the stick is.
+    // Each message carries the whole position, so one lost on the way is
+    // mended by the next instead of leaving a direction held.
+    const PAD_DIRECTIONS = {
+      Numpad8: 'U', Numpad2: 'D', Numpad4: 'L', Numpad6: 'R',
+      Numpad7: 'UL', Numpad9: 'UR', Numpad1: 'DL', Numpad3: 'DR',
+      Numpad0: 'F', Numpad5: 'F',
+    };
+    const padHeld = new Set();
+    const sent = { left: '', right: '' };
+    const controllerAt = { left: '', right: '' };
+
+    function sendStick(port) {
+      let letters = controllerAt[port];
+      if (port === 'left') {
+        for (const code of padHeld) letters += PAD_DIRECTIONS[code];
+      }
+      // As a set, in a fixed order, so the same position is the same text.
+      const directions = ['U', 'D', 'L', 'R', 'F'].filter((d) => letters.includes(d)).join('');
+      if (directions === sent[port]) return;
+      sent[port] = directions;
+      vscodeApi.postMessage({ type: 'joystick', port, directions });
+    }
+
+    // A controller's position: the left stick or the d-pad (the standard
+    // mapping's buttons 12-15), and any of the four face buttons to fire.
+    const AXIS_DEAD = 0.5;
+    function readController(pad) {
+      if (!pad) return '';
+      const pressed = (i) => pad.buttons[i] !== undefined && pad.buttons[i].pressed;
+      const x = pad.axes[0] || 0;
+      const y = pad.axes[1] || 0;
+      let letters = '';
+      if (y < -AXIS_DEAD || pressed(12)) letters += 'U';
+      if (y > AXIS_DEAD || pressed(13)) letters += 'D';
+      if (x < -AXIS_DEAD || pressed(14)) letters += 'L';
+      if (x > AXIS_DEAD || pressed(15)) letters += 'R';
+      if (pressed(0) || pressed(1) || pressed(2) || pressed(3)) letters += 'F';
+      return letters;
+    }
+
+    // Controllers have no events for their buttons, only a state to poll, and
+    // polling is only worth doing once one has been seen.
+    let polling = false;
+    function pollControllers() {
+      const pads = (navigator.getGamepads ? Array.from(navigator.getGamepads()) : [])
+        .filter((pad) => pad && pad.connected);
+      controllerAt.left = readController(pads[0]);
+      controllerAt.right = readController(pads[1]);
+      sendStick('left');
+      sendStick('right');
+      if (pads.length > 0) {
+        requestAnimationFrame(pollControllers);
+      } else {
+        polling = false;
+      }
+    }
+    window.addEventListener('gamepadconnected', () => {
+      if (!polling) {
+        polling = true;
+        requestAnimationFrame(pollControllers);
+      }
+    });
+
     document.body.addEventListener('keydown', (event) => {
       ensureAudio(); // the gesture the autoplay policy has been waiting for
+      if (PAD_DIRECTIONS[event.code] !== undefined) {
+        event.preventDefault();
+        padHeld.add(event.code);
+        sendStick('left');
+        return;
+      }
       const keys = toSpectrumKeys(event);
       if (keys.length === 0) return;
       event.preventDefault();
@@ -3139,6 +3271,12 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
     });
 
     document.body.addEventListener('keyup', (event) => {
+      if (PAD_DIRECTIONS[event.code] !== undefined) {
+        event.preventDefault();
+        padHeld.delete(event.code);
+        sendStick('left');
+        return;
+      }
       const keys = toSpectrumKeys(event);
       if (keys.length === 0) return;
       event.preventDefault();
@@ -3152,6 +3290,8 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
       }
       held.clear();
       down.clear();
+      padHeld.clear();
+      sendStick('left');
     });
 
     document.body.focus();

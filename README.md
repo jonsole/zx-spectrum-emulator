@@ -289,6 +289,7 @@ The detail lives in [docs/](docs/), one file per topic:
 | [The public timing test suites](docs/timing-suites.md) | Fetching and running the published 48K and 128K timing, contention, floating bus and snow tests as slow tests, and where each stands |
 | [Cycle-by-cycle bus tracing](docs/tracing.md) | Recording the bus half-clock by half-clock, the trace viewer, and how it compares against real silicon |
 | [Audio](docs/audio.md) | Beeper emulation, sound as the master clock, backends and latency, stream format |
+| [Joysticks](docs/joystick.md) | Two ports, each a Kempston, Interface II's first or second port, cursor keys or nothing; how each reads, what a port both the ULA and a Kempston answer gives, and the keypad, controllers, `joystick` tool and command that move and plug them |
 | [Tape](docs/tape.md) | Loading `.tap`/`.tzx`/`.wav`/`.csw`, the fast-load trap, and the loading sound |
 | [The emulator in a browser](docs/web.md) | `web/`: the core compiled to WebAssembly and published on GitHub Pages, running whatever `.z80` or `.sna` a visitor opens, and making the Filmation Knight Lore and Pentagram from a visitor's own copy of the original |
 | [Testing and performance](docs/testing-and-performance.md) | The test suites, ZEXALL/ZEXDOC, and measured throughput |

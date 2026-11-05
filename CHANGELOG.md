@@ -7,6 +7,17 @@ GitHub takes its notes from that section.
 
 ## Unreleased
 
+- **Joysticks.** Two joystick ports, each plugged into a Kempston interface,
+  either of Interface II's ports, cursor keys, or nothing. At start the left
+  is Kempston and the right Sinclair 1. In the screen panel the numeric keypad
+  is the left stick, and game controllers are the sticks.
+  **ZX Spectrum: Joystick Ports...** picks the interfaces. MCP has `joystick`,
+  the same as retro-spectrum's bridge, and `joystick_press`;
+  `--joystick-left` and `--joystick-right` set them at start. A port that
+  both the ULA and a Kempston answer reads the Kempston's byte: reasoned from
+  the hardware, not measured, and docs/joystick.md says how to check it. The
+  sticks are rewind inputs like the keys. See docs/joystick.md.
+
 - **A tape whose last block has no pause loads.** A `.tzx` block with a pause
   of 0 relies on the next block to end its last pulse. When it was the last
   block on the tape, nothing did, and the loader timed out on the final bit:

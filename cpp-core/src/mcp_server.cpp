@@ -1088,6 +1088,35 @@ json tools_list() {
         schema(json{{"key", string_prop("Key name, e.g. \"A\", \"ENTER\", \"CAPS SHIFT\", "
                                         "\"SYM SHIFT\", \"SPACE\".")}},
                {"key"}));
+    // The same name and arguments as retro-spectrum's bridge, which sets the
+    // board's JOY: one tool for either machine (docs/joystick.md).
+    {
+        const json modes = json::array({"none", "kempston", "sinclair1", "sinclair2", "cursor"});
+        add("joystick",
+            "Read or change what the two joystick ports are plugged into: none, a Kempston "
+            "interface (its own port, read with A5 low, as 000FUDLR), Interface II's first or "
+            "second port (sinclair1: keys 6 7 8 9 0; sinclair2: keys 1 2 3 4 5) or a cursor "
+            "interface (5 6 7 8, 0 to fire). Plugged-in hardware, so a reset or a load keeps "
+            "it; at start left is kempston and right sinclair1. With no port in kempston mode "
+            "the Kempston port is not there and reads the floating bus. Only the ports given "
+            "change; with none it just reports. Replies with both. Move a stick with "
+            "joystick_press",
+            schema(json{{"left", json{{"type", "string"}, {"enum", modes},
+                                      {"description", "The left port, port 1."}}},
+                        {"right", json{{"type", "string"}, {"enum", modes},
+                                       {"description", "The right port, port 2."}}}},
+                   {}));
+    }
+    add("joystick_press",
+        "Hold a joystick in a position, until the next joystick_press on that port: directions "
+        "and fire as letters, U D L R F in any combination (\"UF\" is up and fire, \"\" lets "
+        "go). Read through whatever the port is plugged into (see joystick); with it plugged "
+        "into nothing the stick does nothing. Takes effect at once, running or stopped",
+        schema(json{{"port", json{{"type", "string"}, {"enum", json::array({"left", "right"})},
+                                  {"description", "Which port's stick."}}},
+                    {"directions", string_prop("The letters U, D, L, R and F for what is held; "
+                                               "\"\" for nothing.")}},
+               {"port", "directions"}));
     add("get_screen", "Get the current screen as a PNG image", no_params());
     add("get_screen_sequence",
         "Get a SEQUENCE of screens: several consecutive frames, one image each, in the order "
@@ -2160,6 +2189,54 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         }
         engine.key_up(key);
         return text_result("key up");
+    }
+
+    if (name == "joystick") {
+        // Every argument is checked before any is applied, so a bad one
+        // changes nothing.
+        const char* port_names[JOY_PORTS] = {"left", "right"};
+        JoystickMode modes[JOY_PORTS] = {};
+        bool given[JOY_PORTS] = {};
+        for (int p = 0; p < JOY_PORTS; p++) {
+            const json& v = arg(args, port_names[p]);
+            if (v.is_null()) {
+                continue;
+            }
+            if (!v.is_string() || !Joystick::parse_mode(v.get<std::string>(), modes[p])) {
+                return error_result(std::string("'") + port_names[p]
+                                    + "' must be none, kempston, sinclair1, sinclair2 or cursor");
+            }
+            given[p] = true;
+        }
+        for (int p = 0; p < JOY_PORTS; p++) {
+            if (given[p]) {
+                engine.set_joystick_mode(p, modes[p]);
+            }
+        }
+        const Joystick joy = engine.joystick();
+        return json_result(json{{"left", Joystick::mode_name(joy.mode[JOY_LEFT_PORT])},
+                                {"right", Joystick::mode_name(joy.mode[JOY_RIGHT_PORT])}});
+    }
+
+    if (name == "joystick_press") {
+        std::string port_text;
+        std::string directions;
+        if (!arg_string(args, "port", port_text, error) || !arg_string(args, "directions", directions, error)) {
+            return error_result(error);
+        }
+        int port = 0;
+        if (!Joystick::parse_port(port_text, port)) {
+            return error_result("'port' must be left or right");
+        }
+        uint8_t stick = 0;
+        if (!Joystick::parse_directions(directions, stick)) {
+            return error_result("'directions' may hold only the letters U, D, L, R and F");
+        }
+        engine.set_joystick_stick(port, stick);
+        const Joystick joy = engine.joystick();
+        return json_result(json{{"port", port_text},
+                                {"directions", Joystick::directions_text(stick)},
+                                {"mode", Joystick::mode_name(joy.mode[port])}});
     }
 
     if (name == "get_screen") {
