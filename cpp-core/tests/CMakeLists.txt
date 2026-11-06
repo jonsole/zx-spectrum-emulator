@@ -345,3 +345,8 @@ add_test(NAME suite_floatspy_self_test
           "expect=Floating bus  OK  for ULA 48K"
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_tests_properties(suite_floatspy_self_test PROPERTIES LABELS "slow;suites" SKIP_RETURN_CODE 77)
+
+# ---- the Manic Miner player --------------------------------------------------
+# agents/manicminer: the game on the end of an API, a lab and a route finder.
+# Its own CMakeLists.txt; its binaries land at the top of the build tree too.
+add_subdirectory(${PROJECT_SOURCE_DIR}/../agents/manicminer ${CMAKE_BINARY_DIR}/agents/manicminer)
