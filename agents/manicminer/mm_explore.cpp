@@ -82,6 +82,7 @@ struct Cell {
     std::vector<Action> path;  // the moves from the cavern's start
     int items = 0;
     uint32_t chosen = 0;
+    uint32_t fruitless = 0;  // times chosen in a row that found nothing new
 };
 
 /// In Eugene's Lair the portal is at the foot of a pit under Eugene's column.
@@ -89,8 +90,10 @@ struct Cell {
 /// pit's mouth, for good (EUGENE, 36344), so Willy has to take it with
 /// Eugene high up and get into the pit before he arrives. Where Eugene is
 /// then is part of the place: his height to 16 pixels and his direction.
+/// Only for the last item and after: before that his timing changes nothing,
+/// and keeping it would multiply the cells sixteen times over.
 uint32_t guardian_phase(const View& v) {
-    if (v.cavern == 4) return uint32_t(v.eugene_up) | uint32_t(v.eugene_y / 16) << 1;
+    if (v.cavern == 4 && v.items_left <= 1) return uint32_t(v.eugene_up) | uint32_t(v.eugene_y / 16) << 1;
     return 0;
 }
 
@@ -125,17 +128,19 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
     uint64_t passes = 0;
 
     while (passes < o.passes && !shared.found) {
-        // Choose a cell: ones tried less often, and ones further on (more
-        // items), more likely.
+        // Choose a cell: ones further on (more items) more likely, and ones
+        // tried often less so -- above all ones that keep leading nowhere new,
+        // such as all the items taken too late to reach the portal.
         keys.clear();
         weights.clear();
         for (const auto& [key, c] : archive) {
             keys.push_back(key);
-            weights.push_back(std::pow(4.0, c.items) / std::sqrt(1.0 + c.chosen));
+            weights.push_back(std::pow(4.0, c.items) / std::sqrt(1.0 + c.chosen) / (1.0 + c.fruitless));
         }
         std::discrete_distribution<size_t> pick(weights.begin(), weights.end());
-        Cell& from = archive[keys[pick(rng)]];
+        Cell& from = archive[keys[pick(rng)]];  // stays valid as cells are added
         from.chosen++;
+        bool fruitful = false;
         apply_diff(base, from.saved, scratch);
         g.restore(scratch);
         std::vector<Action> path = from.path;
@@ -171,8 +176,10 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
                 c.path = path;
                 c.items = v.items_total - v.items_left;
                 if (c.items > shared.best_items) shared.best_items = c.items;
+                fruitful = true;
             }
         }
+        from.fruitless = fruitful ? 0 : from.fruitless + 1;
         shared.passes += uint64_t(taken);
         if (archive.size() > shared.cells) shared.cells = archive.size();
     }
