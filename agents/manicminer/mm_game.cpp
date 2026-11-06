@@ -204,6 +204,8 @@ View Game::view() {
         }
     }
     v.portal_open = (peek(addr::PORTAL) & 0x80) != 0;
+    v.eugene_y = peek(addr::EUGHGT);
+    v.eugene_up = peek(addr::EUGDIR) != 0;
     v.lives = peek(addr::NOMEN);
     for (int i = 0; i < 10; i++) {
         v.score = v.score * 10 + (peek(uint16_t(addr::SCORE + i)) - '0');

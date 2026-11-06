@@ -46,6 +46,8 @@ constexpr uint16_t LOCATION = 32876;   // his top-left cell in the attribute buf
 constexpr uint16_t JUMPING = 32878;    // jump animation counter
 constexpr uint16_t ITEMS = 32885;      // 5 items of 5 bytes; first byte 0 collected, 255 the end
 constexpr uint16_t PORTAL = 32911;     // the portal's attribute; bit 7 set when it flashes (open)
+constexpr uint16_t EUGDIR = 32987;     // Eugene's direction: 0 down, 1 up (Eugene's Lair)
+constexpr uint16_t EUGHGT = 32988;     // Eugene's pixel y-coordinate (the Kong Beast's too)
 constexpr uint16_t AIR = 32956;        // the air bar's length in cells (36 when empty)
 constexpr uint16_t CLOCK = 32957;      // the game clock; the air drops a step when it wraps
 constexpr uint16_t SHEET = 33799;      // the current cavern, 0-19
@@ -97,6 +99,8 @@ struct View {
     int items_left = 0;
     uint8_t items_mask = 0;  // bit n set: item n collected
     bool portal_open = false;
+    int eugene_y = 0;     // EUGHGT: Eugene's pixel y in Eugene's Lair (cavern 4)
+    bool eugene_up = false;
     int lives = 0;
     long score = 0;
 };

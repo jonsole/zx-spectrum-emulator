@@ -6,7 +6,8 @@
 // exactly.
 //
 // A place ("cell") is where Willy stands on the ground, to 8 pixels, and
-// which of the cavern's items he has: that is what progress is. Of two ways
+// which of the cavern's items he has: that is what progress is. Where timing
+// decides, the guardian's phase is part of it too (guardian_phase). Of two ways
 // to the same cell the one taking fewer passes is kept -- more air left, and
 // usually what a later step needs.
 //
@@ -83,8 +84,19 @@ struct Cell {
     uint32_t chosen = 0;
 };
 
+/// In Eugene's Lair the portal is at the foot of a pit under Eugene's column.
+/// Once the last item is taken Eugene heads down and stops at y = 87, in the
+/// pit's mouth, for good (EUGENE, 36344), so Willy has to take it with
+/// Eugene high up and get into the pit before he arrives. Where Eugene is
+/// then is part of the place: his height to 16 pixels and his direction.
+uint32_t guardian_phase(const View& v) {
+    if (v.cavern == 4) return uint32_t(v.eugene_up) | uint32_t(v.eugene_y / 16) << 1;
+    return 0;
+}
+
 uint32_t cell_key(const View& v) {
-    return uint32_t(v.x / 8) | uint32_t(v.y / 8) << 5 | uint32_t(v.items_mask) << 9;
+    return uint32_t(v.x / 8) | uint32_t(v.y / 8) << 5 | uint32_t(v.items_mask) << 9 |
+           guardian_phase(v) << 14;
 }
 
 struct Shared {
