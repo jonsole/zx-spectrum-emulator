@@ -15,21 +15,24 @@ function test(name, fn) {
   }
 }
 
-test('the arguments are the fourteen rf_filter takes', () => {
+test('the arguments are the eighteen rf_filter takes', () => {
   assert.deepStrictEqual(RF_SETTINGS.map((s) => s.arg),
     ['on', 'composite', 'ghost', 'noise', 'scanlines', 'jail', 'jail_rgb', 'crystal_ppm',
-      'luma', 'chroma', 'ghost_d', 'ghost_g', 'noise_n', 'scan_d']);
+      'luma', 'chroma', 'pal_delay', 'colour', 'ghost_d', 'ghost_g', 'noise_n', 'scan_d',
+      'dots_cut', 'fringes_cut']);
 });
 
-// Power-on: FLAGS 0x1E (off, every effect ready, no jail bars), BAND 0x21
-// (the trap, 8-sample chroma), then 24, 3, 3, 6 and the crystal 0xC8, -5.6
-// ppm -- retro-spectrum's docs/spec/rf.md section 5 and
+// Power-on, the board's Good TV with the switch off: FLAGS 0x7E (the
+// composite, ghost, noise, scanlines, 4 % bars on the composite), BAND 0xB7
+// (luma 3, the delay line, chroma 3, colour x3/4), ghost
+// 6 and 0x42, noise 0x41 (the dials at 4/8), scanlines 6, crystal 0xC7,
+// -5.7 ppm -- retro-spectrum's docs/spec/rf.md section 5 and
 // cpp-core/src/rf_filter.h.
 test('unset settings are the power-on values', () => {
   assert.deepStrictEqual(rfArguments(() => undefined), {
-    on: false, composite: true, ghost: true, noise: true, scanlines: true, jail: 0,
-    jail_rgb: false, crystal_ppm: -5.6, luma: 1, chroma: 2, ghost_d: 24, ghost_g: 3,
-    noise_n: 3, scan_d: 6,
+    on: false, composite: true, ghost: true, noise: true, scanlines: true, jail: 3,
+    jail_rgb: false, crystal_ppm: -5.7, luma: 3, chroma: 3, pal_delay: true,
+    colour: 2, ghost_d: 6, ghost_g: 2, noise_n: 1, scan_d: 6, dots_cut: 4, fringes_cut: 4,
   });
 });
 
@@ -40,7 +43,7 @@ test('the crystal offset is tenths of a ppm, -12.8 to 12.7', () => {
   assert.strictEqual(normaliseSetting(crystal, '1.04'), 1);
   assert.strictEqual(normaliseSetting(crystal, -20), -12.8);
   assert.strictEqual(normaliseSetting(crystal, 13), 12.7);
-  assert.strictEqual(normaliseSetting(crystal, 'fast'), -5.6);
+  assert.strictEqual(normaliseSetting(crystal, 'fast'), -5.7);
   assert.strictEqual(describeValue(crystal, -5.6), '-5.6 ppm');
 });
 
@@ -49,7 +52,7 @@ test('levels are clamped and rounded, switches need a boolean', () => {
   assert.strictEqual(normaliseSetting(delay, 99), 63);
   assert.strictEqual(normaliseSetting(delay, -4), 0);
   assert.strictEqual(normaliseSetting(delay, '12.6'), 13);
-  assert.strictEqual(normaliseSetting(delay, 'many'), 24);
+  assert.strictEqual(normaliseSetting(delay, 'many'), 6);
   const on = RF_SETTINGS.find((s) => s.key === 'on');
   assert.strictEqual(normaliseSetting(on, 'yes'), false);
   assert.strictEqual(normaliseSetting(on, true), true);

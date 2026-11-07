@@ -98,6 +98,36 @@ uint8_t clamp_byte(int x) {
     return uint8_t(x < 0 ? 0 : x > 255 ? 255 : x);
 }
 
+/// A line memory's word: 12 bits signed.
+int clamp12(int x) {
+    return x < -2048 ? -2048 : x > 2047 ? 2047 : x;
+}
+
+/// The first canvas line the board shows. It has no line before it for the
+/// delay line.
+constexpr uint32_t FIRST_SHOWN_LINE = 16;
+
+/// The picture's own Y, U and V for each colour index (step 6a), which the
+/// two dials draw the decoded ones towards: what a perfect decoder would give.
+constexpr int YT[16] = {0, 23, 61, 85, 120, 144, 182, 205, 0, 29, 76, 105, 150, 179, 226, 255};
+constexpr int UT[16] = {0, 89, -30, 59, -59, 30, -89, 0, 0, 111, -38, 74, -74, 38, -111, 0};
+constexpr int VT[16] = {0, -20, 126, 106, -106, -126, 20, 0, 0, -25, 157, 131, -131, -157, 25, 0};
+
+/// Chroma setting 1's low-pass (step 5): nine taps summing to 256, which cut
+/// the demodulator's ripple at twice the subcarrier that a 4-sample box
+/// passed at 27 %, folding to 5 MHz as colour on single-pixel detail.
+constexpr int CHROMA_TAPS[9] = {5, 16, 33, 47, 54, 47, 33, 16, 5};
+/// Its shift: 21 is the 14 of 129 / 2^14 and 7 more for the taps' 256 less
+/// the demodulator's gain of 2.
+constexpr int CHROMA_TAPS_SHIFT = 21;
+
+/// One line, as rf_filter_line, with the line memory written when `keep`.
+/// rf_filter_frame keeps it on the one copy it filters; the board, and so
+/// rf_filter_line, on the second.
+void filter_line(const uint8_t index[352], const RfSettings& settings, uint32_t phase,
+                 uint32_t step, uint32_t line, bool second_copy, bool keep, uint16_t lfsr,
+                 RfLineMemory& memory, uint8_t out[RF_WIDTH * 3]);
+
 /// Step 7, the scanlines: X - (X x d) / 16 for each of R, G and B.
 void darken(uint8_t* rgb, size_t bytes, uint32_t depth) {
     for (size_t i = 0; i < bytes; i++) {
@@ -126,7 +156,15 @@ uint16_t rf_lfsr_at(uint64_t frame, uint32_t line) {
 
 void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32_t phase,
                     uint32_t step, uint32_t line, bool second_copy, uint16_t lfsr,
-                    uint8_t out[RF_WIDTH * 3]) {
+                    RfLineMemory& memory, uint8_t out[RF_WIDTH * 3]) {
+    filter_line(index, settings, phase, step, line, second_copy, second_copy, lfsr, memory, out);
+}
+
+namespace {
+
+void filter_line(const uint8_t index[352], const RfSettings& settings, uint32_t phase,
+                 uint32_t step, uint32_t line, bool second_copy, bool keep, uint16_t lfsr,
+                 RfLineMemory& memory, uint8_t out[RF_WIDTH * 3]) {
     const bool composite = settings.on() && (settings.flags & RfSettings::COMPOSITE) != 0;
     const bool odd_line = (line & 1) != 0;
     // The bars go on the composite unless they are asked for on the RGB, or
@@ -147,6 +185,7 @@ void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32
         // the line's own samples stays 0.
         std::array<int, PADDED> e{};
         std::array<int, PADDED> c{};
+        std::array<int, SAMPLES> r{};
         std::array<uint8_t, SAMPLES> ph{};
         const int sw_base = odd_line ? 4096 : 0;
         for (int s = 0; s < SAMPLES; s++) {
@@ -171,8 +210,9 @@ void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32
             if (ghost && delay != 0) {
                 v += (e[size_t(s + PAD - delay < 0 ? 0 : s + PAD - delay)] * strength) >> 5;
             }
+            r[size_t(s)] = int(int8_t(lfsr & 0xFF));
             if (noisy) {
-                v += (int(int8_t(lfsr & 0xFF)) * level) >> 4;
+                v += (r[size_t(s)] * level) >> 4;
             }
             lfsr = rf_lfsr_step(lfsr);
             c[size_t(s + PAD)] = v;
@@ -200,45 +240,99 @@ void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32
                 y.swap(y2);
             }
         }
-        // 5, the chroma: the composite less the trap's output, demodulated
-        // with the encoder's own phase, then a box of n samples, s - n/2 to
-        // s + n/2 - 1, kept as a running sum. Demodulating the whole
-        // composite instead -- the spec's first version -- left a flat bright
-        // area full of false colour, since the box is not a whole number of
-        // subcarrier cycles long and so does not cancel a steady level. Only
-        // the line's own samples are demodulated: c - trap is not quite 0
-        // just outside it, and the spec says 0 there.
+        // 6a, the dot crawl dial: the luma drawn rd/8 of the way to the
+        // picture's own, with the ghost and the noise as the composite has
+        // them, so that turning it up takes out the dots and nothing else.
+        const int dots_cut = settings.dots_cut();
+        if (dots_cut != 0) {
+            for (int s = 0; s < SAMPLES; s++) {
+                int ref = YT[index[s >> 1]];
+                const int back = s - delay;
+                if (ghost && delay != 0 && back >= 0) {
+                    ref += (YT[index[back >> 1]] * strength) >> 5;
+                }
+                if (noisy) {
+                    ref += (r[size_t(s)] * level) >> 4;
+                }
+                int& luma_s = y[size_t(s + PAD)];
+                luma_s += ((ref - luma_s) * dots_cut) >> 3;
+            }
+        }
+        // 5, the chroma: the composite less the trap's output, demodulated with the
+        // encoder's own phase, then filtered. Demodulating the whole composite
+        // instead -- the spec's first version -- left a flat bright area full
+        // of false colour, since a box is not a whole number of subcarrier
+        // cycles long and so does not cancel a steady level. Only the line's
+        // own samples are demodulated: c - trap is not quite 0 just outside
+        // it, and the spec says 0 there.
         std::array<int, PADDED> du{};
         std::array<int, PADDED> dv{};
         const int sw = odd_line ? -1 : 1;
         for (int s = 0; s < SAMPLES; s++) {
-            const int v = c[size_t(s + PAD)] - trap[size_t(s + PAD)];
-            du[size_t(s + PAD)] = v * RF_SIN[ph[size_t(s)]];
-            dv[size_t(s + PAD)] = v * RF_COS[ph[size_t(s)]] * sw;
+            const int band = c[size_t(s + PAD)] - trap[size_t(s + PAD)];
+            du[size_t(s + PAD)] = band * RF_SIN[ph[size_t(s)]];
+            dv[size_t(s + PAD)] = band * RF_COS[ph[size_t(s)]] * sw;
         }
+        // Setting 1 is the 9-tap low-pass; the others a box of n samples,
+        // s - n/2 to s + n/2 - 1, kept as a running sum.
         const uint32_t m = settings.chroma();
+        const bool taps = m == 1;
         const int n = 2 << m;
         int64_t su = 0;
         int64_t sv = 0;
-        for (int j = -n / 2; j <= n / 2 - 1; j++) {
-            su += du[size_t(j + PAD)];
-            sv += dv[size_t(j + PAD)];
-        }
-        for (int s = 0; s < SAMPLES; s++) {
-            if (s > 0) {
-                // The window moves on one: s + n/2 - 1 comes in, s - n/2 - 1 goes.
-                su += du[size_t(s + n / 2 - 1 + PAD)] - du[size_t(s - n / 2 - 1 + PAD)];
-                sv += dv[size_t(s + n / 2 - 1 + PAD)] - dv[size_t(s - n / 2 - 1 + PAD)];
+        if (!taps) {
+            for (int j = -n / 2; j <= n / 2 - 1; j++) {
+                su += du[size_t(j + PAD)];
+                sv += dv[size_t(j + PAD)];
             }
-            // 129 / 2^14 is about 1/127; the box's 1/n and the
-            // demodulator's gain of 2 make the rest of the shift.
-            const int u = int((su * 129) >> (14 + m));
-            const int v = int((sv * 129) >> (14 + m));
-            // 6, back to RGB.
+        }
+        const bool delay_line = settings.pal_delay();
+        const int gain = settings.gain();
+        const int fringes_cut = settings.fringes_cut();
+        for (int s = 0; s < SAMPLES; s++) {
+            int u = 0;
+            int v = 0;
+            if (taps) {
+                int64_t tu = 0;
+                int64_t tv = 0;
+                for (int k = 0; k < 9; k++) {
+                    tu += int64_t(CHROMA_TAPS[k]) * du[size_t(s + k - 4 + PAD)];
+                    tv += int64_t(CHROMA_TAPS[k]) * dv[size_t(s + k - 4 + PAD)];
+                }
+                u = int((tu * 129) >> CHROMA_TAPS_SHIFT);
+                v = int((tv * 129) >> CHROMA_TAPS_SHIFT);
+            } else {
+                if (s > 0) {
+                    // The window moves on one: s + n/2 - 1 comes in, s - n/2 - 1 goes.
+                    su += du[size_t(s + n / 2 - 1 + PAD)] - du[size_t(s - n / 2 - 1 + PAD)];
+                    sv += dv[size_t(s + n / 2 - 1 + PAD)] - dv[size_t(s - n / 2 - 1 + PAD)];
+                }
+                // 129 / 2^14 is about 1/127; the box's 1/n and the
+                // demodulator's gain of 2 make the rest of the shift.
+                u = int((su * 129) >> (14 + m));
+                v = int((sv * 129) >> (14 + m));
+            }
+            // 6a, the colour fringes dial: U and V drawn rf/8 of the way to
+            // the picture's own, before the delay line keeps them.
+            const uint8_t ci = index[s >> 1];
+            u += ((UT[ci] - u) * fringes_cut) >> 3;
+            v += ((VT[ci] - v) * fringes_cut) >> 3;
+            // 5b, the PAL delay line: this line's U and V plus the line
+            // before's, which cancels a phase error between them; without
+            // it, twice this line's. The first line shown has no line before.
+            const bool from_above = delay_line && line != FIRST_SHOWN_LINE;
+            const int ut = from_above ? u + memory.u[s] : 2 * u;
+            const int vt = from_above ? v + memory.v[s] : 2 * v;
+            if (keep) {
+                memory.u[s] = clamp12(u);
+                memory.v[s] = clamp12(v);
+            }
+            // 5c and 6, the colour gain of g/8 and back to RGB, the delay
+            // line's halving in the shift.
             const int luma_s = y[size_t(s + PAD)];
-            out[s * 3] = clamp_byte(luma_s + ((292 * v) >> 8));
-            out[s * 3 + 1] = clamp_byte(luma_s - ((101 * u + 149 * v) >> 8));
-            out[s * 3 + 2] = clamp_byte(luma_s + ((520 * u) >> 8));
+            out[s * 3] = clamp_byte(luma_s + ((292 * gain * vt) >> 12));
+            out[s * 3 + 1] = clamp_byte(luma_s - ((101 * gain * ut + 149 * gain * vt) >> 12));
+            out[s * 3 + 2] = clamp_byte(luma_s + ((520 * gain * ut) >> 12));
         }
     }
     if (jail_rgb && jail_depth != 0) {
@@ -256,6 +350,8 @@ void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32
     }
 }
 
+} // namespace
+
 std::vector<uint8_t> rf_filter_frame(const std::vector<uint8_t>& rgb, const RfSettings& settings,
                                      uint64_t frame, bool locked_subcarrier) {
     if (!settings.on() || rgb.size() != size_t(FULL_WIDTH) * FULL_HEIGHT * 3) {
@@ -272,6 +368,9 @@ std::vector<uint8_t> rf_filter_frame(const std::vector<uint8_t>& rgb, const RfSe
     const size_t row = size_t(RF_WIDTH) * 3;
 
     std::vector<uint8_t> out(row * RF_HEIGHT);
+    // Clear at the top of each frame, which is all the board relies on: the
+    // first line shown takes nothing from it.
+    RfLineMemory memory;
     uint8_t index[FULL_WIDTH];
     for (uint32_t line = 0; line < FULL_HEIGHT; line++) {
         const uint8_t* src = rgb.data() + size_t(line) * FULL_WIDTH * 3;
@@ -279,8 +378,10 @@ std::vector<uint8_t> rf_filter_frame(const std::vector<uint8_t>& rgb, const RfSe
             index[dot] = colour_index(src + dot * 3);
         }
         uint8_t* first = out.data() + size_t(line) * 2 * row;
-        rf_filter_line(index, settings, frame_phase + line * line_step, sample_step, line, false,
-                       rf_lfsr_at(frame, line), first);
+        // Filtered once, keeping the line memory as the board does on its
+        // second copy, which is the same samples.
+        filter_line(index, settings, frame_phase + line * line_step, sample_step, line, false, true,
+                    rf_lfsr_at(frame, line), memory, first);
         // The second copy is the same samples, the same noise included, with
         // only the scanlines to add -- so it is copied rather than filtered
         // again.

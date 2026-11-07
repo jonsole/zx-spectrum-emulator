@@ -38,9 +38,11 @@ GitHub takes its notes from that section.
   noise, scanlines and jail bars, each with its own strength. The 48K's dots
   move as its crystal offset says, a setting in ppm. **ZX Spectrum: Toggle RF
   Look** (a button on the screen panel) and **ZX Spectrum: RF Look...** set
-  it, and MCP's `rf_filter` tool does too. It is bit-exact with the same
-  filter on retro-spectrum's SpecNext board, which takes the same settings.
-  See docs/rf-look.md.
+  it, and MCP's `rf_filter` tool does too, which also has a better TV's
+  settings: the PAL delay line, the colour gain and two
+  dials that take out the dot crawl and the colour fringes by eighths. It is
+  bit-exact with the same filter on retro-spectrum's SpecNext board, takes
+  the same settings and powers on as it does. See docs/rf-look.md.
 
 - **Border effects line up with the paper.** The ULA shows a group of paper
   4 T-states after it fetches it, and the emulator drew it at the fetch, so

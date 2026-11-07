@@ -1232,7 +1232,7 @@ json tools_list() {
         "display setting only: the machine runs the same either way, and a reset or a "
         "snapshot keeps it. While on, get_screen and the screen panel give a 704x624 picture "
         "(two samples a Spectrum pixel, each line twice) instead of 352x312. Only the "
-        "arguments given change; with none it just reports. Replies with all fourteen "
+        "arguments given change; with none it just reports. Replies with all eighteen "
         "settings. Turn it off to read the screen exactly",
         schema(json{{"on", bool_prop("The master switch. Off is the plain picture, to the pixel.")},
                     {"composite", bool_prop("The PAL encode and decode: dot crawl, cross-colour, "
@@ -1250,23 +1250,36 @@ json tools_list() {
                     {"crystal_ppm", number_prop("The 48K's crystal offset in ppm, -12.8 to 12.7 in "
                                                 "0.1 steps: how the dots move from frame to frame. "
                                                 "0 is nominal crystals (the dots nearly invert "
-                                                "every frame), -5.6 the default, a trimmed "
+                                                "every frame), -5.7 the default, a trimmed "
                                                 "machine's slow creep. A 128K's dots stand still "
                                                 "whatever it says.")},
                     {"luma", integer_prop("0-3: 0 no trap (strongest dots), 1 the subcarrier "
                                           "trap, 2-3 softer still.")},
                     {"chroma", integer_prop("0-3: colour bandwidth, 0 sharpest to 3 most bleed "
-                                            "(a 2, 4, 8 or 16-sample average).")},
+                                            "(0 a 2-sample average, 1 a 9-tap low-pass, 2 and 3 "
+                                            "8- and 16-sample averages).")},
+                    {"pal_delay", bool_prop("The PAL delay line, as a better TV: U and V averaged "
+                                            "with the line above (steadier colour edges).")},
+                    {"colour", integer_prop("The colour gain: 0 x1, 1 x7/8, 2 x3/4, 3 x5/8 "
+                                            "(weaker cross-colour dots, paler colours).")},
                     {"ghost_d", integer_prop("The ghost's delay, 0-63 samples of 71 ns; 0 is "
                                              "no ghost.")},
                     {"ghost_g", integer_prop("The ghost's strength, 0-15 (sixteenths of half "
                                              "the picture).")},
                     {"noise_n", integer_prop("The noise level, 0-15.")},
                     {"scan_d", integer_prop("The scanlines' depth, 0-15 (sixteenths darker).")},
+                    {"dots_cut", integer_prop("The dot crawl taken out, in eighths: 0 none (the "
+                                              "full PAL look) to 8 all; 9-15 act as 8.")},
+                    {"fringes_cut", integer_prop("The colour fringes taken out, in eighths: 0 "
+                                                 "none to 8 all (the picture's own colour); "
+                                                 "9-15 act as 8.")},
                     {"defaults", bool_prop("Put back the power-on settings first, then apply "
-                                           "any others given: off, every effect ready, the "
-                                           "trap, 8-sample chroma, no jail bars, a -5.6 ppm "
-                                           "crystal.")}},
+                                           "any others given: the board's power-on, its Good "
+                                           "TV with the switch off -- the composite, ghost "
+                                           "6/2, noise 1, scanlines 6, 4 % jail bars on the "
+                                           "composite; luma 3, the delay line, chroma 3, the "
+                                           "colour at x3/4; dot crawl and fringes cut by "
+                                           "half; a -5.7 ppm crystal.")}},
                {}));
     add("set_graphics_view",
         "Point VS Code's ZX Spectrum Graphics panel at some bytes and say how to draw them: a "
@@ -2432,6 +2445,12 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
                 rf.flags = uint8_t(v.get<bool>() ? (rf.flags | s.bit) : (rf.flags & ~s.bit));
             }
         }
+        // The one in BAND rather than FLAGS.
+        const json& pal_delay = arg(args, "pal_delay");
+        if (pal_delay.is_boolean()) {
+            rf.band = uint8_t(pal_delay.get<bool>() ? (rf.band | RfSettings::PAL_DELAY)
+                                                     : (rf.band & ~RfSettings::PAL_DELAY));
+        }
         // Each level: where it lives in the seven bytes, and its range. All
         // are checked before any is applied, so a bad one changes nothing.
         const struct {
@@ -2442,10 +2461,13 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         } levels[] = {{"jail", &rf.flags, RfSettings::JAIL_SHIFT, 3},
                       {"luma", &rf.band, 0, 3},
                       {"chroma", &rf.band, 4, 3},
+                      {"colour", &rf.band, RfSettings::GAIN_SHIFT, 3},
                       {"ghost_d", &rf.ghost_d, 0, 63},
                       {"ghost_g", &rf.ghost_g, 0, 15},
                       {"noise_n", &rf.noise, 0, 15},
-                      {"scan_d", &rf.scan, 0, 15}};
+                      {"scan_d", &rf.scan, 0, 15},
+                      {"dots_cut", &rf.ghost_g, RfSettings::CUT_SHIFT, 15},
+                      {"fringes_cut", &rf.noise, RfSettings::CUT_SHIFT, 15}};
         for (const auto& l : levels) {
             const json& v = arg(args, l.name);
             if (v.is_null()) {
@@ -2491,10 +2513,14 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
                                 {"crystal_ppm", rf.crystal / 10.0},
                                 {"luma", rf.luma()},
                                 {"chroma", rf.chroma()},
+                                {"pal_delay", rf.pal_delay()},
+                                {"colour", 8 - rf.gain()},
                                 {"ghost_d", rf.ghost_d},
-                                {"ghost_g", rf.ghost_g},
-                                {"noise_n", rf.noise},
-                                {"scan_d", rf.scan}});
+                                {"ghost_g", rf.ghost_g & 15},
+                                {"noise_n", rf.noise & 15},
+                                {"scan_d", rf.scan},
+                                {"dots_cut", rf.ghost_g >> RfSettings::CUT_SHIFT},
+                                {"fringes_cut", rf.noise >> RfSettings::CUT_SHIFT}});
     }
 
     if (name == "set_graphics_view") {

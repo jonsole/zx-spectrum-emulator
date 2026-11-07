@@ -54,6 +54,13 @@ std::vector<uint8_t> solid_frame(uint8_t r, uint8_t g, uint8_t b) {
     return rgb;
 }
 
+/// A line memory with nothing in it, as at the top of a frame.
+RfLineMemory& cleared_memory() {
+    static RfLineMemory memory;
+    memory = RfLineMemory{};
+    return memory;
+}
+
 /// Settings with the composite on and nothing else to disturb a worked value:
 /// no ghost, no noise, no scanlines.
 RfSettings clean_composite() {
@@ -151,7 +158,7 @@ TEST(white_stays_white_in_the_middle_of_a_line) {
         const int level = index == 15 ? 255 : 205;
         const std::vector<uint8_t> white = solid_line(index);
         rf_filter_line(white.data(), clean_composite(), 0x12345678u, RF_K_48K, index == 15 ? 1u : 0u, false,
-                       0xACE1, out);
+                       0xACE1, cleared_memory(), out);
         for (uint32_t s = 16; s < RF_WIDTH - 16; s++) {
             CHECK_EQ(int(out[s * 3]), level);
             CHECK_EQ(int(out[s * 3 + 1]), level);
@@ -166,7 +173,7 @@ TEST(white_stays_white_in_the_middle_of_a_line) {
 TEST(black_stays_black) {
     uint8_t out[RF_WIDTH * 3];
     const std::vector<uint8_t> black = solid_line(0);
-    rf_filter_line(black.data(), clean_composite(), 0, RF_K_48K, 1, false, 0xACE1, out);
+    rf_filter_line(black.data(), clean_composite(), 0, RF_K_48K, 1, false, 0xACE1, cleared_memory(), out);
     for (uint32_t i = 0; i < RF_WIDTH * 3; i++) {
         CHECK_EQ(int(out[i]), 0);
     }
@@ -240,7 +247,7 @@ TEST(jail_bars_on_the_rgb_are_on_the_paper_only) {
     s.flags = uint8_t(RfSettings::ON | (3u << RfSettings::JAIL_SHIFT));
     const std::vector<uint8_t> white = solid_line(7);
     uint8_t out[RF_WIDTH * 3];
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 64, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 64, false, 0xACE1, cleared_memory(), out);
     const int bars[] = {96, 97, 104, 105, 112, 113, 128, 129, 136, 137, 144, 145, 576, 577, 584, 585,
                         592, 593};
     for (int b : bars) {
@@ -252,30 +259,33 @@ TEST(jail_bars_on_the_rgb_are_on_the_paper_only) {
     for (int c : clear) {
         CHECK_EQ(int(out[c * 3]), 0xCD);
     }
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 63, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 63, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0xCD);
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 255, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 255, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0xCD - 10);
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 256, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 256, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0xCD);
     // Black can't go lower; level 1 is 3 down.
     const std::vector<uint8_t> black = solid_line(0);
-    rf_filter_line(black.data(), s, 0, RF_K_48K, 100, false, 0xACE1, out);
+    rf_filter_line(black.data(), s, 0, RF_K_48K, 100, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0);
     s.flags = uint8_t(RfSettings::ON | (1u << RfSettings::JAIL_SHIFT));
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 100, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 100, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0xCD - 3);
     // The switch off: no bars.
     s.flags = uint8_t(3u << RfSettings::JAIL_SHIFT);
-    rf_filter_line(white.data(), s, 0, RF_K_48K, 100, false, 0xACE1, out);
+    rf_filter_line(white.data(), s, 0, RF_K_48K, 100, false, 0xACE1, cleared_memory(), out);
     CHECK_EQ(int(out[96 * 3]), 0xCD);
 }
 
 #ifdef ZX_RF_MODEL
 // retro-spectrum's model of the spec, on the same lines with the same
 // settings: random lines, single dots, every setting in turn, several phases
-// and noise states. The FPGA is diffed against the same model, so agreeing
-// with it is agreeing with the board.
+// and noise states. Each trial is four lines running down the screen, each
+// filtered twice as the board does, so that the PAL delay line sees real
+// lines above it; the line memories carry on from trial to trial
+// on both sides. The FPGA is diffed against the same model, so agreeing with
+// it is agreeing with the board.
 TEST(matches_retro_spectrums_model) {
     static RfTables tables;
     if (!tables.load(ZX_RF_TABLES)) {
@@ -286,28 +296,20 @@ TEST(matches_retro_spectrums_model) {
     std::vector<uint8_t> line(FULL_WIDTH);
     uint8_t ours[RF_WIDTH * 3];
     Rgb theirs[RF_WIDTH];
+    static RfLineMemory our_memory;
+    static RfLineMem their_memory;
+    constexpr int TRIALS = 400;
+    constexpr uint32_t LINES = 4;
     int compared = 0;
     int mismatches = 0;
-    for (int trial = 0; trial < 400; trial++) {
-        // A line: random dots, runs, a single dot on black, or solid.
-        const int kind = trial % 4;
-        for (uint32_t x = 0; x < FULL_WIDTH; x++) {
-            if (kind == 0) {
-                line[x] = uint8_t(rng() & 15);
-            } else if (kind == 1) {
-                line[x] = uint8_t((x / 8 + uint32_t(trial)) & 15);
-            } else if (kind == 2) {
-                line[x] = x == 100 + uint32_t(trial) % 100 ? uint8_t(15) : uint8_t(0);
-            } else {
-                line[x] = uint8_t(trial & 15);
-            }
-        }
+    for (int trial = 0; trial < TRIALS; trial++) {
         RfSettings s;
         s.flags = uint8_t(rng() & 0xFF);
-        s.band = uint8_t(rng() & 0x33);
+        s.band = uint8_t(rng() & 0xFF);
         s.ghost_d = uint8_t(rng() & 63);
-        s.ghost_g = uint8_t(rng() & 15);
-        s.noise = uint8_t(rng() & 15);
+        // The high nibbles are the two dials, 9-15 included.
+        s.ghost_g = uint8_t(rng() & 0xFF);
+        s.noise = uint8_t(rng() & 0xFF);
         s.scan = uint8_t(rng() & 15);
         RfCfg cfg;
         cfg.flags = s.flags;
@@ -317,29 +319,51 @@ TEST(matches_retro_spectrums_model) {
         cfg.noise = s.noise;
         cfg.scan = s.scan;
         // The crystal offset is not in a line's arguments: the caller turns
-        // it into the phase. The line number is, for the jail bars.
-        const uint32_t phase = uint32_t(rng());
-        const uint32_t canvas_line = uint32_t(rng() % FULL_HEIGHT);
-        const bool odd = (canvas_line & 1) != 0;
-        const bool second = (rng() & 1) != 0;
-        uint16_t lfsr = uint16_t(rng() | 1);
+        // it into the phase. The line number is, for the jail bars, the PAL
+        // switch and where the delay line starts.
+        const uint32_t first_line = uint32_t(rng() % (FULL_HEIGHT - LINES + 1));
         const uint32_t step = (trial & 8) ? RF_K_128K : RF_K_48K;
-        rf_filter_line(line.data(), s, phase, step, canvas_line, second, lfsr, ours);
-        rf_line(tables, cfg, int(canvas_line), phase, step, odd, second, line.data(), lfsr, theirs);
-        for (uint32_t i = 0; i < RF_WIDTH; i++) {
-            compared++;
-            if (ours[i * 3] != theirs[i].r || ours[i * 3 + 1] != theirs[i].g
-                || ours[i * 3 + 2] != theirs[i].b) {
-                if (mismatches < 5) {
-                    std::printf("    trial %d sample %u: ours %d,%d,%d model %d,%d,%d\n", trial, i,
-                                ours[i * 3], ours[i * 3 + 1], ours[i * 3 + 2], theirs[i].r,
-                                theirs[i].g, theirs[i].b);
+        for (uint32_t n = 0; n < LINES; n++) {
+            // A line: random dots, runs, a single dot on black, or solid.
+            const int kind = int((uint32_t(trial) + n) % 4);
+            for (uint32_t x = 0; x < FULL_WIDTH; x++) {
+                if (kind == 0) {
+                    line[x] = uint8_t(rng() & 15);
+                } else if (kind == 1) {
+                    line[x] = uint8_t((x / 8 + uint32_t(trial)) & 15);
+                } else if (kind == 2) {
+                    line[x] = x == 100 + uint32_t(trial) % 100 ? uint8_t(15) : uint8_t(0);
+                } else {
+                    line[x] = uint8_t((uint32_t(trial) + n) & 15);
                 }
-                mismatches++;
+            }
+            const uint32_t canvas_line = first_line + n;
+            const bool odd = (canvas_line & 1) != 0;
+            const uint32_t phase = uint32_t(rng());
+            const uint16_t lfsr = uint16_t(rng() | 1);
+            for (const bool second : {false, true}) {
+                uint16_t their_lfsr = lfsr;
+                rf_filter_line(line.data(), s, phase, step, canvas_line, second, lfsr, our_memory, ours);
+                rf_line(tables, cfg, int(canvas_line), phase, step, odd, second, line.data(), their_lfsr,
+                        theirs, their_memory);
+                for (uint32_t i = 0; i < RF_WIDTH; i++) {
+                    compared++;
+                    if (ours[i * 3] != theirs[i].r || ours[i * 3 + 1] != theirs[i].g
+                        || ours[i * 3 + 2] != theirs[i].b) {
+                        if (mismatches < 5) {
+                            std::printf("    trial %d line %u copy %d sample %u band %02X: ours %d,%d,%d "
+                                        "model %d,%d,%d\n",
+                                        trial, canvas_line, second ? 2 : 1, i, s.band, ours[i * 3],
+                                        ours[i * 3 + 1], ours[i * 3 + 2], theirs[i].r, theirs[i].g,
+                                        theirs[i].b);
+                        }
+                        mismatches++;
+                    }
+                }
             }
         }
     }
-    CHECK_EQ(compared, 400 * int(RF_WIDTH));
+    CHECK_EQ(compared, TRIALS * int(LINES) * 2 * int(RF_WIDTH));
     CHECK_EQ(mismatches, 0);
 }
 #endif

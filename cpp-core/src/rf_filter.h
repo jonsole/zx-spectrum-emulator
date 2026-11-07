@@ -31,24 +31,31 @@ namespace zx {
 struct RfSettings {
     /// Bit 0 the master switch, 1 COMPOSITE, 2 GHOST, 3 NOISE, 4 SCANLINES,
     /// 6-5 the jail bars' level (0 none), 7 the bars on the RGB rather than
-    /// the composite. The default has every effect ready and no bars.
-    uint8_t flags = 0x1E;
-    /// Bits 1-0 the luma setting, 5-4 the chroma one.
-    uint8_t band = 0x21;
+    /// the composite. The defaults throughout are the board's power-on, its
+    /// Good TV with the switch off (rf.md section 5): here the composite,
+    /// the ghost, the noise, the scanlines and 4 % bars on the composite.
+    uint8_t flags = 0x7E;
+    /// Bits 1-0 the luma setting, 2 the PAL delay line, 3 unused (it was a
+    /// sharp luma notch, taken out of the board for room), 5-4 the chroma
+    /// setting, 7-6 the colour gain taken down in eighths (0 is 8/8). The
+    /// default: luma 3, the delay line, chroma 3, colour x3/4.
+    uint8_t band = 0xB7;
     /// The ghost's delay in samples, 0-63 (one is 71 ns); 0 is no ghost.
-    uint8_t ghost_d = 24;
-    /// The ghost's strength, 0-15, as G/32 of the picture.
-    uint8_t ghost_g = 3;
-    /// The noise level, 0-15.
-    uint8_t noise = 3;
+    uint8_t ghost_d = 6;
+    /// Bits 3-0 the ghost's strength, as G/32 of the picture; 7-4 the dot
+    /// crawl taken out, in eighths (9-15 read as 8). The default: 2, and half.
+    uint8_t ghost_g = 0x42;
+    /// Bits 3-0 the noise level; 7-4 the colour fringes taken out, in
+    /// eighths (9-15 read as 8). The default: 1, and half.
+    uint8_t noise = 0x41;
     /// The scanlines' depth, 0-15: d/16 darker.
     uint8_t scan = 6;
     /// The 48K's crystal offset in 0.1 ppm, signed: how far its 14 MHz
     /// crystal is from the modulator's, which sets how the dots move from
     /// frame to frame. 1 ppm is 0.0885 of a turn a frame. The default,
-    /// -5.6 ppm, is a trimmed machine whose dots creep a cycle in about 6 s;
-    /// 0 is nominal crystals, the dots nearly inverting every frame.
-    int8_t crystal = -56;
+    /// -5.7 ppm, is a trimmed machine whose dots creep slowly; 0 is nominal
+    /// crystals, the dots nearly inverting every frame.
+    int8_t crystal = -57;
 
     static constexpr uint8_t ON = 0x01;
     static constexpr uint8_t COMPOSITE = 0x02;
@@ -57,11 +64,35 @@ struct RfSettings {
     static constexpr uint8_t SCANLINES = 0x10;
     static constexpr uint8_t JAIL_SHIFT = 5;
     static constexpr uint8_t JAIL_RGB = 0x80;
+    static constexpr uint8_t PAL_DELAY = 0x04;
+    static constexpr uint8_t GAIN_SHIFT = 6;
+    /// The dials' place in ghost_g and noise: their high nibbles.
+    static constexpr uint8_t CUT_SHIFT = 4;
+    static constexpr int CUT_MAX = 8;
 
     bool on() const { return (flags & ON) != 0; }
     uint32_t jail() const { return (flags >> JAIL_SHIFT) & 3u; }
     uint32_t luma() const { return band & 3u; }
     uint32_t chroma() const { return (band >> 4) & 3u; }
+    bool pal_delay() const { return (band & PAL_DELAY) != 0; }
+    /// The dot crawl dial, 0-8 eighths.
+    int dots_cut() const { return cut(ghost_g); }
+    /// The colour fringes dial, 0-8 eighths.
+    int fringes_cut() const { return cut(noise); }
+    static int cut(uint8_t b) {
+        const int r = b >> CUT_SHIFT;
+        return r > CUT_MAX ? CUT_MAX : r;
+    }
+    /// The colour gain in eighths: 8, 7, 6 or 5.
+    int gain() const { return 8 - int((band >> GAIN_SHIFT) & 3u); }
+};
+
+/// What a line leaves for the next: the PAL delay line's U and V (step 5b),
+/// held to 12 bits signed as the board's line memory is. A frame starts with
+/// it clear; the first line shown takes nothing from it.
+struct RfLineMemory {
+    int u[704] = {};
+    int v[704] = {};
 };
 
 /// The size of the filtered picture: two samples a dot, each line twice.
@@ -83,12 +114,14 @@ std::vector<uint8_t> rf_filter_frame(const std::vector<uint8_t>& rgb, const RfSe
 /// subcarrier's phase at sample 0 and `step` its advance a sample, both in
 /// 2^32 a turn; `line` the canvas line, 0-311 (its oddness is the PAL
 /// switch's -1, and the jail bars are on lines 64-255); `second_copy` the copy the
-/// scanlines darken; `lfsr` the noise generator at the start of the line.
+/// scanlines darken; `lfsr` the noise generator at the start of the line;
+/// `memory` the delay line, read for this line and,
+/// on the second copy, written with it -- as the board does.
 /// rf_filter_frame is this, line by line; it is separate so the tests can
-/// put the same line through retro-spectrum's model.
+/// put the same lines through retro-spectrum's model.
 void rf_filter_line(const uint8_t index[352], const RfSettings& settings, uint32_t phase,
                     uint32_t step, uint32_t line, bool second_copy, uint16_t lfsr,
-                    uint8_t out[RF_WIDTH * 3]);
+                    RfLineMemory& memory, uint8_t out[RF_WIDTH * 3]);
 
 /// The noise generator one step on: a 16-bit Galois LFSR, taps 0xB400.
 uint16_t rf_lfsr_step(uint16_t l);

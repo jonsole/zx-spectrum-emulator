@@ -185,7 +185,7 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 3,
-          "default": 0,
+          "default": 3,
           "markdownDescription": "RF look: jail bars, still vertical bars on the paper as the 48K's supply noise gave. `0` off, `1` to `3` about 1, 2 and 4 % of white."
         },
         "zxspectrum.rf.jailRgb": {
@@ -197,42 +197,54 @@
           "type": "number",
           "minimum": -12.8,
           "maximum": 12.7,
-          "default": -5.6,
-          "markdownDescription": "RF look: the 48K's crystal offset in ppm, in steps of 0.1, which sets how its dots move from frame to frame. `0` is nominal crystals (they nearly invert every frame), `-5.6` a trimmed machine whose dots creep a cycle in about 6 s. 1 ppm is 0.0885 of a turn a frame. A 128K's dots stand still whatever it says."
+          "default": -5.7,
+          "markdownDescription": "RF look: the 48K's crystal offset in ppm, in steps of 0.1, which sets how its dots move from frame to frame. `0` is nominal crystals (they nearly invert every frame), `-5.7` a trimmed machine whose dots creep slowly. 1 ppm is 0.0885 of a turn a frame. A 128K's dots stand still whatever it says."
         },
         "zxspectrum.rf.luma": {
           "type": "integer",
           "minimum": 0,
           "maximum": 3,
-          "default": 1,
+          "default": 3,
           "markdownDescription": "RF look: `0` no subcarrier trap (the strongest dots), `1` the trap, `2` and `3` softer still."
         },
         "zxspectrum.rf.chroma": {
           "type": "integer",
           "minimum": 0,
           "maximum": 3,
+          "default": 3,
+          "markdownDescription": "RF look: colour bandwidth, `0` sharpest to `3` most bleed. `1` is a 9-tap low-pass, the others averages of 2, 8 and 16 samples."
+        },
+        "zxspectrum.rf.palDelay": {
+          "type": "boolean",
+          "default": true,
+          "description": "RF look: the PAL delay line, as a better TV: U and V averaged with the line above, for steadier colour edges."
+        },
+        "zxspectrum.rf.colour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
           "default": 2,
-          "markdownDescription": "RF look: colour bandwidth, `0` sharpest to `3` most bleed."
+          "markdownDescription": "RF look: the colour gain, `0` x1, `1` x7/8, `2` x3/4, `3` x5/8 -- weaker cross-colour dots and paler colours as it goes up."
         },
         "zxspectrum.rf.ghostDelay": {
           "type": "integer",
           "minimum": 0,
           "maximum": 63,
-          "default": 24,
+          "default": 6,
           "markdownDescription": "RF look: the ghost's delay, in samples of 71 ns. `0` is no ghost."
         },
         "zxspectrum.rf.ghostStrength": {
           "type": "integer",
           "minimum": 0,
           "maximum": 15,
-          "default": 3,
+          "default": 2,
           "description": "RF look: the ghost's strength, 0 to 15."
         },
         "zxspectrum.rf.noiseLevel": {
           "type": "integer",
           "minimum": 0,
           "maximum": 15,
-          "default": 3,
+          "default": 1,
           "description": "RF look: the noise level, 0 to 15."
         },
         "zxspectrum.rf.scanlineDepth": {
@@ -241,6 +253,20 @@
           "maximum": 15,
           "default": 6,
           "description": "RF look: how much darker the scanlines are, in sixteenths, 0 to 15."
+        },
+        "zxspectrum.rf.dotsCut": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8,
+          "default": 4,
+          "description": "RF look: eighths of the dot crawl taken out, 0 the full PAL look to 8 none left."
+        },
+        "zxspectrum.rf.fringesCut": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8,
+          "default": 4,
+          "description": "RF look: eighths of the colour fringes taken out, 0 none to 8 the picture's own colour."
         },
         "zxspectrum.program.runOnOpen": {
           "type": "boolean",
