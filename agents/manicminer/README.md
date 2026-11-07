@@ -96,8 +96,49 @@ so, with nothing collected.
 
 ## Results
 
-Routes found so far are in [`routes/`](routes/). Each is a text file: the
-cavern, then one character a pass (`.` `L` `R` `J` `<` `>`).
+Every cavern has a route in [`routes/`](routes/), each checked by replaying
+it from the cavern's start. A route is a text file: the cavern, then one
+character a pass (`.` `L` `R` `J` `<` `>`). The searches ran on 4 threads.
+
+| Cavern | Passes | Air left | Searched |
+|---|---:|---:|---|
+| 0 Central Cavern | 991 | 12 | 2 min |
+| 1 The Cold Room | 612 | 18 | 1 min |
+| 2 The Menagerie | 692 | 16 | 2 min |
+| 3 Abandoned Uranium Workings | 1,081 | 10 | 2 min |
+| 4 Eugene's Lair | 931 | 12 | 5 min, with a hint |
+| 5 Processing Plant | 793 | 15 | 3 min |
+| 6 The Vat | 821 | 14 | 5 min |
+| 7 Miner Willy meets the Kong Beast | 689 | 16 | 5 min |
+| 8 Wacky Amoebatrons | 852 | 14 | 3 min |
+| 9 The Endorian Forest | 1,083 | 11 | 5 min |
+| 10 Attack of the Mutant Telephones | 1,204 | 8 | 12 min |
+| 11 Return of the Alien Kong Beast | 1,157 | 9 | 14 min |
+| 12 Ore Refinery | 776 | 15 | 5 min |
+| 13 Skylab Landing Bay | 784 | 15 | 3 min |
+| 14 The Bank | 851 | 14 | 11 min |
+| 15 The Sixteenth Cavern | 595 | 18 | 4 min |
+| 16 The Warehouse | 782 | 15 | 3 min |
+| 17 Amoebatrons' Revenge | 1,043 | 11 | 5 min, with guardian timing |
+| 18 Solar Power Generator | 955 | 3 | 63 min, keeping the most air |
+| 19 The Final Barrier | 610 | 18 | 2 min |
+
+Three caverns needed help:
+
+- **Eugene's Lair.** Once the last item is taken, Eugene descends and parks
+  over the portal for good, so the last item has to be the one nearest the
+  pit (item 5), taken with Eugene high up. `--collected` showed no other item
+  could be left till last. The search is told this, as a player learns it from
+  watching someone play (`last_item`), and Eugene's height is part of a cell
+  for the last item.
+- **Amoebatrons' Revenge.** Willy climbs past a guardian rolling along each
+  level. The guardian on his level or the next one up is part of a cell, so a
+  jump made at a good moment is kept beside an earlier one made at a bad one.
+- **Solar Power Generator.** The light beam drains air, so of two ways to a
+  place the search keeps the one with more air left, not the quicker one.
+
+The search also loses interest in a cell each time it is tried without
+finding anything new, so dead ends stop soaking it up.
 
 ## The player interface
 
@@ -109,8 +150,8 @@ network goes here.
 
 ## Next
 
-- Routes for every cavern, then one game played through all twenty on the
-  routes, with the game's own lives.
+- One game played through all twenty caverns on the routes, with the game's
+  own lives, filmed.
 - Shorter routes: keep searching after the first one, for more air left.
 - A player that isn't a recording: learn from the routes (behaviour cloning),
   or tune a small network by evolution against the lab, as elite-agent did.
