@@ -16,6 +16,8 @@
 //     --passes n    the most passes each search may play (default 400000)
 //     --seed n      (default 1)
 //     --out dir     where the routes go (default agents/manicminer/routes)
+//     --collected m an experiment: items in mask m are taken before the search
+//                   starts; prints what it finds and keeps nothing
 //     --rom f, --game f   as mm_lab
 //
 // Writes <out>/cavern<nn>.route on success, after replaying it from the
@@ -49,6 +51,7 @@ struct Options {
     unsigned threads = 0;
     uint64_t passes = 400000;
     uint32_t seed = 1;
+    uint8_t collected = 0;  // items taken before the search starts (an experiment)
 };
 
 /// A saved game kept as the bytes that differ from the cavern's start: a
@@ -97,6 +100,22 @@ uint32_t guardian_phase(const View& v) {
     return 0;
 }
 
+/// What a player learns from watching someone else play: an item that must
+/// be taken last. Taking it earlier is treated as a dead end.
+///
+/// Eugene's Lair: item 5, at (12,9), on the ledge nearest the pit. Taken last
+/// it leaves the shortest dash to the portal, the only one quick enough to
+/// beat Eugene down (mm_explore --collected 0x0F 4 finds a way; with any other
+/// item left till last, no way turned up in 480,000 passes). Item 4 lies
+/// just past it, so walking from the right takes item 5 first: unhinted, the
+/// search nearly always took them in the wrong order and never recovered.
+int last_item(int cavern) { return cavern == 4 ? 4 : -1; }
+
+bool breaks_hint(const View& v) {
+    const int last = last_item(v.cavern);
+    return last >= 0 && (v.items_mask & (1 << last)) && v.items_left > 0;
+}
+
 uint32_t cell_key(const View& v) {
     return uint32_t(v.x / 8) | uint32_t(v.y / 8) << 5 | uint32_t(v.items_mask) << 9 |
            guardian_phase(v) << 14;
@@ -117,6 +136,10 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
     if (!g.boot(rom, game, o.game).empty()) return;
     std::mt19937 rng(seed);
     g.enter_cavern(cavern);
+    const uint8_t taken = 0;
+    for (int i = 0; i < 5; i++) {
+        if (o.collected & (1 << i)) g.machine().write_memory(uint16_t(addr::ITEMS + 5 * i), &taken, 1);
+    }
     Game::Saved base, scratch;
     g.save(base);
 
@@ -166,6 +189,7 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
             }
             if (out != Outcome::Running) break;
             const View v = g.view();
+            if (breaks_hint(v)) break;
             if (v.airborne != 0) continue;  // only places he stands on count
             const uint32_t key = cell_key(v);
             auto it = archive.find(key);
@@ -233,6 +257,12 @@ bool explore(const Options& o, const std::vector<uint8_t>& rom, const std::vecto
                     (unsigned long long)shared.passes.load(), secs, shared.best_items.load());
         return false;
     }
+    if (o.collected != 0) {
+        // Not a route from the cavern's start: show it, keep nothing.
+        std::printf("cavern %2d  with items 0x%02X taken first: reached the portal in %zu passes\n%s", cavern,
+                    o.collected, shared.route.moves.size(), route_to_text(shared.route, "").c_str());
+        return true;
+    }
     View end;
     if (!verify(rom, game, o.game, shared.route, end)) {
         std::printf("cavern %2d  a route was found but does not replay -- a bug\n", cavern);
@@ -268,6 +298,7 @@ int main(int argc, char** argv) {
         const std::string opt = argv[i], val = argv[i + 1];
         if (opt == "--threads") o.threads = unsigned(std::atoi(val.c_str()));
         else if (opt == "--passes") o.passes = uint64_t(std::atoll(val.c_str()));
+        else if (opt == "--collected") o.collected = uint8_t(std::strtol(val.c_str(), nullptr, 0));
         else if (opt == "--seed") o.seed = uint32_t(std::atoi(val.c_str()));
         else if (opt == "--out") o.out = val;
         else if (opt == "--rom") o.rom = val;
