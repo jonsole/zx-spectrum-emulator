@@ -204,6 +204,16 @@ View Game::view() {
         }
     }
     v.portal_open = (peek(addr::PORTAL) & 0x80) != 0;
+    for (int i = 0; i < 4; i++) {
+        const uint16_t g = uint16_t(addr::HGUARDS + 7 * i);
+        if (peek(g) == 255) break;
+        if (peek(g) == 0) continue;  // a blank definition
+        const int at = (peek(uint16_t(g + 1)) | (peek(uint16_t(g + 2)) << 8)) - addr::ATTR_BUFFER;
+        View::Guardian& h = v.guardians[v.guardian_count++];
+        h.row = at / 32;
+        h.col = at % 32;
+        h.moving_left = peek(uint16_t(g + 4)) >= 4;  // frames 0-3 right, 4-7 left
+    }
     v.eugene_y = peek(addr::EUGHGT);
     v.eugene_up = peek(addr::EUGDIR) != 0;
     v.lives = peek(addr::NOMEN);

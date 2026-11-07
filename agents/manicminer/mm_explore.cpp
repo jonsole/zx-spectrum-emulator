@@ -95,8 +95,24 @@ struct Cell {
 /// then is part of the place: his height to 16 pixels and his direction.
 /// Only for the last item and after: before that his timing changes nothing,
 /// and keeping it would multiply the cells sixteen times over.
+///
+/// Amoebatrons' Revenge (17): Willy climbs from the floor to the item at the
+/// top, level by level, each with a guardian rolling along it to get past.
+/// The guardian on his own level or the next one up, to 4 cells, and its
+/// direction are part of the place, so a jump made at a good moment is kept
+/// beside an earlier one made at a bad one.
 uint32_t guardian_phase(const View& v) {
     if (v.cavern == 4 && v.items_left <= 1) return uint32_t(v.eugene_up) | uint32_t(v.eugene_y / 16) << 1;
+    if (v.cavern == 17) {
+        const int feet = v.y / 8 + 2;  // the row he stands on
+        const View::Guardian* next = nullptr;
+        for (int i = 0; i < v.guardian_count; i++) {
+            const View::Guardian& g = v.guardians[i];
+            // Its bottom row is row + 1; the one on his level or just above.
+            if (g.row + 1 < feet && (!next || g.row > next->row)) next = &g;
+        }
+        if (next) return uint32_t(next->col / 4) | uint32_t(next->moving_left) << 3;
+    }
     return 0;
 }
 
@@ -125,6 +141,7 @@ struct Shared {
     std::atomic<bool> found{false};
     std::atomic<uint64_t> passes{0};
     std::atomic<int> best_items{0};
+    std::atomic<int> highest{255};  // the smallest y Willy has stood at
     std::atomic<size_t> cells{0};
     std::mutex lock;
     Route route;
@@ -200,6 +217,7 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
                 c.path = path;
                 c.items = v.items_total - v.items_left;
                 if (c.items > shared.best_items) shared.best_items = c.items;
+                if (v.y < shared.highest) shared.highest = v.y;
                 fruitful = true;
             }
         }
@@ -240,9 +258,9 @@ bool explore(const Options& o, const std::vector<uint8_t>& rom, const std::vecto
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             if (++ticks % 40 == 0 && !done) {
                 const double s = std::chrono::duration<double>(Clock::now() - t0).count();
-                std::printf("  cavern %2d  %4.0fs  %9llu passes  %6zu cells  best %d items\n", cavern, s,
-                            (unsigned long long)shared.passes.load(), shared.cells.load(),
-                            shared.best_items.load());
+                std::printf("  cavern %2d  %4.0fs  %9llu passes  %6zu cells  best %d items  highest y %d\n",
+                            cavern, s, (unsigned long long)shared.passes.load(), shared.cells.load(),
+                            shared.best_items.load(), shared.highest.load());
                 std::fflush(stdout);
             }
         }
