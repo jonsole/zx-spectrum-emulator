@@ -8,8 +8,7 @@
 // A place ("cell") is where Willy stands on the ground, to 8 pixels, and
 // which of the cavern's items he has: that is what progress is. Where timing
 // decides, the guardian's phase is part of it too (guardian_phase). Of two ways
-// to the same cell the one taking fewer passes is kept -- more air left, and
-// usually what a later step needs.
+// to the same cell the one with more air left is kept, then the shorter.
 //
 //   mm_explore [options] <cavern>|all
 //     --threads n   searches at once, each with its own archive (default: cores)
@@ -84,6 +83,7 @@ struct Cell {
     Diff saved;
     std::vector<Action> path;  // the moves from the cavern's start
     int items = 0;
+    int air = 0;  // air_left() when reached
     uint32_t chosen = 0;
     uint32_t fruitless = 0;  // times chosen in a row that found nothing new
 };
@@ -132,6 +132,9 @@ bool breaks_hint(const View& v) {
     return last >= 0 && (v.items_mask & (1 << last)) && v.items_left > 0;
 }
 
+/// Air and clock together: what is left of the air, finer than the bar.
+int air_left(const View& v) { return v.air * 256 + v.clock; }
+
 uint32_t cell_key(const View& v) {
     return uint32_t(v.x / 8) | uint32_t(v.y / 8) << 5 | uint32_t(v.items_mask) << 9 |
            guardian_phase(v) << 14;
@@ -162,7 +165,7 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
 
     std::unordered_map<uint32_t, Cell> archive;
     const View start = g.view();
-    archive[cell_key(start)] = Cell{make_diff(base, base), {}, 0, 0};
+    archive[cell_key(start)] = Cell{make_diff(base, base), {}, 0, air_left(start)};
     std::vector<uint32_t> keys;
     std::vector<double> weights;
     uint64_t passes = 0;
@@ -210,12 +213,18 @@ void search(const Options& o, const std::vector<uint8_t>& rom, const std::vector
             if (v.airborne != 0) continue;  // only places he stands on count
             const uint32_t key = cell_key(v);
             auto it = archive.find(key);
-            if (it == archive.end() || path.size() < it->second.path.size()) {
+            // Of two ways to a place keep the one with more air left: in
+            // Solar Power Generator the light beam drains air, so a quicker
+            // way through it can leave less. Then the shorter way.
+            const int air = air_left(v);
+            if (it == archive.end() || air > it->second.air ||
+                (air == it->second.air && path.size() < it->second.path.size())) {
                 g.save(scratch);
                 Cell& c = archive[key];
                 c.saved = make_diff(base, scratch);
                 c.path = path;
                 c.items = v.items_total - v.items_left;
+                c.air = air;
                 if (c.items > shared.best_items) shared.best_items = c.items;
                 if (v.y < shared.highest) shared.highest = v.y;
                 fruitful = true;
