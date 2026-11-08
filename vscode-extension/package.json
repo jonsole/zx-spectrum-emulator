@@ -156,6 +156,13 @@
           "default": 0,
           "markdownDescription": "How dark the gaps between the screen panel's scanlines are, as a percentage: `0` is off, `100` black. Drawn over the lower half of each Spectrum line, after the filter. Needs at least two device pixels to a line, so it shows nothing at `1x` on an unscaled display."
         },
+        "zxspectrum.audio.stereoMix": {
+          "type": "string",
+          "enum": ["mono", "abc", "acb"],
+          "enumDescriptions": ["The 128K's own output: the AY's three channels and the beeper together.", "A left, B in the middle, C right, the beeper in the middle.", "A left, C in the middle, B right, the beeper in the middle."],
+          "default": "mono",
+          "description": "How a 128K's AY sound chip reaches the speakers. Sent to every server a screen panel shows, as the RF look is. A 48K has no AY, so it sounds the same in all three."
+        },
         "zxspectrum.rf.on": {
           "type": "boolean",
           "default": false,

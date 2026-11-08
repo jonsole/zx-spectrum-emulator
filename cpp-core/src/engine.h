@@ -766,6 +766,12 @@ public:
     /// Registers a sink to receive beeper samples as they are generated, and
     /// hands back the ring it will be fed through. Callable from any thread.
     ///
+    /// Every sink gets STEREO: frames of a left and a right sample,
+    /// interleaved, whatever the mix -- in mono the two are the same sample.
+    /// So `capacity` is in samples, two a frame, and a sink reads whole
+    /// frames. One shape for every consumer means a mix can change part-way
+    /// through a run without any of them having to be told.
+    ///
     /// A registry rather than one shared drain-and-clear accessor (the shape
     /// `screen()` uses) because audio has three independent consumers -- the
     /// TCP stream, the optional native device, and MCP capture -- and a single
@@ -799,6 +805,13 @@ public:
     /// The rate currently being generated -- what the stream preamble
     /// announces and what get_audio reports.
     uint32_t audio_sample_rate() const { return audio_sample_rate_.load(); }
+
+    /// How the AY is mixed (see StereoMix in beeper.h): mono, the default, or
+    /// ABC or ACB stereo. An output setting, not machine state: a reset, a
+    /// load or a rewind keeps it, and a snapshot does not hold it. Applied to
+    /// the beeper at the next publish, so callable from any thread.
+    void set_stereo_mix(StereoMix mix) { stereo_mix_.store(uint8_t(mix)); }
+    StereoMix stereo_mix() const { return StereoMix(stereo_mix_.load()); }
 
     /// The native sound device's (--audio-device) volume, 0 to 100 percent;
     /// 0 is mute. Only the device's output is scaled: it goes on taking
@@ -913,6 +926,7 @@ private:
     PacingClock pacing_clock_;
     size_t pacing_target_ = 0;
     std::atomic<uint32_t> audio_sample_rate_{AUDIO_SAMPLE_RATE};
+    std::atomic<uint8_t> stereo_mix_{uint8_t(StereoMix::Mono)};
     std::atomic<uint32_t> device_volume_{100};
     /// Consecutive waits that timed out. A device that has stopped draining
     /// must not be able to freeze the emulator, so after a few of these the
@@ -921,6 +935,8 @@ private:
     std::vector<std::shared_ptr<AudioRing>> audio_sinks_;
     /// Reused across publishes so the audio path does not allocate per block.
     std::vector<int16_t> audio_scratch_;
+    /// The same, made stereo when the beeper is mono.
+    std::vector<int16_t> audio_stereo_;
 
     /// Frame counter as of the last note_frame, so a boundary is seen once.
     /// Emulator thread only.

@@ -14,9 +14,10 @@
 // box-filter integration at the AY's step boundaries so that a step's new
 // output level is weighted for exactly the half-clocks it was live.
 //
-// Mono, like the beeper: the three channels are summed. The 128K's own
-// output is mono too; the ACB stereo of some later machines is a wiring
-// difference, not a chip feature.
+// The 128K's own output is mono, the three channels summed. The ABC and ACB
+// stereo of add-ons and later machines is a wiring difference, not a chip
+// feature, so the chip keeps each channel's level apart as well and the
+// Beeper pans them (see StereoMix in beeper.h).
 
 #include <cstdint>
 
@@ -69,6 +70,8 @@ public:
     void advance(uint32_t hc);
     /// The summed output of the three channels right now, 0..AY_FULL_LEVEL.
     int32_t level() const { return level_; }
+    /// One channel's output right now, 0..AY_CHANNEL_LEVEL: 0 is A, 1 B, 2 C.
+    int32_t channel_level(int ch) const { return channel_level_[ch]; }
 
 private:
     uint8_t regs_[AY_REGISTERS];
@@ -93,6 +96,7 @@ private:
     bool env_holding_ = false;
     uint8_t env_volume_ = 0;
     int32_t level_ = 0;
+    int32_t channel_level_[3] = {};
 
     void step();
     void restart_envelope();

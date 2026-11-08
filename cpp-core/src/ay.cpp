@@ -54,6 +54,9 @@ void Ay::reset() {
     env_holding_ = false;
     env_volume_ = 0;
     level_ = 0;
+    for (int ch = 0; ch < 3; ch++) {
+        channel_level_[ch] = 0;
+    }
 }
 
 uint8_t Ay::read() const {
@@ -198,6 +201,7 @@ void Ay::update_level() {
     const uint8_t enable = regs_[7];
     int32_t level = 0;
     for (int ch = 0; ch < 3; ch++) {
+        channel_level_[ch] = 0;
         const uint8_t tone = uint8_t(tone_out_[ch] | ((enable >> ch) & 1));
         const uint8_t noise = uint8_t(noise_out_ | ((enable >> (3 + ch)) & 1));
         if ((tone & noise) == 0) {
@@ -205,6 +209,7 @@ void Ay::update_level() {
         }
         const uint8_t vol = regs_[8 + ch];
         const uint8_t index = (vol & 0x10) != 0 ? env_volume_ : uint8_t(vol & 0x0F);
+        channel_level_[ch] = VOLUME[index];
         level += VOLUME[index];
     }
     level_ = level;

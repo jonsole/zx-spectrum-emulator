@@ -11,10 +11,13 @@
 namespace zx {
 
 /// Pushes live beeper audio to every connected client as a 12-byte preamble
-/// ("ZXA2" + big-endian u32 sample rate + big-endian u32 target latency in
-/// milliseconds) followed by
-/// `[big-endian u32 byte length][mono int16 little-endian samples]` blocks,
-/// forever. Blocking; run on its own thread.
+/// ("ZXA3" + big-endian u32 sample rate + big-endian u32 target latency in
+/// milliseconds) followed by `[big-endian u32 byte length][stereo int16
+/// little-endian frames, left then right]` blocks, forever -- stereo
+/// whatever the mix, the two sides the same in mono. "ZXA2" was the same
+/// stream in mono, before the AY could be panned; a client that knows only
+/// that stops at the new magic rather than playing it at half speed.
+/// Blocking; run on its own thread.
 ///
 /// The latency travels with the stream so that one `--audio-latency-ms` knob
 /// sets both the server's buffering and the depth of the client's own jitter

@@ -95,9 +95,12 @@ struct Shared {
 };
 using SharedPtr = std::shared_ptr<Shared>;
 
-/// Writes `frames` of the ring's mono audio into the device buffer, in the
+/// Writes `frames` of the ring's stereo audio into the device buffer, in the
 /// engine's format, padding with SILENCE (never held samples) if the ring
-/// runs short. Returns how many real frames were taken.
+/// runs short. Returns how many real frames were taken. A mono device gets
+/// the two sides' mean; on more than two channels the first two are left
+/// and right and the rest get the mean, which in a mono mix is exactly the
+/// one sample every channel got before stereo.
 ///
 /// Turned down, the frames are still all taken -- the rate the device takes
 /// them at is what paces the emulator (see Engine::set_device_volume) -- and
@@ -105,31 +108,36 @@ using SharedPtr = std::shared_ptr<Shared>;
 size_t fill(BYTE* out, UINT32 frames, AudioRing& ring, const WAVEFORMATEX* fmt,
             std::vector<int16_t>& scratch, bool is_float, uint32_t volume) {
     const size_t channels = fmt->nChannels;
-    scratch.resize(frames);
-    const size_t got = ring.read(scratch.data(), frames);
+    const size_t wanted = size_t(frames) * AUDIO_CHANNELS;
+    scratch.resize(wanted);
+    // The ring is only ever written whole frames, so it reads back whole
+    // frames too.
+    const size_t got = ring.read(scratch.data(), wanted);
     const size_t audible = volume == 0 ? 0 : got;
     apply_volume(scratch.data(), audible, volume);
-    for (size_t i = audible; i < frames; i++) {
+    for (size_t i = audible; i < wanted; i++) {
         scratch[i] = 0; // underrun: silence, deliberately
     }
 
-    if (is_float) {
-        float* dst = reinterpret_cast<float*>(out);
-        for (UINT32 i = 0; i < frames; i++) {
-            const float v = float(scratch[i]) / 32768.0f;
-            for (size_t c = 0; c < channels; c++) {
-                *dst++ = v;
+    for (UINT32 i = 0; i < frames; i++) {
+        const int16_t left = scratch[2 * size_t(i)];
+        const int16_t right = scratch[2 * size_t(i) + 1];
+        const int16_t mean = int16_t((int32_t(left) + int32_t(right)) / 2);
+        for (size_t c = 0; c < channels; c++) {
+            int16_t v = mean;
+            if (channels >= 2 && c == 0) {
+                v = left;
+            } else if (channels >= 2 && c == 1) {
+                v = right;
             }
-        }
-    } else {
-        int16_t* dst = reinterpret_cast<int16_t*>(out);
-        for (UINT32 i = 0; i < frames; i++) {
-            for (size_t c = 0; c < channels; c++) {
-                *dst++ = scratch[i];
+            if (is_float) {
+                reinterpret_cast<float*>(out)[size_t(i) * channels + c] = float(v) / 32768.0f;
+            } else {
+                reinterpret_cast<int16_t*>(out)[size_t(i) * channels + c] = v;
             }
         }
     }
-    return got;
+    return got / AUDIO_CHANNELS;
 }
 
 /// One open connection to the device: what open_stream hands back, what
@@ -270,7 +278,7 @@ bool open_stream(Engine& engine, uint32_t latency_ms, Stream& out, uint32_t& act
     // to be a few periods deep and no more.
     const size_t ring_frames =
         size_t(out.buffer_frames) * 4 + size_t(uint64_t(rate) * latency_ms / 1000);
-    out.ring = engine.add_audio_sink(ring_frames);
+    out.ring = engine.add_audio_sink(ring_frames * AUDIO_CHANNELS);
     out.shared = std::make_shared<Shared>();
 
     // Pace against what is queued ahead of the speaker plus what has not
@@ -290,8 +298,8 @@ bool open_stream(Engine& engine, uint32_t latency_ms, Stream& out, uint32_t& act
     }
     const SharedPtr shared = out.shared;
     const std::shared_ptr<AudioRing> ring = out.ring;
-    engine.set_pacing_clock([shared, ring]() { return shared->buffered.load() + ring->available(); },
-                            target);
+    engine.set_pacing_clock(
+        [shared, ring]() { return shared->buffered.load() + ring->frames_available(); }, target);
 
     if (FAILED(out.client->Start())) {
         error = "could not start the audio stream";

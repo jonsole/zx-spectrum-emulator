@@ -39,6 +39,8 @@ struct Args {
     /// native device's queue and, via the stream preamble, the VS Code
     /// panel's own jitter buffer.
     uint32_t audio_latency_ms = zx::DEFAULT_AUDIO_LATENCY_MS;
+    /// How a 128K's AY is mixed: mono, abc or acb (zx::StereoMix).
+    zx::StereoMix stereo_mix = zx::StereoMix::Mono;
     uint16_t screen_port = 8500;
     std::string mcp_host = "127.0.0.1";
     uint16_t mcp_port = 8000;
@@ -155,6 +157,12 @@ bool parse_args(int argc, char** argv, Args& args) {
         } else if (flag == "--audio-latency-ms") {
             if (!next(value)) return false;
             args.audio_latency_ms = uint32_t(std::strtoul(value.c_str(), nullptr, 10));
+        } else if (flag == "--stereo") {
+            if (!next(value)) return false;
+            if (!zx::parse_stereo_mix(value, args.stereo_mix)) {
+                std::fprintf(stderr, "--stereo is mono, abc or acb, not %s\n", value.c_str());
+                return false;
+            }
         } else if (flag == "--mcp-host") {
             if (!next(args.mcp_host)) return false;
         } else if (flag == "--mcp-port") {
@@ -445,6 +453,7 @@ int main(int argc, char** argv) {
         }
     }
 
+    engine.set_stereo_mix(args.stereo_mix);
     if (args.audio_device) {
         std::string audio_error;
         uint32_t actual_ms = args.audio_latency_ms;
@@ -491,7 +500,7 @@ int main(int argc, char** argv) {
     std::printf("Screen stream server listening on %s:%u\n", args.screen_host.c_str(),
                 unsigned(identity.ports.screen));
     if (!args.no_audio) {
-        std::printf("Audio stream server listening on %s:%u (%u Hz mono s16, %ums buffer)\n",
+        std::printf("Audio stream server listening on %s:%u (%u Hz stereo s16, %ums buffer)\n",
                     args.audio_host.c_str(), unsigned(identity.ports.audio),
                     unsigned(engine.audio_sample_rate()), unsigned(args.audio_latency_ms));
     }

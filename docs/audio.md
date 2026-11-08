@@ -3,7 +3,9 @@
 Part of the [zx-spectrum-emulator README](../README.md).
 
 The C++ core emulates the 48K beeper: writes to port `0xFE` latch the speaker
-(bit 4) and MIC (bit 3) levels, and those become mono 16-bit PCM.
+(bit 4) and MIC (bit 3) levels, and those become 16-bit PCM, together with a
+128K's AY sound chip. That is mono, as the 128K's own output is, unless an
+ABC or ACB [stereo mix](#stereo) is chosen.
 
 **Nothing is sampled per clock cycle.** The level only changes when a program
 writes the port -- a few thousand times a second at most -- so each write is
@@ -103,6 +105,50 @@ launch configurations do.
 - **`get_audio` is unaffected**: it measures what the machine produced, not
   what the speaker was allowed to play.
 
+## Stereo
+
+A 128K's AY has three channels, A, B and C, and its own output mixes them
+into one. Add-ons and later machines wire them to stereo instead, and so can
+the emulator:
+
+| Mix | Left | Middle | Right |
+|---|---|---|---|
+| `mono` (the default) | | everything | |
+| `abc` | A | B and the beeper | C |
+| `acb` | A | C and the beeper | B |
+
+Choose it with `--stereo mono|abc|acb` on the server, the MCP tool
+`set_stereo_mix`, or the VS Code setting `zxspectrum.audio.stereoMix`, which
+the screen panel sends to its server whenever it connects or the setting
+changes. It is an output setting, like the volume: a reset, a load, a rewind
+or a snapshot leaves it alone. A 48K has no AY, so all three sound the same
+on one.
+
+The panning is linear, at mono's scale. In the mixing units of
+`cpp-core/src/beeper.h`, where a channel at full volume is 80 and the speaker
+bit 100:
+
+```
+mono:  A + B + C + beeper
+ABC:   left  = 2A + B + beeper    right = 2C + B + beeper
+ACB:   left  = 2A + C + beeper    right = 2B + C + beeper
+```
+
+where the beeper is the speaker, MIC and EAR levels together. So:
+
+- **Nothing clips that did not in mono.** A side at its loudest, 2 x 80 + 80
+  plus the beeper, is exactly mono at its loudest, 3 x 80 plus the beeper,
+  and both go through the same scaling to 16 bits.
+- **The middle is mono.** The middle channel and the beeper are on each side
+  at their mono level, sample for sample.
+- **A side channel is twice its mono level, on its side alone**, and the two
+  sides add up to twice the mono mix.
+- **Integers only**, as a resistor mix behaves. retro-spectrum's board makes
+  the same mix (retro-spectrum #61) and follows this definition.
+
+Each side then gets the box filter and the DC blocker that mono gets. In
+mono nothing has changed: the same samples as before stereo, to the bit.
+
 ## Backends and latency
 
 Native playback prefers **WASAPI shared mode via `IAudioClient3`**, falling
@@ -181,10 +227,15 @@ out the jitter, since the delay itself cannot be recovered from this side.
 ## Stream format
 
 Served on `--audio-port`, default `8501`, alongside the screen stream on
-8500. A 12-byte preamble -- `ZXA2`, a big-endian `u32` sample rate, and a
+8500. A 12-byte preamble -- `ZXA3`, a big-endian `u32` sample rate, and a
 big-endian `u32` target latency in milliseconds -- followed by
-`[big-endian u32 byte length][mono int16 little-endian]` blocks, the same
-framing the screen stream uses for PNGs. The latency travels with the stream
+`[big-endian u32 byte length][int16 little-endian stereo frames]` blocks,
+the same framing the screen stream uses for PNGs. A frame is a left sample
+and a right one; the stream is stereo whatever the mix, the two the same in
+mono, so a mix can change mid-stream without a new preamble. `ZXA2` was the
+same stream in mono, before stereo. The panel still plays it from an older
+server, and an older panel stops at `ZXA3` rather than playing it at half
+speed. The latency travels with the stream
 so one `--audio-latency-ms` sets both the server's buffering and the depth of
 the client's own jitter buffer, rather than two settings that can disagree.
 

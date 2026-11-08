@@ -26,11 +26,12 @@
 
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace zx {
 
-/// Mono, and the rate used unless a playback device asks for another one.
+/// The rate used unless a playback device asks for another one.
 ///
 /// It is not fixed, because WASAPI shared mode will only run at the audio
 /// engine's own mix rate -- and matching that exactly is far better than
@@ -79,9 +80,33 @@ constexpr int32_t AUDIO_PEAK = 9000;
 /// first toggle after it.
 constexpr float DC_BLOCK_R = 0.995f;
 
-/// How much generated-but-undrained audio the beeper will hold before it
-/// starts dropping the oldest. Only reached when nothing is consuming.
+/// How many sample periods of generated-but-undrained audio the beeper will
+/// hold before it starts dropping the oldest -- frames, so twice as many
+/// samples in stereo. Only reached when nothing is consuming.
 constexpr size_t BEEPER_MAX_PENDING = AUDIO_SAMPLE_RATE / 2; // ~0.5s
+
+/// Samples a frame in what every audio sink receives: a left and a right,
+/// whatever the mix (see Engine::add_audio_sink).
+constexpr uint32_t AUDIO_CHANNELS = 2;
+
+/// How the AY's three channels reach the output. Mono is the 128K's own
+/// output and the default. ABC and ACB are the stereo of add-ons and later
+/// machines: A on the left, then B or C in the middle and the other on the
+/// right. In both the beeper (speaker, MIC and EAR) is in the middle.
+///
+/// The pan law is linear at mono's scale: each side is twice its own
+/// channel, plus the middle channel, plus the beeper. So a side's loudest
+/// (2 x 80 + 80 + the beeper) is exactly mono's loudest (3 x 80 + the
+/// beeper), nothing clips that did not in mono, the two sides add up to
+/// twice the mono mix, and the beeper is as loud on each side as it is in
+/// mono. Integers only, as a resistor mix behaves; retro-spectrum's board
+/// does the same mix (retro-spectrum #61).
+enum class StereoMix : uint8_t { Mono = 0, Abc = 1, Acb = 2 };
+
+/// "mono", "abc" or "acb".
+const char* stereo_mix_name(StereoMix mix);
+/// The mix a name gives, false if it is none of the three.
+bool parse_stereo_mix(const std::string& name, StereoMix& mix);
 
 class Beeper {
 public:
@@ -110,6 +135,14 @@ public:
     /// the chip as it integrates, so the chip's output is weighted for
     /// exactly the half-clocks each level was live -- see ay.h.
     void attach_ay(Ay* ay) { ay_ = ay; }
+
+    /// How the AY is mixed. Mono emits one sample a period; ABC and ACB two,
+    /// left then right. Changing it starts the sample period afresh and
+    /// drops what is pending, which is of the old shape.
+    void set_stereo_mix(StereoMix mix);
+    StereoMix stereo_mix() const { return mix_; }
+    /// Samples emitted a period: 1 in mono, 2 in stereo.
+    uint32_t channels() const { return mix_ == StereoMix::Mono ? 1u : 2u; }
 
     /// Latches a port 0xFE write at half-clock `now_hc`: bit 4 is the speaker,
     /// bit 3 the MIC.
@@ -142,7 +175,8 @@ public:
     /// call often and a no-op if no time has passed.
     void advance_to(uint64_t now_hc);
 
-    /// Moves everything generated so far into `out` (appending).
+    /// Moves everything generated so far into `out` (appending): one sample a
+    /// period in mono, a left and a right one in stereo.
     void drain(std::vector<int16_t>& out);
     /// Throws away everything generated so far.
     void discard() { pending_.clear(); }
@@ -169,23 +203,32 @@ private:
     int32_t mixed_level() const {
         return level_ + ear_level_ + (ay_ != nullptr ? ay_->level() : 0);
     }
+    /// The two sides in stereo, as StereoMix says.
+    void side_levels(int32_t& left, int32_t& right) const;
+    StereoMix mix_ = StereoMix::Mono;
     /// Half-clock the integration has reached.
     uint64_t last_hc_ = 0;
     uint64_t hc_per_sec_ = HC_PER_SEC;
     Ay* ay_ = nullptr;
 
-    // Box-filter accumulator over the sample period in progress.
+    // Box-filter accumulator over the sample period in progress: sum_ the
+    // mono level or the left, sum_right_ the right.
     int32_t sum_ = 0;
+    int32_t sum_right_ = 0;
     uint32_t count_ = 0;
     // Sample clock: += rate_ per half-clock, crossing hc_per_sec_.
     uint32_t acc_ = 0;
-    // DC blocker state.
+    // DC blocker state, the right side's apart.
     float dc_in_ = 0.0f;
     float dc_out_ = 0.0f;
+    float dc_in_right_ = 0.0f;
+    float dc_out_right_ = 0.0f;
 
     std::vector<int16_t> pending_;
 
     void emit();
+    /// Clears the period in progress and the DC blockers.
+    void clear_filter();
 };
 
 /// A bounded single-producer/single-consumer sample queue, one per audio
@@ -210,6 +253,8 @@ public:
     /// MCP capture can look at the audio without starving playback.
     void peek_latest(std::vector<int16_t>& out, size_t max);
     size_t available();
+    /// Whole stereo frames held: available() / AUDIO_CHANNELS.
+    size_t frames_available() { return available() / AUDIO_CHANNELS; }
 
 private:
     std::mutex mutex_;
@@ -231,14 +276,15 @@ float estimate_frequency_hz(const std::vector<int16_t>& samples);
 /// RMS and absolute peak of a window, both normalised to 0..1.
 void measure_level(const std::vector<int16_t>& samples, float& rms, float& peak);
 
-/// Wraps mono 16-bit samples in a RIFF/WAVE container.
+/// Wraps 16-bit samples in a RIFF/WAVE container: mono, or with `channels`
+/// 2, interleaved stereo frames.
 ///
 /// Lives here rather than beside the stream server (the way `encode_png` sits
 /// in screen_stream.cpp) because a WAV header is 44 bytes of arithmetic with
 /// no dependency to speak of, and both the server and the core-only `beep`
 /// diagnostic want it. Duplicating it would be sillier than the asymmetry.
 std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples,
-                                uint32_t sample_rate = AUDIO_SAMPLE_RATE);
+                                uint32_t sample_rate = AUDIO_SAMPLE_RATE, uint16_t channels = 1);
 
 /// Scales `n` samples in place for a playback volume of `percent`, 0 to 100,
 /// on a squared curve: loudness follows the square of the amplitude far more

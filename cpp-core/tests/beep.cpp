@@ -44,12 +44,16 @@ bool load_rom(Engine& engine) {
 
 /// Steps in chunks, draining as it goes. Chunked because the Beeper drops its
 /// oldest samples past half a second, and it only publishes between commands.
+/// The sink is stereo, the two sides the same in the default mono mix, so
+/// only the left is kept.
 void run_for(Engine& engine, AudioRing& ring, std::vector<int16_t>& out, int chunks) {
     std::vector<int16_t> block(CAPTURE_RING);
     for (int i = 0; i < chunks; i++) {
         engine.step(20000);
         const size_t n = ring.read(block.data(), block.size());
-        out.insert(out.end(), block.begin(), block.begin() + long(n));
+        for (size_t s = 0; s + 1 < n; s += AUDIO_CHANNELS) {
+            out.push_back(block[s]);
+        }
     }
 }
 

@@ -32,6 +32,15 @@ GitHub takes its notes from that section.
   three tiny test programs (`border_rainbow`, `hello_rom_call`,
   `ldir_contention`) stayed behind, in `cpp-core/tests/programs/`.
 
+- **ABC and ACB stereo for the 128K's AY.** A on the left, B or C in the
+  middle with the beeper, the other on the right; mono, the 128K's own mix,
+  stays the default and sounds exactly as before. Chosen with `--stereo`,
+  the MCP tool `set_stereo_mix` or the setting `zxspectrum.audio.stereoMix`.
+  The panning is linear, so a side is never louder than mono at its loudest,
+  and retro-spectrum's board follows the same definition. The sound device,
+  the screen panel and `get_audio`'s WAV are stereo throughout. See
+  "Stereo" in docs/audio.md.
+
 - **The RF look.** An optional filter shows the picture as a TV did through
   the Spectrum's RF lead: a full PAL encode and decode with the 48K's real
   dot crawl (the 128K's stands still), cross-colour, colour bleed, a ghost,

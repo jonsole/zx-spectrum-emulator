@@ -637,7 +637,8 @@ bool arg_string(const json& args, const char* name, std::string& out, std::strin
     return true;
 }
 
-/// How much recent audio get_audio can look back over.
+/// How much recent audio get_audio can look back over, in frames (the ring
+/// holds two samples to each).
 constexpr size_t MCP_CAPTURE_SAMPLES = size_t(AUDIO_SAMPLE_RATE) * 4;
 
 /// The capture window get_audio reads from.
@@ -649,7 +650,8 @@ constexpr size_t MCP_CAPTURE_SAMPLES = size_t(AUDIO_SAMPLE_RATE) * 4;
 /// a lazily-created ring would make the first call after a run come back empty
 /// -- the one call most likely to be asking "did that make a sound?".
 AudioRing& capture_ring(Engine& engine) {
-    static std::shared_ptr<AudioRing> ring = engine.add_audio_sink(MCP_CAPTURE_SAMPLES);
+    static std::shared_ptr<AudioRing> ring =
+        engine.add_audio_sink(MCP_CAPTURE_SAMPLES * AUDIO_CHANNELS);
     return *ring;
 }
 
@@ -1369,15 +1371,31 @@ json tools_list() {
         "pitch in Hz estimated from zero crossings. For checking that a BEEP, a sound effect or "
         "a tape tone actually came out, and at what frequency, without a human listening. Reads "
         "a rolling window of the most recent audio and does NOT consume it, so it can be called "
-        "repeatedly and alongside live playback.",
+        "repeatedly and alongside live playback. The measurements are of the two sides' mean "
+        "-- in mono, the one signal -- and in ABC or ACB stereo there are left and right "
+        "ones as well.",
         schema(json{{"duration_ms",
                      integer_prop("How far back to look, in milliseconds (default 1000, "
                                   "maximum 4000).")},
                     {"include_wav",
                      json{{"type", "boolean"},
-                          {"description", "Also return the window as a base64 16-bit mono WAV. "
-                                          "Off by default -- a second of audio is 44100 numbers, "
-                                          "and the summary is usually the answer."}}}},
+                          {"description", "Also return the window as a base64 16-bit WAV, mono "
+                                          "or, with a stereo mix, stereo. Off by default -- a "
+                                          "second of audio is 44100 numbers, and the summary is "
+                                          "usually the answer."}}}},
+               {}));
+    add("set_stereo_mix",
+        "Read or change how a 128K's AY reaches the sound: \"mono\" (the default, the 128K's "
+        "own output: all three channels and the beeper together), \"abc\" (A left, B in the "
+        "middle, C right) or \"acb\" (A left, C in the middle, B right). In both stereo mixes "
+        "the beeper is in the middle. Linear panning at mono's scale: each side is twice its "
+        "own channel plus the middle channel plus the beeper, so a side is never louder than "
+        "mono at its loudest. An output setting, like the volume: a reset, a load or a "
+        "snapshot keeps it. A 48K has no AY, so all three sound the same there. Replies with "
+        "the mix in force",
+        schema(json{{"mix", json{{"type", "string"},
+                                 {"enum", json::array({"mono", "abc", "acb"})},
+                                 {"description", "The mix to use. Leave out to just report."}}}},
                {}));
     add("get_state",
         "Get a full state snapshot: pc, registers, breakpoints, running, border, call stack, "
@@ -2633,23 +2651,65 @@ json call_tool(Engine& engine, Sources& sources, const std::string& name,
         const uint32_t rate = engine.audio_sample_rate();
         const size_t wanted = size_t(duration_ms * int64_t(rate) / 1000);
 
-        std::vector<int16_t> samples;
-        capture_ring(engine).peek_latest(samples, wanted);
+        std::vector<int16_t> frames;
+        capture_ring(engine).peek_latest(frames, wanted * AUDIO_CHANNELS);
+        // The ring is stereo whatever the mix. The measurements are of the
+        // two sides' mean, which in mono is exactly the mono samples, so a
+        // mono reply is what it always was.
+        const size_t count = frames.size() / AUDIO_CHANNELS;
+        std::vector<int16_t> mean(count);
+        std::vector<int16_t> left(count);
+        std::vector<int16_t> right(count);
+        for (size_t i = 0; i < count; i++) {
+            left[i] = frames[2 * i];
+            right[i] = frames[2 * i + 1];
+            mean[i] = int16_t((int32_t(left[i]) + int32_t(right[i])) / 2);
+        }
+        const StereoMix mix = engine.stereo_mix();
+        const bool stereo = mix != StereoMix::Mono;
 
         float rms = 0.0f;
         float peak = 0.0f;
-        measure_level(samples, rms, peak);
+        measure_level(mean, rms, peak);
         json out{{"sample_rate", rate},
-                 {"samples", samples.size()},
-                 {"duration_ms", samples.size() * 1000 / size_t(rate)},
+                 {"samples", count},
+                 {"duration_ms", count * 1000 / size_t(rate)},
                  {"rms", rms},
                  {"peak", peak},
                  {"silent", peak < 0.001f},
-                 {"frequency_hz", estimate_frequency_hz(samples)}};
+                 {"frequency_hz", estimate_frequency_hz(mean)},
+                 {"mix", stereo_mix_name(mix)}};
+        if (stereo) {
+            const struct {
+                const char* name;
+                const std::vector<int16_t>* samples;
+            } sides[] = {{"left", &left}, {"right", &right}};
+            for (const auto& side : sides) {
+                float side_rms = 0.0f;
+                float side_peak = 0.0f;
+                measure_level(*side.samples, side_rms, side_peak);
+                out[side.name] = json{{"rms", side_rms},
+                                      {"peak", side_peak},
+                                      {"frequency_hz", estimate_frequency_hz(*side.samples)}};
+            }
+        }
         if (arg(args, "include_wav").is_boolean() && arg(args, "include_wav").get<bool>()) {
-            out["wav_base64"] = base64_encode(encode_wav(samples, rate));
+            out["wav_base64"] = base64_encode(stereo ? encode_wav(frames, rate, AUDIO_CHANNELS)
+                                                     : encode_wav(mean, rate));
         }
         return json_result(out);
+    }
+
+    if (name == "set_stereo_mix") {
+        const json& mix_arg = arg(args, "mix");
+        if (!mix_arg.is_null()) {
+            StereoMix mix = StereoMix::Mono;
+            if (!mix_arg.is_string() || !parse_stereo_mix(mix_arg.get<std::string>(), mix)) {
+                return error_result("'mix' must be \"mono\", \"abc\" or \"acb\"");
+            }
+            engine.set_stereo_mix(mix);
+        }
+        return json_result(json{{"mix", stereo_mix_name(engine.stereo_mix())}});
     }
 
     if (name == "get_state") {

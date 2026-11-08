@@ -110,6 +110,11 @@ Things worth knowing:
 What each option looks like is in [Scaling and
 filtering](vscode-debugging.md#scaling-and-filtering).
 
+`zxspectrum.audio.stereoMix` -- `"mono"` (the default), `"abc"` or `"acb"` --
+says how a 128K's AY sound chip reaches the speakers. The panel sends it to
+its server whenever it connects and whenever the setting changes, as it does
+the RF look. See [Stereo](audio.md#stereo).
+
 ## launch.json
 
 Every configuration is a `zxspectrum` debug session connected to the

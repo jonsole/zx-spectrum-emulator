@@ -15,14 +15,74 @@ void Beeper::set_enabled(bool on, uint64_t now_hc) {
     if (on) {
         // Start integrating from here, not from wherever we left off: the gap
         // could be the whole of a ZEXALL run, and none of it is worth hearing.
-        sum_ = 0;
-        count_ = 0;
+        clear_filter();
         acc_ = 0;
-        dc_in_ = 0.0f;
-        dc_out_ = 0.0f;
     }
     last_hc_ = now_hc;
     enabled_ = on;
+}
+
+const char* stereo_mix_name(StereoMix mix) {
+    if (mix == StereoMix::Abc) {
+        return "abc";
+    }
+    if (mix == StereoMix::Acb) {
+        return "acb";
+    }
+    return "mono";
+}
+
+bool parse_stereo_mix(const std::string& name, StereoMix& mix) {
+    if (name == "mono") {
+        mix = StereoMix::Mono;
+    } else if (name == "abc") {
+        mix = StereoMix::Abc;
+    } else if (name == "acb") {
+        mix = StereoMix::Acb;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void Beeper::clear_filter() {
+    sum_ = 0;
+    sum_right_ = 0;
+    count_ = 0;
+    dc_in_ = 0.0f;
+    dc_out_ = 0.0f;
+    dc_in_right_ = 0.0f;
+    dc_out_right_ = 0.0f;
+}
+
+void Beeper::set_stereo_mix(StereoMix mix) {
+    if (mix == mix_) {
+        return;
+    }
+    mix_ = mix;
+    // A period half summed as one mix would come out as neither, and the
+    // pending samples are of the old shape, which a consumer reading frames
+    // of the new one would split wrongly.
+    clear_filter();
+    pending_.clear();
+}
+
+void Beeper::side_levels(int32_t& left, int32_t& right) const {
+    const int32_t beeper = level_ + ear_level_;
+    int32_t a = 0;
+    int32_t b = 0;
+    int32_t c = 0;
+    if (ay_ != nullptr) {
+        a = ay_->channel_level(0);
+        b = ay_->channel_level(1);
+        c = ay_->channel_level(2);
+    }
+    // A is on the left in both. ABC puts B in the middle and C on the
+    // right; ACB the other way round.
+    const int32_t middle = mix_ == StereoMix::Acb ? c : b;
+    const int32_t other = mix_ == StereoMix::Acb ? b : c;
+    left = 2 * a + middle + beeper;
+    right = 2 * other + middle + beeper;
 }
 
 void Beeper::set_sample_rate(uint32_t rate) {
@@ -33,6 +93,7 @@ void Beeper::set_sample_rate(uint32_t rate) {
     // The accumulator is scaled to the old rate, so carrying it over would
     // put the first sample in the wrong place.
     sum_ = 0;
+    sum_right_ = 0;
     count_ = 0;
     acc_ = 0;
 }
@@ -43,6 +104,7 @@ void Beeper::set_clock(uint64_t hc_per_sec) {
     }
     hc_per_sec_ = hc_per_sec;
     sum_ = 0;
+    sum_right_ = 0;
     count_ = 0;
     acc_ = 0;
 }
@@ -92,7 +154,15 @@ void Beeper::advance_to(uint64_t now_hc) {
         }
         // `chunk` is at most `need`, which is at most a couple of hundred
         // half-clocks, so neither the multiply nor `acc_` can overflow.
-        sum_ += mixed_level() * int32_t(chunk);
+        if (mix_ == StereoMix::Mono) {
+            sum_ += mixed_level() * int32_t(chunk);
+        } else {
+            int32_t left = 0;
+            int32_t right = 0;
+            side_levels(left, right);
+            sum_ += left * int32_t(chunk);
+            sum_right_ += right * int32_t(chunk);
+        }
         count_ += chunk;
         acc_ += rate_ * chunk;
         remaining -= chunk;
@@ -106,34 +176,53 @@ void Beeper::advance_to(uint64_t now_hc) {
     }
 }
 
-void Beeper::emit() {
-    // Box-filter average of the level over this sample period, normalised to
-    // 0..1. count_ is 158 or 159 -- never zero, since a sample only completes
-    // after at least one half-clock has been added.
-    const float x = float(sum_) / (float(count_) * float(FULL_LEVEL));
-    sum_ = 0;
-    count_ = 0;
+namespace {
 
-    // One-pole DC blocker: y[n] = x[n] - x[n-1] + R*y[n-1].
-    const float y = x - dc_in_ + DC_BLOCK_R * dc_out_;
-    dc_in_ = x;
-    dc_out_ = y;
-
+/// One side's sample from its box-filter sum: the average over the period,
+/// normalised to 0..1, through the one-pole DC blocker
+/// y[n] = x[n] - x[n-1] + R*y[n-1], then scaled and clamped.
+int16_t finish_sample(int32_t sum, uint32_t count, float& dc_in, float& dc_out) {
+    const float x = float(sum) / (float(count) * float(FULL_LEVEL));
+    const float y = x - dc_in + DC_BLOCK_R * dc_out;
+    dc_in = x;
+    dc_out = y;
     int32_t scaled = int32_t(y * float(AUDIO_PEAK));
     if (scaled > INT16_MAX) {
         scaled = INT16_MAX;
     } else if (scaled < INT16_MIN) {
         scaled = INT16_MIN;
     }
+    return int16_t(scaled);
+}
 
-    if (pending_.size() >= BEEPER_MAX_PENDING) {
+} // namespace
+
+void Beeper::emit() {
+    // count_ is 158 or 159 -- never zero, since a sample only completes
+    // after at least one half-clock has been added.
+    const int16_t left = finish_sample(sum_, count_, dc_in_, dc_out_);
+    const bool stereo = mix_ != StereoMix::Mono;
+    int16_t right = 0;
+    if (stereo) {
+        right = finish_sample(sum_right_, count_, dc_in_right_, dc_out_right_);
+    }
+    sum_ = 0;
+    sum_right_ = 0;
+    count_ = 0;
+
+    if (pending_.size() >= BEEPER_MAX_PENDING * channels()) {
         // Nothing is draining us. Drop the oldest half rather than one sample
         // at a time: the erase is O(n), and at this point the audio is already
         // going nowhere, so paying it once per half-buffer beats once per
-        // sample.
-        pending_.erase(pending_.begin(), pending_.begin() + long(pending_.size() / 2));
+        // sample. A whole number of frames, so a stereo pair is never split.
+        size_t drop = pending_.size() / 2;
+        drop -= drop % channels();
+        pending_.erase(pending_.begin(), pending_.begin() + long(drop));
     }
-    pending_.push_back(int16_t(scaled));
+    pending_.push_back(left);
+    if (stereo) {
+        pending_.push_back(right);
+    }
 }
 
 void Beeper::drain(std::vector<int16_t>& out) {
@@ -147,12 +236,9 @@ void Beeper::reset() {
     // drive it low again, and a stuck EAR level would sit under everything
     // that followed as a DC offset eating headroom.
     ear_level_ = 0;
-    sum_ = 0;
-    count_ = 0;
+    clear_filter();
     acc_ = 0;
     last_hc_ = 0;
-    dc_in_ = 0.0f;
-    dc_out_ = 0.0f;
     pending_.clear();
 }
 
@@ -311,7 +397,8 @@ void put_tag(std::vector<uint8_t>& out, const char* tag) {
 
 } // namespace
 
-std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples, uint32_t sample_rate) {
+std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples, uint32_t sample_rate,
+                                uint16_t channels) {
     const uint32_t data_bytes = uint32_t(samples.size() * 2);
     std::vector<uint8_t> out;
     out.reserve(44 + data_bytes);
@@ -323,10 +410,10 @@ std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples, uint32_t sa
     put_tag(out, "fmt ");
     put_u32(out, 16);                    // PCM header size
     put_u16(out, 1);                     // format: PCM
-    put_u16(out, 1);                     // channels: mono
+    put_u16(out, channels);
     put_u32(out, sample_rate);
-    put_u32(out, sample_rate * 2);       // byte rate (mono, 2 bytes/sample)
-    put_u16(out, 2);                     // block align
+    put_u32(out, sample_rate * 2u * channels); // byte rate, 2 bytes a sample
+    put_u16(out, uint16_t(2u * channels));     // block align: a frame
     put_u16(out, 16);                    // bits per sample
 
     put_tag(out, "data");
@@ -339,11 +426,8 @@ std::vector<uint8_t> encode_wav(const std::vector<int16_t>& samples, uint32_t sa
 
 #if ZX_REWIND
 void Beeper::restart_at(uint64_t now_hc) {
-    sum_ = 0;
-    count_ = 0;
+    clear_filter();
     acc_ = 0;
-    dc_in_ = 0.0f;
-    dc_out_ = 0.0f;
     pending_.clear();
     last_hc_ = now_hc;
 }

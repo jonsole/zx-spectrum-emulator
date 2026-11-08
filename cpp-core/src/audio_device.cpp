@@ -4,8 +4,8 @@
 // (engine.cpp uses timeBeginPeriod for pacing), so the whole feature costs no
 // new dependency at all -- which matters in a project whose only third-party
 // code is two single headers and which has no package manager. It is a legacy
-// API, but "play a mono 16-bit stream" is exactly what it has always been
-// good at, and it is present on every Windows.
+// API, but "play a 16-bit stream" is exactly what it has always been good
+// at, and it is present on every Windows.
 //
 // The feeder thread polls rather than using a callback: waveOut callbacks run
 // with restrictions on what may be called from them, and there is nothing to
@@ -88,17 +88,18 @@ constexpr int HEADROOM_BLOCKS = 1;
 
 constexpr auto POLL_INTERVAL = std::chrono::milliseconds(2);
 
+/// Sizes in frames, a left and a right sample each.
 struct Layout {
-    size_t block_samples;
+    size_t block_frames;
     int block_count;
-    size_t ring_samples;
+    size_t ring_frames;
 };
 
 /// Splits a requested end-to-end latency into a device queue plus the
 /// headroom above it, so the flag means the total a listener actually hears.
 Layout layout_for(uint32_t latency_ms) {
     Layout out;
-    out.block_samples = size_t(AUDIO_SAMPLE_RATE) * BLOCK_MS / 1000;
+    out.block_frames = size_t(AUDIO_SAMPLE_RATE) * BLOCK_MS / 1000;
     int blocks = int(latency_ms / BLOCK_MS) - HEADROOM_BLOCKS;
     if (blocks < MIN_BLOCKS) {
         blocks = MIN_BLOCKS;
@@ -109,7 +110,7 @@ Layout layout_for(uint32_t latency_ms) {
     // Headroom only. Pacing holds the ring near empty by construction, so
     // this is what absorbs a burst when pacing is NOT in charge -- an
     // uncapped run, or the fallback after a device stops draining.
-    out.ring_samples = out.block_samples * (size_t(blocks) + 2);
+    out.ring_frames = out.block_frames * (size_t(blocks) + 2);
     return out;
 }
 
@@ -127,7 +128,7 @@ using QueueDepth = std::shared_ptr<std::atomic<size_t>>;
 #endif
 void feed(HWAVEOUT device, Engine& engine, std::shared_ptr<AudioRing> ring, Layout layout,
           QueueDepth depth) {
-    const size_t block_samples = layout.block_samples;
+    const size_t block_samples = layout.block_frames * AUDIO_CHANNELS;
     const int block_count = layout.block_count;
 
     // Sized through a named variable, not `blocks(size_t(block_count))` --
@@ -211,7 +212,7 @@ bool start_waveout_playback(Engine& engine, uint32_t latency_ms, std::string& er
     WAVEFORMATEX format;
     ZeroMemory(&format, sizeof format);
     format.wFormatTag = WAVE_FORMAT_PCM;
-    format.nChannels = 1;
+    format.nChannels = WORD(AUDIO_CHANNELS);
     format.nSamplesPerSec = AUDIO_SAMPLE_RATE;
     format.wBitsPerSample = 16;
     format.nBlockAlign = WORD(format.nChannels * format.wBitsPerSample / 8);
@@ -225,18 +226,18 @@ bool start_waveout_playback(Engine& engine, uint32_t latency_ms, std::string& er
     }
 
     const Layout layout = layout_for(latency_ms);
-    std::shared_ptr<AudioRing> ring = engine.add_audio_sink(layout.ring_samples);
+    std::shared_ptr<AudioRing> ring = engine.add_audio_sink(layout.ring_frames * AUDIO_CHANNELS);
     QueueDepth depth = std::make_shared<std::atomic<size_t>>(0);
 
     // The sound card becomes the master clock. "Buffered ahead of the
     // speaker" is what is queued at the device plus whatever has not reached
     // it yet; the emulator holds whenever that exceeds a full queue, so it
     // settles at exactly block_count blocks and stays there.
-    const size_t block_samples = layout.block_samples;
-    const size_t target = size_t(layout.block_count + HEADROOM_BLOCKS) * block_samples;
+    const size_t block_frames = layout.block_frames;
+    const size_t target = size_t(layout.block_count + HEADROOM_BLOCKS) * block_frames;
     engine.set_pacing_clock(
-        [depth, ring, block_samples]() {
-            return depth->load() * block_samples + ring->available();
+        [depth, ring, block_frames]() {
+            return depth->load() * block_frames + ring->frames_available();
         },
         target);
 

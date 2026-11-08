@@ -194,6 +194,11 @@ function activate(context) {
           screen.sendRfLook();
         }
       }
+      if (event.affectsConfiguration('zxspectrum.audio.stereoMix')) {
+        for (const screen of screenPanels()) {
+          screen.sendStereoMix();
+        }
+      }
     })
   );
   context.subscriptions.push(
@@ -760,11 +765,24 @@ class ScreenPanel {
     }
   }
 
+  // The AY's stereo mix, the same way and for the same reasons: the server
+  // mixes the sound, so the setting goes to it on connecting and on change.
+  sendStereoMix() {
+    if (this.server.ports.mcp) {
+      const mix = vscode.workspace.getConfiguration('zxspectrum.audio').get('stereoMix');
+      callMcpTool(this.server, this.mcpAgent, 'set_stereo_mix',
+        { mix: ['mono', 'abc', 'acb'].includes(mix) ? mix : 'mono' });
+    }
+  }
+
   connectScreen() {
     this.screenFrames = new FrameReader();
     const socket = net.connect(this.server.ports.screen, this.server.host || SCREEN_HOST);
     this.screenSocket = socket;
-    socket.on('connect', () => this.sendRfLook());
+    socket.on('connect', () => {
+      this.sendRfLook();
+      this.sendStereoMix();
+    });
     socket.on('data', (chunk) => {
       // A frame is a 4-byte big-endian length prefix + that many PNG bytes
       // (see cpp-core/src/screen_stream.cpp and frame_reader.js). Sent to
@@ -787,10 +805,11 @@ class ScreenPanel {
     socket.on('data', (chunk) => {
       this.audioBuffer = Buffer.concat([this.audioBuffer, chunk]);
 
-      // A one-off preamble: "ZXA2", a big-endian u32 sample rate, then the
+      // A one-off preamble: "ZXA3", a big-endian u32 sample rate, then the
       // server's target latency in ms. Both travel with the stream so
       // neither is hardcoded here, and so the server's --audio-latency-ms is
-      // the single knob for how deep the panel buffers too.
+      // the single knob for how deep the panel buffers too. "ZXA3" is
+      // stereo; "ZXA2", from a server before stereo, the same in mono.
       if (!this.audioPreambleSeen) {
         if (this.audioBuffer.length < 12) return;
         const magic = this.audioBuffer.subarray(0, 4).toString('latin1');
@@ -798,7 +817,7 @@ class ScreenPanel {
         const latencyMs = this.audioBuffer.readUInt32BE(8);
         this.audioBuffer = this.audioBuffer.subarray(12);
         this.audioPreambleSeen = true;
-        if (magic !== 'ZXA2') {
+        if (magic !== 'ZXA3' && magic !== 'ZXA2') {
           // An older server, or something else altogether listening on that
           // port. Stop rather than feed the speakers whatever it is sending.
           socket.removeAllListeners();
@@ -806,10 +825,11 @@ class ScreenPanel {
           this.audioSocket = undefined;
           return;
         }
-        this.post({ audioRate: rate, audioLatencyMs: latencyMs });
+        this.post({ audioRate: rate, audioLatencyMs: latencyMs, audioChannels: magic === 'ZXA3' ? 2 : 1 });
       }
 
-      // Then [4-byte big-endian byte length][mono int16 LE samples] blocks,
+      // Then [4-byte big-endian byte length][int16 LE samples] blocks, stereo
+      // frames or mono samples as the magic said,
       // reassembled exactly the way the screen's PNG frames are.
       while (this.audioBuffer.length >= 4) {
         const length = this.audioBuffer.readUInt32BE(0);
@@ -2993,6 +3013,9 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
     //     accumulates into latency. Dropping a block claws it back.
     let audioCtx = null;
     let sampleRate = 44100;
+    // 2, left and right interleaved, from a server that sends stereo; 1 from
+    // an older one.
+    let audioChannels = 2;
     let nextStart = 0;
     // One volume for all the sound, wherever it comes out: this panel's own
     // playback, and -- through the extension -- the server's sound device.
@@ -3034,16 +3057,19 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
       if (ctx.state !== 'running') return; // still waiting on a gesture
 
       const bin = atob(base64);
-      const count = bin.length >> 1;
+      const count = Math.floor((bin.length >> 1) / audioChannels);
       if (count === 0) return;
 
-      const buffer = ctx.createBuffer(1, count, sampleRate);
-      const channel = buffer.getChannelData(0);
-      for (let i = 0; i < count; i++) {
-        // mono int16, little-endian
-        let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8);
-        if (v >= 0x8000) v -= 0x10000;
-        channel[i] = v / 32768;
+      const buffer = ctx.createBuffer(audioChannels, count, sampleRate);
+      for (let c = 0; c < audioChannels; c++) {
+        const channel = buffer.getChannelData(c);
+        for (let i = 0; i < count; i++) {
+          // int16, little-endian, the channels interleaved
+          const at = (i * audioChannels + c) * 2;
+          let v = bin.charCodeAt(at) | (bin.charCodeAt(at + 1) << 8);
+          if (v >= 0x8000) v -= 0x10000;
+          channel[i] = v / 32768;
+        }
       }
 
       const now = ctx.currentTime;
@@ -3070,6 +3096,7 @@ function getHtml(view, startVolume, startVolumeBeforeMute) {
       } else if (data.audio !== undefined) {
         playBlock(data.audio);
       } else if (data.audioRate !== undefined) {
+        audioChannels = data.audioChannels === 1 ? 1 : 2;
         if (data.audioLatencyMs !== undefined) {
           jitterS = data.audioLatencyMs / 1000;
           // Enough slack above the target to ride out normal jitter without

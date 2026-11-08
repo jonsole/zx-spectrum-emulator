@@ -532,6 +532,10 @@ void Engine::publish_audio() {
     const bool wanted = !audio_sinks_.empty() && speed_.load() != Speed::Uncapped
                         && speed_multiplier_.load() == 1.0;
     machine_.beeper.set_enabled(wanted, now_hc);
+    // Set here rather than by a queued job, so that it survives a machine
+    // being replaced by a reset or a load: the next publish puts it back.
+    // A no-op when it has not changed.
+    machine_.beeper.set_stereo_mix(StereoMix(stereo_mix_.load()));
     if (!wanted) {
         machine_.beeper.discard();
         return;
@@ -544,8 +548,18 @@ void Engine::publish_audio() {
     if (audio_scratch_.empty()) {
         return;
     }
+    // The sinks take stereo, so mono goes to both sides.
+    const std::vector<int16_t>* frames = &audio_scratch_;
+    if (machine_.beeper.channels() == 1) {
+        audio_stereo_.resize(audio_scratch_.size() * 2);
+        for (size_t i = 0; i < audio_scratch_.size(); i++) {
+            audio_stereo_[2 * i] = audio_scratch_[i];
+            audio_stereo_[2 * i + 1] = audio_scratch_[i];
+        }
+        frames = &audio_stereo_;
+    }
     for (const std::shared_ptr<AudioRing>& sink : audio_sinks_) {
-        sink->write(audio_scratch_.data(), audio_scratch_.size());
+        sink->write(frames->data(), frames->size());
     }
 }
 

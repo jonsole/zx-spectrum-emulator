@@ -8,6 +8,9 @@
 #include "ula.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <string>
+#include <utility>
 #include <vector>
 
 using namespace zx;
@@ -173,6 +176,135 @@ TEST(beeper_and_ay_mix_without_one_silencing_the_other) {
     // follows the sample clock, which the AY chunking must not disturb.
     const size_t expected = size_t(2'000'000.0 * 44100.0 / double(TIMING_128K.hc_per_sec));
     CHECK(out.size() >= expected - 1 && out.size() <= expected + 1);
+}
+
+namespace {
+
+/// A third of a second of the chip -- under the Beeper's half second of
+/// undrained audio, so nothing is dropped -- set up by `regs` (register, value pairs) from
+/// power-on, with the beeper's speaker bit at `speaker`, through a Beeper in
+/// `mix`. A fresh chip each time, so two mixes hear the same signal.
+std::vector<int16_t> render_mix(const std::vector<std::pair<uint8_t, uint8_t>>& regs,
+                                bool speaker, StereoMix mix) {
+    Ay ay;
+    for (const auto& r : regs) {
+        set(ay, r.first, r.second);
+    }
+    Beeper b;
+    b.set_clock(TIMING_128K.hc_per_sec);
+    b.attach_ay(&ay);
+    b.set_stereo_mix(mix);
+    b.set_enabled(true, 0);
+    // The speaker goes high a little way in, so that the DC blocker has an
+    // edge to pass rather than a level it takes out.
+    b.advance_to(100'003);
+    b.write_port_fe(speaker ? 0x10 : 0x00, 100'003);
+    b.advance_to(uint64_t(TIMING_128K.hc_per_sec / 3));
+    std::vector<int16_t> out;
+    b.drain(out);
+    return out;
+}
+
+/// The left or right samples of interleaved stereo.
+std::vector<int16_t> side(const std::vector<int16_t>& stereo, size_t which) {
+    std::vector<int16_t> out;
+    for (size_t i = which; i < stereo.size(); i += 2) {
+        out.push_back(stereo[i]);
+    }
+    return out;
+}
+
+/// A ~1 kHz tone at full volume on channel `ch` (0 A, 1 B, 2 C) alone.
+std::vector<std::pair<uint8_t, uint8_t>> tone_on(int ch) {
+    // Register 7's bits are active-low disables: clear only this tone's.
+    const uint8_t enable = uint8_t(0x3F & ~(1u << ch));
+    return {{7, enable}, {uint8_t(8 + ch), 15}, {uint8_t(2 * ch), 111}, {uint8_t(2 * ch + 1), 0}};
+}
+
+} // namespace
+
+TEST(stereo_is_two_samples_a_period_and_mono_one) {
+    const std::vector<int16_t> mono = render_mix(tone_on(0), false, StereoMix::Mono);
+    const std::vector<int16_t> stereo = render_mix(tone_on(0), false, StereoMix::Abc);
+    CHECK(!mono.empty());
+    CHECK_EQ(stereo.size(), 2 * mono.size());
+}
+
+// Each side is 2 x its own channel + the middle channel + the beeper. So
+// the middle channel alone, and the beeper alone, are the mono signal on
+// both sides, sample for sample: the sums are the same integers.
+TEST(the_middle_channel_and_the_beeper_are_mono_on_both_sides) {
+    const std::vector<int16_t> b_mono = render_mix(tone_on(1), false, StereoMix::Mono);
+    const std::vector<int16_t> b_abc = render_mix(tone_on(1), false, StereoMix::Abc);
+    CHECK(side(b_abc, 0) == b_mono);
+    CHECK(side(b_abc, 1) == b_mono);
+    const std::vector<int16_t> c_mono = render_mix(tone_on(2), false, StereoMix::Mono);
+    const std::vector<int16_t> c_acb = render_mix(tone_on(2), false, StereoMix::Acb);
+    CHECK(side(c_acb, 0) == c_mono);
+    CHECK(side(c_acb, 1) == c_mono);
+    const std::vector<int16_t> beep_mono = render_mix({}, true, StereoMix::Mono);
+    const std::vector<int16_t> beep_acb = render_mix({}, true, StereoMix::Acb);
+    float rms = 0, peak = 0;
+    measure_level(beep_mono, rms, peak);
+    CHECK(peak > 0.1f);
+    CHECK(side(beep_acb, 0) == beep_mono);
+    CHECK(side(beep_acb, 1) == beep_mono);
+}
+
+// A side channel is on its own side only, at twice its mono level: within
+// one count, since the scaling to 16 bits truncates.
+TEST(a_side_channel_is_on_its_side_alone_at_twice_mono) {
+    const struct {
+        int ch;
+        StereoMix mix;
+        size_t loud;
+    } cases[] = {{0, StereoMix::Abc, 0}, {2, StereoMix::Abc, 1},
+                 {0, StereoMix::Acb, 0}, {1, StereoMix::Acb, 1}};
+    for (const auto& c : cases) {
+        const std::vector<int16_t> mono = render_mix(tone_on(c.ch), false, StereoMix::Mono);
+        const std::vector<int16_t> stereo = render_mix(tone_on(c.ch), false, c.mix);
+        const std::vector<int16_t> loud = side(stereo, c.loud);
+        const std::vector<int16_t> quiet = side(stereo, 1 - c.loud);
+        CHECK_EQ(loud.size(), mono.size());
+        CHECK_EQ(quiet.size(), mono.size());
+        const size_t n = loud.size() < mono.size() ? loud.size() : mono.size();
+        int worst = 0;
+        int quietest = 0;
+        for (size_t i = 0; i < n; i++) {
+            const int off = std::abs(int(loud[i]) - 2 * int(mono[i]));
+            worst = off > worst ? off : worst;
+            quietest = std::abs(int(quiet[i])) > quietest ? std::abs(int(quiet[i])) : quietest;
+        }
+        CHECK(worst <= 1);
+        CHECK_EQ(quietest, 0);
+    }
+}
+
+// All three channels the same tone, in step from power-on, with the beeper:
+// the loudest the chip can be. Each side (2 x 80 + 80) is then mono's
+// (3 x 80) exactly, so stereo is never louder than mono at its loudest.
+TEST(a_side_at_its_loudest_is_mono_at_its_loudest) {
+    const std::vector<std::pair<uint8_t, uint8_t>> all = {
+        {7, 0x38}, {8, 15}, {9, 15}, {10, 15}, {0, 111}, {2, 111}, {4, 111}};
+    const std::vector<int16_t> mono = render_mix(all, true, StereoMix::Mono);
+    for (const StereoMix mix : {StereoMix::Abc, StereoMix::Acb}) {
+        const std::vector<int16_t> stereo = render_mix(all, true, mix);
+        CHECK(side(stereo, 0) == mono);
+        CHECK(side(stereo, 1) == mono);
+    }
+}
+
+TEST(the_mixes_have_names) {
+    StereoMix mix = StereoMix::Mono;
+    CHECK(parse_stereo_mix("acb", mix));
+    CHECK(mix == StereoMix::Acb);
+    CHECK_EQ(std::string(stereo_mix_name(mix)), std::string("acb"));
+    CHECK(parse_stereo_mix("abc", mix));
+    CHECK(mix == StereoMix::Abc);
+    CHECK(parse_stereo_mix("mono", mix));
+    CHECK(mix == StereoMix::Mono);
+    CHECK(!parse_stereo_mix("ACB", mix));
+    CHECK(!parse_stereo_mix("", mix));
 }
 
 RUN_TESTS()

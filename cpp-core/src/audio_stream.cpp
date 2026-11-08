@@ -51,13 +51,13 @@ void handle_connection(net::Socket sock, Engine& engine, uint32_t latency_ms) {
     // The rate is whatever the beeper is actually generating at, which a
     // native device may have changed to its engine's mix rate.
     const uint32_t rate = engine.audio_sample_rate();
-    if (!sock.send_all("ZXA2", 4) || !send_u32_be(sock, rate)
+    if (!sock.send_all("ZXA3", 4) || !send_u32_be(sock, rate)
         || !send_u32_be(sock, latency_ms)) {
         return;
     }
 
     const uint32_t ring_ms = latency_ms > MIN_RING_MS ? latency_ms : MIN_RING_MS;
-    const size_t ring_samples = size_t(rate) * ring_ms / 1000;
+    const size_t ring_samples = size_t(rate) * ring_ms / 1000 * AUDIO_CHANNELS;
 
     std::shared_ptr<AudioRing> ring = engine.add_audio_sink(ring_samples);
     std::vector<int16_t> block(ring_samples);
@@ -88,7 +88,7 @@ void serve_audio_stream(Engine& engine, const std::string& host, uint16_t port,
         std::fprintf(stderr, "Audio stream server failed to start: %s\n", error.c_str());
         return;
     }
-    std::printf("Audio stream server listening on %s:%u (%u Hz mono s16, %ums buffer)\n",
+    std::printf("Audio stream server listening on %s:%u (%u Hz stereo s16, %ums buffer)\n",
                 host.c_str(), unsigned(port), unsigned(engine.audio_sample_rate()),
                 unsigned(latency_ms));
     std::fflush(stdout);
